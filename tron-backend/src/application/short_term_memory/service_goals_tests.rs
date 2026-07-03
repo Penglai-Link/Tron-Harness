@@ -312,7 +312,6 @@ fn service_with_database_url(label: &str) -> (ShortTermMemoryService, String) {
             session_code: "SESSION-1".into(),
             objective: "完成一个待办循环测试".into(),
             max_runs: Some(3),
-            criteria: Vec::new(),
         })
         .expect("goal should be set");
     let mut context = base_context();

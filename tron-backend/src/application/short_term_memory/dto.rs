@@ -134,8 +134,15 @@ pub struct SetGoalCommand {
     pub session_code: String,
     pub objective: String,
     pub max_runs: Option<u32>,
-    #[serde(default)]
-    pub criteria: Vec<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateGoalCommand {
+    pub session_code: String,
+    pub goal_code: String,
+    pub objective: String,
+    pub max_runs: Option<u32>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -143,22 +150,6 @@ pub struct SetGoalCommand {
 pub struct GoalSessionCommand {
     pub session_code: String,
     pub goal_code: Option<String>,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct AddGoalCriterionCommand {
-    pub session_code: String,
-    pub goal_code: Option<String>,
-    pub text: String,
-}
-
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct RemoveGoalCriterionCommand {
-    pub session_code: String,
-    pub goal_code: String,
-    pub criterion_code: String,
 }
 
 #[derive(Debug, Clone, PartialEq)]

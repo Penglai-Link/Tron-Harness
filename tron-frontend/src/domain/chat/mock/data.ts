@@ -7,13 +7,12 @@ import type {
   ChatSession,
   ChatSessionGroup,
   ChatSessionTodo,
-  AddChatSessionGoalCriterionInput,
   ChatSessionGoalCommand,
   CreateChatCompactionInput,
   CreateChatSessionInput,
-  RemoveChatSessionGoalCriterionInput,
   SendChatMessageInput,
   SetChatSessionGoalInput,
+  UpdateChatSessionGoalInput,
   UpdateChatSessionInput,
 } from "@/domain/chat/model/ChatModel";
 
@@ -215,20 +214,6 @@ const goalsBySession: Record<string, ChatSessionGoalView | null> = {
       clearedAt: null,
       metadataJson: null,
     },
-    criteria: [
-      {
-        id: 735221000000000001,
-        criterionCode: "CRITERION-MOCK-1",
-        goalCode: "GOAL-MOCK-1",
-        sessionCode: "SESSION-8842",
-        position: 0,
-        text: "Rollback path includes the affected regions and a verification step.",
-        status: "ACTIVE",
-        createdAt: "2026-05-27T10:40:00Z",
-        updatedAt: "2026-05-27T10:40:00Z",
-        removedAt: null,
-      },
-    ],
   },
   "SESSION-REFACTOR": null,
   "SESSION-UNASSIGNED": null,
@@ -289,6 +274,11 @@ export function getMockChatSessionGoal(sessionCode: string): ChatSessionGoalView
   return ["ACTIVE", "PAUSED", "BLOCKED"].includes(goal.goal.status) ? cloneGoalView(goal) : null;
 }
 
+export function getMockChatSessionLatestGoal(sessionCode: string): ChatSessionGoalView | null {
+  const goal = goalsBySession[sessionCode] ?? null;
+  return goal ? cloneGoalView(goal) : null;
+}
+
 export function setMockChatSessionGoal(input: SetChatSessionGoalInput): ChatSessionGoalView {
   const session = sessions.find((item) => item.sessionCode === input.sessionCode);
   if (!session) throw new Error("chat session was not found");
@@ -325,18 +315,6 @@ export function setMockChatSessionGoal(input: SetChatSessionGoalInput): ChatSess
       clearedAt: null,
       metadataJson: { outerLoopStatus: "not_started", startPolicy: "after_next_run" },
     },
-    criteria: (input.criteria ?? []).map((text, index) => ({
-      id: Date.now() + index + 1,
-      criterionCode: `CRITERION-MOCK-${Date.now()}-${index}`,
-      goalCode,
-      sessionCode: input.sessionCode,
-      position: index,
-      text,
-      status: "ACTIVE",
-      createdAt: now,
-      updatedAt: now,
-      removedAt: null,
-    })),
   };
   goalsBySession[input.sessionCode] = goal;
   return cloneGoalView(goal);
@@ -355,39 +333,19 @@ export function transitionMockChatSessionGoal(
   return cloneGoalView(goal);
 }
 
-export function addMockChatSessionGoalCriterion(input: AddChatSessionGoalCriterionInput): ChatSessionGoalView {
-  const goal = goalsBySession[input.sessionCode];
-  if (!goal || (input.goalCode && goal.goal.goalCode !== input.goalCode)) {
-    throw new Error("session goal was not found");
-  }
-  const now = new Date().toISOString();
-  goal.criteria.push({
-    id: Date.now(),
-    criterionCode: `CRITERION-MOCK-${Date.now()}`,
-    goalCode: goal.goal.goalCode,
-    sessionCode: input.sessionCode,
-    position: goal.criteria.length,
-    text: input.text,
-    status: "ACTIVE",
-    createdAt: now,
-    updatedAt: now,
-    removedAt: null,
-  });
-  goal.goal.updatedAt = now;
-  return cloneGoalView(goal);
-}
-
-export function removeMockChatSessionGoalCriterion(input: RemoveChatSessionGoalCriterionInput): ChatSessionGoalView {
+export function updateMockChatSessionGoal(input: UpdateChatSessionGoalInput): ChatSessionGoalView {
   const goal = goalsBySession[input.sessionCode];
   if (!goal || goal.goal.goalCode !== input.goalCode) {
     throw new Error("session goal was not found");
   }
+  if (!["ACTIVE", "PAUSED", "BLOCKED"].includes(goal.goal.status)) {
+    throw new Error("goal command is invalid");
+  }
+  const objective = input.objective.trim();
+  if (!objective) throw new Error("goal objective is required");
   const now = new Date().toISOString();
-  goal.criteria = goal.criteria.map((criterion) => (
-    criterion.criterionCode === input.criterionCode
-      ? { ...criterion, status: "REMOVED", removedAt: now, updatedAt: now }
-      : criterion
-  ));
+  goal.goal.objectiveMarkdown = objective;
+  goal.goal.maxRuns = Math.max(1, input.maxRuns ?? goal.goal.maxRuns);
   goal.goal.updatedAt = now;
   return cloneGoalView(goal);
 }
@@ -395,7 +353,6 @@ export function removeMockChatSessionGoalCriterion(input: RemoveChatSessionGoalC
 function cloneGoalView(goal: ChatSessionGoalView): ChatSessionGoalView {
   return {
     goal: { ...goal.goal },
-    criteria: goal.criteria.map((criterion) => ({ ...criterion })),
   };
 }
 

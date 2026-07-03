@@ -19,6 +19,7 @@ export function usePanel() {
         const groupWidth = panelElement?.parentElement?.getBoundingClientRect().width || window.innerWidth;
         const targetPixels = Math.min(680, Math.max(520, groupWidth * 0.42));
 
+        setRightDragglePanelOpen(true)
         panelRef.current?.expand()
         panelRef.current?.resize(`${targetPixels}px`)
     }, []);

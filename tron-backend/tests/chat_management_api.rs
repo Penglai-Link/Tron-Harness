@@ -333,6 +333,20 @@ async fn short_term_memory_endpoints_return_uniform_response_for_success_and_bad
     assert_eq!(todos_body["code"], json!("SUCCESS"));
     assert_eq!(todos_body["data"], json!([]));
 
+    let latest_goal = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/get-latest-goal?sessionCode={session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(latest_goal.status(), StatusCode::OK);
+    let latest_goal_body = response_json(latest_goal).await;
+    assert_eq!(latest_goal_body["code"], json!("SUCCESS"));
+    assert_eq!(latest_goal_body["data"], Value::Null);
+
     let missing_query = request_with_headers(
         &app,
         Method::GET,
@@ -478,6 +492,124 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
 }
 
 #[tokio::test]
+async fn chat_goal_can_be_updated_while_unfinished() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Goal update"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let goal_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/set-goal",
+        Some(json!({
+            "sessionCode": session_code,
+            "objective": "Initial goal",
+            "maxRuns": 5
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(goal_response.status(), StatusCode::OK);
+    let goal_payload = response_json(goal_response).await;
+    assert!(goal_payload["data"].get("criteria").is_none());
+    let goal_code = goal_payload["data"]["goal"]["goalCode"]
+        .as_str()
+        .expect("goal code should be returned")
+        .to_string();
+
+    let update_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/update-goal",
+        Some(json!({
+            "sessionCode": session_code,
+            "goalCode": goal_code,
+            "objective": "Updated goal",
+            "maxRuns": 9
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(update_response.status(), StatusCode::OK);
+    let update_payload = response_json(update_response).await;
+    assert_eq!(
+        update_payload["data"]["goal"]["objectiveMarkdown"],
+        json!("Updated goal")
+    );
+    assert_eq!(update_payload["data"]["goal"]["maxRuns"], json!(9));
+    assert!(update_payload["data"].get("criteria").is_none());
+
+    let latest_response = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/get-latest-goal?sessionCode={session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(latest_response.status(), StatusCode::OK);
+    let latest_payload = response_json(latest_response).await;
+    assert_eq!(
+        latest_payload["data"]["goal"]["objectiveMarkdown"],
+        json!("Updated goal")
+    );
+    assert_eq!(latest_payload["data"]["goal"]["maxRuns"], json!(9));
+    assert!(latest_payload["data"].get("criteria").is_none());
+
+    let clear_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/clear-goal",
+        Some(json!({
+            "sessionCode": session_code,
+            "goalCode": goal_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(clear_response.status(), StatusCode::OK);
+
+    let terminal_update_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/update-goal",
+        Some(json!({
+            "sessionCode": session_code,
+            "goalCode": goal_code,
+            "objective": "Should not update after clear",
+            "maxRuns": 9
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(terminal_update_response.status(), StatusCode::BAD_REQUEST);
+}
+
+#[tokio::test]
 async fn chat_goal_judge_failure_retries_without_business_continuation() {
     let database_url = temp_database_url("chat-goal-judge-failure-no-continuation");
     let app = app_with_config(AppConfig {
@@ -515,8 +647,7 @@ async fn chat_goal_judge_failure_retries_without_business_continuation() {
         Some(json!({
             "sessionCode": session_code,
             "objective": "Finish the one business run, then judge it.",
-            "maxRuns": 5,
-            "criteria": []
+            "maxRuns": 5
         })),
         None,
         Some(&authorization),
@@ -656,8 +787,7 @@ async fn chat_goal_judge_retry_can_complete_without_business_continuation() {
         Some(json!({
             "sessionCode": session_code,
             "objective": "Complete after one business run.",
-            "maxRuns": 5,
-            "criteria": []
+            "maxRuns": 5
         })),
         None,
         Some(&authorization),
@@ -752,6 +882,40 @@ async fn chat_goal_judge_retry_can_complete_without_business_continuation() {
     assert_eq!(runs_used, 1);
     assert_eq!(consecutive_failures, 0);
     assert_eq!(last_verdict, "COMPLETED");
+
+    let active_goal_response = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/get-goal?sessionCode={session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(active_goal_response.status(), StatusCode::OK);
+    let active_goal_payload = response_json(active_goal_response).await;
+    assert_eq!(active_goal_payload["data"], Value::Null);
+
+    let latest_goal_response = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/get-latest-goal?sessionCode={session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(latest_goal_response.status(), StatusCode::OK);
+    let latest_goal_payload = response_json(latest_goal_response).await;
+    assert_eq!(
+        latest_goal_payload["data"]["goal"]["goalCode"],
+        json!(goal_code)
+    );
+    assert_eq!(
+        latest_goal_payload["data"]["goal"]["status"],
+        json!("COMPLETED")
+    );
+    assert!(latest_goal_payload["data"].get("criteria").is_none());
 }
 
 #[tokio::test]

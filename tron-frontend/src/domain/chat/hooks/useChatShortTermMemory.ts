@@ -1,23 +1,22 @@
 import { chatApiEndpoints } from "@/domain/chat/api";
 import {
-  addMockChatSessionGoalCriterion,
   createMockChatCompaction,
   getMockChatLatestCompaction,
   getMockChatSessionGoal,
+  getMockChatSessionLatestGoal,
   getMockChatSessionTodos,
-  removeMockChatSessionGoalCriterion,
   setMockChatSessionGoal,
   transitionMockChatSessionGoal,
+  updateMockChatSessionGoal,
 } from "@/domain/chat/mock/data";
 import type {
-  AddChatSessionGoalCriterionInput,
   ChatSessionCompaction,
   ChatSessionGoalCommand,
   ChatSessionGoalView,
   ChatSessionTodo,
   CreateChatCompactionInput,
-  RemoveChatSessionGoalCriterionInput,
   SetChatSessionGoalInput,
+  UpdateChatSessionGoalInput,
 } from "@/domain/chat/model";
 import { requestApi } from "@/shared/api/httpClient";
 import {
@@ -115,6 +114,32 @@ export function useChatSessionGoal(sessionCode: string, refreshKey = 0) {
   });
 }
 
+export function useChatSessionLatestGoalState(sessionCode: string, refreshKey = 0) {
+  return useServiceQueryState<ChatSessionGoalView | null>({
+    apiInitialData: () => null,
+    domain: "chat",
+    enabled: Boolean(sessionCode),
+    endpoint: chatApiEndpoints.getChatSessionLatestGoal,
+    mockData: () => getMockChatSessionLatestGoal(sessionCode),
+    deps: [sessionCode],
+    params: { sessionCode },
+    refreshKey,
+  });
+}
+
+export function useChatSessionLatestGoal(sessionCode: string, refreshKey = 0) {
+  return useServiceQuery<ChatSessionGoalView | null>({
+    apiInitialData: () => null,
+    domain: "chat",
+    enabled: Boolean(sessionCode),
+    endpoint: chatApiEndpoints.getChatSessionLatestGoal,
+    mockData: () => getMockChatSessionLatestGoal(sessionCode),
+    deps: [sessionCode],
+    params: { sessionCode },
+    refreshKey,
+  });
+}
+
 export async function setChatSessionGoal(
   input: SetChatSessionGoalInput,
 ): Promise<ChatSessionGoalView> {
@@ -122,6 +147,17 @@ export async function setChatSessionGoal(
     return setMockChatSessionGoal(input);
   }
   return requestApi<ChatSessionGoalView>(chatApiEndpoints.setChatSessionGoal, {
+    body: input,
+  });
+}
+
+export async function updateChatSessionGoal(
+  input: UpdateChatSessionGoalInput,
+): Promise<ChatSessionGoalView> {
+  if (getServiceDataSource("chat") === "mock") {
+    return updateMockChatSessionGoal(input);
+  }
+  return requestApi<ChatSessionGoalView>(chatApiEndpoints.updateChatSessionGoal, {
     body: input,
   });
 }
@@ -166,28 +202,6 @@ export async function clearChatSessionGoal(
     return transitionMockChatSessionGoal(input, "CLEARED");
   }
   return requestApi<ChatSessionGoalView>(chatApiEndpoints.clearChatSessionGoal, {
-    body: input,
-  });
-}
-
-export async function addChatSessionGoalCriterion(
-  input: AddChatSessionGoalCriterionInput,
-): Promise<ChatSessionGoalView> {
-  if (getServiceDataSource("chat") === "mock") {
-    return addMockChatSessionGoalCriterion(input);
-  }
-  return requestApi<ChatSessionGoalView>(chatApiEndpoints.addChatSessionGoalCriterion, {
-    body: input,
-  });
-}
-
-export async function removeChatSessionGoalCriterion(
-  input: RemoveChatSessionGoalCriterionInput,
-): Promise<ChatSessionGoalView> {
-  if (getServiceDataSource("chat") === "mock") {
-    return removeMockChatSessionGoalCriterion(input);
-  }
-  return requestApi<ChatSessionGoalView>(chatApiEndpoints.removeChatSessionGoalCriterion, {
     body: input,
   });
 }

@@ -161,17 +161,6 @@ fn working_state_message(
             goal_view.goal.status,
             goal_view.goal.objective_markdown.trim()
         ));
-        let active_criteria = goal_view
-            .criteria
-            .iter()
-            .filter(|criterion| criterion.status == "ACTIVE")
-            .collect::<Vec<_>>();
-        if !active_criteria.is_empty() {
-            text.push_str("Criteria:\n");
-            for criterion in active_criteria {
-                text.push_str(&format!("- {}\n", criterion.text));
-            }
-        }
         if let Some(verdict) = &goal_view.goal.last_verdict {
             text.push_str(&format!("Last judge verdict: {verdict}\n"));
         }

@@ -10,8 +10,8 @@ use serde::Deserialize;
 use crate::{
     app::AppState,
     application::short_term_memory::{
-        AddGoalCriterionCommand, CreateCompactionCommand, GoalSessionCommand,
-        ModelCompactionFailure, RemoveGoalCriterionCommand, SetGoalCommand,
+        CreateCompactionCommand, GoalSessionCommand, ModelCompactionFailure, SetGoalCommand,
+        UpdateGoalCommand,
     },
     domain::short_term_memory::ShortTermMemoryError,
     response::ApiResponse,
@@ -139,6 +139,21 @@ pub async fn get_goal(
     }
 }
 
+pub async fn get_latest_goal(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    query: Result<Query<SessionCodeQuery>, QueryRejection>,
+) -> Response {
+    let session_code = match parse_session_code_query(query) {
+        Ok(session_code) => session_code,
+        Err(response) => return response,
+    };
+    match state.short_term_memory.get_latest_goal(&session_code) {
+        Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
+        Err(error) => short_term_memory_error_response(error),
+    }
+}
+
 pub async fn set_goal(
     State(state): State<AppState>,
     auth: RequestAuthContext,
@@ -217,31 +232,16 @@ pub async fn clear_goal(
     }
 }
 
-pub async fn add_goal_criterion(
+pub async fn update_goal(
     State(state): State<AppState>,
     _auth: RequestAuthContext,
-    command: Result<Json<AddGoalCriterionCommand>, JsonRejection>,
+    command: Result<Json<UpdateGoalCommand>, JsonRejection>,
 ) -> Response {
     let command = match parse_json_command(command) {
         Ok(command) => command,
         Err(response) => return response,
     };
-    match state.short_term_memory.add_goal_criterion(command) {
-        Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
-        Err(error) => short_term_memory_error_response(error),
-    }
-}
-
-pub async fn remove_goal_criterion(
-    State(state): State<AppState>,
-    _auth: RequestAuthContext,
-    command: Result<Json<RemoveGoalCriterionCommand>, JsonRejection>,
-) -> Response {
-    let command = match parse_json_command(command) {
-        Ok(command) => command,
-        Err(response) => return response,
-    };
-    match state.short_term_memory.remove_goal_criterion(command) {
+    match state.short_term_memory.update_goal(command) {
         Ok(goal) => Json(ApiResponse::success(goal)).into_response(),
         Err(error) => short_term_memory_error_response(error),
     }

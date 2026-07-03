@@ -2,24 +2,19 @@ use serde_json::json;
 
 use crate::{
     domain::short_term_memory::{
-        ShortTermMemoryError, ShortTermMemoryGoal, ShortTermMemoryGoalCriterion,
-        ShortTermMemoryGoalEvent, ShortTermMemoryGoalView,
+        ShortTermMemoryError, ShortTermMemoryGoal, ShortTermMemoryGoalEvent,
+        ShortTermMemoryGoalView,
     },
     shared::time::current_timestamp,
 };
 
-use super::{
-    AddGoalCriterionCommand, GoalSessionCommand, RemoveGoalCriterionCommand, SetGoalCommand,
-    ShortTermMemoryService,
-};
+use super::{GoalSessionCommand, SetGoalCommand, ShortTermMemoryService, UpdateGoalCommand};
 
 #[cfg(test)]
 #[path = "service_goals_tests.rs"]
 mod service_goals_tests;
 
-const MAX_GOAL_CRITERIA: usize = 25;
 const MAX_GOAL_OBJECTIVE_CHARS: usize = 8_000;
-const MAX_GOAL_CRITERION_CHARS: usize = 1_000;
 
 impl ShortTermMemoryService {
     pub fn get_active_goal(
@@ -28,6 +23,14 @@ impl ShortTermMemoryService {
     ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
         self.ensure_session(session_code)?;
         self.repository().get_active_goal(session_code)
+    }
+
+    pub fn get_latest_goal(
+        &self,
+        session_code: &str,
+    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
+        self.ensure_session(session_code)?;
+        self.repository().get_latest_goal(session_code)
     }
 
     pub(super) fn load_active_goal_for_context(
@@ -52,10 +55,7 @@ impl ShortTermMemoryService {
         let session_code = command.session_code.trim();
         let workspace_code = self.ensure_session(session_code)?;
         let objective = command.objective.trim();
-        if objective.is_empty()
-            || objective.chars().count() > MAX_GOAL_OBJECTIVE_CHARS
-            || command.criteria.len() > MAX_GOAL_CRITERIA
-        {
+        if objective.is_empty() || objective.chars().count() > MAX_GOAL_OBJECTIVE_CHARS {
             return Err(ShortTermMemoryError::GoalInvalid);
         }
 
@@ -100,19 +100,13 @@ impl ShortTermMemoryService {
                 "startPolicy": "after_next_run",
             })),
         };
-        let criteria = command
-            .criteria
-            .into_iter()
-            .enumerate()
-            .map(|(index, text)| self.new_goal_criterion(&goal_code, session_code, index, text))
-            .collect::<Result<Vec<_>, _>>()?;
+        let criteria = Vec::new();
         let event = self.new_goal_event(
             &goal,
             "GOAL_SET",
             Some("Goal was set"),
             Some(json!({
                 "objective": goal.objective_markdown,
-                "criteriaCount": criteria.len(),
                 "startPolicy": "after_next_run",
             })),
         )?;
@@ -147,73 +141,38 @@ impl ShortTermMemoryService {
         self.transition_goal(command, "CLEARED", "GOAL_CLEARED", "Goal was cleared")
     }
 
-    pub fn add_goal_criterion(
+    pub fn update_goal(
         &self,
-        command: AddGoalCriterionCommand,
+        command: UpdateGoalCommand,
     ) -> Result<ShortTermMemoryGoalView, ShortTermMemoryError> {
-        let mut view = self.resolve_goal(&command.session_code, command.goal_code.as_deref())?;
-        if command.text.trim().is_empty()
-            || command.text.chars().count() > MAX_GOAL_CRITERION_CHARS
-            || view.criteria.len() >= MAX_GOAL_CRITERIA
-        {
+        let objective = command.objective.trim();
+        if objective.is_empty() || objective.chars().count() > MAX_GOAL_OBJECTIVE_CHARS {
             return Err(ShortTermMemoryError::GoalInvalid);
         }
-        let expected_revision = view.goal.revision;
-        let next_position = view
-            .criteria
-            .iter()
-            .map(|criterion| criterion.position)
-            .max()
-            .unwrap_or(-1)
-            + 1;
-        let criterion = self.new_goal_criterion(
-            &view.goal.goal_code,
-            &view.goal.session_code,
-            next_position as usize,
-            command.text,
-        )?;
-        view.criteria.push(criterion.clone());
-        view.goal.revision = expected_revision.saturating_add(1);
-        view.goal.updated_at = current_timestamp();
-        let event = self.new_goal_event(
-            &view.goal,
-            "CRITERION_ADDED",
-            Some("Goal criterion was added"),
-            Some(json!({"criterionCode": criterion.criterion_code})),
-        )?;
-        self.repository()
-            .update_goal(&view.goal, &view.criteria, &event, expected_revision)
-    }
 
-    pub fn remove_goal_criterion(
-        &self,
-        command: RemoveGoalCriterionCommand,
-    ) -> Result<ShortTermMemoryGoalView, ShortTermMemoryError> {
         let mut view = self.resolve_goal(&command.session_code, Some(&command.goal_code))?;
+        if !is_unfinished_goal_status(&view.goal.status) {
+            return Err(ShortTermMemoryError::GoalInvalid);
+        }
+
         let expected_revision = view.goal.revision;
         let now = current_timestamp();
-        let mut removed = false;
-        for criterion in &mut view.criteria {
-            if criterion.criterion_code == command.criterion_code && criterion.status == "ACTIVE" {
-                criterion.status = "REMOVED".into();
-                criterion.updated_at = now.clone();
-                criterion.removed_at = Some(now.clone());
-                removed = true;
-            }
-        }
-        if !removed {
-            return Err(ShortTermMemoryError::GoalNotFound);
-        }
+        view.goal.objective_markdown = objective.to_string();
+        view.goal.max_runs = command.max_runs.unwrap_or(view.goal.max_runs).max(1);
         view.goal.revision = expected_revision.saturating_add(1);
         view.goal.updated_at = now;
+        let criteria = Vec::new();
         let event = self.new_goal_event(
             &view.goal,
-            "CRITERION_REMOVED",
-            Some("Goal criterion was removed"),
-            Some(json!({"criterionCode": command.criterion_code})),
+            "GOAL_UPDATED",
+            Some("Goal was updated"),
+            Some(json!({
+                "objective": view.goal.objective_markdown,
+                "maxRuns": view.goal.max_runs,
+            })),
         )?;
         self.repository()
-            .update_goal(&view.goal, &view.criteria, &event, expected_revision)
+            .update_goal(&view.goal, &criteria, &event, expected_revision)
     }
 
     pub fn should_admit_goal_continuation(
@@ -329,32 +288,6 @@ impl ShortTermMemoryService {
         Ok(view)
     }
 
-    fn new_goal_criterion(
-        &self,
-        goal_code: &str,
-        session_code: &str,
-        position: usize,
-        text: String,
-    ) -> Result<ShortTermMemoryGoalCriterion, ShortTermMemoryError> {
-        let text = text.trim().to_string();
-        if text.is_empty() || text.chars().count() > MAX_GOAL_CRITERION_CHARS {
-            return Err(ShortTermMemoryError::GoalInvalid);
-        }
-        let now = current_timestamp();
-        Ok(ShortTermMemoryGoalCriterion {
-            id: 0,
-            criterion_code: self.next_code("CRITERION")?,
-            goal_code: goal_code.to_string(),
-            session_code: session_code.to_string(),
-            position: position as i64,
-            text,
-            status: "ACTIVE".into(),
-            created_at: now.clone(),
-            updated_at: now,
-            removed_at: None,
-        })
-    }
-
     pub(super) fn new_goal_event(
         &self,
         goal: &ShortTermMemoryGoal,
@@ -377,6 +310,10 @@ impl ShortTermMemoryService {
             created_at: current_timestamp(),
         })
     }
+}
+
+fn is_unfinished_goal_status(status: &str) -> bool {
+    matches!(status, "ACTIVE" | "PAUSED" | "BLOCKED")
 }
 
 fn merge_goal_metadata(

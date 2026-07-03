@@ -21,12 +21,16 @@ import {
   CircleDot,
   Copy,
   Ellipsis,
+  Eraser,
   GitBranch,
   Hammer,
   ListTodo,
   LoaderCircle,
+  MessageCircleMore,
   MessageSquareText,
+  Pause,
   Pencil,
+  Play,
   Plus,
   RefreshCw,
   Send,
@@ -36,7 +40,6 @@ import {
   Wrench,
   type LucideIcon,
   X,
-  MessageCircleMore,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
@@ -46,6 +49,7 @@ import {
   useWorkspaceSpaces,
   useConsoleShellConfig,
   useDismissibleLayer,
+  useOpenRightSidebar,
   useToast,
   PageView,
   type TargetPageFrameInspectionResult,
@@ -57,17 +61,18 @@ import {
   deleteChatSession,
   streamChatMessage,
   updateChatSession,
-  cancelChatSessionGoal,
-  clearChatSessionGoal,
   useChatAguiEvents,
   useChatAguiProtocolEvents,
+  createChatCompaction,
+  cancelChatSessionGoal,
+  clearChatSessionGoal,
   pauseChatSessionGoal,
   resumeChatSessionGoal,
-  createChatCompaction,
   setChatSessionGoal,
+  updateChatSessionGoal,
   useChatLatestCompactionState,
   useChatMessageListBySession,
-  useChatSessionGoalState,
+  useChatSessionLatestGoalState,
   useChatSessionTodosState,
   useChatSessionGroupList,
 } from "@/domain/chat/hooks";
@@ -90,26 +95,38 @@ import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkRe
 import { TronChatPanel } from "@tron/chat-react";
 import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
 import { inferChatAgentCodeFromModel } from "../model/chatAgentCode";
+import { parseGoalCommand } from "../model/goalCommand";
+import {
+  canClearGoalStatus,
+  canStartNewGoalFromStatus,
+  isEditableGoalStatus,
+} from "../model/goalStatusState";
 import type {
   ChatAguiEvent,
   ChatAguiStreamEvent,
   ChatMessage,
   ChatSessionCompaction,
   ChatSessionGoalView,
+  ChatSessionGoalStatus,
+  ChatSessionGoalCommand,
   ChatSession,
   ChatSessionGroup,
   ChatSessionTodo,
+  ChatSessionTodoPriority,
+  ChatSessionTodoStatus,
   ChatMessageAttachment,
   ChatTokenEstimateSnapshot,
   ChatTokenUsage,
   ChatUsageAuditSnapshot,
   SendChatMessageInput,
+  SetChatSessionGoalInput,
+  UpdateChatSessionGoalInput,
 } from "@/domain/chat/model";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useInspection } from "../hooks/useInspection";
 import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { throttle } from "lodash-es";
 
 function formatTime(value: string) {
@@ -223,7 +240,6 @@ function ChatInspectionAttachmentChip({
   onRemove: () => void;
 }) {
   return (
-
     <div className="group relative">
       <Button variant="outline" size="sm" className="hover:bg-background!">
         <MessageCircleMore />
@@ -1645,53 +1661,526 @@ function SessionRunIndicator({
   return <span className="size-5" aria-hidden="true" />;
 }
 
-function RightContextSidebar({
-  events,
+type BadgeToneName = "secondary" | "info" | "success" | "warning" | "error";
+
+function goalStatusTone(status: ChatSessionGoalStatus): BadgeToneName {
+  if (status === "BLOCKED") return "warning";
+  if (status === "COMPLETED") return "success";
+  if (status === "CANCELLED" || status === "CLEARED") return "secondary";
+  return "secondary";
+}
+
+function todoStatusTone(status: ChatSessionTodoStatus): BadgeToneName {
+  if (status === "completed") return "success";
+  if (status === "cancelled") return "secondary";
+  if (status === "in_progress") return "info";
+  return "secondary";
+}
+
+function todoPriorityTone(priority: ChatSessionTodoPriority): BadgeToneName {
+  if (priority === "high") return "warning";
+  return "secondary";
+}
+
+function todoStatusDotClass(status: ChatSessionTodoStatus) {
+  if (status === "in_progress") return "bg-[var(--color-focus-ring)]";
+  if (status === "completed") return "bg-[var(--color-success)]";
+  if (status === "cancelled") return "bg-[var(--color-outline-variant)]";
+  return "bg-[var(--color-outline)]";
+}
+
+function isFoldedTodo(todo: ChatSessionTodo) {
+  return todo.status === "completed" || todo.status === "cancelled";
+}
+
+function parseGoalMaxRunsDraft(value: string, fallback: number) {
+  const parsed = Number.parseInt(value, 10);
+  return Number.isFinite(parsed) ? Math.max(1, parsed) : fallback;
+}
+
+function WorkspaceTabState({
+  goal,
+  running,
+}: {
+  goal?: ChatSessionGoalView | null;
+  running: boolean;
+}) {
+  const { t } = useTranslation("pages");
+  const status = goal?.goal.status;
+  if (!status) return null;
+  const label = t(`chat.shortTermMemory.goalStatuses.${status}`);
+
+  if (status === "ACTIVE" && running) {
+    return (
+      <span className="inline-flex size-4 items-center justify-center text-[var(--color-focus-ring)]" title={label} aria-label={label}>
+        <LoaderCircle className="animate-spin" size={14} />
+      </span>
+    );
+  }
+
+  if (status === "ACTIVE") {
+    return (
+      <span className="inline-flex size-4 items-center justify-center text-[var(--color-focus-ring)]" title={label} aria-label={label}>
+        <CircleDot size={14} />
+      </span>
+    );
+  }
+
+  if (status === "BLOCKED") {
+    return (
+      <span className="inline-flex size-4 items-center justify-center text-[var(--color-warning)]" title={label} aria-label={label}>
+        <CircleAlert size={14} />
+      </span>
+    );
+  }
+
+  if (status === "PAUSED") {
+    return (
+      <span className="inline-flex size-4 items-center justify-center text-[var(--color-on-surface-variant)]" title={label} aria-label={label}>
+        <Pause size={14} />
+      </span>
+    );
+  }
+
+  if (status === "COMPLETED") {
+    return (
+      <span className="inline-flex size-4 items-center justify-center text-[var(--color-success)]" title={label} aria-label={label}>
+        <CheckCircle2 size={14} />
+      </span>
+    );
+  }
+
+  return null;
+}
+
+function GoalDetailBlock({
+  children,
+  title,
+  tone = "neutral",
+}: {
+  children: React.ReactNode;
+  title: string;
+  tone?: "neutral" | "warning";
+}) {
+  return (
+    <div
+      className={cn(
+        "space-y-1 border-l-2 border-[var(--color-outline-variant)] pl-3",
+        tone === "warning" && "border-[var(--color-warning)]",
+      )}
+    >
+      <div className="text-[11px] font-medium text-[var(--color-on-surface-variant)]">{title}</div>
+      <div className="max-h-24 overflow-y-auto whitespace-pre-wrap break-words pr-2 text-xs leading-5 text-[var(--color-on-surface)]">
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function goalVerdictLabel(value: string | null | undefined, translate: (key: string) => string) {
+  const normalized = value?.trim().toUpperCase();
+  if (!normalized) return translate("chat.shortTermMemory.goalVerdicts.UNKNOWN");
+  if (normalized === "CONTINUE") return translate("chat.shortTermMemory.goalVerdicts.CONTINUE");
+  if (normalized === "COMPLETE" || normalized === "COMPLETED") return translate("chat.shortTermMemory.goalVerdicts.COMPLETED");
+  if (normalized === "BLOCKED") return translate("chat.shortTermMemory.goalVerdicts.BLOCKED");
+  if (normalized === "FAILED" || normalized === "ERROR") return translate("chat.shortTermMemory.goalVerdicts.FAILED");
+  return value?.trim() ?? normalized;
+}
+
+function RightWorkspaceSidebar({
   goal,
   goalBusy,
   goalStatus,
+  onCancelGoal,
+  onClearGoal,
+  onCreateGoal,
+  onPauseGoal,
+  onResumeGoal,
+  onUpdateGoal,
+  sessionCode,
+  todos,
+  todosStatus,
+}: {
+  goal?: ChatSessionGoalView | null;
+  goalBusy?: boolean;
+  goalStatus?: QueryStatus;
+  onCancelGoal?: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onClearGoal?: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onCreateGoal?: (input: SetChatSessionGoalInput) => Promise<boolean> | boolean;
+  onPauseGoal?: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onResumeGoal?: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onUpdateGoal?: (input: UpdateChatSessionGoalInput) => Promise<boolean> | boolean;
+  sessionCode?: string;
+  todos?: ChatSessionTodo[];
+  todosStatus?: QueryStatus;
+}) {
+  const { t } = useTranslation("pages");
+  const [creatingGoal, setCreatingGoal] = useState(false);
+  const [editingGoal, setEditingGoal] = useState(false);
+  const [goalDraft, setGoalDraft] = useState("");
+  const [goalMaxRunsDraft, setGoalMaxRunsDraft] = useState("");
+  const goalDraftSignature = useMemo(() => JSON.stringify({
+    goalCode: goal?.goal.goalCode ?? "",
+    maxRuns: goal?.goal.maxRuns ?? 0,
+    objective: goal?.goal.objectiveMarkdown ?? "",
+  }), [goal?.goal.goalCode, goal?.goal.maxRuns, goal?.goal.objectiveMarkdown]);
+  const activeTodos = (todos ?? []).filter((todo) => !isFoldedTodo(todo));
+  const foldedTodoCount = (todos ?? []).length - activeTodos.length;
+  const hasGoalLoadState = Boolean(goalStatus?.loading || goalStatus?.error);
+  const hasTodoLoadState = Boolean(todosStatus?.loading || todosStatus?.error);
+  const goalStatusLabel = goal ? t(`chat.shortTermMemory.goalStatuses.${goal.goal.status}`) : "";
+  const canCreateGoal = Boolean(sessionCode && onCreateGoal && (!goal || canStartNewGoalFromStatus(goal.goal.status)));
+  const canEditGoal = Boolean(goal && onUpdateGoal && isEditableGoalStatus(goal.goal.status));
+  const showCreateGoalForm = canCreateGoal && (creatingGoal || !goal);
+
+  useEffect(() => {
+    if (creatingGoal || editingGoal) return;
+    setGoalDraft(goal?.goal.objectiveMarkdown ?? "");
+    setGoalMaxRunsDraft(goal ? String(goal.goal.maxRuns) : "20");
+  }, [creatingGoal, editingGoal, goalDraftSignature]);
+
+  function resetGoalDraft() {
+    setGoalDraft(goal?.goal.objectiveMarkdown ?? "");
+    setGoalMaxRunsDraft(goal ? String(goal.goal.maxRuns) : "20");
+  }
+
+  function resetCreateGoalDraft() {
+    setGoalDraft("");
+    setGoalMaxRunsDraft("20");
+  }
+
+  function startGoalCreate() {
+    resetCreateGoalDraft();
+    setEditingGoal(false);
+    setCreatingGoal(true);
+  }
+
+  function startGoalEdit() {
+    resetGoalDraft();
+    setCreatingGoal(false);
+    setEditingGoal(true);
+  }
+
+  function cancelGoalEdit() {
+    resetGoalDraft();
+    setEditingGoal(false);
+  }
+
+  function cancelGoalCreate() {
+    resetGoalDraft();
+    setCreatingGoal(false);
+  }
+
+  async function handleCreateGoal() {
+    if (!sessionCode || !onCreateGoal) return;
+    const objective = goalDraft.trim();
+    if (!objective) return;
+    const saved = await onCreateGoal({
+      sessionCode,
+      objective,
+      maxRuns: parseGoalMaxRunsDraft(goalMaxRunsDraft, 20),
+    });
+    if (saved !== false) {
+      resetCreateGoalDraft();
+      setCreatingGoal(false);
+    }
+  }
+
+  async function handleSaveGoal() {
+    if (!goal || !onUpdateGoal) return;
+    const objective = goalDraft.trim();
+    if (!objective) return;
+    const saved = await onUpdateGoal({
+      sessionCode: goal.goal.sessionCode,
+      goalCode: goal.goal.goalCode,
+      objective,
+      maxRuns: parseGoalMaxRunsDraft(goalMaxRunsDraft, goal.goal.maxRuns),
+    });
+    if (saved !== false) setEditingGoal(false);
+  }
+
+  function goalCommandInput(): ChatSessionGoalCommand | null {
+    if (!goal) return null;
+    return {
+      sessionCode: goal.goal.sessionCode,
+      goalCode: goal.goal.goalCode,
+    };
+  }
+
+  function runGoalCommand(action?: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean) {
+    const input = goalCommandInput();
+    if (!input || !action) return;
+    void action(input);
+  }
+
+  function renderGoalForm(mode: "create" | "edit") {
+    const savingLabel = mode === "create"
+      ? t("chat.shortTermMemory.setGoal")
+      : t("chat.shortTermMemory.saveGoal");
+    const onSave = mode === "create" ? handleCreateGoal : handleSaveGoal;
+    const onCancel = mode === "create" ? cancelGoalCreate : cancelGoalEdit;
+    const showCancel = mode === "edit" || Boolean(goal);
+
+    return (
+      <div className="space-y-3">
+        <textarea
+          className="min-h-28 w-full resize-y rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 py-1.5 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)]"
+          disabled={goalBusy}
+          placeholder={t("chat.shortTermMemory.goalPlaceholder")}
+          value={goalDraft}
+          onChange={(event) => setGoalDraft(event.target.value)}
+        />
+        <label className="block space-y-1">
+          <span className="text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+            {t("chat.shortTermMemory.goalMaxRuns")}
+          </span>
+          <input
+            className="h-8 w-24 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)]"
+            disabled={goalBusy}
+            min={1}
+            type="number"
+            value={goalMaxRunsDraft}
+            onChange={(event) => setGoalMaxRunsDraft(event.target.value)}
+          />
+        </label>
+        <div className="flex flex-wrap items-center gap-1.5">
+          <button
+            className={smallActionButtonClass()}
+            disabled={goalBusy || !goalDraft.trim()}
+            type="button"
+            onClick={() => void onSave()}
+          >
+            {goalBusy ? <LoaderCircle className="animate-spin" size={13} /> : <CheckCircle2 size={13} />}
+            <span className="ml-1.5">{goalBusy ? t("chat.shortTermMemory.savingGoal") : savingLabel}</span>
+          </button>
+          {showCancel ? (
+            <button
+              className={smallActionButtonClass()}
+              disabled={goalBusy}
+              type="button"
+              onClick={onCancel}
+            >
+              <X size={13} />
+              <span className="ml-1.5">{t("chat.shortTermMemory.cancelEditGoal")}</span>
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  function renderGoalActionButtons() {
+    if (!goal || editingGoal || showCreateGoalForm) return null;
+    const status = goal.goal.status;
+    return (
+      <div className="flex flex-wrap items-center gap-1.5">
+        {status === "ACTIVE" && onPauseGoal ? (
+          <button
+            className={smallActionButtonClass()}
+            disabled={goalBusy}
+            type="button"
+            onClick={() => runGoalCommand(onPauseGoal)}
+          >
+            <Pause size={13} />
+            <span className="ml-1.5">{t("chat.shortTermMemory.pauseGoal")}</span>
+          </button>
+        ) : null}
+        {(status === "PAUSED" || status === "BLOCKED") && onResumeGoal ? (
+          <button
+            className={smallActionButtonClass()}
+            disabled={goalBusy}
+            type="button"
+            onClick={() => runGoalCommand(onResumeGoal)}
+          >
+            <Play size={13} />
+            <span className="ml-1.5">{t("chat.shortTermMemory.resumeGoal")}</span>
+          </button>
+        ) : null}
+        {isEditableGoalStatus(status) && onCancelGoal ? (
+          <button
+            className={smallActionButtonClass()}
+            disabled={goalBusy}
+            type="button"
+            onClick={() => runGoalCommand(onCancelGoal)}
+          >
+            <X size={13} />
+            <span className="ml-1.5">{t("chat.shortTermMemory.cancelGoal")}</span>
+          </button>
+        ) : null}
+        {canClearGoalStatus(status) && onClearGoal ? (
+          <button
+            className={smallActionButtonClass()}
+            disabled={goalBusy}
+            type="button"
+            onClick={() => runGoalCommand(onClearGoal)}
+          >
+            <Eraser size={13} />
+            <span className="ml-1.5">{t("chat.shortTermMemory.clearGoal")}</span>
+          </button>
+        ) : null}
+        {canCreateGoal ? (
+          <button
+            className={smallActionButtonClass()}
+            disabled={goalBusy}
+            type="button"
+            onClick={startGoalCreate}
+          >
+            <Plus size={13} />
+            <span className="ml-1.5">{t("chat.shortTermMemory.newGoal")}</span>
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <section className="space-y-5 text-sm">
+      <ContextBlock
+        title={t("chat.shortTermMemory.goal")}
+        actions={goal ? (
+          <div className="flex items-center gap-1.5">
+            <Badge className="h-5 rounded px-1.5 text-[11px]" tone={goalStatusTone(goal.goal.status)}>
+              {goalStatusLabel}
+            </Badge>
+            {canEditGoal && !editingGoal ? (
+              <button
+                className={smallActionButtonClass()}
+                disabled={goalBusy}
+                type="button"
+                onClick={startGoalEdit}
+              >
+                <Pencil size={13} />
+                <span className="ml-1.5">{t("chat.shortTermMemory.editGoal")}</span>
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      >
+        {hasGoalLoadState ? (
+          <QueryStatusLine
+            errorText={t("chat.shortTermMemory.loadFailed")}
+            loadingText={t("chat.shortTermMemory.loadingGoal")}
+            retryText={t("chat.shortTermMemory.retry")}
+            status={goalStatus}
+          />
+        ) : showCreateGoalForm ? (
+          renderGoalForm("create")
+        ) : goal ? (
+          editingGoal ? (
+            renderGoalForm("edit")
+          ) : (
+            <div className="space-y-3">
+              <div className="max-h-32 overflow-y-auto break-words pr-2 text-sm leading-5 text-[var(--color-on-surface)]">
+                {goal.goal.objectiveMarkdown}
+              </div>
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-[var(--color-on-surface-variant)]">
+                <span>{goalVerdictLabel(goal.goal.lastVerdict, t)}</span>
+                <span>{t("chat.shortTermMemory.goalRunCount", { used: goal.goal.runsUsed, max: goal.goal.maxRuns })}</span>
+                {goal.goal.lastRunCode ? (
+                  <span className="font-mono">{truncateLabel(goal.goal.lastRunCode, 18)}</span>
+                ) : null}
+              </div>
+              {goal.goal.status === "BLOCKED" && goal.goal.blockedReason ? (
+                <GoalDetailBlock title={t("chat.shortTermMemory.blockedReason")} tone="warning">
+                  {goal.goal.blockedReason}
+                </GoalDetailBlock>
+              ) : null}
+              {goal.goal.status === "BLOCKED" && goal.goal.requiredUserInput ? (
+                <GoalDetailBlock title={t("chat.shortTermMemory.requiredUserInput")} tone="warning">
+                  {goal.goal.requiredUserInput}
+                </GoalDetailBlock>
+              ) : null}
+              {goal.goal.status !== "BLOCKED" && goal.goal.lastReason ? (
+                <GoalDetailBlock title={t("chat.shortTermMemory.judgeReason")}>
+                  {goal.goal.lastReason}
+                </GoalDetailBlock>
+              ) : null}
+              {renderGoalActionButtons()}
+            </div>
+          )
+        ) : (
+          <p className="text-xs text-[var(--color-on-surface-variant)]">
+            {t("chat.shortTermMemory.noGoal")}
+          </p>
+        )}
+      </ContextBlock>
+
+      <ContextBlock
+        title={t("chat.shortTermMemory.todo")}
+        actions={activeTodos.length ? (
+          <Badge className="h-5 rounded px-1.5 text-[11px]" tone="secondary">
+            {t("chat.shortTermMemory.activeTodoCount", { count: activeTodos.length })}
+          </Badge>
+        ) : null}
+      >
+        {hasTodoLoadState ? (
+          <QueryStatusLine
+            errorText={t("chat.shortTermMemory.loadFailed")}
+            loadingText={t("chat.shortTermMemory.loadingTodos")}
+            retryText={t("chat.shortTermMemory.retry")}
+            status={todosStatus}
+          />
+        ) : activeTodos.length ? (
+          <div className="space-y-1">
+            {activeTodos.map((todo) => (
+              <div
+                key={todo.todoCode}
+                className="grid min-w-0 grid-cols-[0.5rem_minmax(0,1fr)_auto_auto] items-center gap-2 py-1 text-xs"
+                title={todo.content}
+              >
+                <span className={cn("size-2 rounded-full", todoStatusDotClass(todo.status))} aria-hidden="true" />
+                <span className="min-w-0 truncate text-sm text-[var(--color-on-surface)]">{todo.content}</span>
+                <Badge className="h-5 rounded px-1.5 text-[11px]" tone={todoStatusTone(todo.status)}>
+                  {t(`chat.shortTermMemory.todoStatuses.${todo.status}`)}
+                </Badge>
+                <Badge className="h-5 rounded px-1.5 text-[11px]" tone={todoPriorityTone(todo.priority)}>
+                  {t(`chat.shortTermMemory.todoPriorities.${todo.priority}`)}
+                </Badge>
+              </div>
+            ))}
+            {foldedTodoCount ? (
+              <div className="border-t border-[var(--color-outline-variant)] pt-2 text-xs text-[var(--color-on-surface-variant)]">
+                {t("chat.shortTermMemory.foldedTodoCount", { count: foldedTodoCount })}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <div className="space-y-2 text-xs text-[var(--color-on-surface-variant)]">
+            <p>{t("chat.shortTermMemory.emptyTodos")}</p>
+            {foldedTodoCount ? <p>{t("chat.shortTermMemory.foldedTodoCount", { count: foldedTodoCount })}</p> : null}
+          </div>
+        )}
+      </ContextBlock>
+    </section>
+  );
+}
+
+function RightContextSidebar({
+  events,
   latestCompaction,
   latestCompactionStatus,
   latestRequestEstimate,
   latestUsageAudit,
   messages,
   model,
-  onCancelGoal,
   onCreateCompaction,
-  onClearGoal,
-  onPauseGoal,
-  onResumeGoal,
-  onSetGoal,
   compactionBusy,
   selectedModel,
   session,
-  todos,
-  todosStatus,
 }: {
   events: ChatAguiEvent[];
-  goal?: ChatSessionGoalView | null;
-  goalBusy?: boolean;
-  goalStatus?: QueryStatus;
   latestCompaction?: ChatSessionCompaction | null;
   latestCompactionStatus?: QueryStatus;
   latestRequestEstimate?: ChatTokenEstimateSnapshot | null;
   latestUsageAudit?: ChatUsageAuditSnapshot | null;
   messages: ChatMessage[];
   model?: ModelRecord | null;
-  onCancelGoal?: () => void;
   onCreateCompaction?: () => void;
-  onClearGoal?: () => void;
-  onPauseGoal?: () => void;
-  onResumeGoal?: () => void;
-  onSetGoal?: (objective: string) => Promise<void> | void;
   compactionBusy?: boolean;
   selectedModel?: ChatModelOption | null;
   session?: ChatSession;
-  todos?: ChatSessionTodo[];
-  todosStatus?: QueryStatus;
 }) {
   const { t } = useTranslation("pages");
-  const [goalDraft, setGoalDraft] = useState("");
   const skills = usedSkills(events);
   const appCode = contextValue(session?.appCode) ?? contextValue(latestEventValue(events, "appCode"));
   const taskCode = contextValue(session?.taskCode) ?? contextValue(latestEventValue(events, "taskCode"));
@@ -1722,234 +2211,115 @@ function RightContextSidebar({
     sessionId: systemAgentSessionId,
     worktreePath,
   }) : null;
-  const activeCriteria = goal?.criteria.filter((criterion) => criterion.status === "ACTIVE") ?? [];
-
-  async function handleSubmitGoal() {
-    const objective = goalDraft.trim();
-    if (!objective || !onSetGoal) return;
-    await onSetGoal(objective);
-    setGoalDraft("");
-  }
 
   return (
-    <section className="space-y-4">
-      <div className="space-y-5 text-sm">
-        <ContextBlock title="Last Request Context">
-          <ContextRow label="model" value={modelLabel} />
-          <ContextRow label="window" value={formatContextWindowValue(windowTokens, usedTokens)} />
-          <ContextRow label="estimated" value={formatTokenCount(requestEstimate?.estimatedInputTokens)} />
-          <ContextRow label="messages" value={formatTokenCount(requestEstimate?.messageTokenEstimate)} />
-          <ContextRow label="tools" value={formatTokenCount(requestEstimate?.toolSchemaTokenEstimate)} />
-          <ContextRow label="budget" value={formatTokenCount(requestEstimate?.effectiveInputBudget)} />
-          <ContextRow label="state" value={formatEstimateStatus(requestEstimate)} />
-        </ContextBlock>
-        <ContextBlock title="Provider Usage">
-          <ContextRow label="last turn" value={<TokenUsageCompare lastTurn={lastTurnUsage} sessionTotal={usage} />} />
-          <ContextRow label="cached input" value={formatTokenCount(latestProviderUsage?.cachedInputTokens)} />
-          <ContextRow label="reasoning" value={formatTokenCount(latestProviderUsage?.reasoningTokens)} />
-          <ContextRow label="session spend" value={formatTokenCount(usage.total)} />
-          <ContextRow label="input" value={formatTokenCount(usage.input)} />
-          <ContextRow label="output" value={formatTokenCount(usage.output)} />
-        </ContextBlock>
-        <ContextBlock title={t("chat.shortTermMemory.workingState")}>
-          <div className="mb-3 space-y-2 border-b border-[var(--color-outline-variant)] pb-3">
-            <div className="flex items-center justify-between gap-2">
-              <span className="text-xs font-medium text-[var(--color-on-surface-variant)]">
-                {t("chat.shortTermMemory.goal")}
-              </span>
-              {goal ? <Badge tone="info">{goal.goal.status}</Badge> : null}
-            </div>
-            {goalStatus?.loading || goalStatus?.error ? (
-              <QueryStatusLine
-                errorText={t("chat.shortTermMemory.loadFailed")}
-                loadingText={t("chat.shortTermMemory.loadingGoal")}
-                retryText={t("chat.shortTermMemory.retry")}
-                status={goalStatus}
-              />
-            ) : goal ? (
-              <div className="space-y-2">
-                <p className="break-words text-sm text-[var(--color-on-surface)]">
-                  {goal.goal.objectiveMarkdown}
-                </p>
-                {activeCriteria.length ? (
-                  <ul className="space-y-1 text-xs text-[var(--color-on-surface-variant)]">
-                    {activeCriteria.map((criterion) => (
-                      <li key={criterion.criterionCode} className="break-words">
-                        {criterion.text}
-                      </li>
-                    ))}
-                  </ul>
-                ) : null}
-              </div>
-            ) : (
-              <p className="text-xs text-[var(--color-on-surface-variant)]">
-                {t("chat.shortTermMemory.noGoal")}
-              </p>
-            )}
+    <section className="space-y-5 text-sm">
+      <ContextBlock title={t("chat.shortTermMemory.contextSections.request")}>
+        <ContextRow label="model" value={modelLabel} />
+        <ContextRow label="window" value={formatContextWindowValue(windowTokens, usedTokens)} />
+        <ContextRow label="estimated" value={formatTokenCount(requestEstimate?.estimatedInputTokens)} />
+        <ContextRow label="messages" value={formatTokenCount(requestEstimate?.messageTokenEstimate)} />
+        <ContextRow label="tools" value={formatTokenCount(requestEstimate?.toolSchemaTokenEstimate)} />
+        <ContextRow label="budget" value={formatTokenCount(requestEstimate?.effectiveInputBudget)} />
+        <ContextRow label="state" value={formatEstimateStatus(requestEstimate)} />
+      </ContextBlock>
+      <ContextBlock title={t("chat.shortTermMemory.contextSections.providerUsage")}>
+        <ContextRow label="last turn" value={<TokenUsageCompare lastTurn={lastTurnUsage} sessionTotal={usage} />} />
+        <ContextRow label="cached input" value={formatTokenCount(latestProviderUsage?.cachedInputTokens)} />
+        <ContextRow label="reasoning" value={formatTokenCount(latestProviderUsage?.reasoningTokens)} />
+        <ContextRow label="session spend" value={formatTokenCount(usage.total)} />
+        <ContextRow label="input" value={formatTokenCount(usage.input)} />
+        <ContextRow label="output" value={formatTokenCount(usage.output)} />
+      </ContextBlock>
+      <ContextBlock
+        title={t("chat.shortTermMemory.checkpoint")}
+        actions={(
+          <button
+            aria-label={t("chat.shortTermMemory.createCheckpoint")}
+            className={iconButtonClass()}
+            disabled={!session || compactionBusy}
+            title={t("chat.shortTermMemory.createCheckpoint")}
+            type="button"
+            onClick={onCreateCompaction}
+          >
+            {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Archive size={15} />}
+          </button>
+        )}
+      >
+        <div className="text-xs text-[var(--color-on-surface-variant)]">
+          {latestCompactionStatus?.loading
+            ? t("chat.shortTermMemory.loadingCheckpoint")
+            : latestCompactionStatus?.error
+              ? t("chat.shortTermMemory.loadFailed")
+              : latestCompaction
+                ? t("chat.shortTermMemory.checkpointReady")
+                : t("chat.shortTermMemory.noCheckpoint")}
+        </div>
+        {latestCompactionStatus?.error ? (
+          <QueryStatusLine
+            errorText={t("chat.shortTermMemory.loadFailed")}
+            loadingText={t("chat.shortTermMemory.loadingCheckpoint")}
+            retryText={t("chat.shortTermMemory.retry")}
+            status={latestCompactionStatus}
+          />
+        ) : latestCompaction ? (
+          <div className="space-y-1.5">
+            <ContextRow label={t("chat.shortTermMemory.rows.checkpoint")} value={latestCompaction.checkpointMessageCode} />
+            <ContextRow label={t("chat.shortTermMemory.rows.status")} value={latestCompaction.status} />
+            <ContextRow label={t("chat.shortTermMemory.rows.source")} value={`${latestCompaction.sourceStartSeq}-${latestCompaction.sourceEndSeq}`} />
+            <ContextRow label={t("chat.shortTermMemory.rows.tail")} value={latestCompaction.tailStartSeq} />
+            <ContextRow label={t("chat.shortTermMemory.rows.summaryTokens")} value={formatTokenCount(latestCompaction.summaryTokenEstimate)} />
+            <ContextRow label={t("chat.shortTermMemory.rows.created")} value={formatTime(latestCompaction.createdAt)} />
           </div>
-          {todosStatus?.loading || todosStatus?.error ? (
-            <QueryStatusLine
-              errorText={t("chat.shortTermMemory.loadFailed")}
-              loadingText={t("chat.shortTermMemory.loadingTodos")}
-              retryText={t("chat.shortTermMemory.retry")}
-              status={todosStatus}
-            />
-          ) : todos?.length ? (
-            <div className="space-y-2">
-              {todos.map((todo) => (
-                <div key={todo.todoCode} className="grid grid-cols-[1rem_minmax(0,1fr)] items-start gap-2">
-                  <ListTodo className="mt-0.5 text-[var(--color-on-surface-variant)]" size={14} />
-                  <div className="min-w-0 space-y-1">
-                    <div className="break-words text-[var(--color-on-surface)]">{todo.content}</div>
-                    <div className="flex flex-wrap gap-1.5">
-                      <Badge tone="info">{todo.status}</Badge>
-                      <Badge tone="info">{todo.priority}</Badge>
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="text-xs text-[var(--color-on-surface-variant)]">
-              {t("chat.shortTermMemory.emptyTodos")}
-            </p>
-          )}
+        ) : null}
+      </ContextBlock>
+      {(appCode || taskCode) ? (
+        <ContextBlock title={t("chat.shortTermMemory.contextSections.appTask")}>
+          {appCode ? <ContextRow label="app" value={appCode} /> : null}
+          {taskCode ? <ContextRow label="task" value={taskCode} /> : null}
         </ContextBlock>
-        <ContextBlock title={t("chat.shortTermMemory.goalControls")}>
-          {goalStatus?.loading || goalStatus?.error ? (
-            <QueryStatusLine
-              errorText={t("chat.shortTermMemory.loadFailed")}
-              loadingText={t("chat.shortTermMemory.loadingGoal")}
-              retryText={t("chat.shortTermMemory.retry")}
-              status={goalStatus}
-            />
-          ) : goal ? (
-            <div className="flex flex-wrap gap-1.5">
-              <button
-                className={smallActionButtonClass()}
-                disabled={goalBusy || goal.goal.status === "PAUSED"}
-                type="button"
-                onClick={onPauseGoal}
-              >
-                {t("chat.shortTermMemory.pauseGoal")}
-              </button>
-              <button
-                className={smallActionButtonClass()}
-                disabled={goalBusy || goal.goal.status === "ACTIVE"}
-                type="button"
-                onClick={onResumeGoal}
-              >
-                {t("chat.shortTermMemory.resumeGoal")}
-              </button>
-              <button
-                className={smallActionButtonClass()}
-                disabled={goalBusy}
-                type="button"
-                onClick={onCancelGoal}
-              >
-                {t("chat.shortTermMemory.cancelGoal")}
-              </button>
-              <button
-                className={smallActionButtonClass()}
-                disabled={goalBusy}
-                type="button"
-                onClick={onClearGoal}
-              >
-                {t("chat.shortTermMemory.clearGoal")}
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <textarea
-                className="min-h-20 w-full resize-y rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 py-1.5 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)]"
-                disabled={!session || goalBusy}
-                placeholder={t("chat.shortTermMemory.goalPlaceholder")}
-                value={goalDraft}
-                onChange={(event) => setGoalDraft(event.target.value)}
-              />
-              <button
-                className={smallActionButtonClass()}
-                disabled={!session || goalBusy || !goalDraft.trim()}
-                type="button"
-                onClick={handleSubmitGoal}
-              >
-                {goalBusy ? t("chat.shortTermMemory.savingGoal") : t("chat.shortTermMemory.setGoal")}
-              </button>
-            </div>
-          )}
+      ) : null}
+      {(worktreePath || branchName) ? (
+        <ContextBlock title={t("chat.shortTermMemory.contextSections.worktree")}>
+          {worktreePath ? <ContextRow label="path" value={worktreePath} /> : null}
+          {branchName ? <ContextRow label="branch" value={branchName} icon={<GitBranch size={14} />} /> : null}
         </ContextBlock>
-        <ContextBlock title={t("chat.shortTermMemory.checkpoint")}>
-          <div className="mb-2 flex items-center justify-between gap-2">
-            <span className="text-xs text-[var(--color-on-surface-variant)]">
-              {latestCompactionStatus?.loading
-                ? t("chat.shortTermMemory.loadingCheckpoint")
-                : latestCompactionStatus?.error
-                  ? t("chat.shortTermMemory.loadFailed")
-                  : latestCompaction
-                    ? t("chat.shortTermMemory.checkpointReady")
-                    : t("chat.shortTermMemory.noCheckpoint")}
-            </span>
-            <button
-              aria-label={t("chat.shortTermMemory.createCheckpoint")}
-              className={iconButtonClass()}
-              disabled={!session || compactionBusy}
-              title={t("chat.shortTermMemory.createCheckpoint")}
-              type="button"
-              onClick={onCreateCompaction}
-            >
-              {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Archive size={15} />}
-            </button>
+      ) : null}
+      {isSystemAgentSession ? (
+        <ContextBlock title={t("chat.shortTermMemory.contextSections.systemAgentSession")}>
+          <ContextRow label="agent" value={contextValue(session?.agentCode) ?? "unavailable"} />
+          <ContextRow label="session" value={systemAgentSessionId ?? "unavailable"} />
+          <ContextRow label="path" value={systemSessionPath ?? "unavailable"} />
+        </ContextBlock>
+      ) : null}
+      {skills.length ? (
+        <ContextBlock title={t("chat.shortTermMemory.contextSections.skills")}>
+          <div className="flex flex-wrap gap-2">
+            {skills.map((skill) => <Badge key={skill} tone="secondary">{skill}</Badge>)}
           </div>
-          {latestCompactionStatus?.error ? (
-            <QueryStatusLine
-              errorText={t("chat.shortTermMemory.loadFailed")}
-              loadingText={t("chat.shortTermMemory.loadingCheckpoint")}
-              retryText={t("chat.shortTermMemory.retry")}
-              status={latestCompactionStatus}
-            />
-          ) : latestCompaction ? (
-            <div className="space-y-1.5">
-              <ContextRow label={t("chat.shortTermMemory.rows.checkpoint")} value={latestCompaction.checkpointMessageCode} />
-              <ContextRow label={t("chat.shortTermMemory.rows.source")} value={`${latestCompaction.sourceStartSeq}-${latestCompaction.sourceEndSeq}`} />
-              <ContextRow label={t("chat.shortTermMemory.rows.created")} value={formatTime(latestCompaction.createdAt)} />
-            </div>
-          ) : null}
         </ContextBlock>
-        {(appCode || taskCode) ? (
-          <ContextBlock title="App / Task">
-            {appCode ? <ContextRow label="app" value={appCode} /> : null}
-            {taskCode ? <ContextRow label="task" value={taskCode} /> : null}
-          </ContextBlock>
-        ) : null}
-        {(worktreePath || branchName) ? (
-          <ContextBlock title="Worktree">
-            {worktreePath ? <ContextRow label="path" value={worktreePath} /> : null}
-            {branchName ? <ContextRow label="branch" value={branchName} icon={<GitBranch size={14} />} /> : null}
-          </ContextBlock>
-        ) : null}
-        {isSystemAgentSession ? (
-          <ContextBlock title="System Agent Session">
-            <ContextRow label="agent" value={contextValue(session?.agentCode) ?? "unavailable"} />
-            <ContextRow label="session" value={systemAgentSessionId ?? "unavailable"} />
-            <ContextRow label="path" value={systemSessionPath ?? "unavailable"} />
-          </ContextBlock>
-        ) : null}
-        {skills.length ? (
-          <ContextBlock title="Skills">
-            <div className="flex flex-wrap gap-2">
-              {skills.map((skill) => <Badge key={skill} tone="info">{skill}</Badge>)}
-            </div>
-          </ContextBlock>
-        ) : null}
-      </div>
+      ) : null}
     </section>
   );
 }
 
-function ContextBlock({ children, title }: { children: React.ReactNode; title: string }) {
+function ContextBlock({
+  actions,
+  children,
+  className,
+  title,
+}: {
+  actions?: React.ReactNode;
+  children: React.ReactNode;
+  className?: string;
+  title: React.ReactNode;
+}) {
   return (
-    <section className="space-y-2 border-b border-[var(--color-outline-variant)] pb-4 last:border-b-0">
-      <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">{title}</h3>
+    <section className={cn("space-y-2 border-b border-[var(--color-outline-variant)] pb-4 last:border-b-0", className)}>
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <h3 className="truncate text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">{title}</h3>
+        {actions ? <div className="shrink-0">{actions}</div> : null}
+      </div>
       {children}
     </section>
   );
@@ -3079,6 +3449,7 @@ export function ChatManagementPage() {
   const requestedSessionCode = currentSearchParams.get("sessionCode")?.trim() ?? "";
   const requestedSourceTab = parseChatSessionSourceTab(currentSearchParams.get("sourceTab"));
   const toast = useToast();
+  const openRightSidebar = useOpenRightSidebar();
   const { t } = useTranslation("pages");
   const { session: authSession } = useAuthSession();
   const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
@@ -3115,7 +3486,7 @@ export function ChatManagementPage() {
   const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
   const shortTermMemoryTodosState = useChatSessionTodosState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const latestCompactionState = useChatLatestCompactionState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
-  const activeGoalState = useChatSessionGoalState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
+  const activeGoalState = useChatSessionLatestGoalState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const shortTermMemoryTodos = shortTermMemoryTodosState.data;
   const latestCompaction = latestCompactionState.data;
   const activeGoal = activeGoalState.data;
@@ -3592,50 +3963,71 @@ export function ChatManagementPage() {
       || shouldPollActiveChatData
     )
   );
+  const handleCreateCompactionForRightPanel = useStableCallback(handleCreateCompaction);
   const handleCancelGoalForRightPanel = useStableCallback(handleCancelGoal);
   const handleClearGoalForRightPanel = useStableCallback(handleClearGoal);
-  const handleCreateCompactionForRightPanel = useStableCallback(handleCreateCompaction);
+  const handleCreateGoalForRightPanel = useStableCallback(handleCreateGoal);
   const handlePauseGoalForRightPanel = useStableCallback(handlePauseGoal);
   const handleResumeGoalForRightPanel = useStableCallback(handleResumeGoal);
   const handleSendForRightPanel = useStableCallback(handleSend);
-  const handleSetGoalForRightPanel = useStableCallback(handleSetGoal);
+  const handleUpdateGoalForRightPanel = useStableCallback(handleUpdateGoal);
+  const workspaceGoalRunning = Boolean(
+    activeSession?.sessionCode
+    && activeGoal?.goal.status === "ACTIVE"
+    && (
+      (sending && runningSessionCode === activeSession.sessionCode)
+      || hasOpenReplayRun
+    ),
+  );
 
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
     return (
-      <Tabs key={activeSession?.sessionCode} defaultValue="1" className="w-full h-full">
-        <TabsList className="mx-4 my-2">
-          <TabsTrigger value="1">Run Context</TabsTrigger>
-          <TabsTrigger value="2">页面</TabsTrigger>
+      <Tabs key={activeSession?.sessionCode} defaultValue="workspace" className="h-full min-h-0 w-full">
+        <TabsList className="mx-4 my-2 w-[calc(100%-2rem)]">
+          <TabsTrigger value="workspace">
+            <WorkspaceTabState goal={activeGoal} running={workspaceGoalRunning} />
+            <span>{t("chat.shortTermMemory.workspace")}</span>
+          </TabsTrigger>
+          <TabsTrigger value="context">{t("chat.shortTermMemory.context")}</TabsTrigger>
+          <TabsTrigger value="page">{t("chat.shortTermMemory.page")}</TabsTrigger>
         </TabsList>
-        <TabsContent value="1">
+        <TabsContent value="workspace" className="min-h-0 overflow-y-auto">
           <div className="m-4">
-            <RightContextSidebar
-              events={aguiEvents}
+            <RightWorkspaceSidebar
               goal={activeGoal}
               goalBusy={Boolean(activeSession?.sessionCode && goalActionSessionCode === activeSession.sessionCode)}
               goalStatus={goalStatus}
+              onCancelGoal={handleCancelGoalForRightPanel}
+              onClearGoal={handleClearGoalForRightPanel}
+              onCreateGoal={handleCreateGoalForRightPanel}
+              onPauseGoal={handlePauseGoalForRightPanel}
+              onResumeGoal={handleResumeGoalForRightPanel}
+              onUpdateGoal={handleUpdateGoalForRightPanel}
+              sessionCode={activeSession?.sessionCode}
+              todos={shortTermMemoryTodos}
+              todosStatus={shortTermMemoryTodosStatus}
+            />
+          </div>
+        </TabsContent>
+        <TabsContent value="context" className="min-h-0 overflow-y-auto">
+          <div className="m-4">
+            <RightContextSidebar
+              events={aguiEvents}
               latestCompaction={latestCompaction}
               latestCompactionStatus={latestCompactionStatus}
               latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
               latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
               messages={visibleMessages}
               model={selectedMainAgentModel}
-              onCancelGoal={handleCancelGoalForRightPanel}
               compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
               onCreateCompaction={handleCreateCompactionForRightPanel}
-              onClearGoal={handleClearGoalForRightPanel}
-              onPauseGoal={handlePauseGoalForRightPanel}
-              onResumeGoal={handleResumeGoalForRightPanel}
-              onSetGoal={handleSetGoalForRightPanel}
               selectedModel={selectedModel}
               session={activeSession}
-              todos={shortTermMemoryTodos}
-              todosStatus={shortTermMemoryTodosStatus}
             />
           </div>
         </TabsContent>
-        <TabsContent value="2">
+        <TabsContent value="page" className="min-h-0">
           <PageView
             url="https://www.baidu.com"
             onInspectionConfirm={(result) => {
@@ -3665,10 +4057,11 @@ export function ChatManagementPage() {
     handleCancelGoalForRightPanel,
     handleClearGoalForRightPanel,
     handleCreateCompactionForRightPanel,
+    handleCreateGoalForRightPanel,
     handlePauseGoalForRightPanel,
     handleResumeGoalForRightPanel,
     handleSendForRightPanel,
-    handleSetGoalForRightPanel,
+    handleUpdateGoalForRightPanel,
     latestCompaction,
     latestCompactionStatus,
     latestRequestEstimatesBySessionCode,
@@ -3677,7 +4070,9 @@ export function ChatManagementPage() {
     selectedModel,
     shortTermMemoryTodos,
     shortTermMemoryTodosStatus,
+    t,
     visibleMessages,
+    workspaceGoalRunning,
   ]);
   const transcriptDebugOptions = useMemo(() => ({
     debugEventTypes: resolveAguiDebugEventTypes(aguiDebugPreferences),
@@ -3872,15 +4267,63 @@ export function ChatManagementPage() {
   async function handleSend(contentOverride?: string, attachmentOverride?: ChatMessageAttachment[]) {
     if (sending) return;
     if (!activeSession) return;
-    const content = (contentOverride ?? composer).trim();
+    const rawContent = contentOverride ?? composer;
+    const goalCommand = contentOverride === undefined
+      ? parseGoalCommand(rawContent)
+      : { isGoalCommand: false, content: rawContent.trim() };
+    const content = goalCommand.content;
     if (!content) {
-      toast.warning("Message content is required", { title: "Nothing to send" });
+      toast.warning(
+        goalCommand.isGoalCommand ? "Goal content is required" : "Message content is required",
+        { title: goalCommand.isGoalCommand ? "Goal required" : "Nothing to send" },
+      );
       return;
     }
     if (!selectedModel) {
       toast.warning("Select a model before sending", { title: "Model required" });
       return;
     }
+
+    if (goalCommand.isGoalCommand) {
+      const goalSet = await setGoalFromComposerCommand(content);
+      if (!goalSet) return;
+    }
+
+    await sendChatContent(content, attachmentOverride, contentOverride === undefined);
+  }
+
+  async function setGoalFromComposerCommand(objective: string) {
+    if (!activeSession) return false;
+    const sessionCode = activeSession.sessionCode;
+    setGoalActionSessionCode(sessionCode);
+    try {
+      await setChatSessionGoal({
+        sessionCode,
+        objective,
+        maxRuns: 20,
+      });
+      setShortTermMemoryRefreshKey((current) => current + 1);
+      openRightSidebar();
+      toast.success(t("chat.shortTermMemory.messages.goalSet"), {
+        title: t("chat.shortTermMemory.messages.goalUpdatedTitle"),
+      });
+      return true;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("chat.shortTermMemory.messages.goalFailed"), {
+        title: t("chat.shortTermMemory.messages.goalFailedTitle"),
+      });
+      return false;
+    } finally {
+      setGoalActionSessionCode("");
+    }
+  }
+
+  async function sendChatContent(
+    content: string,
+    attachmentOverride?: ChatMessageAttachment[],
+    shouldClearComposer = false,
+  ) {
+    if (!activeSession || !selectedModel) return;
     const sendInput: SendChatMessageInput = {
       agentCode: effectiveAgentCode,
       appCode: activeSession.appCode,
@@ -3932,7 +4375,7 @@ export function ChatManagementPage() {
     };
     setSending(true);
     setRunningSessionCode(sendingSessionCode);
-    if (contentOverride === undefined) {
+    if (shouldClearComposer) {
       setComposer("");
     }
     if (attachmentOverride === undefined) {
@@ -4126,7 +4569,7 @@ export function ChatManagementPage() {
   }
 
   async function runGoalAction(action: () => Promise<unknown>, successMessage: string) {
-    if (!activeSession || goalActionSessionCode) return;
+    if (!activeSession || goalActionSessionCode) return false;
     const sessionCode = activeSession.sessionCode;
     setGoalActionSessionCode(sessionCode);
     try {
@@ -4135,68 +4578,74 @@ export function ChatManagementPage() {
       toast.success(successMessage, {
         title: t("chat.shortTermMemory.messages.goalUpdatedTitle"),
       });
+      return true;
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("chat.shortTermMemory.messages.goalFailed"), {
         title: t("chat.shortTermMemory.messages.goalFailedTitle"),
       });
+      return false;
     } finally {
       setGoalActionSessionCode("");
     }
   }
 
-  async function handleSetGoal(objective: string) {
-    if (!activeSession) return;
-    await runGoalAction(
-      () => setChatSessionGoal({
-        sessionCode: activeSession.sessionCode,
-        objective,
-        maxRuns: 20,
-        criteria: [],
-      }),
-      t("chat.shortTermMemory.messages.goalSet"),
+  async function handleUpdateGoal(input: UpdateChatSessionGoalInput) {
+    return runGoalAction(
+      () => updateChatSessionGoal(input),
+      t("chat.shortTermMemory.messages.goalSaved"),
     );
   }
 
-  async function handlePauseGoal() {
-    if (!activeSession || !activeGoal) return;
-    await runGoalAction(
-      () => pauseChatSessionGoal({
-        sessionCode: activeSession.sessionCode,
-        goalCode: activeGoal.goal.goalCode,
-      }),
+  async function handleCreateGoal(input: SetChatSessionGoalInput) {
+    if (sending) return false;
+    if (!selectedModel) {
+      toast.warning("Select a model before setting the goal", { title: "Model required" });
+      return false;
+    }
+    const created = await runGoalAction(
+      () => setChatSessionGoal(input),
+      t("chat.shortTermMemory.messages.goalSet"),
+    );
+    if (created) {
+      openRightSidebar();
+      await handleSend(input.objective, []);
+    }
+    return created;
+  }
+
+  async function handlePauseGoal(input: ChatSessionGoalCommand) {
+    return runGoalAction(
+      () => pauseChatSessionGoal(input),
       t("chat.shortTermMemory.messages.goalPaused"),
     );
   }
 
-  async function handleResumeGoal() {
-    if (!activeSession || !activeGoal) return;
-    await runGoalAction(
-      () => resumeChatSessionGoal({
-        sessionCode: activeSession.sessionCode,
-        goalCode: activeGoal.goal.goalCode,
-      }),
+  async function handleResumeGoal(input: ChatSessionGoalCommand) {
+    if (sending) return false;
+    if (!selectedModel) {
+      toast.warning("Select a model before resuming the goal", { title: "Model required" });
+      return false;
+    }
+    const resumed = await runGoalAction(
+      () => resumeChatSessionGoal(input),
       t("chat.shortTermMemory.messages.goalResumed"),
     );
+    if (resumed) {
+      await handleSend(t("chat.shortTermMemory.goalResumePrompt"), []);
+    }
+    return resumed;
   }
 
-  async function handleCancelGoal() {
-    if (!activeSession || !activeGoal) return;
-    await runGoalAction(
-      () => cancelChatSessionGoal({
-        sessionCode: activeSession.sessionCode,
-        goalCode: activeGoal.goal.goalCode,
-      }),
+  async function handleCancelGoal(input: ChatSessionGoalCommand) {
+    return runGoalAction(
+      () => cancelChatSessionGoal(input),
       t("chat.shortTermMemory.messages.goalCancelled"),
     );
   }
 
-  async function handleClearGoal() {
-    if (!activeSession || !activeGoal) return;
-    await runGoalAction(
-      () => clearChatSessionGoal({
-        sessionCode: activeSession.sessionCode,
-        goalCode: activeGoal.goal.goalCode,
-      }),
+  async function handleClearGoal(input: ChatSessionGoalCommand) {
+    return runGoalAction(
+      () => clearChatSessionGoal(input),
       t("chat.shortTermMemory.messages.goalCleared"),
     );
   }
@@ -4338,7 +4787,7 @@ export function ChatManagementPage() {
     const mainElement = mainRef.current;
     if (!mainElement) return;
     const resizeObserver = new ResizeObserver(
-      throttle((entries) => {
+      throttle((entries: ResizeObserverEntry[]) => {
         for (const entry of entries) {
           if (entry.contentBoxSize) {
             const width = entry.contentBoxSize[0].inlineSize;

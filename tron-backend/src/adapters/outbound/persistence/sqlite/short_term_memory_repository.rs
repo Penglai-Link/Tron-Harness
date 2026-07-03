@@ -45,6 +45,8 @@ pub struct SqliteShortTermMemoryRepository {
     connection: Connection,
 }
 
+type GoalLookupResult = Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError>;
+
 impl SqliteShortTermMemoryRepository {
     pub fn connect(database_url: &str) -> Result<Self, ShortTermMemoryError> {
         Ok(Self {
@@ -510,11 +512,12 @@ impl ShortTermMemoryRepository for SqliteShortTermMemoryRepository {
         Ok(session_code.to_string())
     }
 
-    fn get_active_goal(
-        &mut self,
-        session_code: &str,
-    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
+    fn get_active_goal(&mut self, session_code: &str) -> GoalLookupResult {
         repository_goal::get_active_goal(&self.connection, session_code)
+    }
+
+    fn get_latest_goal(&mut self, session_code: &str) -> GoalLookupResult {
+        repository_goal::get_latest_goal(&self.connection, session_code)
     }
 
     fn list_open_goals_batch(
@@ -525,10 +528,7 @@ impl ShortTermMemoryRepository for SqliteShortTermMemoryRepository {
         repository_goal::list_open_goals(&self.connection, after_id, limit)
     }
 
-    fn get_goal(
-        &mut self,
-        goal_code: &str,
-    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
+    fn get_goal(&mut self, goal_code: &str) -> GoalLookupResult {
         repository_goal::get_goal(&self.connection, goal_code)
     }
 

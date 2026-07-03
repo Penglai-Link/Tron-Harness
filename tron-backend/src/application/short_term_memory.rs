@@ -32,12 +32,11 @@ pub use config::{
     ShortTermMemoryConfig, ToolOutputConfig,
 };
 pub use dto::{
-    AddGoalCriterionCommand, CompactionContextPolicy, ContextBudgetBreakdown,
-    CreateCompactionCommand, GoalJudgeFailure, GoalJudgeOutput, GoalLoopDecision,
-    GoalSessionCommand, ModelCompactionFailure, ModelCompactionOutput, ModelRequestTranscriptFacts,
-    ModelResponseTranscriptFacts, PreparedCompactionInput, PreparedGoalJudgeInput,
-    PreparedModelContext, RemoveGoalCriterionCommand, ReplaceTodosCommand, SetGoalCommand,
-    TodoUpdateItem, ToolTranscriptStatus,
+    CompactionContextPolicy, ContextBudgetBreakdown, CreateCompactionCommand, GoalJudgeFailure,
+    GoalJudgeOutput, GoalLoopDecision, GoalSessionCommand, ModelCompactionFailure,
+    ModelCompactionOutput, ModelRequestTranscriptFacts, ModelResponseTranscriptFacts,
+    PreparedCompactionInput, PreparedGoalJudgeInput, PreparedModelContext, ReplaceTodosCommand,
+    SetGoalCommand, TodoUpdateItem, ToolTranscriptStatus, UpdateGoalCommand,
 };
 pub use port::ShortTermMemoryRepository;
 pub use service::ShortTermMemoryService;

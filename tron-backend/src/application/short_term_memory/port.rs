@@ -153,6 +153,10 @@ pub trait ShortTermMemoryRepository: Send {
         &mut self,
         session_code: &str,
     ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError>;
+    fn get_latest_goal(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError>;
     fn list_open_goals_batch(
         &mut self,
         after_id: i64,

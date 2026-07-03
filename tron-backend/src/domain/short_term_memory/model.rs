@@ -350,6 +350,7 @@ pub struct ShortTermMemoryGoalEvent {
 #[serde(rename_all = "camelCase")]
 pub struct ShortTermMemoryGoalView {
     pub goal: ShortTermMemoryGoal,
+    #[serde(default, skip_serializing)]
     pub criteria: Vec<ShortTermMemoryGoalCriterion>,
 }
 

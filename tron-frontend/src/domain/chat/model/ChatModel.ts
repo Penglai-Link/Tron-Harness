@@ -208,46 +208,26 @@ export interface ChatSessionGoal {
   metadataJson?: Record<string, unknown> | null;
 }
 
-export interface ChatSessionGoalCriterion {
-  id: number;
-  criterionCode: string;
-  goalCode: string;
-  sessionCode: string;
-  position: number;
-  text: string;
-  status: "ACTIVE" | "REMOVED";
-  createdAt: string;
-  updatedAt: string;
-  removedAt?: string | null;
-}
-
 export interface ChatSessionGoalView {
   goal: ChatSessionGoal;
-  criteria: ChatSessionGoalCriterion[];
 }
 
 export interface SetChatSessionGoalInput {
   sessionCode: string;
   objective: string;
   maxRuns?: number | null;
-  criteria?: string[];
+}
+
+export interface UpdateChatSessionGoalInput {
+  sessionCode: string;
+  goalCode: string;
+  objective: string;
+  maxRuns?: number | null;
 }
 
 export interface ChatSessionGoalCommand {
   sessionCode: string;
   goalCode?: string | null;
-}
-
-export interface AddChatSessionGoalCriterionInput {
-  sessionCode: string;
-  goalCode?: string | null;
-  text: string;
-}
-
-export interface RemoveChatSessionGoalCriterionInput {
-  sessionCode: string;
-  goalCode: string;
-  criterionCode: string;
 }
 
 export interface ChatAguiEvent {

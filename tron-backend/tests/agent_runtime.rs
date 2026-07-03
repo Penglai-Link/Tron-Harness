@@ -383,6 +383,13 @@ impl ShortTermMemoryRepository for ContextEpochFailingRepository {
         Ok(None)
     }
 
+    fn get_latest_goal(
+        &mut self,
+        _session_code: &str,
+    ) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
+        Ok(None)
+    }
+
     fn list_open_goals_batch(
         &mut self,
         _after_id: i64,

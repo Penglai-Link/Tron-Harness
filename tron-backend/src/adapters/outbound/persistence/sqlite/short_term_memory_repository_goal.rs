@@ -34,6 +34,26 @@ pub(super) fn get_active_goal(
         .transpose()
 }
 
+pub(super) fn get_latest_goal(
+    connection: &Connection,
+    session_code: &str,
+) -> Result<Option<ShortTermMemoryGoalView>, ShortTermMemoryError> {
+    let goal = connection
+        .query_row(
+            "SELECT id, goal_code, session_code, workspace_code, user_code, task_code, active_family_code, objective_markdown, status, revision, runs_used, max_runs, last_run_code, last_input_code, last_verdict, last_reason, blocked_reason, required_user_input, consecutive_judge_failures, created_by_run_code, created_at, updated_at, paused_at, blocked_at, completed_at, cancelled_at, cleared_at, metadata_json
+             FROM agent_session_goals
+             WHERE session_code = ?1
+             ORDER BY updated_at DESC, id DESC
+             LIMIT 1",
+            [session_code],
+            row_to_goal,
+        )
+        .optional()
+        .map_err(storage_error)?;
+    goal.map(|goal| load_goal_view(connection, goal))
+        .transpose()
+}
+
 pub(super) fn list_open_goals(
     connection: &Connection,
     after_id: i64,

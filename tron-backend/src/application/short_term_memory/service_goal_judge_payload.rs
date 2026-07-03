@@ -36,14 +36,6 @@ pub(super) fn goal_judge_payload(
             "maxRuns": goal.goal.max_runs,
             "lastVerdict": goal.goal.last_verdict,
             "lastReason": goal.goal.last_reason,
-            "criteria": goal.criteria.iter()
-                .filter(|criterion| criterion.status == "ACTIVE")
-                .map(|criterion| json!({
-                    "criterionCode": criterion.criterion_code,
-                    "position": criterion.position,
-                    "text": criterion.text,
-                }))
-                .collect::<Vec<_>>(),
         },
         "lastRun": {
             "runCode": run_code,

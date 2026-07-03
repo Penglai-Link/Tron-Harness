@@ -424,7 +424,6 @@ fn transcript_service_records_todos_and_compaction() {
             session_code: second_session.session_code.clone(),
             objective: "Finish the complete short-term memory design".into(),
             max_runs: Some(5),
-            criteria: vec!["Family context is visible".into()],
         })
         .expect("goal should be set");
     service
@@ -485,7 +484,6 @@ fn transcript_service_records_todos_and_compaction() {
             session_code: active_state_session.session_code.clone(),
             objective: "Active state without snapshot".into(),
             max_runs: Some(5),
-            criteria: vec!["Active state appears in family context".into()],
         })
         .expect("active-state goal should be set");
     service
@@ -816,7 +814,6 @@ fn goal_continuation_admission_rechecks_active_goal_state() {
         .set_goal(SetGoalCommand {
             session_code: session.session_code.clone(),
             objective: "Continue only while active".into(),
-            criteria: vec!["second admission check passes".into()],
             max_runs: Some(3),
         })
         .expect("goal should be set");
@@ -1925,7 +1922,6 @@ fn goal_storage_rejects_second_open_goal_and_preserves_existing_goal() {
             session_code: session.session_code.clone(),
             objective: "Keep the original goal".into(),
             max_runs: Some(3),
-            criteria: vec!["criterion one".into()],
         })
         .expect("first goal should be created");
     let conflict = service
@@ -1933,7 +1929,6 @@ fn goal_storage_rejects_second_open_goal_and_preserves_existing_goal() {
             session_code: session.session_code.clone(),
             objective: "Reject this second goal".into(),
             max_runs: Some(3),
-            criteria: Vec::new(),
         })
         .expect_err("second open goal should conflict");
 
@@ -1983,7 +1978,6 @@ fn goal_update_rejects_stale_revision_and_preserves_current_state() {
             session_code: session.session_code.clone(),
             objective: "Keep revision safe".into(),
             max_runs: Some(3),
-            criteria: vec!["criterion one".into()],
         })
         .expect("goal should be created");
     let mut repository = SqliteShortTermMemoryRepository::connect(&database_url)
@@ -3110,7 +3104,6 @@ fn working_state_budget_prioritizes_goal_before_todos() {
             session_code: session.session_code.clone(),
             objective: "Preserve the active session goal under pressure".into(),
             max_runs: Some(5),
-            criteria: Vec::new(),
         })
         .expect("goal should be set");
     service
@@ -4699,7 +4692,6 @@ fn delete_session_removes_short_term_memory_rows() {
         .set_goal(SetGoalCommand {
             session_code: session.session_code.clone(),
             objective: "Delete this goal with its session".into(),
-            criteria: vec!["cleanup leaves no goal rows".into()],
             max_runs: Some(2),
         })
         .expect("goal should be recorded");
