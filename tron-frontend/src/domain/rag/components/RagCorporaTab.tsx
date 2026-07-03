@@ -1,8 +1,6 @@
 import {
-  useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import {
   MoreHorizontal,
   Sparkles
@@ -16,11 +14,16 @@ import {
   SurfaceCard,
   TablePagination,
   TextInput,
-  useDismissibleLayer,
   useTablePagination,
 } from "@/shared";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import type { CorpusRecord } from "@/domain/rag/model/RagModel";
 import {
@@ -28,13 +31,6 @@ import {
   statusTone,
 } from "@/domain/rag/components/RagShared";
 import { SelectItem } from "@/components/ui/select";
-
-interface RowMenuState {
-  code: string;
-  left: number;
-  top: number;
-  triggerElement: HTMLButtonElement;
-}
 
 export function RagCorporaTab({
   corpusPagination,
@@ -61,47 +57,14 @@ export function RagCorporaTab({
 }) {
   const navigate = useNavigate();
   const { t } = useTranslation(["pages"]);
-  const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
   const [rowBusyCode, setRowBusyCode] = useState("");
-  const rowMenuRef = useRef<HTMLDivElement | null>(null);
-  const openMenuCorpus = openRowMenu
-    ? corpusPagination.visibleItems.find((corpus) => corpus.code === openRowMenu.code) ?? null
-    : null;
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:rag.corpora.${key}`, { defaultValue, ...options })
   );
 
-  useDismissibleLayer({
-    open: Boolean(openRowMenu),
-    onDismiss: () => setOpenRowMenu(null),
-    popupRef: rowMenuRef,
-    triggerElement: openRowMenu?.triggerElement ?? null,
-  });
-
-  function toggleRowMenu(corpus: CorpusRecord, triggerElement: HTMLButtonElement) {
-    const rect = triggerElement.getBoundingClientRect();
-    const menuWidth = 176;
-    const menuHeight = corpus.ingestProfile.trim() ? 188 : 108;
-    const preferredTop = rect.bottom + 8;
-    const top = preferredTop + menuHeight > window.innerHeight - 16
-      ? Math.max(16, rect.top - menuHeight - 8)
-      : preferredTop;
-    setOpenRowMenu((current) => (
-      current?.code === corpus.code
-        ? null
-        : {
-          code: corpus.code,
-          left: Math.max(16, Math.min(rect.right - menuWidth, window.innerWidth - menuWidth - 16)),
-          top,
-          triggerElement,
-        }
-    ));
-  }
-
   async function runRowAction(corpus: CorpusRecord, action: (target: CorpusRecord) => Promise<void> | void) {
     if (rowBusyCode === corpus.code) return;
     setRowBusyCode(corpus.code);
-    setOpenRowMenu(null);
     try {
       await action(corpus);
     } finally {
@@ -118,7 +81,6 @@ export function RagCorporaTab({
   }
 
   function openIngestProfile(corpus: CorpusRecord) {
-    setOpenRowMenu(null);
     navigate(ingestProfilePath(corpus));
   }
 
@@ -209,23 +171,62 @@ export function RagCorporaTab({
               headerClassName: "w-24",
               id: "actions",
               render: (corpus) => {
-                const isMenuOpen = openRowMenu?.code === corpus.code;
+                const isBusy = rowBusyCode === corpus.code;
                 return (
                   <div className="flex justify-end">
-                    <Button
-                      aria-expanded={isMenuOpen}
-                      aria-label={pageT("actions.openRowActions", "Open actions for {{name}}", { name: corpus.name })}
-                      data-rag-corpus-menu-trigger={corpus.code}
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleRowMenu(corpus, event.currentTarget);
-                      }}
-                    >
-                      <MoreHorizontal size={16} aria-hidden="true" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger disabled={isBusy}>
+                        <MoreHorizontal onClick={(event) => {
+                          event.stopPropagation();
+                        }} size={16} aria-hidden="true" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        <DropdownMenuItem
+                          disabled={isBusy}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openIngestProfile(corpus);
+                          }}
+                        >
+                          {corpus.ingestProfile.trim()
+                            ? pageT("actions.editIngestProfile", "Edit ingest profile")
+                            : pageT("actions.createIngestProfile", "Create ingest profile")}
+                        </DropdownMenuItem>
+                        {corpus.ingestProfile.trim() ? (
+                          <>
+                            <DropdownMenuItem
+                              disabled={isBusy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                onTestIngest(corpus);
+                              }}
+                            >
+                              {pageT("actions.testIngest", "Ingest test")}
+                            </DropdownMenuItem>
+                            <DropdownMenuItem
+                              variant="destructive"
+                              disabled={isBusy}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void runRowAction(corpus, onDeleteIngestProfile);
+                              }}
+                            >
+                              {pageT("actions.deleteIngestProfile", "Delete ingest profile")}
+                            </DropdownMenuItem>
+                          </>
+                        ) : null}
+                        <DropdownMenuItem
+                          variant="destructive"
+                          disabled={isBusy}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void runRowAction(corpus, onDeleteCorpus);
+                          }}
+                        >
+                          {pageT("actions.deleteCorpus", "Delete corpus")}
+                        </DropdownMenuItem>
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 );
               },
@@ -233,69 +234,6 @@ export function RagCorporaTab({
           ]}
         />
       </SurfaceCard>
-
-      {openRowMenu && openMenuCorpus
-        ? createPortal(
-          <div
-            ref={rowMenuRef}
-            aria-label={pageT("actions.rowMenuAria", "Actions for {{name}}", { name: openMenuCorpus.name })}
-            className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
-            role="menu"
-            style={{ left: openRowMenu.left, top: openRowMenu.top }}
-          >
-            <button
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyCode === openMenuCorpus.code}
-              role="menuitem"
-              type="button"
-              onClick={() => openIngestProfile(openMenuCorpus)}
-            >
-              {openMenuCorpus.ingestProfile.trim()
-                ? pageT("actions.editIngestProfile", "Edit ingest profile")
-                : pageT("actions.createIngestProfile", "Create ingest profile")}
-            </button>
-            {openMenuCorpus.ingestProfile.trim() ? (
-              <>
-                <button
-                  className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={rowBusyCode === openMenuCorpus.code}
-                  role="menuitem"
-                  type="button"
-                  onClick={() => {
-                    setOpenRowMenu(null);
-                    onTestIngest(openMenuCorpus);
-                  }}
-                >
-                  {pageT("actions.testIngest", "Ingest test")}
-                </button>
-                <button
-                  className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-                  disabled={rowBusyCode === openMenuCorpus.code}
-                  role="menuitem"
-                  type="button"
-                  onClick={() => {
-                    void runRowAction(openMenuCorpus, onDeleteIngestProfile);
-                  }}
-                >
-                  {pageT("actions.deleteIngestProfile", "Delete ingest profile")}
-                </button>
-              </>
-            ) : null}
-            <button
-              className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyCode === openMenuCorpus.code}
-              role="menuitem"
-              type="button"
-              onClick={() => {
-                void runRowAction(openMenuCorpus, onDeleteCorpus);
-              }}
-            >
-              {pageT("actions.deleteCorpus", "Delete corpus")}
-            </button>
-          </div>,
-          document.body,
-        )
-        : null}
     </>
   );
 }

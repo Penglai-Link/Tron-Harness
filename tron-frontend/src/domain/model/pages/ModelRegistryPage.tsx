@@ -1,10 +1,8 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
@@ -23,11 +21,16 @@ import {
   SurfaceCard,
   TablePagination,
   TextInput,
-  useDismissibleLayer,
   useTablePagination,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 import {
   deleteWorkspaceModel,
@@ -60,13 +63,6 @@ import type {
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { SelectItem } from "@/components/ui/select";
 
-interface RowMenuState {
-  left: number;
-  modelCode: string;
-  top: number;
-  triggerElement: HTMLButtonElement;
-}
-
 export function ModelRegistryPage() {
   const navigate = useNavigate();
   const { t } = useTranslation(["common", "pages"]);
@@ -78,17 +74,12 @@ export function ModelRegistryPage() {
   const [catalog, setCatalog] = useState<WorkspaceModelCatalog | null>(null);
   const [loading, setLoading] = useState(false);
   const [rowBusyCode, setRowBusyCode] = useState("");
-  const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [protocolFilter, setProtocolFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
-  const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
   const records = catalog?.records ?? [];
-  const openMenuRow = openRowMenu
-    ? records.find((record) => record.modelCode === openRowMenu.modelCode) ?? null
-    : null;
 
   function getProtocolFilterValue(record: ModelRecord) {
     return record.protocol;
@@ -202,7 +193,6 @@ export function ModelRegistryPage() {
   async function refreshWorkspaceModels() {
     if (!activeWorkspaceCode) {
       setCatalog(null);
-      setOpenRowMenu(null);
       return;
     }
 
@@ -223,50 +213,13 @@ export function ModelRegistryPage() {
     void refreshWorkspaceModels();
   }, [activeWorkspaceCode]);
 
-  useDismissibleLayer({
-    onDismiss: () => setOpenRowMenu(null),
-    open: openRowMenu !== null,
-    popupRef: rowMenuRef,
-    triggerElement: openRowMenu?.triggerElement,
-  });
-
   function hasRowActions(row: ModelRecord) {
     return row.workspaceCode === activeWorkspaceCode;
-  }
-
-  function toggleRowMenu(row: ModelRecord, trigger: HTMLButtonElement) {
-    if (!activeWorkspaceCode || !hasRowActions(row) || rowBusyCode === row.modelCode) {
-      return;
-    }
-    if (openRowMenu?.modelCode === row.modelCode) {
-      setOpenRowMenu(null);
-      return;
-    }
-
-    const menuWidth = 176;
-    const estimatedMenuHeight = 272;
-    const rect = trigger.getBoundingClientRect();
-    const left = Math.min(
-      Math.max(12, rect.right - menuWidth),
-      window.innerWidth - menuWidth - 12,
-    );
-    const top = Math.min(
-      Math.max(12, rect.bottom + 8),
-      window.innerHeight - estimatedMenuHeight - 12,
-    );
-
-    setOpenRowMenu({
-      modelCode: row.modelCode,
-      left,
-      top,
-      triggerElement: trigger,
-    });
   }
 
   async function handleSetDefault(row: ModelRecord) {
     if (!activeWorkspaceCode || rowBusyCode === row.modelCode || row.isDefault) return;
     setRowBusyCode(row.modelCode);
-    setOpenRowMenu(null);
 
     try {
       await (dataSource === "api"
@@ -284,7 +237,6 @@ export function ModelRegistryPage() {
   async function handleToggleEnabled(row: ModelRecord) {
     if (!activeWorkspaceCode || rowBusyCode === row.modelCode) return;
     setRowBusyCode(row.modelCode);
-    setOpenRowMenu(null);
 
     try {
       const updated = dataSource === "api"
@@ -304,7 +256,6 @@ export function ModelRegistryPage() {
   async function handleVerify(row: ModelRecord) {
     if (!activeWorkspaceCode || rowBusyCode === row.modelCode) return;
     setRowBusyCode(row.modelCode);
-    setOpenRowMenu(null);
     const verifyingToastId = toast.info(`Verifying connectivity for ${row.displayName}...`, {
       title: "Verify",
       durationMs: 0,
@@ -327,7 +278,6 @@ export function ModelRegistryPage() {
   async function handleDuplicate(row: ModelRecord) {
     if (!activeWorkspaceCode || rowBusyCode === row.modelCode) return;
     setRowBusyCode(row.modelCode);
-    setOpenRowMenu(null);
 
     try {
       const duplicated = dataSource === "api"
@@ -345,7 +295,6 @@ export function ModelRegistryPage() {
   async function handleDelete(row: ModelRecord) {
     if (!activeWorkspaceCode || rowBusyCode === row.modelCode) return;
     setRowBusyCode(row.modelCode);
-    setOpenRowMenu(null);
 
     try {
       if (dataSource === "api") {
@@ -515,7 +464,6 @@ export function ModelRegistryPage() {
               cellClassName: "w-24",
               render: (row) => {
                 const hasActionsAvailable = hasRowActions(row);
-                const isMenuOpen = openRowMenu?.modelCode === row.modelCode;
                 const isBusy = rowBusyCode === row.modelCode;
 
                 if (!hasActionsAvailable) {
@@ -524,20 +472,73 @@ export function ModelRegistryPage() {
 
                 return (
                   <div className="flex justify-end">
-                    <Button
-                      size="icon"
-                      variant="ghost"
-                      aria-label={`Open actions for ${row.displayName}`}
-                      aria-expanded={isMenuOpen}
-                      data-workspace-model-menu-trigger={row.modelCode}
-                      disabled={isBusy}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleRowMenu(row, event.currentTarget);
-                      }}
-                    >
-                      <MoreHorizontal size={16} aria-hidden="true" />
-                    </Button>
+                    <DropdownMenu>
+                      <DropdownMenuTrigger disabled={isBusy}>
+                        <MoreHorizontal onClick={(event) => {
+                          event.stopPropagation();
+                        }} size={16} aria-hidden="true" />
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="end" className="w-44">
+                        {row.enabled && !row.isDefault ? (
+                          <DropdownMenuItem
+                            disabled={isBusy}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleSetDefault(row);
+                            }}
+                          >
+                            Set Default
+                          </DropdownMenuItem>
+                        ) : null}
+                        <DropdownMenuItem
+                          disabled={isBusy}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleDuplicate(row);
+                          }}
+                        >
+                          Copy
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}&mode=edit`);
+                          }}
+                        >
+                          Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={isBusy}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleToggleEnabled(row);
+                          }}
+                        >
+                          {row.enabled ? "Disable" : "Enable"}
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={isBusy}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            void handleVerify(row);
+                          }}
+                        >
+                          Verify
+                        </DropdownMenuItem>
+                        {row.sourceKind === "LOCAL" || row.sourceKind === "OVERRIDE" ? (
+                          <DropdownMenuItem
+                            variant="destructive"
+                            disabled={isBusy}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              void handleDelete(row);
+                            }}
+                          >
+                            {row.sourceKind === "OVERRIDE" ? "Revert" : "Delete"}
+                          </DropdownMenuItem>
+                        ) : null}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
                   </div>
                 );
               },
@@ -546,90 +547,6 @@ export function ModelRegistryPage() {
           emptyState={activeWorkspaceCode ? "No effective models match the current filters." : "Select a workspace in the shell to load models."}
         />
       </div>
-
-      {openRowMenu && openMenuRow
-        ? createPortal(
-          <div
-            ref={rowMenuRef}
-            style={{ left: openRowMenu.left, top: openRowMenu.top }}
-            className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
-            role="menu"
-            aria-label={`Actions for ${openMenuRow.displayName}`}
-          >
-            {openMenuRow.enabled && !openMenuRow.isDefault ? (
-              <button
-                type="button"
-                role="menuitem"
-                className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={rowBusyCode === openMenuRow.modelCode}
-                onClick={() => {
-                  void handleSetDefault(openMenuRow);
-                }}
-              >
-                Set Default
-              </button>
-            ) : null}
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyCode === openMenuRow.modelCode}
-              onClick={() => {
-                void handleDuplicate(openMenuRow);
-              }}
-            >
-              Copy
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
-              onClick={() => {
-                setOpenRowMenu(null);
-                navigate(`/models/detail?modelCode=${encodeURIComponent(openMenuRow.modelCode)}&mode=edit`);
-              }}
-            >
-              Edit
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyCode === openMenuRow.modelCode}
-              onClick={() => {
-                void handleToggleEnabled(openMenuRow);
-              }}
-            >
-              {openMenuRow.enabled ? "Disable" : "Enable"}
-            </button>
-            <button
-              type="button"
-              role="menuitem"
-              className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              disabled={rowBusyCode === openMenuRow.modelCode}
-              onClick={() => {
-                void handleVerify(openMenuRow);
-              }}
-            >
-              Verify
-            </button>
-            {openMenuRow.sourceKind === "LOCAL" || openMenuRow.sourceKind === "OVERRIDE" ? (
-              <button
-                type="button"
-                role="menuitem"
-                className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-                disabled={rowBusyCode === openMenuRow.modelCode}
-                onClick={() => {
-                  void handleDelete(openMenuRow);
-                }}
-              >
-                {openMenuRow.sourceKind === "OVERRIDE" ? "Revert" : "Delete"}
-              </button>
-            ) : null}
-          </div>,
-          document.body,
-        )
-        : null}
     </>
   );
 }
