@@ -9,6 +9,7 @@
 ## API
 
 Use a uniform response body format:
+
 ```
 {
   code: "response status code or error code"
@@ -18,6 +19,7 @@ Use a uniform response body format:
 ```
 
 Pagable response body format:
+
 ```
 {
   code: "response status code"
@@ -38,7 +40,5 @@ Pagable response body format:
 - Git Spec follows `$eliteforge-git-feature-oriented-lite-spec`
 
 ## What's more
-If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
 
-<!-- Note: `make fe-unit-test` currently fails in some chat-react tests because the test environment's `window.localStorage` is not a full Storage implementation (`clear`/`setItem` can be missing). -->
-<!-- Note: `make fe-check` currently fails on an existing TypeScript error in `tron-frontend/src/domain/admin/pages/WorkspaceManagementPage.tsx` where `Select` is passed an `onChange` prop that is not part of the component's typed API. -->
+If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
