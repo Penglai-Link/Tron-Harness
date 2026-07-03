@@ -6,17 +6,39 @@ import type {
 
 const timestamp = "2026-06-23T08:00:00Z";
 
-function node(node: Omit<GraphNodeView, "createdAt" | "updatedAt">): GraphNodeView {
+type GraphNodeMockInput = Omit<
+GraphNodeView,
+"createdAt" | "editable" | "inherited" | "originUserCode" | "originWorkspaceCode" | "originWorkspaceName" | "scopeType" | "updatedAt"
+> & Partial<Pick<GraphNodeView, "editable" | "inherited" | "originUserCode" | "originWorkspaceCode" | "originWorkspaceName" | "scopeType">>;
+
+type GraphEdgeMockInput = Omit<
+GraphEdgeView,
+"createdAt" | "editable" | "inherited" | "originUserCode" | "originWorkspaceCode" | "originWorkspaceName" | "scopeType" | "updatedAt"
+> & Partial<Pick<GraphEdgeView, "editable" | "inherited" | "originUserCode" | "originWorkspaceCode" | "originWorkspaceName" | "scopeType">>;
+
+function node(node: GraphNodeMockInput): GraphNodeView {
   return {
     createdAt: timestamp,
+    editable: true,
+    inherited: false,
+    originUserCode: null,
+    originWorkspaceCode: "TRON_CORE",
+    originWorkspaceName: "Tron Core",
+    scopeType: "SPACE",
     updatedAt: timestamp,
     ...node,
   };
 }
 
-function edge(edge: Omit<GraphEdgeView, "createdAt" | "updatedAt">): GraphEdgeView {
+function edge(edge: GraphEdgeMockInput): GraphEdgeView {
   return {
     createdAt: timestamp,
+    editable: true,
+    inherited: false,
+    originUserCode: null,
+    originWorkspaceCode: "TRON_CORE",
+    originWorkspaceName: "Tron Core",
+    scopeType: "SPACE",
     updatedAt: timestamp,
     ...edge,
   };
@@ -44,7 +66,11 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       nodeCode: "GIT",
       labels: ["RagTool"],
       score: 0.95,
+      editable: false,
       fullText: "Git operations",
+      inherited: true,
+      originWorkspaceCode: "WS-ROOT",
+      originWorkspaceName: "Root Workspace",
       properties: {
         builtin: true,
         confidence: 0.95,
@@ -106,7 +132,11 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       nodeCode: "ROOT_NODE",
       labels: ["TronGraphNode"],
       score: 0.72,
+      editable: false,
       fullText: "root task",
+      inherited: true,
+      originWorkspaceCode: "WS-ROOT",
+      originWorkspaceName: "Root Workspace",
       properties: {
         priority: 3,
         workspaceCode: "WS-ROOT",
@@ -136,11 +166,13 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       nodeCode: "RAG_PROMPTER",
       labels: ["RagSkill"],
       score: 0.66,
+      originUserCode: "U-TRON-001",
       properties: {
         corpusId: "skill-graph",
         skillName: "rag-prompter",
         sourceVersion: "v1",
       },
+      scopeType: "USER",
     }),
     node({
       nodeCode: "CODE_SEARCH",
@@ -211,6 +243,10 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       sourceNodeCode: "RAG_REVIEWER",
       targetNodeCode: "GIT",
       relationship: "REQUIRES_TOOL",
+      editable: false,
+      inherited: true,
+      originWorkspaceCode: "WS-ROOT",
+      originWorkspaceName: "Root Workspace",
       properties: {
         required: true,
         usage: "source-control",
@@ -261,6 +297,10 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       sourceNodeCode: "ROOT_NODE",
       targetNodeCode: "CHILD_NODE",
       relationship: "RELATES_TO",
+      editable: false,
+      inherited: true,
+      originWorkspaceCode: "WS-ROOT",
+      originWorkspaceName: "Root Workspace",
       properties: {
         weight: 9.5,
       },
@@ -286,7 +326,9 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
       sourceNodeCode: "RAG_PROMPTER",
       targetNodeCode: "RAG_PROMPT_TEMPLATE",
       relationship: "USES_PROMPT_TEMPLATE",
+      originUserCode: "U-TRON-001",
       properties: {},
+      scopeType: "USER",
     }),
     edge({
       edgeCode: "TASK_PROPERTY_RELATES_TASK",
@@ -357,13 +399,24 @@ export function getKnowledgeGraphMock(): KnowledgeGraphView {
     scope: {
       appCode: "__NONE__",
       currentWorkspaceCode: "TRON_CORE",
+      inheritanceMode: "WORKSPACE_LINEAGE",
       namedGraph: "WS-ROOT",
       namespace: "rag_skill",
       rootWorkspaceCode: "WS-ROOT",
       schema: "rag_skill",
-      userCode: "__NONE__",
+      scopeModes: ["SPACE", "USER"],
+      userCode: "U-TRON-001",
+      visibleUserCodes: ["__NONE__", "U-TRON-001"],
       visibleWorkspaceCodes: ["WS-ROOT", "TRON_CORE"],
       workspaceCode: "TRON_CORE",
+    },
+    window: {
+      edgeTotal: 3942,
+      hasMore: true,
+      limit: 100,
+      nodeTotal: 1284,
+      returnedEdgeCount: edges.length,
+      returnedNodeCount: nodes.length,
     },
   };
 }

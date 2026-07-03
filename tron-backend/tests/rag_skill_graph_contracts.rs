@@ -1,5 +1,7 @@
 use std::{
+    collections::BTreeMap,
     future::Future,
+    hash::{Hash, Hasher},
     path::PathBuf,
     pin::Pin,
     sync::{
@@ -1332,6 +1334,147 @@ async fn skill_graph_default_write_policy_allows_custom_kind_relationship_and_ed
     assert_eq!(prompt_edge["properties"]["required"], json!(true));
     assert_eq!(prompt_edge["properties"]["weight"], json!(0.7));
     assert_eq!(prompt_edge["properties"]["usage"], json!("agent-selected"));
+}
+
+#[tokio::test]
+async fn skill_graph_related_write_links_new_nodes_to_existing_nodes_without_updating_existing_nodes()
+ {
+    let database_url = temp_database_path("rag-skill-graph-existing-node")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-existing-node-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    graph_service
+        .create_node(
+            graph_scope(),
+            GraphNodeWrite {
+                node_code: "EXISTING_TOOL".into(),
+                labels: vec!["RagTool".into()],
+                properties: BTreeMap::from([
+                    ("provider".into(), GraphPropertyValue::Text("git".into())),
+                    ("priority".into(), GraphPropertyValue::Integer(10)),
+                ]),
+                full_text: Some("Existing Git tool".into()),
+                embedding_text: None,
+                embedding_model_code: None,
+            },
+        )
+        .await
+        .unwrap();
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    let mut request = skill_graph_request(
+        "rag-existing-linker",
+        "Links new graph data to existing graph nodes.",
+    );
+    request.payload["relatedGraph"] = json!({
+        "nodes": [{
+            "ref": "new.topic",
+            "kind": "TOPIC",
+            "label": "RagTopic",
+            "code": "NEW_TOPIC",
+            "title": "New Topic",
+            "text": "New topic graph node",
+            "properties": { "priority": 3 }
+        }],
+        "existingNodes": [{
+            "ref": "existing.tool",
+            "code": "EXISTING_TOOL"
+        }],
+        "edges": [{
+            "from": "new.topic",
+            "to": "existing.tool",
+            "relationship": "RELATES_TO",
+            "properties": { "weight": 0.8 }
+        }]
+    });
+
+    service.ingest(request).await.unwrap();
+
+    let existing = graph_service
+        .get_node(graph_scope(), "EXISTING_TOOL".into())
+        .unwrap();
+    assert_eq!(
+        existing.properties.get("provider"),
+        Some(&GraphPropertyValue::Text("git".into()))
+    );
+    assert_eq!(
+        existing.properties.get("priority"),
+        Some(&GraphPropertyValue::Integer(10))
+    );
+    assert_eq!(existing.full_text.as_deref(), Some("Existing Git tool"));
+    let created = graph_service
+        .get_node(graph_scope(), "NEW_TOPIC".into())
+        .unwrap();
+    assert_eq!(created.labels, vec!["RagTopic".to_string()]);
+    let edge_code = test_stable_graph_code(
+        "RAG_RELATED_EDGE",
+        &["NEW_TOPIC", "RELATES_TO", "EXISTING_TOOL"],
+    );
+    let edge = graph_service.get_edge(graph_scope(), edge_code).unwrap();
+    assert_eq!(edge.source_node_code, "NEW_TOPIC");
+    assert_eq!(edge.target_node_code, "EXISTING_TOOL");
+    assert_eq!(edge.relationship, "RELATES_TO");
+    assert_eq!(
+        edge.properties.get("weight"),
+        Some(&GraphPropertyValue::Decimal(0.8))
+    );
+}
+
+#[tokio::test]
+async fn skill_graph_related_write_rejects_missing_existing_nodes_before_writing_new_nodes() {
+    let database_url = temp_database_path("rag-skill-graph-missing-existing-node")
+        .to_string_lossy()
+        .to_string();
+    let graph_path = temp_database_path("rag-skill-graph-missing-existing-node-store")
+        .to_string_lossy()
+        .to_string();
+    let runtime = FakeRuntime::new(embedding_4(1.0, 0.0));
+    let (repository, graph_service) = build_repository(&database_url, &graph_path);
+    let service = RagIngestService::new(
+        repository,
+        DefaultRagStrategyRegistry::default(),
+        runtime.clone(),
+    );
+    let mut request = skill_graph_request(
+        "rag-missing-existing-linker",
+        "Fails when an existing graph node reference does not resolve.",
+    );
+    request.payload["relatedGraph"] = json!({
+        "nodes": [{
+            "ref": "new.topic",
+            "kind": "TOPIC",
+            "label": "RagTopic",
+            "code": "NEW_TOPIC",
+            "title": "New Topic"
+        }],
+        "existingNodes": [{
+            "ref": "missing.tool",
+            "code": "MISSING_TOOL"
+        }],
+        "edges": [{
+            "from": "new.topic",
+            "to": "missing.tool",
+            "relationship": "RELATES_TO"
+        }]
+    });
+
+    assert_eq!(
+        service.ingest(request).await.unwrap_err(),
+        RagError::IngestRequestInvalid
+    );
+    assert!(
+        graph_service
+            .get_node(graph_scope(), "NEW_TOPIC".into())
+            .is_err(),
+        "new related graph nodes should not be written when existing node preflight fails"
+    );
 }
 
 #[tokio::test]
@@ -2772,6 +2915,14 @@ fn graph_scope_for_namespace(namespace: &str) -> GraphScopeCommand {
         app_code: None,
         user_code: None,
     }
+}
+
+fn test_stable_graph_code(prefix: &str, parts: &[&str]) -> String {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    for part in parts {
+        part.hash(&mut hasher);
+    }
+    format!("{prefix}_{:016X}", hasher.finish())
 }
 
 fn embedding_4(left: f32, right: f32) -> Vec<f32> {

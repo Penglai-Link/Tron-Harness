@@ -77,11 +77,17 @@ impl GraphBackedRagRepository {
             .get("nodes")
             .and_then(Value::as_array)
             .ok_or(RagError::IngestRequestInvalid)?;
+        let empty_existing_nodes = Vec::new();
+        let existing_nodes = related_graph
+            .get("existingNodes")
+            .map(|value| value.as_array().ok_or(RagError::IngestRequestInvalid))
+            .transpose()?
+            .unwrap_or(&empty_existing_nodes);
         let edges = related_graph
             .get("edges")
             .and_then(Value::as_array)
             .ok_or(RagError::IngestRequestInvalid)?;
-        if nodes.len() > policy.max_nodes || edges.len() > policy.max_edges {
+        if nodes.len() + existing_nodes.len() > policy.max_nodes || edges.len() > policy.max_edges {
             return Err(RagError::IngestRequestInvalid);
         }
 
@@ -91,6 +97,21 @@ impl GraphBackedRagRepository {
             ("$source".to_string(), target_node_code.to_string()),
             ("$skill".to_string(), target_node_code.to_string()),
         ]);
+        for node in existing_nodes {
+            let reference = required_str(node, "ref")?;
+            let code = normalize_related_code(required_str(node, "code")?)?;
+            if self
+                .graph_store
+                .get_node(scope, &code)
+                .map_err(map_graph_error)?
+                .is_none()
+            {
+                return Err(RagError::IngestRequestInvalid);
+            }
+            insert_related_ref(&mut refs, reference, code)?;
+        }
+
+        let mut prepared_nodes = Vec::with_capacity(nodes.len());
         for node in nodes {
             let reference = required_str(node, "ref")?;
             let kind = required_str(node, "kind")?;
@@ -104,6 +125,7 @@ impl GraphBackedRagRepository {
                 return Err(RagError::IngestRequestInvalid);
             }
             let code = normalize_related_code(required_str(node, "code")?)?;
+            insert_related_ref(&mut refs, reference, code.clone())?;
             let mut properties = custom_related_properties(node)?;
             push_text_prop(&mut properties, "relatedKind", kind);
             push_text_prop(&mut properties, "relatedRef", reference);
@@ -127,24 +149,10 @@ impl GraphBackedRagRepository {
             }
             .validate()
             .map_err(map_graph_error)?;
-            let prepared = PreparedGraphNodeWrite::plain(write);
-            if self
-                .graph_store
-                .get_node(scope, &code)
-                .map_err(map_graph_error)?
-                .is_some()
-            {
-                self.graph_store
-                    .update_node(scope, prepared)
-                    .map_err(map_graph_error)?;
-            } else {
-                self.graph_store
-                    .create_node(scope, prepared)
-                    .map_err(map_graph_error)?;
-            }
-            refs.insert(reference.to_string(), code);
+            prepared_nodes.push(PreparedGraphNodeWrite::plain(write));
         }
 
+        let mut prepared_edges = Vec::with_capacity(edges.len());
         for edge in edges {
             let from = refs
                 .get(required_str(edge, "from")?)
@@ -166,7 +174,7 @@ impl GraphBackedRagRepository {
             let edge_code = stable_graph_code("RAG_RELATED_EDGE", &[&from, relationship, &to]);
             let properties = custom_edge_properties(edge)?;
             let write = GraphEdgeWrite {
-                edge_code: edge_code.clone(),
+                edge_code,
                 source_node_code: from,
                 target_node_code: to,
                 relationship: relationship.to_string(),
@@ -177,7 +185,29 @@ impl GraphBackedRagRepository {
             }
             .validate()
             .map_err(map_graph_error)?;
-            let prepared = PreparedGraphEdgeWrite::plain(write);
+            prepared_edges.push(PreparedGraphEdgeWrite::plain(write));
+        }
+
+        for prepared in prepared_nodes {
+            let code = prepared.command.node_code.clone();
+            if self
+                .graph_store
+                .get_node(scope, &code)
+                .map_err(map_graph_error)?
+                .is_some()
+            {
+                self.graph_store
+                    .update_node(scope, prepared)
+                    .map_err(map_graph_error)?;
+            } else {
+                self.graph_store
+                    .create_node(scope, prepared)
+                    .map_err(map_graph_error)?;
+            }
+        }
+
+        for prepared in prepared_edges {
+            let edge_code = prepared.command.edge_code.clone();
             if self
                 .graph_store
                 .get_edge(scope, &edge_code)
@@ -211,6 +241,18 @@ fn related_policy(policy: &Value) -> Result<RelatedPolicy, RagError> {
         max_nodes: optional_positive_usize(policy, "maxRelatedNodes").unwrap_or(50),
         max_edges: optional_positive_usize(policy, "maxRelatedEdges").unwrap_or(100),
     })
+}
+
+fn insert_related_ref(
+    refs: &mut BTreeMap<String, String>,
+    reference: &str,
+    code: String,
+) -> Result<(), RagError> {
+    if reference.trim().is_empty() || refs.contains_key(reference) {
+        return Err(RagError::IngestRequestInvalid);
+    }
+    refs.insert(reference.to_string(), code);
+    Ok(())
 }
 
 fn optional_code_set(policy: &Value, field: &str) -> Result<Option<BTreeSet<String>>, RagError> {

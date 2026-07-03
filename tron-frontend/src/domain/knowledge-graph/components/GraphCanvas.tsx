@@ -19,7 +19,14 @@ import { GraphLegend } from "@/domain/knowledge-graph/components/GraphLegend";
 import type {
   GraphEdgeView,
   GraphLayoutMode,
+  GraphMetrics,
   GraphNodeView,
+} from "@/domain/knowledge-graph/model";
+import {
+  graphNodeColorForGroup,
+  graphNodeColorGroup,
+  graphNodeLegendItems,
+  resolveGraphNodeLabel,
 } from "@/domain/knowledge-graph/model";
 import { cn } from "@/shared/lib/utils";
 
@@ -28,6 +35,8 @@ interface GraphCanvasProps {
   highlightedEdgeCodes: string[];
   highlightedNodeCodes: string[];
   layoutMode: GraphLayoutMode;
+  metrics: GraphMetrics;
+  nodeLabelProperty: string;
   nodes: GraphNodeView[];
   onCameraZoomChange: (zoom: number) => void;
   onClearSelection: () => void;
@@ -39,8 +48,8 @@ interface GraphCanvasProps {
 type NodeKind = "skill" | "tool" | "tag" | "prompt" | "text" | "vector" | "ontology" | "lineage" | "code" | "default";
 
 interface PositionedNode extends GraphNodeView {
+  colorGroup: string;
   degree: number;
-  kind: NodeKind;
   layoutX: number;
   layoutY: number;
 }
@@ -87,19 +96,6 @@ interface GraphZoomStyleData {
 
 type ResolvedGraphLayoutMode = Exclude<GraphLayoutMode, "Smart">;
 
-const nodePalette: Record<NodeKind, { border: string; color: string; soft: string }> = {
-  code: { border: "#ccd8e8", color: "#315f8d", soft: "rgba(49,95,141,0.1)" },
-  default: { border: "#d3d7d7", color: "#7b7f80", soft: "rgba(123,127,128,0.1)" },
-  lineage: { border: "#d3d7d7", color: "#7b7f80", soft: "rgba(123,127,128,0.1)" },
-  ontology: { border: "#d9c9ef", color: "#7a5e9a", soft: "rgba(122,94,154,0.1)" },
-  prompt: { border: "#c6d6f1", color: "#3e69a7", soft: "rgba(47,95,159,0.1)" },
-  skill: { border: "#1c1b1b", color: "#1c1b1b", soft: "rgba(28,27,27,0.08)" },
-  tag: { border: "#c9ddcc", color: "#4f6f52", soft: "rgba(79,111,82,0.11)" },
-  text: { border: "#d5d8d8", color: "#747878", soft: "rgba(116,120,120,0.11)" },
-  tool: { border: "#c6d6f1", color: "#2f5f9f", soft: "rgba(47,95,159,0.11)" },
-  vector: { border: "#eadbac", color: "#8a6a1f", soft: "rgba(138,106,31,0.12)" },
-};
-
 const fallbackMinimapViewport: MinimapViewport = {
   height: 58,
   left: 26,
@@ -108,6 +104,10 @@ const fallbackMinimapViewport: MinimapViewport = {
   visibleWidth: 52,
   width: 52,
 };
+
+function numberText(value: number) {
+  return new Intl.NumberFormat("en-US").format(value);
+}
 
 function nodeKind(labels: string[]): NodeKind {
   if (labels.some((label) => label.includes("Code") || label.includes("Symbol") || label.includes("Method") || label.includes("Function"))) return "code";
@@ -649,12 +649,12 @@ function buildPositionedNodes(nodes: GraphNodeView[], edges: GraphEdgeView[], la
   const generatedLayout = useExplicitCoordinates ? undefined : buildLayout(nodes, edges, degreeByNode, resolvedLayoutMode);
 
   return nodes.map<PositionedNode>((node) => {
-    const kind = nodeKind(node.labels);
+    const colorGroup = graphNodeColorGroup(node.labels);
     const generatedPoint = generatedLayout?.get(node.nodeCode);
     return {
       ...node,
+      colorGroup,
       degree: degreeByNode.get(node.nodeCode) ?? 0,
-      kind,
       layoutX: useExplicitCoordinates ? node.x ?? 0 : generatedPoint?.x ?? 0,
       layoutY: useExplicitCoordinates ? node.y ?? 0 : generatedPoint?.y ?? 0,
     };
@@ -810,6 +810,7 @@ function buildG6Data(
   highlightedNodeCodes: string[],
   highlightedEdgeCodes: string[],
   zoom: number,
+  nodeLabelProperty: string,
 ): GraphData {
   const highlightedNodes = new Set(highlightedNodeCodes);
   const nodeByCode = new Map(nodes.map((node) => [node.nodeCode, node]));
@@ -819,23 +820,23 @@ function buildG6Data(
     nodes: nodes.map((node) => {
       const selected = node.nodeCode === selectedNodeCode;
       const highlighted = selected || highlightedNodes.has(node.nodeCode);
-      const palette = nodePalette[node.kind];
+      const palette = graphNodeColorForGroup(node.colorGroup);
       const point = graphPointForNode(node);
       const radius = nodeRadius(node);
       const displayRadius = selected ? radius + 2 : highlighted ? radius + 1 : radius;
       return {
         id: node.nodeCode,
         data: {
+          colorGroup: node.colorGroup,
           degree: node.degree,
           detail: propertyText(node),
-          kind: node.kind,
           nodeCode: node.nodeCode,
           primaryLabel: node.labels[0] ?? "GraphNode",
         },
         states: [],
         style: {
           cursor: "pointer",
-          fill: selected ? "#1c1b1b" : highlighted ? "#2f5f9f" : palette.color,
+          fill: palette.color,
           halo: false,
           labelBackground: false,
           labelFill: "#1f2933",
@@ -843,12 +844,12 @@ function buildG6Data(
           labelFontWeight: 700,
           labelPadding: 0,
           labelPlacement: "right",
-          labelText: node.nodeCode,
-          lineWidth: selected ? 1.5 : 0,
+          labelText: resolveGraphNodeLabel(node, nodeLabelProperty),
+          lineWidth: selected ? 2.5 : highlighted ? 1.8 : 0,
           opacity: selected || highlighted ? 1 : 0.92,
           r: displayRadius,
           size: displayRadius * 2,
-          stroke: selected ? "#ffffff" : "transparent",
+          stroke: selected ? "#111827" : highlighted ? "#2f5f9f" : "transparent",
           x: point.x,
           y: point.y,
           zIndex: selected ? 10 : highlighted ? 6 : Math.max(1, Math.min(5, node.degree)),
@@ -973,6 +974,8 @@ export function GraphCanvas({
   highlightedEdgeCodes,
   highlightedNodeCodes,
   layoutMode,
+  metrics,
+  nodeLabelProperty,
   nodes,
   onCameraZoomChange,
   onClearSelection,
@@ -1013,13 +1016,21 @@ export function GraphCanvas({
     () => new Set(positionedNodes.map((node) => node.nodeCode)),
     [positionedNodes],
   );
+  const nodeLabelPreview = useMemo(
+    () => positionedNodes.map((node) => resolveGraphNodeLabel(node, nodeLabelProperty)).join(" | "),
+    [nodeLabelProperty, positionedNodes],
+  );
+  const legendItems = useMemo(
+    () => graphNodeLegendItems(positionedNodes),
+    [positionedNodes],
+  );
   const renderEdges = useMemo(
     () => edges.filter((edge) => visibleNodeCodes.has(edge.sourceNodeCode) && visibleNodeCodes.has(edge.targetNodeCode)),
     [edges, visibleNodeCodes],
   );
   const g6Data = useMemo(
-    () => buildG6Data(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoomRef.current),
-    [graphBounds, highlightedEdgeCodes, highlightedNodeCodes, positionedNodes, renderEdges, selectedNodeCode],
+    () => buildG6Data(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoomRef.current, nodeLabelProperty),
+    [graphBounds, highlightedEdgeCodes, highlightedNodeCodes, nodeLabelProperty, positionedNodes, renderEdges, selectedNodeCode],
   );
   const zoomStyleData = useMemo(
     () => buildG6ZoomStyleData(positionedNodes, renderEdges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoom),
@@ -1269,10 +1280,13 @@ export function GraphCanvas({
       graph.setData(g6Data);
       await graph.draw();
       if (graphRef.current === graph) {
+        if (!selectedNodeCode) {
+          await centerGraphAt(graph, graphCenter(graphBounds), 0);
+        }
         setMinimapViewport(buildMinimapViewport(graph, graphBounds));
       }
     });
-  }, [g6Data, graphBounds]);
+  }, [g6Data, graphBounds, selectedNodeCode]);
 
   useEffect(() => {
     const graph = graphRef.current;
@@ -1332,7 +1346,7 @@ export function GraphCanvas({
 
   return (
     <section
-      className="relative h-full min-h-[620px] min-w-0 overflow-hidden bg-[var(--color-surface-container-lowest)]"
+      className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--color-surface-container-lowest)]"
       aria-label="G6 semantic knowledge graph canvas"
       style={{
         backgroundImage: "radial-gradient(circle at 1px 1px, rgba(68,71,72,0.13) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.76), rgba(243,244,244,0.58))",
@@ -1340,6 +1354,7 @@ export function GraphCanvas({
       }}
     >
       <div ref={containerRef} className="absolute inset-0 z-0" />
+      <div className="sr-only" aria-label="Graph node labels">{nodeLabelPreview}</div>
 
       <div className="absolute bottom-4 left-4 z-20 rounded-xl border border-[var(--color-card-border)] bg-white/88 p-2 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm">
         <button
@@ -1364,7 +1379,7 @@ export function GraphCanvas({
               )}
               key={`mini-${node.nodeCode}`}
               style={{
-                backgroundColor: nodePalette[node.kind].color,
+                backgroundColor: graphNodeColorForGroup(node.colorGroup).color,
                 ...minimapNodePosition(node, graphBounds),
               }}
             />
@@ -1381,7 +1396,15 @@ export function GraphCanvas({
         </button>
       </div>
 
-      <GraphLegend />
+      <GraphLegend items={legendItems} />
+      <div
+        aria-label="Graph canvas metrics"
+        className="absolute bottom-16 right-4 z-20 flex items-center gap-2 rounded-xl border border-[var(--color-card-border)] bg-white/88 px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+      >
+        <span>{numberText(metrics.nodeCount)} nodes</span>
+        <span className="text-[var(--color-outline)]">·</span>
+        <span>{numberText(metrics.edgeCount)} edges</span>
+      </div>
     </section>
   );
 }

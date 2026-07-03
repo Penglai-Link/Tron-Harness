@@ -1,6 +1,7 @@
 mod embedding;
 #[cfg(test)]
 mod embedding_tests;
+mod explorer;
 mod ontology;
 mod ontology_reference_validation;
 #[cfg(test)]
@@ -17,6 +18,7 @@ mod service_test_support;
 mod service_tests;
 
 pub use embedding::*;
+pub use explorer::*;
 pub use ontology::*;
 pub use scope_resolver::{ScopeResolver, WorkspaceDetailProvider};
 pub use service::*;

@@ -1280,6 +1280,9 @@ export function RagCorpusFormPage() {
                 {visibleStorageSegmentOrder.map((segmentKey) => {
                   const segmentMeta = segmentBindingMeta.find((entry) => entry.key === segmentKey);
                   if (!segmentMeta) return null;
+                  const selectedTargetId = form.segmentBindings[segmentMeta.key].trim();
+                  const selectedTargetIndex = form.storageTargets.findIndex((target) => target.id.trim() === selectedTargetId);
+                  const selectedTargetLabel = storageTargetValue(form.storageTargets[selectedTargetIndex], selectedTargetIndex);
                   return (
                     <Field
                       key={segmentMeta.key}
@@ -1290,6 +1293,7 @@ export function RagCorpusFormPage() {
                       <SelectInput
                         aria-label={pageT(`segmentBindings.${segmentMeta.key}`, "{{label}} target", { label: pageT(`segments.${segmentMeta.key}`, segmentMeta.label) })}
                         className="w-full"
+                        displayValue={selectedTargetLabel}
                         placeholder={pageT("storageTargets.select", "Select storage target")}
                         value={form.segmentBindings[segmentMeta.key]}
                         onValueChange={(event) => updateSegmentBinding(segmentMeta.key, event!)}

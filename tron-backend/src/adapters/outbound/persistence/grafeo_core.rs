@@ -49,6 +49,23 @@ impl GrafeoStoreCore {
         Ok(session)
     }
 
+    pub(crate) fn session(&self) -> Session {
+        self.database.session()
+    }
+
+    pub(crate) fn schema_names(&self) -> Result<Vec<String>, grafeo::Error> {
+        let result = self.session().execute("SHOW SCHEMAS")?;
+        Ok(result
+            .rows()
+            .iter()
+            .filter_map(|row| {
+                row.first()
+                    .and_then(|value| value.as_str())
+                    .map(str::to_owned)
+            })
+            .collect())
+    }
+
     fn ensure_scope(
         &self,
         session: &Session,
@@ -56,7 +73,7 @@ impl GrafeoStoreCore {
     ) -> Result<(), grafeo::Error> {
         let schema = encode_schema_name(&scope.schema);
         if remember_once(&self.bootstrapped_schemas, &schema) {
-            session.execute(&format!("CREATE SCHEMA {schema} IF NOT EXISTS"))?;
+            create_if_missing(session, &format!("CREATE SCHEMA {schema} IF NOT EXISTS"))?;
         }
 
         session.execute(&format!("SESSION SET SCHEMA {schema}"))?;
@@ -65,7 +82,10 @@ impl GrafeoStoreCore {
         let graph_key = format!("{schema}/{named_graph}");
         let bootstrap_graph = remember_once(&self.bootstrapped_graphs, &graph_key);
         if bootstrap_graph {
-            session.execute(&format!("CREATE GRAPH {named_graph} IF NOT EXISTS"))?;
+            create_if_missing(
+                session,
+                &format!("CREATE GRAPH {named_graph} IF NOT EXISTS"),
+            )?;
         }
 
         session.execute(&format!("USE GRAPH {named_graph}"))?;
@@ -110,6 +130,10 @@ fn remember_once(cache: &Mutex<HashSet<String>>, key: &str) -> bool {
 }
 
 fn create_index(session: &Session, query: &str) -> Result<(), grafeo::Error> {
+    create_if_missing(session, query)
+}
+
+fn create_if_missing(session: &Session, query: &str) -> Result<(), grafeo::Error> {
     match session.execute(query) {
         Ok(_) => Ok(()),
         Err(error) if error.to_string().contains("already exists") => Ok(()),
@@ -130,6 +154,10 @@ pub fn encode_schema_name(value: &str) -> String {
     encode_storage_name("ns", value)
 }
 
+pub(crate) fn decode_schema_name(value: &str) -> Option<String> {
+    decode_storage_name("ns", value)
+}
+
 pub fn encode_graph_name(value: &str) -> String {
     encode_storage_name("graph", value)
 }
@@ -144,6 +172,21 @@ fn encode_storage_name(prefix: &str, value: &str) -> String {
         encoded.push(HEX[(byte & 0x0f) as usize] as char);
     }
     encoded
+}
+
+fn decode_storage_name(prefix: &str, value: &str) -> Option<String> {
+    let encoded = value.strip_prefix(&format!("{prefix}_"))?;
+    if encoded.len() % 2 != 0 {
+        return None;
+    }
+
+    let mut bytes = Vec::with_capacity(encoded.len() / 2);
+    for index in (0..encoded.len()).step_by(2) {
+        let byte = u8::from_str_radix(&encoded[index..index + 2], 16).ok()?;
+        bytes.push(byte);
+    }
+
+    String::from_utf8(bytes).ok()
 }
 
 fn ensure_parent_directory(storage_path: &str) -> Result<(), grafeo::Error> {

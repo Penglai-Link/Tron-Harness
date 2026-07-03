@@ -26,6 +26,7 @@ export interface MultiSelectOption {
 export function MultiSelectDropdown({
   ariaLabel,
   "aria-describedby": ariaDescribedBy,
+  className,
   disabled = false,
   emptyMessage,
   id,
@@ -34,12 +35,14 @@ export function MultiSelectDropdown({
   onToggle,
   options,
   placeholder,
+  triggerClassName,
   searchEmptyMessage = "No matching options.",
   searchPlaceholder = "Search options...",
   selectedValues,
 }: {
   "aria-describedby"?: string;
   ariaLabel: string;
+  className?: string;
   disabled?: boolean;
   emptyMessage: string;
   id?: string;
@@ -48,6 +51,7 @@ export function MultiSelectDropdown({
   onToggle?: (value: string) => void;
   options: MultiSelectOption[];
   placeholder: string;
+  triggerClassName?: string;
   searchEmptyMessage?: string;
   searchPlaceholder?: string;
   selectedValues: string[];
@@ -124,7 +128,7 @@ export function MultiSelectDropdown({
   });
 
   return (
-    <div className="relative w-full">
+    <div className={cn("relative w-full", className)}>
       <button
         ref={triggerRef}
         aria-expanded={open}
@@ -135,6 +139,7 @@ export function MultiSelectDropdown({
           triggerDisabled
             ? "cursor-not-allowed opacity-70"
             : "hover:border-[var(--color-primary)] hover:bg-[var(--color-hover-surface)]",
+          triggerClassName,
         )}
         disabled={triggerDisabled}
         id={id}

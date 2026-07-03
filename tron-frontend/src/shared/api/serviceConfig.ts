@@ -96,7 +96,7 @@ function selectApiData<T>(payload: unknown): T {
     return payload as T;
   }
 
-  if (payload.code !== "SUCCESS") {
+  if (payload.code !== "SUCCESS" && payload.code !== "0") {
     const message = typeof payload.message === "string" ? payload.message : "API request failed";
     throw new Error(message);
   }

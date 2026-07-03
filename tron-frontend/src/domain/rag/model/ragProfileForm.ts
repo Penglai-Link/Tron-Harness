@@ -118,6 +118,7 @@ export interface RagRetrievalProfileFormState {
 }
 
 export interface RagIngestProfileFormErrors {
+  graphWritePolicy?: string;
   id?: string;
   parseDocumentFormat?: string;
   pipeline?: string;
@@ -170,6 +171,20 @@ function splitCommaSeparatedTokens(value: string) {
 function trimOrUndefined(value: string) {
   const trimmed = value.trim();
   return trimmed ? trimmed : undefined;
+}
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+export function parseIngestGraphWritePolicy(value: string): Record<string, unknown> | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = JSON.parse(trimmed) as unknown;
+  if (!isPlainRecord(parsed)) {
+    throw new Error("graphWritePolicy must be a JSON object");
+  }
+  return parsed;
 }
 
 function parseOptionalInteger(value: string) {
@@ -831,6 +846,15 @@ export function validateIngestProfileForm(
 
   if (form.status !== "Ready") {
     errors.status = ragProfileFormT("errors.readyStatusOnly", "The current RAG runtime only allows saving Ready profiles.");
+  }
+
+  try {
+    parseIngestGraphWritePolicy(form.graphWritePolicy);
+  } catch {
+    errors.graphWritePolicy = ragProfileFormT(
+      "errors.graphWritePolicyJson",
+      "Graph write policy must be a JSON object.",
+    );
   }
 
   const enabledStages = form.pipelineStages.filter((stage) => stage.enabled);

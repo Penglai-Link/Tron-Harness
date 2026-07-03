@@ -6,7 +6,7 @@ use crate::{
         app::AppService,
         automation::AutomationService,
         chat::ChatService,
-        graph::{GraphService, OntologyService},
+        graph::{GraphExplorerService, GraphService, OntologyService},
         llm::LlmRuntimeService,
         mcp::McpService,
         memory::MemoryWorkDomainService,
@@ -77,6 +77,12 @@ impl FromRef<AppState> for GraphService {
 impl FromRef<AppState> for OntologyService {
     fn from_ref(state: &AppState) -> Self {
         state.ontologies.clone()
+    }
+}
+
+impl FromRef<AppState> for GraphExplorerService {
+    fn from_ref(state: &AppState) -> Self {
+        state.graph_explorer.clone()
     }
 }
 

@@ -6,6 +6,7 @@ pub mod automations;
 pub mod chats;
 pub mod dashboard;
 pub mod frontend;
+pub mod knowledge_graph;
 pub mod mcp;
 pub mod memory;
 pub mod models;

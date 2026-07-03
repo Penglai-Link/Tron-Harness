@@ -19,6 +19,7 @@ use crate::adapters::{
         automations::routes as automation_routes,
         chats::routes::routes as chat_routes,
         dashboard::routes as dashboard_routes,
+        knowledge_graph::routes as knowledge_graph_routes,
         mcp::routes::management_routes as mcp_management_routes,
         memory::routes as memory_routes,
         models::routes::routes as model_routes,
@@ -52,6 +53,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(variable_routes())
         .merge(memory_routes())
         .merge(rag_routes())
+        .merge(knowledge_graph_routes::routes())
         .merge(skill_routes())
         .route_layer(middleware::from_fn_with_state(
             state.users.clone(),

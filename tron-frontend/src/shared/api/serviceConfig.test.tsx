@@ -3,8 +3,8 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { useServiceQueryState } from "@/shared/api/serviceConfig";
 import { ToastProvider } from "@/components/ui/toast";
+import { useServiceQueryState } from "@/shared/api/serviceConfig";
 
 vi.mock("@/i18n", () => ({
   fallbackLocale: "en",

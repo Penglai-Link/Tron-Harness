@@ -6,11 +6,11 @@ use std::{
 
 use crate::{
     adapters::outbound::persistence::{
-        GrafeoAdapterConfig, GrafeoGraphStore, GrafeoOntologyStore, GrafeoStoreCore,
-        GraphBackedRagRepository, sqlite::SqliteRagRepository,
+        GrafeoAdapterConfig, GrafeoGraphExplorerStore, GrafeoGraphStore, GrafeoOntologyStore,
+        GrafeoStoreCore, GraphBackedRagRepository, sqlite::SqliteRagRepository,
     },
     application::{
-        graph::{GraphService, OntologyService, ScopeResolver},
+        graph::{GraphExplorerService, GraphService, OntologyService, ScopeResolver},
         llm::LlmRuntimeService,
         rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
         workspace::WorkspaceService,
@@ -169,16 +169,21 @@ pub(super) fn build_graph_services(
     core: GrafeoStoreCore,
     workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
-) -> (GraphService, OntologyService) {
+) -> (GraphService, OntologyService, GraphExplorerService) {
     let graphs = GraphService::with_embedding_runtime(
         GrafeoGraphStore::new(core.clone()),
         ScopeResolver::new(workspaces.clone()),
         Arc::new(llm_runtime),
     );
     let ontologies = OntologyService::new(
-        GrafeoOntologyStore::new(core),
-        ScopeResolver::new(workspaces),
+        GrafeoOntologyStore::new(core.clone()),
+        ScopeResolver::new(workspaces.clone()),
+    );
+    let explorer = GraphExplorerService::new(
+        GrafeoGraphExplorerStore::new(core),
+        ScopeResolver::new(workspaces.clone()),
+        workspaces,
     );
 
-    (graphs, ontologies)
+    (graphs, ontologies, explorer)
 }

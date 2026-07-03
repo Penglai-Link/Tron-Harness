@@ -35,6 +35,7 @@ import {
   ingestStageIdToStageType,
   ingestStageNodeId,
   ingestStageTypeToStageId,
+  parseIngestGraphWritePolicy,
   retrievalNodeId,
   type RagIngestProfileFormState,
   type RagRetrievalProfileFormState,
@@ -150,7 +151,7 @@ export interface RagProfileDetailApi {
   filters?: RagProfileFilterApi[];
   fusionPolicy?: string;
   graphExpansionPolicy?: string;
-  graphWritePolicy?: string;
+  graphWritePolicy?: unknown;
   pipeline?: RagProfilePipelineApi;
   pipelineStages?: RagProfilePipelineStageApi[];
   primaryCorpusId?: string;
@@ -316,6 +317,12 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 function readString(value: unknown) {
   return typeof value === "string" ? value : "";
+}
+
+function readJsonObjectText(value: unknown) {
+  if (typeof value === "string") return value;
+  if (isRecord(value) && !Array.isArray(value)) return JSON.stringify(value, null, 2);
+  return "";
 }
 
 function readStringArray(value: unknown) {
@@ -654,7 +661,7 @@ export function mapRagProfileDetailToRecord(payload: RagProfileDetailApi): Profi
         },
         embeddingModelCode: readString(payload.embeddingModelCode),
         embeddingVersion: readString(payload.embeddingVersion),
-        graphWritePolicy: readString(payload.graphWritePolicy),
+        graphWritePolicy: readJsonObjectText(payload.graphWritePolicy),
         requiredSourceVersion: readString(payload.requiredSourceVersion) || "v1",
         stages,
       },
@@ -909,7 +916,7 @@ export function buildRagIngestProfileMutationPayload(
     description: record.description,
     embeddingModelCode: record.config.embeddingModelCode,
     embeddingVersion: record.config.embeddingVersion,
-    graphWritePolicy: record.config.graphWritePolicy,
+    graphWritePolicy: parseIngestGraphWritePolicy(form.graphWritePolicy),
     pipeline: buildIngestPipelineFromForm(form, pipelineCatalog),
     primaryCorpusId: record.primaryCorpusId,
     profileId: record.id,

@@ -154,7 +154,7 @@ export function MainAgentChatWindow({
   }, [persistedSession, sessionStorageKey, toast]);
 
   const handleInfo = useCallback((message: string, title?: string) => {
-    toast.info(message, { title });
+    toast.info(message, { title: title ?? null });
   }, [toast]);
 
   useEffect(() => {

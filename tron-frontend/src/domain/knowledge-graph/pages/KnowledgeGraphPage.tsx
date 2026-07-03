@@ -3,61 +3,143 @@ import {
   useMemo,
   useState,
 } from "react";
-import {
-  Download,
-  GitBranch,
-  Minimize2,
-  RefreshCw,
-} from "lucide-react";
+import { Minimize2 } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 
 import {
   GraphCanvas,
   GraphInspector,
-  GraphResultRail,
   GraphToolbar,
 } from "@/domain/knowledge-graph/components";
-import { useKnowledgeGraphExplorer } from "@/domain/knowledge-graph/hooks";
+import {
+  useKnowledgeGraphExplorer,
+  useKnowledgeGraphNamespaces,
+} from "@/domain/knowledge-graph/hooks";
 import type {
+  GraphFacet,
   GraphLayoutMode,
+  GraphNodeView,
   KnowledgeGraphExplorerFilters,
+} from "@/domain/knowledge-graph/model";
+import {
+  defaultGraphNodeLabelProperty,
+  graphNodePropertyOptions,
 } from "@/domain/knowledge-graph/model";
 import {
   Button,
   PageHeader,
-  SegmentedTabs,
   SurfaceCard,
   useConsoleShellConfig,
+  useWorkspaceSpaces,
 } from "@/shared";
 
 const defaultGraphLayoutMode: GraphLayoutMode = "Radial";
+const preferredGraphNamespace = "rag_skill";
+
+function pickGraphNamespace(namespaces: string[]) {
+  if (namespaces.includes(preferredGraphNamespace)) return preferredGraphNamespace;
+  return namespaces[0] ?? "";
+}
+
+function graphLabelFacets(nodes: GraphNodeView[]): GraphFacet[] {
+  const counts = new Map<string, number>();
+  for (const node of nodes) {
+    for (const label of node.labels) {
+      const normalizedLabel = label.trim();
+      if (!normalizedLabel) continue;
+      counts.set(normalizedLabel, (counts.get(normalizedLabel) ?? 0) + 1);
+    }
+  }
+
+  return Array.from(counts.entries())
+    .map(([label, count]) => ({
+      count,
+      label,
+      value: label,
+    }))
+    .sort((left, right) => right.count - left.count || left.label.localeCompare(right.label));
+}
 
 export function GraphPage() {
   const { t } = useTranslation(["pages"]);
   const pageT = (key: string, defaultValue: string) => t(`pages:knowledgeGraph.${key}`, { defaultValue });
-  const [selectedNodeCode, setSelectedNodeCode] = useState("RAG_REVIEWER");
-  const [inspectorOpen, setInspectorOpen] = useState(true);
+  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
+  const activeWorkspaceCode = selectedSecondarySpace?.workspaceCode
+    ?? selectedPrimarySpace?.workspaceCode
+    ?? "";
+  const [selectedNodeCode, setSelectedNodeCode] = useState("");
+  const [inspectorOpen, setInspectorOpen] = useState(false);
   const [graphFullscreenActive, setGraphFullscreenActive] = useState(false);
   const [graphLayoutMode, setGraphLayoutMode] = useState<GraphLayoutMode>(defaultGraphLayoutMode);
+  const [nodeLabelProperty, setNodeLabelProperty] = useState(defaultGraphNodeLabelProperty);
+  const [locatorQuery, setLocatorQuery] = useState("");
   const [filters, setFilters] = useState<KnowledgeGraphExplorerFilters>({
     labels: [],
-    namespace: "rag_skill",
-    query: "",
-    relationship: "all",
-    workspaceCode: "TRON_CORE",
+    namespace: "",
+    relationships: [],
+    workspaceCode: activeWorkspaceCode,
   });
   const [zoom, setZoom] = useState(100);
-  const [tab, setTab] = useState("explore");
-  const graph = useKnowledgeGraphExplorer(filters, selectedNodeCode);
+  const [refreshTick, setRefreshTick] = useState(0);
+  const namespaceState = useKnowledgeGraphNamespaces(activeWorkspaceCode);
+  const namespaceOptions = namespaceState.namespaces;
+  const graph = useKnowledgeGraphExplorer(filters, selectedNodeCode, refreshTick);
   const relationships = useMemo(
-    () => Array.from(new Set(graph.edges.map((edge) => edge.relationship))).sort(),
-    [graph.edges],
+    () => Array.from(new Set(graph.filterOptionEdges.map((edge) => edge.relationship))).sort(),
+    [graph.filterOptionEdges],
+  );
+  const nodeLabelProperties = useMemo(() => {
+    const options = graphNodePropertyOptions(graph.filterOptionNodes);
+    return options.includes(nodeLabelProperty)
+      ? options
+      : [nodeLabelProperty, ...options];
+  }, [graph.filterOptionNodes, nodeLabelProperty]);
+  const labelFacets = useMemo(
+    () => graphLabelFacets(graph.filterOptionNodes),
+    [graph.filterOptionNodes],
   );
 
   useConsoleShellConfig({
-    searchPlaceholder: pageT("shellSearch", "Search graph nodes and relationships..."),
+    searchPlaceholder: pageT("shellSearch", "Locate graph node code or title..."),
   });
+
+  useEffect(() => {
+    setFilters((current) => {
+      if (!activeWorkspaceCode) {
+        return current.workspaceCode === "" && current.namespace === ""
+          ? current
+          : {
+            ...current,
+            namespace: "",
+            workspaceCode: "",
+          };
+      }
+      if (current.workspaceCode !== activeWorkspaceCode) {
+        return {
+          ...current,
+          namespace: "",
+          workspaceCode: activeWorkspaceCode,
+        };
+      }
+      if (namespaceOptions.length === 0) {
+        return current.namespace === ""
+          ? current
+          : {
+            ...current,
+            namespace: "",
+          };
+      }
+      if (current.namespace && namespaceOptions.includes(current.namespace)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        namespace: pickGraphNamespace(namespaceOptions),
+      };
+    });
+  }, [activeWorkspaceCode, namespaceOptions]);
 
   useEffect(() => {
     if (!graphFullscreenActive) return undefined;
@@ -75,6 +157,13 @@ export function GraphPage() {
       window.removeEventListener("keydown", handleKeyDown);
     };
   }, [graphFullscreenActive]);
+
+  useEffect(() => {
+    setNodeLabelProperty(defaultGraphNodeLabelProperty);
+    setSelectedNodeCode("");
+    setInspectorOpen(false);
+    setLocatorQuery("");
+  }, [filters.namespace]);
 
   function selectNode(nodeCode: string) {
     setSelectedNodeCode(nodeCode);
@@ -112,6 +201,8 @@ export function GraphPage() {
         highlightedEdgeCodes={selectedNodeCode ? graph.highlightedEdgeCodes : []}
         highlightedNodeCodes={selectedNodeCode ? graph.highlightedNodeCodes : []}
         layoutMode={graphLayoutMode}
+        metrics={graph.metrics}
+        nodeLabelProperty={nodeLabelProperty}
         nodes={graph.visibleNodes}
         selectedNodeCode={selectedNodeCode}
         zoom={zoom}
@@ -119,13 +210,16 @@ export function GraphPage() {
         onClearSelection={clearSelectedNode}
         onSelectNode={selectNode}
       />
-      {inspectorOpen && selectedNodeCode ? (
+      {inspectorOpen && selectedNodeCode && graph.selectedNode ? (
         <div className="absolute bottom-3 right-3 top-3 z-30 w-[min(380px,calc(100%-1.5rem))] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] shadow-[0_18px_48px_rgba(15,23,42,0.18)] backdrop-blur-md">
           <GraphInspector
             edges={graph.selectedNodeEdges}
             node={graph.selectedNode}
             scope={graph.scope}
             onClose={() => setInspectorOpen(false)}
+            onExpandNode={(nodeCode) => {
+              void graph.expandNode(nodeCode);
+            }}
           />
         </div>
       ) : null}
@@ -133,68 +227,44 @@ export function GraphPage() {
   );
 
   const graphPanel = (
-    <SurfaceCard className="overflow-hidden p-0">
+    <SurfaceCard className="flex min-h-0 flex-1 flex-col overflow-hidden p-0">
       <GraphToolbar
         activeLabels={filters.labels}
-        facets={graph.facets}
+        facets={labelFacets}
         fullscreenActive={graphFullscreenActive}
         layoutMode={graphLayoutMode}
-        metrics={graph.metrics}
+        locatorNodes={graph.visibleNodes}
+        locatorQuery={locatorQuery}
+        nodeLabelProperties={nodeLabelProperties}
+        nodeLabelProperty={nodeLabelProperty}
         namespace={filters.namespace}
-        namespaces={graph.namespaces}
-        query={filters.query}
-        relationship={filters.relationship}
+        namespaces={namespaceOptions}
         relationships={relationships}
-        workspaceCode={filters.workspaceCode}
+        selectedRelationships={filters.relationships}
+        refreshing={graph.loading}
         onActiveLabelsChange={(labels) => setFilter("labels", labels)}
+        onLocateNode={selectNode}
+        onLocatorQueryChange={setLocatorQuery}
         onLayoutModeChange={changeGraphLayoutMode}
         onNamespaceChange={(namespace) => setFilter("namespace", namespace)}
-        onQueryChange={(query) => setFilter("query", query)}
+        onNodeLabelPropertyChange={setNodeLabelProperty}
+        onRefresh={() => setRefreshTick((current) => current + 1)}
+        onSelectedRelationshipsChange={(relationships) => setFilter("relationships", relationships)}
         onToggleFullscreen={() => setGraphFullscreenActive((current) => !current)}
         onZoomChange={changeCameraZoom}
-        setRelationship={(relationship) => setFilter("relationship", relationship)}
       />
 
-      <div className="grid min-h-[620px] xl:grid-cols-[280px_minmax(0,1fr)]">
-        <GraphResultRail
-          nodes={graph.resultNodes}
-          selectedNodeCode={selectedNodeCode}
-          onSelectNode={selectNode}
-        />
+      <div className="min-h-0 min-w-0 flex-1">
         {canvasPanel}
       </div>
     </SurfaceCard>
   );
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col gap-6">
+    <div className="flex h-full min-h-0 flex-col">
       <PageHeader
+        className="shrink-0"
         title={pageT("title", "Knowledge Graph")}
-        actions={(
-          <>
-            <SegmentedTabs
-              value={tab}
-              onValueChange={setTab}
-              items={[
-                { label: pageT("tabs.explore", "Explore"), value: "explore" },
-                { label: pageT("tabs.search", "Search"), value: "search" },
-                { label: pageT("tabs.ontology", "Ontology"), value: "ontology" },
-              ]}
-            />
-            <Button type="button" variant="secondary">
-              <GitBranch size={16} aria-hidden="true" />
-              {pageT("actions.runTraversal", "Run Traversal")}
-            </Button>
-            <Button type="button" variant="secondary">
-              <Download size={16} aria-hidden="true" />
-              {pageT("actions.export", "Export")}
-            </Button>
-            <Button type="button">
-              <RefreshCw size={16} aria-hidden="true" />
-              {pageT("actions.refresh", "Refresh Graph")}
-            </Button>
-          </>
-        )}
       />
 
       {graphFullscreenActive && typeof document !== "undefined" ? createPortal(
@@ -214,7 +284,7 @@ export function GraphPage() {
         </div>,
         document.body,
       ) : (
-        <div className="min-w-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
           {graphPanel}
         </div>
       )}

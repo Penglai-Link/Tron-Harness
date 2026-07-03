@@ -34,7 +34,7 @@ use crate::{
     application::app::AppService,
     application::automation::AutomationService,
     application::chat::ChatService,
-    application::graph::{GraphService, OntologyService},
+    application::graph::{GraphExplorerService, GraphService, OntologyService},
     application::llm::LlmRuntimeService,
     application::mcp::McpService,
     application::memory::{MemoryService, MemoryWorkDomainService},
@@ -79,7 +79,8 @@ static GLOBAL_SHORT_TERM_MEMORY_SERVICE: OnceLock<ShortTermMemoryService> = Once
 static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_MEMORY_WORK_DOMAIN_SERVICE: OnceLock<MemoryWorkDomainService> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
-static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService)> = OnceLock::new();
+static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService, GraphExplorerService)> =
+    OnceLock::new();
 
 pub type AppRagService =
     RagService<Arc<Mutex<GraphBackedRagRepository>>, DefaultRagStrategyRegistry, DefaultRagRuntime>;
@@ -108,6 +109,7 @@ pub struct AppState {
     pub event_bus: EventBusHandle,
     pub graphs: GraphService,
     pub ontologies: OntologyService,
+    pub graph_explorer: GraphExplorerService,
     pub roles: RoleService,
     pub tasks: TaskService,
     pub users: UserService,
@@ -333,7 +335,7 @@ impl AppState {
             short_term_memory.clone(),
         )
         .expect("default agent tools should register");
-        let (graphs, ontologies) = if config.graph_storage_path == ":memory:" {
+        let (graphs, ontologies, graph_explorer) = if config.graph_storage_path == ":memory:" {
             if let Some(services) = GLOBAL_GRAPH_SERVICES.get() {
                 services.clone()
             } else {
@@ -399,6 +401,7 @@ impl AppState {
             event_bus,
             graphs,
             ontologies,
+            graph_explorer,
             models,
             open_apps,
             llm_runtime,

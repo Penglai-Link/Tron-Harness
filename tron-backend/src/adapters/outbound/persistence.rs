@@ -3,6 +3,7 @@ mod rag_graph_repository;
 pub mod sqlite;
 
 pub use grafeo::GrafeoAdapterConfig;
+pub use grafeo::GrafeoGraphExplorerStore;
 pub use grafeo::GrafeoGraphStore;
 pub use grafeo::GrafeoOntologyStore;
 pub use grafeo::GrafeoStoreCore;

@@ -5,6 +5,7 @@ import type {
   GraphNodeView,
   GraphScopeView,
 } from "@/domain/knowledge-graph/model";
+import { isEmbeddingVectorProperty } from "@/domain/knowledge-graph/model";
 import {
   Badge,
   Button,
@@ -15,6 +16,7 @@ interface GraphInspectorProps {
   edges: GraphEdgeView[];
   node: GraphNodeView;
   onClose: () => void;
+  onExpandNode: (nodeCode: string) => void;
   scope: GraphScopeView;
 }
 
@@ -22,6 +24,10 @@ function formatValue(value: unknown) {
   if (value === null || value === undefined || value === "") return "-";
   if (typeof value === "boolean") return value ? "true" : "false";
   return String(value);
+}
+
+function visiblePropertyRows(properties: GraphNodeView["properties"] | GraphEdgeView["properties"]) {
+  return Object.entries(properties).filter(([key]) => !isEmbeddingVectorProperty(key));
 }
 
 function KeyValueRows({ rows }: { rows: Array<[string, unknown]> }) {
@@ -37,7 +43,7 @@ function KeyValueRows({ rows }: { rows: Array<[string, unknown]> }) {
   );
 }
 
-export function GraphInspector({ edges, node, onClose, scope }: GraphInspectorProps) {
+export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: GraphInspectorProps) {
   const primaryLabel = node.labels[0] ?? "GraphNode";
 
   return (
@@ -61,6 +67,8 @@ export function GraphInspector({ edges, node, onClose, scope }: GraphInspectorPr
           ["namespace", scope.namespace],
           ["namedGraph", scope.namedGraph],
           ["workspaceCode", scope.workspaceCode],
+          ["scopeModes", scope.scopeModes.join(", ")],
+          ["inheritanceMode", scope.inheritanceMode],
           ["appCode", scope.appCode],
           ["userCode", scope.userCode],
         ]} />
@@ -71,15 +79,19 @@ export function GraphInspector({ edges, node, onClose, scope }: GraphInspectorPr
         <KeyValueRows rows={[
           ["nodeCode", node.nodeCode],
           ["labels", node.labels.join(", ")],
+          ["scopeType", node.scopeType],
+          ["originWorkspaceCode", node.originWorkspaceCode],
+          ["originUserCode", node.originUserCode],
+          ["inherited", node.inherited],
+          ["editable", node.editable],
           ["createdAt", node.createdAt.slice(0, 10)],
           ["updatedAt", node.updatedAt.slice(0, 10)],
-          ["embedding", node.properties.embeddingJson ?? (node.embeddingText ? "indexed" : "not indexed")],
         ]} />
       </section>
 
       <section className="space-y-2">
         <h3 className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Properties</h3>
-        <KeyValueRows rows={Object.entries(node.properties)} />
+        <KeyValueRows rows={visiblePropertyRows(node.properties)} />
       </section>
 
       <section className="space-y-2">
@@ -94,9 +106,15 @@ export function GraphInspector({ edges, node, onClose, scope }: GraphInspectorPr
                   <span className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{edge.edgeCode}</span>
                 </div>
                 <p className="mt-1 font-medium">{target}</p>
-                {Object.keys(edge.properties).length ? (
+                <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">
+                  {edge.scopeType} · {edge.originWorkspaceCode}
+                  {edge.originUserCode ? ` · ${edge.originUserCode}` : ""}
+                  {edge.inherited ? " · inherited" : ""}
+                  {!edge.editable ? " · read-only" : ""}
+                </p>
+                {visiblePropertyRows(edge.properties).length ? (
                   <p className="mt-2 text-[12px] text-[var(--color-on-surface-variant)]">
-                    {Object.entries(edge.properties).map(([key, value]) => `${key}=${formatValue(value)}`).join(" · ")}
+                    {visiblePropertyRows(edge.properties).map(([key, value]) => `${key}=${formatValue(value)}`).join(" · ")}
                   </p>
                 ) : null}
               </div>
@@ -116,6 +134,10 @@ export function GraphInspector({ edges, node, onClose, scope }: GraphInspectorPr
       </section>
 
       <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+        <Button type="button" variant="secondary" onClick={() => onExpandNode(node.nodeCode)}>
+          <ExternalLink size={16} aria-hidden="true" />
+          Expand Node
+        </Button>
         <Button type="button">
           <ExternalLink size={16} aria-hidden="true" />
           Open Node

@@ -1407,9 +1407,9 @@ export function RagIngestProfileFormPage() {
   ]);
 
   useEffect(() => {
-    if (errors.pipeline || advancedNodeErrorId) setAdvancedNodesOpen(true);
+    if (errors.pipeline || errors.graphWritePolicy || advancedNodeErrorId) setAdvancedNodesOpen(true);
     if (advancedNodeErrorId) setExpandedAdvancedNodeId(advancedNodeErrorId);
-  }, [advancedNodeErrorId, errors.pipeline]);
+  }, [advancedNodeErrorId, errors.graphWritePolicy, errors.pipeline]);
 
   function updateForm<K extends keyof RagIngestProfileFormState>(key: K, value: RagIngestProfileFormState[K]) {
     setForm((currentForm) => ({ ...currentForm, [key]: value }));
@@ -1857,8 +1857,13 @@ export function RagIngestProfileFormPage() {
                   );
                 })}
                 {graphBackedCorpus ? (
-                  <Field label={pageT("fields.graphWritePolicy", "Graph write policy")} hint={ingestHintT("graphWritePolicy")}>
-                    <TextInput aria-label={pageT("fields.graphWritePolicy", "Graph write policy")} className="font-mono" value={form.graphWritePolicy} onChange={(event) => updateForm("graphWritePolicy", event.target.value)} />
+                  <Field label={pageT("fields.graphWritePolicy", "Graph write policy")} error={errors.graphWritePolicy} hint={ingestHintT("graphWritePolicy")}>
+                    <TextArea
+                      aria-label={pageT("fields.graphWritePolicy", "Graph write policy")}
+                      className="min-h-24 font-mono"
+                      value={form.graphWritePolicy}
+                      onChange={(event) => updateForm("graphWritePolicy", event.target.value)}
+                    />
                   </Field>
                 ) : null}
               </div>

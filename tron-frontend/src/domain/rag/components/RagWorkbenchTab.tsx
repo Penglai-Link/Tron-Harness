@@ -61,6 +61,31 @@ type WorkbenchBusinessAttributeRow = {
   value: string;
 };
 
+type WorkbenchRelatedNodeRow = {
+  code: string;
+  formId: string;
+  kind: string;
+  label: string;
+  propertiesJson: string;
+  ref: string;
+  text: string;
+  title: string;
+};
+
+type WorkbenchExistingGraphNodeRow = {
+  code: string;
+  formId: string;
+  ref: string;
+};
+
+type WorkbenchRelatedEdgeRow = {
+  formId: string;
+  from: string;
+  propertiesJson: string;
+  relationship: string;
+  to: string;
+};
+
 type WorkbenchFilterRow = {
   field: string;
   formId: string;
@@ -93,6 +118,9 @@ const workbenchScopeOptions: Array<{ label: string; value: WorkbenchScopeType }>
   { label: "User", value: "USER" },
   { label: "Agent", value: "AGENT" },
 ];
+const relatedGraphAnchorRefs = ["$target", "$ragNode", "$source", "$skill"] as const;
+const reservedRelatedGraphNodeProperties = new Set(["relatedKind", "relatedRef", "title", "text"]);
+const reservedRelatedGraphEdgeProperties = new Set(["edgeCode", "sourceNodeCode", "targetNodeCode", "relationship"]);
 
 const workbenchFieldHints = {
   businessField: "Business field written to payload.domainFields, sourced from the current corpus field mapping.",
@@ -109,6 +137,16 @@ const workbenchFieldHints = {
   limit: "Maximum hits returned by this retrieval request.",
   metadataSourcePath: "Path written to metadata.sourcePath so the document can be traced in the project.",
   query: "Natural-language query for this retrieval test.",
+  relatedExistingNodeCode: "Node code that already exists in the graph store. It is referenced only and is not updated by this ingest.",
+  relatedGraph: "Optional graph nodes and relationships attached to this ingest payload.",
+  relatedGraphEdgeEndpoint: "Reference used by this edge. It can be an anchor, a new node ref, or an existing node ref.",
+  relatedGraphEdgeProperties: "Optional JSON object written to the edge properties. Values must be string, number, or boolean.",
+  relatedGraphNodeCode: "Graph node code for a new node written by this request.",
+  relatedGraphNodeKind: "Business kind saved as relatedKind and checked against graphWritePolicy when configured.",
+  relatedGraphNodeLabel: "Graph label used when creating or updating the new node.",
+  relatedGraphNodeProperties: "Optional JSON object written to the new node properties. Values must be string, number, or boolean.",
+  relatedGraphNodeRef: "Local reference name used by edges in this relatedGraph payload.",
+  relatedGraphRelationship: "Relationship code for this edge, checked against graphWritePolicy when configured.",
   retrievalProfile: "Profile used for this retrieval request. It controls routes, fusion, deduplication, and context strategy.",
   returnField: "Extra field requested in retrieval results, sourced from corpus field mapping.",
   scopeType: "Target request scope. The scope code is filled automatically from the selected type.",
@@ -197,6 +235,7 @@ function buildPayloadFromForm(
   form: WorkbenchSourcePayloadForm,
   documentPayload: boolean,
   domainFields: Record<string, unknown>,
+  relatedGraph?: Record<string, unknown>,
 ): Record<string, unknown> {
   const metadata: Record<string, string> = {};
   if (form.language.trim()) metadata.language = form.language.trim();
@@ -211,6 +250,9 @@ function buildPayloadFromForm(
   };
   if (Object.keys(domainFields).length > 0) {
     payload.domainFields = domainFields;
+  }
+  if (relatedGraph) {
+    payload.relatedGraph = relatedGraph;
   }
 
   if (documentPayload) {
@@ -281,8 +323,255 @@ function createWorkbenchBusinessAttributeRow(index: number): WorkbenchBusinessAt
   };
 }
 
+function sanitizeGraphCodePart(value: string) {
+  return value
+    .trim()
+    .toUpperCase()
+    .replace(/[^A-Z0-9_-]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+}
+
+function createWorkbenchRelatedNodeRow(index: number, sourceCode: string): WorkbenchRelatedNodeRow {
+  const codePrefix = sanitizeGraphCodePart(sourceCode) || "RELATED";
+  return {
+    code: `${codePrefix}_NODE_${index + 1}`,
+    formId: `related-node-${index + 1}`,
+    kind: "TOPIC",
+    label: "RagTopic",
+    propertiesJson: "",
+    ref: `new.node${index + 1}`,
+    text: "",
+    title: "",
+  };
+}
+
+function createWorkbenchExistingGraphNodeRow(index: number): WorkbenchExistingGraphNodeRow {
+  return {
+    code: "",
+    formId: `existing-graph-node-${index + 1}`,
+    ref: `existing.node${index + 1}`,
+  };
+}
+
+function createWorkbenchRelatedEdgeRow(index: number, from = "$target", to = ""): WorkbenchRelatedEdgeRow {
+  return {
+    formId: `related-edge-${index + 1}`,
+    from,
+    propertiesJson: "",
+    relationship: "RELATES_TO",
+    to,
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
+function isPrimitiveGraphPropertyValue(value: unknown): value is string | number | boolean {
+  return (
+    typeof value === "string"
+    || typeof value === "boolean"
+    || (typeof value === "number" && Number.isFinite(value))
+  );
+}
+
+function parseRelatedGraphProperties(
+  value: string,
+  label: string,
+  reservedNames: Set<string>,
+): Record<string, string | number | boolean> | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(trimmed);
+  } catch {
+    throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphPropertiesJson", {
+      defaultValue: "{{label}} properties must be a JSON object.",
+      label,
+    }));
+  }
+  if (!isRecord(parsed)) {
+    throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphPropertiesObject", {
+      defaultValue: "{{label}} properties must be a JSON object.",
+      label,
+    }));
+  }
+  return Object.fromEntries(
+    Object.entries(parsed).map(([key, propertyValue]) => {
+      const name = key.trim();
+      if (!name || reservedNames.has(name) || !isPrimitiveGraphPropertyValue(propertyValue)) {
+        throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphPropertyValue", {
+          defaultValue: "{{label}} properties can only use non-reserved string, number, or boolean values.",
+          label,
+        }));
+      }
+      return [name, propertyValue];
+    }),
+  );
+}
+
+function buildRelatedGraphFromRows(
+  nodes: WorkbenchRelatedNodeRow[],
+  existingNodes: WorkbenchExistingGraphNodeRow[],
+  edges: WorkbenchRelatedEdgeRow[],
+): Record<string, unknown> | undefined {
+  const relatedNodes = nodes
+    .map((row, index) => {
+      const hasValue = [
+        row.code,
+        row.kind,
+        row.label,
+        row.propertiesJson,
+        row.ref,
+        row.text,
+        row.title,
+      ].some((value) => value.trim());
+      if (!hasValue) return undefined;
+      if (!row.ref.trim() || !row.kind.trim() || !row.label.trim() || !row.code.trim()) {
+        throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphNodeRequired", {
+          defaultValue: "Related graph node {{index}} must include ref, kind, label, and code.",
+          index: index + 1,
+        }));
+      }
+      const properties = parseRelatedGraphProperties(
+        row.propertiesJson,
+        i18n.t("pages:rag.workbench.relatedGraph.nodeLabel", {
+          defaultValue: "Node {{index}}",
+          index: index + 1,
+        }),
+        reservedRelatedGraphNodeProperties,
+      );
+      return {
+        code: row.code.trim(),
+        kind: row.kind.trim(),
+        label: row.label.trim(),
+        ...(properties ? { properties } : {}),
+        ref: row.ref.trim(),
+        ...(row.text.trim() ? { text: row.text.trim() } : {}),
+        ...(row.title.trim() ? { title: row.title.trim() } : {}),
+      };
+    })
+    .filter(Boolean) as Record<string, unknown>[];
+
+  const relatedExistingNodes = existingNodes
+    .map((row, index) => {
+      const hasValue = [row.code, row.ref].some((value) => value.trim());
+      if (!hasValue) return undefined;
+      if (!row.ref.trim() || !row.code.trim()) {
+        throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphExistingNodeRequired", {
+          defaultValue: "Existing graph node {{index}} must include ref and code.",
+          index: index + 1,
+        }));
+      }
+      return {
+        code: row.code.trim(),
+        ref: row.ref.trim(),
+      };
+    })
+    .filter(Boolean) as Record<string, unknown>[];
+
+  const refs = new Set<string>(relatedGraphAnchorRefs);
+  [...relatedNodes, ...relatedExistingNodes].forEach((row) => {
+    const ref = typeof row.ref === "string" ? row.ref : "";
+    if (!ref || refs.has(ref)) {
+      throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphDuplicateRef", {
+        defaultValue: "Related graph refs must be unique and cannot reuse anchor names.",
+      }));
+    }
+    refs.add(ref);
+  });
+
+  const relatedEdges = edges
+    .map((row, index) => {
+      const hasValue = [row.from, row.propertiesJson, row.relationship, row.to].some((value) => value.trim());
+      if (!hasValue) return undefined;
+      if (!row.from.trim() || !row.to.trim() || !row.relationship.trim()) {
+        throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphEdgeRequired", {
+          defaultValue: "Related graph edge {{index}} must include from, to, and relationship.",
+          index: index + 1,
+        }));
+      }
+      if (!refs.has(row.from.trim()) || !refs.has(row.to.trim())) {
+        throw new Error(i18n.t("pages:rag.workbench.errors.relatedGraphEdgeRef", {
+          defaultValue: "Related graph edge {{index}} must use refs declared by anchors, new nodes, or existing nodes.",
+          index: index + 1,
+        }));
+      }
+      const properties = parseRelatedGraphProperties(
+        row.propertiesJson,
+        i18n.t("pages:rag.workbench.relatedGraph.edgeLabel", {
+          defaultValue: "Edge {{index}}",
+          index: index + 1,
+        }),
+        reservedRelatedGraphEdgeProperties,
+      );
+      return {
+        from: row.from.trim(),
+        ...(properties ? { properties } : {}),
+        relationship: row.relationship.trim(),
+        to: row.to.trim(),
+      };
+    })
+    .filter(Boolean) as Record<string, unknown>[];
+
+  if (relatedNodes.length === 0 && relatedExistingNodes.length === 0 && relatedEdges.length === 0) {
+    return undefined;
+  }
+  return {
+    edges: relatedEdges,
+    existingNodes: relatedExistingNodes,
+    nodes: relatedNodes,
+  };
+}
+
+function buildRelatedGraphPreview(
+  nodes: WorkbenchRelatedNodeRow[],
+  existingNodes: WorkbenchExistingGraphNodeRow[],
+  edges: WorkbenchRelatedEdgeRow[],
+) {
+  const parsePropertiesForPreview = (value: string) => {
+    const trimmed = value.trim();
+    if (!trimmed) return undefined;
+    try {
+      return JSON.parse(trimmed) as unknown;
+    } catch {
+      return trimmed;
+    }
+  };
+  const relatedNodes = nodes
+    .filter((row) => [row.code, row.kind, row.label, row.ref, row.text, row.title, row.propertiesJson].some((value) => value.trim()))
+    .map((row) => ({
+      code: row.code.trim(),
+      kind: row.kind.trim(),
+      label: row.label.trim(),
+      ...(row.propertiesJson.trim() ? { properties: parsePropertiesForPreview(row.propertiesJson) } : {}),
+      ref: row.ref.trim(),
+      ...(row.text.trim() ? { text: row.text.trim() } : {}),
+      ...(row.title.trim() ? { title: row.title.trim() } : {}),
+    }));
+  const relatedExistingNodes = existingNodes
+    .filter((row) => [row.code, row.ref].some((value) => value.trim()))
+    .map((row) => ({
+      code: row.code.trim(),
+      ref: row.ref.trim(),
+    }));
+  const relatedEdges = edges
+    .filter((row) => [row.from, row.propertiesJson, row.relationship, row.to].some((value) => value.trim()))
+    .map((row) => ({
+      from: row.from.trim(),
+      ...(row.propertiesJson.trim() ? { properties: parsePropertiesForPreview(row.propertiesJson) } : {}),
+      relationship: row.relationship.trim(),
+      to: row.to.trim(),
+    }));
+  if (relatedNodes.length === 0 && relatedExistingNodes.length === 0 && relatedEdges.length === 0) {
+    return undefined;
+  }
+  return {
+    edges: relatedEdges,
+    existingNodes: relatedExistingNodes,
+    nodes: relatedNodes,
+  };
 }
 
 function parseFilterValue(value: string, valueType: "boolean" | "integer" | "string", field: string): unknown {
@@ -355,6 +644,29 @@ function collectWorkbenchFieldOptions(
   });
 
   return [...optionsByField.values()].sort((left, right) => left.field.localeCompare(right.field));
+}
+
+function corpusSupportsRelatedGraph(corpus?: RagCorpusRecord) {
+  if (!corpus) return false;
+  return Boolean(
+    corpus.config?.capabilities.graph
+    || corpus.strategies.includes("GRAPH")
+    || corpus.config?.storageBinding.targets.some((target) => target.backend === "GRAPH"),
+  );
+}
+
+function collectRelatedGraphRefOptions(
+  nodes: WorkbenchRelatedNodeRow[],
+  existingNodes: WorkbenchExistingGraphNodeRow[],
+) {
+  const refs = new Set<string>(relatedGraphAnchorRefs);
+  nodes.forEach((row) => {
+    if (row.ref.trim()) refs.add(row.ref.trim());
+  });
+  existingNodes.forEach((row) => {
+    if (row.ref.trim()) refs.add(row.ref.trim());
+  });
+  return [...refs];
 }
 
 function buildDomainFields(
@@ -555,6 +867,9 @@ export function RagWorkbenchTab({
     buildDefaultPayloadForm(initialCorpusId ?? visibleCorpora[0]?.code ?? "", ingestProfiles[0], workspaceCode)
   ));
   const [businessAttributeRows, setBusinessAttributeRows] = useState<WorkbenchBusinessAttributeRow[]>([]);
+  const [relatedNodeRows, setRelatedNodeRows] = useState<WorkbenchRelatedNodeRow[]>([]);
+  const [relatedExistingNodeRows, setRelatedExistingNodeRows] = useState<WorkbenchExistingGraphNodeRow[]>([]);
+  const [relatedEdgeRows, setRelatedEdgeRows] = useState<WorkbenchRelatedEdgeRow[]>([]);
   const initialRetrievalId = initialRetrievalProfileId && retrievalProfiles.some((profile) => profile.id === initialRetrievalProfileId)
     ? initialRetrievalProfileId
     : retrievalProfiles[0]?.id ?? "";
@@ -584,6 +899,11 @@ export function RagWorkbenchTab({
   const selectedRetrievalProfile = retrievalProfileDetail?.type === "Retrieval"
     ? retrievalProfileDetail
     : retrievalProfiles.find((profile) => profile.id === retrievalProfileId);
+  const relatedGraphSupported = corpusSupportsRelatedGraph(selectedIngestCorpus);
+  const relatedGraphRefOptions = collectRelatedGraphRefOptions(relatedNodeRows, relatedExistingNodeRows);
+  const relatedGraphPreview = relatedGraphSupported
+    ? buildRelatedGraphPreview(relatedNodeRows, relatedExistingNodeRows, relatedEdgeRows)
+    : undefined;
   const usesDocumentPayload = isDocumentPayloadProfile(selectedIngestProfile);
   const requiredSourceVersion = selectedIngestProfile?.config.requiredSourceVersion ?? "";
   const contextStrategyOptions = selectedRetrievalProfile?.config.contextStrategies.length
@@ -632,7 +952,7 @@ export function RagWorkbenchTab({
         appliedInitialCorpusIdRef.current = initialCorpusId;
         if (corpusId !== initialCorpusId) {
           setCorpusId(initialCorpusId);
-          setBusinessAttributeRows([]);
+          resetIngestPayloadRows();
           setSourcePayloadEdited(false);
         }
       }
@@ -649,7 +969,7 @@ export function RagWorkbenchTab({
         appliedInitialIngestProfileIdRef.current = initialIngestProfileId;
         if (ingestProfileId !== initialIngestProfileId) {
           setIngestProfileId(initialIngestProfileId);
-          setBusinessAttributeRows([]);
+          resetIngestPayloadRows();
           setSourcePayloadEdited(false);
         }
       }
@@ -707,6 +1027,31 @@ export function RagWorkbenchTab({
     setSourcePayloadEdited(true);
   }
 
+  function resetIngestPayloadRows() {
+    setBusinessAttributeRows([]);
+    setRelatedNodeRows([]);
+    setRelatedExistingNodeRows([]);
+    setRelatedEdgeRows([]);
+  }
+
+  function updateRelatedNodeRow(formId: string, patch: Partial<WorkbenchRelatedNodeRow>) {
+    setRelatedNodeRows((current) => current.map((row) => (
+      row.formId === formId ? { ...row, ...patch } : row
+    )));
+  }
+
+  function updateRelatedExistingNodeRow(formId: string, patch: Partial<WorkbenchExistingGraphNodeRow>) {
+    setRelatedExistingNodeRows((current) => current.map((row) => (
+      row.formId === formId ? { ...row, ...patch } : row
+    )));
+  }
+
+  function updateRelatedEdgeRow(formId: string, patch: Partial<WorkbenchRelatedEdgeRow>) {
+    setRelatedEdgeRows((current) => current.map((row) => (
+      row.formId === formId ? { ...row, ...patch } : row
+    )));
+  }
+
   function buildSearchFilters() {
     const filters: Record<string, unknown> = {};
     filterRows.forEach((row, index) => {
@@ -734,15 +1079,19 @@ export function RagWorkbenchTab({
   async function handleIngestSubmit() {
     setIngestFeedback("");
     let domainFields: Record<string, unknown>;
+    let relatedGraph: Record<string, unknown> | undefined;
     try {
       domainFields = buildDomainFields(businessAttributeRows, businessFieldSchema);
+      relatedGraph = relatedGraphSupported
+        ? buildRelatedGraphFromRows(relatedNodeRows, relatedExistingNodeRows, relatedEdgeRows)
+        : undefined;
     } catch (error) {
       const message = readErrorMessage(error);
       setIngestFeedback(message);
       onNotice(message);
       return;
     }
-    const payload = buildPayloadFromForm(sourcePayloadForm, usesDocumentPayload, domainFields);
+    const payload = buildPayloadFromForm(sourcePayloadForm, usesDocumentPayload, domainFields, relatedGraph);
     if (!sourcePayloadForm.sourceCode.trim() || !sourcePayloadForm.sourceVersion.trim()) {
       const message = pageT("errors.sourceIdentityRequired", "Source code and version are required.");
       setIngestFeedback(message);
@@ -894,7 +1243,7 @@ export function RagWorkbenchTab({
                     value={corpusId}
                     onValueChange={(event) => {
                       setCorpusId(event!);
-                      setBusinessAttributeRows([]);
+                      resetIngestPayloadRows();
                       setSourcePayloadEdited(false);
                     }}
                   >
@@ -918,7 +1267,7 @@ export function RagWorkbenchTab({
                     value={ingestProfileId}
                     onValueChange={(event) => {
                       setIngestProfileId(event!);
-                      setBusinessAttributeRows([]);
+                      resetIngestPayloadRows();
                       setSourcePayloadEdited(false);
                     }}
                   >
@@ -1027,6 +1376,241 @@ export function RagWorkbenchTab({
                   </div>
                 ) : null}
               </div>
+              {relatedGraphSupported ? (
+                <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("relatedGraph.title", "Related graph")}</p>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setRelatedNodeRows((current) => [
+                          ...current,
+                          createWorkbenchRelatedNodeRow(current.length, sourcePayloadForm.sourceCode),
+                        ])}
+                      >
+                        {pageT("relatedGraph.addNode", "Add node")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setRelatedExistingNodeRows((current) => [
+                          ...current,
+                          createWorkbenchExistingGraphNodeRow(current.length),
+                        ])}
+                      >
+                        {pageT("relatedGraph.addExistingNode", "Add existing node")}
+                      </Button>
+                      <Button
+                        size="sm"
+                        type="button"
+                        variant="secondary"
+                        onClick={() => setRelatedEdgeRows((current) => {
+                          const from = relatedNodeRows.find((row) => row.ref.trim())?.ref.trim() || "$target";
+                          const to = relatedExistingNodeRows.find((row) => row.ref.trim())?.ref.trim()
+                            || relatedNodeRows.find((row) => row.ref.trim() && row.ref.trim() !== from)?.ref.trim()
+                            || "$target";
+                          return [...current, createWorkbenchRelatedEdgeRow(current.length, from, to)];
+                        })}
+                      >
+                        {pageT("relatedGraph.addEdge", "Add edge")}
+                      </Button>
+                    </div>
+                  </div>
+                  {relatedNodeRows.length > 0 ? (
+                    <div className="mt-3 grid gap-3">
+                      <p className="text-[12px] font-medium text-[var(--color-on-surface-variant)]">{pageT("relatedGraph.nodesTitle", "New nodes")}</p>
+                      {relatedNodeRows.map((row, index) => (
+                        <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3" key={row.formId}>
+                          <div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_160px_minmax(0,1fr)_minmax(0,1fr)_auto]">
+                            <Field label={pageT("relatedGraph.nodeRef", "Ref")} hint={hintT("relatedGraphNodeRef")}>
+                              <TextInput
+                                aria-label={pageT("relatedGraph.nodeRefAria", "Related graph node {{index}} ref", { index: index + 1 })}
+                                className="font-mono"
+                                value={row.ref}
+                                onChange={(event) => updateRelatedNodeRow(row.formId, { ref: event.target.value })}
+                              />
+                            </Field>
+                            <Field label={pageT("relatedGraph.nodeKind", "Kind")} hint={hintT("relatedGraphNodeKind")}>
+                              <TextInput
+                                aria-label={pageT("relatedGraph.nodeKindAria", "Related graph node {{index}} kind", { index: index + 1 })}
+                                className="font-mono"
+                                value={row.kind}
+                                onChange={(event) => updateRelatedNodeRow(row.formId, { kind: event.target.value })}
+                              />
+                            </Field>
+                            <Field label={pageT("relatedGraph.nodeLabelField", "Label")} hint={hintT("relatedGraphNodeLabel")}>
+                              <TextInput
+                                aria-label={pageT("relatedGraph.nodeLabelAria", "Related graph node {{index}} label", { index: index + 1 })}
+                                className="font-mono"
+                                value={row.label}
+                                onChange={(event) => updateRelatedNodeRow(row.formId, { label: event.target.value })}
+                              />
+                            </Field>
+                            <Field label={pageT("relatedGraph.nodeCode", "Code")} hint={hintT("relatedGraphNodeCode")}>
+                              <TextInput
+                                aria-label={pageT("relatedGraph.nodeCodeAria", "Related graph node {{index}} code", { index: index + 1 })}
+                                className="font-mono"
+                                value={row.code}
+                                onChange={(event) => updateRelatedNodeRow(row.formId, { code: event.target.value })}
+                              />
+                            </Field>
+                            <Button
+                              aria-label={pageT("relatedGraph.removeNodeAria", "Remove related graph node {{index}}", { index: index + 1 })}
+                              className="self-end"
+                              size="sm"
+                              type="button"
+                              variant="ghost"
+                              onClick={() => setRelatedNodeRows((current) => current.filter((item) => item.formId !== row.formId))}
+                            >
+                              {pageT("actions.remove", "Remove")}
+                            </Button>
+                          </div>
+                          <div className="grid gap-3 lg:grid-cols-3">
+                            <Field label={pageT("relatedGraph.nodeTitle", "Title")}>
+                              <TextInput
+                                aria-label={pageT("relatedGraph.nodeTitleAria", "Related graph node {{index}} title", { index: index + 1 })}
+                                value={row.title}
+                                onChange={(event) => updateRelatedNodeRow(row.formId, { title: event.target.value })}
+                              />
+                            </Field>
+                            <Field label={pageT("relatedGraph.nodeText", "Text")}>
+                              <TextInput
+                                aria-label={pageT("relatedGraph.nodeTextAria", "Related graph node {{index}} text", { index: index + 1 })}
+                                value={row.text}
+                                onChange={(event) => updateRelatedNodeRow(row.formId, { text: event.target.value })}
+                              />
+                            </Field>
+                            <Field label={pageT("relatedGraph.nodeProperties", "Properties JSON")} hint={hintT("relatedGraphNodeProperties")}>
+                              <TextInput
+                                aria-label={pageT("relatedGraph.nodePropertiesAria", "Related graph node {{index}} properties JSON", { index: index + 1 })}
+                                className="font-mono"
+                                placeholder='{"priority":3}'
+                                value={row.propertiesJson}
+                                onChange={(event) => updateRelatedNodeRow(row.formId, { propertiesJson: event.target.value })}
+                              />
+                            </Field>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {relatedExistingNodeRows.length > 0 ? (
+                    <div className="mt-3 grid gap-3">
+                      <p className="text-[12px] font-medium text-[var(--color-on-surface-variant)]">{pageT("relatedGraph.existingNodesTitle", "Existing node refs")}</p>
+                      {relatedExistingNodeRows.map((row, index) => (
+                        <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
+                          <Field label={pageT("relatedGraph.existingNodeRef", "Ref")} hint={hintT("relatedGraphNodeRef")}>
+                            <TextInput
+                              aria-label={pageT("relatedGraph.existingNodeRefAria", "Existing graph node {{index}} ref", { index: index + 1 })}
+                              className="font-mono"
+                              value={row.ref}
+                              onChange={(event) => updateRelatedExistingNodeRow(row.formId, { ref: event.target.value })}
+                            />
+                          </Field>
+                          <Field label={pageT("relatedGraph.existingNodeCode", "Code")} hint={hintT("relatedExistingNodeCode")}>
+                            <TextInput
+                              aria-label={pageT("relatedGraph.existingNodeCodeAria", "Existing graph node {{index}} code", { index: index + 1 })}
+                              className="font-mono"
+                              value={row.code}
+                              onChange={(event) => updateRelatedExistingNodeRow(row.formId, { code: event.target.value })}
+                            />
+                          </Field>
+                          <Button
+                            aria-label={pageT("relatedGraph.removeExistingNodeAria", "Remove existing graph node {{index}}", { index: index + 1 })}
+                            className="self-end"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setRelatedExistingNodeRows((current) => current.filter((item) => item.formId !== row.formId))}
+                          >
+                            {pageT("actions.remove", "Remove")}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {relatedEdgeRows.length > 0 ? (
+                    <div className="mt-3 grid gap-3">
+                      <p className="text-[12px] font-medium text-[var(--color-on-surface-variant)]">{pageT("relatedGraph.edgesTitle", "Edges")}</p>
+                      {relatedEdgeRows.map((row, index) => (
+                        <div className="grid gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)_auto]" key={row.formId}>
+                          <Field label={pageT("relatedGraph.edgeFrom", "From")} hint={hintT("relatedGraphEdgeEndpoint")}>
+                            <SelectInput
+                              aria-label={pageT("relatedGraph.edgeFromAria", "Related graph edge {{index}} source", { index: index + 1 })}
+                              className="font-mono"
+                              placeholder={pageT("fields.selectField", "Select field")}
+                              value={row.from}
+                              onValueChange={(event) => updateRelatedEdgeRow(row.formId, { from: event! })}
+                            >
+                              {relatedGraphRefOptions.map((ref) => (
+                                <SelectItem key={ref} value={ref}>{ref}</SelectItem>
+                              ))}
+                            </SelectInput>
+                          </Field>
+                          <Field label={pageT("relatedGraph.edgeTo", "To")} hint={hintT("relatedGraphEdgeEndpoint")}>
+                            <SelectInput
+                              aria-label={pageT("relatedGraph.edgeToAria", "Related graph edge {{index}} target", { index: index + 1 })}
+                              className="font-mono"
+                              placeholder={pageT("fields.selectField", "Select field")}
+                              value={row.to}
+                              onValueChange={(event) => updateRelatedEdgeRow(row.formId, { to: event! })}
+                            >
+                              {relatedGraphRefOptions.map((ref) => (
+                                <SelectItem key={ref} value={ref}>{ref}</SelectItem>
+                              ))}
+                            </SelectInput>
+                          </Field>
+                          <Field label={pageT("relatedGraph.relationship", "Relationship")} hint={hintT("relatedGraphRelationship")}>
+                            <TextInput
+                              aria-label={pageT("relatedGraph.relationshipAria", "Related graph edge {{index}} relationship", { index: index + 1 })}
+                              className="font-mono"
+                              value={row.relationship}
+                              onChange={(event) => updateRelatedEdgeRow(row.formId, { relationship: event.target.value })}
+                            />
+                          </Field>
+                          <Field label={pageT("relatedGraph.edgeProperties", "Properties JSON")} hint={hintT("relatedGraphEdgeProperties")}>
+                            <TextInput
+                              aria-label={pageT("relatedGraph.edgePropertiesAria", "Related graph edge {{index}} properties JSON", { index: index + 1 })}
+                              className="font-mono"
+                              placeholder='{"weight":0.8}'
+                              value={row.propertiesJson}
+                              onChange={(event) => updateRelatedEdgeRow(row.formId, { propertiesJson: event.target.value })}
+                            />
+                          </Field>
+                          <Button
+                            aria-label={pageT("relatedGraph.removeEdgeAria", "Remove related graph edge {{index}}", { index: index + 1 })}
+                            className="self-end"
+                            size="sm"
+                            type="button"
+                            variant="ghost"
+                            onClick={() => setRelatedEdgeRows((current) => current.filter((item) => item.formId !== row.formId))}
+                          >
+                            {pageT("actions.remove", "Remove")}
+                          </Button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : null}
+                  {relatedGraphPreview ? (
+                    <details className="group mt-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] text-sm">
+                      <summary className="flex cursor-pointer list-none items-center gap-2 p-3 marker:hidden [&::-webkit-details-marker]:hidden">
+                        <ChevronDown
+                          className="shrink-0 transition-transform group-open:rotate-180"
+                          size={16}
+                          aria-hidden="true"
+                        />
+                        <span className="text-[12px] font-medium text-[var(--color-on-surface-variant)]">{pageT("relatedGraph.preview", "relatedGraph preview")}</span>
+                      </summary>
+                      <pre className="max-h-72 overflow-auto border-t border-[var(--color-outline-variant)] p-3 text-[12px] leading-5">
+                        {JSON.stringify(relatedGraphPreview, null, 2)}
+                      </pre>
+                    </details>
+                  ) : null}
+                </div>
+              ) : null}
               {usesDocumentPayload ? (
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label={pageT("fields.documentUri", "Document URI")} hint={hintT("documentUri")}>

@@ -94,6 +94,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   "aria-labelledby": ariaLabelledBy,
   children,
   className,
+  displayValue,
   id,
   placeholder,
   size,
@@ -103,6 +104,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   "aria-label"?: string;
   "aria-labelledby"?: string;
   className?: string;
+  displayValue?: SelectPrimitive.Value.Props["children"];
   id?: string;
   placeholder?: ReactNode;
   size?: 'sm' | 'lg';
@@ -117,10 +119,13 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
           id={id}
           size={size || 'lg'}
           className={cn(
-          disabledControlClasses,
-          className,
-        )}>
-          <SelectValue placeholder={placeholder} />
+            disabledControlClasses,
+            className,
+          )}
+        >
+          <SelectValue placeholder={placeholder}>
+            {displayValue}
+          </SelectValue>
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>
           {children}
