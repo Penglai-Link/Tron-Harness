@@ -3,18 +3,21 @@ import type {
   InputHTMLAttributes,
   ReactElement,
   ReactNode,
-  TextareaHTMLAttributes,
+  TextareaHTMLAttributes
 } from "react";
-import { cloneElement, forwardRef, isValidElement, useId } from "react";
+import { Children } from "react"
+import { cloneElement, forwardRef, isValidElement, useId, useMemo } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { InfoTooltip } from "@/shared/ui/InfoTooltip";
-import { Select, SelectPopup, SelectPrimitive, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectPopup, SelectPrimitive, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Switch } from "@/components/ui/switch";
 import { Field as FieldPrimitive, FieldLabel, FieldError } from "@/components/ui/field";
+import { SelectItemProps } from "@base-ui/react/select";
+
 
 interface FieldProps {
   children: ReactNode;
@@ -88,6 +91,7 @@ export const TextArea = forwardRef(function TextArea(
 
 
 
+
 export function SelectInput<Value, Multiple extends boolean | undefined = false>({
   "aria-describedby": ariaDescribedBy,
   "aria-label": ariaLabel,
@@ -107,9 +111,25 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   placeholder?: ReactNode;
   size?: 'sm' | 'lg';
 }) {
+
+  const items = useMemo(() => {
+    return Children.toArray(children).map((child) => {
+      if (isValidElement(child)) {
+        return {
+          value: (child.props as SelectPrimitive.Item.Props).value,
+          label: (child.props as SelectPrimitive.Item.Props).children,
+        }
+      }
+      return [];
+    }).filter(Boolean) as ReadonlyArray<{
+      label: React.ReactNode;
+      value: any;
+    }>;
+  }, [children])
+
   return (
     <>
-      <Select {...props}>
+      <Select {...props} items={items}>
         <SelectTrigger
           aria-describedby={ariaDescribedBy}
           aria-label={ariaLabel}
@@ -117,9 +137,9 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
           id={id}
           size={size || 'lg'}
           className={cn(
-          disabledControlClasses,
-          className,
-        )}>
+            disabledControlClasses,
+            className,
+          )}>
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectPopup alignItemWithTrigger={false}>
