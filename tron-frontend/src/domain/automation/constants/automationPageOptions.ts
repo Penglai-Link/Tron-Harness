@@ -12,7 +12,7 @@ export const editableAutomationStatuses: AutomationOperationalStatus[] = [
 export function getAutomationStatusTone(status: AutomationStatus) {
   if (status === "Active") return "success";
   if (status === "Paused") return "warning";
-  return "neutral";
+  return "outline";
 }
 
 export function getAutomationExecutionStatusTone(
@@ -20,7 +20,7 @@ export function getAutomationExecutionStatusTone(
 ) {
   if (status === "Success") return "success";
   if (status === "Failed") return "error";
-  if (status === "Running") return "accent";
+  if (status === "Running") return "info";
   if (status === "Skipped" || status === "Canceled") return "warning";
-  return "neutral";
+  return "outline";
 }

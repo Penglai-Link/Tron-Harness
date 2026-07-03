@@ -7,5 +7,5 @@ export interface DashboardMetric {
 export interface DashboardActivity {
   title: string;
   meta: string;
-  tone: "neutral" | "warning" | "success";
+  tone: "info" | "warning" | "success";
 }

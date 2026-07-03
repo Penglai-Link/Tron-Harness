@@ -145,19 +145,19 @@ export function formatModelVerifyStatus(value: ModelVerifyStatus | null) {
 export function getModelVerifyTone(value: ModelVerifyStatus | null) {
   if (value === "SUCCEEDED") return "success" as const;
   if (value === "FAILED") return "error" as const;
-  return "neutral" as const;
+  return "info" as const;
 }
 
 export function getModelSourceTone(sourceKind: ModelSourceKind) {
   switch (sourceKind) {
     case "LOCAL":
-      return "accent" as const;
+      return "info" as const;
     case "INHERITED":
-      return "neutral" as const;
+      return "info" as const;
     case "OVERRIDE":
       return "warning" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 

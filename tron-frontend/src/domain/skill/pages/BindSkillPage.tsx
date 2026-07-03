@@ -113,13 +113,13 @@ function CandidateCard({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="accent">{candidate.skillName}</Badge>
+            <Badge tone="info">{candidate.skillName}</Badge>
             {installed ? (
               <Badge tone="success">Installed</Badge>
             ) : null}
-            <Badge tone="neutral">{candidate.sourceType}</Badge>
+            <Badge tone="info">{candidate.sourceType}</Badge>
             {candidate.declaredVersion ? (
-              <Badge tone="neutral">{candidate.declaredVersion}</Badge>
+              <Badge tone="info">{candidate.declaredVersion}</Badge>
             ) : null}
           </div>
           <p className="mt-3 text-sm font-medium text-[var(--color-on-surface)]">
@@ -355,10 +355,10 @@ export function BindSkillPage() {
                       className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4"
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone="accent">{candidate.skillName}</Badge>
-                        <Badge tone="neutral">{candidate.sourceType}</Badge>
+                        <Badge tone="info">{candidate.skillName}</Badge>
+                        <Badge tone="info">{candidate.sourceType}</Badge>
                         {candidate.declaredVersion ? (
-                          <Badge tone="neutral">{candidate.declaredVersion}</Badge>
+                          <Badge tone="info">{candidate.declaredVersion}</Badge>
                         ) : null}
                       </div>
                       <p className="mt-3 break-words text-sm font-medium text-[var(--color-on-surface)]">

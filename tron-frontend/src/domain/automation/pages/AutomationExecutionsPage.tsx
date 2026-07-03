@@ -398,7 +398,7 @@ export function AutomationExecutionsPage() {
                 header: "Trigger",
                 id: "trigger",
                 render: (row) => (
-                  <Badge tone={row.triggerSource === "Manual" ? "accent" : "neutral"}>
+                  <Badge tone={row.triggerSource === "Manual" ? "info" : "outline"}>
                     {row.triggerSource}
                   </Badge>
                 ),

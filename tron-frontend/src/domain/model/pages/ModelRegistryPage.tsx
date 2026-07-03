@@ -502,8 +502,8 @@ export function ModelRegistryPage() {
               header: "Status",
               render: (row) => (
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={row.enabled ? "success" : "neutral"}>{row.enabled ? "Enabled" : "Disabled"}</Badge>
-                  {row.isDefault ? <Badge tone="accent">Default</Badge> : null}
+                  <Badge tone={row.enabled ? "success" : "info"}>{row.enabled ? "Enabled" : "Disabled"}</Badge>
+                  {row.isDefault ? <Badge tone="info">Default</Badge> : null}
                 </div>
               ),
             },

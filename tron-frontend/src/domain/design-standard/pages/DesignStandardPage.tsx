@@ -80,7 +80,7 @@ export function DesignStandardPage() {
               <div className="rounded-2xl border border-[var(--color-card-border)] bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.05)]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <Badge tone="accent">Apple-like enterprise SaaS</Badge>
+                    <Badge tone="info">Apple-like enterprise SaaS</Badge>
                     <h2 className="mt-4 text-[40px] font-semibold leading-[1.1] tracking-normal">Calm control for agent operations</h2>
                     <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--color-on-surface-variant)]">
                       The Tron light system uses restrained color, dense but breathable spacing, and stable workspace navigation for AI agent governance.

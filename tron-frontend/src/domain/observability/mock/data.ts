@@ -3,7 +3,7 @@ import type { ObservabilityData } from "@/domain/observability/model/Observabili
 const observabilityData: ObservabilityData = {
   metrics: [
     { label: "Requests", value: "14.2M", trend: "+8.4% from last week", tone: "success" },
-    { label: "P95 latency", value: "1.24s", trend: "Stable under failover threshold", tone: "accent" },
+    { label: "P95 latency", value: "1.24s", trend: "Stable under failover threshold", tone: "info" },
     { label: "Error rate", value: "0.08%", trend: "0.02% below budget", tone: "success" },
     { label: "Active traces", value: "342", trend: "42 with open spans", tone: "warning" },
   ],

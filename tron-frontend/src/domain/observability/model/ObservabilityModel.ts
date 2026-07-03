@@ -1,10 +1,10 @@
-import type { StatusTone } from "../constants/StatusTone";
+import type { BadgeProps } from "@/components/ui/badge";
 
 export interface MetricDatum {
   label: string;
   value: string;
   trend: string;
-  tone?: StatusTone;
+  tone?: BadgeProps['variant'];
 }
 
 export interface TraceDatum {

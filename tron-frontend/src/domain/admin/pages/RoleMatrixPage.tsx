@@ -724,7 +724,7 @@ export function RoleMatrixPage() {
                             type="button"
                             onClick={() => runDebouncedAction(`matrix-select-${role.id}`, () => selectRole(role.id), 180)}
                           >
-                            <Badge tone={role.kind === "System" ? "accent" : "neutral"}>{role.kind}</Badge>
+                            <Badge tone={role.kind === "System" ? "info" : "outline"}>{role.kind}</Badge>
                           </button>
                           {dirtyIds.has(role.id) ? <Badge tone="warning">Unsaved</Badge> : null}
                         </div>

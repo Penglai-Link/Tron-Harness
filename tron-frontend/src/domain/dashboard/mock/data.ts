@@ -18,8 +18,8 @@ export function getDashboardData() {
     activities: [
       { title: "Skill Refund_Processing deployed", meta: "Just now - admin@system", tone: "success" },
       { title: "High latency detected in Model Router", meta: "2m ago - System Alert", tone: "warning" },
-      { title: "Inheritance policy updated (Global)", meta: "15m ago - sec-ops@system", tone: "neutral" },
-      { title: "New agent cluster provisioned", meta: "1h ago - auto-scaler", tone: "neutral" },
+      { title: "Inheritance policy updated (Global)", meta: "15m ago - sec-ops@system", tone: "info" },
+      { title: "New agent cluster provisioned", meta: "1h ago - auto-scaler", tone: "info" },
       { title: "Vector DB sync completed", meta: "3h ago - daily-job", tone: "success" },
     ] satisfies DashboardActivity[],
   };

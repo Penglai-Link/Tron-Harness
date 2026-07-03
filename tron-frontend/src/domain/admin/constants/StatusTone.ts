@@ -1,6 +1,6 @@
-export type StatusTone = "neutral" | "accent" | "success" | "warning" | "error";
 
-export function getStatusTone(status: string): StatusTone {
+import type { BadgeProps } from "@/components/ui/badge"
+export function getStatusTone(status: string): BadgeProps["variant"] {
   const normalized = status.toLowerCase();
   if (normalized.includes("healthy") || normalized.includes("active") || normalized.includes("connected") || normalized.includes("completed") || normalized.includes("success")) {
     return "success";
@@ -11,5 +11,5 @@ export function getStatusTone(status: string): StatusTone {
   if (normalized.includes("suspend") || normalized.includes("disabled") || normalized.includes("deprecated") || normalized.includes("failed") || normalized.includes("error")) {
     return "error";
   }
-  return "neutral";
+  return "outline";
 }

@@ -70,12 +70,12 @@ function getScopeLabel(scope: MemoryScopeKind) {
   return "Domain";
 }
 
-function getTypeTone(memory: MemoryRecord): "accent" | "success" | "warning" | "neutral" | "error" {
+function getTypeTone(memory: MemoryRecord) {
   if (memory.memoryStatus === "DISABLED") return "error";
   if (memory.scope === "space") return "success";
   if (memory.scope === "domain") return "warning";
-  if (memory.scope === "user") return "accent";
-  return "neutral";
+  if (memory.scope === "user") return "info";
+  return "outline";
 }
 
 function normalizeSearchValue(value: string) {
@@ -394,7 +394,7 @@ function getUseSummary(memory: MemoryRecord) {
   return {
     detail: "not injected",
     label: "Search only",
-    tone: "neutral" as const,
+    tone: "info" as const,
   };
 }
 
@@ -507,7 +507,7 @@ function MemoryRecordsTable({
                     </MemoryCell>
                     <MemoryCell label="Status">
                       <div className="grid justify-items-end gap-1 lg:justify-items-start">
-                        <Badge className="w-fit max-w-full font-bold" tone={memory.memoryStatus === "ACTIVE" ? "success" : "neutral"}>
+                        <Badge className="w-fit max-w-full font-bold" tone={memory.memoryStatus === "ACTIVE" ? "success" : "info"}>
                           {memory.memoryStatus}
                         </Badge>
                         <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">

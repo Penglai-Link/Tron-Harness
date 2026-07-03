@@ -99,7 +99,7 @@ export function AppTagList({ tags }: { tags: string[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {tags.map((tag) => (
-        <Badge key={tag} tone="neutral">
+        <Badge key={tag} tone="info">
           {tag}
         </Badge>
       ))}

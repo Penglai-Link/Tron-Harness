@@ -358,7 +358,7 @@ export function PlatformMcpServersPage() {
               header: pageT("table.columns.transport", "Transport"),
               width: "14%",
               render: (row) => (
-                <Badge tone="neutral">
+                <Badge tone="info">
                   {formatPlatformMcpTransportLabel(row.transportKind)}
                 </Badge>
               ),

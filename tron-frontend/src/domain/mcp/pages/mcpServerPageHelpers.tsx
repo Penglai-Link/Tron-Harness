@@ -199,12 +199,12 @@ export function platformMcpServerStateTone(status: PlatformMcpServerRecord["last
     case "UNHEALTHY":
       return "warning" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
 export function platformMcpServerEnabledTone(enabled: boolean) {
-  return enabled ? "success" as const : "neutral" as const;
+  return enabled ? "success" as const : "info" as const;
 }
 
 export function platformMcpServerTransportTabsValue(transportKind: McpServerTransportKind) {

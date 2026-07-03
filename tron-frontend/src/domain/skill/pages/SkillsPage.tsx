@@ -64,13 +64,13 @@ import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
 function getWorkspaceSourceTone(sourceKind: SkillWorkspaceSourceKind) {
   switch (sourceKind) {
     case "Local":
-      return "accent" as const;
+      return "info" as const;
     case "Inherited":
-      return "neutral" as const;
+      return "info" as const;
     case "Override":
       return "warning" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
@@ -91,11 +91,11 @@ function getSourceTone(sourceType: SkillSourceType) {
   switch (sourceType) {
     case "GitHub":
     case "Marketplace":
-      return "accent" as const;
+      return "info" as const;
     case "Manual":
       return "warning" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
@@ -108,9 +108,9 @@ function getUpdateTone(updateStatus: SkillUpdateStatus) {
     case "Error":
       return "error" as const;
     case "Manual":
-      return "accent" as const;
+      return "info" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
@@ -143,9 +143,9 @@ function getRagStatusTone(status: SkillRagIndexStatus) {
     case "STALE":
       return "warning" as const;
     case "PENDING":
-      return "accent" as const;
+      return "info" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
@@ -302,7 +302,7 @@ function RagIndexDetailCard({
           </p>
         </div>
         {indexing ? (
-          <Badge tone="accent">
+          <Badge tone="info">
             <LoaderCircle className="mr-1 animate-spin" size={13} aria-hidden="true" />
             Indexing
           </Badge>
@@ -715,7 +715,7 @@ export function SkillsPage() {
             <Badge tone={getWorkspaceSourceTone(selectedSkill.sourceKind)}>
               {selectedSkill.sourceKind}
             </Badge>
-            <Badge tone={selectedSkill.enabled ? "success" : "neutral"}>
+            <Badge tone={selectedSkill.enabled ? "success" : "info"}>
               {selectedSkill.enabled ? "Enabled" : "Disabled"}
             </Badge>
           </div>
@@ -807,7 +807,7 @@ export function SkillsPage() {
             </p>
             <div className="mt-2 flex flex-wrap gap-2">
               {selectedSkill.files.map((file) => (
-                <Badge key={file.path} tone={file.isMarkdown ? "accent" : "neutral"}>
+                <Badge key={file.path} tone={file.isMarkdown ? "info" : "outline"}>
                   {file.path}
                 </Badge>
               ))}
@@ -890,7 +890,7 @@ export function SkillsPage() {
                 onChange={setSearchInput}
               />
             </div>
-            {loading ? <Badge tone="accent">{pageT("loading.badge", "Loading")}</Badge> : null}
+            {loading ? <Badge tone="info">{pageT("loading.badge", "Loading")}</Badge> : null}
           </div>
           {ragOperation ? (
             <div className="border-b border-[var(--color-outline-variant)] px-4 py-3">
@@ -976,7 +976,7 @@ export function SkillsPage() {
                   row.updateStatus ? (
                     <Badge tone={getUpdateTone(row.updateStatus)}>{row.updateStatus}</Badge>
                   ) : (
-                    <Badge tone="neutral">{pageT("status.unknown", "Unknown")}</Badge>
+                    <Badge tone="info">{pageT("status.unknown", "Unknown")}</Badge>
                   )
                 ),
               },

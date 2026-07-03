@@ -91,7 +91,7 @@ function taskTypeMarkerClass(taskType: TaskType) {
 function taskPriorityTone(priority: TaskPriority) {
   if (priority === "Extra High" || priority === "High") return "error";
   if (priority === "Medium") return "warning";
-  return "neutral";
+  return "outline";
 }
 
 function reorderKanbanColumns(

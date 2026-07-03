@@ -51,11 +51,11 @@ function getSourceTone(sourceType: SkillSourceType) {
   switch (sourceType) {
     case "GitHub":
     case "Marketplace":
-      return "accent" as const;
+      return "info" as const;
     case "Manual":
       return "warning" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
@@ -68,9 +68,9 @@ function getUpdateTone(updateStatus: SkillUpdateStatus) {
     case "Error":
       return "error" as const;
     case "Manual":
-      return "accent" as const;
+      return "info" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
@@ -327,7 +327,7 @@ export function InstalledSkillsPage() {
                 <RefreshCcw size={16} aria-hidden="true" />
                 {syncing === "refresh" ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
               </Button>
-              {loading ? <Badge tone="accent">{pageT("loading.badge", "Loading")}</Badge> : null}
+              {loading ? <Badge tone="info">{pageT("loading.badge", "Loading")}</Badge> : null}
             </div>
           </div>
           <DataTable<RegistrySkillRecord>
@@ -454,7 +454,7 @@ export function InstalledSkillsPage() {
                 <Badge tone={getUpdateTone(selectedSkill.updateStatus)}>
                   {selectedSkill.updateStatus}
                 </Badge>
-                <Badge tone="neutral">{selectedSkill.managedBy === "Cli" ? "CLI Managed" : "Manual"}</Badge>
+                <Badge tone="info">{selectedSkill.managedBy === "Cli" ? "CLI Managed" : "Manual"}</Badge>
               </div>
 
               <div className="rounded-2xl border border-[var(--color-outline-variant)] px-4 py-4">
@@ -475,7 +475,7 @@ export function InstalledSkillsPage() {
                 <div className="mt-3 flex flex-wrap gap-2">
                   {selectedSkill.files.length ? (
                     selectedSkill.files.map((file) => (
-                      <Badge key={file.path} tone={file.isMarkdown ? "accent" : "neutral"}>
+                      <Badge key={file.path} tone={file.isMarkdown ? "info" : "outline"}>
                         {file.path}
                       </Badge>
                     ))

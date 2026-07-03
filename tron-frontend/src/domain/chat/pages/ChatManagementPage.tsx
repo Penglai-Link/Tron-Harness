@@ -1757,7 +1757,7 @@ function RightContextSidebar({
               <span className="text-xs font-medium text-[var(--color-on-surface-variant)]">
                 {t("chat.shortTermMemory.goal")}
               </span>
-              {goal ? <Badge tone="neutral">{goal.goal.status}</Badge> : null}
+              {goal ? <Badge tone="info">{goal.goal.status}</Badge> : null}
             </div>
             {goalStatus?.loading || goalStatus?.error ? (
               <QueryStatusLine
@@ -1802,8 +1802,8 @@ function RightContextSidebar({
                   <div className="min-w-0 space-y-1">
                     <div className="break-words text-[var(--color-on-surface)]">{todo.content}</div>
                     <div className="flex flex-wrap gap-1.5">
-                      <Badge tone="neutral">{todo.status}</Badge>
-                      <Badge tone="neutral">{todo.priority}</Badge>
+                      <Badge tone="info">{todo.status}</Badge>
+                      <Badge tone="info">{todo.priority}</Badge>
                     </div>
                   </div>
                 </div>
@@ -1937,7 +1937,7 @@ function RightContextSidebar({
         {skills.length ? (
           <ContextBlock title="Skills">
             <div className="flex flex-wrap gap-2">
-              {skills.map((skill) => <Badge key={skill} tone="neutral">{skill}</Badge>)}
+              {skills.map((skill) => <Badge key={skill} tone="info">{skill}</Badge>)}
             </div>
           </ContextBlock>
         ) : null}
@@ -2809,7 +2809,7 @@ function CompactToolRow({
               <span className={cn("truncate", nested ? "font-normal" : "font-semibold")}>
                 {nested ? nestedToolLabel : toolLabel}
               </span>
-              {nested ? null : <Badge tone={complete ? "neutral" : "success"}>{complete ? "done" : "running"}</Badge>}
+              {nested ? null : <Badge tone={complete ? "info" : "success"}>{complete ? "done" : "running"}</Badge>}
             </div>
           </div>
         </div>
@@ -2965,7 +2965,7 @@ function AguiEventCard({ event }: { event: TranscriptAguiEvent }) {
           <div className="min-w-0">
             <div className="flex min-w-0 items-center gap-2">
               <span className="truncate font-semibold">{aguiEventTitle(type)}</span>
-              <Badge tone="neutral">{type}</Badge>
+              <Badge tone="info">{type}</Badge>
             </div>
             <p className="mt-1 line-clamp-2 text-[var(--color-on-surface-variant)]">{summary}</p>
           </div>
@@ -3095,7 +3095,7 @@ export function ChatManagementPage() {
     requestedSourceTab ?? defaultChatSessionSourceTab
   ));
   const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
-  const mainRef = useRef<HTMLElement>(null);
+  const mainRef = useRef<HTMLDivElement>(null);
   const [composer, setComposer] = useState("");
   const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
   const requestedSession = requestedSessionCode ? findSession(sessionGroups, requestedSessionCode) : undefined;

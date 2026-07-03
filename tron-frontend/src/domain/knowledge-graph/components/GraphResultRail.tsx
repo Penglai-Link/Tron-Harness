@@ -40,7 +40,7 @@ export function GraphResultRail({ nodes, onSelectNode, selectedNodeCode }: Graph
               <span className="min-w-0 flex-1">
                 <span className="block truncate font-mono text-[13px] font-semibold">{node.nodeCode}</span>
                 <span className="mt-1 flex flex-wrap items-center gap-1.5">
-                  <Badge className="h-5 px-2 text-[11px]" tone={primaryLabel === "RagSkill" ? "accent" : "neutral"}>{primaryLabel}</Badge>
+                  <Badge className="h-5 px-2 text-[11px]" tone={primaryLabel === "RagSkill" ? "info" : "outline"}>{primaryLabel}</Badge>
                   {node.score !== undefined ? (
                     <span className="rounded-full bg-[var(--color-surface-container-high)] px-2 py-0.5 font-mono text-[11px] text-[var(--color-on-surface-variant)]">
                       {node.score.toFixed(2)}

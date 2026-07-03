@@ -378,8 +378,8 @@ export function PlatformModelDetailsPage() {
         <SurfaceCard className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
             <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
-            <Badge tone={selectedRecord.enabled ? "success" : "neutral"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
-            {selectedRecord.isDefault ? <Badge tone="accent">Default</Badge> : null}
+            <Badge tone={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
+            {selectedRecord.isDefault ? <Badge tone="info">Default</Badge> : null}
             <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
               {selectedRecord.modelCode}
             </code>

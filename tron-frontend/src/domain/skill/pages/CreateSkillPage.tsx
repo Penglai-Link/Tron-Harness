@@ -56,23 +56,23 @@ const searchModeOptions: Array<{
   emptyHint: string;
   buttonLabel: string;
 }> = [
-  {
-    mode: "find",
-    label: "Find",
-    fieldLabel: "Marketplace Query",
-    placeholder: "Search skills with npx skills find...",
-    emptyHint: "Enter keywords like `typescript`, `rag`, or `review` to query the skills marketplace.",
-    buttonLabel: "Search",
-  },
-  {
-    mode: "repo",
-    label: "Repo",
-    fieldLabel: "Repository",
-    placeholder: "owner/repo or git URL",
-    emptyHint: "Enter a repository like `cloudsen/eliteforge-skills` to list its available skills.",
-    buttonLabel: "List Skills",
-  },
-];
+    {
+      mode: "find",
+      label: "Find",
+      fieldLabel: "Marketplace Query",
+      placeholder: "Search skills with npx skills find...",
+      emptyHint: "Enter keywords like `typescript`, `rag`, or `review` to query the skills marketplace.",
+      buttonLabel: "Search",
+    },
+    {
+      mode: "repo",
+      label: "Repo",
+      fieldLabel: "Repository",
+      placeholder: "owner/repo or git URL",
+      emptyHint: "Enter a repository like `cloudsen/eliteforge-skills` to list its available skills.",
+      buttonLabel: "List Skills",
+    },
+  ];
 
 function SearchInput({
   mode,
@@ -180,7 +180,7 @@ function CandidateCard({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone="accent">{candidate.skillName}</Badge>
+            <Badge tone="info">{candidate.skillName}</Badge>
             {installed ? (
               <Badge tone="success">Installed</Badge>
             ) : null}
@@ -191,7 +191,7 @@ function CandidateCard({
               <Badge tone="error">Failed</Badge>
             ) : null}
             {candidate.installsLabel ? (
-              <Badge tone="neutral">{candidate.installsLabel}</Badge>
+              <Badge tone="info">{candidate.installsLabel}</Badge>
             ) : null}
           </div>
           <p className="mt-3 text-sm font-medium text-[var(--color-on-surface)]">
@@ -578,7 +578,7 @@ export function CreateSkillPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-2">
-                            <Badge tone="accent">{candidate.skillName}</Badge>
+                            <Badge tone="info">{candidate.skillName}</Badge>
                             {isInstalledCandidate(candidate) ? (
                               <Badge tone="success">Installed</Badge>
                             ) : null}
@@ -589,7 +589,7 @@ export function CreateSkillPage() {
                               <Badge tone="error">Failed</Badge>
                             ) : null}
                             {candidate.installsLabel ? (
-                              <Badge tone="neutral">{candidate.installsLabel}</Badge>
+                              <Badge tone="info">{candidate.installsLabel}</Badge>
                             ) : null}
                           </div>
                           <p className="mt-3 break-words text-sm font-medium text-[var(--color-on-surface)]">
@@ -604,7 +604,7 @@ export function CreateSkillPage() {
                             </p>
                           ) : null}
                           {installProgress?.results[candidate.packageRef]?.state === "error"
-                          && installProgress.results[candidate.packageRef]?.message ? (
+                            && installProgress.results[candidate.packageRef]?.message ? (
                             <p className="mt-2 text-sm text-[var(--color-error)]">
                               {installProgress.results[candidate.packageRef]?.message}
                             </p>

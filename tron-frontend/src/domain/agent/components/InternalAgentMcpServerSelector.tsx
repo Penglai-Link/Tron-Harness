@@ -32,7 +32,7 @@ function healthTone(status: WorkspaceMcpServerRecord["lastHealthStatus"]) {
     case "UNHEALTHY":
       return "warning" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 
@@ -137,11 +137,10 @@ export function InternalAgentMcpServerSelector({
             return (
               <label
                 key={server.serverCode}
-                className={`rounded-2xl border p-4 transition-colors ${
-                  checked
+                className={`rounded-2xl border p-4 transition-colors ${checked
                     ? "border-[var(--color-primary)] bg-[var(--color-primary)]/8"
                     : "border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)]"
-                } ${disabled ? "opacity-70" : ""}`}
+                  } ${disabled ? "opacity-70" : ""}`}
               >
                 <div className="flex items-start gap-3">
                   <input

@@ -152,7 +152,7 @@ export function SharedShellPreviewPage() {
             columns={[
               { id: "name", header: "Name", render: (row) => <span className="font-medium">{row.name}</span> },
               { id: "owner", header: "Owner", render: (row) => <span className="text-[var(--color-on-surface-variant)]">{row.owner}</span> },
-              { id: "inheritance", header: "Inheritance", render: (row) => <Badge tone={row.inheritance === "Override" ? "warning" : "neutral"}>{row.inheritance}</Badge> },
+              { id: "inheritance", header: "Inheritance", render: (row) => <Badge tone={row.inheritance === "Override" ? "warning" : "info"}>{row.inheritance}</Badge> },
               { id: "usage", header: "Usage", align: "right", render: (row) => <span className="font-mono text-[13px]">{row.usage}</span> },
               { id: "status", header: "Status", align: "right", render: (row) => <Badge tone={row.status === "Healthy" ? "success" : "warning"}>{row.status}</Badge> },
             ]}

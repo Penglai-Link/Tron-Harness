@@ -55,12 +55,12 @@ import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 
 type ConfirmAction = "archive" | "disable" | null;
 
-function getTypeTone(memory: MemoryRecord): "accent" | "success" | "warning" | "neutral" | "error" {
+function getTypeTone(memory: MemoryRecord) {
   if (memory.memoryStatus === "DISABLED") return "error";
   if (memory.scope === "space") return "success";
   if (memory.scope === "domain") return "warning";
-  if (memory.scope === "user") return "accent";
-  return "neutral";
+  if (memory.scope === "user") return "info";
+  return "outline";
 }
 
 function formatReviewStatus(reviewStatus: MemoryRecord["reviewStatus"]) {
@@ -287,10 +287,10 @@ export function MemoryDetailsPage() {
             <SurfaceCard className="space-y-5">
               <div className="flex flex-wrap items-center gap-2">
                 <Badge className="font-bold" tone={getTypeTone(memory)}>{memory.memoryType}</Badge>
-                <Badge tone={memory.memoryStatus === "ACTIVE" ? "success" : "neutral"}>{memory.memoryStatus}</Badge>
-                <Badge tone={memory.reviewStatus === "APPROVED" ? "success" : "neutral"}>{formatReviewStatus(memory.reviewStatus)}</Badge>
-                <Badge tone={memory.injectable ? "success" : "neutral"}>{getUseLabel(memory)}</Badge>
-                <Badge tone="accent">{memory.targetLabel}</Badge>
+                <Badge tone={memory.memoryStatus === "ACTIVE" ? "success" : "info"}>{memory.memoryStatus}</Badge>
+                <Badge tone={memory.reviewStatus === "APPROVED" ? "success" : "info"}>{formatReviewStatus(memory.reviewStatus)}</Badge>
+                <Badge tone={memory.injectable ? "success" : "info"}>{getUseLabel(memory)}</Badge>
+                <Badge tone="info">{memory.targetLabel}</Badge>
               </div>
               <div>
                 <h2 className="text-xl font-semibold leading-7 tracking-normal text-[var(--color-on-surface)]">

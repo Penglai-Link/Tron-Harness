@@ -46,8 +46,8 @@ export function GraphInspector({ edges, node, onClose, scope }: GraphInspectorPr
         <div className="min-w-0">
           <h2 className="break-words text-xl font-semibold">{node.nodeCode}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-2">
-            <Badge tone={primaryLabel === "RagSkill" ? "accent" : "neutral"}>{primaryLabel}</Badge>
-            <Badge tone={node.properties.status === "ACTIVE" ? "success" : "neutral"}>{formatValue(node.properties.status ?? "ACTIVE")}</Badge>
+            <Badge tone={primaryLabel === "RagSkill" ? "info" : "outline"}>{primaryLabel}</Badge>
+            <Badge tone={node.properties.status === "ACTIVE" ? "success" : "info"}>{formatValue(node.properties.status ?? "ACTIVE")}</Badge>
           </div>
         </div>
         <Button size="icon" variant="ghost" type="button" aria-label="Close node inspector" onClick={onClose}>

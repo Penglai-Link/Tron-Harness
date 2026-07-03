@@ -197,7 +197,7 @@ function workspaceDescendantCodes(record: WorkspaceTreeNodeRecord) {
 function sourceTone(source: WorkspaceEffectiveUserRecord["source"]) {
   if (source === "DirectAndRole") return "success";
   if (source === "Role") return "warning";
-  return "accent";
+  return "info";
 }
 
 function TreeNode({
@@ -776,7 +776,7 @@ export function WorkspaceManagementPage() {
             <div>
               <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Workspace Tree")}</h2>
             </div>
-            {treeLoading ? <Badge tone="accent">{pt("Loading")}</Badge> : null}
+            {treeLoading ? <Badge tone="info">{pt("Loading")}</Badge> : null}
           </div>
           <div className="grid gap-3">
             <SearchField ariaLabel={pt("Search workspaces")} clearLabel={pt("Clear workspace search")} placeholder={pt("Filter workspaces...")} value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
@@ -853,8 +853,8 @@ export function WorkspaceManagementPage() {
                     <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{pt("Use the selected tree context when you need a child, or keep it root-level for a new top branch.")}</p>
                   </div>
                   {rootValueToParent(createForm.parentWorkspaceCode)
-                    ? <Badge tone="accent">{pt("Child of {{code}}", { code: rootValueToParent(createForm.parentWorkspaceCode) ?? "" })}</Badge>
-                    : <Badge tone="neutral">{pt("Root workspace")}</Badge>}
+                    ? <Badge tone="info">{pt("Child of {{code}}", { code: rootValueToParent(createForm.parentWorkspaceCode) ?? "" })}</Badge>
+                    : <Badge tone="info">{pt("Root workspace")}</Badge>}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="min-w-0">

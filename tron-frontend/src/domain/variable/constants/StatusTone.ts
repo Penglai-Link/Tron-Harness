@@ -1,6 +1,5 @@
-export type StatusTone = "neutral" | "accent" | "success" | "warning" | "error";
-
-export function getVariableSourceTone(status: string): StatusTone {
+import type { BadgeProps } from "@/components/ui/badge"
+export function getVariableSourceTone(status: string): BadgeProps['variant'] {
   const normalized = status.toLowerCase();
   if (normalized.includes("local")) {
     return "success";
@@ -9,11 +8,11 @@ export function getVariableSourceTone(status: string): StatusTone {
     return "warning";
   }
   if (normalized.includes("inherited")) {
-    return "accent";
+    return "info";
   }
-  return "neutral";
+  return "outline";
 }
 
-export function getStatusTone(status: string): StatusTone {
+export function getStatusTone(status: string): BadgeProps['variant'] {
   return getVariableSourceTone(status);
 }

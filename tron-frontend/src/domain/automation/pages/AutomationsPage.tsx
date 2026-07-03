@@ -397,7 +397,7 @@ export function AutomationsPage() {
                     {pt(row.lastExecutionStatus)}
                   </Badge>
                 ) : (
-                  <Badge tone="neutral">{pt("Never run")}</Badge>
+                  <Badge tone="info">{pt("Never run")}</Badge>
                 )}
               </div>
             ),

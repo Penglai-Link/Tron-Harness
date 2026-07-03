@@ -1,5 +1,5 @@
 import { i18n } from "@/i18n";
-export type BadgeTone = "neutral" | "accent" | "success" | "warning" | "error";
+export type BadgeTone = "info" | "info" | "success" | "warning" | "error";
 export type RagStorageBackend = "SQLITE" | "GRAPH";
 export type RagStorageTargetLayout = "TABLE" | "GRAPH_SINGLE_NODE" | "GRAPH_TREE";
 export type RagStorageSegmentKey = "source" | "textUnit" | "fulltext" | "vector" | "tree" | "diagnostics";

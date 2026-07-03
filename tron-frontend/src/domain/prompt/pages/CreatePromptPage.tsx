@@ -193,7 +193,7 @@ export function CreatePromptPage() {
                 <div className="rounded-lg border border-[var(--color-outline-variant)] p-3 text-sm" key={variable.name}>
                   <div className="flex justify-between">
                     <span className="font-mono">{variable.name}</span>
-                    <Badge tone="neutral">{variable.type}</Badge>
+                    <Badge tone="info">{variable.type}</Badge>
                   </div>
                   <TextInput className="mt-2 h-8 w-full" defaultValue={variable.sample} />
                 </div>

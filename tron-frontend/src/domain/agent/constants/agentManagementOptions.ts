@@ -9,6 +9,6 @@ export function getAgentStatusTone(status: AgentStatus) {
     case "Unavailable":
       return "error" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }

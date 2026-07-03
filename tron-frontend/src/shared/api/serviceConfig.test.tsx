@@ -4,7 +4,7 @@ import { useState } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { useServiceQueryState } from "@/shared/api/serviceConfig";
-import { ToastProvider } from "@/shared/ui/Toast";
+import { ToastProvider } from "@/components/ui/toast";
 
 vi.mock("@/i18n", () => ({
   fallbackLocale: "en",

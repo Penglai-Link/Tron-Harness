@@ -36,7 +36,7 @@ function healthTone(status: WorkspaceMcpServerRecord["lastHealthStatus"]) {
     case "UNHEALTHY":
       return "warning" as const;
     default:
-      return "neutral" as const;
+      return "info" as const;
   }
 }
 

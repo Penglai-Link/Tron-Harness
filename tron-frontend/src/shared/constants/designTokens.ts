@@ -4,7 +4,7 @@ export const tronColors = [
   { name: "Container", token: "surface-container", value: "#f1edec", role: "Low emphasis fills" },
   { name: "Card Border", token: "card-border", value: "#e5e5e5", role: "Quiet separation" },
   { name: "Primary", token: "primary", value: "#000000", role: "Primary actions" },
-  { name: "Accent", token: "accent", value: "#2f5f9f", role: "Focus and active state" },
+  { name: "info", token: "info", value: "#2f5f9f", role: "Focus and active state" },
   { name: "Success", token: "success", value: "#4f6f52", role: "Healthy state" },
   { name: "Warning", token: "warning", value: "#8a6a1f", role: "Risk state" },
   { name: "Error", token: "error", value: "#ba1a1a", role: "Failure state" },

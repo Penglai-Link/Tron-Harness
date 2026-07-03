@@ -33,11 +33,11 @@ function statusTone(status: KnowledgeBaseRecord["status"]) {
     case "Active":
       return "success";
     case "Indexing":
-      return "accent";
+      return "info";
     case "Draft":
       return "warning";
     default:
-      return "neutral";
+      return "outline";
   }
 }
 

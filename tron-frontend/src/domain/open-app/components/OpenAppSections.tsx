@@ -58,7 +58,7 @@ export function statusTone(status: OpenAppStatus) {
     case "Disabled":
       return "warning";
     case "Archived":
-      return "neutral";
+      return "outline";
   }
 }
 
@@ -676,8 +676,8 @@ function CapabilityGrantOperationCard({
   return (
     <div
       className={`overflow-hidden rounded-2xl border bg-[var(--color-elevated-surface)] transition-[border-color,box-shadow] ${selected
-          ? "border-[var(--color-outline-variant)] shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
-          : "border-[var(--color-card-border)]"
+        ? "border-[var(--color-outline-variant)] shadow-[0_10px_24px_rgba(15,23,42,0.05)]"
+        : "border-[var(--color-card-border)]"
         }`}
     >
       <div
