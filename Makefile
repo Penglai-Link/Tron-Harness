@@ -122,7 +122,7 @@ be-run:
 	@if [ -f $(BACKEND_ENV_FILE) ]; then set -a; . $(BACKEND_ENV_FILE); set +a; fi; $(BE_RUN_ENV) cargo run --manifest-path $(BACKEND_MANIFEST)
 
 .PHONY: dev-api
-dev-api:
+dev-api: fe-install be-install
 	@set -e; \
 	backend_port="$(API_BACKEND_PORT)"; \
 	frontend_port="$(API_FRONTEND_PORT)"; \
