@@ -14,6 +14,7 @@ import {
   type IElementEvent,
   type Point,
 } from "@antv/g6";
+import { useTranslation } from "react-i18next";
 
 import { GraphLegend } from "@/domain/knowledge-graph/components/GraphLegend";
 import type {
@@ -105,8 +106,8 @@ const fallbackMinimapViewport: MinimapViewport = {
   width: 52,
 };
 
-function numberText(value: number) {
-  return new Intl.NumberFormat("en-US").format(value);
+function numberText(value: number, locale: string) {
+  return new Intl.NumberFormat(locale).format(value);
 }
 
 function nodeKind(labels: string[]): NodeKind {
@@ -983,6 +984,11 @@ export function GraphCanvas({
   selectedNodeCode,
   zoom,
 }: GraphCanvasProps) {
+  const { i18n, t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:knowledgeGraph.${key}`, { defaultValue, ...options })
+  );
+  const locale = i18n.resolvedLanguage ?? i18n.language;
   const containerRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLButtonElement | null>(null);
   const minimapDragRef = useRef<MinimapDragState | null>(null);
@@ -1347,19 +1353,19 @@ export function GraphCanvas({
   return (
     <section
       className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--color-surface-container-lowest)]"
-      aria-label="G6 semantic knowledge graph canvas"
+      aria-label={pageT("canvas.aria", "G6 semantic knowledge graph canvas")}
       style={{
         backgroundImage: "radial-gradient(circle at 1px 1px, rgba(68,71,72,0.13) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.76), rgba(243,244,244,0.58))",
         backgroundSize: "20px 20px, 100% 100%",
       }}
     >
       <div ref={containerRef} className="absolute inset-0 z-0" />
-      <div className="sr-only" aria-label="Graph node labels">{nodeLabelPreview}</div>
+      <div className="sr-only" aria-label={pageT("canvas.nodeLabelsAria", "Graph node labels")}>{nodeLabelPreview}</div>
 
       <div className="absolute bottom-4 left-4 z-20 rounded-xl border border-[var(--color-card-border)] bg-white/88 p-2 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm">
         <button
           ref={minimapRef}
-          aria-label="Pan graph viewport"
+          aria-label={pageT("canvas.minimapAria", "Pan graph viewport")}
           className="relative block h-28 w-40 cursor-grab overflow-hidden rounded-lg bg-[var(--color-surface-container-low)] text-left active:cursor-grabbing"
           type="button"
           onClick={(event) => {
@@ -1398,12 +1404,12 @@ export function GraphCanvas({
 
       <GraphLegend items={legendItems} />
       <div
-        aria-label="Graph canvas metrics"
+        aria-label={pageT("canvas.metricsAria", "Graph canvas metrics")}
         className="absolute bottom-16 right-4 z-20 flex items-center gap-2 rounded-xl border border-[var(--color-card-border)] bg-white/88 px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
       >
-        <span>{numberText(metrics.nodeCount)} nodes</span>
+        <span>{pageT("canvas.metrics.nodes", "{{count}} nodes", { count: numberText(metrics.nodeCount, locale) })}</span>
         <span className="text-[var(--color-outline)]">·</span>
-        <span>{numberText(metrics.edgeCount)} edges</span>
+        <span>{pageT("canvas.metrics.edges", "{{count}} edges", { count: numberText(metrics.edgeCount, locale) })}</span>
       </div>
     </section>
   );

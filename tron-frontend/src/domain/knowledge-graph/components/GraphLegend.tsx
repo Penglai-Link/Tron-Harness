@@ -1,3 +1,5 @@
+import { useTranslation } from "react-i18next";
+
 import type { GraphNodeLegendItem } from "@/domain/knowledge-graph/model";
 
 interface GraphLegendProps {
@@ -5,11 +7,13 @@ interface GraphLegendProps {
 }
 
 export function GraphLegend({ items }: GraphLegendProps) {
+  const { t } = useTranslation(["pages"]);
+
   if (items.length === 0) return null;
 
   return (
     <div
-      aria-label="Graph legend"
+      aria-label={t("pages:knowledgeGraph.legend.aria", { defaultValue: "Graph legend" })}
       className="absolute bottom-4 right-4 z-20 flex max-w-[min(42rem,calc(100%-14rem))] flex-wrap items-center gap-3 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2 shadow-[0_10px_28px_rgba(15,23,42,0.08)]"
     >
       {items.map((item) => (

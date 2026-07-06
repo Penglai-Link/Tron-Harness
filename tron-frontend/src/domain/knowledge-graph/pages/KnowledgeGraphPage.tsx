@@ -275,8 +275,8 @@ export function GraphPage() {
             size="icon"
             variant="ghost"
             type="button"
-            aria-label="Exit graph fullscreen"
-            title="Exit fullscreen"
+            aria-label={pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen")}
+            title={pageT("toolbar.fullscreen.exit", "Exit fullscreen")}
             onClick={() => setGraphFullscreenActive(false)}
           >
             <Minimize2 size={16} aria-hidden="true" />

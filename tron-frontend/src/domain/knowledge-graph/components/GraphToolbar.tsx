@@ -9,6 +9,7 @@ import {
 } from "lucide-react";
 import type { ReactNode } from "react";
 import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 
 import type {
   GraphFacet,
@@ -51,13 +52,7 @@ interface GraphToolbarProps {
   fullscreenActive: boolean;
 }
 
-const graphLayoutOptions: Array<{ label: string; value: GraphLayoutMode }> = [
-  { label: "Radial", value: "Radial" },
-  { label: "Smart", value: "Smart" },
-  { label: "Force", value: "Force" },
-  { label: "Hierarchy", value: "Hierarchy" },
-  { label: "Grid", value: "Grid" },
-];
+const graphLayoutOptions: GraphLayoutMode[] = ["Radial", "Smart", "Force", "Hierarchy", "Grid"];
 
 interface ToolbarFieldProps {
   children: ReactNode;
@@ -67,11 +62,16 @@ interface ToolbarFieldProps {
 }
 
 function ToolbarField({ children, className, hint, label }: ToolbarFieldProps) {
+  const { t } = useTranslation(["pages"]);
+
   return (
     <div className={`flex min-w-0 flex-col items-stretch gap-2 ${className}`}>
       <div className="inline-flex self-start items-center gap-2 font-medium text-base/4.5 text-foreground sm:text-sm/4">
         <span>{label}</span>
-        <InfoTooltip ariaLabel={`${label} field help`}>
+        <InfoTooltip ariaLabel={t("pages:knowledgeGraph.toolbar.fieldHelpAria", {
+          defaultValue: "{{label}} field help",
+          label,
+        })}>
           {hint}
         </InfoTooltip>
       </div>
@@ -125,6 +125,10 @@ export function GraphToolbar({
   selectedRelationships,
   fullscreenActive,
 }: GraphToolbarProps) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:knowledgeGraph.${key}`, { defaultValue, ...options })
+  );
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [locatorOpen, setLocatorOpen] = useState(false);
   const activeFilterCount = activeLabels.length + selectedRelationships.length;
@@ -147,11 +151,11 @@ export function GraphToolbar({
   );
   const labelOptions = useMemo<MultiSelectOption[]>(
     () => facets.map((facet) => ({
-      description: `${facet.count} nodes`,
+      description: pageT("toolbar.nodeCount", "{{count}} nodes", { count: facet.count }),
       label: facet.label,
       value: facet.value,
     })),
-    [facets],
+    [facets, t],
   );
   const relationshipOptions = useMemo<MultiSelectOption[]>(() => {
     const values = new Set(relationships.filter((item) => item.trim().length > 0));
@@ -206,14 +210,14 @@ export function GraphToolbar({
         <div className="flex min-w-[1180px] items-end gap-2">
           <ToolbarField
             className="w-[420px] shrink-0"
-            label="Locate node"
-            hint="Type a node code or title, then choose a match to select and center it on the canvas."
+            label={pageT("toolbar.locate.label", "Locate node")}
+            hint={pageT("toolbar.locate.hint", "Type a node code or title, then choose a match to select and center it on the canvas.")}
           >
             <div className="relative w-full">
               <SearchField
-                ariaLabel="Locate graph node"
+                ariaLabel={pageT("toolbar.locate.aria", "Locate graph node")}
                 inputClassName="h-10 pl-3 sm:h-9"
-                placeholder="Locate node by code or title..."
+                placeholder={pageT("toolbar.locate.placeholder", "Locate node by code or title...")}
                 value={locatorQuery}
                 onBlur={() => {
                   window.setTimeout(() => setLocatorOpen(false), 120);
@@ -228,7 +232,7 @@ export function GraphToolbar({
                 <div
                   className="absolute left-0 right-0 top-full z-40 mt-2 max-h-72 overflow-y-auto rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-1 shadow-xl"
                   role="listbox"
-                  aria-label="Matching graph nodes"
+                  aria-label={pageT("toolbar.locate.matchesAria", "Matching graph nodes")}
                 >
                   {locatorMatches.length ? locatorMatches.map((node) => {
                     const primaryLabel = node.labels[0] ?? "GraphNode";
@@ -257,7 +261,9 @@ export function GraphToolbar({
                       </button>
                     );
                   }) : (
-                    <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">No matching nodes.</p>
+                    <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">
+                      {pageT("toolbar.locate.empty", "No matching nodes.")}
+                    </p>
                   )}
                 </div>
               ) : null}
@@ -265,11 +271,11 @@ export function GraphToolbar({
           </ToolbarField>
           <ToolbarField
             className="w-[160px] shrink-0"
-            label="Namespace"
-            hint="Choose which graph namespace to browse."
+            label={pageT("toolbar.namespace.label", "Namespace")}
+            hint={pageT("toolbar.namespace.hint", "Choose which graph namespace to browse.")}
           >
             <SelectInput
-              aria-label="Graph namespace"
+              aria-label={pageT("toolbar.namespace.aria", "Graph namespace")}
               className="w-full"
               value={namespace}
               disabled={namespaces.length === 0}
@@ -282,11 +288,11 @@ export function GraphToolbar({
           </ToolbarField>
           <ToolbarField
             className="w-[160px] shrink-0"
-            label="Display field"
-            hint="Choose the node property shown beside enlarged graph nodes."
+            label={pageT("toolbar.displayField.label", "Display field")}
+            hint={pageT("toolbar.displayField.hint", "Choose the node property shown beside enlarged graph nodes.")}
           >
             <SelectInput
-              aria-label="Graph node label property"
+              aria-label={pageT("toolbar.displayField.aria", "Graph node label property")}
               className="w-full"
               value={nodeLabelProperty}
               disabled={nodeLabelProperties.length === 0}
@@ -300,17 +306,17 @@ export function GraphToolbar({
           <div className="flex shrink-0 items-end gap-2">
             <ToolbarField
               className="w-[148px]"
-              label="Layout"
-              hint="Choose how nodes are arranged on the graph canvas."
+              label={pageT("toolbar.layout.label", "Layout")}
+              hint={pageT("toolbar.layout.hint", "Choose how nodes are arranged on the graph canvas.")}
             >
               <SelectInput
-                aria-label="Graph layout"
+                aria-label={pageT("toolbar.layout.aria", "Graph layout")}
                 className="w-full"
                 value={layoutMode}
                 onValueChange={(event) => onLayoutModeChange((event ?? "Radial") as GraphLayoutMode)}
               >
                 {graphLayoutOptions.map((item) => (
-                  <SelectItem key={item.value} value={item.value}>{item.label}</SelectItem>
+                  <SelectItem key={item} value={item}>{pageT(`toolbar.layout.options.${item}`, item)}</SelectItem>
                 ))}
               </SelectInput>
             </ToolbarField>
@@ -320,11 +326,11 @@ export function GraphToolbar({
               variant={filtersOpen || activeFilterCount ? "secondary" : "ghost"}
               type="button"
               aria-expanded={filtersOpen}
-              aria-label="Toggle graph filters"
+              aria-label={pageT("toolbar.filters.toggleAria", "Toggle graph filters")}
               onClick={() => setFiltersOpen((current) => !current)}
             >
               <SlidersHorizontal size={15} aria-hidden="true" />
-              Filters
+              {pageT("toolbar.filters.label", "Filters")}
               {activeFilterCount ? (
                 <span className="rounded-full bg-[var(--color-primary)] px-1.5 font-mono text-[10px] text-[var(--color-on-primary)]">
                   {activeFilterCount}
@@ -333,10 +339,10 @@ export function GraphToolbar({
             </Button>
           </div>
           <div className="ml-auto flex shrink-0 items-center gap-2">
-            <Button className="size-9" size="icon" variant="ghost" type="button" aria-label="Zoom in" title="Zoom in" onClick={() => onZoomChange(10)}>
+            <Button className="size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>
               <Plus size={16} aria-hidden="true" />
             </Button>
-            <Button className="size-9" size="icon" variant="ghost" type="button" aria-label="Zoom out" title="Zoom out" onClick={() => onZoomChange(-10)}>
+            <Button className="size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomOut", "Zoom out")} title={pageT("toolbar.zoomOut", "Zoom out")} onClick={() => onZoomChange(-10)}>
               <Minus size={16} aria-hidden="true" />
             </Button>
             <Button
@@ -344,8 +350,8 @@ export function GraphToolbar({
               size="icon"
               variant={fullscreenActive ? "secondary" : "ghost"}
               type="button"
-              aria-label={fullscreenActive ? "Exit graph fullscreen" : "Open graph fullscreen"}
-              title={fullscreenActive ? "Exit fullscreen" : "Fullscreen"}
+              aria-label={fullscreenActive ? pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen") : pageT("toolbar.fullscreen.openAria", "Open graph fullscreen")}
+              title={fullscreenActive ? pageT("toolbar.fullscreen.exit", "Exit fullscreen") : pageT("toolbar.fullscreen.open", "Fullscreen")}
               onClick={onToggleFullscreen}
             >
               {fullscreenActive ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
@@ -355,8 +361,8 @@ export function GraphToolbar({
               size="icon"
               variant="ghost"
               type="button"
-              aria-label="Refresh graph"
-              title="Refresh graph"
+              aria-label={pageT("actions.refresh", "Refresh graph")}
+              title={pageT("actions.refresh", "Refresh graph")}
               disabled={!namespace || refreshing}
               onClick={onRefresh}
             >
@@ -368,7 +374,7 @@ export function GraphToolbar({
 
       {!filtersOpen && activeFilterCount ? (
         <div className="flex flex-wrap items-center gap-2 px-0.5 text-[12px] text-[var(--color-on-surface-variant)]">
-          <span className="font-medium">Active filters</span>
+          <span className="font-medium">{pageT("toolbar.filters.active", "Active filters")}</span>
           {selectedRelationships.map((relationship) => (
             <button
               className="inline-flex h-7 items-center gap-1 rounded-full border border-[var(--color-accent)] bg-[var(--color-accent-container)] px-2 font-mono text-[11px] font-semibold text-[var(--color-on-accent-container)]"
@@ -400,19 +406,21 @@ export function GraphToolbar({
             {showRelationshipFilter ? (
               <div className="min-w-0">
                 <div className="mb-1.5 flex h-6 items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-[var(--color-on-surface)]">Relationship</p>
+                  <p className="text-sm font-semibold text-[var(--color-on-surface)]">
+                    {pageT("toolbar.relationships.label", "Relationship")}
+                  </p>
                   {selectedRelationships.length ? (
                     <Button className="h-6 px-2 text-[12px]" size="sm" variant="ghost" type="button" onClick={clearRelationshipFilters}>
-                      Clear
+                      {pageT("toolbar.filters.clear", "Clear")}
                     </Button>
                   ) : null}
                 </div>
                 <MultiSelectDropdown
-                  ariaLabel="Filter relationship"
-                  emptyMessage="No relationships."
+                  ariaLabel={pageT("toolbar.relationships.aria", "Filter relationship")}
+                  emptyMessage={pageT("toolbar.relationships.empty", "No relationships.")}
                   options={relationshipOptions}
-                  placeholder="All relationships"
-                  searchPlaceholder="Search relationships..."
+                  placeholder={pageT("toolbar.relationships.placeholder", "All relationships")}
+                  searchPlaceholder={pageT("toolbar.relationships.searchPlaceholder", "Search relationships...")}
                   selectedValues={selectedRelationships}
                   onToggle={toggleRelationship}
                 />
@@ -421,19 +429,21 @@ export function GraphToolbar({
             {showLabelFilter ? (
               <div className="min-w-0">
                 <div className="mb-1.5 flex h-6 items-center justify-between gap-2">
-                  <p className="text-sm font-semibold text-[var(--color-on-surface)]">Labels</p>
+                  <p className="text-sm font-semibold text-[var(--color-on-surface)]">
+                    {pageT("toolbar.labels.label", "Labels")}
+                  </p>
                   {activeLabels.length ? (
                     <Button className="h-6 px-2 text-[12px]" size="sm" variant="ghost" type="button" onClick={clearLabelFilters}>
-                      Clear
+                      {pageT("toolbar.filters.clear", "Clear")}
                     </Button>
                   ) : null}
                 </div>
                 <MultiSelectDropdown
-                  ariaLabel="Filter node labels"
-                  emptyMessage="No labels."
+                  ariaLabel={pageT("toolbar.labels.aria", "Filter node labels")}
+                  emptyMessage={pageT("toolbar.labels.empty", "No labels.")}
                   options={labelOptions}
-                  placeholder="All labels"
-                  searchPlaceholder="Search labels..."
+                  placeholder={pageT("toolbar.labels.placeholder", "All labels")}
+                  searchPlaceholder={pageT("toolbar.labels.searchPlaceholder", "Search labels...")}
                   selectedValues={activeLabels}
                   onToggle={toggleLabel}
                 />
