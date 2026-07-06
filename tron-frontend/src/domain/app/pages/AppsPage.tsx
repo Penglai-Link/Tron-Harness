@@ -1,32 +1,32 @@
 import {
-  type CSSProperties,
-  type MouseEvent,
   type SyntheticEvent,
   useEffect,
   useMemo,
-  useRef,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import {
   Archive,
   ExternalLink,
   MoreHorizontal,
   Pencil,
-  Plus,
-  RefreshCcw,
   RotateCcw,
 } from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   DataTable,
   PageHeader,
   SelectInput,
   TablePagination,
   TextInput,
-  useDismissibleLayer,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -54,36 +54,9 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { SelectItem } from "@/components/ui/select";
 
 type StatusFilter = "Active" | "Archived" | "All";
-type OpenRowMenuState = {
-  anchorRect: DOMRect;
-  appCode: string;
-  triggerElement: HTMLButtonElement;
-};
-
-const ACTION_MENU_GAP = 8;
-const ACTION_MENU_HEIGHT = 196;
-const ACTION_MENU_MARGIN = 12;
-const ACTION_MENU_WIDTH = 176;
 
 function stopRowNavigation(event: SyntheticEvent<HTMLElement>) {
   event.stopPropagation();
-}
-
-function getActionMenuStyle(anchorRect: DOMRect): CSSProperties {
-  const left = Math.min(
-    window.innerWidth - ACTION_MENU_WIDTH - ACTION_MENU_MARGIN,
-    Math.max(ACTION_MENU_MARGIN, anchorRect.right - ACTION_MENU_WIDTH),
-  );
-  const top = anchorRect.bottom + ACTION_MENU_GAP + ACTION_MENU_HEIGHT <= window.innerHeight - ACTION_MENU_MARGIN
-    ? anchorRect.bottom + ACTION_MENU_GAP
-    : Math.max(ACTION_MENU_MARGIN, anchorRect.top - ACTION_MENU_GAP - ACTION_MENU_HEIGHT);
-
-  return {
-    left,
-    position: "fixed",
-    top,
-    width: ACTION_MENU_WIDTH,
-  };
 }
 
 function openExternalLink(url: string) {
@@ -92,30 +65,77 @@ function openExternalLink(url: string) {
 
 function AppActions({
   app,
-  isOpen,
-  onToggleOpen,
+  onArchive,
+  onRestore,
+  pendingLifecycle,
 }: {
   app: AppListItem;
-  isOpen: boolean;
-  onToggleOpen: (event: MouseEvent<HTMLButtonElement>) => void;
+  onArchive: () => void;
+  onRestore: () => void;
+  pendingLifecycle: boolean;
 }) {
+  const navigate = useNavigate();
+
   return (
-    <div className="flex justify-end">
-      <Button
-        aria-expanded={isOpen}
-        aria-haspopup="menu"
-        aria-label={`Open actions for ${app.name}`}
-        size="icon"
-        type="button"
-        variant="ghost"
-        onClick={(event) => {
-          event.stopPropagation();
-          onToggleOpen(event);
-        }}
-      >
-        <MoreHorizontal size={16} aria-hidden="true" />
-      </Button>
-    </div>
+    <DropdownMenu>
+      <DropdownMenuTrigger>
+        <Button
+          aria-label={`Open actions for ${app.name}`}
+          size="icon"
+          type="button"
+          variant="ghost"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <MoreHorizontal size={16} aria-hidden="true" />
+        </Button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" onClick={stopRowNavigation}>
+        <DropdownMenuItem
+          onClick={(event) => {
+            event.stopPropagation();
+            navigate(`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`);
+          }}
+        >
+          Edit
+        </DropdownMenuItem>
+        {app.status === "Archived" ? (
+          <DropdownMenuItem
+            disabled={pendingLifecycle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onRestore();
+            }}
+          >
+            Restore
+          </DropdownMenuItem>
+        ) : (
+          <DropdownMenuItem
+            disabled={pendingLifecycle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onArchive();
+            }}
+          >
+            Archive
+          </DropdownMenuItem>
+        )}
+        <DropdownMenuSeparator />
+        <DropdownMenuItem
+          disabled={!app.repositoryUrl}
+          onClick={(event) => {
+            event.stopPropagation();
+            if (app.repositoryUrl) {
+              openExternalLink(app.repositoryUrl);
+            }
+          }}
+        >
+          Gitlab
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled>
+          Poseidon
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -131,9 +151,7 @@ export function AppsPage() {
   const [status, setStatus] = useState<StatusFilter>("Active");
   const [current, setCurrent] = useState(1);
   const [size, setSize] = useState(15);
-  const [openRowMenu, setOpenRowMenu] = useState<OpenRowMenuState | null>(null);
   const [pendingLifecycleCode, setPendingLifecycleCode] = useState<string | null>(null);
-  const rowMenuRef = useRef<HTMLDivElement | null>(null);
   const query = useMemo(() => ({
     current,
     includeArchived: status === "All",
@@ -159,29 +177,12 @@ export function AppsPage() {
   }, [searchInput]);
 
   useEffect(() => {
-    setOpenRowMenu(null);
-  }, [activeWorkspaceCode, current, runtimeRole, searchInput, size, status]);
-
-  useEffect(() => {
     if (current > pageCount) {
       setCurrent(pageCount);
     }
   }, [current, pageCount]);
 
-  useDismissibleLayer({
-    onDismiss: () => setOpenRowMenu(null),
-    open: openRowMenu !== null,
-    popupRef: rowMenuRef,
-    triggerElement: openRowMenu?.triggerElement,
-  });
-
-  const openMenuApp = useMemo(
-    () => (openRowMenu ? page.records.find((app) => app.appCode === openRowMenu.appCode) ?? null : null),
-    [openRowMenu, page.records],
-  );
-
   async function updateLifecycle(app: AppListItem, action: "archive" | "restore") {
-    setOpenRowMenu(null);
     setPendingLifecycleCode(app.appCode);
     try {
       if (action === "archive") {
@@ -215,19 +216,17 @@ export function AppsPage() {
           <>
             <Button
               type="button"
-              variant="secondary"
+              size="lg"
+              variant="outline"
               disabled={loading}
               onClick={() => {
-                setOpenRowMenu(null);
                 refresh();
                 toast.success("App registry refreshed");
               }}
             >
-              <RefreshCcw size={15} aria-hidden="true" />
               Refresh
             </Button>
-            <Button type="button" disabled={!activeWorkspaceCode} onClick={() => navigate("/apps/new")}>
-              <Plus size={15} aria-hidden="true" />
+            <Button size="lg" type="button" disabled={!activeWorkspaceCode} onClick={() => navigate("/apps/new")}>
               New
             </Button>
           </>
@@ -360,100 +359,14 @@ export function AppsPage() {
             render: (app) => (
               <AppActions
                 app={app}
-                isOpen={openRowMenu?.appCode === app.appCode}
-                onToggleOpen={(event) => {
-                  const anchorRect = event.currentTarget.getBoundingClientRect();
-                  setOpenRowMenu((currentMenu) => (
-                    currentMenu?.appCode === app.appCode
-                      ? null
-                      : {
-                        appCode: app.appCode,
-                        anchorRect,
-                        triggerElement: event.currentTarget,
-                      }
-                  ));
-                }}
+                onArchive={() => void updateLifecycle(app, "archive")}
+                onRestore={() => void updateLifecycle(app, "restore")}
+                pendingLifecycle={pendingLifecycleCode === app.appCode}
               />
             ),
           },
         ]}
       />
-      {openMenuApp && openRowMenu
-        ? createPortal(
-          <div
-            className="z-50 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)] p-2 shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
-            data-app-actions-menu
-            ref={rowMenuRef}
-            role="menu"
-            aria-label={`Actions for ${openMenuApp.name}`}
-            style={getActionMenuStyle(openRowMenu.anchorRect)}
-            onClick={stopRowNavigation}
-          >
-            <button
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
-              role="menuitem"
-              type="button"
-              onClick={() => {
-                setOpenRowMenu(null);
-                navigate(`/apps/edit?appCode=${encodeURIComponent(openMenuApp.appCode)}`);
-              }}
-            >
-              <Pencil size={14} aria-hidden="true" />
-              Edit
-            </button>
-            {openMenuApp.status === "Archived" ? (
-              <button
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-                role="menuitem"
-                type="button"
-                disabled={pendingLifecycleCode === openMenuApp.appCode}
-                onClick={() => void updateLifecycle(openMenuApp, "restore")}
-              >
-                <RotateCcw size={14} aria-hidden="true" />
-                Restore
-              </button>
-            ) : (
-              <button
-                className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-                role="menuitem"
-                type="button"
-                disabled={pendingLifecycleCode === openMenuApp.appCode}
-                onClick={() => void updateLifecycle(openMenuApp, "archive")}
-              >
-                <Archive size={14} aria-hidden="true" />
-                Archive
-              </button>
-            )}
-            <div className="my-1 border-t border-[var(--color-outline-variant)]" aria-hidden="true" />
-            <button
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              role="menuitem"
-              type="button"
-              disabled={!openMenuApp.repositoryUrl}
-              onClick={() => {
-                if (!openMenuApp.repositoryUrl) {
-                  return;
-                }
-                setOpenRowMenu(null);
-                openExternalLink(openMenuApp.repositoryUrl);
-              }}
-            >
-              <ExternalLink size={14} aria-hidden="true" />
-              Gitlab
-            </button>
-            <button
-              className="flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm text-[var(--color-on-surface)] disabled:cursor-not-allowed disabled:opacity-60"
-              role="menuitem"
-              type="button"
-              disabled
-            >
-              <ExternalLink size={14} aria-hidden="true" />
-              Poseidon
-            </button>
-          </div>,
-          document.body,
-        )
-        : null}
     </>
   );
 }

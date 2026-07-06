@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   MultiSelectDropdown,
@@ -239,9 +239,8 @@ export function CreateTaskPage() {
         title="Create Task"
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/tasks")}>Cancel</Button>
-            <Button disabled={submitting || !title.trim() || !activeWorkspaceCode} aria-busy={submitting} onClick={submitTask}>
-              <Save size={15} aria-hidden="true" />
+            <Button size="lg" variant="outline" onClick={() => navigate("/tasks")}>Cancel</Button>
+            <Button size="lg" disabled={submitting || !title.trim() || !activeWorkspaceCode} aria-busy={submitting} onClick={submitTask}>
               {submitting ? "Saving..." : "Save"}
             </Button>
           </>
@@ -327,14 +326,13 @@ export function CreateTaskPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</span>
               <Button
-                size="sm"
+                size="lg"
                 type="button"
                 variant="ghost"
                 aria-label="Open description fullscreen"
                 onClick={() => setDescriptionFullscreenOpen(true)}
               >
                 <Maximize2 size={14} aria-hidden="true" />
-                Fullscreen
               </Button>
             </div>
             <TextArea

@@ -11,7 +11,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   Field,
@@ -110,8 +110,8 @@ export function PromptsPage() {
         title={pt("Prompt Management")}
         actions={
           <>
-            <Button variant="secondary" onClick={() => setNotice(pt("{{count}} prompts exported", { count: filtered.length }))}>{pt("Bulk Export")}</Button>
-            <Button onClick={() => setNotice(pt("New prompt flow opened"))}><Plus size={16} aria-hidden="true" />{pt("New")}</Button>
+            <Button size="lg" variant="outline" onClick={() => setNotice(pt("{{count}} prompts exported", { count: filtered.length }))}>{pt("Bulk Export")}</Button>
+            <Button size="lg" onClick={() => setNotice(pt("New prompt flow opened"))}>{pt("New")}</Button>
           </>
         }
       />
@@ -127,7 +127,7 @@ export function PromptsPage() {
             </div>
             <div className="flex flex-wrap items-center gap-2 py-4">
               <SearchField ariaLabel={pt("Search prompts")} placeholder={pt("Search prompts...")} value={query} onChange={setQuery} />
-              <Button size="sm" variant="secondary" onClick={() => setNotice(pt("Prompt filters opened"))}><Filter size={14} aria-hidden="true" />{pt("Filter")}</Button>
+              <Button size="lg" variant="ghost" onClick={() => setNotice(pt("Prompt filters opened"))}><Filter size={14} aria-hidden="true" />{pt("Filter")}</Button>
             </div>
           </div>
           <DataTable

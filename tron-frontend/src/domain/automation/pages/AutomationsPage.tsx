@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   PageHeader,
@@ -268,16 +268,14 @@ export function AutomationsPage() {
         title={pt("Automations")}
         actions={
           <>
-            <Button variant="secondary" onClick={() => {
+            <Button size="lg" variant="outline" onClick={() => {
               refresh();
               toast.success(pt("Automation list refreshed"));
             }}
             >
-              <RefreshCcw size={15} aria-hidden="true" />
               {pt("Refresh")}
             </Button>
-            <Button disabled={!activeWorkspaceCode} onClick={() => navigate("/automations/new")}>
-              <Plus size={15} aria-hidden="true" />
+            <Button size="lg" disabled={!activeWorkspaceCode} onClick={() => navigate("/automations/new")}>
               {pt("New")}
             </Button>
           </>

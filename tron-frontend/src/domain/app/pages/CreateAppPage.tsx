@@ -3,9 +3,8 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
-import { Plus } from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SurfaceCard,
@@ -68,9 +67,8 @@ export function CreateAppPage() {
         <form className="space-y-6" onSubmit={handleSubmit}>
           <AppFormFields disabled={submitting} form={form} onChange={updateForm} />
           <div className="flex flex-wrap justify-end gap-2">
-            <Button type="button" variant="secondary" onClick={() => navigate("/apps")}>Cancel</Button>
-            <Button type="submit" disabled={submitting || !activeWorkspaceCode || !canSubmitAppForm(form)}>
-              <Plus size={15} aria-hidden="true" />
+            <Button size="lg" type="button" variant="outline" onClick={() => navigate("/apps")}>Cancel</Button>
+            <Button size="lg" type="submit" disabled={submitting || !activeWorkspaceCode || !canSubmitAppForm(form)}>
               {submitting ? "Saving..." : "Save"}
             </Button>
           </div>

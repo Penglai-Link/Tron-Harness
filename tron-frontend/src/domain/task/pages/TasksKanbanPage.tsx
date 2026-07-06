@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SearchField,
@@ -427,11 +427,11 @@ export function TasksKanbanPage() {
               <SelectItem value="fit">{`Fit (${boardScalePercent}%)`}</SelectItem>
               {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
             </SelectInput>
-            <Button variant="secondary" onClick={() => {
+            <Button size="lg" variant="outline" onClick={() => {
               refresh();
               toast.success("Task board refreshed");
-            }}><RefreshCcw size={16} aria-hidden="true" />Refresh</Button>
-            <Button onClick={() => navigate("/tasks/new")}><Plus size={16} aria-hidden="true" />New</Button>
+            }}>Refresh</Button>
+            <Button size="lg" onClick={() => navigate("/tasks/new")}>New</Button>
           </>
         }
       />

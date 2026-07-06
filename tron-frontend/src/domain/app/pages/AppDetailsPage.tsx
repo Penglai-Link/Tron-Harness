@@ -6,13 +6,8 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  Archive,
-  Pencil,
-  RotateCcw,
-} from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   InspectorPanel,
   PageHeader,
@@ -138,15 +133,13 @@ export function AppDetailsPage() {
         title={app.name}
         actions={(
           <>
-            <Button type="button" variant="secondary" onClick={() => navigate(`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`)}><Pencil size={15} aria-hidden="true" />Edit</Button>
+            <Button type="button" size="lg" variant="outline" onClick={() => navigate(`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`)}>Edit</Button>
             {app.status === "Archived" ? (
-              <Button type="button" disabled={updatingLifecycle} variant="secondary" onClick={() => void handleLifecycle("restore")}>
-                <RotateCcw size={15} aria-hidden="true" />
+              <Button size="lg" type="button" disabled={updatingLifecycle} variant="destructive" onClick={() => void handleLifecycle("restore")}>
                 Restore
               </Button>
             ) : (
-              <Button type="button" disabled={updatingLifecycle} variant="secondary" onClick={() => void handleLifecycle("archive")}>
-                <Archive size={15} aria-hidden="true" />
+              <Button size="lg" type="button" disabled={updatingLifecycle} onClick={() => void handleLifecycle("archive")}>
                 Archive
               </Button>
             )}

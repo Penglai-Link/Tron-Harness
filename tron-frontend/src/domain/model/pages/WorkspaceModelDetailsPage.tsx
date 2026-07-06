@@ -9,17 +9,10 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import {
-  Edit3,
-  Save,
-  ShieldCheck,
-  Trash2,
-  X,
-  Zap,
-} from "lucide-react";
+
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   PageHeader,
@@ -358,50 +351,70 @@ export function WorkspaceModelDetailsPage() {
         actions={editing ? (
           <>
             <Button
-              variant="secondary"
+              variant="outline"
+              size="lg"
               disabled={submitting || verifying || !form.displayName.trim()}
               aria-busy={verifying}
               onClick={() => void runVerify()}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
               {verifying ? "Verifying..." : "Verify"}
             </Button>
-            <Button variant="secondary" disabled={submitting || verifying} onClick={resetDraft}>
-              <X size={16} aria-hidden="true" />
+            <Button
+              variant="outline"
+              size="lg"
+              disabled={submitting || verifying}
+              onClick={resetDraft}
+            >
               Cancel
             </Button>
             <Button
+              size="lg"
               disabled={submitting || verifying || !form.displayName.trim()}
               aria-busy={submitting}
               onClick={() => void saveModel()}
             >
-              <Save size={16} aria-hidden="true" />
               {submitting ? "Saving..." : "Save"}
             </Button>
           </>
         ) : (
           <>
             {editableDefinition ? (
-              <Button variant="secondary" onClick={() => setEditing(true)}>
-                <Edit3 size={16} aria-hidden="true" />
+              <Button
+                variant="outline"
+                size="lg"
+                onClick={() => setEditing(true)}
+              >
                 Edit
               </Button>
             ) : null}
             {verifiableRecord ? (
-              <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
-                <ShieldCheck size={16} aria-hidden="true" />
+              <Button
+                variant="outline"
+                size="lg"
+                disabled={verifying}
+                aria-busy={verifying}
+                onClick={() => void runVerify()}
+              >
                 {verifying ? "Verifying..." : "Verify"}
               </Button>
             ) : null}
             {toggleableRecord ? (
-              <Button variant="secondary" disabled={submitting} onClick={() => void toggleEnabled()}>
-                <Zap size={16} aria-hidden="true" />
+              <Button
+                variant="outline"
+                size="lg"
+                disabled={submitting} onClick={() => void toggleEnabled()}
+              >
                 {selectedRecord.enabled ? "Disable" : "Enable"}
               </Button>
             ) : null}
             {removableRecord ? (
-              <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
-                <Trash2 size={16} aria-hidden="true" />
+              <Button
+                variant="destructive"
+                size="lg"
+                disabled={deleting}
+                aria-busy={deleting}
+                onClick={() => void removeModel()}
+              >
                 {deleting ? "Deleting..." : (selectedRecord.sourceKind === "OVERRIDE" ? "Revert" : "Delete")}
               </Button>
             ) : null}
@@ -417,9 +430,7 @@ export function WorkspaceModelDetailsPage() {
             <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
             <Badge tone={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
             {selectedRecord.isDefault ? <Badge tone="info">Default</Badge> : null}
-            <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
-              {selectedRecord.modelCode}
-            </code>
+            <Badge tone="outline">{selectedRecord.modelCode}</Badge>
           </div>
 
           {editing ? (
@@ -432,7 +443,6 @@ export function WorkspaceModelDetailsPage() {
                 onApiKeyDirtyChange={setApiKeyDirty}
                 displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceCode}` : undefined}
               />
-
               <ToggleSwitch
                 checked={allowInheritance}
                 label="Allow Inheritance"

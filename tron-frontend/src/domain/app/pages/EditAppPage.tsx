@@ -7,9 +7,8 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
-import { Save } from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SurfaceCard,
@@ -110,9 +109,8 @@ export function EditAppPage() {
         title={`Edit ${app.name}`}
         actions={(
           <>
-            <Button type="button" variant="secondary" onClick={() => navigate(`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`)}>Cancel</Button>
-            <Button type="submit" form="edit-app-form" disabled={submitting || !canSubmitAppForm(form) || app.status === "Archived"}>
-              <Save size={15} aria-hidden="true" />
+            <Button type="button" variant="outline" size="lg" onClick={() => navigate(`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`)}>Cancel</Button>
+            <Button type="submit" form="edit-app-form" size="lg" disabled={submitting || !canSubmitAppForm(form) || app.status === "Archived"}>
               {submitting ? "Saving..." : "Save"}
             </Button>
           </>

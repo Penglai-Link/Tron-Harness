@@ -7,7 +7,6 @@ import {
   CheckCircle2,
   CircleAlert,
   Database,
-  Download,
   FolderOpen,
   Maximize2,
   Network,
@@ -34,7 +33,7 @@ import type {
   PrimarySpace,
   SecondarySpace,
 } from "@/shared/types/WorkspaceSpace";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 
 function DashboardContent() {
   const { activities, metrics } = useDashboardOverview();
@@ -54,8 +53,7 @@ function DashboardContent() {
       <PageHeader
         title="Workspace Overview"
         actions={
-          <Button variant="secondary" onClick={() => setShowAll((current) => !current)}>
-            <Download size={16} aria-hidden="true" />
+          <Button size="lg" variant="outline" onClick={() => setShowAll((current) => !current)}>
             Export Report
           </Button>
         }
@@ -103,9 +101,9 @@ function DashboardContent() {
         <SurfaceCard className="p-0">
           <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] px-5 py-4">
             <h2 className="text-xl font-semibold">Recent Activity</h2>
-            <button className="text-[11px] font-semibold uppercase text-[var(--color-accent)]" type="button" onClick={() => setShowAll((current) => !current)}>
+            <Button size="lg" variant="outline" onClick={() => setShowAll((current) => !current)}>
               View All
-            </button>
+            </Button>
           </div>
           <ul className="max-h-[360px] overflow-y-auto p-3">
             {activities.slice(0, showAll ? activities.length : 4).map((activity) => (

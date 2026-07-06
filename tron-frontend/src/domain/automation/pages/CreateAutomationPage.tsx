@@ -10,7 +10,7 @@ import {
   X,
 } from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   OptionSelect,
@@ -204,9 +204,8 @@ export function CreateAutomationPage() {
         title="Create Automation"
         actions={
           <>
-            <Button variant="secondary" onClick={() => navigate("/automations")}>Cancel</Button>
-            <Button disabled={submitting || !activeWorkspaceCode || !name.trim() || !prompt.trim() || !selectedModelOptionCode} aria-busy={submitting} onClick={submitAutomation}>
-              <Save size={15} aria-hidden="true" />
+            <Button size="lg" variant="outline" onClick={() => navigate("/automations")}>Cancel</Button>
+            <Button size="lg" disabled={submitting || !activeWorkspaceCode || !name.trim() || !prompt.trim() || !selectedModelOptionCode} aria-busy={submitting} onClick={submitAutomation}>
               {submitting ? "Saving..." : "Save"}
             </Button>
           </>
@@ -265,9 +264,8 @@ export function CreateAutomationPage() {
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                 Prompt body
               </span>
-              <Button size="sm" type="button" variant="secondary" onClick={() => setPromptFullscreenOpen(true)}>
+              <Button size="lg" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
                 <Maximize2 size={14} aria-hidden="true" />
-                Fullscreen
               </Button>
             </div>
             <TextArea

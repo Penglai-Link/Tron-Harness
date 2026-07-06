@@ -20,7 +20,7 @@ import {
   Save,
 } from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   InspectorPanel,
@@ -647,17 +647,16 @@ export function TaskDetailsPage() {
         title="Task Details"
         actions={
           <>
-            <Button disabled={executing || archived} variant="primary" onClick={() => void handleExecute()}>
-              <Play size={15} aria-hidden="true" />
+            <Button disabled={executing || archived} size="lg" onClick={() => void handleExecute()}>
               {executing ? "Executing..." : "Execute"}
             </Button>
             {detailEditable ? (
               <>
-                <Button variant="secondary" onClick={resetDetailFields}>Cancel</Button>
-                <Button disabled={!detailDirty} onClick={() => void saveDetailFields()}><Save size={15} aria-hidden="true" />Save</Button>
+                <Button size="lg" variant="outline" onClick={resetDetailFields}>Cancel</Button>
+                <Button size="lg" disabled={!detailDirty} onClick={() => void saveDetailFields()}>Save</Button>
               </>
             ) : !archived ? (
-              <Button variant="secondary" onClick={() => setEditing(true)}><Edit3 size={15} aria-hidden="true" />Edit</Button>
+              <Button size="lg" variant="outline" onClick={() => setEditing(true)}>Edit</Button>
             ) : null}
           </>
         }
@@ -820,14 +819,13 @@ export function TaskDetailsPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</span>
               <Button
-                size="sm"
+                size="lg"
                 type="button"
                 variant="ghost"
                 aria-label="Open description fullscreen"
                 onClick={() => setDescriptionFullscreenOpen(true)}
               >
                 <Maximize2 size={14} aria-hidden="true" />
-                Fullscreen
               </Button>
             </div>
             {detailEditable ? (
@@ -840,7 +838,7 @@ export function TaskDetailsPage() {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Execution Result</span>
               <Button
-                size="sm"
+                size="lg"
                 type="button"
                 variant="ghost"
                 aria-label="Open execution result fullscreen"
@@ -848,7 +846,6 @@ export function TaskDetailsPage() {
                 onClick={() => setExecutionResultFullscreenOpen(true)}
               >
                 <Maximize2 size={14} aria-hidden="true" />
-                Fullscreen
               </Button>
             </div>
             <MarkdownContent ariaLabel="Task execution result markdown" className="max-h-80 overflow-y-auto pr-2" content={task.executionResult} />
