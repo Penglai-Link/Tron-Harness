@@ -1,5 +1,40 @@
 use std::{fs, path::Path, process::Command};
 
+fn frontend_api_data_source_assignments(repo_root: &Path) -> Vec<String> {
+    let service_config =
+        fs::read_to_string(repo_root.join("tron-frontend/src/shared/api/serviceConfig.ts"))
+            .expect("frontend service config should be readable");
+    let mut assignments = vec![
+        "VITE_TRON_DATA_SOURCE=api".to_string(),
+        "VITE_TRON_AUTH_DATA_SOURCE=api".to_string(),
+    ];
+    let mut in_domain_env_keys = false;
+
+    for line in service_config.lines() {
+        if line.contains("const domainEnvKeys") {
+            in_domain_env_keys = true;
+            continue;
+        }
+        if in_domain_env_keys && line.contains("};") {
+            break;
+        }
+        if !in_domain_env_keys {
+            continue;
+        }
+        if let Some((_, value)) = line.split_once(": \"") {
+            if let Some((env_key, _)) = value.split_once('"') {
+                assignments.push(format!("VITE_TRON_{env_key}_DATA_SOURCE=api"));
+            }
+        }
+    }
+
+    assert!(
+        assignments.len() > 2,
+        "frontend service config must expose domain data source keys",
+    );
+    assignments
+}
+
 #[test]
 fn make_help_lists_integrated_backend_and_frontend_targets() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
@@ -63,14 +98,35 @@ fn integrated_frontend_build_defaults_integrated_runtime_to_api_mode() {
         makefile.contains("VITE_TRON_API_BASE_URL="),
         "app-build must keep API calls same-origin for integrated runtime",
     );
-    for required in [
-        "VITE_TRON_DATA_SOURCE=api",
-        "VITE_TRON_AUTH_DATA_SOURCE=api",
-        "VITE_TRON_ADMIN_DATA_SOURCE=api",
-    ] {
+    assert!(
+        makefile
+            .contains("APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV)"),
+        "app-build must reuse the shared frontend API data source env",
+    );
+    for required in frontend_api_data_source_assignments(repo_root) {
         assert!(
-            makefile.contains(required),
+            makefile.contains(&required),
             "integrated app build must default integrated runtime to API mode via `{required}`",
+        );
+    }
+}
+
+#[test]
+fn dev_api_frontend_start_forces_every_frontend_module_to_api_mode() {
+    let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .parent()
+        .expect("tron-backend must live under the repository root");
+    let makefile = fs::read_to_string(repo_root.join("Makefile"))
+        .expect("Makefile should be readable from the repository root");
+
+    assert!(
+        makefile.contains("FE_API_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV)"),
+        "fe-dev-api must reuse the shared frontend API data source env",
+    );
+    for required in frontend_api_data_source_assignments(repo_root) {
+        assert!(
+            makefile.contains(&required),
+            "dev-api must force frontend module API mode via `{required}`",
         );
     }
 }

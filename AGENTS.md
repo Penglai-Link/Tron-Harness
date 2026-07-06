@@ -9,6 +9,7 @@
 ## API
 
 Use a uniform response body format:
+
 ```
 {
   code: "response status code or error code"
@@ -18,6 +19,7 @@ Use a uniform response body format:
 ```
 
 Pagable response body format:
+
 ```
 {
   code: "response status code"

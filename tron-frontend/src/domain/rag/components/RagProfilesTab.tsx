@@ -142,7 +142,7 @@ export function RagProfilesTab({
           <div className="flex flex-wrap items-center justify-between gap-4">
             <h2 className="text-base font-semibold">{pageT("title", "Retrieval profiles")}</h2>
           </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-[minmax(260px,1fr)_auto] md:items-center">
+          <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_auto] md:items-center">
             <div className="relative min-w-0">
               <TextInput
                 placeholder={pageT("searchPlaceholder", "Search retrieval profiles, corpora, routes, or strategies...")}

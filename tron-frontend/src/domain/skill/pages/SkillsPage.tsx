@@ -890,7 +890,6 @@ export function SkillsPage() {
                 onChange={setSearchInput}
               />
             </div>
-            {loading ? <Badge tone="info">{pageT("loading.badge", "Loading")}</Badge> : null}
           </div>
           {ragOperation ? (
             <div className="border-b border-[var(--color-outline-variant)] px-4 py-3">

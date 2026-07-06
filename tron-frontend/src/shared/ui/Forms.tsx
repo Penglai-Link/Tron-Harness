@@ -1,11 +1,10 @@
 import type {
   ForwardedRef,
   InputHTMLAttributes,
-  ReactElement,
   ReactNode,
   TextareaHTMLAttributes,
 } from "react";
-import { cloneElement, forwardRef, isValidElement, useId } from "react";
+import { Children, forwardRef, isValidElement, useMemo } from "react";
 
 import { cn } from "@/shared/lib/utils";
 import { InfoTooltip } from "@/shared/ui/InfoTooltip";
@@ -23,18 +22,8 @@ interface FieldProps {
   label: ReactNode;
 }
 
-interface FieldChildProps {
-  "aria-describedby"?: string;
-  id?: string;
-}
-
 const disabledControlClasses =
   "disabled:cursor-not-allowed disabled:border-[var(--color-outline-variant)] disabled:bg-[var(--color-surface-container)] disabled:text-[var(--color-on-surface-variant)] disabled:opacity-100 disabled:placeholder:text-[var(--color-outline)] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
-
-function mergeAriaReferences(...references: Array<string | undefined>) {
-  const normalized = references.map((value) => value?.trim()).filter(Boolean);
-  return normalized.length > 0 ? normalized.join(" ") : undefined;
-}
 
 export function Field({ children, error, hint, label }: FieldProps) {
   return (
@@ -86,8 +75,6 @@ export const TextArea = forwardRef(function TextArea(
   );
 });
 
-
-
 export function SelectInput<Value, Multiple extends boolean | undefined = false>({
   "aria-describedby": ariaDescribedBy,
   "aria-label": ariaLabel,
@@ -109,9 +96,24 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   placeholder?: ReactNode;
   size?: 'sm' | 'lg';
 }) {
+  const items = useMemo(() => {
+    return Children.toArray(children).map((child) => {
+      if (isValidElement(child)) {
+        return {
+          value: (child.props as SelectPrimitive.Item.Props).value,
+          label: (child.props as SelectPrimitive.Item.Props).children,
+        };
+      }
+      return [];
+    }).filter(Boolean) as ReadonlyArray<{
+      label: ReactNode;
+      value: any;
+    }>;
+  }, [children]);
+
   return (
     <>
-      <Select {...props}>
+      <Select {...props} items={items}>
         <SelectTrigger
           aria-describedby={ariaDescribedBy}
           aria-label={ariaLabel}
