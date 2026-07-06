@@ -48,62 +48,27 @@ export const useTabStore = create<TabState>()((set, get) => ({
   addTab: (tab) => {
     const state = get();
 
-    // 如果有 activeNav，优先根据 activeNav 查找已存在的 tab
+    // 首先根据 path 精确查找
+    const existingTabByPath = state.tabs.find(t => t.path === tab.path);
+    if (existingTabByPath) {
+      // 找到了精确匹配的 tab，只更新 activeTabId
+      if (state.activeTabId !== existingTabByPath.id) {
+        set({ activeTabId: existingTabByPath.id });
+      }
+      return existingTabByPath.id;
+    }
+
+    // 如果有 activeNav，根据 activeNav 查找已存在的 tab
     if (tab.activeNav) {
       const existingTabByNav = state.tabs.find(t => t.activeNav === tab.activeNav);
       if (existingTabByNav) {
-        // 检查 path 是否改变
-        const pathChanged = existingTabByNav.path !== tab.path;
-
-        // 检查是否需要更新
-        const needsUpdate =
-          pathChanged ||
-          existingTabByNav.title !== tab.title ||
-          state.activeTabId !== existingTabByNav.id;
-
-        if (needsUpdate) {
-          // 如果 path 改变了，需要清除该 tab 的缓存，让它重新渲染
-          if (pathChanged) {
-            const newCachedTabsMap = new Map(state.cachedTabsMap);
-            newCachedTabsMap.delete(existingTabByNav.id);
-            const newCachedTabsList = Array.from(newCachedTabsMap.values());
-
-            set({
-              tabs: state.tabs.map(t =>
-                t.id === existingTabByNav.id
-                  ? { ...t, path: tab.path, title: tab.title }
-                  : t
-              ),
-              activeTabId: existingTabByNav.id,
-              cachedTabsMap: newCachedTabsMap,
-              cachedTabsList: newCachedTabsList,
-            });
-          } else {
-            set({
-              tabs: state.tabs.map(t =>
-                t.id === existingTabByNav.id
-                  ? { ...t, path: tab.path, title: tab.title }
-                  : t
-              ),
-              activeTabId: existingTabByNav.id,
-            });
-          }
-        }
+        // 找到了同 activeNav 的 tab，返回它的 ID
+        // 不在这里更新 activeTabId，让外部调用者决定
         return existingTabByNav.id;
       }
     }
 
-    // 否则按原逻辑根据 path 查找
-    const existingTab = state.tabs.find(t => t.path === tab.path);
-
-    if (existingTab) {
-      // 只有当 activeTabId 不同时才更新
-      if (state.activeTabId !== existingTab.id) {
-        set({ activeTabId: existingTab.id });
-      }
-      return existingTab.id;
-    }
-
+    // 创建新 tab
     const newTab: TabItem = {
       ...tab,
       id: generateTabId(),
@@ -180,15 +145,18 @@ export const useTabStore = create<TabState>()((set, get) => ({
     if (state.cachedTabsMap.has(tabId)) {
       const cached = state.cachedTabsMap.get(tabId)!;
       const now = Date.now();
+      const routeChanged = cached.path !== path || cached.pageId !== pageId;
 
-      // 如果距离上次访问不到1秒，不更新
-      if (now - cached.lastAccessTime < 1000) {
+      // 如果距离上次访问不到1秒且路由元数据未变化，不更新
+      if (!routeChanged && now - cached.lastAccessTime < 1000) {
         return;
       }
 
       const newCachedTabsMap = new Map(state.cachedTabsMap);
       newCachedTabsMap.set(tabId, {
         ...cached,
+        pageId,
+        path,
         lastAccessTime: now,
       });
       const newCachedTabsList = Array.from(newCachedTabsMap.values());
