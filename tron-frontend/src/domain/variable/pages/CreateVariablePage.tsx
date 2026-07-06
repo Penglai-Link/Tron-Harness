@@ -1,11 +1,10 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
-import { Save } from "lucide-react";
 
 import { createVariable } from "@/domain/variable/api";
 import { createVariableRecord } from "@/domain/variable/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SurfaceCard,
@@ -69,16 +68,15 @@ export function CreateVariablePage() {
         title="Create Variable"
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/variables")}>Cancel</Button>
-            <Button disabled={submitting || !activeWorkspaceCode || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
-              <Save size={16} aria-hidden="true" />
+            <Button size="lg" variant="outline" onClick={() => navigate("/variables")}>Cancel</Button>
+            <Button size="lg" disabled={submitting || !activeWorkspaceCode || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
               {submitting ? "Saving..." : "Save"}
             </Button>
           </>
         )}
       />
 
-      <div className="max-w-5xl">
+      <div>
         {!activeWorkspaceCode ? (
           <SurfaceCard>Select a workspace in the shell before creating a variable.</SurfaceCard>
         ) : (

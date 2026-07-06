@@ -9,11 +9,10 @@ import { useNavigate } from "react-router";
 import {
   MoreHorizontal,
   Plus,
-  RefreshCcw,
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   Field,
@@ -270,12 +269,10 @@ export function VariablesPage() {
         title="Variables"
         actions={(
           <>
-            <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={refreshAndClearRevealedValues}>
-              <RefreshCcw size={16} aria-hidden="true" />
+            <Button size="lg" variant="outline" disabled={loading} aria-busy={loading} onClick={refreshAndClearRevealedValues}>
               {loading ? "Refreshing..." : "Refresh"}
             </Button>
-            <Button disabled={!activeWorkspaceCode} onClick={() => navigate("/variables/new")}>
-              <Plus size={16} aria-hidden="true" />
+            <Button size="lg" disabled={!activeWorkspaceCode} onClick={() => navigate("/variables/new")}>
               New
             </Button>
           </>

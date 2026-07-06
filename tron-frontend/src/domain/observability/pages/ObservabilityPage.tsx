@@ -10,7 +10,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   InspectorPanel,
@@ -100,7 +100,6 @@ export function ObservabilityPage() {
       </div>
       <div className="flex gap-2">
         <Button className="flex-1" size="sm" onClick={() => setNotice("Agent paused")}>
-          <Pause size={14} aria-hidden="true" />
           Pause Agent
         </Button>
         <Button size="sm" variant="secondary" onClick={() => setNotice("Inspector edit opened")}>Edit</Button>
@@ -122,8 +121,8 @@ export function ObservabilityPage() {
         title="Observability Dashboard"
         actions={
           <>
-            <Button variant="secondary" onClick={openInspector}>Open Inspector</Button>
-            <Button onClick={() => setNotice("Trace export queued")}>Export</Button>
+            <Button size="lg" variant="outline" onClick={openInspector}>Open Inspector</Button>
+            <Button size="lg" onClick={() => setNotice("Trace export queued")}>Export</Button>
           </>
         }
       />
@@ -155,7 +154,7 @@ export function ObservabilityPage() {
         title="Recent Traces"
         rows={tracePagination.visibleItems}
         rowKey={(row) => row.id}
-        toolbar={<Button size="sm" variant="secondary" onClick={() => setNotice("All traces view opened")}>View All</Button>}
+        toolbar={<Button size="lg" variant="outline" onClick={() => setNotice("All traces view opened")}>View All</Button>}
         pagination={<TablePagination itemLabel="traces" {...tracePagination.paginationProps} />}
         columns={[
           { id: "id", header: "Trace", render: (row) => <span className="font-mono text-[13px]">{row.id}</span> },

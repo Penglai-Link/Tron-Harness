@@ -19,7 +19,6 @@ import {
 import type { MemorySearchTarget } from "@/domain/memory/model";
 import { createMemoryFragment } from "@/domain/memory/mock";
 import {
-  Button,
   PageHeader,
   SurfaceCard,
   useConsoleShellConfig,
@@ -27,6 +26,7 @@ import {
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
+import { Button } from "@/components/ui/button"
 
 function buildDisplayTargets(
   targets: MemorySearchTarget[],
@@ -122,16 +122,15 @@ export function CreateMemoryPage() {
         title="Create Memory"
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/memory")}>Cancel</Button>
-            <Button disabled={submitting || !form.title.trim() || !form.text.trim()} aria-busy={submitting} onClick={saveMemory}>
-              <Save size={16} aria-hidden="true" />
+            <Button size="lg" variant="outline" onClick={() => navigate("/memory")}>Cancel</Button>
+            <Button size="lg" disabled={submitting || !form.title.trim() || !form.text.trim()} aria-busy={submitting} onClick={saveMemory}>
               {submitting ? "Saving..." : "Save"}
             </Button>
           </>
         )}
       />
 
-      <div className="max-w-5xl">
+      <div>
         <SurfaceCard>
           <MemoryFormFields
             domainTargets={domainTargets}

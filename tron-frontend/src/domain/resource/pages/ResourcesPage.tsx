@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   MetricCard,
@@ -97,12 +97,10 @@ export function ResourcesPage() {
         title={pageT("title", "Resources")}
         actions={(
           <>
-            <Button variant="secondary" onClick={() => setNotice(pageT("messages.bulkActions", "{{count}} resources queued for bulk actions", { count: formatNumber(selected.length) }))}>
-              <SlidersHorizontal size={17} aria-hidden="true" />
+            <Button size="lg" variant="outline" onClick={() => setNotice(pageT("messages.bulkActions", "{{count}} resources queued for bulk actions", { count: formatNumber(selected.length) }))}>
               {pageT("actions.bulk", "Bulk Actions")}
             </Button>
-            <Button onClick={() => setNotice(pageT("messages.importOpened", "Import Resource drawer opened"))}>
-              <Upload size={17} aria-hidden="true" />
+            <Button size="lg" onClick={() => setNotice(pageT("messages.importOpened", "Import Resource drawer opened"))}>
               {pageT("actions.import", "Import Resource")}
             </Button>
           </>
@@ -150,7 +148,7 @@ export function ResourcesPage() {
             </div>
             <SelectInput
               aria-label={pageT("filters.typeAriaLabel", "Filter resources by type")}
-              className="h-9 w-full sm:w-52"
+              className="w-full sm:w-52"
               value={typeFilter}
               onValueChange={(event) => {
                 setTypeFilter(event as (typeof resourceTypeFilters)[number]);
@@ -165,7 +163,7 @@ export function ResourcesPage() {
             </SelectInput>
             <SelectInput
               aria-label={pageT("filters.statusAriaLabel", "Filter resources by status")}
-              className="h-9 w-full sm:w-44"
+              className="w-full sm:w-44"
               value={statusFilter}
               onValueChange={(event) => {
                 setStatusFilter(event as (typeof resourceStatusFilters)[number] | "All");
@@ -179,10 +177,10 @@ export function ResourcesPage() {
               ))}
               <SelectItem value="All">{pageT("filters.allStatuses", "All Statuses")}</SelectItem>
             </SelectInput>
-            <Button size="sm" type="button" variant="secondary" onClick={toggleAllSelected}>
+            <Button size="lg" type="button" variant="default" onClick={toggleAllSelected}>
               {allSelected ? pageT("actions.clearVisible", "Clear Visible") : pageT("actions.selectVisible", "Select Visible")}
             </Button>
-            <Button size="icon" variant="ghost" aria-label={pageT("actions.advancedFilters", "Open advanced resource filters")} onClick={() => setNotice(pageT("messages.advancedFilters", "Advanced filters opened"))}>
+            <Button size="icon-lg" variant="ghost" aria-label={pageT("actions.advancedFilters", "Open advanced resource filters")} onClick={() => setNotice(pageT("messages.advancedFilters", "Advanced filters opened"))}>
               <Filter size={18} aria-hidden="true" />
             </Button>
           </>

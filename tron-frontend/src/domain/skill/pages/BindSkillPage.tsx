@@ -4,14 +4,9 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
-import {
-  Link2,
-  Search,
-} from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
 import {
   DetailField,
   Field,
@@ -21,6 +16,7 @@ import {
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { Button } from "@/components/ui/button"
 
 import {
   bindWorkspaceSkill,
@@ -69,8 +65,7 @@ function SearchInput({
           }
         }}
       />
-      <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={onSubmit}>
-        <Search size={16} aria-hidden="true" />
+      <Button size="lg" disabled={loading} aria-busy={loading} onClick={onSubmit}>
         {loading ? "Searching..." : "Search"}
       </Button>
     </div>
@@ -276,15 +271,12 @@ export function BindSkillPage() {
         title="Install Skills"
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/skills")}>
+            <Button size="lg" variant="outline" onClick={() => navigate("/skills")}>
               Cancel
             </Button>
-            <Button
-              disabled={!selectedCount || binding || !activeWorkspaceCode}
+            <Button size="lg" disabled={!selectedCount || binding || !activeWorkspaceCode}
               aria-busy={binding}
-              onClick={() => void handleBind()}
-            >
-              <Link2 size={16} aria-hidden="true" />
+              onClick={() => void handleBind()}>
               {binding ? "Installing..." : `Install Selected${selectedCount ? ` (${selectedCount})` : ""}`}
             </Button>
           </>

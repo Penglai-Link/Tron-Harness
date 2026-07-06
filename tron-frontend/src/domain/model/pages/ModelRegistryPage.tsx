@@ -6,13 +6,11 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
-  MoreHorizontal,
-  Plus,
-  RefreshCcw,
+  MoreHorizontal
 } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   Field,
@@ -317,12 +315,10 @@ export function ModelRegistryPage() {
 
   const headerActions = useMemo(() => (
     <>
-      <Button variant="secondary" disabled={loading} onClick={() => void refreshWorkspaceModels()}>
-        <RefreshCcw size={16} aria-hidden="true" />
+      <Button size="lg" variant="outline" disabled={loading} onClick={() => void refreshWorkspaceModels()}>
         {loading ? "Refreshing..." : "Refresh"}
       </Button>
-      <Button onClick={() => navigate("/models/new")}>
-        <Plus size={16} aria-hidden="true" />
+      <Button size="lg" onClick={() => navigate("/models/new")}>
         New
       </Button>
     </>

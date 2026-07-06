@@ -23,7 +23,7 @@ import {
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DetailField,
@@ -862,16 +862,15 @@ export function SkillsPage() {
         actions={(
           <>
             <Button
-              variant="secondary"
+              size="lg"
+              variant="outline"
               disabled={refreshing || !activeWorkspaceCode}
               aria-busy={refreshing}
               onClick={() => void handleRefresh()}
             >
-              <RefreshCcw size={16} aria-hidden="true" />
               {refreshing ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
             </Button>
-            <Button disabled={!activeWorkspaceCode} onClick={() => navigate("/skills/bind")}>
-              <Link2 size={16} aria-hidden="true" />
+            <Button size="lg" disabled={!activeWorkspaceCode} onClick={() => navigate("/skills/bind")}>
               {pageT("actions.install", "Install")}
             </Button>
           </>

@@ -35,7 +35,6 @@ import type {
 import { archiveMemoryFragment } from "@/domain/memory/mock/data";
 import {
   Badge,
-  Button,
   ConfirmDialog,
   Field,
   PageHeader,
@@ -45,6 +44,7 @@ import {
   useConsoleShellConfig,
   useDismissibleLayer,
 } from "@/shared";
+import { Button } from "@/components/ui/button"
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { cn } from "@/shared/lib/utils";
@@ -682,17 +682,16 @@ function MemoryRepository() {
         actions={(
           <>
             <Button
-              variant="secondary"
+              size="lg"
+              variant="outline"
               onClick={() => {
                 setRefreshKey((value) => value + 1);
                 setNotice("Memory list refreshed.");
               }}
             >
-              <RefreshCcw size={16} aria-hidden="true" />
               Refresh
             </Button>
-            <Button onClick={() => navigate("/memory/new")}>
-              <Plus size={16} aria-hidden="true" />
+            <Button size="lg" onClick={() => navigate("/memory/new")}>
               New
             </Button>
           </>

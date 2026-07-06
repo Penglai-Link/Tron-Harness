@@ -22,7 +22,7 @@ import {
   useOpenRightSidebar,
 } from "@/shared";
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { SelectInput } from "@/shared/ui/Forms";
 import { SelectItem } from "@/components/ui/select";
 
@@ -92,10 +92,10 @@ export function KnowledgeBasePage() {
       </div>
 
       <div className="mt-auto flex gap-2">
-        <Button className="flex-1" variant="secondary" onClick={() => setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`)}>
+        <Button size="lg" className="flex-1" variant="outline" onClick={() => setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`)}>
           Review Policy
         </Button>
-        <Button className="flex-1" onClick={() => setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`)}>
+        <Button size="lg" className="flex-1" onClick={() => setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`)}>
           Reindex Now
         </Button>
       </div>
@@ -115,12 +115,10 @@ export function KnowledgeBasePage() {
         title="Knowledge Base"
         actions={(
           <>
-            <Button variant="secondary" onClick={() => setNotice("Embedding sync queued for all active knowledge bases.")}>
-              <FolderSync size={16} aria-hidden="true" />
+            <Button size="lg" variant="outline" onClick={() => setNotice("Embedding sync queued for all active knowledge bases.")}>
               Sync Embeddings
             </Button>
-            <Button onClick={() => setNotice("Create KnowledgeBase drawer opened.")}>
-              <Sparkles size={16} aria-hidden="true" />
+            <Button size="lg" onClick={() => setNotice("Create KnowledgeBase drawer opened.")}>
               New
             </Button>
           </>
@@ -160,7 +158,6 @@ export function KnowledgeBasePage() {
             <div className="relative min-w-[280px] flex-1">
               <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
               <TextInput
-                className="h-10 pl-9"
                 placeholder="Search knowledge bases, workspaces, or retrieval profiles..."
                 type="search"
                 value={query}

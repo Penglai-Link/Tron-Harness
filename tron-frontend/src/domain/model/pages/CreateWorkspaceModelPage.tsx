@@ -4,12 +4,8 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
-import {
-  Save,
-  ShieldCheck,
-} from "lucide-react";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SurfaceCard,
@@ -146,29 +142,28 @@ export function CreateWorkspaceModelPage() {
         title="Create Workspace Model"
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/models")}>Cancel</Button>
+            <Button size="lg" variant="outline" onClick={() => navigate("/models")}>Cancel</Button>
             <Button
-              variant="secondary"
+              size="lg" variant="outline"
               disabled={!activeWorkspaceCode || loading || submitting || verifying || !form.displayName.trim()}
               aria-busy={verifying}
               onClick={() => void saveModel({ verifyAfterCreate: true })}
             >
-              <ShieldCheck size={16} aria-hidden="true" />
               {verifying ? "Verifying..." : "Verify"}
             </Button>
             <Button
+              size="lg"
               disabled={!activeWorkspaceCode || loading || submitting || verifying || !form.displayName.trim()}
               aria-busy={submitting}
               onClick={() => void saveModel()}
             >
-              <Save size={16} aria-hidden="true" />
               {submitting ? "Saving..." : "Save"}
             </Button>
           </>
         )}
       />
 
-      <div className="max-w-5xl">
+      <div>
         {!activeWorkspaceCode ? (
           <SurfaceCard>Select a workspace in the shell before creating a model.</SurfaceCard>
         ) : (
