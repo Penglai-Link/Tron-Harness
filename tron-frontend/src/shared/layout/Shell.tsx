@@ -947,7 +947,7 @@ export function TronShell({
             <div className={cn("h-full overflow-y-auto py-4", sidebarCollapsed ? "px-2" : "px-3")}>
               {renderSidebarContent()}
             </div>
-            <DraggleLine onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="absolute right-0 top-0 h-full z-10 " />
+            {/* <DraggleLine onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="absolute right-0 top-0 h-full z-10 " /> */}
           </aside>
 
           {sidebarTooltip && sidebarCollapsed ? (
