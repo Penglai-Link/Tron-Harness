@@ -6,6 +6,7 @@ import {
   useRef,
   useState,
   type ReactNode,
+  Activity,
 } from "react";
 import {
   ArrowRight,
@@ -15,7 +16,6 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   BrowserRouter,
-  Link,
   matchPath,
   Navigate,
   Route,
@@ -193,24 +193,43 @@ function AppRoutePage() {
   const toast = useToast();
   const { t } = useTranslation();
   const addTab = useTabStore((state) => state.addTab);
+  const addToCache = useTabStore((state) => state.addToCache);
+  const cachedTabsList = useTabStore((state) => state.cachedTabsList);
+  const activeTabId = useTabStore((state) => state.activeTabId);
   const resolved = resolveAppRoute(pathname, search);
   const routeRenderKey = routeRenderKeyForLocation(pathname, search, resolved?.route.pageId);
   const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
   const blocksAdministrationRoute = isAdministrationRoute(pathname) && !isAdmin;
   const blockedAdministrationToastPath = useRef<string | null>(null);
   const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>({});
-  const routeContent = useMemo(() => {
-    if (!resolved) {
-      return null;
-    }
 
-    const { Component } = resolved;
-    return (
-      <SuspendedRoute>
-        <Component key={routeRenderKey} />
-      </SuspendedRoute>
-    );
-  }, [resolved, routeRenderKey]);
+  // 渲染所有缓存的 tab 内容
+  const cachedRouteContents = useMemo(() => {
+    return cachedTabsList.map((cachedTab) => {
+      // 对于 chats.index 等页面，需要使用当前的 search 参数，而不是缓存的
+      // 因为这些页面的查询参数可能随时变化，但共用一个组件实例
+      const isCurrentTab = cachedTab.tabId === activeTabId;
+      const useCurrentSearch = isCurrentTab && cachedTab.pageId === "chats.index";
+      const searchParam = useCurrentSearch ? search : "";
+
+      const cachedResolved = resolveAppRoute(cachedTab.path, searchParam);
+      if (!cachedResolved) {
+        return null;
+      }
+
+      const { Component } = cachedResolved;
+      const key = routeRenderKeyForLocation(cachedTab.path, searchParam, cachedResolved.route.pageId);
+
+      return (
+        <Activity key={cachedTab.tabId} mode={isCurrentTab ? "visible" : "hidden"}>
+          <SuspendedRoute>
+            <Component key={key} />
+          </SuspendedRoute>
+        </Activity>
+      );
+    });
+  }, [cachedTabsList, activeTabId, search]);
+
   const shellConfigController = useMemo(() => ({
     resetConfig: () => {
       setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));
@@ -226,22 +245,44 @@ function AppRoutePage() {
       const navItem = resolveActiveItem(pathname);
       const tabTitle = navItem ? t(navItem.translationKey) : resolved.route.activeNav;
       const activeNav = resolved.route.activeNav;
-      const existingTab = useTabStore.getState().getTabByPath(currentPath);
 
-      if (existingTab && existingTab.title !== tabTitle) {
-        useTabStore.getState().updateTab(existingTab.id, {
-          title: tabTitle,
-        });
+      // 对于某些页面（如 chats.index），查询参数变化不应该被视为 path 变化
+      // 这些页面使用 pathname 作为 key，而不是完整的 path
+      const shouldIgnoreSearch = resolved.route.pageId === "chats.index";
+      const lookupPath = shouldIgnoreSearch ? pathname : currentPath;
+
+      const existingTab = useTabStore.getState().getTabByPath(lookupPath);
+
+      if (existingTab) {
+        // Tab 已存在，更新 path 和标题（如果需要）
+        if (existingTab.path !== currentPath) {
+          useTabStore.getState().updateTab(existingTab.id, {
+            path: currentPath,
+          });
+        }
+        if (existingTab.title !== tabTitle) {
+          useTabStore.getState().updateTab(existingTab.id, {
+            title: tabTitle,
+          });
+        }
+        // 设置为当前活动的 tab
+        useTabStore.getState().setActiveTab(existingTab.id);
+        // 更新缓存访问时间
+        addToCache(existingTab.id, currentPath, resolved.route.pageId);
       } else {
-        addTab({
+        // Tab 不存在，创建新的
+        const tabId = addTab({
           title: tabTitle,
-          path: currentPath,
+          path: lookupPath,  // 使用 lookupPath 而不是 currentPath
           closable: true,
           activeNav,
         });
+
+        // 将 tab 添加到缓存
+        addToCache(tabId, lookupPath, resolved.route.pageId);
       }
     }
-  }, [pathname, search, resolved, addTab, t]);
+  }, [pathname, search, resolved, addTab, addToCache, t]);
 
   useEffect(() => {
     setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));
@@ -274,6 +315,7 @@ function AppRoutePage() {
       ...pageShellConfig,
     };
     if (route.layout === "settings") {
+      // Settings 页面不使用 keep-alive，直接渲染
       return (
         <SettingsShell
           activeItem={route.settingsNav ?? route.title}
@@ -281,7 +323,9 @@ function AppRoutePage() {
           items={settingsNavigation}
           roleCodes={session?.user.roleCodes}
         >
-          {routeContent}
+          <SuspendedRoute>
+            <resolved.Component key={routeRenderKey} />
+          </SuspendedRoute>
         </SettingsShell>
       );
     }
@@ -296,7 +340,7 @@ function AppRoutePage() {
           topbarActions={effectiveShellConfig.topbarActions}
           userMenuContent={<AuthUserMenuPanel />}
         >
-          {routeContent}
+          {cachedRouteContents}
         </TronShell>
       </ConsoleShellConfigContext.Provider>
     );
