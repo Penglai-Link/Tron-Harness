@@ -211,7 +211,7 @@ export function CreateAutomationPage() {
           </>
         }
       />
-      <div className="max-w-5xl">
+      <div>
         <SurfaceCard className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
             <Field label="Automation name">
