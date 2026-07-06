@@ -17,7 +17,7 @@ interface PageHeaderProps {
 
 export function PageHeader({ actions, breadcrumbs, className, title }: PageHeaderProps) {
   return (
-    <header className={cn("mb-6 flex flex-wrap items-start justify-between gap-4", className)}>
+    <header className={cn("mb-6 flex flex-wrap items-center justify-between gap-4", className)}>
       <div className="min-w-0">
         {breadcrumbs?.length ? (
           <nav className="mb-2 flex flex-wrap items-center gap-1 text-[12px] text-[var(--color-on-surface-variant)]" aria-label="Breadcrumb">

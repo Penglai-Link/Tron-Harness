@@ -92,7 +92,7 @@ export function ResourcesPage() {
   }
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col gap-6">
+    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
       <PageHeader
         title={pageT("title", "Resources")}
         actions={(
@@ -107,7 +107,7 @@ export function ResourcesPage() {
         )}
       />
 
-      <section className="grid gap-5 xl:grid-cols-3" aria-label={pageT("metrics.ariaLabel", "Resource metrics")}>
+      <section className="grid gap-5 xl:grid-cols-3 mb-6" aria-label={pageT("metrics.ariaLabel", "Resource metrics")}>
         <MetricCard
           icon={<Database size={18} aria-hidden="true" />}
           label={pageT("metrics.activeSources.label", "Active Data Sources")}

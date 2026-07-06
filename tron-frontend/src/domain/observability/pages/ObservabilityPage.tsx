@@ -129,7 +129,7 @@ export function ObservabilityPage() {
       <div className="grid gap-4 xl:grid-cols-4">
         {data.metrics.map((metric) => <MetricCard key={metric.label} label={metric.label} value={metric.value} trend={metric.trend} icon={<Gauge size={18} aria-hidden="true" />} />)}
       </div>
-      <div className="mt-6 grid gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
+      <div className="grid mb-6 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <SurfaceCard>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-base font-semibold">Request Throughput</h2>
