@@ -310,13 +310,7 @@ async fn query_filters_by_multiple_relationships() {
             "WORKSPACE_OVERRIDE_NODE",
         ],
     );
-    assert_edge_codes(
-        &body,
-        &[
-            "CURRENT_TO_PARENT",
-            "USER_PRIVATE_LINK",
-        ],
-    );
+    assert_edge_codes(&body, &["CURRENT_TO_PARENT", "USER_PRIVATE_LINK"]);
 }
 
 #[tokio::test]

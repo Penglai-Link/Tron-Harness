@@ -34,7 +34,15 @@ pub fn translate_agui_event(stream_key: &str, event: &BusEvent) -> Option<AgentA
         metadata.insert(attr.key.clone(), attr.value.clone());
     }
     for field in &event.payload_fields {
-        if matches!(field.key.as_str(), "model_name" | "context_window_limit") {
+        if matches!(
+            field.key.as_str(),
+            "budgetBreakdown"
+                | "context_window_limit"
+                | "model_name"
+                | "overBudgetReason"
+                | "usage_audit_json"
+                | "usage_estimate_json"
+        ) {
             metadata.insert(field.key.clone(), field.value.clone());
         }
     }
@@ -324,6 +332,67 @@ pub fn translate_protocol_events(
                 }),
             )]
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::shared::{
+        event_bus::{BusEvent, BusEventDraft, BusOutcome, EventBusConfig},
+        id::FixedSnowflakeIdProvider,
+    };
+
+    use super::translate_agui_event;
+
+    #[test]
+    fn translate_agui_event_exposes_short_term_memory_usage_payload() {
+        let event = BusEvent::from_draft(
+            BusEventDraft::agui("agent.model.requested", "agent_runtime")
+                .outcome(BusOutcome::Started)
+                .subject("agent_run", "RUN-1")
+                .payload_field("model_name", "gpt-5-codex")
+                .payload_field("context_window_limit", "128000")
+                .payload_field("usage_estimate_json", r#"{"estimatedInputTokens":22600}"#)
+                .payload_field("usage_audit_json", r#"{"usageSource":"provider"}"#)
+                .payload_field("budgetBreakdown", r#"{"estimatedInputTokens":22600}"#)
+                .payload_field("overBudgetReason", "too_many_tokens")
+                .payload_field("internal_only", "hidden"),
+            &FixedSnowflakeIdProvider::new(1),
+            &EventBusConfig::default(),
+        )
+        .expect("event should validate");
+
+        let translated = translate_agui_event("SESSION-1", &event).expect("event should translate");
+
+        assert_eq!(
+            translated
+                .metadata
+                .get("usage_estimate_json")
+                .map(String::as_str),
+            Some(r#"{"estimatedInputTokens":22600}"#),
+        );
+        assert_eq!(
+            translated
+                .metadata
+                .get("usage_audit_json")
+                .map(String::as_str),
+            Some(r#"{"usageSource":"provider"}"#),
+        );
+        assert_eq!(
+            translated
+                .metadata
+                .get("budgetBreakdown")
+                .map(String::as_str),
+            Some(r#"{"estimatedInputTokens":22600}"#),
+        );
+        assert_eq!(
+            translated
+                .metadata
+                .get("overBudgetReason")
+                .map(String::as_str),
+            Some("too_many_tokens"),
+        );
+        assert_eq!(translated.metadata.get("internal_only"), None);
     }
 }
 

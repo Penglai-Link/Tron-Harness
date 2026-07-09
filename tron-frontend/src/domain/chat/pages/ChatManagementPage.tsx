@@ -22,7 +22,6 @@ import {
   Copy,
   Ellipsis,
   Eraser,
-  GitBranch,
   Hammer,
   ListTodo,
   LoaderCircle,
@@ -115,6 +114,7 @@ import type {
   ChatSessionTodoPriority,
   ChatSessionTodoStatus,
   ChatMessageAttachment,
+  ChatContextBudgetBreakdown,
   ChatTokenEstimateSnapshot,
   ChatTokenUsage,
   ChatUsageAuditSnapshot,
@@ -457,7 +457,7 @@ function contextValue(value: string | null | undefined) {
 }
 
 function formatTokenCount(value: number | null | undefined) {
-  if (value == null) return "unavailable";
+  if (value == null) return "-";
   return new Intl.NumberFormat("en-US").format(value);
 }
 
@@ -498,6 +498,39 @@ function normalizeUsageEstimate(parsed: Partial<ChatTokenEstimateSnapshot> | nul
   };
 }
 
+function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudgetBreakdown> | null | undefined): ChatContextBudgetBreakdown | null {
+  if (typeof parsed?.estimatedInputTokens !== "number") return null;
+  return {
+    checkpointBudgetTokens: tokenField(parsed.checkpointBudgetTokens),
+    checkpointTokens: tokenField(parsed.checkpointTokens) ?? 0,
+    compressedHistoryMessageCount: tokenField(parsed.compressedHistoryMessageCount),
+    compressedHistoryTokens: tokenField(parsed.compressedHistoryTokens) ?? 0,
+    compactionTriggerRatioBps: tokenField(parsed.compactionTriggerRatioBps),
+    compactionTriggerReached: Boolean(parsed.compactionTriggerReached),
+    compactionTriggerTokens: tokenField(parsed.compactionTriggerTokens),
+    contextWindowLimit: tokenField(parsed.contextWindowLimit),
+    currentSessionHistoryBudgetTokens: tokenField(parsed.currentSessionHistoryBudgetTokens),
+    effectiveInputBudget: tokenField(parsed.effectiveInputBudget),
+    effectiveRetainedHistoryTokens: tokenField(parsed.effectiveRetainedHistoryTokens),
+    estimatedInputTokens: parsed.estimatedInputTokens,
+    historySourceMessageCount: tokenField(parsed.historySourceMessageCount),
+    inputBudgetExceeded: Boolean(parsed.inputBudgetExceeded),
+    outputTokenReserve: tokenField(parsed.outputTokenReserve),
+    promptPrefixBudgetTokens: tokenField(parsed.promptPrefixBudgetTokens),
+    promptPrefixTokens: tokenField(parsed.promptPrefixTokens) ?? 0,
+    rawTailMessageCount: tokenField(parsed.rawTailMessageCount),
+    rawTailStartSeq: tokenField(parsed.rawTailStartSeq),
+    rawTailTranscriptTokens: tokenField(parsed.rawTailTranscriptTokens) ?? 0,
+    recentTranscriptTokens: tokenField(parsed.recentTranscriptTokens) ?? 0,
+    retainedHistoryRatioBps: tokenField(parsed.retainedHistoryRatioBps),
+    sessionFamilyContextBudgetTokens: tokenField(parsed.sessionFamilyContextBudgetTokens),
+    sessionFamilyContextTokens: tokenField(parsed.sessionFamilyContextTokens) ?? 0,
+    toolSchemaTokens: tokenField(parsed.toolSchemaTokens) ?? 0,
+    workingStateBudgetTokens: tokenField(parsed.workingStateBudgetTokens),
+    workingStateTokens: tokenField(parsed.workingStateTokens) ?? 0,
+  };
+}
+
 function normalizeTokenUsage(parsed: Partial<ChatTokenUsage> | null | undefined): ChatTokenUsage | null {
   if (typeof parsed?.inputTokens !== "number") return null;
   if (typeof parsed.outputTokens !== "number") return null;
@@ -515,6 +548,15 @@ function parsedUsageEstimate(value: string | null | undefined): ChatTokenEstimat
   if (!value) return null;
   try {
     return normalizeUsageEstimate(JSON.parse(value) as Partial<ChatTokenEstimateSnapshot>);
+  } catch {
+    return null;
+  }
+}
+
+function parsedContextBudgetBreakdown(value: string | null | undefined): ChatContextBudgetBreakdown | null {
+  if (!value) return null;
+  try {
+    return normalizeContextBudgetBreakdown(JSON.parse(value) as Partial<ChatContextBudgetBreakdown>);
   } catch {
     return null;
   }
@@ -543,16 +585,21 @@ function parsedUsageAudit(value: string | null | undefined): ChatUsageAuditSnaps
 }
 
 function latestUsageEstimateFromEvents(events: ChatAguiEvent[]) {
-  return parsedUsageEstimate(latestEventValue(events, "usage_estimate_json"));
+  return parsedUsageEstimate(latestEventValue(events, "usage_estimate_json"))
+    ?? parsedUsageEstimate(latestEventValue(events, "usageEstimate"));
 }
 
 function latestUsageAuditFromEvents(events: ChatAguiEvent[]) {
   return parsedUsageAudit(latestEventValue(events, "usage_audit_json"));
 }
 
+function latestContextBudgetBreakdownFromEvents(events: ChatAguiEvent[]) {
+  return parsedContextBudgetBreakdown(latestEventValue(events, "budgetBreakdown"));
+}
+
 function chatTokenUsage(messages: ChatMessage[]) {
   const assistantMessages = messages.filter((message) => message.role === "ASSISTANT");
-  let hasUsage = assistantMessages.length === 0;
+  let hasUsage = false;
   let input = 0;
   let output = 0;
   let total = 0;
@@ -576,63 +623,6 @@ function chatTokenUsage(messages: ChatMessage[]) {
   };
 }
 
-function lastTurnTokenUsage(messages: ChatMessage[]) {
-  for (let index = messages.length - 1; index >= 0; index -= 1) {
-    const message = messages[index];
-    if (message.role !== "ASSISTANT") continue;
-    const inputTokens = tokenField(message.inputTokens);
-    const outputTokens = tokenField(message.outputTokens);
-    const totalTokens = tokenField(message.totalTokens);
-    if (inputTokens == null && outputTokens == null && totalTokens == null) continue;
-    return {
-      input: inputTokens,
-      output: outputTokens,
-      total: totalTokens ?? (inputTokens ?? 0) + (outputTokens ?? 0),
-    };
-  }
-  return {
-    input: null,
-    output: null,
-    total: null,
-  };
-}
-
-function contextWindowLimit(
-  model: ModelRecord | null | undefined,
-  selectedModel: ChatModelOption | null | undefined,
-  requestEstimate: ChatTokenEstimateSnapshot | null | undefined,
-  events: ChatAguiEvent[],
-) {
-  const metadataWindow = tokenFieldFromMetadata(
-    contextValue(latestEventValue(events, "contextWindowTokens"))
-    ?? contextValue(latestEventValue(events, "context_window_tokens"))
-    ?? contextValue(latestEventValue(events, "contextWindowLimit"))
-    ?? contextValue(latestEventValue(events, "context_window_limit")),
-  );
-  return requestEstimate?.contextWindowLimit ?? model?.contextWindowTokens ?? selectedModel?.contextWindowTokens ?? metadataWindow ?? null;
-}
-
-function formatContextUsagePercent(usedTokens: number | null, windowTokens: number | null) {
-  if (usedTokens == null || windowTokens == null || windowTokens <= 0) return null;
-  const percent = (usedTokens / windowTokens) * 100;
-  if (percent > 0 && percent < 0.01) return "<0.01% used";
-  const maximumFractionDigits = percent < 1 ? 2 : percent < 10 ? 1 : 0;
-  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits }).format(percent)}% used`;
-}
-
-function formatContextWindowValue(windowTokens: number | null, usedTokens: number | null) {
-  const windowLabel = formatTokenCount(windowTokens);
-  const usageLabel = formatContextUsagePercent(usedTokens, windowTokens);
-  return usageLabel ? `${windowLabel} · ${usageLabel}` : windowLabel;
-}
-
-function formatEstimateStatus(estimate: ChatTokenEstimateSnapshot | null) {
-  if (!estimate) return "unavailable";
-  if (estimate.overBudget) return "over budget";
-  if (estimate.compactionTriggerReached) return "compaction threshold";
-  return estimate.rebased ? "rebased" : "prepared";
-}
-
 function insertNewlineAtCursor(textarea: HTMLTextAreaElement) {
   const start = textarea.selectionStart;
   const end = textarea.selectionEnd;
@@ -643,39 +633,70 @@ function insertNewlineAtCursor(textarea: HTMLTextAreaElement) {
   return nextValue;
 }
 
-function usedSkills(events: ChatAguiEvent[]) {
-  return Array.from(new Set(events.map((event) => event.metadata.skillName).filter(Boolean)));
+function formatCompactTokenCount(value: number | null | undefined) {
+  if (value == null) return "-";
+  const absolute = Math.abs(value);
+  if (absolute >= 1_000_000) {
+    return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(value / 1_000_000)}m`;
+  }
+  if (absolute >= 1_000) {
+    return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: absolute < 10_000 ? 1 : 0 }).format(value / 1_000)}k`;
+  }
+  return new Intl.NumberFormat("en-US").format(value);
 }
 
-function homeDirectoryFromWorktreePath(worktreePath: string | null | undefined) {
-  if (!worktreePath) return null;
-  const marker = "/.codex/worktrees/";
-  const markerIndex = worktreePath.indexOf(marker);
-  if (markerIndex <= 0) return null;
-  return worktreePath.slice(0, markerIndex);
+function formatTokenLimit(usedTokens: number | null | undefined, limitTokens: number | null | undefined) {
+  const used = formatCompactTokenCount(usedTokens);
+  const limit = limitTokens == null ? "-" : formatCompactTokenCount(limitTokens);
+  return `${used} / ${limit}`;
 }
 
-function systemAgentSessionPath({
-  agentCode,
-  sessionId,
-  worktreePath,
-}: {
-  agentCode: string | null | undefined;
-  sessionId: string | null | undefined;
-  worktreePath: string | null | undefined;
-}) {
-  const normalizedAgentCode = contextValue(agentCode)?.toLowerCase();
-  const normalizedSessionId = contextValue(sessionId);
-  if (!normalizedAgentCode || !normalizedSessionId) return null;
-  const homeDirectory = homeDirectoryFromWorktreePath(worktreePath) ?? "~";
+function contextPercent(usedTokens: number | null | undefined, limitTokens: number | null | undefined) {
+  if (usedTokens == null || limitTokens == null || limitTokens <= 0) return 0;
+  return Math.min(100, Math.max(0, (usedTokens / limitTokens) * 100));
+}
 
-  if (normalizedAgentCode === "codex") {
-    return `${homeDirectory}/.codex/sessions/**/rollout-*-${normalizedSessionId}.jsonl`;
-  }
-  if (normalizedAgentCode === "opencode") {
-    return `${homeDirectory}/.local/share/opencode/opencode.db`;
-  }
-  return null;
+function formatPercent(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)}%`;
+}
+
+function formatSignedPercentFromRatio(value: number | null | undefined) {
+  if (value == null || !Number.isFinite(value)) return "-";
+  const percent = (value - 1) * 100;
+  const sign = percent > 0 ? "+" : "";
+  return `${sign}${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(percent)}%`;
+}
+
+function safeSubtract(minuend: number | null | undefined, subtrahend: number | null | undefined) {
+  if (minuend == null || subtrahend == null) return null;
+  return Math.max(0, minuend - subtrahend);
+}
+
+function contextStatusTone(estimate: ChatTokenEstimateSnapshot | null, breakdown: ChatContextBudgetBreakdown | null): BadgeToneName {
+  if (estimate?.overBudget || breakdown?.inputBudgetExceeded) return "error";
+  if (estimate?.compactionTriggerReached || breakdown?.compactionTriggerReached) return "warning";
+  return "success";
+}
+
+function contextStatusLabel(estimate: ChatTokenEstimateSnapshot | null, breakdown: ChatContextBudgetBreakdown | null, translate: (key: string) => string) {
+  if (estimate?.overBudget || breakdown?.inputBudgetExceeded) return translate("chat.shortTermMemory.contextPanel.overBudget");
+  if (estimate?.compactionTriggerReached || breakdown?.compactionTriggerReached) return translate("chat.shortTermMemory.contextPanel.nearCompaction");
+  return translate("chat.shortTermMemory.contextPanel.healthy");
+}
+
+function contextWindowLimitFromSources(
+  model: ModelRecord | null | undefined,
+  selectedModel: ChatModelOption | null | undefined,
+  events: ChatAguiEvent[],
+) {
+  const metadataWindow = tokenFieldFromMetadata(
+    contextValue(latestEventValue(events, "contextWindowTokens"))
+    ?? contextValue(latestEventValue(events, "context_window_tokens"))
+    ?? contextValue(latestEventValue(events, "contextWindowLimit"))
+    ?? contextValue(latestEventValue(events, "context_window_limit")),
+  );
+  return model?.contextWindowTokens ?? selectedModel?.contextWindowTokens ?? metadataWindow ?? null;
 }
 
 type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
@@ -1787,6 +1808,400 @@ function goalVerdictLabel(value: string | null | undefined, translate: (key: str
   return value?.trim() ?? normalized;
 }
 
+type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "family" | "history";
+
+interface ContextMemoryBlockItem {
+  code: string;
+  color: ContextBlockColor;
+  limitTokens: number | null;
+  meta: string;
+  name: string;
+  stat: string;
+  tokens: number;
+}
+
+const mutedContextBlockColor = {
+  dot: "border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-high)] text-[var(--color-on-surface-variant)]",
+  fill: "bg-[var(--color-on-surface-variant)]",
+};
+
+const contextBlockColorClasses: Record<ContextBlockColor, { dot: string; fill: string }> = {
+  checkpoint: mutedContextBlockColor,
+  family: mutedContextBlockColor,
+  history: mutedContextBlockColor,
+  seed: mutedContextBlockColor,
+  state: mutedContextBlockColor,
+  tool: mutedContextBlockColor,
+};
+
+function buildContextMemoryBlocks({
+  breakdown,
+  goal,
+  latestCompaction,
+  requestEstimate,
+  todos,
+  translate,
+}: {
+  breakdown: ChatContextBudgetBreakdown | null;
+  goal?: ChatSessionGoalView | null;
+  latestCompaction?: ChatSessionCompaction | null;
+  requestEstimate: ChatTokenEstimateSnapshot | null;
+  todos?: ChatSessionTodo[];
+  translate: (key: string, options?: Record<string, unknown>) => string;
+}): ContextMemoryBlockItem[] {
+  const activeTodoCount = (todos ?? []).filter((todo) => !isFoldedTodo(todo)).length;
+  const activeGoalCount = goal && isEditableGoalStatus(goal.goal.status) ? 1 : 0;
+  const historyMessageCount = breakdown?.rawTailMessageCount
+    ?? breakdown?.historySourceMessageCount
+    ?? requestEstimate?.messageCount
+    ?? 0;
+  const checkpointTokens = breakdown?.checkpointTokens ?? 0;
+  const checkpointCode = contextValue(requestEstimate?.checkpointCode);
+  const hasCheckpointInRequest = Boolean(latestCompaction || checkpointCode || checkpointTokens > 0);
+  const checkpointMeta = latestCompaction
+    ? translate("chat.shortTermMemory.contextPanel.checkpointMeta", {
+      end: latestCompaction.sourceEndSeq,
+      start: latestCompaction.sourceStartSeq,
+    })
+    : checkpointCode
+      ? translate("chat.shortTermMemory.contextPanel.checkpointCodeMeta", { code: checkpointCode })
+      : checkpointTokens > 0
+        ? translate("chat.shortTermMemory.contextPanel.checkpointLoadedMeta")
+        : translate("chat.shortTermMemory.contextPanel.noCheckpointMeta");
+  const checkpointStat = latestCompaction || checkpointCode
+    ? translate("chat.shortTermMemory.contextPanel.checkpointStat")
+    : checkpointTokens > 0
+      ? translate("chat.shortTermMemory.contextPanel.loaded")
+      : translate("chat.shortTermMemory.contextPanel.none");
+  const sharedInputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? null;
+  const toolSchemaTokens = breakdown?.toolSchemaTokens ?? requestEstimate?.toolSchemaTokenEstimate ?? 0;
+  const toolSchemaLimit = sharedInputBudget ?? breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? null;
+  const toolSchemaStat = toolSchemaLimit
+    ? translate("chat.shortTermMemory.contextPanel.sharedWindow")
+    : translate("chat.shortTermMemory.contextPanel.schemaStat");
+  const compressedCount = breakdown?.compressedHistoryMessageCount ?? 0;
+  const rawTailCount = breakdown?.rawTailMessageCount ?? 0;
+  const historyMeta = compressedCount > 0
+    ? translate("chat.shortTermMemory.contextPanel.compressedHistoryMeta", {
+      compressed: compressedCount,
+      tail: rawTailCount,
+    })
+    : translate("chat.shortTermMemory.contextPanel.historyMeta");
+
+  return [
+    {
+      code: "01",
+      color: "seed",
+      limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
+      meta: translate("chat.shortTermMemory.contextPanel.seedMeta"),
+      name: "Seed Prompt Prefix",
+      stat: translate("chat.shortTermMemory.contextPanel.blockCount", { count: 1 }),
+      tokens: breakdown?.promptPrefixTokens ?? 0,
+    },
+    {
+      code: "02",
+      color: "tool",
+      limitTokens: toolSchemaLimit,
+      meta: translate("chat.shortTermMemory.contextPanel.toolMeta"),
+      name: "Tool Schema",
+      stat: toolSchemaStat,
+      tokens: toolSchemaTokens,
+    },
+    {
+      code: "03",
+      color: "checkpoint",
+      limitTokens: breakdown?.checkpointBudgetTokens ?? null,
+      meta: checkpointMeta,
+      name: "Current Session Checkpoint",
+      stat: hasCheckpointInRequest ? checkpointStat : translate("chat.shortTermMemory.contextPanel.none"),
+      tokens: checkpointTokens,
+    },
+    {
+      code: "04",
+      color: "state",
+      limitTokens: breakdown?.workingStateBudgetTokens ?? null,
+      meta: translate("chat.shortTermMemory.contextPanel.workingStateMeta"),
+      name: "Current Session Working State",
+      stat: translate("chat.shortTermMemory.contextPanel.workingStateStat", {
+        goals: activeGoalCount,
+        todos: activeTodoCount,
+      }),
+      tokens: breakdown?.workingStateTokens ?? 0,
+    },
+    {
+      code: "05",
+      color: "family",
+      limitTokens: breakdown?.sessionFamilyContextBudgetTokens ?? null,
+      meta: translate("chat.shortTermMemory.contextPanel.familyMeta"),
+      name: "Session Family Context",
+      stat: breakdown?.sessionFamilyContextTokens
+        ? translate("chat.shortTermMemory.contextPanel.loaded")
+        : translate("chat.shortTermMemory.contextPanel.none"),
+      tokens: breakdown?.sessionFamilyContextTokens ?? 0,
+    },
+    {
+      code: "06",
+      color: "history",
+      limitTokens: breakdown?.currentSessionHistoryBudgetTokens ?? null,
+      meta: historyMeta,
+      name: "Current Session History",
+      stat: translate("chat.shortTermMemory.contextPanel.messageCount", { count: historyMessageCount }),
+      tokens: breakdown?.recentTranscriptTokens ?? requestEstimate?.messageTokenEstimate ?? 0,
+    },
+  ];
+}
+
+function ContextOverviewPanel({
+  breakdown,
+  fallbackWindowLimit,
+  modelLabel,
+  requestEstimate,
+}: {
+  breakdown: ChatContextBudgetBreakdown | null;
+  fallbackWindowLimit?: number | null;
+  modelLabel: string;
+  requestEstimate: ChatTokenEstimateSnapshot | null;
+}) {
+  const { t } = useTranslation("pages");
+  const usedTokens = breakdown?.estimatedInputTokens ?? requestEstimate?.estimatedInputTokens ?? (fallbackWindowLimit ? 0 : null);
+  const inputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? fallbackWindowLimit ?? null;
+  const windowLimit = breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? fallbackWindowLimit ?? null;
+  const remainingTokens = safeSubtract(inputBudget, usedTokens);
+  const percent = contextPercent(usedTokens, inputBudget ?? windowLimit);
+  const statusLabel = contextStatusLabel(requestEstimate, breakdown, (key) => t(key));
+  const statusTone = contextStatusTone(requestEstimate, breakdown);
+  const messageCount = requestEstimate?.messageCount ?? 0;
+  const partCount = requestEstimate?.partCount ?? 0;
+
+  return (
+    <section className="space-y-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
+      <div className="flex min-w-0 items-start justify-between gap-3">
+        <div className="min-w-0">
+          <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
+            {t("chat.shortTermMemory.contextPanel.overview")}
+          </h3>
+          <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
+            {requestEstimate?.modelName || requestEstimate?.modelCode || modelLabel}
+            {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
+          </p>
+        </div>
+        <Badge className="h-5 rounded px-1.5 text-[11px]" tone={statusTone}>
+          {statusLabel}
+        </Badge>
+      </div>
+      <div className="flex items-end justify-between gap-3">
+        <div className="min-w-0">
+          <div className="text-2xl font-semibold text-[var(--color-on-surface)]">
+            {formatCompactTokenCount(usedTokens)}
+          </div>
+          <div className="text-[11px] text-[var(--color-on-surface-variant)]">
+            {t("chat.shortTermMemory.contextPanel.inputBudget", {
+              budget: formatCompactTokenCount(inputBudget),
+            })}
+          </div>
+        </div>
+        <div className="pb-0.5 text-sm font-medium text-[var(--color-on-surface-variant)]">
+          {formatPercent(percent)}
+        </div>
+      </div>
+      <div className="h-2.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+        <div
+          className={cn(
+            "h-full rounded-full transition-[width]",
+            statusTone === "error" ? "bg-[var(--color-error)]" : statusTone === "warning" ? "bg-[var(--color-warning)]" : "bg-[var(--color-success)]",
+          )}
+          style={{ width: `${percent}%` }}
+        />
+      </div>
+      <div className="grid grid-cols-4 gap-1.5">
+        <ContextStat label={t("chat.shortTermMemory.contextPanel.messages")} value={formatTokenCount(messageCount)} />
+        <ContextStat label={t("chat.shortTermMemory.contextPanel.parts")} value={formatTokenCount(partCount)} />
+        <ContextStat label={t("chat.shortTermMemory.contextPanel.blocks")} value="6" />
+        <ContextStat label={t("chat.shortTermMemory.contextPanel.remaining")} value={formatCompactTokenCount(remainingTokens)} />
+      </div>
+    </section>
+  );
+}
+
+function ContextStat({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="min-w-0 rounded-md bg-[var(--color-surface-container)] px-2 py-1.5">
+      <div className="truncate text-sm font-semibold text-[var(--color-on-surface)]">{value}</div>
+      <div className="truncate text-[10px] text-[var(--color-on-surface-variant)]">{label}</div>
+    </div>
+  );
+}
+
+function ContextStructurePanel({
+  blocks,
+  compactionBusy,
+  onCreateCompaction,
+  session,
+}: {
+  blocks: ContextMemoryBlockItem[];
+  compactionBusy?: boolean;
+  onCreateCompaction?: () => void;
+  session?: ChatSession;
+}) {
+  const { t } = useTranslation("pages");
+  return (
+    <section className="space-y-2">
+      <div className="flex min-w-0 items-center justify-between gap-2">
+        <div className="min-w-0">
+          <h3 className="truncate text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
+            {t("chat.shortTermMemory.contextPanel.structure")}
+          </h3>
+          <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
+            {t("chat.shortTermMemory.contextPanel.structureSubtitle")}
+          </p>
+        </div>
+        <button
+          aria-label={t("chat.shortTermMemory.createCheckpoint")}
+          className={iconButtonClass()}
+          disabled={!session || compactionBusy}
+          title={t("chat.shortTermMemory.createCheckpoint")}
+          type="button"
+          onClick={onCreateCompaction}
+        >
+          {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Archive size={15} />}
+        </button>
+      </div>
+      <div className="space-y-2">
+        {blocks.map((block) => (
+          <ContextMemoryBlockRow block={block} key={block.code} />
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
+  const colors = contextBlockColorClasses[block.color];
+  const percent = contextPercent(block.tokens, block.limitTokens);
+  const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
+  return (
+    <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-2.5">
+      <span className={cn("flex size-7 items-center justify-center rounded-md text-[11px] font-semibold", colors.dot)}>
+        {block.code}
+      </span>
+      <div className="min-w-0">
+        <div className="flex min-w-0 items-baseline justify-between gap-2">
+          <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
+          <div className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface)]">
+            {formatTokenLimit(block.tokens, block.limitTokens)}
+          </div>
+        </div>
+        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+          <div
+            className={cn("h-full rounded-full", colors.fill)}
+            style={{ width: `${fallbackPercent}%` }}
+          />
+        </div>
+        <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[10px] text-[var(--color-on-surface-variant)]">
+          <span className="min-w-0 truncate">{block.meta}</span>
+          <span className="shrink-0">{block.stat}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ProviderUsagePanel({
+  fallbackSessionUsage,
+  usageAudit,
+}: {
+  fallbackSessionUsage: { input: number | null; output: number | null; total: number | null };
+  usageAudit: ChatUsageAuditSnapshot | null;
+}) {
+  const { t } = useTranslation("pages");
+  const providerUsage = usageAudit?.providerUsage ?? null;
+  const requestEstimate = usageAudit?.requestEstimate ?? null;
+  const actualInput = providerUsage?.inputTokens ?? fallbackSessionUsage.input;
+  const cachedInput = providerUsage?.cachedInputTokens ?? null;
+  const reasoningTokens = providerUsage?.reasoningTokens ?? null;
+  const actualTotal = providerUsage?.totalTokens ?? fallbackSessionUsage.total;
+  const inputBudget = requestEstimate?.effectiveInputBudget ?? requestEstimate?.contextWindowLimit ?? null;
+  const inputPercent = contextPercent(actualInput, inputBudget);
+  const cachedPercent = contextPercent(cachedInput, actualInput);
+  const reasoningPercent = contextPercent(reasoningTokens, actualTotal);
+
+  return (
+    <section className="space-y-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
+      <div>
+        <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
+          {t("chat.shortTermMemory.contextSections.providerUsage")}
+        </h3>
+        <p className="text-[11px] text-[var(--color-on-surface-variant)]">
+          {t("chat.shortTermMemory.contextPanel.providerSubtitle")}
+        </p>
+      </div>
+      <div className="grid grid-cols-3 gap-1.5">
+        <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(actualInput)} />
+        <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(cachedInput)} />
+        <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(reasoningTokens)} />
+      </div>
+      <div className="space-y-2">
+        <ProviderUsageLine
+          label={t("chat.shortTermMemory.contextPanel.input")}
+          percent={inputPercent}
+          value={usageAudit?.inputTokenRatio ? formatSignedPercentFromRatio(usageAudit.inputTokenRatio) : formatCompactTokenCount(actualInput)}
+        />
+        <ProviderUsageLine
+          label={t("chat.shortTermMemory.contextPanel.cached")}
+          percent={cachedPercent}
+          value={formatPercent(cachedInput == null ? null : cachedPercent)}
+        />
+        <ProviderUsageLine
+          label={t("chat.shortTermMemory.contextPanel.reasoning")}
+          percent={reasoningPercent}
+          value={formatCompactTokenCount(reasoningTokens)}
+        />
+      </div>
+      <div className="border-t border-[var(--color-outline-variant)] pt-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
+        {requestEstimate ? (
+          <span>
+            {t("chat.shortTermMemory.contextPanel.providerDelta", {
+              actual: formatCompactTokenCount(providerUsage?.inputTokens),
+              delta: formatCompactTokenCount(usageAudit?.inputTokenDelta),
+              estimate: formatCompactTokenCount(requestEstimate.estimatedInputTokens),
+            })}
+            {usageAudit?.calibrationFactor ? (
+              <span> {t("chat.shortTermMemory.contextPanel.calibration", {
+                factor: new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(usageAudit.calibrationFactor),
+              })}</span>
+            ) : null}
+          </span>
+        ) : (
+          t("chat.shortTermMemory.contextPanel.providerUnavailable")
+        )}
+      </div>
+    </section>
+  );
+}
+
+function ProviderUsageLine({
+  label,
+  percent,
+  value,
+}: {
+  label: string;
+  percent: number;
+  value: string;
+}) {
+  return (
+    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)_3.75rem] items-center gap-2 text-[11px] text-[var(--color-on-surface-variant)]">
+      <span className="truncate">{label}</span>
+      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+        <span
+          className="block h-full rounded-full bg-[var(--color-on-surface-variant)]"
+          style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
+        />
+      </span>
+      <span className="truncate text-right font-mono text-[var(--color-on-surface)]">{value}</span>
+    </div>
+  );
+}
+
 function RightWorkspaceSidebar({
   goal,
   goalBusy,
@@ -2034,7 +2449,7 @@ function RightWorkspaceSidebar({
   }
 
   return (
-    <section className="space-y-5 text-sm">
+    <div className="space-y-5 text-sm">
       <ContextBlock
         title={t("chat.shortTermMemory.goal")}
         actions={goal ? (
@@ -2151,12 +2566,13 @@ function RightWorkspaceSidebar({
           </div>
         )}
       </ContextBlock>
-    </section>
+    </div>
   );
 }
 
 function RightContextSidebar({
   events,
+  goal,
   latestCompaction,
   latestCompactionStatus,
   latestRequestEstimate,
@@ -2167,8 +2583,10 @@ function RightContextSidebar({
   compactionBusy,
   selectedModel,
   session,
+  todos,
 }: {
   events: ChatAguiEvent[];
+  goal?: ChatSessionGoalView | null;
   latestCompaction?: ChatSessionCompaction | null;
   latestCompactionStatus?: QueryStatus;
   latestRequestEstimate?: ChatTokenEstimateSnapshot | null;
@@ -2179,13 +2597,9 @@ function RightContextSidebar({
   compactionBusy?: boolean;
   selectedModel?: ChatModelOption | null;
   session?: ChatSession;
+  todos?: ChatSessionTodo[];
 }) {
   const { t } = useTranslation("pages");
-  const skills = usedSkills(events);
-  const appCode = contextValue(session?.appCode) ?? contextValue(latestEventValue(events, "appCode"));
-  const taskCode = contextValue(session?.taskCode) ?? contextValue(latestEventValue(events, "taskCode"));
-  const worktreePath = contextValue(latestEventValue(events, "localDirectory"));
-  const branchName = contextValue(latestEventValue(events, "branchName"));
   const modelLabel = (
     contextValue(model?.displayName)
     ?? contextValue(model?.modelName)
@@ -2193,112 +2607,44 @@ function RightContextSidebar({
     ?? contextValue(selectedModel?.modelName)
     ?? contextValue(latestEventValue(events, "modelName"))
     ?? contextValue(latestEventValue(events, "model_name"))
-    ?? "unavailable"
+    ?? "-"
   );
   const usage = chatTokenUsage(messages);
-  const lastTurnUsage = lastTurnTokenUsage(messages);
-  const requestEstimate = latestRequestEstimate ?? latestUsageEstimateFromEvents(events);
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
-  const latestProviderUsage = usageAudit?.providerUsage ?? null;
-  const usedTokens = requestEstimate?.estimatedInputTokens ?? null;
-  const windowTokens = contextWindowLimit(model, selectedModel, requestEstimate, events);
-  const isSystemAgentSession = Boolean(
-    session?.agentCode && !isMainChatAgent(session.agentCode),
-  );
-  const systemAgentSessionId = contextValue(session?.systemAgentSessionId);
-  const systemSessionPath = isSystemAgentSession ? systemAgentSessionPath({
-    agentCode: session?.agentCode,
-    sessionId: systemAgentSessionId,
-    worktreePath,
-  }) : null;
-
+  const requestEstimate = latestRequestEstimate ?? usageAudit?.requestEstimate ?? latestUsageEstimateFromEvents(events);
+  const budgetBreakdown = latestContextBudgetBreakdownFromEvents(events);
+  const fallbackWindowLimit = contextWindowLimitFromSources(model, selectedModel, events);
+  const contextBlocks = buildContextMemoryBlocks({
+    breakdown: budgetBreakdown,
+    goal,
+    latestCompaction,
+    requestEstimate,
+    todos,
+    translate: (key, options) => t(key, options),
+  });
   return (
     <section className="space-y-5 text-sm">
-      <ContextBlock title={t("chat.shortTermMemory.contextSections.request")}>
-        <ContextRow label="model" value={modelLabel} />
-        <ContextRow label="window" value={formatContextWindowValue(windowTokens, usedTokens)} />
-        <ContextRow label="estimated" value={formatTokenCount(requestEstimate?.estimatedInputTokens)} />
-        <ContextRow label="messages" value={formatTokenCount(requestEstimate?.messageTokenEstimate)} />
-        <ContextRow label="tools" value={formatTokenCount(requestEstimate?.toolSchemaTokenEstimate)} />
-        <ContextRow label="budget" value={formatTokenCount(requestEstimate?.effectiveInputBudget)} />
-        <ContextRow label="state" value={formatEstimateStatus(requestEstimate)} />
-      </ContextBlock>
-      <ContextBlock title={t("chat.shortTermMemory.contextSections.providerUsage")}>
-        <ContextRow label="last turn" value={<TokenUsageCompare lastTurn={lastTurnUsage} sessionTotal={usage} />} />
-        <ContextRow label="cached input" value={formatTokenCount(latestProviderUsage?.cachedInputTokens)} />
-        <ContextRow label="reasoning" value={formatTokenCount(latestProviderUsage?.reasoningTokens)} />
-        <ContextRow label="session spend" value={formatTokenCount(usage.total)} />
-        <ContextRow label="input" value={formatTokenCount(usage.input)} />
-        <ContextRow label="output" value={formatTokenCount(usage.output)} />
-      </ContextBlock>
-      <ContextBlock
-        title={t("chat.shortTermMemory.checkpoint")}
-        actions={(
-          <button
-            aria-label={t("chat.shortTermMemory.createCheckpoint")}
-            className={iconButtonClass()}
-            disabled={!session || compactionBusy}
-            title={t("chat.shortTermMemory.createCheckpoint")}
-            type="button"
-            onClick={onCreateCompaction}
-          >
-            {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Archive size={15} />}
-          </button>
-        )}
-      >
-        <div className="text-xs text-[var(--color-on-surface-variant)]">
-          {latestCompactionStatus?.loading
-            ? t("chat.shortTermMemory.loadingCheckpoint")
-            : latestCompactionStatus?.error
-              ? t("chat.shortTermMemory.loadFailed")
-              : latestCompaction
-                ? t("chat.shortTermMemory.checkpointReady")
-                : t("chat.shortTermMemory.noCheckpoint")}
-        </div>
-        {latestCompactionStatus?.error ? (
-          <QueryStatusLine
-            errorText={t("chat.shortTermMemory.loadFailed")}
-            loadingText={t("chat.shortTermMemory.loadingCheckpoint")}
-            retryText={t("chat.shortTermMemory.retry")}
-            status={latestCompactionStatus}
-          />
-        ) : latestCompaction ? (
-          <div className="space-y-1.5">
-            <ContextRow label={t("chat.shortTermMemory.rows.checkpoint")} value={latestCompaction.checkpointMessageCode} />
-            <ContextRow label={t("chat.shortTermMemory.rows.status")} value={latestCompaction.status} />
-            <ContextRow label={t("chat.shortTermMemory.rows.source")} value={`${latestCompaction.sourceStartSeq}-${latestCompaction.sourceEndSeq}`} />
-            <ContextRow label={t("chat.shortTermMemory.rows.tail")} value={latestCompaction.tailStartSeq} />
-            <ContextRow label={t("chat.shortTermMemory.rows.summaryTokens")} value={formatTokenCount(latestCompaction.summaryTokenEstimate)} />
-            <ContextRow label={t("chat.shortTermMemory.rows.created")} value={formatTime(latestCompaction.createdAt)} />
-          </div>
-        ) : null}
-      </ContextBlock>
-      {(appCode || taskCode) ? (
-        <ContextBlock title={t("chat.shortTermMemory.contextSections.appTask")}>
-          {appCode ? <ContextRow label="app" value={appCode} /> : null}
-          {taskCode ? <ContextRow label="task" value={taskCode} /> : null}
-        </ContextBlock>
+      <ContextOverviewPanel
+        breakdown={budgetBreakdown}
+        fallbackWindowLimit={fallbackWindowLimit}
+        modelLabel={modelLabel}
+        requestEstimate={requestEstimate}
+      />
+      <ContextStructurePanel
+        blocks={contextBlocks}
+        compactionBusy={compactionBusy || latestCompactionStatus?.loading}
+        onCreateCompaction={onCreateCompaction}
+        session={session}
+      />
+      {latestCompactionStatus?.error ? (
+        <QueryStatusLine
+          errorText={t("chat.shortTermMemory.loadFailed")}
+          loadingText={t("chat.shortTermMemory.loadingCheckpoint")}
+          retryText={t("chat.shortTermMemory.retry")}
+          status={latestCompactionStatus}
+        />
       ) : null}
-      {(worktreePath || branchName) ? (
-        <ContextBlock title={t("chat.shortTermMemory.contextSections.worktree")}>
-          {worktreePath ? <ContextRow label="path" value={worktreePath} /> : null}
-          {branchName ? <ContextRow label="branch" value={branchName} icon={<GitBranch size={14} />} /> : null}
-        </ContextBlock>
-      ) : null}
-      {isSystemAgentSession ? (
-        <ContextBlock title={t("chat.shortTermMemory.contextSections.systemAgentSession")}>
-          <ContextRow label="agent" value={contextValue(session?.agentCode) ?? "unavailable"} />
-          <ContextRow label="session" value={systemAgentSessionId ?? "unavailable"} />
-          <ContextRow label="path" value={systemSessionPath ?? "unavailable"} />
-        </ContextBlock>
-      ) : null}
-      {skills.length ? (
-        <ContextBlock title={t("chat.shortTermMemory.contextSections.skills")}>
-          <div className="flex flex-wrap gap-2">
-            {skills.map((skill) => <Badge key={skill} tone="secondary">{skill}</Badge>)}
-          </div>
-        </ContextBlock>
-      ) : null}
+      <ProviderUsagePanel fallbackSessionUsage={usage} usageAudit={usageAudit} />
     </section>
   );
 }
@@ -2334,31 +2680,6 @@ function ContextRow({ icon, label, value }: { icon?: React.ReactNode; label: str
         {value}
       </span>
     </div>
-  );
-}
-
-function TokenUsageCompare({
-  lastTurn,
-  sessionTotal,
-}: {
-  lastTurn: { input: number | null; output: number | null; total: number | null };
-  sessionTotal: { input: number | null; output: number | null; total: number | null };
-}) {
-  return (
-    <span className="grid min-w-0 grid-cols-2 gap-2">
-      <span className="min-w-0 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 py-1">
-        <span className="block text-[10px] uppercase tracking-wide text-[var(--color-on-surface-variant)]">last turn</span>
-        <span className="block">used {formatTokenCount(lastTurn.total)}</span>
-        <span className="block">in {formatTokenCount(lastTurn.input)}</span>
-        <span className="block">out {formatTokenCount(lastTurn.output)}</span>
-      </span>
-      <span className="min-w-0 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 py-1">
-        <span className="block text-[10px] uppercase tracking-wide text-[var(--color-on-surface-variant)]">session total</span>
-        <span className="block">used {formatTokenCount(sessionTotal.total)}</span>
-        <span className="block">in {formatTokenCount(sessionTotal.input)}</span>
-        <span className="block">out {formatTokenCount(sessionTotal.output)}</span>
-      </span>
-    </span>
   );
 }
 
@@ -3505,7 +3826,7 @@ export function ChatManagementPage() {
     error: activeGoalState.error,
     retry: activeGoalState.retry,
   }), [activeGoalState.error, activeGoalState.loading, activeGoalState.retry]);
-  const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "");
+  const aguiEvents = useChatAguiEvents(activeSession?.sessionCode ?? "", activeChatDataRefreshKey + shortTermMemoryRefreshKey);
   const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "", activeChatReplayRefreshKey);
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
@@ -4014,6 +4335,7 @@ export function ChatManagementPage() {
           <div className="m-4">
             <RightContextSidebar
               events={aguiEvents}
+              goal={activeGoal}
               latestCompaction={latestCompaction}
               latestCompactionStatus={latestCompactionStatus}
               latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
@@ -4024,6 +4346,7 @@ export function ChatManagementPage() {
               onCreateCompaction={handleCreateCompactionForRightPanel}
               selectedModel={selectedModel}
               session={activeSession}
+              todos={shortTermMemoryTodos}
             />
           </div>
         </TabsContent>

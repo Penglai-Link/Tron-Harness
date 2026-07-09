@@ -85,6 +85,36 @@ export interface ChatTokenEstimateSnapshot {
   usageConfidence: string;
 }
 
+export interface ChatContextBudgetBreakdown {
+  promptPrefixTokens: number;
+  checkpointTokens: number;
+  sessionFamilyContextTokens: number;
+  workingStateTokens: number;
+  recentTranscriptTokens: number;
+  rawTailTranscriptTokens: number;
+  compressedHistoryTokens: number;
+  toolSchemaTokens: number;
+  estimatedInputTokens: number;
+  promptPrefixBudgetTokens?: number | null;
+  checkpointBudgetTokens?: number | null;
+  sessionFamilyContextBudgetTokens?: number | null;
+  workingStateBudgetTokens?: number | null;
+  effectiveInputBudget?: number | null;
+  contextWindowLimit?: number | null;
+  outputTokenReserve?: number | null;
+  compactionTriggerRatioBps?: number | null;
+  compactionTriggerTokens?: number | null;
+  compactionTriggerReached: boolean;
+  inputBudgetExceeded: boolean;
+  retainedHistoryRatioBps?: number | null;
+  effectiveRetainedHistoryTokens?: number | null;
+  currentSessionHistoryBudgetTokens?: number | null;
+  historySourceMessageCount?: number | null;
+  rawTailMessageCount?: number | null;
+  compressedHistoryMessageCount?: number | null;
+  rawTailStartSeq?: number | null;
+}
+
 export interface ChatUsageAuditSnapshot {
   requestEstimate: ChatTokenEstimateSnapshot;
   providerUsage?: ChatTokenUsage | null;

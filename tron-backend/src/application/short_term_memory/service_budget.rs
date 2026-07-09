@@ -37,6 +37,24 @@ pub(super) fn apply_request_budget_fields(
                 .seed_prompt_prefix
                 .effective_limit_tokens,
         );
+        breakdown.checkpoint_budget_tokens = Some(
+            budget_plan
+                .block_budgets
+                .current_session_checkpoint
+                .effective_limit_tokens,
+        );
+        breakdown.session_family_context_budget_tokens = Some(
+            budget_plan
+                .block_budgets
+                .session_family_context
+                .effective_limit_tokens,
+        );
+        breakdown.working_state_budget_tokens = Some(
+            budget_plan
+                .block_budgets
+                .current_session_working_state
+                .effective_limit_tokens,
+        );
         breakdown.compaction_trigger_ratio_bps = Some(config.compaction.trigger_ratio_bps);
         breakdown.compaction_trigger_tokens = Some(trigger_tokens);
         breakdown.compaction_trigger_reached = prepared.compaction_trigger_reached;

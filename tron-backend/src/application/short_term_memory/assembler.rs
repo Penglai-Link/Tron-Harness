@@ -105,6 +105,24 @@ pub(super) fn assemble_context(
                     .seed_prompt_prefix
                     .effective_limit_tokens,
             ),
+            checkpoint_budget_tokens: Some(
+                budget_plan
+                    .block_budgets
+                    .current_session_checkpoint
+                    .effective_limit_tokens,
+            ),
+            session_family_context_budget_tokens: Some(
+                budget_plan
+                    .block_budgets
+                    .session_family_context
+                    .effective_limit_tokens,
+            ),
+            working_state_budget_tokens: Some(
+                budget_plan
+                    .block_budgets
+                    .current_session_working_state
+                    .effective_limit_tokens,
+            ),
             effective_input_budget: Some(budget_plan.effective_input_budget),
             context_window_limit: Some(budget_plan.model_context_window),
             output_token_reserve: Some(budget_plan.output_token_reserve),

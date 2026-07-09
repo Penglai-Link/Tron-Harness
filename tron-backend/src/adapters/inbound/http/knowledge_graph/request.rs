@@ -139,7 +139,10 @@ fn parse_inheritance_mode(
     }
 }
 
-fn relationship_filters(relationships: Option<Vec<String>>, relationship: Option<String>) -> Vec<String> {
+fn relationship_filters(
+    relationships: Option<Vec<String>>,
+    relationship: Option<String>,
+) -> Vec<String> {
     let mut filters = Vec::new();
     let has_relationships_field = relationships.is_some();
 

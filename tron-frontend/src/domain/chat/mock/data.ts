@@ -1,7 +1,10 @@
 import type {
   ChatAguiEvent,
+  ChatContextBudgetBreakdown,
   ChatMessage,
   ChatSendResult,
+  ChatTokenEstimateSnapshot,
+  ChatUsageAuditSnapshot,
   ChatSessionCompaction,
   ChatSessionGoalView,
   ChatSession,
@@ -17,6 +20,78 @@ import type {
 } from "@/domain/chat/model/ChatModel";
 
 const baseTime = "2026-05-27T09:30:00Z";
+
+const mockContextBudgetBreakdown: ChatContextBudgetBreakdown = {
+  checkpointBudgetTokens: 10_000,
+  checkpointTokens: 3_900,
+  compressedHistoryMessageCount: 0,
+  compressedHistoryTokens: 0,
+  compactionTriggerRatioBps: 8_000,
+  compactionTriggerReached: false,
+  compactionTriggerTokens: 89_600,
+  contextWindowLimit: 128_000,
+  currentSessionHistoryBudgetTokens: 16_000,
+  effectiveInputBudget: 112_000,
+  effectiveRetainedHistoryTokens: 8_000,
+  estimatedInputTokens: 22_600,
+  historySourceMessageCount: 18,
+  inputBudgetExceeded: false,
+  outputTokenReserve: 16_000,
+  promptPrefixBudgetTokens: 4_000,
+  promptPrefixTokens: 2_100,
+  rawTailMessageCount: 18,
+  rawTailStartSeq: 1,
+  rawTailTranscriptTokens: 10_800,
+  recentTranscriptTokens: 10_800,
+  retainedHistoryRatioBps: 5_000,
+  sessionFamilyContextBudgetTokens: 10_000,
+  sessionFamilyContextTokens: 2_600,
+  toolSchemaTokens: 1_800,
+  workingStateBudgetTokens: 5_000,
+  workingStateTokens: 1_400,
+};
+
+const mockRequestEstimate: ChatTokenEstimateSnapshot = {
+  checkpointCode: "ATM-MOCK-1",
+  compactionTriggerReached: false,
+  contextWindowLimit: 128_000,
+  effectiveInputBudget: 112_000,
+  estimatedInputTokens: 22_600,
+  messageCount: 31,
+  messageTokenEstimate: 20_800,
+  modelCode: "mock-gpt-5-codex",
+  modelName: "gpt-5-codex",
+  modelProtocol: "responses",
+  outputTokenReserve: 16_000,
+  overBudget: false,
+  partCount: 68,
+  rebased: true,
+  toolSchemaTokenEstimate: 1_800,
+  usageConfidence: "estimated",
+  usageSource: "local_estimate",
+};
+
+const mockUsageAudit: ChatUsageAuditSnapshot = {
+  calibrationFactor: 1.06,
+  cumulativeRunUsage: {
+    inputTokens: 24_100,
+    outputTokens: 2_400,
+    totalTokens: 26_500,
+  },
+  inputTokenDelta: 1_500,
+  inputTokenRatio: 1.066,
+  providerUsage: {
+    cachedInputTokens: 6_800,
+    inputTokens: 24_100,
+    outputTokens: 2_400,
+    reasoningTokens: 1_900,
+    totalTokens: 26_500,
+  },
+  requestEstimate: mockRequestEstimate,
+  responseId: "resp_mock",
+  usageConfidence: "actual",
+  usageSource: "provider",
+};
 
 const sessions: ChatSession[] = [
   {
@@ -370,9 +445,12 @@ export function getChatAguiEvents(sessionCode: string): ChatAguiEvent[] {
       outcome: session.lastRunStatus ?? "COMPLETED",
       metadata: {
         appCode: session.appCode ?? "unavailable",
+        budgetBreakdown: JSON.stringify(mockContextBudgetBreakdown),
         taskCode: session.taskCode ?? "unavailable",
         localDirectory: "/Users/clouds3n/.codex/worktrees/Tron/feature/clouds3n/chat-management/base",
         branchName: "feature/clouds3n/chat-management/base",
+        usage_audit_json: JSON.stringify(mockUsageAudit),
+        usage_estimate_json: JSON.stringify(mockRequestEstimate),
       },
     },
     {
@@ -465,20 +543,57 @@ export function createMockChatSendResult(session: ChatSession, input: SendChatMe
   const systemAgentSessionId = session.agentCode && session.agentCode !== "main-agent"
     ? session.systemAgentSessionId ?? `ses-${session.sessionCode.toLowerCase()}`
     : null;
-  return {
-    session: {
-      ...session,
-      lastRunCode: runCode,
-      lastRunStatus: "COMPLETED",
-      systemAgentSessionId,
-      updatedAt: now,
+  const nextSession: ChatSession = {
+    ...session,
+    lastRunCode: runCode,
+    lastRunStatus: "COMPLETED",
+    systemAgentSessionId,
+    updatedAt: now,
+  };
+  const nextMessages: ChatMessage[] = [
+    {
+      id: Date.now(),
+      messageCode: `MSG-${Date.now()}`,
+      sessionCode: session.sessionCode,
+      runCode,
+      role: "USER",
+      channel: session.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
+      actor: "User",
+      content: input.content,
+      createdAt: now,
     },
+    {
+      id: Date.now() + 1,
+      messageCode: `MSG-${Date.now() + 1}`,
+      sessionCode: session.sessionCode,
+      runCode,
+      role: "ASSISTANT",
+      channel: session.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
+      actor: "Assistant",
+      content: finalOutput,
+      inputTokens: 32,
+      outputTokens: 24,
+      totalTokens: 56,
+      createdAt: now,
+    },
+  ];
+  const sessionIndex = sessions.findIndex((item) => item.sessionCode === session.sessionCode);
+  if (sessionIndex >= 0) sessions[sessionIndex] = nextSession;
+  messagesBySession[session.sessionCode] = [
+    ...(messagesBySession[session.sessionCode] ?? []),
+    ...nextMessages,
+  ];
+
+  return {
+    session: nextSession,
     run: {
       runCode,
       conversationCode: session.sessionCode,
       workspaceCode: input.workspaceCode,
       status: "COMPLETED",
       finalOutput,
+      latestRequestEstimate: mockRequestEstimate,
+      latestUsageAudit: mockUsageAudit,
       stepCount: 1,
       tokenUsage: {
         inputTokens: 32,
@@ -487,32 +602,6 @@ export function createMockChatSendResult(session: ChatSession, input: SendChatMe
       },
       systemAgentSessionId,
     },
-    messages: [
-      {
-        id: Date.now(),
-        messageCode: `MSG-${Date.now()}`,
-        sessionCode: session.sessionCode,
-        runCode,
-        role: "USER",
-        channel: session.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
-        actor: "User",
-        content: input.content,
-        createdAt: now,
-      },
-      {
-        id: Date.now() + 1,
-        messageCode: `MSG-${Date.now() + 1}`,
-        sessionCode: session.sessionCode,
-        runCode,
-        role: "ASSISTANT",
-        channel: session.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
-        actor: "Assistant",
-        content: finalOutput,
-        inputTokens: 32,
-        outputTokens: 24,
-        totalTokens: 56,
-        createdAt: now,
-      },
-    ],
+    messages: nextMessages,
   };
 }

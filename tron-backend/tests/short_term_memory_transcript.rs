@@ -7,9 +7,9 @@ use tron_backend::{
         chat::{ChatService, ChatSessionQuery, CreateChatSessionCommand},
         short_term_memory::{
             CreateCompactionCommand, GoalSessionCommand, ModelCompactionOutput,
-            ModelRequestTranscriptFacts, SetGoalCommand, ShortTermMemoryConfig,
-            ShortTermMemoryRepository, ShortTermMemoryService, TodoUpdateItem, ToolOutputConfig,
-            ToolTranscriptStatus,
+            ModelRequestTranscriptFacts, PreparedCompactionInput, SetGoalCommand,
+            ShortTermMemoryConfig, ShortTermMemoryRepository, ShortTermMemoryService,
+            TodoUpdateItem, ToolOutputConfig, ToolTranscriptStatus,
         },
     },
     domain::{
@@ -242,6 +242,16 @@ fn transcript_service_records_todos_and_compaction() {
     assert!(!family_snapshot_summary.contains("Track the implementation state"));
     assert!(!family_snapshot_summary.contains(inline_tool_output));
     assert!(!family_snapshot_summary.contains(large_output));
+    let mut compaction_seed_context = base_context(&session.session_code);
+    for index in 0..6 {
+        compaction_seed_context.run_code = format!("RUN-STMEM-MANUAL-SEED-{index}");
+        service
+            .record_user_input(
+                &compaction_seed_context,
+                &format!("manual compaction seed {index} {}", "S".repeat(2_200)),
+            )
+            .expect("manual compaction seed input should be recorded");
+    }
 
     let todos = service
         .list_todos(&session.session_code)
@@ -322,6 +332,18 @@ fn transcript_service_records_todos_and_compaction() {
         )
         .expect("agent code should be queryable");
     assert!(main_agent_message_count > 0);
+    for index in 0..6 {
+        compaction_seed_context.run_code = format!("RUN-STMEM-MANUAL-SEED-SECOND-{index}");
+        service
+            .record_user_input(
+                &compaction_seed_context,
+                &format!(
+                    "second manual compaction seed {index} {}",
+                    "T".repeat(2_200)
+                ),
+            )
+            .expect("second manual compaction seed input should be recorded");
+    }
     let second_compaction = create_stub_model_compaction(
         &service,
         CreateCompactionCommand {
@@ -342,6 +364,18 @@ fn transcript_service_records_todos_and_compaction() {
     assert!(second_compaction_summary.contains("Previous checkpoint summary:"));
     assert!(second_compaction_summary.contains("Previous retained recent transcript:"));
     assert!(second_compaction_summary.contains("Carry prior checkpoint context forward."));
+    for index in 0..6 {
+        compaction_seed_context.run_code = format!("RUN-STMEM-MANUAL-SEED-TODO-DISABLED-{index}");
+        service
+            .record_user_input(
+                &compaction_seed_context,
+                &format!(
+                    "todo-disabled manual compaction seed {index} {}",
+                    "U".repeat(2_200)
+                ),
+            )
+            .expect("todo-disabled manual compaction seed input should be recorded");
+    }
     let todo_disabled_compaction = create_stub_model_compaction(
         &service,
         CreateCompactionCommand {
@@ -2515,8 +2549,9 @@ fn prepare_model_context_replays_only_messages_after_v2_checkpoint_source_end_se
             &ModelResponse::final_output("pre-checkpoint assistant"),
         )
         .expect("assistant response should be recorded");
-    create_stub_model_compaction(
+    create_legacy_full_source_stub_compaction(
         &service,
+        &database_url,
         CreateCompactionCommand {
             session_code: session.session_code.clone(),
             reason: Some("v2-boundary".into()),
@@ -2588,6 +2623,19 @@ fn manual_compaction_conflicts_when_session_has_active_run() {
     service
         .recover_goal_state_on_startup()
         .expect("startup recovery should close stale runs");
+    let mut recovered_context = base_context(&session.session_code);
+    for index in 0..6 {
+        recovered_context.run_code = format!("RUN-STMEM-RECOVERED-MANUAL-SEED-{index}");
+        service
+            .record_user_input(
+                &recovered_context,
+                &format!(
+                    "recovered manual compaction seed {index} {}",
+                    "R".repeat(2_200)
+                ),
+            )
+            .expect("recovered compaction seed input should be recorded");
+    }
     create_stub_model_compaction(
         &service,
         CreateCompactionCommand {
@@ -3983,7 +4031,10 @@ fn model_compaction_input_budget_reserves_compaction_output_tokens() {
     for index in 0..3 {
         context.run_code = format!("RUN-STMEM-COMPACTION-BUDGET-{index}");
         service
-            .record_user_input(&context, &format!("budget-input-{index}"))
+            .record_user_input(
+                &context,
+                &format!("budget-input-{index} {}", "B".repeat(2_200)),
+            )
             .expect("history input should be recorded");
     }
 
@@ -4149,6 +4200,115 @@ fn auto_compaction_summarizes_head_and_replays_raw_tail_after_checkpoint() {
 }
 
 #[test]
+fn manual_compaction_summarizes_head_and_replays_raw_tail_after_checkpoint() {
+    let database_url = temp_database_url("short-term-memory-manual-head-only-raw-tail");
+    let session = create_test_session(&database_url, "manual head only raw tail");
+    let mut config = ShortTermMemoryConfig::default();
+    config
+        .context
+        .blocks
+        .current_session_checkpoint
+        .max_ratio_bps = None;
+    config.context.blocks.current_session_checkpoint.max_tokens = Some(250);
+
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        config,
+    );
+    let mut context = base_context(&session.session_code);
+    context.model.context_window_tokens = Some(8_192);
+    context.model.max_tokens = Some(0);
+    context.tools.clear();
+    let messages = [
+        ("A", "RUN-STMEM-MANUAL-A", "manual-head-A-old"),
+        ("B", "RUN-STMEM-MANUAL-B", "manual-head-B-old"),
+        ("C", "RUN-STMEM-MANUAL-C", "manual-head-C-old"),
+        ("D", "RUN-STMEM-MANUAL-D", "manual-head-D-old"),
+        ("E", "RUN-STMEM-MANUAL-E", "manual-tail-E-recent"),
+        ("F", "RUN-STMEM-MANUAL-F", "manual-tail-F-recent"),
+        ("G", "RUN-STMEM-MANUAL-G", "manual-tail-G-recent"),
+        ("H", "RUN-STMEM-MANUAL-H", "manual-tail-H-recent"),
+    ];
+    let mut latest_input_code = String::new();
+    for (_, run_code, text) in messages {
+        context.run_code = run_code.into();
+        latest_input_code = service
+            .record_user_input(&context, &format!("{text} {}", "M".repeat(2_200)))
+            .expect("history input should be recorded");
+    }
+    attach_short_term_memory(
+        &mut context,
+        &session.session_code,
+        latest_input_code,
+        vec![AgentMessage::system("system seed")],
+    );
+
+    let compaction_input = service
+        .prepare_manual_model_compaction_input(
+            CreateCompactionCommand {
+                session_code: session.session_code.clone(),
+                reason: Some("manual_compaction_trigger".into()),
+                note: None,
+                todo_enabled: Some(false),
+            },
+            context.model.context_window_tokens,
+            context.model.max_tokens,
+        )
+        .expect("manual compaction input should prepare");
+    assert_eq!(compaction_input.strategy, "MANUAL_CHECKPOINT");
+    assert_eq!(compaction_input.coverage, "head_only_tail_replayed");
+    assert_eq!(compaction_input.selector_version, 4);
+    assert!(compaction_input.source_message_count > 0);
+    assert!(
+        compaction_input.source_message_count < compaction_input.selection_source_message_count
+    );
+    assert!(compaction_input.prompt.contains("manual-head-A-old"));
+    assert!(compaction_input.prompt.contains("manual-tail-H-recent"));
+    assert_eq!(
+        compaction_input.source_end_seq,
+        compaction_input.tail_start_seq.saturating_sub(1)
+    );
+
+    let model = service.compaction_model_config(&context.model);
+    let checkpoint = service
+        .commit_model_compaction(
+            compaction_input,
+            ModelCompactionOutput {
+                summary:
+                    "## Goal\nMANUAL CHECKPOINT HEAD ONLY\n\n## Decisions\nOlder history was compacted."
+                        .into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &model,
+        )
+        .expect("manual model compaction should commit");
+    assert_eq!(
+        checkpoint.coverage.as_deref(),
+        Some("head_only_tail_replayed")
+    );
+    assert_eq!(checkpoint.selector_version, 4);
+
+    let prepared = service
+        .prepare_model_context(&context)
+        .expect("model context should prepare after manual checkpoint");
+    let rendered = rendered_messages(&prepared.messages);
+    assert!(rendered.contains("MANUAL CHECKPOINT HEAD ONLY"));
+    assert!(!rendered.contains("Recent retained context"));
+    assert!(!rendered.contains("manual-head-A-old"));
+    assert!(rendered.contains("manual-tail-H-recent"));
+    let breakdown = prepared
+        .budget_breakdown
+        .as_ref()
+        .expect("budget breakdown should be present");
+    assert!(
+        breakdown.raw_tail_message_count.unwrap_or_default() > 0,
+        "manual compaction should leave raw tail messages for replay"
+    );
+}
+
+#[test]
 fn checkpoint_replay_boundary_depends_on_coverage() {
     let database_url = temp_database_url("short-term-memory-coverage-boundary");
     let legacy_session = create_test_session(&database_url, "legacy boundary");
@@ -4167,8 +4327,9 @@ fn checkpoint_replay_boundary_depends_on_coverage() {
     service
         .record_user_input(&legacy_context, "legacy-pre-unique")
         .expect("legacy pre input should be recorded");
-    create_stub_model_compaction(
+    create_legacy_full_source_stub_compaction(
         &service,
+        &database_url,
         CreateCompactionCommand {
             session_code: legacy_session.session_code.clone(),
             reason: Some("legacy-boundary".into()),
@@ -4886,8 +5047,9 @@ fn lifecycle_only_event_log_keeps_projections_and_run_events() {
     service
         .record_run_completed(&context)
         .expect("run completion should be recorded");
-    create_stub_model_compaction(
+    create_legacy_full_source_stub_compaction(
         &service,
+        &database_url,
         CreateCompactionCommand {
             session_code: session.session_code.clone(),
             reason: Some("lifecycle only".into()),
@@ -5212,11 +5374,7 @@ fn create_stub_model_compaction(
     let base_model = compaction_test_model();
     let model = service.compaction_model_config(&base_model);
     let input = service
-        .prepare_manual_model_compaction_input(
-            command,
-            model.context_window_tokens,
-            model.max_tokens,
-        )
+        .prepare_manual_model_compaction_input(command, Some(8_192), Some(0))
         .expect("model compaction input should prepare");
     service
         .commit_model_compaction(
@@ -5235,6 +5393,111 @@ fn create_stub_model_compaction(
             &model,
         )
         .expect("model compaction should commit")
+}
+
+fn create_legacy_full_source_stub_compaction(
+    service: &ShortTermMemoryService,
+    database_url: &str,
+    command: CreateCompactionCommand,
+    summary: &str,
+) -> ShortTermMemoryCompaction {
+    let session_code = command.session_code.trim().to_string();
+    let workspace_code = service
+        .session_workspace_for_compaction(&session_code)
+        .expect("session workspace should load");
+    let connection =
+        rusqlite::Connection::open(database_url).expect("database should be queryable");
+    let (source_start_seq, source_end_seq, source_message_count): (i64, i64, i64) = connection
+        .query_row(
+            "SELECT COALESCE(min(seq), 0), COALESCE(max(seq), 0), count(1)
+             FROM agent_transcript_messages
+             WHERE session_code = ?1
+               AND status = 'completed'
+               AND message_type <> 'compaction'",
+            [session_code.as_str()],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("transcript message range should be queryable");
+    let previous_checkpoint = service
+        .latest_compaction(&session_code)
+        .expect("latest checkpoint should load");
+    let recent = {
+        let mut statement = connection
+            .prepare(
+                "SELECT COALESCE(p.content_text, '')
+                 FROM agent_transcript_messages m
+                 JOIN agent_transcript_parts p ON p.message_code = m.message_code
+                 WHERE m.session_code = ?1
+                   AND m.status = 'completed'
+                   AND m.message_type <> 'compaction'
+                   AND m.seq BETWEEN ?2 AND ?3
+                   AND p.visibility = 'model'
+                 ORDER BY m.seq, p.seq",
+            )
+            .expect("legacy recent transcript statement should prepare");
+        let fragments = statement
+            .query_map(
+                rusqlite::params![session_code.as_str(), source_start_seq, source_end_seq],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("legacy recent transcript should query")
+            .collect::<Result<Vec<_>, _>>()
+            .expect("legacy recent transcript should map")
+            .into_iter()
+            .filter(|text| !text.trim().is_empty())
+            .collect::<Vec<_>>();
+        if fragments.is_empty() {
+            "Legacy retained recent transcript".into()
+        } else {
+            fragments.join("\n")
+        }
+    };
+    let model = service.compaction_model_config(&compaction_test_model());
+    let input = PreparedCompactionInput {
+        session_code,
+        workspace_code,
+        reason: command.reason,
+        note: command.note,
+        todo_enabled: command.todo_enabled.unwrap_or(true),
+        enforce_idle: true,
+        strategy: "MANUAL_CHECKPOINT".into(),
+        triggered_by: "user".into(),
+        source: "chat_page".into(),
+        previous_checkpoint_message_code: previous_checkpoint
+            .as_ref()
+            .map(|item| item.checkpoint_message_code.clone()),
+        previous_checkpoint_included_recent: previous_checkpoint.is_some(),
+        coverage: "full_source_includes_tail".into(),
+        selector_version: 2,
+        selection_source_end_seq: source_end_seq,
+        trigger_ratio_bps: 8_000,
+        retained_history_ratio_bps: 2_000,
+        effective_retained_history_tokens: 0,
+        source_start_seq,
+        source_end_seq,
+        tail_start_seq: source_start_seq,
+        source_message_count: source_message_count as usize,
+        selection_source_message_count: source_message_count as usize,
+        source_token_estimate: 0,
+        tail_token_estimate: 0,
+        compaction_input_token_estimate: 0,
+        max_input_tokens: 8_192,
+        recent,
+        prompt: "legacy full-source checkpoint test input".into(),
+        prompt_hash: "legacy-full-source-stub".into(),
+        pinned_start_seq: None,
+    };
+    service
+        .commit_model_compaction(
+            input,
+            ModelCompactionOutput {
+                summary: summary.to_string(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &model,
+        )
+        .expect("legacy full-source compaction should commit")
 }
 
 fn compaction_test_model() -> AgentModelConfig {

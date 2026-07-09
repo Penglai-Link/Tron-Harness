@@ -47,7 +47,7 @@ export function useChatMessageListBySession(sessionCode: string, refreshKey = 0,
   });
 }
 
-export function useChatAguiEvents(sessionCode: string) {
+export function useChatAguiEvents(sessionCode: string, refreshKey = 0) {
   return useServiceQuery<ChatAguiEvent[]>({
     apiInitialData: () => [],
     domain: "chat",
@@ -56,6 +56,7 @@ export function useChatAguiEvents(sessionCode: string) {
     mockData: () => getChatAguiEvents(sessionCode),
     deps: [sessionCode],
     params: { streamKey: sessionCode },
+    refreshKey,
     select: (payload) => {
       const snapshot = payload as AguiEventSnapshot | { data?: AguiEventSnapshot };
       if ("data" in snapshot && snapshot.data) return snapshot.data.events ?? [];

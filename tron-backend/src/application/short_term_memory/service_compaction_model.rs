@@ -89,7 +89,10 @@ impl ShortTermMemoryService {
         let budget_plan = self
             .config
             .model_context_budget_plan(context_window_tokens, effective_max_output_tokens);
-        let head_only_tail_replayed = matches!(strategy, "AUTO_CHECKPOINT" | "OVERFLOW_CHECKPOINT");
+        let head_only_tail_replayed = matches!(
+            strategy,
+            "AUTO_CHECKPOINT" | "OVERFLOW_CHECKPOINT" | "MANUAL_CHECKPOINT"
+        );
         let retained_history_tokens = requested_retained_history_tokens.unwrap_or_else(|| {
             budget_plan.effective_input_budget.saturating_mul(
                 self.config

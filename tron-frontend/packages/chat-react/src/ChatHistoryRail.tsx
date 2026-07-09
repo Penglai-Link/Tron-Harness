@@ -182,7 +182,7 @@ export function ChatHistoryRail({
 
           const width = hovered
             ? 24
-            : 6 + influence * 22 + (active ? 8 : 0);
+            : 6 + influence * 14 + (active ? 8 : 0);
           return (
             <button
               key={turn.id}
@@ -198,7 +198,7 @@ export function ChatHistoryRail({
                 markerRefs.current[index] = node;
               }}
               style={{
-                width: hoveredMarkerIndex !== null ? `${width}px` : '8px',
+                width: hoveredMarkerIndex !== null ? `${width}px` : `${active ? 14 : 6}px`,
               }}
               onClick={() => {
                 const transcript = transcriptRef.current;
