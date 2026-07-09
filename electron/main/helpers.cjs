@@ -8,6 +8,7 @@ const HOST = "127.0.0.1";
 const SIDE_CAR_BASELINE_PORT = 8080;
 const MAX_PORT_PROBE = 80;
 const BACKEND_HEALTH_PATH = "/api/v1/health";
+const GITHUB_OAUTH_CALLBACK_PATH = "/api/v1/auth/oauth2/callback/github";
 
 function isHttpUrl(input) {
   try {
@@ -32,6 +33,11 @@ function normalizeTargetUrl(input) {
 
 function sanitizeUrl(raw) {
   return normalizeTargetUrl(String(raw || "").trim());
+}
+
+function buildGitHubOAuthRedirectUri(backendUrl) {
+  const origin = String(backendUrl || "").replace(/\/+$/, "");
+  return `${origin}${GITHUB_OAUTH_CALLBACK_PATH}`;
 }
 
 function loadPort() {
@@ -211,6 +217,7 @@ module.exports = {
   BACKEND_HEALTH_PATH,
   HOST,
   SIDE_CAR_BASELINE_PORT,
+  buildGitHubOAuthRedirectUri,
   checkTargetPageEmbeddingStatus,
   findFreePort,
   iframeBlockReasonFromHeaders,

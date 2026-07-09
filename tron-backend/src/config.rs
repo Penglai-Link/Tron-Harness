@@ -198,6 +198,7 @@ impl AppConfig {
         {
             self.project_doc_root = normalize_storage_path(value);
         }
+        self.auth.github_oauth = parsing::github_oauth_env_override(self.auth.github_oauth.take())?;
         if let Some(value) = ldap_env_override().transpose()? {
             self.auth.ldap = Some(value);
         }

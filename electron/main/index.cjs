@@ -5,6 +5,7 @@ const { app, BrowserWindow, WebContentsView, ipcMain, shell } = require("electro
 
 const {
   HOST,
+  buildGitHubOAuthRedirectUri,
   checkTargetPageEmbeddingStatus,
   findFreePort,
   isHttpUrl,
@@ -100,7 +101,8 @@ function startBackend(resourcesDir) {
       TRON_BACKEND_DATABASE_URL: state.databasePath,
       TRON_BACKEND_FRONTEND_DIST_DIR: state.frontendDistDir,
       TRON_BACKEND_GRAPH_STORAGE_PATH: state.graphPath,
-      TRON_BACKEND_PORT: String(state.backendPort)
+      TRON_BACKEND_PORT: String(state.backendPort),
+      TRON_AUTH_GITHUB_REDIRECT_URI: buildGitHubOAuthRedirectUri(state.backendUrl)
     },
     stdio: ["ignore", "ignore", "inherit"]
   });
