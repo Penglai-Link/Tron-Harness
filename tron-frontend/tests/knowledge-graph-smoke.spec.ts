@@ -349,6 +349,23 @@ test.describe("Knowledge graph mock mode", () => {
     await expect(page.getByText("git").first()).toBeVisible();
     await expect(page.getByText("priority").first()).toBeVisible();
   });
+
+  test("adapts graph canvas chrome to matrix dark theme", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.localStorage.setItem("tron.theme", "matrix-dark");
+    });
+
+    await page.goto(`${harness.baseUrl}/knowledge-graph`);
+
+    const canvas = page.getByLabel("G6 semantic knowledge graph canvas");
+    await expect(canvas).toBeVisible();
+    await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundImage)).toContain("92, 255, 133");
+    await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundImage)).not.toContain("255, 255, 255");
+
+    const metrics = page.getByLabel("Graph canvas metrics");
+    await expect(metrics).toBeVisible();
+    await expect.poll(() => metrics.evaluate((element) => getComputedStyle(element).backgroundColor)).not.toContain("255, 255, 255");
+  });
 });
 
 test.describe("Knowledge graph API mode", () => {

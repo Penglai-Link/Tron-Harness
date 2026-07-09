@@ -30,6 +30,7 @@ import {
   resolveGraphNodeLabel,
 } from "@/domain/knowledge-graph/model";
 import { cn } from "@/shared/lib/utils";
+import { useTheme, type AppTheme } from "@/shared/theme/ThemeProvider";
 
 interface GraphCanvasProps {
   edges: GraphEdgeView[];
@@ -95,6 +96,18 @@ interface GraphZoomStyleData {
   nodes: NonNullable<GraphData["nodes"]>;
 }
 
+interface GraphCanvasTheme {
+  activeEdgeColor: string;
+  canvasBackgroundImage: string;
+  edgeLabelBackgroundFill: string;
+  edgeLabelBackgroundOpacity: number;
+  edgeLabelBackgroundStroke: string;
+  edgeStroke: string;
+  highlightedNodeStroke: string;
+  nodeLabelFill: string;
+  selectedNodeStroke: string;
+}
+
 type ResolvedGraphLayoutMode = Exclude<GraphLayoutMode, "Smart">;
 
 const fallbackMinimapViewport: MinimapViewport = {
@@ -104,6 +117,35 @@ const fallbackMinimapViewport: MinimapViewport = {
   visibleHeight: 58,
   visibleWidth: 52,
   width: 52,
+};
+
+const graphCanvasThemes: Record<AppTheme, GraphCanvasTheme> = {
+  light: {
+    activeEdgeColor: "#2f5f9f",
+    canvasBackgroundImage: "radial-gradient(circle at 1px 1px, rgba(68,71,72,0.13) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.76), rgba(243,244,244,0.58))",
+    edgeLabelBackgroundFill: "#ffffff",
+    edgeLabelBackgroundOpacity: 0.86,
+    edgeLabelBackgroundStroke: "#c6d6f1",
+    edgeStroke: "#cfd6d6",
+    highlightedNodeStroke: "#2f5f9f",
+    nodeLabelFill: "#1f2933",
+    selectedNodeStroke: "#111827",
+  },
+  "matrix-dark": {
+    activeEdgeColor: "#3ef4c4",
+    canvasBackgroundImage: "radial-gradient(circle at 1px 1px, rgba(92,255,133,0.16) 1px, transparent 0), linear-gradient(135deg, #06120a 0%, #0b1810 48%, #07120b 100%)",
+    edgeLabelBackgroundFill: "#09150d",
+    edgeLabelBackgroundOpacity: 0.94,
+    edgeLabelBackgroundStroke: "#21422f",
+    edgeStroke: "rgba(155,197,167,0.42)",
+    highlightedNodeStroke: "#3ef4c4",
+    nodeLabelFill: "#d7ffe2",
+    selectedNodeStroke: "#5cff85",
+  },
+};
+
+const floatingCanvasPanelStyle = {
+  backgroundColor: "color-mix(in srgb, var(--color-elevated-surface) 88%, transparent)",
 };
 
 function numberText(value: number, locale: string) {
@@ -812,6 +854,7 @@ function buildG6Data(
   highlightedEdgeCodes: string[],
   zoom: number,
   nodeLabelProperty: string,
+  graphCanvasTheme: GraphCanvasTheme,
 ): GraphData {
   const highlightedNodes = new Set(highlightedNodeCodes);
   const nodeByCode = new Map(nodes.map((node) => [node.nodeCode, node]));
@@ -840,7 +883,7 @@ function buildG6Data(
           fill: palette.color,
           halo: false,
           labelBackground: false,
-          labelFill: "#1f2933",
+          labelFill: graphCanvasTheme.nodeLabelFill,
           labelFontFamily: "Inter Variable, Inter, sans-serif",
           labelFontWeight: 700,
           labelPadding: 0,
@@ -850,7 +893,7 @@ function buildG6Data(
           opacity: selected || highlighted ? 1 : 0.92,
           r: displayRadius,
           size: displayRadius * 2,
-          stroke: selected ? "#111827" : highlighted ? "#2f5f9f" : "transparent",
+          stroke: selected ? graphCanvasTheme.selectedNodeStroke : highlighted ? graphCanvasTheme.highlightedNodeStroke : "transparent",
           x: point.x,
           y: point.y,
           zIndex: selected ? 10 : highlighted ? 6 : Math.max(1, Math.min(5, node.degree)),
@@ -879,14 +922,14 @@ function buildG6Data(
           badge: false,
           curveOffset: edgeCurveOffset(sourcePoint, targetPoint, active, center),
           endArrow: active,
-          endArrowFill: "#2f5f9f",
-          endArrowStroke: "#2f5f9f",
+          endArrowFill: graphCanvasTheme.activeEdgeColor,
+          endArrowStroke: graphCanvasTheme.activeEdgeColor,
           labelAutoRotate: false,
           labelBackground: true,
-          labelBackgroundFill: "#ffffff",
-          labelBackgroundOpacity: 0.86,
-          labelBackgroundStroke: "#c6d6f1",
-          labelFill: "#2f5f9f",
+          labelBackgroundFill: graphCanvasTheme.edgeLabelBackgroundFill,
+          labelBackgroundOpacity: graphCanvasTheme.edgeLabelBackgroundOpacity,
+          labelBackgroundStroke: graphCanvasTheme.edgeLabelBackgroundStroke,
+          labelFill: graphCanvasTheme.activeEdgeColor,
           labelFontFamily: "Inter Variable, Inter, sans-serif",
           labelFontWeight: 700,
           labelOffsetX: 0,
@@ -896,7 +939,7 @@ function buildG6Data(
           labelTextBaseline: "middle",
           lineWidth: active ? 1.35 : 0.8,
           opacity: active ? 0.72 : 0.38,
-          stroke: active ? "#2f5f9f" : "#cfd6d6",
+          stroke: active ? graphCanvasTheme.activeEdgeColor : graphCanvasTheme.edgeStroke,
           zIndex: active ? 4 : 1,
           ...buildEdgeZoomStyle(edge, active, zoom),
         },
@@ -985,10 +1028,12 @@ export function GraphCanvas({
   zoom,
 }: GraphCanvasProps) {
   const { i18n, t } = useTranslation(["pages"]);
+  const { theme } = useTheme();
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:knowledgeGraph.${key}`, { defaultValue, ...options })
   );
   const locale = i18n.resolvedLanguage ?? i18n.language;
+  const graphCanvasTheme = graphCanvasThemes[theme];
   const containerRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLButtonElement | null>(null);
   const minimapDragRef = useRef<MinimapDragState | null>(null);
@@ -1035,8 +1080,8 @@ export function GraphCanvas({
     [edges, visibleNodeCodes],
   );
   const g6Data = useMemo(
-    () => buildG6Data(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoomRef.current, nodeLabelProperty),
-    [graphBounds, highlightedEdgeCodes, highlightedNodeCodes, nodeLabelProperty, positionedNodes, renderEdges, selectedNodeCode],
+    () => buildG6Data(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoomRef.current, nodeLabelProperty, graphCanvasTheme),
+    [graphBounds, graphCanvasTheme, highlightedEdgeCodes, highlightedNodeCodes, nodeLabelProperty, positionedNodes, renderEdges, selectedNodeCode],
   );
   const zoomStyleData = useMemo(
     () => buildG6ZoomStyleData(positionedNodes, renderEdges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoom),
@@ -1355,14 +1400,17 @@ export function GraphCanvas({
       className="relative h-full min-h-0 min-w-0 overflow-hidden bg-[var(--color-surface-container-lowest)]"
       aria-label={pageT("canvas.aria", "G6 semantic knowledge graph canvas")}
       style={{
-        backgroundImage: "radial-gradient(circle at 1px 1px, rgba(68,71,72,0.13) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.76), rgba(243,244,244,0.58))",
+        backgroundImage: graphCanvasTheme.canvasBackgroundImage,
         backgroundSize: "20px 20px, 100% 100%",
       }}
     >
       <div ref={containerRef} className="absolute inset-0 z-0" />
       <div className="sr-only" aria-label={pageT("canvas.nodeLabelsAria", "Graph node labels")}>{nodeLabelPreview}</div>
 
-      <div className="absolute bottom-4 left-4 z-20 rounded-xl border border-[var(--color-card-border)] bg-white/88 p-2 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm">
+      <div
+        className="absolute bottom-4 left-4 z-20 rounded-xl border border-[var(--color-card-border)] p-2 shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+        style={floatingCanvasPanelStyle}
+      >
         <button
           ref={minimapRef}
           aria-label={pageT("canvas.minimapAria", "Pan graph viewport")}
@@ -1381,18 +1429,21 @@ export function GraphCanvas({
             <span
               className={cn(
                 "absolute -translate-x-1/2 -translate-y-1/2 rounded-full",
-                node.nodeCode === selectedNodeCode ? "size-2.5 ring-2 ring-[#2f5f9f]/25" : "size-1.5",
+                node.nodeCode === selectedNodeCode ? "size-2.5" : "size-1.5",
               )}
               key={`mini-${node.nodeCode}`}
               style={{
                 backgroundColor: graphNodeColorForGroup(node.colorGroup).color,
+                boxShadow: node.nodeCode === selectedNodeCode ? "0 0 0 2px color-mix(in srgb, var(--color-focus-ring) 28%, transparent)" : undefined,
                 ...minimapNodePosition(node, graphBounds),
               }}
             />
           ))}
           <span
-            className="absolute rounded-md border border-[var(--color-accent)]/60 bg-white/22 shadow-[0_0_0_1px_rgba(255,255,255,0.55)_inset]"
+            className="absolute rounded-md border border-[var(--color-accent)]/60"
             style={{
+              backgroundColor: "color-mix(in srgb, var(--color-on-surface) 20%, transparent)",
+              boxShadow: "inset 0 0 0 1px color-mix(in srgb, var(--color-on-surface) 24%, transparent)",
               height: `${minimapViewport.height}%`,
               left: `${minimapViewport.left}%`,
               top: `${minimapViewport.top}%`,
@@ -1405,7 +1456,8 @@ export function GraphCanvas({
       <GraphLegend items={legendItems} />
       <div
         aria-label={pageT("canvas.metricsAria", "Graph canvas metrics")}
-        className="absolute bottom-16 right-4 z-20 flex items-center gap-2 rounded-xl border border-[var(--color-card-border)] bg-white/88 px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+        className="absolute bottom-16 right-4 z-20 flex items-center gap-2 rounded-xl border border-[var(--color-card-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+        style={floatingCanvasPanelStyle}
       >
         <span>{pageT("canvas.metrics.nodes", "{{count}} nodes", { count: numberText(metrics.nodeCount, locale) })}</span>
         <span className="text-[var(--color-outline)]">·</span>
