@@ -21,7 +21,7 @@ httpClients:
 
 mineru:
   enabled: true
-  baseUrl: http://127.0.0.1:8000
+  baseUrl: https://pre-platform.cisdigital.cn/mineru
   parseEndpoint: /file_parse
   timeoutSeconds: 300
   maxBytes: 52428800

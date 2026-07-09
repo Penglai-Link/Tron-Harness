@@ -62,6 +62,11 @@ fn application_yaml_uses_home_storage_defaults() {
             .retained_history_ratio_bps,
         2000
     );
+    assert_eq!(
+        config.mineru.base_url,
+        "https://pre-platform.cisdigital.cn/mineru"
+    );
+    assert_eq!(config.mineru.parse_endpoint, "/file_parse");
 }
 
 #[test]
