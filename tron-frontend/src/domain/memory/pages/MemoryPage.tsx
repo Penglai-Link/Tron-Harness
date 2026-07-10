@@ -19,6 +19,7 @@ import {
 import { useNavigate } from "react-router";
 
 import { useAuthSession } from "@/domain/auth";
+import { MemoryRecordSummary } from "@/domain/memory/components";
 import {
   defaultMemoryFilters,
   memoryInjectableOptions,
@@ -488,19 +489,10 @@ function MemoryRecordsTable({
                     key={memory.id}
                   >
                     <div className="min-w-0 lg:px-5 lg:py-4">
-                      <button
-                        className="text-left text-base font-medium leading-6 tracking-normal text-[#1a0dab] hover:underline"
-                        type="button"
-                        onClick={() => onOpen(memory)}
-                      >
-                        {memory.title}
-                      </button>
-                      <p className="mt-1 text-[13px] leading-5 text-[var(--color-on-surface)]">
-                        {memory.text}
-                      </p>
-                      <div className="mt-1 max-w-full overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[12px] leading-5 text-[var(--color-on-surface-variant)]">
-                        {memory.memoryCode}
-                      </div>
+                      <MemoryRecordSummary
+                        memory={memory}
+                        onOpen={() => onOpen(memory)}
+                      />
                     </div>
                     <MemoryCell label="Type">
                       <Badge className="w-fit max-w-full font-bold" tone={getTypeTone(memory)}>{memory.memoryType}</Badge>
