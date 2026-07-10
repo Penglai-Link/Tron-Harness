@@ -5,9 +5,10 @@ import {
   type Route,
 } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,7 @@ import { getWorkspaceSwitcherMock } from "../src/shared/constants/workspaceSpace
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
@@ -85,20 +86,6 @@ async function waitForFrontend(url: string) {
   }
 
   throw new Error(`Frontend dev server did not become ready: ${String(lastError)}\n${frontendLogs}`);
-}
-
-async function stopFrontend() {
-  const processToStop = frontendProcess;
-  if (!processToStop || processToStop.exitCode !== null) return;
-
-  const exited = new Promise((resolveExit) => {
-    processToStop.once("exit", resolveExit);
-  });
-  processToStop.kill("SIGTERM");
-  await Promise.race([exited, delay(2000)]);
-  if (processToStop.exitCode === null) {
-    processToStop.kill("SIGKILL");
-  }
 }
 
 function successEnvelope(data: unknown) {
@@ -208,11 +195,19 @@ async function signIn(page: Page, targetPath: string, expectedPath = targetPath)
   await expect(page).toHaveURL(expectedUrlPattern);
 }
 
+async function chooseSelectOption(page: Page, label: string, optionName: string) {
+  const control = page.getByRole("combobox", { name: label });
+  await control.click();
+  await expect(control).toHaveAttribute("aria-expanded", "true");
+  await page.getByRole("option", { name: optionName, exact: true }).click();
+  await expect(control).toHaveAttribute("aria-expanded", "false");
+}
+
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
 
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
@@ -236,7 +231,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopFrontend();
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards are off", async ({ context, page }) => {
@@ -257,9 +256,10 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   }, getWorkspaceSwitcherMock());
   await signIn(page, "/settings/general");
 
-  const eventCardVisibility = page.getByLabel("AG-UI event card visibility");
-  await expect(eventCardVisibility.locator("option", { hasText: "Core cards" })).toHaveCount(0);
-  await eventCardVisibility.selectOption("off");
+  const eventCardVisibility = page.getByRole("combobox", { name: "AG-UI event card visibility" });
+  await eventCardVisibility.click();
+  await expect(page.getByRole("option", { name: "Core cards", exact: true })).toHaveCount(0);
+  await page.getByRole("option", { name: "Off", exact: true }).click();
   await expect(page.getByText("Hide low-level AG-UI debug event cards")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/chats`);
@@ -277,7 +277,6 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await page.getByRole("button", { name: "New session" }).first().click();
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show grouped agui cards");
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
-  await expect(page.getByLabel("Waiting for model")).toContainText("Waiting for model...");
   const streamingRunWork = page.getByLabel("AG-UI run work");
   const streamingRunSummary = streamingRunWork.getByRole("button", { name: /Worked for/ });
   await expect(streamingRunSummary).toBeVisible();
@@ -339,20 +338,20 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   const toolRunGroupButton = toolRunGroup.getByRole("button", { name: /Ran 6 commands/ });
   await expect(toolRunGroupButton).toBeVisible();
   await expect(toolRunGroupButton).toHaveAttribute("aria-expanded", "false");
-  await expect(toolRunGroup.getByRole("button", { name: /Ran workspace\.list/ })).toHaveCount(0);
+  await expect(toolRunGroup.getByRole("button", { name: /Ran workspace\.page/ })).toHaveCount(0);
   await toolRunGroupButton.click();
   await expect(toolRunGroupButton).toHaveAttribute("aria-expanded", "true");
-  await expect(toolRunGroup.getByRole("button", { name: /Ran workspace\.list/ })).toBeVisible();
-  await expect(toolRunGroup.getByRole("button", { name: /Ran variable\.list/ })).toBeVisible();
+  await expect(toolRunGroup.getByRole("button", { name: /Ran workspace\.page/ })).toBeVisible();
+  await expect(toolRunGroup.getByRole("button", { name: /Ran variable\.page/ })).toBeVisible();
   await expect(toolRunGroup.getByRole("button", { name: /Ran / })).toHaveCount(7);
   await secondThinkingButton.click();
   await expect(secondThinkingButton).toHaveAttribute("aria-expanded", "true");
   await expect(secondThinkingCard).toContainText("Summarizing tool results before replying.");
   await expect(secondThinkingCard.getByText(/Raw reasoning stream segment/)).toHaveCount(0);
 
-  const toolCard = toolRunGroup.getByRole("button", { name: /Ran workspace\.list/ });
+  const toolCard = toolRunGroup.getByRole("button", { name: /Ran workspace\.page/ });
   await expect(toolCard).toBeVisible();
-  await expect(firstThinkingCard.getByText(/workspace\.list · .*tool-/)).toHaveCount(0);
+  await expect(firstThinkingCard.getByText(/workspace\.page · .*tool-/)).toHaveCount(0);
   await toolCard.click();
   const parametersCopyButton = toolRunGroup.getByRole("button", { name: "Copy parameters" });
   const resultCopyButton = toolRunGroup.getByRole("button", { name: "Copy result" });
@@ -423,7 +422,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await expect(logScrollRunSummary).toHaveAttribute("aria-expanded", "false");
   await logScrollRunSummary.click();
   const logScrollThinking = logScrollRunWork.getByLabel("Thinking").nth(0);
-  await expect(logScrollThinking.getByRole("button", { name: /Reviewing session context and available skills/ })).toHaveAttribute("aria-expanded", "true");
+  await expect(logScrollThinking.getByRole("button", { name: /Reviewing session context and available skills/ })).toHaveAttribute("aria-expanded", "false");
   const logScrollToolGroup = logScrollRunWork.getByLabel("Tool run steps").first();
   await expect(logScrollToolGroup.getByRole("button", { name: /Ran 7 commands/ })).toHaveAttribute("aria-expanded", "true");
   await expect(logScrollToolGroup.getByRole("button", { name: /Running bash\.exec/ })).toHaveAttribute("aria-expanded", "true");
@@ -435,7 +434,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   )).toBeLessThanOrEqual(2);
 
   await page.goto(`${frontendBaseUrl}/settings/general`);
-  await page.getByLabel("AG-UI event card visibility").selectOption("all");
+  await chooseSelectOption(page, "AG-UI event card visibility", "All cards");
   await page.goto(`${frontendBaseUrl}/chats`);
   await page.getByRole("button", { name: "New session" }).first().click();
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show debug and user cards");

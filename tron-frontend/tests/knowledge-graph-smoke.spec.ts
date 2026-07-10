@@ -5,9 +5,10 @@ import {
   type Route,
 } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -101,7 +102,7 @@ async function reservePort() {
   });
 }
 
-async function waitForFrontend(url: string, process: ChildProcessWithoutNullStreams, logs: () => string) {
+async function waitForFrontend(url: string, process: ManagedProcess, logs: () => string) {
   const deadline = Date.now() + 30_000;
   let lastError: unknown;
 
@@ -128,7 +129,7 @@ async function startFrontend(env: NodeJS.ProcessEnv): Promise<FrontendHarness> {
   const baseUrl = `http://127.0.0.1:${port}`;
   let frontendLogs = "";
 
-  const frontendProcess = spawn(
+  let frontendProcess: ManagedProcess | undefined = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port)],
     {
@@ -147,17 +148,23 @@ async function startFrontend(env: NodeJS.ProcessEnv): Promise<FrontendHarness> {
   frontendProcess.stdout.on("data", appendFrontendLog);
   frontendProcess.stderr.on("data", appendFrontendLog);
 
-  await waitForFrontend(`${baseUrl}/knowledge-graph`, frontendProcess, () => frontendLogs);
+  try {
+    await waitForFrontend(`${baseUrl}/knowledge-graph`, frontendProcess, () => frontendLogs);
+  } catch (error) {
+    await stopManagedProcess(frontendProcess);
+    frontendProcess = undefined;
+    throw error;
+  }
 
   return {
     baseUrl,
     logs: () => frontendLogs,
     stop: async () => {
-      frontendProcess.kill("SIGTERM");
-      await new Promise<void>((resolveProcess) => {
-        frontendProcess.once("exit", () => resolveProcess());
-        setTimeout(() => resolveProcess(), 5_000);
-      });
+      try {
+        await stopManagedProcess(frontendProcess);
+      } finally {
+        frontendProcess = undefined;
+      }
     },
   };
 }

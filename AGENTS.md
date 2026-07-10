@@ -42,5 +42,3 @@ Pagable response body format:
 ## What's more
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
 
-<!-- Codex note 2026-06-29: The desktop right sidebar can keep rightPanel content mounted while collapsed through the resizable panel. Browser tests that assert chat right-panel text should first open it via the topbar toggle or `tron:open-right-sidebar`, then scope assertions to `[data-testid="tron-right-sidebar"]` instead of the whole `body`. -->
-<!-- Codex note 2026-07-08: During a dev-api restart shutdown, backend logs showed `short-term memory sqlite goal conflict: UNIQUE constraint failed: agent_session_goals.session_code`; after shutdown, ports 8080/5173 released normally. -->

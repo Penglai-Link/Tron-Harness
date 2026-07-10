@@ -5,9 +5,10 @@ import {
   type Page,
 } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -16,7 +17,7 @@ const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 const mockStorageKey = "tron.rag.mock.corpora";
 
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
@@ -129,7 +130,7 @@ async function openFieldConfig(page: Page, tabName: "Source fields" | "Text unit
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
-  frontendProcess = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port)], {
+  frontendProcess = spawnManagedProcess("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port)], {
     cwd: frontendRoot,
     env: {
       ...process.env,
@@ -148,9 +149,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (!frontendProcess || frontendProcess.killed) return;
-  frontendProcess.kill("SIGTERM");
-  await new Promise((resolveProcess) => frontendProcess?.once("exit", resolveProcess));
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test.beforeEach(async ({ page }) => {
@@ -188,14 +191,14 @@ test("creates target-first mixed-media corpus config and derives the registry su
   await expect(controlByAriaLabel(page, "Storage target 2 table")).toHaveValue("rag_support_notes_text_units");
   await expect(controlByAriaLabel(page, "Storage target 3 table")).toHaveValue("rag_support_notes_vectors");
   await expect(controlByAriaLabel(page, "Storage target 4 table")).toHaveCount(0);
-  await expect(controlByAriaLabel(page, "Source target")).toContainText("source-store");
-  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("text-unit-store");
-  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("text-unit-store");
-  await expect(controlByAriaLabel(page, "Vector target")).toContainText("vector-store");
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("rag_support_notes_sources");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("rag_support_notes_text_units");
+  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("rag_support_notes_text_units");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("rag_support_notes_vectors");
   await expect(controlByAriaLabel(page, "Summary tree target")).toHaveCount(0);
   await enableSummaryTree(page);
   await expect(controlByAriaLabel(page, "Storage target 4 table")).toHaveValue("rag_support_notes_tree_nodes");
-  await expect(controlByAriaLabel(page, "Summary tree target")).toContainText("tree-store");
+  await expect(controlByAriaLabel(page, "Summary tree target")).toContainText("rag_support_notes_tree_nodes");
   await chooseSelectOption(page, controlByAriaLabel(page, "Fulltext index target"), "rag_support_notes_vectors");
   await chooseSelectOption(page, controlByAriaLabel(page, "Storage target 3 backend"), "Graph storage");
   await controlByAriaLabel(page, "Storage target 3 graph namespace").fill("rag_doc");
@@ -358,17 +361,19 @@ test("keeps at least one storage target and shows physical target names in segme
 
   await page.getByLabel("Corpus code").fill("test");
   await openAdvancedStorage(page);
-  await expect(controlByAriaLabel(page, "Source target")).toContainText("source-store");
-  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("text-unit-store");
-  await expect(controlByAriaLabel(page, "Vector target")).toContainText("vector-store");
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("rag_test_sources");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("rag_test_text_units");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("rag_test_vectors");
   await expect(controlByAriaLabel(page, "Summary tree target")).toHaveCount(0);
   const sourceTargetOptionTexts = await selectOptionTexts(page, controlByAriaLabel(page, "Source target"));
   expect(sourceTargetOptionTexts.join(" ")).not.toContain("Storage Target");
 
   await page.getByRole("button", { name: "Remove storage target 3" }).click();
+  await expect(page.getByRole("button", { name: /Remove storage target/ })).toHaveCount(2);
   await page.getByRole("button", { name: "Remove storage target 2" }).click();
 
-  await expect(controlByAriaLabel(page, "Storage target 1 backend")).toBeVisible();
+  await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveValue("rag_test_sources");
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("rag_test_sources");
   await expect(page.getByRole("button", { name: /Remove storage target/ })).toHaveCount(0);
 });
 
@@ -432,16 +437,16 @@ test("edits seeded project document storage structure with target reuse in previ
   await expect(controlByAriaLabel(page, "Storage target 1 id")).toHaveCount(0);
   await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveValue("rag_project_doc_sources");
   await expect(controlByAriaLabel(page, "Storage target 2 table")).toHaveValue("rag_project_doc_text_units");
-  await expect(controlByAriaLabel(page, "Source target")).toContainText("source-store");
-  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("content-store");
-  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("content-store");
-  await expect(controlByAriaLabel(page, "Vector target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("rag_project_doc_sources");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("rag_project_doc_text_units");
+  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("rag_project_doc_text_units");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("rag_project_doc_text_units");
 
   await chooseSelectOption(page, controlByAriaLabel(page, "Storage target 2 backend"), "Graph storage");
   await controlByAriaLabel(page, "Storage target 2 graph namespace").fill("rag_doc");
   await controlByAriaLabel(page, "Storage target 2 node label").fill("RagDocUnit");
-  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("content-store");
-  await expect(controlByAriaLabel(page, "Vector target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("rag_doc/RagDocUnit");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("rag_doc/RagDocUnit");
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page).toHaveURL(/\/rag$/);
@@ -491,10 +496,10 @@ test("seeded memory-card edit preserves target-first bindings", async ({ page })
   await openAdvancedStorage(page);
   await expect(controlByAriaLabel(page, "Storage target 1 id")).toHaveCount(0);
   await expect(controlByAriaLabel(page, "Storage target 1 table")).toHaveValue("rag_memory_text_units");
-  await expect(controlByAriaLabel(page, "Source target")).toContainText("content-store");
-  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("content-store");
-  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("content-store");
-  await expect(controlByAriaLabel(page, "Vector target")).toContainText("content-store");
+  await expect(controlByAriaLabel(page, "Source target")).toContainText("rag_memory_text_units");
+  await expect(controlByAriaLabel(page, "Text unit target")).toContainText("rag_memory_text_units");
+  await expect(controlByAriaLabel(page, "Fulltext index target")).toContainText("rag_memory_text_units");
+  await expect(controlByAriaLabel(page, "Vector target")).toContainText("rag_memory_text_units");
   await expect(page.getByRole("heading", { name: "Linked Profiles" })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Filters And Route Summary" })).toHaveCount(0);
   await openFieldConfig(page, "Filter fields");

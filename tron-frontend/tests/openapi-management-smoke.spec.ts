@@ -6,11 +6,16 @@ import {
   rmSync,
   writeFileSync,
 } from "node:fs";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:net";
 import { join, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
+
+import {
+  spawnManagedProcess,
+  stopManagedProcesses,
+  type ManagedProcess,
+} from "./support/managed-process";
 
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
@@ -23,8 +28,8 @@ const createDescription = "Browser-driven lifecycle verification.";
 const userGrantCode = "USR-ADMIN";
 const backendHealthPath = "/api/v1/health";
 
-let backendProcess: ChildProcessWithoutNullStreams | undefined;
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let backendProcess: ManagedProcess | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let backendLogs = "";
 let frontendLogs = "";
 let backendBaseUrl = "";
@@ -85,31 +90,6 @@ async function waitForUrl(url: string, label: string, failureLogs: () => string)
   throw new Error(`${label} did not become ready: ${String(lastError)}\n${failureLogs()}`);
 }
 
-async function stopProcess(processToStop: ChildProcessWithoutNullStreams | undefined) {
-  if (!processToStop || processToStop.exitCode !== null || processToStop.signalCode !== null) return;
-
-  const processExited = new Promise((resolveProcess) => {
-    processToStop.once("exit", resolveProcess);
-  });
-  if (processToStop.pid) {
-    process.kill(-processToStop.pid, "SIGTERM");
-  } else {
-    processToStop.kill("SIGTERM");
-  }
-  await Promise.race([
-    processExited,
-    new Promise((resolveProcess) => setTimeout(resolveProcess, 5_000)),
-  ]);
-
-  if (processToStop.exitCode === null && processToStop.signalCode === null) {
-    if (processToStop.pid) {
-      process.kill(-processToStop.pid, "SIGKILL");
-    } else {
-      processToStop.kill("SIGKILL");
-    }
-  }
-}
-
 function toast(page: Page, message: string | RegExp) {
   return page
     .locator('[aria-label="Notifications"]')
@@ -143,7 +123,7 @@ test.beforeAll(async () => {
   backendBaseUrl = `http://127.0.0.1:${backendPort}`;
   frontendBaseUrl = `http://127.0.0.1:${frontendPort}`;
 
-  backendProcess = spawn(
+  backendProcess = spawnManagedProcess(
     "make",
     [
       "be-run",
@@ -152,7 +132,6 @@ test.beforeAll(async () => {
     ],
     {
       cwd: repoRoot,
-      detached: true,
       env: {
         ...process.env,
         TRON_BACKEND_DATABASE_URL: databasePath,
@@ -169,12 +148,11 @@ test.beforeAll(async () => {
     () => backendLogs,
   );
 
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(frontendPort)],
     {
       cwd: frontendRoot,
-      detached: true,
       env: {
         ...process.env,
         TRON_FRONTEND_API_PROXY_TARGET: backendBaseUrl,
@@ -197,10 +175,17 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopProcess(frontendProcess);
-  await stopProcess(backendProcess);
-  if (tempRunDir) {
-    rmSync(tempRunDir, { force: true, recursive: true });
+  const processesToStop = [frontendProcess, backendProcess];
+  frontendProcess = undefined;
+  backendProcess = undefined;
+
+  try {
+    await stopManagedProcesses(processesToStop);
+  } finally {
+    if (tempRunDir) {
+      rmSync(tempRunDir, { force: true, recursive: true });
+      tempRunDir = "";
+    }
   }
 });
 

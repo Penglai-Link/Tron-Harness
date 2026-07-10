@@ -1,15 +1,19 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
-import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
 import { getWorkspaceSwitcherMock } from "../src/shared/constants/workspaceSpaces";
+import {
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
@@ -78,20 +82,6 @@ async function waitForFrontend(url: string) {
   throw new Error(`Frontend dev server did not become ready: ${String(lastError)}\n${frontendLogs}`);
 }
 
-async function stopFrontend() {
-  const processToStop = frontendProcess;
-  if (!processToStop || processToStop.exitCode !== null) return;
-
-  const exited = new Promise((resolveExit) => {
-    processToStop.once("exit", resolveExit);
-  });
-  processToStop.kill("SIGTERM");
-  await Promise.race([exited, delay(2000)]);
-  if (processToStop.exitCode === null) {
-    processToStop.kill("SIGKILL");
-  }
-}
-
 async function expectMainComposerFocused(page: Page) {
   await expect.poll(() => page.evaluate(() => {
     const active = document.activeElement;
@@ -99,6 +89,11 @@ async function expectMainComposerFocused(page: Page) {
       && active.placeholder === "Enter to send, Shift+Enter for newline"
       && active.closest("main") !== null;
   })).toBe(true);
+}
+
+async function selectTaskSessions(page: Page) {
+  await page.getByRole("tab", { name: "Task sessions" }).click();
+  await expect(page.getByText("Primary investigation", { exact: true }).first()).toBeVisible();
 }
 
 function successEnvelope(data: unknown) {
@@ -208,7 +203,7 @@ test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
 
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
@@ -234,7 +229,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopFrontend();
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test("chat agent and model selectors are linked and agent locks after first turn", async ({ page }) => {
@@ -270,7 +269,7 @@ test("chat agent and model selectors are linked and agent locks after first turn
 
   await page.goto(`${frontendBaseUrl}/chats`);
   await expect(page).toHaveURL(/\/chats$/);
-  await expect(page.getByText("Primary investigation", { exact: true }).first()).toBeVisible();
+  await selectTaskSessions(page);
 
   await page.locator("[aria-label='New session']").first().click();
 
@@ -349,6 +348,7 @@ test("new sessions always start on main agent after browsing a system agent sess
 
   await page.goto(`${frontendBaseUrl}/chats`);
   await expect(page).toHaveURL(/\/chats$/);
+  await selectTaskSessions(page);
 
   await page.getByText("Refactor discussion", { exact: true }).first().click();
   const sessionHeader = page.locator("main > header");
@@ -392,6 +392,7 @@ test("composer autofocuses when opening or creating a session on desktop", async
 
   await page.goto(`${frontendBaseUrl}/chats`);
   await expect(page).toHaveURL(/\/chats$/);
+  await selectTaskSessions(page);
 
   await expectMainComposerFocused(page);
 
@@ -435,16 +436,16 @@ test("system agent sessions show history snapshot in context sidebar", async ({ 
 
   await page.goto(`${frontendBaseUrl}/chats`);
   await expect(page).toHaveURL(/\/chats$/);
-  await expect(page.getByText("Refactor discussion", { exact: true }).first()).toBeVisible();
+  await selectTaskSessions(page);
 
   await page.getByText("Refactor discussion", { exact: true }).first().click();
   const openRightSidebarButton = page.getByRole("button", { name: "Open right sidebar" });
   if ((await openRightSidebarButton.count()) > 0) {
     await openRightSidebarButton.first().click();
   }
-  await expect(page.getByText("Run Context", { exact: true })).toBeVisible();
-  await expect(page.getByText("System Agent Session", { exact: true })).toBeVisible();
-  await expect(page.getByText("thr_codex_mock_39", { exact: true })).toBeVisible();
-  await expect(page.getByText("codex", { exact: true })).toBeVisible();
-  await expect(page.getByText(/rollout-\*?-thr_codex_mock_39\.jsonl/)).toBeVisible();
+  const rightSidebar = page.getByTestId("tron-right-sidebar");
+  await rightSidebar.getByRole("tab", { name: "Context" }).click();
+  await expect(rightSidebar.getByText("Short-Term Memory Overview")).toBeVisible();
+  await expect(rightSidebar.getByText("Context Structure")).toBeVisible();
+  await expect(rightSidebar.getByText("Current Session History")).toBeVisible();
 });

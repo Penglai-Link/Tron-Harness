@@ -5,9 +5,10 @@ import {
   type Route,
 } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { createServer } from "node:net";
 import { readFileSync } from "node:fs";
 import { resolve } from "node:path";
@@ -17,7 +18,7 @@ test.describe.configure({ timeout: 45_000 });
 
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
@@ -395,7 +396,7 @@ test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
 
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port)],
     {
@@ -416,12 +417,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  if (!frontendProcess) return;
-  frontendProcess.kill("SIGTERM");
-  await new Promise<void>((resolveProcess) => {
-    frontendProcess?.once("exit", () => resolveProcess());
-    setTimeout(() => resolveProcess(), 5_000);
-  });
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test("redirects anonymous users to login, signs in, reaches user management, and returns to login after logout", async ({ page }) => {

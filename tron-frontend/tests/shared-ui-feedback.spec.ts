@@ -12,9 +12,10 @@ import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
@@ -22,7 +23,7 @@ const toastSourcePath = resolve(frontendRoot, "src/shared/ui/Toast.tsx");
 const redExpectationTimeout = 2500;
 const toastAutoDismissTimeout = 3000;
 
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
@@ -89,20 +90,6 @@ async function waitForFrontend(url: string) {
   throw new Error(`Frontend dev server did not become ready: ${String(lastError)}\n${frontendLogs}`);
 }
 
-async function stopFrontend() {
-  const processToStop = frontendProcess;
-  if (!processToStop || processToStop.exitCode !== null) return;
-
-  const exited = new Promise((resolveExit) => {
-    processToStop.once("exit", resolveExit);
-  });
-  processToStop.kill("SIGTERM");
-  await Promise.race([exited, delay(2000)]);
-  if (processToStop.exitCode === null) {
-    processToStop.kill("SIGKILL");
-  }
-}
-
 async function openSharedShellPreview(page: Page) {
   await page.goto(`${frontendBaseUrl}/shared-shell-preview`);
   await expect(page).toHaveURL(/\/shared-shell-preview$/);
@@ -132,7 +119,7 @@ async function expectToastInTopRightViewport(toast: Locator, page: Page) {
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
@@ -155,7 +142,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopFrontend();
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test("TDD-FEEDBACK-01: shared toast provider, hook, and public export are wired", async () => {

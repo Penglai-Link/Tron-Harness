@@ -5,9 +5,10 @@ import {
   type Route,
 } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { readFileSync } from "node:fs";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -15,7 +16,7 @@ import { fileURLToPath } from "node:url";
 
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
@@ -784,7 +785,7 @@ async function routeDetailMutationApi(
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
@@ -809,16 +810,10 @@ test.beforeEach(async ({ page }) => {
 });
 
 test.afterAll(async () => {
-  const processToStop = frontendProcess;
-  if (!processToStop || processToStop.exitCode !== null) return;
-
-  const exited = new Promise((resolveExit) => {
-    processToStop.once("exit", resolveExit);
-  });
-  processToStop.kill("SIGTERM");
-  await Promise.race([exited, delay(2000)]);
-  if (processToStop.exitCode === null) {
-    processToStop.kill("SIGKILL");
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
   }
 });
 

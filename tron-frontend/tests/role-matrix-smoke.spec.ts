@@ -5,9 +5,10 @@ import {
   type Route,
 } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,7 +16,7 @@ import { fileURLToPath } from "node:url";
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 const STORAGE_KEY = "tron.admin.role-matrix.v1";
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 const authenticatedSession = {
@@ -38,31 +39,6 @@ const authenticatedGrant = {
   expiresIn: 900,
   session: authenticatedSession,
 };
-
-async function stopFrontend() {
-  const processToStop = frontendProcess;
-  if (!processToStop || processToStop.exitCode !== null || processToStop.signalCode !== null) return;
-
-  const processExited = new Promise((resolveProcess) => {
-    processToStop.once("exit", resolveProcess);
-  });
-  if (processToStop.pid) {
-    process.kill(-processToStop.pid, "SIGTERM");
-  } else {
-    processToStop.kill("SIGTERM");
-  }
-  await Promise.race([
-    processExited,
-    new Promise((resolveProcess) => setTimeout(resolveProcess, 5_000)),
-  ]);
-  if (processToStop.exitCode === null && processToStop.signalCode === null) {
-    if (processToStop.pid) {
-      process.kill(-processToStop.pid, "SIGKILL");
-    } else {
-      processToStop.kill("SIGKILL");
-    }
-  }
-}
 
 const permissionDomainList = ["Workspace", "Models", "Tasks", "Memory", "Skills", "MCP"];
 type RoleCatalogRecord = {
@@ -372,12 +348,11 @@ test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
 
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
       cwd: frontendRoot,
-      detached: true,
       env: {
         ...process.env,
         CI: "1",
@@ -395,7 +370,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopFrontend();
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test("role matrix interactions stay real across the simplified matrix workspace", async ({ page }) => {

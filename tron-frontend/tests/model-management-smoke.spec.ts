@@ -1,8 +1,9 @@
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -12,34 +13,9 @@ const frontendRoot = resolve(thisFilePath, "..", "..");
 const now = "2026-05-20T12:00:00Z";
 const MASKED_API_KEY_VALUE = "*****";
 
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
-
-async function stopFrontend() {
-  const processToStop = frontendProcess;
-  if (!processToStop || processToStop.exitCode !== null || processToStop.signalCode !== null) return;
-
-  const processExited = new Promise((resolveProcess) => {
-    processToStop.once("exit", resolveProcess);
-  });
-  if (processToStop.pid) {
-    process.kill(-processToStop.pid, "SIGTERM");
-  } else {
-    processToStop.kill("SIGTERM");
-  }
-  await Promise.race([
-    processExited,
-    new Promise((resolveProcess) => setTimeout(resolveProcess, 5_000)),
-  ]);
-  if (processToStop.exitCode === null && processToStop.signalCode === null) {
-    if (processToStop.pid) {
-      process.kill(-processToStop.pid, "SIGKILL");
-    } else {
-      processToStop.kill("SIGKILL");
-    }
-  }
-}
 
 type ModelScopeKind = "PLATFORM" | "WORKSPACE";
 type ModelSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
@@ -1330,9 +1306,8 @@ test("responses state options are localized on the model create page", async ({ 
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
-  frontendProcess = spawn("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
+  frontendProcess = spawnManagedProcess("npm", ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"], {
     cwd: frontendRoot,
-    detached: true,
     env: {
       ...process.env,
       CI: "1",
@@ -1348,7 +1323,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopFrontend();
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test("workspace models show local and inherited source semantics with inherited-from lineage", async ({ page }) => {

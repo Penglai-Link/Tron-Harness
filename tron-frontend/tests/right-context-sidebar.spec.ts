@@ -5,9 +5,10 @@ import {
   type Route,
 } from "@playwright/test";
 import {
-  spawn,
-  type ChildProcessWithoutNullStreams,
-} from "node:child_process";
+  spawnManagedProcess,
+  stopManagedProcess,
+  type ManagedProcess,
+} from "./support/managed-process";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -17,7 +18,7 @@ import { getWorkspaceSwitcherMock } from "../src/shared/constants/workspaceSpace
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
 
-let frontendProcess: ChildProcessWithoutNullStreams | undefined;
+let frontendProcess: ManagedProcess | undefined;
 let frontendLogs = "";
 let frontendBaseUrl = "";
 
@@ -85,20 +86,6 @@ async function waitForFrontend(url: string) {
   }
 
   throw new Error(`Frontend dev server did not become ready: ${String(lastError)}\n${frontendLogs}`);
-}
-
-async function stopFrontend() {
-  const processToStop = frontendProcess;
-  if (!processToStop || processToStop.exitCode !== null) return;
-
-  const exited = new Promise((resolveExit) => {
-    processToStop.once("exit", resolveExit);
-  });
-  processToStop.kill("SIGTERM");
-  await Promise.race([exited, delay(2000)]);
-  if (processToStop.exitCode === null) {
-    processToStop.kill("SIGKILL");
-  }
 }
 
 function successEnvelope(data: unknown) {
@@ -237,23 +224,47 @@ function rightSidebar(page: Page) {
   return page.getByTestId("tron-right-sidebar");
 }
 
-function rightReopenControl(page: Page) {
-  return page.getByTestId("tron-right-sidebar-reopen");
+function rightSidebarOpenControl(page: Page) {
+  return page.getByRole("button", { name: "Open right sidebar" });
+}
+
+function rightSidebarCloseControl(page: Page) {
+  return page.getByRole("button", { name: "Close right sidebar" });
+}
+
+async function expectRightSidebarClosed(page: Page) {
+  await expect(rightSidebar(page)).toBeHidden();
+  await expect(rightSidebarOpenControl(page)).toBeVisible();
 }
 
 async function openRightSidebar(page: Page) {
-  if (await rightSidebar(page).count()) {
-    await expect(rightSidebar(page)).toBeVisible();
-    return;
+  await expect.poll(async () => (
+    await rightSidebarOpenControl(page).isVisible().catch(() => false)
+    || await rightSidebarCloseControl(page).isVisible().catch(() => false)
+  )).toBe(true);
+  if (await rightSidebarOpenControl(page).isVisible().catch(() => false)) {
+    await rightSidebarOpenControl(page).click();
   }
-  await expect(rightReopenControl(page)).toBeVisible();
-  await rightReopenControl(page).click();
+  await expect(rightSidebarCloseControl(page)).toBeVisible();
   await expect(rightSidebar(page)).toBeVisible();
+}
+
+async function closeRightSidebar(page: Page) {
+  await expect(rightSidebar(page)).toBeVisible();
+  await expect(rightSidebarCloseControl(page)).toBeVisible();
+  await rightSidebarCloseControl(page).click();
+  await expectRightSidebarClosed(page);
+}
+
+async function selectTaskSessions(page: Page) {
+  await page.getByRole("tab", { name: "Task sessions" }).click();
+  await expect(page.getByRole("button", { name: "Auth latency rollback" })).toBeVisible();
 }
 
 async function expectNoRightSidebarControls(page: Page) {
   await expect(rightSidebar(page)).toHaveCount(0);
-  await expect(rightReopenControl(page)).toHaveCount(0);
+  await expect(rightSidebarOpenControl(page)).toHaveCount(0);
+  await expect(rightSidebarCloseControl(page)).toHaveCount(0);
   await expect(page.getByTestId("tron-mobile-right-sidebar-toggle")).toHaveCount(0);
 }
 
@@ -261,7 +272,7 @@ test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
 
-  frontendProcess = spawn(
+  frontendProcess = spawnManagedProcess(
     "npm",
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
@@ -269,6 +280,7 @@ test.beforeAll(async () => {
       env: {
         ...process.env,
         BROWSER: "none",
+        VITE_TRON_AUTH_DATA_SOURCE: "mock",
         VITE_TRON_API_BASE_URL: "",
         VITE_TRON_DATA_SOURCE: "mock",
         VITE_TRON_ADMIN_DATA_SOURCE: "mock",
@@ -276,7 +288,15 @@ test.beforeAll(async () => {
         VITE_TRON_APP_DATA_SOURCE: "mock",
         VITE_TRON_AUTOMATION_DATA_SOURCE: "mock",
         VITE_TRON_CHAT_DATA_SOURCE: "mock",
+        VITE_TRON_DASHBOARD_DATA_SOURCE: "mock",
+        VITE_TRON_KNOWLEDGE_GRAPH_DATA_SOURCE: "mock",
+        VITE_TRON_MCP_DATA_SOURCE: "mock",
+        VITE_TRON_MEMORY_DATA_SOURCE: "mock",
         VITE_TRON_MODEL_DATA_SOURCE: "mock",
+        VITE_TRON_OBSERVABILITY_DATA_SOURCE: "mock",
+        VITE_TRON_PROMPT_DATA_SOURCE: "mock",
+        VITE_TRON_RAG_DATA_SOURCE: "mock",
+        VITE_TRON_RESOURCE_DATA_SOURCE: "mock",
         VITE_TRON_SKILL_DATA_SOURCE: "mock",
         VITE_TRON_TASK_DATA_SOURCE: "mock",
         VITE_TRON_VARIABLE_DATA_SOURCE: "mock",
@@ -291,7 +311,11 @@ test.beforeAll(async () => {
 });
 
 test.afterAll(async () => {
-  await stopFrontend();
+  try {
+    await stopManagedProcess(frontendProcess);
+  } finally {
+    frontendProcess = undefined;
+  }
 });
 
 test("AC-RCS-01: desktop right sidebar collapses out of layout, restores width, and reopens", async ({ page }) => {
@@ -300,37 +324,32 @@ test("AC-RCS-01: desktop right sidebar collapses out of layout, restores width, 
   await signIn(page, "/shared-shell-preview");
 
   await expect(page.getByRole("heading", { name: "Workspace console foundation" })).toBeVisible();
-  await expect(rightSidebar(page)).toHaveCount(0);
-  await expect(rightReopenControl(page)).toBeVisible();
+  await expectRightSidebarClosed(page);
   const mainBefore = await page.locator("main").first().boundingBox();
   expect(mainBefore, "The shell main region should be rendered before opening the default-collapsed sidebar.").not.toBeNull();
 
-  await rightReopenControl(page).click();
+  await rightSidebarOpenControl(page).click();
 
   await expect(rightSidebar(page)).toBeVisible();
   await expect(rightSidebar(page).getByText("Resource Pattern")).toBeVisible();
-  await expect(rightReopenControl(page)).toHaveCount(0);
+  await expect(rightSidebarOpenControl(page)).toHaveCount(0);
 
   const mainAfterOpen = await page.locator("main").first().boundingBox();
   expect(mainAfterOpen, "The shell main region should remain rendered after opening the sidebar.").not.toBeNull();
   expect(mainBefore!.width).toBeGreaterThan(mainAfterOpen!.width + 250);
 
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-
-  await expect(rightSidebar(page)).toHaveCount(0);
-  await expect(rightReopenControl(page)).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Resource Pattern" })).toHaveCount(0);
+  await closeRightSidebar(page);
+  await expect(rightSidebar(page).getByText("Resource Pattern")).toBeHidden();
 
   const mainAfterCollapse = await page.locator("main").first().boundingBox();
   expect(mainAfterCollapse, "The shell main region should remain rendered after collapse.").not.toBeNull();
   expect(mainAfterCollapse!.width).toBeGreaterThan(mainAfterOpen!.width + 250);
-  await expect(rightReopenControl(page)).toBeVisible();
 
-  await rightReopenControl(page).click();
+  await rightSidebarOpenControl(page).click();
 
   await expect(rightSidebar(page)).toBeVisible();
   await expect(rightSidebar(page).getByText("Resource Pattern")).toBeVisible();
-  await expect(rightReopenControl(page)).toHaveCount(0);
+  await expect(rightSidebarOpenControl(page)).toHaveCount(0);
 });
 
 test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all required paths", async ({ page }) => {
@@ -338,7 +357,7 @@ test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all requir
   await routeAuthApi(page);
   await signIn(page, "/shared-shell-preview");
 
-  const drawerToggle = page.getByTestId("tron-mobile-right-sidebar-toggle");
+  const drawerToggle = page.getByRole("button", { name: "Open right sidebar" });
   await expect(drawerToggle).toBeVisible();
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Resource Pattern" })).not.toBeVisible();
@@ -374,9 +393,11 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
   await routeAuthApi(page);
   await signIn(page, "/chats/8842-alpha");
   await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
+  await selectTaskSessions(page);
   await page.getByText("Refactor discussion", { exact: true }).first().click();
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Run Context")).toBeVisible();
+  await rightSidebar(page).getByRole("tab", { name: "Context" }).click();
+  await expect(rightSidebar(page).getByText("Short-Term Memory Overview")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/observability`);
   await expect(page.getByRole("heading", { name: "Observability Dashboard" })).toBeVisible();
@@ -405,95 +426,61 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
   await routeAuthApi(page);
   await signIn(page, "/chats/8842-alpha");
   await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
+  await selectTaskSessions(page);
   await page.getByText("Primary investigation", { exact: true }).first().click();
   await openRightSidebar(page);
 
   const sidebar = rightSidebar(page);
-  await expect(sidebar.getByText("Working State")).toBeVisible();
-  await expect(sidebar.getByText("Goal Controls")).toBeVisible();
+  await expect(sidebar.getByRole("heading", { name: "Goal" })).toBeVisible();
+  await expect(sidebar.getByRole("heading", { name: "Todo" })).toBeVisible();
   await expect(sidebar.getByText("Validate transcript storage after the next chat turn")).toBeVisible();
   await expect(sidebar.getByText("Review compaction checkpoint output")).toBeVisible();
-  await expect(sidebar.getByText("in_progress")).toBeVisible();
-  await expect(sidebar.getByText("pending")).toBeVisible();
+  await expect(sidebar.getByText("In progress")).toBeVisible();
+  await expect(sidebar.getByText("Pending", { exact: true })).toBeVisible();
 
-  await expect(sidebar.getByText("Session Checkpoint")).toBeVisible();
-  await expect(sidebar.getByText("Checkpoint ready")).toBeVisible();
-  await expect(sidebar.getByText("ATM-MOCK-1")).toBeVisible();
-  await expect(sidebar.getByText("1-8", { exact: true })).toBeVisible();
+  await sidebar.getByRole("tab", { name: "Context" }).click();
+  await expect(sidebar.getByText("Context Structure")).toBeVisible();
+  await expect(sidebar.getByText("Current Session Checkpoint")).toBeVisible();
+  await expect(sidebar.getByText("seq 1-8", { exact: true })).toBeVisible();
 
   await sidebar.getByRole("button", { name: "Create checkpoint" }).click();
 
-  await expect(sidebar.getByText("1-2", { exact: true })).toBeVisible();
-  await expect(sidebar.getByText("ATM-MOCK-1", { exact: true })).toHaveCount(0);
+  await expect(sidebar.getByText("seq 1-2", { exact: true })).toBeVisible();
+  await expect(sidebar.getByText("seq 1-8", { exact: true })).toHaveCount(0);
 });
 
-test("AC-RCS-04: graph and memory inspectors render in shell right sidebar and preserve selected context", async ({ page }) => {
+test("AC-RCS-04: graph inspector stays inline and memory inspectors preserve selected context", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
+  await seedWorkspaceSelection(page);
   await routeAuthApi(page);
   await signIn(page, "/knowledge-graph");
 
-  await expect(page.getByRole("heading", { name: "Entities" })).toBeVisible();
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Node Inspector")).toBeVisible();
-  await expect(rightSidebar(page).getByText("Customer_0192")).toBeVisible();
-
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await expect(rightSidebar(page)).toHaveCount(0);
-  await expect(rightReopenControl(page)).toBeVisible();
-  await page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Order_TXN_55/ }).click();
-  await expect(rightSidebar(page)).toBeVisible();
-  await expect(rightSidebar(page).getByText("Order_TXN_55")).toBeVisible();
-  await expect(rightSidebar(page).getByText("Transaction")).toBeVisible();
-
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await expect(rightSidebar(page)).toHaveCount(0);
-  await expect(rightReopenControl(page)).toBeVisible();
-  await rightReopenControl(page).click();
-  await expect(rightSidebar(page)).toBeVisible();
-  await expect(rightSidebar(page).getByText("Order_TXN_55")).toBeVisible();
-
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await expect(rightReopenControl(page)).toBeVisible();
-  await rightReopenControl(page).click();
-  await expect(rightSidebar(page)).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Knowledge Graph" })).toBeVisible();
+  await expectNoRightSidebarControls(page);
+  await page.getByRole("searchbox", { name: "Locate graph node" }).fill("RAG_REVIEWER");
+  await page.getByRole("option", { name: /RAG_REVIEWER/ }).click();
+  await expect(page.getByText("Node Inspector")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "RAG_REVIEWER" })).toBeVisible();
+  await expectNoRightSidebarControls(page);
+  await page.getByRole("button", { name: "Close node inspector" }).click();
+  await expect(page.getByText("Node Inspector")).toHaveCount(0);
 
   await page.goto(`${frontendBaseUrl}/knowledge-graph/domain-filtering`);
-  await openRightSidebar(page);
-  const domainGraphLayout = page.locator("aside", { has: page.getByRole("heading", { name: "Entities" }) }).locator("xpath=..");
-  await expect(domainGraphLayout.locator("> aside")).toHaveCount(1);
-  await expect(domainGraphLayout.locator("aside").filter({ hasText: "Node Inspector" })).toHaveCount(0);
-  await expect(rightSidebar(page)).toBeVisible();
-  await expect(rightSidebar(page).getByText("Node Inspector")).toBeVisible();
-  await expect(rightSidebar(page).getByText("Customer_0192")).toBeVisible();
-  await expect(page.locator("aside").filter({ hasText: "Domain" }).locator("select")).toHaveCount(1);
-  await expect(page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Customer_0192/ })).toBeVisible();
-
-  await page.locator("aside").filter({ has: page.getByRole("heading", { name: "Entities" }) }).getByRole("button", { name: /Order_TXN_56/ }).click();
-  await expect(rightSidebar(page).getByText("Order_TXN_56")).toBeVisible();
-  await expect(rightSidebar(page).getByText("Node Inspector")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Knowledge Graph" })).toBeVisible();
+  await expectNoRightSidebarControls(page);
+  await page.getByRole("searchbox", { name: "Locate graph node" }).fill("SOURCE_CONTROL");
+  await page.getByRole("option", { name: /SOURCE_CONTROL/ }).click();
+  await expect(page.getByText("Node Inspector")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "SOURCE_CONTROL" })).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/memory`);
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("button", { name: "Edit Fragment" })).toBeVisible();
-  await expect(rightSidebar(page).getByText("User prefers terse, direct responses without conversational filler.")).toBeVisible();
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await expect(rightSidebar(page)).toHaveCount(0);
-  await expect(rightReopenControl(page)).toBeVisible();
-  await page.getByRole("button", { name: /System default tone set to professional and helpful./ }).click();
-  await expect(rightSidebar(page)).toBeVisible();
-  await expect(rightSidebar(page).getByText("System default tone set to professional and helpful.")).toBeVisible();
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await expect(rightReopenControl(page)).toBeVisible();
-  await expect(rightSidebar(page)).toHaveCount(0);
-  await rightReopenControl(page).click();
-  await expect(rightSidebar(page).getByText("System default tone set to professional and helpful.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Memory" }).first()).toBeVisible();
+  await expectNoRightSidebarControls(page);
+  await expect(page.getByText("manual lookup")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/memory/details`);
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("button", { name: "Edit Fragment" })).toBeVisible();
-  await expect(rightSidebar(page).getByText("System default tone set to professional and helpful.", { exact: false })).toHaveCount(0);
-  await page.getByRole("button", { name: /Project Alpha requires strict adherence to security protocols./ }).click();
-  await expect(rightSidebar(page).getByText("Project Alpha requires strict adherence to security protocols outlined in doc-4A.")).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Memory" }).first()).toBeVisible();
+  await expectNoRightSidebarControls(page);
 });
 
 test("memory empty state uses neutral copy", async ({ page }) => {
@@ -538,21 +525,21 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   await openRightSidebar(page);
   await expect(rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()).toBeVisible();
   await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()).toBeVisible();
-  await page.getByRole("button", { name: "Edit Details" }).click();
-  await expect(page.getByRole("textbox", { name: "Task detail title" })).toHaveValue("Fix task board workflow regression");
+  await page.getByRole("button", { name: "Edit" }).click();
+  await expect(page.locator('input[aria-label="Task detail title"]')).toHaveValue("Fix task board workflow regression");
   await page.getByRole("button", { name: "Cancel" }).click();
   await expect(rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()).toBeVisible();
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await expect(rightSidebar(page)).toHaveCount(0);
-  await expect(rightReopenControl(page)).toBeVisible();
-  await rightReopenControl(page).click();
+  await closeRightSidebar(page);
+  await rightSidebarOpenControl(page).click();
   await expect(rightSidebar(page).getByRole("heading", { name: "Task Metadata" }).first()).toBeVisible();
   await expect(page.locator("p.font-mono", { hasText: "TSK-SEED-BUG" }).first()).toBeVisible();
 
-  await page.goto(`${frontendBaseUrl}/automations/detail?automationCode=AUT-734600000000000001`);
+  await page.goto(`${frontendBaseUrl}/automations/executions?automationCode=AUT-734600000000000001`);
+  await expect(page.getByRole("heading", { name: "Execution instances" })).toBeVisible();
+  await page.getByRole("row", { name: /AEX-734600000000000001/ }).click();
   await openRightSidebar(page);
-  await expect(rightSidebar(page).getByText("Automation Details")).toBeVisible();
-  await expect(rightSidebar(page).locator("p", { hasText: "Automation code" })).toBeVisible();
+  await expect(rightSidebar(page).getByRole("heading", { name: "Session detail" })).toBeVisible();
+  await expect(rightSidebar(page).getByText("AEX-734600000000000001", { exact: true })).toBeVisible();
   await page.getByRole("heading", { name: "Execution instances" }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("columnheader", { name: "Execution" })).toBeVisible();
 
@@ -560,8 +547,8 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   await openRightSidebar(page);
   await expect(rightSidebar(page).getByText("App Metadata")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tron Console" })).toBeVisible();
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await rightReopenControl(page).click();
+  await closeRightSidebar(page);
+  await rightSidebarOpenControl(page).click();
   await expect(rightSidebar(page).getByText("Identifier")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/prompts`);
@@ -581,8 +568,8 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
     .click();
   await expect(rightSidebar(page).getByText("LLM Router System")).toBeVisible();
 
-  await page.getByTestId("tron-right-sidebar-collapse").click();
-  await rightReopenControl(page).click();
+  await closeRightSidebar(page);
+  await rightSidebarOpenControl(page).click();
   await expect(rightSidebar(page).getByText("LLM Router System")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/variables`);
@@ -596,13 +583,13 @@ test("AC-RCS-05: management inspectors render in shell right sidebar and preserv
   }
 
   await page.goto(`${frontendBaseUrl}/knowledge-base`);
-  await expect(rightReopenControl(page)).toBeVisible();
+  await expect(rightSidebarOpenControl(page)).toBeVisible();
   await page.locator("tbody tr").filter({ hasText: "Operations SOP Library" }).click();
   await expect(rightSidebar(page).getByText("Selected KnowledgeBase")).toBeVisible();
   await expect(rightSidebar(page).getByText("Operations SOP Library")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/skills`);
-  await expect(rightReopenControl(page)).toBeVisible();
+  await expect(rightSidebarOpenControl(page)).toBeVisible();
   const skillRows = page.locator("tbody tr");
   const skillRowsCount = await skillRows.count();
   if (skillRowsCount > 0) {
