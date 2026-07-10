@@ -262,7 +262,7 @@ export function MemoryDetailsPage() {
               />
             </SurfaceCard>
             <SurfaceCard className="space-y-5">
-              <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Locked identity</h2>
+              <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Identity</h2>
               <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
                 <Field label="Memory code">
                   <CodeValue>{memory.memoryCode}</CodeValue>
@@ -307,7 +307,7 @@ export function MemoryDetailsPage() {
               <div>
                 <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Metadata</h2>
                 <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                  Audit and identity fields for this memory.
+                  Identity, source, and audit fields.
                 </p>
               </div>
               <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
@@ -355,8 +355,8 @@ export function MemoryDetailsPage() {
         open={confirmAction !== null}
         title={confirmAction === "disable" ? "Disable memory?" : "Archive memory?"}
         description={confirmAction === "disable"
-          ? "This mock memory will be disabled and removed from automatic context use."
-          : "This mock memory will be archived and kept for later review."}
+          ? "This memory will be disabled and removed from auto context."
+          : "This memory will be archived and kept for later review."}
         confirmText={confirmAction === "disable" ? "Disable" : "Archive"}
         onCancel={() => setConfirmAction(null)}
         onConfirm={confirmMutation}

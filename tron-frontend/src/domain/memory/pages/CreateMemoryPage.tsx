@@ -119,7 +119,7 @@ export function CreateMemoryPage() {
     <>
       <PageHeader
         breadcrumbs={[{ label: "Memory", href: "/memory" }, { label: "New" }]}
-        title="Create Memory"
+        title="New Memory"
         actions={(
           <>
             <Button size="lg" variant="outline" onClick={() => navigate("/memory")}>Cancel</Button>

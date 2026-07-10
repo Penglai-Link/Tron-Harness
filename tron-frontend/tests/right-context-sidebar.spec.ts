@@ -502,11 +502,26 @@ test("memory empty state uses neutral copy", async ({ page }) => {
   await routeAuthApi(page);
   await signIn(page, "/memory");
 
-  await page.getByLabel("Search memories").fill("zz-empty-memory-copy");
+  await page.getByRole("searchbox", { name: "Search" }).fill("zz-empty-memory-copy");
 
   await expect(page.getByText("No memories found")).toBeVisible();
   await expect(page.getByText('No memories in Tron Core match "zz-empty-memory-copy".', { exact: true })).toBeVisible();
   await expect(page.getByText(/mock memories/i)).toHaveCount(0);
+});
+
+test("memory domain preview omits instructional helper copy", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await seedWorkspaceSelection(page);
+  await routeAuthApi(page);
+  await signIn(page, "/settings/memory-domains");
+
+  await page.getByText("Backend Engineering", { exact: true }).click();
+
+  const dialog = page.getByRole("dialog", { name: "Memory Domain" });
+  await expect(dialog).toBeVisible();
+  await expect(dialog.getByText("Review the selected domain before switching to edit mode.")).toHaveCount(0);
+  await expect(dialog.getByText("Domain-scoped memory targets use this catalog.")).toHaveCount(0);
+  await expect(dialog.getByText("Backend Engineering", { exact: true })).toBeVisible();
 });
 
 test("AC-RCS-05: management inspectors render in shell right sidebar and preserve page actions", async ({ page }) => {

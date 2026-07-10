@@ -317,7 +317,7 @@ function SearchTargetNav({
                   {target.id === activeTargetId ? <Check size={15} aria-hidden="true" /> : null}
                 </button>
               )) : (
-                <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">No more targets</p>
+                <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">All targets are shown</p>
               )}
             </div>
           ) : null}
@@ -385,14 +385,14 @@ function formatReviewStatus(reviewStatus: MemoryRecord["reviewStatus"]) {
 function getUseSummary(memory: MemoryRecord) {
   if (memory.injectable) {
     return {
-      detail: "available to agent",
+      detail: "added automatically",
       label: "Auto context",
       tone: "success" as const,
     };
   }
 
   return {
-    detail: "not injected",
+    detail: "manual lookup",
     label: "Search only",
     tone: "info" as const,
   };
@@ -686,7 +686,7 @@ function MemoryRepository() {
               variant="outline"
               onClick={() => {
                 setRefreshKey((value) => value + 1);
-                setNotice("Memory list refreshed.");
+                setNotice("Memory refreshed.");
               }}
             >
               Refresh

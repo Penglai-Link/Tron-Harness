@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useId,
   useMemo,
   useRef,
   useState,
@@ -196,6 +197,7 @@ function DomainEditorDialog({
   submitting: boolean;
 }) {
   const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleId = useId();
 
   useDismissibleLayer({
     dismissOnViewportChange: false,
@@ -217,17 +219,13 @@ function DomainEditorDialog({
         <div
           ref={dialogRef}
           aria-modal="true"
+          aria-labelledby={titleId}
           className="w-full max-w-2xl rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] shadow-[0_28px_70px_rgba(15,23,42,0.24)]"
           role="dialog"
         >
           <div className="flex items-start justify-between gap-4 border-b border-[var(--color-outline-variant)] px-6 py-5">
             <div className="min-w-0">
-              <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">{title}</h2>
-              <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                {readOnly
-                  ? "Review the selected domain before switching to edit mode."
-                  : "Domain-scoped memory targets use this catalog."}
-              </p>
+              <h2 id={titleId} className="text-lg font-semibold text-[var(--color-on-surface)]">{title}</h2>
             </div>
             <div className="flex items-center gap-2">
               {record ? (
@@ -606,7 +604,7 @@ export function PlatformMemoryDomainsPage() {
                 ariaLabel="Search memory domains"
                 className="w-full"
                 disabled={loading}
-                placeholder="Search memory domains..."
+                placeholder="Search domains"
                 value={query}
                 onChange={setQuery}
               />
@@ -647,7 +645,7 @@ export function PlatformMemoryDomainsPage() {
           tableClassName="table-fixed min-w-[900px]"
           pagination={<TablePagination itemLabel="memory domains" {...pagination.paginationProps} />}
           title="Domains"
-          emptyState="No memory domains match the current filters."
+          emptyState="No domains match the current filters."
           columns={[
             {
               id: "domain",
@@ -794,10 +792,10 @@ export function PlatformMemoryDomainsPage() {
       <ConfirmDialog
         cancelText="Cancel"
         confirmText={rowBusyCode === disableTarget?.domainCode ? "Disabling..." : "Disable"}
-        description={disableTarget ? `Disable ${disableTarget.name}? It will be removed from active domain targets.` : ""}
+        description={disableTarget ? `${disableTarget.name} will be removed from active memory targets.` : ""}
         open={Boolean(disableTarget)}
         pending={rowBusyCode === disableTarget?.domainCode}
-        title="Disable memory domain"
+        title="Disable domain?"
         tone="danger"
         onCancel={() => {
           if (rowBusyCode === disableTarget?.domainCode) return;
