@@ -1260,9 +1260,9 @@ export const pages = {
     messages: {
       disabled: "{{name}} 已禁用",
       enabled: "{{name}} 已启用",
+      found: "扫描完成，发现 {{count}} 个可用的系统智能体",
+      noneFound: "扫描完成，未找到可用的系统智能体",
       saved: "Main Agent 已保存",
-      scanned: "已扫描 {{count}} 个系统智能体",
-      scannedPartial: "已扫描 {{count}} 个系统智能体；其中 {{unavailable}} 个不可用",
     },
     pagination: {
       itemLabel: "系统智能体",

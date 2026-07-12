@@ -37,7 +37,7 @@ type SystemAgentSeed = {
   lastScannedAt: string | null;
 };
 
-const systemAgentRegistry: SystemAgentSeed[] = [
+let systemAgentRegistry: SystemAgentSeed[] = [
   {
     agentCode: "codex",
     available: true,
@@ -634,19 +634,21 @@ export function listPlatformSystemAgentsMock() {
 
 export function rescanPlatformSystemAgentsMock() {
   const scannedAt = nextScanTimestamp();
-  systemAgentRegistry.forEach((record) => {
-    record.lastScannedAt = scannedAt;
-    if (record.agentCode === "opencode") {
-      record.available = false;
-    }
-  });
+  const scannedCount = systemAgentRegistry.length;
+  systemAgentRegistry = systemAgentRegistry
+    .map((record) => ({
+      ...record,
+      available: record.agentCode !== "opencode",
+      lastScannedAt: scannedAt,
+    }))
+    .filter((record) => record.available);
 
   const records = listWorkspaceSystemAgentsMock("TRON_CORE");
   return {
-    availableCount: records.filter((record) => record.available).length,
+    availableCount: records.length,
     records,
-    scannedCount: records.length,
-    unavailableCount: records.filter((record) => !record.available).length,
+    scannedCount,
+    unavailableCount: scannedCount - records.length,
   } satisfies PlatformSystemAgentRescanResult;
 }
 

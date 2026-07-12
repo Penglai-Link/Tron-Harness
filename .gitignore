@@ -3,6 +3,7 @@ docs/brainstorm/*/runtime/
 tron-backend/resources/frontend/
 .intentforge-dreaming/
 **/.intentforge-dreaming/
+.tron/
 
 # AI Tools
 .codex/

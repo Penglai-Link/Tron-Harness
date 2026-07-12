@@ -1218,9 +1218,9 @@ export const pages = {
     messages: {
       disabled: "{{name}} disabled",
       enabled: "{{name}} enabled",
+      found: "Scan complete. Found {{count}} available system agents.",
+      noneFound: "Scan complete. No available system agents found.",
       saved: "Main Agent saved",
-      scanned: "Scanned {{count}} system agents",
-      scannedPartial: "Scanned {{count}} system agents; {{unavailable}} unavailable",
     },
     pagination: {
       itemLabel: "system agents",

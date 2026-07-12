@@ -282,7 +282,7 @@ test("agent management works fully in mock mode without backend requests", async
 
   const codexSettingsRow = rowByName(page, "Codex");
   await page.getByRole("button", { name: /^scan$/i }).click();
-  await expect(page.getByRole("status").filter({ hasText: "Scanned 2 system agents; 1 unavailable" })).toBeVisible();
+  await expect(page.getByRole("status").filter({ hasText: "Scan complete. Found 1 available system agents" })).toBeVisible();
   await expect(codexSettingsRow.locator("td").nth(3)).not.toHaveText("");
 
   await expect(rowActionButton(codexSettingsRow)).toHaveAttribute("aria-label", /Disable Codex/i);
@@ -295,9 +295,7 @@ test("agent management works fully in mock mode without backend requests", async
   await expect(page.getByRole("status").filter({ hasText: "Codex enabled" })).toBeVisible();
   await expect(codexSettingsRow.locator("td").nth(2)).toContainText("Enabled");
 
-  const openCodeSettingsRow = rowByName(page, "OpenCode");
-  await expect(openCodeSettingsRow.locator("td").nth(2)).toContainText("Unavailable");
-  await expect(openCodeSettingsRow.getByRole("button")).toHaveCount(0);
+  await expect(page.locator("table").filter({ hasText: "OpenCode" })).toHaveCount(0);
 
   await page.goto(`${frontendBaseUrl}/settings/tools`);
   await expect(page).toHaveURL(/\/settings\/tools$/);

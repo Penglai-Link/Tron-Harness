@@ -25,7 +25,7 @@ impl SystemCommandProbe for ProcessSystemCommandProbe {
         if command_name.contains(std::path::MAIN_SEPARATOR) {
             return Ok(Path::new(command_name).exists());
         }
-        let output = Command::new("which")
+        let output = Command::new(command_discovery_command())
             .arg(command_name)
             .output()
             .map_err(|error| error.to_string())?;
@@ -75,6 +75,16 @@ impl SystemCommandProbe for ProcessSystemCommandProbe {
             ))
         }
     }
+}
+
+#[cfg(target_os = "windows")]
+const fn command_discovery_command() -> &'static str {
+    "where"
+}
+
+#[cfg(not(target_os = "windows"))]
+const fn command_discovery_command() -> &'static str {
+    "which"
 }
 
 fn command_plans_for_agent(agent_code: &str) -> Vec<Vec<&'static str>> {

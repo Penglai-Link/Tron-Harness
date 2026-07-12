@@ -1,5 +1,6 @@
 import {
   spawn,
+  spawnSync,
   type ChildProcess,
   type SpawnOptions,
 } from "node:child_process";
@@ -29,19 +30,27 @@ type ManagedProcessRecord = {
 const DEFAULT_FORCE_TIMEOUT_MS = 1_000;
 const DEFAULT_GRACEFUL_TIMEOUT_MS = 5_000;
 const PROCESS_GROUP_POLL_INTERVAL_MS = 25;
+const IS_WINDOWS = process.platform === "win32";
 
 const processGroups = new Map<number, ManagedProcessRecord>();
 const processRecords = new WeakMap<ManagedProcess, ManagedProcessRecord>();
 
 let terminating = false;
 
-function assertSupportedPlatform() {
-  if (process.platform === "win32") {
-    throw new Error("Managed test processes support macOS and Linux only.");
+function isProcessAlive(processId: number) {
+  try {
+    process.kill(processId, 0);
+    return true;
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ESRCH") return false;
+    if ((error as NodeJS.ErrnoException).code === "EPERM") return true;
+    throw error;
   }
 }
 
 function isProcessGroupAlive(groupId: number) {
+  if (IS_WINDOWS) return isProcessAlive(groupId);
+
   try {
     process.kill(-groupId, 0);
     return true;
@@ -52,7 +61,22 @@ function isProcessGroupAlive(groupId: number) {
   }
 }
 
+function terminateWindowsProcessTree(processId: number) {
+  const result = spawnSync("taskkill", ["/pid", String(processId), "/t", "/f"], {
+    stdio: "ignore",
+    windowsHide: true,
+  });
+  if (result.error && (result.error as NodeJS.ErrnoException).code !== "ESRCH") {
+    throw result.error;
+  }
+}
+
 function signalProcessGroup(groupId: number, signal: NodeJS.Signals) {
+  if (IS_WINDOWS) {
+    terminateWindowsProcessTree(groupId);
+    return;
+  }
+
   try {
     process.kill(-groupId, signal);
   } catch (error) {
@@ -105,7 +129,7 @@ function registerProcess(managedProcess: ManagedProcess) {
 
   managedProcess.once("exit", () => {
     setImmediate(() => {
-      if (record.state === "running" && !isProcessGroupAlive(groupId)) {
+      if (!IS_WINDOWS && record.state === "running" && !isProcessGroupAlive(groupId)) {
         markProcessStopped(record);
       }
     });
@@ -117,11 +141,13 @@ export function spawnManagedProcess(
   args: readonly string[],
   options: ManagedProcessSpawnOptions = {},
 ) {
-  assertSupportedPlatform();
+  const executable = IS_WINDOWS && command === "npm" ? "npm.cmd" : command;
 
-  const managedProcess = spawn(command, args, {
+  const managedProcess = spawn(executable, args, {
     ...options,
-    detached: true,
+    detached: !IS_WINDOWS,
+    shell: IS_WINDOWS,
+    windowsHide: IS_WINDOWS,
   }) as ManagedProcess;
 
   if (managedProcess.pid) {
@@ -152,6 +178,15 @@ export async function stopManagedProcess(
   record.state = "stopping";
   record.stopPromise = (async () => {
     try {
+      if (IS_WINDOWS) {
+        terminateWindowsProcessTree(record.groupId);
+        if (await waitForProcessGroupExit(record.groupId, forceTimeoutMs)) {
+          markProcessStopped(record);
+          return;
+        }
+        throw new Error(`Managed Windows process tree ${record.groupId} remained alive after taskkill.`);
+      }
+
       if (!isProcessGroupAlive(record.groupId)) {
         markProcessStopped(record);
         return;
@@ -205,7 +240,11 @@ export async function stopManagedProcesses(
 function stopRegisteredProcessGroupsSync() {
   for (const record of processGroups.values()) {
     try {
-      signalProcessGroup(record.groupId, "SIGKILL");
+      if (IS_WINDOWS) {
+        terminateWindowsProcessTree(record.groupId);
+      } else {
+        signalProcessGroup(record.groupId, "SIGKILL");
+      }
     } catch {
       // The worker is already exiting; continue terminating every registered group.
     }

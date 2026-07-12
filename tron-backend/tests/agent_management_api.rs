@@ -282,7 +282,10 @@ fn temp_command_path(command_name: &str) -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .expect("system time should be after Unix epoch")
         .as_nanos();
-    std::env::temp_dir().join(format!("tron-agent-mgmt-{command_name}-{nanos}"))
+    let file_name = format!("tron-agent-mgmt-{command_name}-{nanos}");
+    #[cfg(target_os = "windows")]
+    let file_name = format!("{file_name}.cmd");
+    std::env::temp_dir().join(file_name)
 }
 
 fn temp_workspace_dir(name: &str) -> PathBuf {
@@ -296,14 +299,30 @@ fn write_fake_command(path: &PathBuf) {
 }
 
 fn write_executable_script(path: &PathBuf, script: &str) {
-    use std::os::unix::fs::PermissionsExt;
+    #[cfg(target_os = "windows")]
+    {
+        let output = script.lines().map(str::trim).find_map(|line| {
+            line.strip_prefix("echo '")
+                .and_then(|value| value.strip_suffix('\''))
+        });
+        let batch_file = match output {
+            Some(value) => format!("@echo off\r\necho {value}\r\nexit /b 0\r\n"),
+            None => "@echo off\r\nexit /b 0\r\n".to_string(),
+        };
+        std::fs::write(path, batch_file).expect("fake command should be written");
+    }
 
-    std::fs::write(path, script).expect("fake command should be written");
-    let mut permissions = std::fs::metadata(path)
-        .expect("fake command metadata should exist")
-        .permissions();
-    permissions.set_mode(0o755);
-    std::fs::set_permissions(path, permissions).expect("fake command should be executable");
+    #[cfg(not(target_os = "windows"))]
+    {
+        use std::os::unix::fs::PermissionsExt;
+
+        std::fs::write(path, script).expect("fake command should be written");
+        let mut permissions = std::fs::metadata(path)
+            .expect("fake command metadata should exist")
+            .permissions();
+        permissions.set_mode(0o755);
+        std::fs::set_permissions(path, permissions).expect("fake command should be executable");
+    }
 }
 
 async fn request_with_locale(
@@ -348,7 +367,7 @@ fn test_config(codex_command: &PathBuf, opencode_command: &PathBuf) -> AppConfig
 }
 
 #[tokio::test]
-async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
+async fn startup_scan_only_retains_available_system_agents() {
     let codex_command = temp_command_path("codex");
     let opencode_command = temp_command_path("opencode");
     write_fake_command(&codex_command);
@@ -530,13 +549,33 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
     )
     .await;
     let platform_after_rescan_body = response_json(platform_after_rescan).await;
-    let codex_after_rescan = platform_after_rescan_body["data"]
+    let platform_rows_after_rescan = platform_after_rescan_body["data"]
         .as_array()
-        .and_then(|rows| rows.iter().find(|row| row["agentCode"] == json!("codex")))
-        .expect("codex row should still exist after rescan");
-    assert_eq!(codex_after_rescan["status"], json!("UNAVAILABLE"));
+        .expect("platform rows should be an array");
+    assert_eq!(platform_rows_after_rescan.len(), 1);
+    assert!(
+        platform_rows_after_rescan
+            .iter()
+            .all(|row| row["agentCode"] != json!("codex"))
+    );
 
-    let unavailable_workspace_mutation = request_with_headers(
+    let workspace_after_rescan = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/agents/workspaces/TRON_CORE/system",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(workspace_after_rescan.status(), StatusCode::OK);
+    let workspace_rows_after_rescan = response_json(workspace_after_rescan).await;
+    assert_eq!(
+        workspace_rows_after_rescan["data"].as_array().map(Vec::len),
+        Some(1)
+    );
+
+    let removed_workspace_mutation = request_with_headers(
         &app,
         Method::POST,
         "/api/v1/agents/workspaces/TRON_CORE/system/codex/disable",
@@ -545,14 +584,11 @@ async fn startup_scan_workspace_policies_and_rescan_unavailable_state_work() {
         Some(&authorization),
     )
     .await;
+    assert_eq!(removed_workspace_mutation.status(), StatusCode::NOT_FOUND);
+    let removed_workspace_body = response_json(removed_workspace_mutation).await;
     assert_eq!(
-        unavailable_workspace_mutation.status(),
-        StatusCode::BAD_REQUEST
-    );
-    let unavailable_workspace_body = response_json(unavailable_workspace_mutation).await;
-    assert_eq!(
-        unavailable_workspace_body["code"],
-        json!("AGENT_SYSTEM_UNAVAILABLE")
+        removed_workspace_body["code"],
+        json!("AGENT_SYSTEM_NOT_FOUND")
     );
 }
 

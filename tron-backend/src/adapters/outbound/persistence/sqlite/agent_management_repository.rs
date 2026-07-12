@@ -185,6 +185,24 @@ impl AgentManagementRepository for SqliteAgentManagementRepository {
         Ok(())
     }
 
+    fn delete_system_agent(&mut self, agent_code: &str) -> Result<bool, AgentManagementError> {
+        let transaction = self.connection.transaction().map_err(storage_error)?;
+        transaction
+            .execute(
+                "DELETE FROM workspace_system_agent_policies WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        let deleted = transaction
+            .execute(
+                "DELETE FROM system_agent_registries WHERE agent_code = ?1",
+                [agent_code],
+            )
+            .map_err(storage_error)?;
+        transaction.commit().map_err(storage_error)?;
+        Ok(deleted > 0)
+    }
+
     fn list_workspace_system_policies(
         &mut self,
         workspace_code: Option<&str>,

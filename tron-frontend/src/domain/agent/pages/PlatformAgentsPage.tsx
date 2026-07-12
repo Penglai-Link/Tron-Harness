@@ -168,14 +168,11 @@ export function PlatformAgentsPage() {
         : rescanPlatformSystemAgentsMock();
       setSystemAgents(result.records);
       toast.success(pageT(
-        result.unavailableCount > 0 ? "messages.scannedPartial" : "messages.scanned",
-        result.unavailableCount > 0
-          ? "Scanned {{count}} system agents; {{unavailable}} unavailable"
-          : "Scanned {{count}} system agents",
-        {
-          count: formatNumber(result.scannedCount),
-          unavailable: formatNumber(result.unavailableCount),
-        },
+        result.availableCount === 0 ? "messages.noneFound" : "messages.found",
+        result.availableCount === 0
+          ? "Scan complete. No available system agents found."
+          : "Scan complete. Found {{count}} available system agents.",
+        { count: formatNumber(result.availableCount) },
       ));
     } catch (error) {
       toast.error(error instanceof Error ? error.message : pageT("errors.scan", "System-agent scan failed"));

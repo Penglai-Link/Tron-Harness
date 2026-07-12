@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 
 use super::*;
 
@@ -48,6 +48,7 @@ impl AgentManagementService {
         let now = current_timestamp();
         let mut available_count = 0usize;
         let mut unavailable_count = 0usize;
+        let mut discovered_agent_codes = HashSet::new();
 
         for supported in &self.supported_agents {
             let existing_entry = existing.get(&supported.agent_code);
@@ -61,26 +62,27 @@ impl AgentManagementService {
             if let Some(error) = availability_error {
                 last_error = Some(error);
             }
-            let models = if available {
-                match self
-                    .probe
-                    .list_models(&supported.agent_code, &supported.command_name)
-                {
-                    Ok(models) => models,
-                    Err(error) => {
-                        last_error = Some(error);
-                        Vec::new()
-                    }
+            if !available {
+                unavailable_count += 1;
+                self.set_system_agent_models(&supported.agent_code, Vec::new());
+                self.repository()
+                    .delete_system_agent(&supported.agent_code)?;
+                continue;
+            }
+
+            let models = match self
+                .probe
+                .list_models(&supported.agent_code, &supported.command_name)
+            {
+                Ok(models) => models,
+                Err(error) => {
+                    last_error = Some(error);
+                    Vec::new()
                 }
-            } else {
-                Vec::new()
             };
             self.set_system_agent_models(&supported.agent_code, models);
-            if available {
-                available_count += 1;
-            } else {
-                unavailable_count += 1;
-            }
+            available_count += 1;
+            discovered_agent_codes.insert(supported.agent_code.clone());
             let entry = SystemAgentRegistryEntry {
                 agent_code: supported.agent_code.clone(),
                 name: supported.name.clone(),
@@ -89,16 +91,19 @@ impl AgentManagementService {
                 command_name: supported.command_name.clone(),
                 source: ManagedAgentSource::System,
                 enabled: existing_entry.map(|entry| entry.enabled).unwrap_or(true),
-                available,
+                available: true,
                 last_scanned_at: Some(now.clone()),
-                last_seen_at: if available {
-                    Some(now.clone())
-                } else {
-                    existing_entry.and_then(|entry| entry.last_seen_at.clone())
-                },
+                last_seen_at: Some(now.clone()),
                 last_error,
             };
             self.repository().upsert_system_agent(&entry)?;
+        }
+
+        for agent_code in existing.keys() {
+            if !discovered_agent_codes.contains(agent_code) {
+                self.set_system_agent_models(agent_code, Vec::new());
+                self.repository().delete_system_agent(agent_code)?;
+            }
         }
 
         let records = self.list_platform_system_agents()?;

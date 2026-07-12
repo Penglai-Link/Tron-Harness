@@ -41,6 +41,3 @@ Pagable response body format:
 
 ## What's more
 If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
-
-# GNU Make on Windows may still execute recipes through cmd.exe even when SHELL is set; Windows recipes must use cmd-compatible syntax or invoke PowerShell explicitly.
-

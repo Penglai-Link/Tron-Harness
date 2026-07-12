@@ -78,6 +78,7 @@ pub trait AgentManagementRepository: Send {
         &mut self,
         agent: &SystemAgentRegistryEntry,
     ) -> Result<(), AgentManagementError>;
+    fn delete_system_agent(&mut self, agent_code: &str) -> Result<bool, AgentManagementError>;
     fn list_workspace_system_policies(
         &mut self,
         workspace_code: Option<&str>,
