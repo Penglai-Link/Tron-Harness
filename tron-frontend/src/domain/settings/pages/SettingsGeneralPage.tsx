@@ -6,9 +6,7 @@ import {
   SelectInput,
   SurfaceCard,
   TextInput,
-  useTheme,
 } from "@/shared";
-import { useLocale } from "@/i18n";
 import {
   aguiDebugModeOptions,
   aguiEventTypeOptions,
@@ -24,9 +22,7 @@ import {
 import { SelectItem } from "@/components/ui/select";
 
 export function SettingsGeneralPage() {
-  const { t } = useTranslation(["common", "shell"]);
-  const { changeLocale, currentLocale, supportedLocales } = useLocale();
-  const { setTheme, theme, themes } = useTheme();
+  const { t } = useTranslation(["shell"]);
   const {
     preferences: aguiDebugPreferences,
     setMode: setAguiDebugMode,
@@ -45,44 +41,6 @@ export function SettingsGeneralPage() {
       <PageHeader title={t("shell:settings.items.general")} />
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <SurfaceCard className="space-y-3">
-          <label className="grid gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-              {t("shell:theme.label")}
-            </span>
-            <SelectInput
-              value={theme}
-              onValueChange={(event) => setTheme(event === "matrix-dark" ? "matrix-dark" : "light")}
-            >
-              {themes.map((themeOption) => (
-                <SelectItem key={themeOption.value} value={themeOption.value}>
-                  {t(themeOption.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectInput>
-          </label>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">{t("shell:theme.hint")}</p>
-        </SurfaceCard>
-
-        <SurfaceCard className="space-y-3">
-          <label className="grid gap-1.5">
-            <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-              {t("common:locale.label")}
-            </span>
-            <SelectInput
-              value={currentLocale}
-              onValueChange={(event) => void changeLocale(event as typeof currentLocale)}
-            >
-              {supportedLocales.map((locale) => (
-                <SelectItem key={locale.code} value={locale.code}>
-                  {t(locale.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectInput>
-          </label>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">{t("common:locale.unavailable")}</p>
-        </SurfaceCard>
-
         <SurfaceCard className="space-y-4 xl:col-span-2">
           <div>
             <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">AG-UI Debug</h2>
