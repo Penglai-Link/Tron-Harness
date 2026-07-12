@@ -62,7 +62,7 @@ import { cn } from "@/shared/lib/utils";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/shared/ui/Forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
-import type { TronNavSection } from "@/shared/types/ShellNavigation";
+import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
   WorkspaceSpacesContextValue,
   WorkspaceSwitcherData,
@@ -203,8 +203,33 @@ export function useOpenRightSidebar() {
   }, [setRightSidebarCollapsed]);
 }
 
+function navigationItemHasActiveItem(item: TronNavItem, activeItem: string): boolean {
+  return item.label === activeItem
+    || item.children?.some((child) => navigationItemHasActiveItem(child, activeItem))
+    || false;
+}
+
 function sectionHasActiveItem(section: TronNavSection, activeItem?: string) {
-  return Boolean(activeItem && section.items.some((item) => item.label === activeItem));
+  return Boolean(activeItem && section.items.some((item) => navigationItemHasActiveItem(item, activeItem)));
+}
+
+function findActiveNavigationParentKeys(
+  items: TronNavItem[],
+  activeItem: string,
+  parentKey: string,
+): string[] {
+  for (const item of items) {
+    const itemKey = `${parentKey}/${item.label}`;
+    if (item.label === activeItem) {
+      return [];
+    }
+
+    if (item.children?.some((child) => navigationItemHasActiveItem(child, activeItem))) {
+      return [itemKey, ...findActiveNavigationParentKeys(item.children, activeItem, itemKey)];
+    }
+  }
+
+  return [];
 }
 
 function compactWorkspacePath(label: string) {
@@ -250,6 +275,7 @@ export function TronShell({
   const hasOpenTabs = useTabStore((state) => state.tabs.length > 0);
   const dataSource = getServiceDataSource("admin");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+  const [openNavigationItems, setOpenNavigationItems] = useState<Record<string, boolean>>({});
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
 
 
@@ -391,6 +417,23 @@ export function TronShell({
   useEffect(() => {
     const activeSection = visibleNavigation.find((section) => sectionHasActiveItem(section, activeItem));
     ensureSectionOpen(activeSection?.label);
+
+    if (!activeSection) {
+      return;
+    }
+
+    const activeParentKeys = findActiveNavigationParentKeys(activeSection.items, activeItem, activeSection.label);
+    if (!activeParentKeys.length) {
+      return;
+    }
+
+    setOpenNavigationItems((current) => {
+      if (activeParentKeys.every((key) => current[key])) {
+        return current;
+      }
+
+      return activeParentKeys.reduce((next, key) => ({ ...next, [key]: true }), current);
+    });
   }, [activeItem, ensureSectionOpen, visibleNavigation]);
 
   useEffect(() => {
@@ -687,6 +730,65 @@ export function TronShell({
   function renderSidebarContent(mobile = false) {
     const compact = mobile ? false : sidebarCollapsed;
 
+    function renderNavigationItem(item: TronNavItem, itemKey: string, nestingLevel = 0): ReactNode {
+      const Icon = item.icon;
+      const active = item.label === activeItem;
+      const itemLabel = t(item.translationKey);
+      const hasChildren = Boolean(item.children?.length);
+      const open = hasChildren && (compact || openNavigationItems[itemKey]);
+      const childOffset = compact ? 0 : nestingLevel * 12;
+
+      return (
+        <div className="space-y-1" key={itemKey}>
+          <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: `${childOffset}px` }}>
+            <Link
+              className={cn(
+                "flex h-9 min-w-0 flex-1 items-center rounded-lg text-sm transition-colors",
+                compact ? "justify-center px-0" : "gap-2 px-3",
+                active
+                  ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
+                  : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
+              )}
+              aria-label={compact ? itemLabel : undefined}
+              aria-current={active ? "page" : undefined}
+              data-active={active}
+              onBlur={compact ? hideCollapsedNavTooltip : undefined}
+              onFocus={(event) => {
+                if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
+              }}
+              onMouseEnter={(event) => {
+                if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
+              }}
+              onMouseLeave={compact ? hideCollapsedNavTooltip : undefined}
+              onClick={mobile ? handleSidebarNavigationClick : undefined}
+              to={item.href}
+            >
+              <Icon size={17} aria-hidden="true" />
+              <span className={cn("truncate", compact ? "sr-only" : "")}>{itemLabel}</span>
+            </Link>
+            {hasChildren && !compact ? (
+              <button
+                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+                type="button"
+                aria-expanded={open}
+                aria-label={t(open ? "shell:aria.collapseNavigationItem" : "shell:aria.expandNavigationItem", { item: itemLabel })}
+                onClick={() => {
+                  setOpenNavigationItems((current) => ({ ...current, [itemKey]: !current[itemKey] }));
+                }}
+              >
+                <ChevronDown className={cn("transition-transform", open ? "rotate-180" : "")} size={14} aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
+          {open ? (
+            <div className="space-y-1">
+              {item.children?.map((child) => renderNavigationItem(child, `${itemKey}/${child.label}`, nestingLevel + 1))}
+            </div>
+          ) : null}
+        </div>
+      );
+    }
+
     return (
       <>
         <nav className={cn("space-y-4", compact ? "space-y-2" : "")} aria-label={t("shell:aria.primaryNavigation")}>
@@ -707,39 +809,7 @@ export function TronShell({
                 )}
                 {open || compact ? (
                   <div className={cn("space-y-1", compact ? "" : "mt-1")}>
-                    {section.items.map((item) => {
-                      const Icon = item.icon;
-                      const active = item.label === activeItem;
-                      const itemLabel = t(item.translationKey);
-                      return (
-                        <Link
-                          className={cn(
-                            "flex h-9 items-center rounded-lg text-sm transition-colors",
-                            compact ? "justify-center px-0" : "gap-2 px-3",
-                            active
-                              ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
-                              : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
-                          )}
-                          aria-label={compact ? itemLabel : undefined}
-                          aria-current={active ? "page" : undefined}
-                          data-active={active}
-                          key={item.label}
-                          onBlur={compact ? hideCollapsedNavTooltip : undefined}
-                          onFocus={(event) => {
-                            if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
-                          }}
-                          onMouseEnter={(event) => {
-                            if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
-                          }}
-                          onMouseLeave={compact ? hideCollapsedNavTooltip : undefined}
-                          onClick={mobile ? handleSidebarNavigationClick : undefined}
-                          to={item.href}
-                        >
-                          <Icon size={17} aria-hidden="true" />
-                          <span className={cn(compact ? "sr-only" : "")}>{itemLabel}</span>
-                        </Link>
-                      );
-                    })}
+                    {section.items.map((item) => renderNavigationItem(item, `${section.label}/${item.label}`))}
                   </div>
                 ) : null}
               </section>
