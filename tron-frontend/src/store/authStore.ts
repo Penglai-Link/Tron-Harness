@@ -15,6 +15,7 @@ import {
 import type {
   AuthGrant,
   AuthSession,
+  AuthenticatedUser,
   InternalLoginPayload,
 } from "@/domain/auth/model";
 import {
@@ -35,6 +36,7 @@ interface AuthState {
   markUnauthenticated: () => void;
   logout: () => Promise<void>;
   recoverFromUnauthorized: () => Promise<boolean>;
+  updateSessionUser: (patch: Partial<AuthenticatedUser>) => void;
 }
 
 type AuthStateSetter = (
@@ -258,6 +260,17 @@ export const useAuthStore = create<AuthState>((set) => ({
       allowBootstrap: false,
       failureMode: "preserve-session",
     });
+  },
+  updateSessionUser: (patch) => {
+    set((state) => state.session ? {
+      session: {
+        ...state.session,
+        user: {
+          ...state.session.user,
+          ...patch,
+        },
+      },
+    } : state);
   },
 }));
 

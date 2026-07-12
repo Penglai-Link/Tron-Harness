@@ -1,3 +1,4 @@
+import { account } from "./account";
 import { auth } from "./auth";
 import { common } from "./common";
 import { consoleMessages } from "./console";
@@ -6,6 +7,7 @@ import { pages } from "./pages";
 import { shell } from "./shell";
 
 export const enUS = {
+  account,
   auth,
   common,
   console: consoleMessages,

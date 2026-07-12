@@ -15,8 +15,9 @@ use url::Url;
 
 use crate::{
     application::user::{
-        CreateUserCommand, PasswordHasher, StepUpVariableRevealScope, StepUpVariableRevealTarget,
-        UpdateUserCommand, UserRepository,
+        AccountError, ChangePasswordCommand, CreateUserCommand, PasswordChangeResult,
+        PasswordHasher, StepUpVariableRevealScope, StepUpVariableRevealTarget,
+        UpdateAccountProfileCommand, UpdateUserCommand, UserRepository,
     },
     config::{AuthConfig, GitHubOAuthConfig, LdapConfig},
     domain::{
@@ -40,6 +41,7 @@ use crate::{
     },
 };
 
+mod account_use_cases;
 mod auth_ldap;
 mod auth_oauth;
 mod auth_session;

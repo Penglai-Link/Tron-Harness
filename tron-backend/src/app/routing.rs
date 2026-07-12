@@ -7,6 +7,7 @@ use tower_http::cors::{Any, CorsLayer};
 
 use crate::adapters::{
     inbound::http::{
+        account::routes as account_routes,
         admin::{
             models::routes::routes as admin_model_routes,
             open_apps::routes::routes as admin_open_app_routes, roles::routes as role_routes,
@@ -36,7 +37,8 @@ use crate::adapters::{
 use super::AppState;
 
 pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
-    user_routes()
+    account_routes()
+        .merge(user_routes())
         .merge(admin_model_routes())
         .merge(admin_open_app_routes())
         .merge(admin_variable_routes())

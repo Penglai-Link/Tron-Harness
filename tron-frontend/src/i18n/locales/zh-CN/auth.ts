@@ -43,6 +43,7 @@ export const auth = {
   title: "Tron",
   userMenu: {
     loggingOut: "退出登录中...",
+    personalCenter: "个人中心",
     signedIn: "已登录",
   },
   usernamePlaceholder: "输入用户名或邮箱",

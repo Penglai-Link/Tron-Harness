@@ -22,7 +22,9 @@ import {
   ChevronLeft,
   ChevronRight,
   CircleUserRound,
+  MousePointerClick,
   MoreHorizontal,
+  PanelsTopLeft,
   PanelLeftClose,
   PanelLeftOpen,
   PanelRightClose,
@@ -70,6 +72,7 @@ import { usePanel } from "../hooks/usePanel";
 import DraggleLine from "../ui/DraggleLine";
 import { SelectItem } from "@/components/ui/select";
 import { TabBar } from "@/shared/ui/TabBar";
+import { useTabStore } from "@/store/tabStore";
 
 
 interface TronShellProps {
@@ -103,6 +106,67 @@ const TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS = "lg:pl-[240px]";
 const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 
 export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
+
+function EmptyTabWorkspace() {
+  const { t } = useTranslation("shell");
+  const guides = [
+    {
+      description: t("emptyWorkspace.guides.open.description"),
+      icon: MousePointerClick,
+      label: t("emptyWorkspace.guides.open.label"),
+      marker: t("emptyWorkspace.guides.open.marker"),
+    },
+    {
+      description: t("emptyWorkspace.guides.switch.description"),
+      icon: PanelsTopLeft,
+      label: t("emptyWorkspace.guides.switch.label"),
+      marker: t("emptyWorkspace.guides.switch.marker"),
+    },
+    {
+      description: t("emptyWorkspace.guides.close.description"),
+      icon: X,
+      label: t("emptyWorkspace.guides.close.label"),
+      marker: t("emptyWorkspace.guides.close.marker"),
+    },
+  ];
+
+  return (
+    <section
+      aria-labelledby="empty-tab-workspace-heading"
+      className="flex min-h-full items-center justify-center px-2 py-10 sm:px-8"
+      data-testid="tron-empty-tab-workspace"
+    >
+      <div className="w-full max-w-xl animate-in fade-in-0 duration-300">
+        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
+          {t("emptyWorkspace.eyebrow")}
+        </p>
+        <h1 className="mt-3 text-2xl font-semibold text-[var(--color-on-surface)]" id="empty-tab-workspace-heading">
+          {t("emptyWorkspace.title")}
+        </h1>
+        <p className="mt-3 max-w-lg text-sm leading-6 text-[var(--color-on-surface-variant)]">
+          {t("emptyWorkspace.description")}
+        </p>
+
+        <div className="mt-9 border-y border-[var(--color-outline-variant)]">
+          {guides.map(({ description, icon: Icon, label, marker }) => (
+            <div className="flex items-center gap-4 py-4" key={label}>
+              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">
+                <Icon size={17} aria-hidden="true" />
+              </span>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-medium text-[var(--color-on-surface)]">{label}</p>
+                <p className="mt-0.5 text-xs leading-5 text-[var(--color-on-surface-variant)]">{description}</p>
+              </div>
+              <kbd className="shrink-0 rounded border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-2 py-1 text-xs font-medium text-[var(--color-on-surface-variant)]">
+                {marker}
+              </kbd>
+            </div>
+          ))}
+        </div>
+      </div>
+    </section>
+  );
+}
 
 export function useConsoleShellConfig(config: ConsoleShellConfig) {
   const shellConfigController = useContext(ConsoleShellConfigContext);
@@ -183,6 +247,7 @@ export function TronShell({
   const syncSelectedWorkspace = useAppShellStore((state) => state.syncSelectedWorkspace);
   const setWorkspaceSwitcherSnapshot = useAppShellStore((state) => state.setWorkspaceSwitcherSnapshot);
   const workspaceSwitcher = useAppShellStore((state) => state.workspaceSwitcherSnapshot);
+  const hasOpenTabs = useTabStore((state) => state.tabs.length > 0);
   const dataSource = getServiceDataSource("admin");
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
@@ -979,7 +1044,9 @@ export function TronShell({
                 className="w-full"
               >
                 <ResizablePanel defaultSize="100%">
-                  <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6 overflow-y-auto", "h-[calc(100vh-3.5rem-2.5rem)]", contentClassName)}>{children}</main>
+                  <main className={cn("relative z-0 min-w-0 overflow-x-hidden px-6 py-6 overflow-y-auto", "h-[calc(100vh-3.5rem-2.5rem)]", contentClassName)}>
+                    {hasOpenTabs ? children : <EmptyTabWorkspace />}
+                  </main>
                 </ResizablePanel>
                 {hasRightPanel ? (
                   <>

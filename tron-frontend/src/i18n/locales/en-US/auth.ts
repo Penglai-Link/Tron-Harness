@@ -43,6 +43,7 @@ export const auth = {
   title: "Tron",
   userMenu: {
     loggingOut: "Logging out...",
+    personalCenter: "Personal Center",
     signedIn: "Signed in",
   },
   usernamePlaceholder: "Enter username or email",

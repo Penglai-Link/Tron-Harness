@@ -36,7 +36,7 @@ fn frontend_api_data_source_assignments(repo_root: &Path) -> Vec<String> {
 }
 
 #[test]
-fn make_help_lists_integrated_backend_and_frontend_targets() {
+fn make_help_lists_common_integrated_backend_and_frontend_targets() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("tron-backend must live under the repository root");
@@ -55,11 +55,18 @@ fn make_help_lists_integrated_backend_and_frontend_targets() {
 
     let stdout = String::from_utf8_lossy(&output.stdout);
 
+    for common_target in ["make install", "make clean"] {
+        assert!(
+            stdout.contains(common_target),
+            "make help must list common `{common_target}`, stdout:\n{stdout}",
+        );
+    }
+
     for backend_target in [
         "make be-install",
         "make be-check",
         "make be-test",
-        "make be-run",
+        "make be-dev",
     ] {
         assert!(
             stdout.contains(backend_target),
@@ -74,10 +81,10 @@ fn make_help_lists_integrated_backend_and_frontend_targets() {
         );
     }
 
-    for app_target in ["make app-build", "make app-run", "make app-clean"] {
+    for web_target in ["make web-build", "make web-dev", "make web-clean"] {
         assert!(
-            stdout.contains(app_target),
-            "make help must list integrated `{app_target}`, stdout:\n{stdout}",
+            stdout.contains(web_target),
+            "make help must list integrated `{web_target}`, stdout:\n{stdout}",
         );
     }
 }
@@ -92,16 +99,16 @@ fn integrated_frontend_build_defaults_integrated_runtime_to_api_mode() {
 
     assert!(
         makefile.contains("TRON_FRONTEND_OUT_DIR="),
-        "app-build must direct Vite output into backend frontend resources",
+        "web-build must direct Vite output into backend frontend resources",
     );
     assert!(
         makefile.contains("VITE_TRON_API_BASE_URL="),
-        "app-build must keep API calls same-origin for integrated runtime",
+        "web-build must keep API calls same-origin for integrated runtime",
     );
     assert!(
         makefile
             .contains("APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV)"),
-        "app-build must reuse the shared frontend API data source env",
+        "web-build must reuse the shared frontend API data source env",
     );
     for required in frontend_api_data_source_assignments(repo_root) {
         assert!(
@@ -132,7 +139,7 @@ fn dev_api_frontend_start_forces_every_frontend_module_to_api_mode() {
 }
 
 #[test]
-fn make_be_run_port_override_is_wired_into_backend_config() {
+fn make_be_dev_port_override_is_wired_into_backend_config() {
     let repo_root = Path::new(env!("CARGO_MANIFEST_DIR"))
         .parent()
         .expect("tron-backend must live under the repository root");
@@ -141,11 +148,11 @@ fn make_be_run_port_override_is_wired_into_backend_config() {
         .expect("Makefile should be readable from the repository root");
     assert!(
         makefile.contains("TRON_BACKEND_PORT=$(PORT)"),
-        "make be-run must export TRON_BACKEND_PORT when PORT is provided"
+        "make be-dev must export TRON_BACKEND_PORT when PORT is provided"
     );
     assert!(
         makefile.contains("TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH)"),
-        "make be-run must export TRON_BACKEND_GRAPH_STORAGE_PATH when GRAPH_STORAGE_PATH is provided"
+        "make be-dev must export TRON_BACKEND_GRAPH_STORAGE_PATH when GRAPH_STORAGE_PATH is provided"
     );
 
     let config_source = fs::read_to_string(repo_root.join("tron-backend/src/config/parsing.rs"))

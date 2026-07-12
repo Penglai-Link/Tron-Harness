@@ -1,16 +1,26 @@
 import { useState } from "react";
-import { LogOut } from "lucide-react";
+import {
+  ChevronRight,
+  LogOut,
+  UserRound,
+} from "lucide-react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router";
+import {
+  Link,
+  useLocation,
+  useNavigate,
+} from "react-router";
 
 import { LOGIN_PATH } from "@/domain/auth/constants";
 import { Button } from "@/shared/ui/Button";
+import { useAppShellStore } from "@/store/appShellStore";
 import { useAuthStore } from "@/store/authStore";
 
 export function AuthUserMenuPanel() {
   const { t } = useTranslation(["auth", "common"]);
   const navigate = useNavigate();
   const location = useLocation();
+  const closeFloatingPanels = useAppShellStore((state) => state.closeFloatingPanels);
   const logout = useAuthStore((state) => state.logout);
   const session = useAuthStore((state) => state.session);
   const [submitting, setSubmitting] = useState(false);
@@ -46,6 +56,15 @@ export function AuthUserMenuPanel() {
             {session.provider.name}
           </span>
         ) : null}
+        <Link
+          className="mt-3 flex h-9 items-center gap-2 border-t border-[var(--color-outline-variant)] pt-3 text-[13px] font-medium text-[var(--color-on-surface-variant)] transition-colors hover:text-[var(--color-on-surface)]"
+          to="/account"
+          onClick={closeFloatingPanels}
+        >
+          <UserRound size={16} aria-hidden="true" />
+          <span>{t("auth:userMenu.personalCenter")}</span>
+          <ChevronRight className="ml-auto" size={15} aria-hidden="true" />
+        </Link>
       </div>
       <Button
         className="w-full justify-center"

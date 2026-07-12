@@ -187,6 +187,25 @@ async function routeAuthApi(
   let nextAccessTokenId = 1;
   let refreshGrantCount = 0;
   let shouldExpireAdminUsersRequest = options.expireFirstAdminUsersRequest ?? false;
+  let accountProfile = {
+    avatarUrl: null as string | null,
+    displayName: "Auth Operator",
+    email: "auth.operator@tron.ai",
+    firstName: "Auth",
+    lastName: "Operator",
+    locale: "en-US",
+    passwordChangeAllowed: true,
+    passwordResetRequired: false,
+    phone: null as { countryCode: string; number: string } | null,
+    roleCodes: ["ADMIN", "DEVELOPER"],
+    sourceType: "Internal",
+    spaceCodes: ["PLATFORM", "DATA"],
+    status: "Active",
+    timezone: "UTC",
+    updatedAt: "2026-07-11T00:00:00Z",
+    userCode: "USR-AUTH-0001",
+    username: "auth.operator",
+  };
 
   function issueGrant(session: typeof authUser | typeof oauthUser | typeof ldapUser, expiresIn: number) {
     currentSession = session;
@@ -275,6 +294,59 @@ async function routeAuthApi(
       },
       body: "",
     });
+  });
+
+  await page.route("**/api/v1/account/get-profile", async (route) => {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    await fulfillJson(route, successEnvelope(accountProfile));
+  });
+
+  await page.route("**/api/v1/account/update-profile", async (route) => {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    const body = route.request().postDataJSON() as Partial<typeof accountProfile>;
+    accountProfile = {
+      ...accountProfile,
+      ...body,
+      updatedAt: "2026-07-11T01:00:00Z",
+    };
+    currentSession = {
+      ...currentSession,
+      user: {
+        ...currentSession.user,
+        displayName: accountProfile.displayName,
+        email: accountProfile.email,
+      },
+    };
+    await fulfillJson(route, successEnvelope(accountProfile));
+  });
+
+  await page.route("**/api/v1/account/change-password", async (route) => {
+    if (
+      !currentSession
+      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
+    ) {
+      await fulfillJson(route, unauthorizedEnvelope(), 401);
+      return;
+    }
+
+    await fulfillJson(route, successEnvelope({
+      changed: true,
+      passwordResetRequired: false,
+    }));
   });
 
   await page.route("**/api/v1/admin/users**", async (route) => {
@@ -466,6 +538,56 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 
   await page.goto(`${frontendBaseUrl}/settings/models`);
   await expect(page).toHaveURL(/\/login\?redirect=%2Fsettings%2Fmodels$/);
+});
+
+test("opens personal center from the user summary and updates profile, password, and theme", async ({ page }) => {
+  await routeAuthApi(page);
+
+  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await submitLogin(page);
+  await expect(page).toHaveURL(/\/dashboard$/);
+
+  await page.getByRole("button", { name: /open user menu/i }).click();
+  await page.getByRole("link", { name: /personal center/i }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await expect(page.getByRole("heading", { name: "Personal Center" })).toBeVisible();
+
+  await page.getByLabel("Display name").fill("Alex Morgan");
+  await page.getByRole("button", { name: /^Update$/ }).click();
+  await expect(page.getByText("Personal information updated.")).toBeVisible();
+
+  await page.getByRole("button", { name: /open user menu/i }).click();
+  await expect(page.locator("header").getByText("Alex Morgan")).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByLabel("Current password").fill("TronAuthPass123!");
+  await page.getByLabel("New password", { exact: true }).fill("TronNewPass456!");
+  await page.getByLabel("Confirm new password").fill("TronNewPass456!");
+  await page.getByRole("button", { name: "Change password" }).click();
+  await expect(page.getByText("Password changed.")).toBeVisible();
+
+  await page.getByRole("button", { name: "Matrix Dark" }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-theme", "matrix-dark");
+});
+
+test("shows workspace guidance after closing the final tab", async ({ page }) => {
+  await routeAuthApi(page);
+
+  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
+  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
+  await submitLogin(page);
+
+  const tabList = page.getByRole("tablist");
+  await expect(tabList).toBeVisible();
+  await tabList.getByRole("button", { name: "Close Dashboard" }).click();
+
+  const emptyWorkspace = page.getByTestId("tron-empty-tab-workspace");
+  await expect(emptyWorkspace).toBeVisible();
+  await expect(emptyWorkspace.getByRole("heading", { name: "No open tabs" })).toBeVisible();
+  await expect(emptyWorkspace.getByText("Open a view")).toBeVisible();
 });
 
 test("blocks authenticated users without assigned spaces on an authorization request page", async ({ page }) => {

@@ -21,6 +21,28 @@ export const shell = {
     body: "Contextual assistant entry is open. Step 3 pages can bind route-specific prompts here.",
     title: "Main Agent",
   },
+  emptyWorkspace: {
+    eyebrow: "Workspace",
+    title: "No open tabs",
+    description: "Choose a module from the navigation to begin. Open views stay available in the tab bar until you close them.",
+    guides: {
+      open: {
+        label: "Open a view",
+        description: "Select a module from the left navigation.",
+        marker: "Navigation",
+      },
+      switch: {
+        label: "Switch context",
+        description: "Return to an open view from the tab bar.",
+        marker: "Tabs",
+      },
+      close: {
+        label: "Clear a view",
+        description: "Use the close control on a tab when you are finished.",
+        marker: "x",
+      },
+    },
+  },
   nav: {
     items: {
       agents: "Agents",

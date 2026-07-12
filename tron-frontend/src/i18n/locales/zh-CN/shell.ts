@@ -21,6 +21,28 @@ export const shell = {
     body: "上下文助理入口当前已打开。后续 Step 3 页面可以在这里绑定路由级提示。",
     title: "Main Agent",
   },
+  emptyWorkspace: {
+    eyebrow: "工作区",
+    title: "没有打开的标签页",
+    description: "从左侧导航选择一个功能开始使用。已打开的页面会保留在上方标签栏中，直到手动关闭。",
+    guides: {
+      open: {
+        label: "打开功能",
+        description: "从左侧导航选择一个功能模块。",
+        marker: "导航",
+      },
+      switch: {
+        label: "切换上下文",
+        description: "通过上方标签栏返回已打开的页面。",
+        marker: "标签",
+      },
+      close: {
+        label: "整理工作区",
+        description: "完成后使用标签右侧的关闭按钮。",
+        marker: "x",
+      },
+    },
+  },
   nav: {
     items: {
       agents: "智能体",

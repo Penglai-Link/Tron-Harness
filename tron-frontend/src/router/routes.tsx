@@ -31,6 +31,7 @@ export interface AppRoute {
 }
 
 export const appRoutes: AppRoute[] = [
+  { pageId: "account.center", route: "/account", activeNav: "Account", title: "Personal Center", archetype: "settings", shellConfig: { searchPlaceholder: "Search Tron..." } },
   { pageId: "agents.index", route: "/agents", activeNav: "Agents", title: "Agents", archetype: "data-table", shellConfig: { searchPlaceholder: "Search agents..." } },
   { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Create Workspace Model", archetype: "form" },
   { pageId: "models.detail", route: "/models/detail", activeNav: "Models", title: "Workspace Model Detail", archetype: "detail" },
