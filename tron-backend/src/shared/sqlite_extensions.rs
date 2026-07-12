@@ -310,7 +310,15 @@ fn vec_file_name(platform: &str) -> &'static str {
 
 fn copy_file_once(source: &Path, target: &Path) -> Result<(), rusqlite::Error> {
     if target.is_file() {
-        return Ok(());
+        let source_size = fs::metadata(source)
+            .map_err(|_| rusqlite::Error::InvalidPath(source.into()))?
+            .len();
+        let target_size = fs::metadata(target)
+            .map_err(|_| rusqlite::Error::InvalidPath(target.into()))?
+            .len();
+        if source_size == target_size {
+            return Ok(());
+        }
     }
     if let Some(parent) = target.parent() {
         fs::create_dir_all(parent).map_err(|_| rusqlite::Error::InvalidPath(parent.into()))?;
@@ -367,5 +375,26 @@ mod tests {
         context.prepare_connection(&connection).unwrap();
 
         assert!(sqlite_fts5_available(&connection));
+    }
+
+    #[test]
+    fn refreshes_stale_extracted_files() {
+        let root = env::temp_dir().join(format!(
+            "tron-sqlite-extension-copy-test-{}",
+            std::process::id()
+        ));
+        let source = root.join("source.bin");
+        let target = root.join("nested").join("target.bin");
+
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(source.parent().unwrap()).unwrap();
+        fs::write(&source, b"new extension").unwrap();
+        fs::create_dir_all(target.parent().unwrap()).unwrap();
+        fs::write(&target, b"old pointer").unwrap();
+
+        copy_file_once(&source, &target).unwrap();
+
+        assert_eq!(fs::read(&target).unwrap(), b"new extension");
+        fs::remove_dir_all(root).unwrap();
     }
 }

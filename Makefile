@@ -9,12 +9,19 @@ SHELL := cmd.exe
 POWERSHELL := powershell.exe
 NPM := npm.cmd
 CARGO := cargo.exe
+PYTHON ?= python
+SKILL_VALIDATOR ?= $(subst \,/,$(USERPROFILE))/.codex/skills/.system/skill-creator/scripts/quick_validate.py
 DEFAULT_GRAPH_STORAGE_PATH := $(subst \,/,$(TEMP))/tron-api-$(if $(strip $(PORT)),$(PORT),8080).graph.grafeo
-TRON_SCRATCH_GLOB := $(subst \,/,$(TEMP))/tron*
+TRON_SCRATCH_GLOB := $(TEMP)\tron*
+
+WIN_PATH = $(subst /,\,$(1))
 
 define REMOVE
-if exist "$(1)\*" rmdir /s /q "$(1)"
-if exist "$(1)" del /f /q "$(1)"
+if exist "$(call WIN_PATH,$(1))\" rmdir /s /q "$(call WIN_PATH,$(1))"
+endef
+
+define REMOVE_FILE
+if exist "$(call WIN_PATH,$(1))" del /f /q "$(call WIN_PATH,$(1))"
 endef
 
 define REMOVE_GLOB
@@ -23,24 +30,24 @@ for %%G in ("$(1)") do if exist "%%~G" del /f /q "%%~G"
 endef
 
 define MKDIR
-if not exist "$(1)\*" mkdir "$(1)"
+if not exist "$(call WIN_PATH,$(1))\" mkdir "$(call WIN_PATH,$(1))"
 endef
 
 define COPY_TREE
 $(call MKDIR,$(2))
-xcopy /e /i /h /y "$(1)\*" "$(2)\" >nul
+xcopy /e /i /h /y "$(call WIN_PATH,$(1))\*" "$(call WIN_PATH,$(2))\" >nul
 endef
 
 define COPY_FILE
-copy /y "$(1)" "$(2)" >nul
+copy /y "$(call WIN_PATH,$(1))" "$(call WIN_PATH,$(2))" >nul
 endef
 
 define ASSERT_FILE
-if not exist "$(1)" (echo Required file not found: $(1) & exit /b 1)
+if not exist "$(call WIN_PATH,$(1))" (echo Required file not found: $(1) & exit /b 1)
 endef
 
 define LOAD_ENV_FILE
-if exist "$(1)" for /f "usebackq eol=# tokens=1,* delims==" %%A in ("$(1)") do set "%%A=%%B"
+if exist "$(call WIN_PATH,$(1))" for /f "usebackq eol=# tokens=1,* delims==" %%A in ("$(call WIN_PATH,$(1))") do set "%%A=%%B"
 endef
 
 FRONTEND_API_DATA_SOURCE_ENV = $(foreach key,$(FRONTEND_API_DATA_SOURCE_KEYS),set "$(key)=api" &)
@@ -55,11 +62,17 @@ SHELL := /bin/sh
 .SHELLFLAGS := -eu -c
 NPM := npm
 CARGO := cargo
+PYTHON ?= python3
+SKILL_VALIDATOR ?= /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py
 DEFAULT_GRAPH_STORAGE_PATH := /tmp/tron-api-$(if $(strip $(PORT)),$(PORT),8080).graph.grafeo
 TRON_SCRATCH_GLOB := /tmp/tron*
 
 define REMOVE
 rm -rf -- "$(1)"
+endef
+
+define REMOVE_FILE
+rm -f -- "$(1)"
 endef
 
 define REMOVE_GLOB
@@ -229,10 +242,10 @@ fe-unit-test:
 .PHONY: fe-clean
 fe-clean:
 	$(call REMOVE,$(FRONTEND_DIR)/dist)
-	$(call REMOVE,$(FRONTEND_DIR)/node_modules/.tmp/tsconfig.node.tsbuildinfo)
-	$(call REMOVE,$(FRONTEND_DIR)/tsconfig.tsbuildinfo)
-	$(call REMOVE,$(FRONTEND_DIR)/vite.config.js)
-	$(call REMOVE,$(FRONTEND_DIR)/vite.config.d.ts)
+	$(call REMOVE_FILE,$(FRONTEND_DIR)/node_modules/.tmp/tsconfig.node.tsbuildinfo)
+	$(call REMOVE_FILE,$(FRONTEND_DIR)/tsconfig.tsbuildinfo)
+	$(call REMOVE_FILE,$(FRONTEND_DIR)/vite.config.js)
+	$(call REMOVE_FILE,$(FRONTEND_DIR)/vite.config.d.ts)
 
 .PHONY: be-install
 be-install:
@@ -364,8 +377,8 @@ desktop-clean:
 
 .PHONY: skill-memory-dreaming-test
 skill-memory-dreaming-test:
-	python3 /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py tron-skills/eliteforge-memory-dreaming
+	$(PYTHON) "$(SKILL_VALIDATOR)" tron-skills/eliteforge-memory-dreaming
 
 .PHONY: skill-memory-spec-test
 skill-memory-spec-test:
-	python3 /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py tron-skills/eliteforge-memory-spec
+	$(PYTHON) "$(SKILL_VALIDATOR)" tron-skills/eliteforge-memory-spec

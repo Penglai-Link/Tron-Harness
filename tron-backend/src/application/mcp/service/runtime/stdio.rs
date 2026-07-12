@@ -17,7 +17,7 @@ use crate::domain::mcp::{McpError, PlatformMcpServerRecord};
 
 use super::DiscoveredMcpTool;
 
-#[cfg(test)]
+#[cfg(all(test, unix))]
 mod stdio_tests;
 
 const MCP_PROTOCOL_VERSION: &str = "2025-06-18";
