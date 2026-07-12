@@ -7,7 +7,18 @@ HOST_OS := windows
 SHELL := cmd.exe
 .SHELLFLAGS := /D /E:ON /V:OFF /S /C
 POWERSHELL := powershell.exe
-NPM := npm.cmd
+# nvm-windows exposes the active Node.js version through this junction.  Use
+# its absolute npm.cmd path when present so child cmd.exe processes do not
+# depend on whether PATH has been refreshed after `nvm use`.
+NVM_NODE_DIR := $(subst \,/,$(NVM_SYMLINK))
+LOCAL_NVM_NODE_DIR := $(subst \,/,$(LOCALAPPDATA))/nodejs
+NVM_NPM := $(NVM_NODE_DIR)/npm.cmd
+LOCAL_NVM_NPM := $(LOCAL_NVM_NODE_DIR)/npm.cmd
+NPM ?= $(if $(wildcard $(NVM_NPM)),"$(NVM_NPM)",$(if $(wildcard $(LOCAL_NVM_NPM)),"$(LOCAL_NVM_NPM)",npm))
+NPM_NODE_DIR := $(if $(wildcard $(NVM_NPM)),$(NVM_NODE_DIR),$(if $(wildcard $(LOCAL_NVM_NPM)),$(LOCAL_NVM_NODE_DIR)))
+ifneq ($(strip $(NPM_NODE_DIR)),)
+export PATH := $(subst /,\,$(NPM_NODE_DIR));$(PATH)
+endif
 CARGO := cargo.exe
 PYTHON ?= python
 SKILL_VALIDATOR ?= $(subst \,/,$(USERPROFILE))/.codex/skills/.system/skill-creator/scripts/quick_validate.py
