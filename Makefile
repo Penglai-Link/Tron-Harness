@@ -1,5 +1,103 @@
+# GNU Make is used on both POSIX shells and Windows PowerShell.
+# Keep recipes shell-neutral where possible and isolate the few unavoidable
+# filesystem/process differences below.
+
+ifeq ($(OS),Windows_NT)
+HOST_OS := windows
+SHELL := cmd.exe
+.SHELLFLAGS := /D /E:ON /V:OFF /S /C
+POWERSHELL := powershell.exe
+NPM := npm.cmd
+CARGO := cargo.exe
+DEFAULT_GRAPH_STORAGE_PATH := $(subst \,/,$(TEMP))/tron-api-$(if $(strip $(PORT)),$(PORT),8080).graph.grafeo
+TRON_SCRATCH_GLOB := $(subst \,/,$(TEMP))/tron*
+
+define REMOVE
+if exist "$(1)\*" rmdir /s /q "$(1)"
+if exist "$(1)" del /f /q "$(1)"
+endef
+
+define REMOVE_GLOB
+for /d %%G in ("$(1)") do if exist "%%~G" rmdir /s /q "%%~G"
+for %%G in ("$(1)") do if exist "%%~G" del /f /q "%%~G"
+endef
+
+define MKDIR
+if not exist "$(1)\*" mkdir "$(1)"
+endef
+
+define COPY_TREE
+$(call MKDIR,$(2))
+xcopy /e /i /h /y "$(1)\*" "$(2)\" >nul
+endef
+
+define COPY_FILE
+copy /y "$(1)" "$(2)" >nul
+endef
+
+define ASSERT_FILE
+if not exist "$(1)" (echo Required file not found: $(1) & exit /b 1)
+endef
+
+define LOAD_ENV_FILE
+if exist "$(1)" for /f "usebackq eol=# tokens=1,* delims==" %%A in ("$(1)") do set "%%A=%%B"
+endef
+
+FRONTEND_API_DATA_SOURCE_ENV = $(foreach key,$(FRONTEND_API_DATA_SOURCE_KEYS),set "$(key)=api" &)
+FE_API_ENV = set "VITE_TRON_API_BASE_URL=" & $(FRONTEND_API_DATA_SOURCE_ENV) set "TRON_FRONTEND_API_PROXY_TARGET=http://127.0.0.1:$(API_BACKEND_PORT)"
+APP_FRONTEND_ENV = set "VITE_TRON_API_BASE_URL=" & $(FRONTEND_API_DATA_SOURCE_ENV) set "TRON_FRONTEND_OUT_DIR=$(FRONTEND_INTEGRATED_OUT_DIR)"
+BE_RUN_ENV = $(if $(strip $(PORT)),set "TRON_BACKEND_PORT=$(PORT)" &) $(if $(strip $(GRAPH_STORAGE_PATH)),set "TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH)")
+ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),set "ELECTRON_MIRROR=$(ELECTRON_MIRROR)")
+ELECTRON_DEV_ENV = set "TRON_ELECTRON_DEVTOOLS=1" & set "TRON_ELECTRON_TARGET_DEVTOOLS=1"
+else
+HOST_OS := posix
+SHELL := /bin/sh
+.SHELLFLAGS := -eu -c
+NPM := npm
+CARGO := cargo
+DEFAULT_GRAPH_STORAGE_PATH := /tmp/tron-api-$(if $(strip $(PORT)),$(PORT),8080).graph.grafeo
+TRON_SCRATCH_GLOB := /tmp/tron*
+
+define REMOVE
+rm -rf -- "$(1)"
+endef
+
+define REMOVE_GLOB
+rm -rf -- $(1)
+endef
+
+define MKDIR
+mkdir -p -- "$(1)"
+endef
+
+define COPY_TREE
+cp -R "$(1)/." "$(2)/"
+endef
+
+define COPY_FILE
+cp -- "$(1)" "$(2)"
+endef
+
+define ASSERT_FILE
+test -f "$(1)"
+endef
+
+define LOAD_ENV_FILE
+if [ -f "$(1)" ]; then set -a; . "$(1)"; set +a; fi
+endef
+
+FRONTEND_API_DATA_SOURCE_ENV = $(foreach key,$(FRONTEND_API_DATA_SOURCE_KEYS),$(key)=api)
+FE_API_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV) TRON_FRONTEND_API_PROXY_TARGET=http://127.0.0.1:$(API_BACKEND_PORT)
+APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV) TRON_FRONTEND_OUT_DIR=$(FRONTEND_INTEGRATED_OUT_DIR)
+BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT)) $(if $(strip $(GRAPH_STORAGE_PATH)),TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH))
+ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),ELECTRON_MIRROR=$(ELECTRON_MIRROR))
+ELECTRON_DEV_ENV = TRON_ELECTRON_DEVTOOLS=1 TRON_ELECTRON_TARGET_DEVTOOLS=1
+endif
+
+.ONESHELL:
+
+ELECTRON_DIR := electron
 FRONTEND_DIR := tron-frontend
-FRONTEND_NPM := cd $(FRONTEND_DIR) && npm
 BACKEND_DIR := tron-backend
 BACKEND_MANIFEST := $(BACKEND_DIR)/Cargo.toml
 BACKEND_ENV_FILE := $(BACKEND_DIR)/.env
@@ -7,30 +105,32 @@ BACKEND_FRONTEND_DIR := $(BACKEND_DIR)/resources/frontend
 FRONTEND_INTEGRATED_OUT_DIR := ../$(BACKEND_FRONTEND_DIR)
 API_BACKEND_PORT := $(if $(strip $(PORT)),$(PORT),8080)
 API_FRONTEND_PORT := $(if $(strip $(FE_PORT)),$(FE_PORT),5173)
-API_GRAPH_STORAGE_PATH := $(if $(strip $(GRAPH_STORAGE_PATH)),$(GRAPH_STORAGE_PATH),/tmp/tron-api-$(API_BACKEND_PORT).graph.grafeo)
-BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT)) $(if $(strip $(GRAPH_STORAGE_PATH)),TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH))
-FRONTEND_API_DATA_SOURCE_ENV = \
-	VITE_TRON_DATA_SOURCE=api \
-	VITE_TRON_AUTH_DATA_SOURCE=api \
-	VITE_TRON_ADMIN_DATA_SOURCE=api \
-	VITE_TRON_AGENT_DATA_SOURCE=api \
-	VITE_TRON_APP_DATA_SOURCE=api \
-	VITE_TRON_AUTOMATION_DATA_SOURCE=api \
-	VITE_TRON_CHAT_DATA_SOURCE=api \
-	VITE_TRON_DASHBOARD_DATA_SOURCE=api \
-	VITE_TRON_KNOWLEDGE_GRAPH_DATA_SOURCE=api \
-	VITE_TRON_MCP_DATA_SOURCE=api \
-	VITE_TRON_MEMORY_DATA_SOURCE=api \
-	VITE_TRON_MODEL_DATA_SOURCE=api \
-	VITE_TRON_OBSERVABILITY_DATA_SOURCE=api \
-	VITE_TRON_PROMPT_DATA_SOURCE=api \
-	VITE_TRON_RAG_DATA_SOURCE=api \
-	VITE_TRON_RESOURCE_DATA_SOURCE=api \
-	VITE_TRON_SKILL_DATA_SOURCE=api \
-	VITE_TRON_TASK_DATA_SOURCE=api \
-	VITE_TRON_VARIABLE_DATA_SOURCE=api
-FE_API_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV) TRON_FRONTEND_API_PROXY_TARGET=http://127.0.0.1:$(API_BACKEND_PORT)
-APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV) TRON_FRONTEND_OUT_DIR=$(FRONTEND_INTEGRATED_OUT_DIR)
+API_GRAPH_STORAGE_PATH := $(if $(strip $(GRAPH_STORAGE_PATH)),$(GRAPH_STORAGE_PATH),$(DEFAULT_GRAPH_STORAGE_PATH))
+FRONTEND_API_DATA_SOURCE_KEYS := \
+	VITE_TRON_DATA_SOURCE \
+	VITE_TRON_AUTH_DATA_SOURCE \
+	VITE_TRON_ADMIN_DATA_SOURCE \
+	VITE_TRON_AGENT_DATA_SOURCE \
+	VITE_TRON_APP_DATA_SOURCE \
+	VITE_TRON_AUTOMATION_DATA_SOURCE \
+	VITE_TRON_CHAT_DATA_SOURCE \
+	VITE_TRON_DASHBOARD_DATA_SOURCE \
+	VITE_TRON_KNOWLEDGE_GRAPH_DATA_SOURCE \
+	VITE_TRON_MCP_DATA_SOURCE \
+	VITE_TRON_MEMORY_DATA_SOURCE \
+	VITE_TRON_MODEL_DATA_SOURCE \
+	VITE_TRON_OBSERVABILITY_DATA_SOURCE \
+	VITE_TRON_PROMPT_DATA_SOURCE \
+	VITE_TRON_RAG_DATA_SOURCE \
+	VITE_TRON_RESOURCE_DATA_SOURCE \
+	VITE_TRON_SKILL_DATA_SOURCE \
+	VITE_TRON_TASK_DATA_SOURCE \
+	VITE_TRON_VARIABLE_DATA_SOURCE
+
+HOST_EXE_SUFFIX := $(if $(filter Windows_NT,$(OS)),.exe,)
+BACKEND_RELEASE_BINARY := tron-backend$(HOST_EXE_SUFFIX)
+BACKEND_RELEASE_PATH := $(BACKEND_DIR)/target/release/$(BACKEND_RELEASE_BINARY)
+DESKTOP_SIDECAR_PATH := electron/resources/binaries/$(BACKEND_RELEASE_BINARY)
 
 .PHONY: help
 help:
@@ -52,7 +152,7 @@ help:
 	@echo "  make be-install   Fetch backend dependencies"
 	@echo "  make be-check     Compile backend"
 	@echo "  make be-test      Run backend tests"
-	@echo "  make be-clean     Remove backend build artifacts and /tmp/tron* scratch files"
+	@echo "  make be-clean     Remove backend build artifacts and scratch files"
 	@echo "  make be-dev       Run backend server"
 	@echo "                    Sources $(BACKEND_ENV_FILE) when present"
 	@echo "                    Example: make be-dev PORT=8081"
@@ -61,10 +161,11 @@ help:
 	@echo "Integrated web commands:"
 	@echo "  make dev-api      Start backend and frontend dev servers in API mode"
 	@echo "                    Example: make dev-api PORT=8081 FE_PORT=5174"
-	@echo "  make web-build    Build frontend into backend resources in integrated API mode and compile backend"
-	@echo "  make web-dev      Build integrated web in integrated API mode and run backend server"
+	@echo "  make web-build    Build frontend into backend resources and compile backend"
+	@echo "  make web-dev      Build integrated web and run backend server"
 	@echo "                    Example: make web-dev PORT=8081"
 	@echo "  make web-clean    Remove standalone and integrated frontend build artifacts"
+	@echo ""
 	@echo "Desktop commands:"
 	@echo "  make desktop-build     Build desktop package artifacts and sidecar binary"
 	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
@@ -84,129 +185,182 @@ install: fe-install be-install
 
 .PHONY: fe-install
 fe-install:
-	$(FRONTEND_NPM) install
+	cd "$(FRONTEND_DIR)"
+	$(NPM) install
 
 .PHONY: fe-dev
 fe-dev:
-	$(FRONTEND_NPM) run dev
+	cd "$(FRONTEND_DIR)"
+	$(NPM) run dev
 
 .PHONY: fe-dev-api
+ifeq ($(HOST_OS),windows)
 fe-dev-api:
-	cd $(FRONTEND_DIR) && $(FE_API_ENV) npm run dev -- --host 0.0.0.0 --port $(API_FRONTEND_PORT)
+	cd "$(FRONTEND_DIR)"
+	$(FE_API_ENV)
+	$(NPM) run dev -- --host 0.0.0.0 --port $(API_FRONTEND_PORT)
+else
+fe-dev-api:
+	cd "$(FRONTEND_DIR)"
+	$(FE_API_ENV) $(NPM) run dev -- --host 0.0.0.0 --port $(API_FRONTEND_PORT)
+endif
 
 .PHONY: fe-build
 fe-build:
-	$(FRONTEND_NPM) run build
+	cd "$(FRONTEND_DIR)"
+	$(NPM) run build
 
 .PHONY: fe-check
 fe-check:
-	$(FRONTEND_NPM) run typecheck
-	$(FRONTEND_NPM) run build
+	cd "$(FRONTEND_DIR)"
+	$(NPM) run typecheck
+	$(NPM) run build
 
 .PHONY: fe-test
 fe-test:
-	$(FRONTEND_NPM) exec playwright test -- $(TEST)
+	cd "$(FRONTEND_DIR)"
+	$(NPM) exec playwright test -- $(TEST)
 
 .PHONY: fe-unit-test
 fe-unit-test:
-	$(FRONTEND_NPM) run test:unit
+	cd "$(FRONTEND_DIR)"
+	$(NPM) run test:unit
 
 .PHONY: fe-clean
 fe-clean:
-	rm -rf $(FRONTEND_DIR)/dist \
-		$(FRONTEND_DIR)/node_modules/.tmp/tsconfig.node.tsbuildinfo \
-		$(FRONTEND_DIR)/tsconfig.tsbuildinfo \
-		$(FRONTEND_DIR)/vite.config.js \
-		$(FRONTEND_DIR)/vite.config.d.ts
+	$(call REMOVE,$(FRONTEND_DIR)/dist)
+	$(call REMOVE,$(FRONTEND_DIR)/node_modules/.tmp/tsconfig.node.tsbuildinfo)
+	$(call REMOVE,$(FRONTEND_DIR)/tsconfig.tsbuildinfo)
+	$(call REMOVE,$(FRONTEND_DIR)/vite.config.js)
+	$(call REMOVE,$(FRONTEND_DIR)/vite.config.d.ts)
 
 .PHONY: be-install
 be-install:
-	cargo fetch --manifest-path $(BACKEND_MANIFEST)
+	$(CARGO) fetch --manifest-path "$(BACKEND_MANIFEST)"
 
 .PHONY: be-check
 be-check:
-	cargo check --manifest-path $(BACKEND_MANIFEST)
+	$(CARGO) check --manifest-path "$(BACKEND_MANIFEST)"
 
 .PHONY: be-test
 be-test:
-	cargo test --manifest-path $(BACKEND_MANIFEST)
+	$(CARGO) test --manifest-path "$(BACKEND_MANIFEST)"
 
 .PHONY: be-clean
 be-clean:
-	rm -rf $(BACKEND_DIR)/target
-	rm -rf /tmp/tron*
+	$(call REMOVE,$(BACKEND_DIR)/target)
+	$(call REMOVE_GLOB,$(TRON_SCRATCH_GLOB))
 
 .PHONY: be-dev
+ifeq ($(HOST_OS),windows)
 be-dev:
-	@if [ -f $(BACKEND_ENV_FILE) ]; then set -a; . $(BACKEND_ENV_FILE); set +a; fi; $(BE_RUN_ENV) cargo run --manifest-path $(BACKEND_MANIFEST)
+	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
+	$(BE_RUN_ENV)
+	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
+else
+be-dev:
+	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
+	$(BE_RUN_ENV) $(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
+endif
 
 .PHONY: dev-api
-dev-api: fe-install be-install
-	@set -e; \
-	backend_port="$(API_BACKEND_PORT)"; \
-	frontend_port="$(API_FRONTEND_PORT)"; \
-	graph_storage_path="$(API_GRAPH_STORAGE_PATH)"; \
-	echo "Starting backend on http://127.0.0.1:$$backend_port"; \
-	$(MAKE) be-dev PORT=$$backend_port GRAPH_STORAGE_PATH=$$graph_storage_path & \
-	backend_pid=$$!; \
-	cleanup() { \
-		kill $$backend_pid $$frontend_pid >/dev/null 2>&1 || true; \
-	}; \
-	trap cleanup INT TERM EXIT; \
-	until curl -fsS "http://127.0.0.1:$$backend_port/api/v1/health" >/dev/null 2>&1; do \
-		sleep 1; \
-	done; \
-	echo "Starting frontend on http://localhost:$$frontend_port with /api proxy -> http://127.0.0.1:$$backend_port"; \
-	$(MAKE) fe-dev-api PORT=$$backend_port FE_PORT=$$frontend_port & \
-	frontend_pid=$$!; \
-	wait $$backend_pid $$frontend_pid
+ifeq ($(HOST_OS),windows)
+dev-api:
+	$(POWERSHELL) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$backend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('be-dev','PORT=$(API_BACKEND_PORT)','GRAPH_STORAGE_PATH=$(API_GRAPH_STORAGE_PATH)') -WorkingDirectory '$(CURDIR)' -PassThru; $$frontend = $$null; try { do { if ($$backend.HasExited) { throw 'Backend exited before the health endpoint became ready.' }; Start-Sleep -Seconds 1; try { $$health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:$(API_BACKEND_PORT)/api/v1/health' -TimeoutSec 2 } catch { $$health = $$null } } while (-not $$health -or $$health.StatusCode -ne 200); Write-Host 'Starting frontend on http://localhost:$(API_FRONTEND_PORT) with /api proxy -> http://127.0.0.1:$(API_BACKEND_PORT)'; $$frontend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('fe-dev-api','PORT=$(API_BACKEND_PORT)','FE_PORT=$(API_FRONTEND_PORT)') -WorkingDirectory '$(CURDIR)' -PassThru; Wait-Process -Id $$frontend.Id } finally { if ($$frontend -and -not $$frontend.HasExited) { Stop-Process -Id $$frontend.Id -Force }; if ($$backend -and -not $$backend.HasExited) { Stop-Process -Id $$backend.Id -Force } }"
+else
+dev-api:
+	set -eu
+	backend_port='$(API_BACKEND_PORT)'
+	frontend_port='$(API_FRONTEND_PORT)'
+	graph_storage_path='$(API_GRAPH_STORAGE_PATH)'
+	backend_pid=''
+	frontend_pid=''
+	cleanup() { test -z "$$backend_pid" || kill "$$backend_pid" >/dev/null 2>&1 || true; test -z "$$frontend_pid" || kill "$$frontend_pid" >/dev/null 2>&1 || true; }
+	trap cleanup INT TERM EXIT
+	$(MAKE) be-dev PORT="$$backend_port" GRAPH_STORAGE_PATH="$$graph_storage_path" &
+	backend_pid=$$!
+	until curl -fsS "http://127.0.0.1:$$backend_port/api/v1/health" >/dev/null 2>&1; do sleep 1; done
+	echo "Starting frontend on http://localhost:$$frontend_port with /api proxy -> http://127.0.0.1:$$backend_port"
+	$(MAKE) fe-dev-api PORT="$$backend_port" FE_PORT="$$frontend_port" &
+	frontend_pid=$$!
+	wait "$$backend_pid" "$$frontend_pid"
+endif
 
 .PHONY: web-build
+ifeq ($(HOST_OS),windows)
 web-build:
-	rm -rf $(BACKEND_FRONTEND_DIR)
-	mkdir -p $(BACKEND_FRONTEND_DIR)
-	cd $(FRONTEND_DIR) && $(APP_FRONTEND_ENV) npm run build
-	cargo build --manifest-path $(BACKEND_MANIFEST)
+	$(call REMOVE,$(BACKEND_FRONTEND_DIR))
+	$(call MKDIR,$(BACKEND_FRONTEND_DIR))
+	cd "$(FRONTEND_DIR)"
+	$(APP_FRONTEND_ENV)
+	$(NPM) run build
+	cd "$(CURDIR)"
+	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)"
+else
+web-build:
+	$(call REMOVE,$(BACKEND_FRONTEND_DIR))
+	$(call MKDIR,$(BACKEND_FRONTEND_DIR))
+	cd "$(FRONTEND_DIR)"
+	$(APP_FRONTEND_ENV) $(NPM) run build
+	cd "$(CURDIR)"
+	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)"
+endif
 
 .PHONY: web-dev
-web-dev: web-build
-	@if [ -f $(BACKEND_ENV_FILE) ]; then set -a; . $(BACKEND_ENV_FILE); set +a; fi; $(BE_RUN_ENV) cargo run --manifest-path $(BACKEND_MANIFEST)
+ifeq ($(HOST_OS),windows)
+web-dev:
+	$(MAKE) web-build
+	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
+	$(BE_RUN_ENV)
+	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
+else
+web-dev:
+	$(MAKE) web-build
+	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
+	$(BE_RUN_ENV) $(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
+endif
 
 .PHONY: web-clean
 web-clean: fe-clean
-	rm -rf $(BACKEND_FRONTEND_DIR)
-	mkdir -p $(BACKEND_FRONTEND_DIR)
-
-ELECTRON_DIR := electron
-ELECTRON_NPM := npm
-ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),ELECTRON_MIRROR=$(ELECTRON_MIRROR))
-HOST_EXE_SUFFIX := $(if $(filter Windows_NT,$(OS)),.exe,)
-BACKEND_RELEASE_BINARY := tron-backend$(HOST_EXE_SUFFIX)
-BACKEND_RELEASE_PATH := $(BACKEND_DIR)/target/release/$(BACKEND_RELEASE_BINARY)
-DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BINARY)
+	$(call REMOVE,$(BACKEND_FRONTEND_DIR))
+	$(call MKDIR,$(BACKEND_FRONTEND_DIR))
 
 .PHONY: desktop-build
 desktop-build: desktop-clean web-build
-	rm -rf $(ELECTRON_DIR)/resources/frontend
-	mkdir -p $(ELECTRON_DIR)/resources/frontend
-	cp -R $(BACKEND_FRONTEND_DIR)/. $(ELECTRON_DIR)/resources/frontend/
-	mkdir -p $(ELECTRON_DIR)/resources/binaries
-	cargo build --manifest-path $(BACKEND_MANIFEST) --release
-	test -f $(BACKEND_RELEASE_PATH)
-	cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)
-	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) install
-	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) run -s ensure-electron
-	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s build
+	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
+	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)
+	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
+	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
+	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
+	$(call ASSERT_FILE,$(BACKEND_RELEASE_PATH))
+	$(call COPY_FILE,$(BACKEND_RELEASE_PATH),$(DESKTOP_SIDECAR_PATH))
+	cd "$(ELECTRON_DIR)"
+ifeq ($(HOST_OS),windows)
+	$(ELECTRON_INSTALL_ENV)
+	$(NPM) install
+	$(ELECTRON_INSTALL_ENV)
+	$(NPM) run -s ensure-electron
+else
+	$(ELECTRON_INSTALL_ENV) $(NPM) install
+	$(ELECTRON_INSTALL_ENV) $(NPM) run -s ensure-electron
+endif
+	$(NPM) run -s build
 
 .PHONY: desktop-dev
 desktop-dev: desktop-build
-	cd $(ELECTRON_DIR) && TRON_ELECTRON_DEVTOOLS=1 TRON_ELECTRON_TARGET_DEVTOOLS=1 $(ELECTRON_NPM) run -s dev
+	cd "$(ELECTRON_DIR)"
+ifeq ($(HOST_OS),windows)
+	$(ELECTRON_DEV_ENV)
+	$(NPM) run -s dev
+else
+	$(ELECTRON_DEV_ENV) $(NPM) run -s dev
+endif
 
 .PHONY: desktop-clean
 desktop-clean:
-	rm -rf $(ELECTRON_DIR)/dist
-	rm -rf $(ELECTRON_DIR)/resources/frontend
-	rm -rf $(ELECTRON_DIR)/resources/binaries
+	$(call REMOVE,$(ELECTRON_DIR)/dist)
+	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
+	$(call REMOVE,$(ELECTRON_DIR)/resources/binaries)
 
 .PHONY: skill-memory-dreaming-test
 skill-memory-dreaming-test:
