@@ -277,7 +277,11 @@ function AppRoutePage() {
     if (resolved && resolved.route.layout !== "settings") {
       const currentPath = `${pathname}${search}`;
       const navItem = resolveActiveItem(pathname) ?? resolveActiveItemByLabel(resolved.route.activeNav);
-      const tabTitle = navItem ? t(navItem.translationKey) : resolved.route.title;
+      const tabTitle = navItem
+        ? t(navItem.translationKey)
+        : resolved.route.titleTranslationKey
+          ? t(resolved.route.titleTranslationKey)
+          : resolved.route.title;
       const activeNav = resolved.route.activeNav;
 
       // 对于某些页面（如 chats.index），查询参数变化不应该被视为 path 变化
