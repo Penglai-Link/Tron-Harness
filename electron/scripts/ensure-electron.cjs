@@ -81,9 +81,11 @@ async function main() {
   const platformPath = platformPathFor(platform);
 
   if (isInstalled(platformPath)) {
+    console.log(`Electron ${packageJson.version} is ready for ${platform}-${arch}.`);
     return;
   }
 
+  console.log(`Downloading Electron ${packageJson.version} for ${platform}-${arch}...`);
   const zipPath = await downloadArtifact({
     version: packageJson.version,
     artifactName: "electron",
@@ -96,6 +98,7 @@ async function main() {
     arch,
   });
 
+  console.log("Extracting Electron runtime...");
   extractZip(zipPath);
 
   const extractedTypeDefinition = path.join(distDir, "electron.d.ts");
@@ -107,6 +110,7 @@ async function main() {
   if (!isInstalled(platformPath)) {
     throw new Error("Electron runtime extraction did not produce a runnable binary");
   }
+  console.log(`Electron ${packageJson.version} is ready for ${platform}-${arch}.`);
 }
 
 main().catch((error) => {

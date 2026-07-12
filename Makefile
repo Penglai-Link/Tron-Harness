@@ -14,14 +14,21 @@ NVM_NODE_DIR := $(subst \,/,$(NVM_SYMLINK))
 LOCAL_NVM_NODE_DIR := $(subst \,/,$(LOCALAPPDATA))/nodejs
 NVM_NPM := $(NVM_NODE_DIR)/npm.cmd
 LOCAL_NVM_NPM := $(LOCAL_NVM_NODE_DIR)/npm.cmd
-NPM ?= $(if $(wildcard $(NVM_NPM)),"$(NVM_NPM)",$(if $(wildcard $(LOCAL_NVM_NPM)),"$(LOCAL_NVM_NPM)",npm))
+NPM_BIN ?= $(if $(wildcard $(NVM_NPM)),"$(NVM_NPM)",$(if $(wildcard $(LOCAL_NVM_NPM)),"$(LOCAL_NVM_NPM)",npm))
 NPM_NODE_DIR := $(if $(wildcard $(NVM_NPM)),$(NVM_NODE_DIR),$(if $(wildcard $(LOCAL_NVM_NPM)),$(LOCAL_NVM_NODE_DIR)))
 ifneq ($(strip $(NPM_NODE_DIR)),)
 export PATH := $(subst /,\,$(NPM_NODE_DIR));$(PATH)
 endif
+# npm is a .cmd batch file on Windows.  With .ONESHELL, `call` is required so
+# control returns to the remaining recipe lines after invoking npm.
+NPM = call $(NPM_BIN)
 CARGO := cargo.exe
 PYTHON ?= python
 SKILL_VALIDATOR ?= $(subst \,/,$(USERPROFILE))/.codex/skills/.system/skill-creator/scripts/quick_validate.py
+# GitHub release downloads frequently time out from mainland China.  The
+# variable remains overridable (including with an empty value) for other
+# networks.
+ELECTRON_MIRROR ?= https://registry.npmmirror.com/-/binary/electron/
 DEFAULT_GRAPH_STORAGE_PATH := $(subst \,/,$(TEMP))/tron-api-$(if $(strip $(PORT)),$(PORT),8080).graph.grafeo
 TRON_SCRATCH_GLOB := $(TEMP)\tron*
 
