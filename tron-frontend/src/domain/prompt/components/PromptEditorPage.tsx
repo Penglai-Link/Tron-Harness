@@ -293,57 +293,53 @@ export function PromptEditorPage({
         )}
       />
       {scopeKind === "WORKSPACE" && !workspaceCode ? <SurfaceCard className="mt-5 text-sm text-[var(--color-on-surface-variant)]">{pt("Select a workspace to edit prompts.")}</SurfaceCard> : (
-        <div className="mt-5 grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]">
-          <div className="space-y-5">
-            <SurfaceCard>
-              <div className="grid gap-4 md:grid-cols-2">
-                {mode === "detail" ? (
-                  <Field label={pt("Prompt code")}>
-                    <div className="flex gap-2">
-                      <TextInput aria-label={pt("Prompt code")} className="font-mono" readOnly value={record?.promptCode ?? promptCode} />
-                      <Button size="icon" variant="outline" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
-                    </div>
-                  </Field>
-                ) : null}
-                <Field label={pt("Name")}>
-                  <TextInput value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
+        <div className="mt-5 space-y-5">
+          <SurfaceCard>
+            <div className="grid gap-4 md:grid-cols-2">
+              {mode === "detail" ? (
+                <Field label={pt("Prompt code")}>
+                  <div className="flex gap-2">
+                    <TextInput aria-label={pt("Prompt code")} className="font-mono" readOnly value={record?.promptCode ?? promptCode} />
+                    <Button size="icon" variant="outline" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
+                  </div>
                 </Field>
-                <Field label={pt("Category")}>
-                  {mode === "create" ? (
-                    <SelectInput value={form.category} onValueChange={(value) => updateForm("category", value as PromptCategory)}>
-                      {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
-                    </SelectInput>
-                  ) : <div className="flex h-10 items-center"><Badge>{pt(promptCategoryLabel(form.category))}</Badge></div>}
-                </Field>
-              </div>
-              {record ? (
-                <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-[var(--color-outline-variant)] pt-4 text-sm text-[var(--color-on-surface-variant)]">
-                  <Badge tone={record.sourceKind === "OVERRIDE" ? "warning" : "info"}>{pt(record.sourceKind)}</Badge>
-                  <span>{record.sourceLabel}</span>
-                  {record.sourceWorkspacePath.length ? <span>{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</span> : null}
-                </div>
               ) : null}
-            </SurfaceCard>
-            <SurfaceCard>
-              <Field label={pt("Prompt body")} error={analysis.invalidVariables.length ? pt("Invalid variables: {{variables}}", { variables: analysis.invalidVariables.join(", ") }) : undefined}>
-                <TextArea aria-label={pt("Prompt body")} className="min-h-80 resize-y font-mono leading-6" value={form.promptBody} onChange={(event) => updatePromptBody(event.target.value)} />
+              <Field label={pt("Name")}>
+                <TextInput value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
               </Field>
-              <div className="mt-4">
-                <Field label={pt("Description")}>
-                  <TextArea aria-label={pt("Description")} className="min-h-24 resize-y" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
-                </Field>
-              </div>
-            </SurfaceCard>
-          </div>
-          <div className="space-y-5">
-            <SurfaceCard>
+              <Field label={pt("Category")}>
+                {mode === "create" ? (
+                  <SelectInput value={form.category} onValueChange={(value) => updateForm("category", value as PromptCategory)}>
+                    {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
+                  </SelectInput>
+                ) : <div className="flex h-10 items-center"><Badge>{pt(promptCategoryLabel(form.category))}</Badge></div>}
+              </Field>
+            </div>
+            <div className="mt-5 border-t border-[var(--color-outline-variant)] pt-5">
               <h2 className="mb-4 text-base font-semibold">{pt("Prompt Settings")}</h2>
               <div className="grid gap-4">
                 <ToggleSwitch checked={form.enabled} label={pt("Enabled")} onCheckedChange={(checked) => updateForm("enabled", checked)} />
                 {scopeKind === "WORKSPACE" && (mode === "create" || record?.sourceKind === "LOCAL") ? <ToggleSwitch checked={form.allowInheritance} label={pt("Allow inheritance")} onCheckedChange={(checked) => updateForm("allowInheritance", checked)} /> : null}
               </div>
-            </SurfaceCard>
-            <SurfaceCard>
+              <div className="mt-5">
+                <Field label={pt("Description")}>
+                  <TextArea aria-label={pt("Description")} className="min-h-24 resize-y" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
+                </Field>
+              </div>
+            </div>
+            {record ? (
+              <div className="mt-5 flex flex-wrap items-center gap-2 border-t border-[var(--color-outline-variant)] pt-4 text-sm text-[var(--color-on-surface-variant)]">
+                <Badge tone={record.sourceKind === "OVERRIDE" ? "warning" : "info"}>{pt(record.sourceKind)}</Badge>
+                <span>{record.sourceLabel}</span>
+                {record.sourceWorkspacePath.length ? <span>{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</span> : null}
+              </div>
+            ) : null}
+          </SurfaceCard>
+          <SurfaceCard>
+            <Field label={pt("Prompt body")} error={analysis.invalidVariables.length ? pt("Invalid variables: {{variables}}", { variables: analysis.invalidVariables.join(", ") }) : undefined}>
+              <TextArea aria-label={pt("Prompt body")} className="min-h-80 resize-y font-mono leading-6" value={form.promptBody} onChange={(event) => updatePromptBody(event.target.value)} />
+            </Field>
+            <div className="mt-5 border-t border-[var(--color-outline-variant)] pt-5">
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-base font-semibold">{pt("Variables")}</h2>
                 <Badge tone={analysis.invalidVariables.length || !variablesReady ? "error" : "info"}>{form.variables.length}</Badge>
@@ -379,8 +375,8 @@ export function PromptEditorPage({
                   ))}
                 </div>
               ) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("No variables detected")}</p>}
-            </SurfaceCard>
-          </div>
+            </div>
+          </SurfaceCard>
         </div>
       )}
     </>
