@@ -86,8 +86,9 @@ test.afterAll(async () => {
 test("manages workspace prompts and exposes platform prompt routes", async ({ page }) => {
   await page.goto(`${frontendBaseUrl}/prompts`);
   await expect(page.getByRole("heading", { name: "Prompt Management" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "All Prompts" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "All Prompts" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Filter", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Category", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Source", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Status", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Inheritance" })).toBeVisible();
@@ -95,6 +96,10 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await expect(page.getByRole("columnheader", { name: "Last Updated" })).toBeVisible();
   const workspaceRouterRow = page.getByRole("row").filter({ hasText: "Workspace Router" });
   await expect(workspaceRouterRow).toBeVisible();
+  await page.getByRole("combobox", { name: "Category", exact: true }).click();
+  await page.getByRole("option", { name: "System", exact: true }).click();
+  await expect(page.getByRole("row").filter({ hasText: "Review Persona" })).toHaveCount(0);
+  await page.keyboard.press("Escape");
 
   await workspaceRouterRow.click();
   await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=.*mode=override/);
@@ -169,8 +174,9 @@ test("localizes prompt UI while preserving prompt data and technical values", as
   await page.goto(`${frontendBaseUrl}/prompts`);
 
   await expect(page.getByRole("heading", { name: "提示词管理" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "全部提示词" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "全部提示词" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "筛选", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "分类", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "来源", exact: true })).toBeVisible();
   await expect(page.getByRole("combobox", { name: "状态", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "继承方式" })).toBeVisible();

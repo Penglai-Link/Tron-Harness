@@ -68,15 +68,6 @@ import {
   type PromptScopeKind,
   type PromptSourceKind,
 } from "@/domain/prompt/model";
-import { cn } from "@/shared/lib/utils";
-
-const workspaceCategoryTabs: Array<{ label: string; translationKey: string; value: PromptCategory | "" }> = [
-  { label: "All Prompts", translationKey: "tabs.all", value: "" },
-  { label: "System", translationKey: "tabs.system", value: "SYSTEM" },
-  { label: "Persona", translationKey: "tabs.persona", value: "PERSONA" },
-  { label: "Tools", translationKey: "tabs.tools", value: "TOOL" },
-  { label: "Templates", translationKey: "tabs.templates", value: "TEMPLATE" },
-];
 
 function pageBounds(current: number, size: number, total: number, visible: number) {
   if (!total || !visible) return { endItem: 0, startItem: 0 };
@@ -243,21 +234,13 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
           />
           <div className="mt-5">
             <SurfaceCard className="p-0">
-              <div className="border-b border-[var(--color-outline-variant)] px-5 pt-4">
-                <div className="flex flex-wrap gap-1">
-                  {workspaceCategoryTabs.map((item) => (
-                    <button
-                      className={cn("border-b-2 px-4 py-2 text-sm", category === item.value ? "border-[var(--color-primary)] font-medium" : "border-transparent text-[var(--color-on-surface-variant)]")}
-                      type="button"
-                      key={item.value || "all"}
-                      onClick={() => { setCategory(item.value); setCurrent(1); }}
-                    >
-                      {pt(item.translationKey, item.label)}
-                    </button>
-                  ))}
-                </div>
-                <div className="flex flex-wrap items-center gap-3 py-4">
+              <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
+                <div className="flex flex-wrap items-center gap-3">
                   <SearchField ariaLabel={pt("aria.search", "Search prompts")} className="w-full sm:w-72" placeholder={pt("filters.searchPlaceholder", "Search prompts...")} value={search} onChange={(value) => { setSearch(value); setCurrent(1); }} />
+                  <SelectInput aria-label={pt("fields.category", "Category")} className="w-full sm:w-44" value={category} onValueChange={(value) => setCategory((value ?? "") as PromptCategory | "")}>
+                    <SelectItem value="">{pt("filters.allCategories", "All categories")}</SelectItem>
+                    {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`categories.${option.value}`, option.label)}</SelectItem>)}
+                  </SelectInput>
                   <SelectInput aria-label={pt("fields.source", "Source")} className="w-full sm:w-48" value={sourceKind} onValueChange={(value) => setSourceKind((value ?? "") as PromptSourceKind | "")}>
                     <SelectItem value="">{pt("filters.allSources", "All sources")}</SelectItem>
                     {promptSourceOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`sources.${option.value}`, option.label)}</SelectItem>)}
