@@ -5,7 +5,6 @@ import {
 } from "react";
 import { useNavigate } from "react-router";
 import {
-  Filter,
   MoreHorizontal,
   Plus,
   RefreshCcw,
@@ -107,7 +106,6 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
   const [sourceKind, setSourceKind] = useState<PromptSourceKind | "">("");
   const [enabled, setEnabled] = useState<"" | "true" | "false">("");
   const [busyCode, setBusyCode] = useState("");
-  const [filtersOpen, setFiltersOpen] = useState(false);
   const [confirmTarget, setConfirmTarget] = useState<{ action: "DELETE" | "REVERT"; record: PromptRecord } | null>(null);
 
   const query = useMemo<PromptPageQuery>(() => ({
@@ -258,24 +256,19 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
                     </button>
                   ))}
                 </div>
-                <div className="flex flex-wrap items-center gap-2 py-4">
-                  <SearchField ariaLabel={pt("aria.search", "Search prompts")} placeholder={pt("filters.searchPlaceholder", "Search prompts...")} value={search} onChange={(value) => { setSearch(value); setCurrent(1); }} />
-                  <Button size="lg" variant="ghost" onClick={() => setFiltersOpen((open) => !open)}><Filter size={14} aria-hidden="true" />{pt("actions.filter", "Filter")}</Button>
+                <div className="flex flex-wrap items-center gap-3 py-4">
+                  <SearchField ariaLabel={pt("aria.search", "Search prompts")} className="w-full sm:w-72" placeholder={pt("filters.searchPlaceholder", "Search prompts...")} value={search} onChange={(value) => { setSearch(value); setCurrent(1); }} />
+                  <SelectInput aria-label={pt("fields.source", "Source")} className="w-full sm:w-48" value={sourceKind} onValueChange={(value) => setSourceKind((value ?? "") as PromptSourceKind | "")}>
+                    <SelectItem value="">{pt("filters.allSources", "All sources")}</SelectItem>
+                    {promptSourceOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`sources.${option.value}`, option.label)}</SelectItem>)}
+                  </SelectInput>
+                  <SelectInput aria-label={pt("fields.status", "Status")} className="w-full sm:w-40" value={enabled} onValueChange={(value) => setEnabled((value ?? "") as typeof enabled)}>
+                    <SelectItem value="">{pt("filters.allStatuses", "All statuses")}</SelectItem>
+                    <SelectItem value="true">{pt("status.enabled", "Enabled")}</SelectItem>
+                    <SelectItem value="false">{pt("status.disabled", "Disabled")}</SelectItem>
+                  </SelectInput>
                   {loading ? <span className="text-sm text-[var(--color-on-surface-variant)]">{pt("status.loading", "Loading...")}</span> : null}
                 </div>
-                {filtersOpen ? (
-                  <div className="flex flex-wrap items-center gap-3 pb-4">
-                    <SelectInput aria-label={pt("fields.source", "Source")} value={sourceKind} onValueChange={(value) => setSourceKind((value ?? "") as PromptSourceKind | "")}>
-                      <SelectItem value="">{pt("filters.allSources", "All sources")}</SelectItem>
-                      {promptSourceOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`sources.${option.value}`, option.label)}</SelectItem>)}
-                    </SelectInput>
-                    <SelectInput aria-label={pt("fields.status", "Status")} value={enabled} onValueChange={(value) => setEnabled((value ?? "") as typeof enabled)}>
-                      <SelectItem value="">{pt("filters.allStatuses", "All statuses")}</SelectItem>
-                      <SelectItem value="true">{pt("status.enabled", "Enabled")}</SelectItem>
-                      <SelectItem value="false">{pt("status.disabled", "Disabled")}</SelectItem>
-                    </SelectInput>
-                  </div>
-                ) : null}
               </div>
               {error ? <div className="border-b border-[var(--color-outline-variant)] px-5 py-3 text-sm text-[var(--color-error)]">{error.message}</div> : null}
               {!workspaceCode ? <div className="px-5 py-10 text-center text-sm text-[var(--color-on-surface-variant)]">{pt("empty.workspaceList", "Select a workspace to manage prompts.")}</div> : (

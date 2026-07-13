@@ -87,7 +87,9 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await page.goto(`${frontendBaseUrl}/prompts`);
   await expect(page.getByRole("heading", { name: "Prompt Management" })).toBeVisible();
   await expect(page.getByRole("button", { name: "All Prompts" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "Filter", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Filter", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "Source", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "Status", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Inheritance" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Status" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Last Updated" })).toBeVisible();
@@ -168,7 +170,9 @@ test("localizes prompt UI while preserving prompt data and technical values", as
 
   await expect(page.getByRole("heading", { name: "提示词管理" })).toBeVisible();
   await expect(page.getByRole("button", { name: "全部提示词" })).toBeVisible();
-  await expect(page.getByRole("button", { name: "筛选", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "筛选", exact: true })).toHaveCount(0);
+  await expect(page.getByRole("combobox", { name: "来源", exact: true })).toBeVisible();
+  await expect(page.getByRole("combobox", { name: "状态", exact: true })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "继承方式" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "状态" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "最后更新时间" })).toBeVisible();
