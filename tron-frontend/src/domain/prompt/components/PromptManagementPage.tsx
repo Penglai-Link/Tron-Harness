@@ -35,7 +35,6 @@ import {
   TablePagination,
   useConsoleShellConfig,
   useLocaleFormatters,
-  useLocaleText,
   useOpenRightSidebar,
   useToast,
   useWorkspaceSpaces,
@@ -57,7 +56,10 @@ import {
   promptCategoryOptions,
   promptSourceOptions,
 } from "@/domain/prompt/constants";
-import { usePromptPage } from "@/domain/prompt/hooks";
+import {
+  usePromptPage,
+  usePromptTranslation,
+} from "@/domain/prompt/hooks";
 import {
   deletePlatformPromptMock,
   deleteWorkspacePromptMock,
@@ -78,12 +80,12 @@ import {
 } from "@/domain/prompt/model";
 import { cn } from "@/shared/lib/utils";
 
-const workspaceCategoryTabs: Array<{ label: string; value: PromptCategory | "" }> = [
-  { label: "All Prompts", value: "" },
-  { label: "System", value: "SYSTEM" },
-  { label: "Persona", value: "PERSONA" },
-  { label: "Tools", value: "TOOL" },
-  { label: "Templates", value: "TEMPLATE" },
+const workspaceCategoryTabs: Array<{ label: string; translationKey: string; value: PromptCategory | "" }> = [
+  { label: "All Prompts", translationKey: "tabs.all", value: "" },
+  { label: "System", translationKey: "tabs.system", value: "SYSTEM" },
+  { label: "Persona", translationKey: "tabs.persona", value: "PERSONA" },
+  { label: "Tools", translationKey: "tabs.tools", value: "TOOL" },
+  { label: "Templates", translationKey: "tabs.templates", value: "TEMPLATE" },
 ];
 
 function pageBounds(current: number, size: number, total: number, visible: number) {
@@ -105,29 +107,29 @@ function PromptInspector({
   onClose: () => void;
   prompt: PromptRecord;
 }) {
-  const pt = useLocaleText();
+  const pt = usePromptTranslation();
   const toast = useToast();
 
   async function copyPrompt() {
     await navigator.clipboard?.writeText(prompt.promptBody);
-    toast.success(pt("Prompt body copied"));
+    toast.success(pt("messages.bodyCopied", "Prompt body copied"));
   }
 
   return (
-    <InspectorPanel title={pt("Prompt Details")}>
+    <InspectorPanel title={pt("titles.details", "Prompt Details")}>
       <div className="flex items-start justify-between">
         <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{prompt.displayName}</p>
-        <Button size="icon" variant="ghost" aria-label={pt("Close prompt details")} onClick={onClose}><X size={16} aria-hidden="true" /></Button>
+        <Button size="icon" variant="ghost" aria-label={pt("aria.closeDetails", "Close prompt details")} onClick={onClose}><X size={16} aria-hidden="true" /></Button>
       </div>
       <div className="mt-5 rounded-lg bg-[var(--color-surface-container-low)] p-4">
         <pre className="whitespace-pre-wrap text-[13px] leading-6">{prompt.promptBody}</pre>
       </div>
       <div className="mt-5 flex justify-end">
-        <Button size="sm" variant="secondary" onClick={() => void copyPrompt()}><Copy size={14} aria-hidden="true" />{pt("Copy")}</Button>
+        <Button size="sm" variant="secondary" onClick={() => void copyPrompt()}><Copy size={14} aria-hidden="true" />{pt("actions.copy", "Copy")}</Button>
       </div>
       <div className="mt-6 grid gap-2">
         <div className="mb-1 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">{pt("Variables")}</h3>
+          <h3 className="text-sm font-semibold">{pt("fields.variables", "Variables")}</h3>
           <Badge tone="info">{prompt.variables.length}</Badge>
         </div>
         {prompt.variables.length ? prompt.variables.map((variable) => (
@@ -138,7 +140,7 @@ function PromptInspector({
             </div>
             <p className="text-xs leading-5 text-[var(--color-on-surface-variant)]">{variable.description}</p>
           </div>
-        )) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("No variables detected")}</p>}
+        )) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("empty.noVariables", "No variables detected")}</p>}
       </div>
     </InspectorPanel>
   );
@@ -157,29 +159,29 @@ function DuplicatePromptDialog({
   onConfirm: (targetCategory: PromptCategory) => void;
   pending: boolean;
 }) {
-  const pt = useLocaleText();
+  const pt = usePromptTranslation();
   const [targetCategory, setTargetCategory] = useState(category);
 
   return createPortal(
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-4">
-      <div className="w-[min(92vw,28rem)] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-xl" role="dialog" aria-modal="true" aria-label={pt("Duplicate prompt")}>
+      <div className="w-[min(92vw,28rem)] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-xl" role="dialog" aria-modal="true" aria-label={pt("aria.duplicatePrompt", "Duplicate prompt")}>
         <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
-          <h2 className="text-base font-semibold">{pt("Duplicate")}</h2>
+          <h2 className="text-base font-semibold">{pt("actions.duplicate", "Duplicate")}</h2>
           <p className="mt-1 truncate text-sm text-[var(--color-on-surface-variant)]">{name}</p>
         </div>
         <div className="px-5 py-5">
           <label className="grid gap-2 text-sm font-medium">
-            {pt("Target category")}
+            {pt("duplicate.targetCategory", "Target category")}
             <SelectInput value={targetCategory} onValueChange={(value) => setTargetCategory(value as PromptCategory)}>
-              {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
+              {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`categories.${option.value}`, option.label)}</SelectItem>)}
             </SelectInput>
           </label>
         </div>
         <div className="flex justify-end gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4">
-          <Button variant="ghost" disabled={pending} onClick={onCancel}>{pt("Cancel")}</Button>
+          <Button variant="ghost" disabled={pending} onClick={onCancel}>{pt("actions.cancel", "Cancel")}</Button>
           <Button disabled={pending} aria-busy={pending} onClick={() => onConfirm(targetCategory)}>
             <Copy size={15} aria-hidden="true" />
-            {pt("Duplicate")}
+            {pt("actions.duplicate", "Duplicate")}
           </Button>
         </div>
       </div>
@@ -191,7 +193,7 @@ function DuplicatePromptDialog({
 export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind }) {
   const navigate = useNavigate();
   const openRightSidebar = useOpenRightSidebar();
-  const pt = useLocaleText();
+  const pt = usePromptTranslation();
   const toast = useToast();
   const { formatDateTime } = useLocaleFormatters();
   const dataSource = getServiceDataSource("prompt");
@@ -234,7 +236,10 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
     ) : undefined
   ), [promptPanelOpen, scopeKind, selectedPrompt]);
 
-  useConsoleShellConfig({ rightPanel });
+  useConsoleShellConfig({
+    rightPanel,
+    searchPlaceholder: pt("shell.searchPlaceholder", "Search prompts..."),
+  });
 
   useEffect(() => {
     setCurrent(1);
@@ -267,10 +272,12 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
         const payload = { enabled: !record.enabled, expectedVersion: record.version, promptCode: record.promptCode };
         await (dataSource === "api" ? setPlatformPromptEnabled(payload) : setPlatformPromptEnabledMock(payload));
       }
-      toast.success(record.enabled ? pt("Prompt disabled") : pt("Prompt enabled"));
+      toast.success(record.enabled
+        ? pt("messages.disabled", "Prompt disabled")
+        : pt("messages.enabled", "Prompt enabled"));
       refresh();
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : pt("Status update failed"));
+      toast.error(reason instanceof Error ? reason.message : pt("errors.statusUpdate", "Status update failed"));
     } finally {
       setBusyCode("");
     }
@@ -284,20 +291,20 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       if (action === "REVERT") {
         const payload = { promptCode: record.promptCode, workspaceCode };
         await (dataSource === "api" ? revertWorkspacePrompt(payload) : revertWorkspacePromptMock(payload));
-        toast.success(pt("Override reverted"));
+        toast.success(pt("messages.overrideReverted", "Override reverted"));
       } else if (scopeKind === "WORKSPACE") {
         const payload = { promptCode: record.promptCode, workspaceCode };
         await (dataSource === "api" ? deleteWorkspacePrompt(payload) : deleteWorkspacePromptMock(payload));
-        toast.success(pt("Prompt deleted"));
+        toast.success(pt("messages.deleted", "Prompt deleted"));
       } else {
         const payload = { promptCode: record.promptCode };
         await (dataSource === "api" ? deletePlatformPrompt(payload) : deletePlatformPromptMock(payload));
-        toast.success(pt("Prompt deleted"));
+        toast.success(pt("messages.deleted", "Prompt deleted"));
       }
       setConfirmTarget(null);
       refresh();
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : pt("Action failed"));
+      toast.error(reason instanceof Error ? reason.message : pt("errors.action", "Action failed"));
     } finally {
       setBusyCode("");
     }
@@ -315,10 +322,10 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
         await (dataSource === "api" ? duplicatePlatformPrompt(payload) : duplicatePlatformPromptMock(payload));
       }
       setDuplicateTarget(null);
-      toast.success(pt("Prompt duplicated"));
+      toast.success(pt("messages.duplicated", "Prompt duplicated"));
       refresh();
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : pt("Duplicate failed"));
+      toast.error(reason instanceof Error ? reason.message : pt("errors.duplicate", "Duplicate failed"));
     } finally {
       setBusyCode("");
     }
@@ -337,9 +344,9 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       anchor.download = result.fileName;
       anchor.click();
       URL.revokeObjectURL(url);
-      toast.success(pt("Prompts exported"));
+      toast.success(pt("messages.exported", "Prompts exported"));
     } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : pt("Export failed"));
+      toast.error(reason instanceof Error ? reason.message : pt("errors.export", "Export failed"));
     }
   }
 
@@ -349,18 +356,18 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       : (["EDIT", "DUPLICATE", "SET_ENABLED", "DELETE"] as const);
     return workspaceActions.map((action) => {
       if (action === "EDIT" || action === "OVERRIDE") {
-        return <DropdownMenuItem key={action} onClick={() => navigate(detailHref(record, action === "OVERRIDE" ? "override" : undefined))}>{pt(action === "OVERRIDE" ? "Create override" : "Edit")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={() => navigate(detailHref(record, action === "OVERRIDE" ? "override" : undefined))}>{action === "OVERRIDE" ? pt("actions.createOverride", "Create override") : pt("actions.edit", "Edit")}</DropdownMenuItem>;
       }
       if (action === "DUPLICATE") {
-        return <DropdownMenuItem key={action} onClick={() => setDuplicateTarget(record)}><Copy aria-hidden="true" />{pt("Duplicate")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={() => setDuplicateTarget(record)}><Copy aria-hidden="true" />{pt("actions.duplicate", "Duplicate")}</DropdownMenuItem>;
       }
       if (action === "SET_ENABLED") {
-        return <DropdownMenuItem key={action} onClick={() => void toggleEnabled(record)}>{pt(record.enabled ? "Disable" : "Enable")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={() => void toggleEnabled(record)}>{record.enabled ? pt("actions.disable", "Disable") : pt("actions.enable", "Enable")}</DropdownMenuItem>;
       }
       if (action === "REVERT") {
-        return <DropdownMenuItem key={action} onClick={() => setConfirmTarget({ action, record })}><RotateCcw aria-hidden="true" />{pt("Revert")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={() => setConfirmTarget({ action, record })}><RotateCcw aria-hidden="true" />{pt("actions.revert", "Revert")}</DropdownMenuItem>;
       }
-      return <DropdownMenuItem key={action} variant="destructive" onClick={() => setConfirmTarget({ action: "DELETE", record })}><Trash2 aria-hidden="true" />{pt("Delete")}</DropdownMenuItem>;
+      return <DropdownMenuItem key={action} variant="destructive" onClick={() => setConfirmTarget({ action: "DELETE", record })}><Trash2 aria-hidden="true" />{pt("actions.delete", "Delete")}</DropdownMenuItem>;
     });
   }
 
@@ -369,11 +376,11 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       {scopeKind === "WORKSPACE" ? (
         <>
           <PageHeader
-            title={pt("Prompt Management")}
+            title={pt("titles.management", "Prompt Management")}
             actions={(
               <>
-                <Button size="lg" variant="outline" disabled={!workspaceCode} onClick={() => void exportPrompts()}>{pt("Bulk Export")}</Button>
-                <Button size="lg" disabled={!workspaceCode} onClick={() => navigate("/prompts/new")}>{pt("New")}</Button>
+                <Button size="lg" variant="outline" disabled={!workspaceCode} onClick={() => void exportPrompts()}>{pt("actions.bulkExport", "Bulk Export")}</Button>
+                <Button size="lg" disabled={!workspaceCode} onClick={() => navigate("/prompts/new")}>{pt("actions.new", "New")}</Button>
               </>
             )}
           />
@@ -388,42 +395,42 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
                       key={item.value || "all"}
                       onClick={() => { setCategory(item.value); setCurrent(1); }}
                     >
-                      {pt(item.label)}
+                      {pt(item.translationKey, item.label)}
                     </button>
                   ))}
                 </div>
                 <div className="flex flex-wrap items-center gap-2 py-4">
-                  <SearchField ariaLabel={pt("Search prompts")} placeholder={pt("Search prompts...")} value={search} onChange={(value) => { setSearch(value); setCurrent(1); }} />
-                  <Button size="lg" variant="ghost" onClick={() => setFiltersOpen((open) => !open)}><Filter size={14} aria-hidden="true" />{pt("Filter")}</Button>
-                  {loading ? <span className="text-sm text-[var(--color-on-surface-variant)]">{pt("Loading...")}</span> : null}
+                  <SearchField ariaLabel={pt("aria.search", "Search prompts")} placeholder={pt("filters.searchPlaceholder", "Search prompts...")} value={search} onChange={(value) => { setSearch(value); setCurrent(1); }} />
+                  <Button size="lg" variant="ghost" onClick={() => setFiltersOpen((open) => !open)}><Filter size={14} aria-hidden="true" />{pt("actions.filter", "Filter")}</Button>
+                  {loading ? <span className="text-sm text-[var(--color-on-surface-variant)]">{pt("status.loading", "Loading...")}</span> : null}
                 </div>
                 {filtersOpen ? (
                   <div className="flex flex-wrap items-center gap-3 pb-4">
-                    <SelectInput aria-label={pt("Source")} value={sourceKind} onValueChange={(value) => setSourceKind((value ?? "") as PromptSourceKind | "")}>
-                      <SelectItem value="">{pt("All sources")}</SelectItem>
-                      {promptSourceOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
+                    <SelectInput aria-label={pt("fields.source", "Source")} value={sourceKind} onValueChange={(value) => setSourceKind((value ?? "") as PromptSourceKind | "")}>
+                      <SelectItem value="">{pt("filters.allSources", "All sources")}</SelectItem>
+                      {promptSourceOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`sources.${option.value}`, option.label)}</SelectItem>)}
                     </SelectInput>
-                    <SelectInput aria-label={pt("Status")} value={enabled} onValueChange={(value) => setEnabled((value ?? "") as typeof enabled)}>
-                      <SelectItem value="">{pt("All statuses")}</SelectItem>
-                      <SelectItem value="true">{pt("Enabled")}</SelectItem>
-                      <SelectItem value="false">{pt("Disabled")}</SelectItem>
+                    <SelectInput aria-label={pt("fields.status", "Status")} value={enabled} onValueChange={(value) => setEnabled((value ?? "") as typeof enabled)}>
+                      <SelectItem value="">{pt("filters.allStatuses", "All statuses")}</SelectItem>
+                      <SelectItem value="true">{pt("status.enabled", "Enabled")}</SelectItem>
+                      <SelectItem value="false">{pt("status.disabled", "Disabled")}</SelectItem>
                     </SelectInput>
                   </div>
                 ) : null}
               </div>
               {error ? <div className="border-b border-[var(--color-outline-variant)] px-5 py-3 text-sm text-[var(--color-error)]">{error.message}</div> : null}
-              {!workspaceCode ? <div className="px-5 py-10 text-center text-sm text-[var(--color-on-surface-variant)]">{pt("Select a workspace to manage prompts.")}</div> : (
+              {!workspaceCode ? <div className="px-5 py-10 text-center text-sm text-[var(--color-on-surface-variant)]">{pt("empty.workspaceList", "Select a workspace to manage prompts.")}</div> : (
                 <DataTable
                   variant="embedded"
                   rows={page.records}
                   rowKey={(record) => record.promptCode}
-                  pagination={<TablePagination {...bounds} itemLabel={pt("prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
+                  pagination={<TablePagination {...bounds} itemLabel={pt("pagination.itemLabel", "prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
                   columns={[
-                    { id: "name", header: pt("Name"), render: (record) => <button className="font-medium text-[var(--color-primary)]" type="button" onClick={() => selectPrompt(record)}>{record.displayName}</button> },
-                    { id: "category", header: pt("Category"), render: (record) => <Badge>{pt(promptCategoryLabel(record.category))}</Badge> },
-                    { id: "inheritance", header: pt("Inheritance"), render: (record) => record.sourceLabel },
-                    { id: "updated", header: pt("Last Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-                    { id: "actions", header: pt("Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+                    { id: "name", header: pt("fields.name", "Name"), render: (record) => <button className="font-medium text-[var(--color-primary)]" type="button" onClick={() => selectPrompt(record)}>{record.displayName}</button> },
+                    { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
+                    { id: "inheritance", header: pt("fields.inheritance", "Inheritance"), render: (record) => record.sourceLabel },
+                    { id: "updated", header: pt("fields.lastUpdated", "Last Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
+                    { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
                   ]}
                 />
               )}
@@ -433,42 +440,42 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       ) : (
         <>
           <PageHeader
-            title={pt("Platform Prompts")}
+            title={pt("titles.platform", "Platform Prompts")}
             actions={(
               <>
-                <Button variant="outline" aria-label={pt("Refresh")} onClick={refresh}><RefreshCcw size={15} aria-hidden="true" /></Button>
-                <Button onClick={() => navigate("/settings/prompts/new")}><Plus size={15} aria-hidden="true" />{pt("New")}</Button>
+                <Button variant="outline" aria-label={pt("actions.refresh", "Refresh")} onClick={refresh}><RefreshCcw size={15} aria-hidden="true" /></Button>
+                <Button onClick={() => navigate("/settings/prompts/new")}><Plus size={15} aria-hidden="true" />{pt("actions.new", "New")}</Button>
               </>
             )}
           />
           <SurfaceCard className="mt-5 p-0">
             <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
-              <SearchField ariaLabel={pt("Search prompts")} placeholder={pt("Search prompts...")} value={search} onChange={(value) => { setSearch(value); setCurrent(1); }} />
-              <SelectInput aria-label={pt("Category")} value={category} onValueChange={(value) => setCategory((value ?? "") as PromptCategory | "")}>
-                <SelectItem value="">{pt("All categories")}</SelectItem>
-                {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
+              <SearchField ariaLabel={pt("aria.search", "Search prompts")} placeholder={pt("filters.searchPlaceholder", "Search prompts...")} value={search} onChange={(value) => { setSearch(value); setCurrent(1); }} />
+              <SelectInput aria-label={pt("fields.category", "Category")} value={category} onValueChange={(value) => setCategory((value ?? "") as PromptCategory | "")}>
+                <SelectItem value="">{pt("filters.allCategories", "All categories")}</SelectItem>
+                {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`categories.${option.value}`, option.label)}</SelectItem>)}
               </SelectInput>
-              <SelectInput aria-label={pt("Status")} value={enabled} onValueChange={(value) => setEnabled((value ?? "") as typeof enabled)}>
-                <SelectItem value="">{pt("All statuses")}</SelectItem>
-                <SelectItem value="true">{pt("Enabled")}</SelectItem>
-                <SelectItem value="false">{pt("Disabled")}</SelectItem>
+              <SelectInput aria-label={pt("fields.status", "Status")} value={enabled} onValueChange={(value) => setEnabled((value ?? "") as typeof enabled)}>
+                <SelectItem value="">{pt("filters.allStatuses", "All statuses")}</SelectItem>
+                <SelectItem value="true">{pt("status.enabled", "Enabled")}</SelectItem>
+                <SelectItem value="false">{pt("status.disabled", "Disabled")}</SelectItem>
               </SelectInput>
-              {loading ? <span className="text-sm text-[var(--color-on-surface-variant)]">{pt("Loading...")}</span> : null}
+              {loading ? <span className="text-sm text-[var(--color-on-surface-variant)]">{pt("status.loading", "Loading...")}</span> : null}
             </div>
             {error ? <div className="border-b border-[var(--color-outline-variant)] px-5 py-3 text-sm text-[var(--color-error)]">{error.message}</div> : null}
             <DataTable
               variant="embedded"
               rows={page.records}
               rowKey={(record) => record.promptCode}
-              pagination={<TablePagination {...bounds} itemLabel={pt("prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
+              pagination={<TablePagination {...bounds} itemLabel={pt("pagination.itemLabel", "prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
               columns={[
-                { id: "name", header: pt("Name"), render: (record) => <button className="text-left font-medium text-[var(--color-primary)]" type="button" onClick={() => navigate(detailHref(record))}>{record.displayName}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></button> },
-                { id: "category", header: pt("Category"), render: (record) => <Badge>{pt(promptCategoryLabel(record.category))}</Badge> },
-                { id: "source", header: pt("Source"), render: (record) => <div><Badge tone={sourceTone(record.sourceKind)}>{pt(record.sourceKind)}</Badge><span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{record.sourceLabel}</span></div> },
-                { id: "variables", header: pt("Variables"), render: (record) => <Badge tone="info">{record.variables.length}</Badge> },
-                { id: "status", header: pt("Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{pt(record.enabled ? "Enabled" : "Disabled")}</Badge> },
-                { id: "updated", header: pt("Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-                { id: "actions", header: pt("Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+                { id: "name", header: pt("fields.name", "Name"), render: (record) => <button className="text-left font-medium text-[var(--color-primary)]" type="button" onClick={() => navigate(detailHref(record))}>{record.displayName}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></button> },
+                { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
+                { id: "source", header: pt("fields.source", "Source"), render: (record) => <div><Badge tone={sourceTone(record.sourceKind)}>{record.sourceKind}</Badge><span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{record.sourceLabel}</span></div> },
+                { id: "variables", header: pt("fields.variables", "Variables"), render: (record) => <Badge tone="info">{record.variables.length}</Badge> },
+                { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
+                { id: "updated", header: pt("fields.updated", "Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
+                { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
               ]}
             />
           </SurfaceCard>
@@ -478,9 +485,13 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       <ConfirmDialog
         open={confirmTarget !== null}
         pending={Boolean(confirmTarget && busyCode === confirmTarget.record.promptCode)}
-        title={pt(confirmTarget?.action === "REVERT" ? "Revert override?" : "Delete prompt?")}
+        title={confirmTarget?.action === "REVERT"
+          ? pt("confirm.revertTitle", "Revert override?")
+          : pt("confirm.deleteTitle", "Delete prompt?")}
         description={confirmTarget?.record.displayName}
-        confirmText={pt(confirmTarget?.action === "REVERT" ? "Revert" : "Delete")}
+        confirmText={confirmTarget?.action === "REVERT"
+          ? pt("actions.revert", "Revert")
+          : pt("actions.delete", "Delete")}
         onCancel={() => setConfirmTarget(null)}
         onConfirm={() => void confirmDestructiveAction()}
       />

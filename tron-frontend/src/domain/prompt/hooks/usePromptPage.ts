@@ -13,6 +13,7 @@ import {
   listPlatformPromptsMock,
   listWorkspacePromptsMock,
 } from "@/domain/prompt/mock";
+import { usePromptTranslation } from "@/domain/prompt/hooks/usePromptTranslation";
 import type {
   PromptPage,
   PromptPageQuery,
@@ -31,6 +32,7 @@ function emptyPage(query: PromptPageQuery): PromptPage<PromptRecord> {
 }
 
 export function usePromptPage(scopeKind: PromptScopeKind, query: PromptPageQuery) {
+  const pt = usePromptTranslation();
   const dataSource = getServiceDataSource("prompt");
   const queryKey = useMemo(() => JSON.stringify(query), [query]);
   const [reloadKey, setReloadKey] = useState(0);
@@ -64,14 +66,14 @@ export function usePromptPage(scopeKind: PromptScopeKind, query: PromptPageQuery
       })
       .catch((reason: unknown) => {
         if (controller.signal.aborted) return;
-        setError(reason instanceof Error ? reason : new Error("Prompts could not be loaded"));
+        setError(reason instanceof Error ? reason : new Error(pt("errors.load", "Prompts could not be loaded")));
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoading(false);
       });
 
     return () => controller.abort();
-  }, [dataSource, queryKey, reloadKey, scopeKind]);
+  }, [dataSource, pt, queryKey, reloadKey, scopeKind]);
 
   const refresh = useCallback(() => setReloadKey((value) => value + 1), []);
   return { error, loading, page, refresh };

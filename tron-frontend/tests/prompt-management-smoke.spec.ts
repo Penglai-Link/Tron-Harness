@@ -136,3 +136,39 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await expect(page.getByRole("heading", { name: "Platform Prompts" })).toBeVisible();
   await expect(page.getByRole("button", { name: "New", exact: true })).toBeVisible();
 });
+
+test("localizes prompt UI while preserving prompt data and technical values", async ({ page }) => {
+  await page.addInitScript(() => window.localStorage.setItem("tron.locale", "zh-CN"));
+  await page.goto(`${frontendBaseUrl}/prompts`);
+
+  await expect(page.getByRole("heading", { name: "提示词管理" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "全部提示词" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "筛选", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "继承方式" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "最后更新时间" })).toBeVisible();
+  await expect(page.getByPlaceholder("搜索提示词...").first()).toBeVisible();
+
+  const workspacePrompt = page.getByRole("button", { name: "Workspace Router", exact: true });
+  await expect(workspacePrompt).toBeVisible();
+  await workspacePrompt.click();
+  await expect(page.getByText("提示词详情", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Workspace Router 的操作" }).click();
+  await expect(page.getByText("创建覆盖", { exact: true })).toBeVisible();
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "新建", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "新建提示词" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "已启用", exact: true })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "允许继承", exact: true })).toBeVisible();
+  await page.getByLabel("名称").fill("Greeting Template");
+  await page.getByLabel("提示词内容").fill("Hello {{name}}.");
+
+  await expect(page.getByText("变量名", { exact: true }).first()).toBeVisible();
+  await expect(page.getByRole("code").filter({ hasText: /^name$/ })).toBeVisible();
+  await expect(page.getByText("STRING", { exact: true }).first()).toBeVisible();
+
+  await page.goto(`${frontendBaseUrl}/settings/prompts`);
+  await expect(page.getByRole("heading", { name: "平台提示词" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "新建", exact: true })).toBeVisible();
+});
