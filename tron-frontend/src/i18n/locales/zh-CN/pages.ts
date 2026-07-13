@@ -1616,11 +1616,9 @@ export const pages = {
     actions: {
       bulkExport: "批量导出",
       cancel: "取消",
-      copy: "复制",
       createOverride: "创建覆盖",
       delete: "删除",
       disable: "禁用",
-      duplicate: "复制提示词",
       edit: "编辑",
       enable: "启用",
       filter: "筛选",
@@ -1632,9 +1630,7 @@ export const pages = {
     },
     aria: {
       actionsFor: "{{name}} 的操作",
-      closeDetails: "关闭提示词详情",
       copyPromptCode: "复制提示词编码",
-      duplicatePrompt: "复制提示词",
       search: "搜索提示词",
       variableDescription: "变量 {{name}} 的描述",
       variableType: "变量 {{name}} 的类型",
@@ -1649,9 +1645,6 @@ export const pages = {
       deleteTitle: "删除提示词？",
       revertTitle: "还原覆盖配置？",
     },
-    duplicate: {
-      targetCategory: "目标分类",
-    },
     empty: {
       noVariables: "未检测到变量",
       workspaceEditor: "请选择工作空间后编辑提示词。",
@@ -1661,7 +1654,6 @@ export const pages = {
       action: "操作失败",
       detailLoad: "提示词加载失败",
       detailsNotLoaded: "提示词详情尚未加载",
-      duplicate: "复制提示词失败",
       export: "导出失败",
       invalidVariables: "请修正无效变量后再保存",
       load: "提示词列表加载失败",
@@ -1693,11 +1685,9 @@ export const pages = {
       searchPlaceholder: "搜索提示词...",
     },
     messages: {
-      bodyCopied: "提示词内容已复制",
       codeCopied: "提示词编码已复制",
       deleted: "提示词已删除",
       disabled: "提示词已禁用",
-      duplicated: "提示词已复制",
       enabled: "提示词已启用",
       exported: "提示词已导出",
       overrideReverted: "覆盖配置已还原",

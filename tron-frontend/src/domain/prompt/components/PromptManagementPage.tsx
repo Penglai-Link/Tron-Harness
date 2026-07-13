@@ -3,17 +3,14 @@ import {
   useMemo,
   useState,
 } from "react";
-import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import {
-  Copy,
   Filter,
   MoreHorizontal,
   Plus,
   RefreshCcw,
   RotateCcw,
   Trash2,
-  X,
 } from "lucide-react";
 
 import {
@@ -27,7 +24,6 @@ import { Button } from "@/components/ui/button";
 import {
   ConfirmDialog,
   DataTable,
-  InspectorPanel,
   PageHeader,
   SearchField,
   SelectInput,
@@ -35,7 +31,6 @@ import {
   TablePagination,
   useConsoleShellConfig,
   useLocaleFormatters,
-  useOpenRightSidebar,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -44,8 +39,6 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   deletePlatformPrompt,
   deleteWorkspacePrompt,
-  duplicatePlatformPrompt,
-  duplicateWorkspacePrompt,
   exportWorkspacePrompts,
   revertWorkspacePrompt,
   setPlatformPromptEnabled,
@@ -63,8 +56,6 @@ import {
 import {
   deletePlatformPromptMock,
   deleteWorkspacePromptMock,
-  duplicatePlatformPromptMock,
-  duplicateWorkspacePromptMock,
   exportWorkspacePromptsMock,
   revertWorkspacePromptMock,
   setPlatformPromptEnabledMock,
@@ -100,99 +91,8 @@ function sourceTone(sourceKind: PromptSourceKind) {
   return "info" as const;
 }
 
-function PromptInspector({
-  onClose,
-  prompt,
-}: {
-  onClose: () => void;
-  prompt: PromptRecord;
-}) {
-  const pt = usePromptTranslation();
-  const toast = useToast();
-
-  async function copyPrompt() {
-    await navigator.clipboard?.writeText(prompt.promptBody);
-    toast.success(pt("messages.bodyCopied", "Prompt body copied"));
-  }
-
-  return (
-    <InspectorPanel title={pt("titles.details", "Prompt Details")}>
-      <div className="flex items-start justify-between">
-        <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{prompt.displayName}</p>
-        <Button size="icon" variant="ghost" aria-label={pt("aria.closeDetails", "Close prompt details")} onClick={onClose}><X size={16} aria-hidden="true" /></Button>
-      </div>
-      <div className="mt-5 rounded-lg bg-[var(--color-surface-container-low)] p-4">
-        <pre className="whitespace-pre-wrap text-[13px] leading-6">{prompt.promptBody}</pre>
-      </div>
-      <div className="mt-5 flex justify-end">
-        <Button size="sm" variant="secondary" onClick={() => void copyPrompt()}><Copy size={14} aria-hidden="true" />{pt("actions.copy", "Copy")}</Button>
-      </div>
-      <div className="mt-6 grid gap-2">
-        <div className="mb-1 flex items-center justify-between gap-3">
-          <h3 className="text-sm font-semibold">{pt("fields.variables", "Variables")}</h3>
-          <Badge tone="info">{prompt.variables.length}</Badge>
-        </div>
-        {prompt.variables.length ? prompt.variables.map((variable) => (
-          <div key={variable.name} className="grid gap-1 rounded-md bg-[var(--color-surface-container-low)] px-3 py-2">
-            <div className="flex min-h-6 items-center justify-between gap-3">
-              <code className="min-w-0 break-all font-mono text-xs">{`{{${variable.name}}}`}</code>
-              <Badge tone="info">{variable.type}</Badge>
-            </div>
-            <p className="text-xs leading-5 text-[var(--color-on-surface-variant)]">{variable.description}</p>
-          </div>
-        )) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("empty.noVariables", "No variables detected")}</p>}
-      </div>
-    </InspectorPanel>
-  );
-}
-
-function DuplicatePromptDialog({
-  category,
-  name,
-  onCancel,
-  onConfirm,
-  pending,
-}: {
-  category: PromptCategory;
-  name: string;
-  onCancel: () => void;
-  onConfirm: (targetCategory: PromptCategory) => void;
-  pending: boolean;
-}) {
-  const pt = usePromptTranslation();
-  const [targetCategory, setTargetCategory] = useState(category);
-
-  return createPortal(
-    <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-4">
-      <div className="w-[min(92vw,28rem)] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-xl" role="dialog" aria-modal="true" aria-label={pt("aria.duplicatePrompt", "Duplicate prompt")}>
-        <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
-          <h2 className="text-base font-semibold">{pt("actions.duplicate", "Duplicate")}</h2>
-          <p className="mt-1 truncate text-sm text-[var(--color-on-surface-variant)]">{name}</p>
-        </div>
-        <div className="px-5 py-5">
-          <label className="grid gap-2 text-sm font-medium">
-            {pt("duplicate.targetCategory", "Target category")}
-            <SelectInput value={targetCategory} onValueChange={(value) => setTargetCategory(value as PromptCategory)}>
-              {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(`categories.${option.value}`, option.label)}</SelectItem>)}
-            </SelectInput>
-          </label>
-        </div>
-        <div className="flex justify-end gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4">
-          <Button variant="ghost" disabled={pending} onClick={onCancel}>{pt("actions.cancel", "Cancel")}</Button>
-          <Button disabled={pending} aria-busy={pending} onClick={() => onConfirm(targetCategory)}>
-            <Copy size={15} aria-hidden="true" />
-            {pt("actions.duplicate", "Duplicate")}
-          </Button>
-        </div>
-      </div>
-    </div>,
-    document.body,
-  );
-}
-
 export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind }) {
   const navigate = useNavigate();
-  const openRightSidebar = useOpenRightSidebar();
   const pt = usePromptTranslation();
   const toast = useToast();
   const { formatDateTime } = useLocaleFormatters();
@@ -208,9 +108,6 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
   const [enabled, setEnabled] = useState<"" | "true" | "false">("");
   const [busyCode, setBusyCode] = useState("");
   const [filtersOpen, setFiltersOpen] = useState(false);
-  const [promptPanelOpen, setPromptPanelOpen] = useState(true);
-  const [selectedCode, setSelectedCode] = useState("");
-  const [duplicateTarget, setDuplicateTarget] = useState<PromptRecord | null>(null);
   const [confirmTarget, setConfirmTarget] = useState<{ action: "DELETE" | "REVERT"; record: PromptRecord } | null>(null);
 
   const query = useMemo<PromptPageQuery>(() => ({
@@ -225,33 +122,15 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
   const { error, loading, page, refresh } = usePromptPage(scopeKind, query);
   const pageCount = Math.max(1, Math.ceil(page.total / Math.max(1, page.size)));
   const bounds = pageBounds(page.current, page.size, page.total, page.records.length);
-  const selectedPrompt = page.records.find((record) => record.promptCode === selectedCode) ?? page.records[0];
-  const rightPanel = useMemo(() => (
-    scopeKind === "WORKSPACE" && selectedPrompt && promptPanelOpen ? (
-      <PromptInspector
-        key={selectedPrompt.promptCode}
-        onClose={() => setPromptPanelOpen(false)}
-        prompt={selectedPrompt}
-      />
-    ) : undefined
-  ), [promptPanelOpen, scopeKind, selectedPrompt]);
 
   useConsoleShellConfig({
-    rightPanel,
     searchPlaceholder: pt("shell.searchPlaceholder", "Search prompts..."),
   });
 
   useEffect(() => {
     setCurrent(1);
-    setDuplicateTarget(null);
     setConfirmTarget(null);
   }, [category, enabled, size, sourceKind, workspaceCode]);
-
-  function selectPrompt(record: PromptRecord) {
-    setSelectedCode(record.promptCode);
-    setPromptPanelOpen(true);
-    openRightSidebar();
-  }
 
   function detailHref(record: PromptRecord, mode?: "override") {
     const params = new URLSearchParams({ promptCode: record.promptCode });
@@ -259,6 +138,10 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
     return scopeKind === "WORKSPACE"
       ? `/prompts/detail?${params.toString()}`
       : `/settings/prompts/detail?${params.toString()}`;
+  }
+
+  function editorHref(record: PromptRecord) {
+    return detailHref(record, scopeKind === "WORKSPACE" && record.sourceKind === "INHERITED" ? "override" : undefined);
   }
 
   async function toggleEnabled(record: PromptRecord) {
@@ -310,27 +193,6 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
     }
   }
 
-  async function duplicatePrompt(targetCategory: PromptCategory) {
-    if (!duplicateTarget || busyCode) return;
-    setBusyCode(duplicateTarget.promptCode);
-    try {
-      if (scopeKind === "WORKSPACE") {
-        const payload = { promptCode: duplicateTarget.promptCode, targetCategory, workspaceCode };
-        await (dataSource === "api" ? duplicateWorkspacePrompt(payload) : duplicateWorkspacePromptMock(payload));
-      } else {
-        const payload = { promptCode: duplicateTarget.promptCode, targetCategory };
-        await (dataSource === "api" ? duplicatePlatformPrompt(payload) : duplicatePlatformPromptMock(payload));
-      }
-      setDuplicateTarget(null);
-      toast.success(pt("messages.duplicated", "Prompt duplicated"));
-      refresh();
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : pt("errors.duplicate", "Duplicate failed"));
-    } finally {
-      setBusyCode("");
-    }
-  }
-
   async function exportPrompts() {
     if (!workspaceCode) return;
     try {
@@ -353,13 +215,10 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
   function actionItems(record: PromptRecord) {
     const workspaceActions = scopeKind === "WORKSPACE"
       ? getWorkspacePromptActions(record.sourceKind)
-      : (["EDIT", "DUPLICATE", "SET_ENABLED", "DELETE"] as const);
+      : (["EDIT", "SET_ENABLED", "DELETE"] as const);
     return workspaceActions.map((action) => {
       if (action === "EDIT" || action === "OVERRIDE") {
         return <DropdownMenuItem key={action} onClick={() => navigate(detailHref(record, action === "OVERRIDE" ? "override" : undefined))}>{action === "OVERRIDE" ? pt("actions.createOverride", "Create override") : pt("actions.edit", "Edit")}</DropdownMenuItem>;
-      }
-      if (action === "DUPLICATE") {
-        return <DropdownMenuItem key={action} onClick={() => setDuplicateTarget(record)}><Copy aria-hidden="true" />{pt("actions.duplicate", "Duplicate")}</DropdownMenuItem>;
       }
       if (action === "SET_ENABLED") {
         return <DropdownMenuItem key={action} onClick={() => void toggleEnabled(record)}>{record.enabled ? pt("actions.disable", "Disable") : pt("actions.enable", "Enable")}</DropdownMenuItem>;
@@ -424,13 +283,15 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
                   variant="embedded"
                   rows={page.records}
                   rowKey={(record) => record.promptCode}
+                  onRowClick={(record) => navigate(editorHref(record))}
                   pagination={<TablePagination {...bounds} itemLabel={pt("pagination.itemLabel", "prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
                   columns={[
-                    { id: "name", header: pt("fields.name", "Name"), render: (record) => <button className="font-medium text-[var(--color-primary)]" type="button" onClick={() => selectPrompt(record)}>{record.displayName}</button> },
+                    { id: "name", header: pt("fields.name", "Name"), render: (record) => <span className="font-medium text-[var(--color-primary)]">{record.displayName}</span> },
                     { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
                     { id: "inheritance", header: pt("fields.inheritance", "Inheritance"), render: (record) => record.sourceLabel },
+                    { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
                     { id: "updated", header: pt("fields.lastUpdated", "Last Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-                    { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+                    { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
                   ]}
                 />
               )}
@@ -467,21 +328,21 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
               variant="embedded"
               rows={page.records}
               rowKey={(record) => record.promptCode}
+              onRowClick={(record) => navigate(editorHref(record))}
               pagination={<TablePagination {...bounds} itemLabel={pt("pagination.itemLabel", "prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
               columns={[
-                { id: "name", header: pt("fields.name", "Name"), render: (record) => <button className="text-left font-medium text-[var(--color-primary)]" type="button" onClick={() => navigate(detailHref(record))}>{record.displayName}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></button> },
+                { id: "name", header: pt("fields.name", "Name"), render: (record) => <div className="text-left font-medium text-[var(--color-primary)]">{record.displayName}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></div> },
                 { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
                 { id: "source", header: pt("fields.source", "Source"), render: (record) => <div><Badge tone={sourceTone(record.sourceKind)}>{record.sourceKind}</Badge><span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{record.sourceLabel}</span></div> },
                 { id: "variables", header: pt("fields.variables", "Variables"), render: (record) => <Badge tone="info">{record.variables.length}</Badge> },
                 { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
                 { id: "updated", header: pt("fields.updated", "Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-                { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+                { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
               ]}
             />
           </SurfaceCard>
         </>
       )}
-      {duplicateTarget ? <DuplicatePromptDialog category={duplicateTarget.category} name={duplicateTarget.displayName} pending={busyCode === duplicateTarget.promptCode} onCancel={() => setDuplicateTarget(null)} onConfirm={(targetCategory) => void duplicatePrompt(targetCategory)} /> : null}
       <ConfirmDialog
         open={confirmTarget !== null}
         pending={Boolean(confirmTarget && busyCode === confirmTarget.record.promptCode)}

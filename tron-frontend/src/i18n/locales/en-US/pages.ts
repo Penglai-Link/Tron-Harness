@@ -1572,11 +1572,9 @@ export const pages = {
     actions: {
       bulkExport: "Bulk Export",
       cancel: "Cancel",
-      copy: "Copy",
       createOverride: "Create override",
       delete: "Delete",
       disable: "Disable",
-      duplicate: "Duplicate",
       edit: "Edit",
       enable: "Enable",
       filter: "Filter",
@@ -1588,9 +1586,7 @@ export const pages = {
     },
     aria: {
       actionsFor: "Actions for {{name}}",
-      closeDetails: "Close prompt details",
       copyPromptCode: "Copy prompt code",
-      duplicatePrompt: "Duplicate prompt",
       search: "Search prompts",
       variableDescription: "Description {{name}}",
       variableType: "Type {{name}}",
@@ -1605,9 +1601,6 @@ export const pages = {
       deleteTitle: "Delete prompt?",
       revertTitle: "Revert override?",
     },
-    duplicate: {
-      targetCategory: "Target category",
-    },
     empty: {
       noVariables: "No variables detected",
       workspaceEditor: "Select a workspace to edit prompts.",
@@ -1617,7 +1610,6 @@ export const pages = {
       action: "Action failed",
       detailLoad: "Prompt could not be loaded",
       detailsNotLoaded: "Prompt details are not loaded",
-      duplicate: "Duplicate failed",
       export: "Export failed",
       invalidVariables: "Fix invalid variables before saving",
       load: "Prompts could not be loaded",
@@ -1649,11 +1641,9 @@ export const pages = {
       searchPlaceholder: "Search prompts...",
     },
     messages: {
-      bodyCopied: "Prompt body copied",
       codeCopied: "Prompt code copied",
       deleted: "Prompt deleted",
       disabled: "Prompt disabled",
-      duplicated: "Prompt duplicated",
       enabled: "Prompt enabled",
       exported: "Prompts exported",
       overrideReverted: "Override reverted",
