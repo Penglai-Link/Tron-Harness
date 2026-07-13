@@ -134,6 +134,19 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
     ModelService::new(repository, workspaces)
 }
 
+fn build_prompt_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    models: ModelService,
+    preview_client: HttpLlmRuntimeClient,
+    id_provider: Arc<dyn IdGenerator>,
+) -> PromptService {
+    let repository = SqlitePromptRepository::connect(database_url)
+        .expect("prompt SQLite repository should initialize");
+    let preview_runtime = PromptLlmPreviewRuntime::new(models, preview_client);
+    PromptService::new(repository, workspaces, id_provider, Arc::new(preview_runtime))
+}
+
 fn build_open_app_service(
     database_url: &str,
     users: UserService,

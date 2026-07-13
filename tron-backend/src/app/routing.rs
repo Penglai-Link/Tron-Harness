@@ -10,7 +10,8 @@ use crate::adapters::{
         account::routes as account_routes,
         admin::{
             models::routes::routes as admin_model_routes,
-            open_apps::routes::routes as admin_open_app_routes, roles::routes as role_routes,
+            open_apps::routes::routes as admin_open_app_routes,
+            prompts::routes::routes as admin_prompt_routes, roles::routes as role_routes,
             users::routes as user_routes, variables::routes::routes as admin_variable_routes,
             workspaces::routes as workspace_routes,
         },
@@ -24,6 +25,7 @@ use crate::adapters::{
         mcp::routes::management_routes as mcp_management_routes,
         memory::routes as memory_routes,
         models::routes::routes as model_routes,
+        prompts::routes::routes as prompt_routes,
         rag::routes as rag_routes,
         skills::routes::routes as skill_routes,
         tasks::routes as task_routes,
@@ -40,10 +42,12 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
     account_routes()
         .merge(user_routes())
         .merge(admin_model_routes())
+        .merge(admin_prompt_routes())
         .merge(admin_open_app_routes())
         .merge(admin_variable_routes())
         .merge(role_routes())
         .merge(model_routes())
+        .merge(prompt_routes())
         .merge(workspace_routes())
         .merge(automation_routes())
         .merge(chat_routes())

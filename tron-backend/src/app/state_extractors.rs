@@ -12,6 +12,7 @@ use crate::{
         memory::MemoryWorkDomainService,
         model::ModelService,
         open_app::OpenAppService,
+        prompt::PromptService,
         role::RoleService,
         short_term_memory::ShortTermMemoryService,
         skill::SkillRegistryService,
@@ -125,6 +126,12 @@ impl FromRef<AppState> for SkillRegistryService {
 impl FromRef<AppState> for ModelService {
     fn from_ref(state: &AppState) -> Self {
         state.models.clone()
+    }
+}
+
+impl FromRef<AppState> for PromptService {
+    fn from_ref(state: &AppState) -> Self {
+        state.prompts.clone()
     }
 }
 

@@ -15,13 +15,16 @@ use crate::{
         },
         outbound::{
             crypto::{BcryptPasswordHasher, Sm4GcmVariableCipher},
-            model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
+            model::{
+                HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient,
+                PromptLlmPreviewRuntime,
+            },
             persistence::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository, SqliteOpenAppRepository,
-                SqliteRoleRepository, SqliteShortTermMemoryRepository,
+                SqlitePromptRepository, SqliteRoleRepository, SqliteShortTermMemoryRepository,
                 SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
                 SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
@@ -40,6 +43,7 @@ use crate::{
     application::memory::{MemoryService, MemoryWorkDomainService},
     application::model::ModelService,
     application::open_app::OpenAppService,
+    application::prompt::PromptService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
     application::role::RoleService,
     application::short_term_memory::ShortTermMemoryService,
@@ -117,6 +121,7 @@ pub struct AppState {
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
     pub models: ModelService,
+    pub prompts: PromptService,
     pub open_apps: OpenAppService,
     pub llm_runtime: LlmRuntimeService,
     pub mcp: McpService,
@@ -271,6 +276,13 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone())
         };
+        let prompts = build_prompt_service(
+            &config.database_url,
+            workspaces.clone(),
+            models.clone(),
+            HttpLlmRuntimeClient::new(model_inference_client.clone()),
+            id_provider.clone(),
+        );
         let llm_runtime = LlmRuntimeService::new(
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
@@ -403,6 +415,7 @@ impl AppState {
             ontologies,
             graph_explorer,
             models,
+            prompts,
             open_apps,
             llm_runtime,
             mcp,

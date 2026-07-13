@@ -39,6 +39,8 @@ pub(super) const VARIABLE_SENSITIVE_METADATA_MIGRATION: &str =
     include_str!("../../../../../migrations/20260602_0028_add_variable_sensitive_metadata.sql");
 pub(super) const MODELS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260520_0012_create_model_management_models.sql");
+pub(super) const PROMPTS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260713_0001_create_prompt_management.sql");
 pub(super) const MODEL_CAPABILITIES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260522_0013_add_model_capabilities_to_models.sql");
 pub(super) const MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION: &str = include_str!(
