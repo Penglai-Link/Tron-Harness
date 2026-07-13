@@ -94,6 +94,8 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
 
   await page.getByRole("button", { name: "Workspace Router", exact: true }).click();
   await expect(page.getByText("Prompt Details", { exact: true })).toBeVisible();
+  await expect(page.getByText("Test Variables", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Render Preview", exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
   await expect(page.getByText("Create override", { exact: true })).toBeVisible();
@@ -108,10 +110,12 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await page.getByLabel("Name").fill("Greeting Template");
   await page.getByLabel("Prompt body").fill("Hello {{name}} from {{workspace_name}}.");
   await expect(page.getByText("STRING").first()).toBeVisible();
-  await page.getByLabel("{{name}}").fill("Ada");
-  await page.getByLabel("{{workspace_name}}").fill("Tron Core");
-  await page.getByRole("button", { name: "Preview", exact: true }).click();
-  await expect(page.getByText("Hello Ada from Tron Core.", { exact: true })).toBeVisible();
+  await expect(page.getByText("{{name}}", { exact: true })).toBeVisible();
+  await expect(page.getByText("{{workspace_name}}", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("{{name}}")).toHaveCount(0);
+  await expect(page.getByLabel("{{workspace_name}}")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: "Preview", exact: true })).toHaveCount(0);
+  await expect(page.getByText("Rendered prompt", { exact: true })).toHaveCount(0);
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=/);

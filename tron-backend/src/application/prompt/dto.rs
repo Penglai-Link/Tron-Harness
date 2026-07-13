@@ -53,12 +53,6 @@ pub struct PromptDeleteResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct RenderTemplateResult {
-    pub rendered_prompt: String,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub struct PromptAnalyzeResult {
     pub variables: Vec<crate::domain::prompt::PromptVariable>,
     pub invalid_variables: Vec<String>,

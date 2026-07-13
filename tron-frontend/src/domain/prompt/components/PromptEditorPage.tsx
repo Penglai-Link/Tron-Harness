@@ -9,7 +9,6 @@ import {
 } from "react-router";
 import {
   Clipboard,
-  Play,
   Save,
 } from "lucide-react";
 
@@ -35,7 +34,6 @@ import {
   createWorkspacePrompt,
   fetchPlatformPromptDetail,
   fetchWorkspacePromptDetail,
-  renderPromptTemplateApi,
   updatePlatformPrompt,
   updateWorkspacePrompt,
 } from "@/domain/prompt/api";
@@ -49,7 +47,6 @@ import {
   createWorkspacePromptMock,
   getPlatformPromptMock,
   getWorkspacePromptMock,
-  renderPromptTemplateMock,
   updatePlatformPromptMock,
   updateWorkspacePromptMock,
 } from "@/domain/prompt/mock";
@@ -57,7 +54,6 @@ import {
   analyzePromptTemplate,
   type PromptAnalyzeResult,
   type PromptCategory,
-  type PromptRenderResult,
   type PromptRecord,
   type PromptScopeKind,
 } from "@/domain/prompt/model";
@@ -114,10 +110,7 @@ export function PromptEditorPage({
   const [record, setRecord] = useState<PromptRecord | null>(null);
   const [loading, setLoading] = useState(mode === "detail");
   const [submitting, setSubmitting] = useState(false);
-  const [testing, setTesting] = useState(false);
   const [backendAnalysis, setBackendAnalysis] = useState<PromptAnalyzeResult | null>(null);
-  const [variableValues, setVariableValues] = useState<Record<string, string>>({});
-  const [preview, setPreview] = useState<PromptRenderResult | null>(null);
   const localAnalysis = useMemo(() => analyzePromptTemplate(form.promptBody), [form.promptBody]);
   const analysis = backendAnalysis ?? {
     invalidVariables: localAnalysis.invalidVariables,
@@ -127,8 +120,6 @@ export function PromptEditorPage({
 
   useEffect(() => {
     setRecord(null);
-    setPreview(null);
-    setVariableValues({});
     setBackendAnalysis(null);
     setForm(emptyForm());
 
@@ -168,10 +159,7 @@ export function PromptEditorPage({
   }, [mode, promptCode, promptDataSource, pt, scopeKind, toast, workspaceCode]);
 
   useEffect(() => {
-    setPreview(null);
     setBackendAnalysis(null);
-    const nextValues = Object.fromEntries(localAnalysis.variables.map((name) => [name, variableValues[name] ?? ""]));
-    setVariableValues(nextValues);
 
     if (promptDataSource !== "api" || !form.promptBody) return;
     const controller = new AbortController();
@@ -255,27 +243,6 @@ export function PromptEditorPage({
     }
   }
 
-  async function runPreview() {
-    if (testing || !form.promptBody.trim()) return;
-    setTesting(true);
-    setPreview(null);
-    try {
-      const payload = {
-        promptBody: form.promptBody,
-        variables: variableValues,
-      };
-      const result = promptDataSource === "api"
-        ? await renderPromptTemplateApi(payload)
-        : renderPromptTemplateMock(payload);
-      setPreview(result);
-      toast.success(pt("Preview completed"));
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : pt("Preview failed"));
-    } finally {
-      setTesting(false);
-    }
-  }
-
   const title = mode === "create"
     ? pt(scopeKind === "WORKSPACE" ? "Create Prompt" : "Create Platform Prompt")
     : pt(isOverrideMode ? "Create Prompt Override" : "Prompt Details");
@@ -288,7 +255,6 @@ export function PromptEditorPage({
         actions={(
           <>
             <Button variant="outline" onClick={() => navigate(listHref)}>{pt("Cancel")}</Button>
-            <Button variant="outline" disabled={testing || loading || !form.promptBody.trim()} onClick={() => void runPreview()}><Play size={15} aria-hidden="true" />{pt("Preview")}</Button>
             <Button disabled={submitting || loading || !form.displayName.trim() || !form.promptBody.trim()} onClick={() => void savePrompt()}><Save size={15} aria-hidden="true" />{pt("Save")}</Button>
           </>
         )}
@@ -335,12 +301,6 @@ export function PromptEditorPage({
                 </Field>
               </div>
             </SurfaceCard>
-            {preview ? (
-              <SurfaceCard>
-                <h2 className="text-base font-semibold">{pt("Rendered prompt")}</h2>
-                <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-surface-container-low)] p-4 text-sm leading-6">{preview.renderedPrompt}</pre>
-              </SurfaceCard>
-            ) : null}
           </div>
           <div className="space-y-5">
             <SurfaceCard>
@@ -355,7 +315,16 @@ export function PromptEditorPage({
                 <h2 className="text-base font-semibold">{pt("Variables")}</h2>
                 <Badge tone={analysis.invalidVariables.length ? "error" : "info"}>{analysis.variables.length}</Badge>
               </div>
-              {analysis.variables.length ? <div className="grid gap-3">{analysis.variables.map((variable) => <Field key={variable.name} label={<span className="flex items-center justify-between gap-2"><code className="font-mono text-xs">{`{{${variable.name}}}`}</code><Badge tone="info">{variable.type}</Badge></span>}><TextInput aria-label={`{{${variable.name}}}`} value={variableValues[variable.name] ?? ""} onChange={(event) => setVariableValues((current) => ({ ...current, [variable.name]: event.target.value }))} /></Field>)}</div> : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("No variables detected")}</p>}
+              {analysis.variables.length ? (
+                <div className="grid gap-2">
+                  {analysis.variables.map((variable) => (
+                    <div key={variable.name} className="flex min-h-9 items-center justify-between gap-3 rounded-md bg-[var(--color-surface-container-low)] px-3 py-2">
+                      <code className="min-w-0 break-all font-mono text-xs">{`{{${variable.name}}}`}</code>
+                      <Badge tone="info">{variable.type}</Badge>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("No variables detected")}</p>}
             </SurfaceCard>
           </div>
         </div>

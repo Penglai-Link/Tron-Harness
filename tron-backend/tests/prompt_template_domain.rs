@@ -40,7 +40,7 @@ fn template_rendering_rejects_missing_and_unknown_variables_before_generation() 
         "Hello {{name}}",
         &HashMap::from([("unknown".to_string(), "value".to_string())]),
     )
-    .expect_err("missing variables must fail before preview generation");
+    .expect_err("missing variables must fail before runtime rendering");
     assert_eq!(
         missing,
         TemplateError::MissingVariables(vec!["name".to_string()])

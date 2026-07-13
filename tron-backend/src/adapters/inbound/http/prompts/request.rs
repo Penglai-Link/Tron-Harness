@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use axum::{
     Json,
     extract::{FromRequest, Request},
@@ -10,8 +8,7 @@ use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{
     application::prompt::{
-        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, RenderTemplateCommand,
-        UpdatePromptCommand,
+        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, UpdatePromptCommand,
     },
     domain::prompt::{PromptCategory, PromptViewSourceKind},
 };
@@ -179,22 +176,6 @@ pub struct WorkspaceSetAllowInheritanceRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AnalyzeTemplateRequest {
     pub prompt_body: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct RenderTemplateRequest {
-    pub prompt_body: String,
-    pub variables: HashMap<String, String>,
-}
-
-impl From<RenderTemplateRequest> for RenderTemplateCommand {
-    fn from(request: RenderTemplateRequest) -> Self {
-        Self {
-            prompt_body: request.prompt_body,
-            variables: request.variables,
-        }
-    }
 }
 
 #[derive(Debug, Deserialize)]

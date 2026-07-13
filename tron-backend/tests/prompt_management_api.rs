@@ -571,7 +571,6 @@ async fn analyze_export_and_route_table_match_the_frozen_post_contract() {
         "/api/v1/prompts/workspace-set-enabled",
         "/api/v1/prompts/workspace-set-allow-inheritance",
         "/api/v1/prompts/analyze-template",
-        "/api/v1/prompts/render-template",
         "/api/v1/prompts/workspace-export",
         "/api/v1/admin/platform/prompts/page",
         "/api/v1/admin/platform/prompts/detail",
@@ -647,18 +646,19 @@ async fn prompt_contract_excludes_model_configuration() {
 }
 
 #[tokio::test]
-async fn render_template_only_substitutes_variables() {
-    let (router, _) = prompt_app("prompt-render-template");
-    let rendered = post_json(
+async fn prompt_management_does_not_expose_template_rendering() {
+    let (router, _) = prompt_app("prompt-without-render-template");
+    let response = authenticated_request(
         &router,
+        Method::POST,
         "/api/v1/prompts/render-template",
-        json!({
+        Some(json!({
             "promptBody": "Hello {{name}}",
             "variables": { "name": "Ada" }
-        }),
+        })),
     )
     .await;
-    assert_eq!(rendered["data"], json!({ "renderedPrompt": "Hello Ada" }));
+    assert_eq!(response.status(), StatusCode::NOT_FOUND);
 }
 
 async fn create_workspace_prompt(

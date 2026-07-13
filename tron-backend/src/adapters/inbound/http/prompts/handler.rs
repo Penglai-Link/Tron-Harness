@@ -9,10 +9,10 @@ use crate::application::prompt::PromptService;
 use super::{
     error_mapper::prompt_error_response,
     request::{
-        AnalyzeTemplateRequest, PromptJson, RenderTemplateRequest, WorkspaceCreateRequest,
-        WorkspaceDeleteRequest, WorkspaceDetailRequest, WorkspaceDuplicateRequest,
-        WorkspaceExportRequest, WorkspacePageRequest, WorkspaceRevertRequest,
-        WorkspaceSetAllowInheritanceRequest, WorkspaceSetEnabledRequest, WorkspaceUpdateRequest,
+        AnalyzeTemplateRequest, PromptJson, WorkspaceCreateRequest, WorkspaceDeleteRequest,
+        WorkspaceDetailRequest, WorkspaceDuplicateRequest, WorkspaceExportRequest,
+        WorkspacePageRequest, WorkspaceRevertRequest, WorkspaceSetAllowInheritanceRequest,
+        WorkspaceSetEnabledRequest, WorkspaceUpdateRequest,
     },
     response::PromptApiResponse,
 };
@@ -102,13 +102,6 @@ pub async fn analyze_template(
     PromptJson(request): PromptJson<AnalyzeTemplateRequest>,
 ) -> Response {
     prompt_response(prompts.analyze_prompt_template(&request.prompt_body))
-}
-
-pub async fn render_template(
-    State(prompts): State<PromptService>,
-    PromptJson(request): PromptJson<RenderTemplateRequest>,
-) -> Response {
-    prompt_response(prompts.render_template(request.into()))
 }
 
 pub async fn workspace_export(

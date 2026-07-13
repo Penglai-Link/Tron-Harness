@@ -1,6 +1,6 @@
 use crate::{
-    application::prompt::{PromptAnalyzeResult, RenderTemplateCommand, RenderTemplateResult},
-    domain::prompt::{PromptError, PromptVariable, analyze_template, render_template},
+    application::prompt::PromptAnalyzeResult,
+    domain::prompt::{PromptError, PromptVariable, analyze_template},
 };
 
 use super::PromptService;
@@ -16,14 +16,5 @@ impl PromptService {
                 invalid_variables: Vec::new(),
             })
             .map_err(Into::into)
-    }
-
-    pub fn render_template(
-        &self,
-        command: RenderTemplateCommand,
-    ) -> Result<RenderTemplateResult, PromptError> {
-        Ok(RenderTemplateResult {
-            rendered_prompt: render_template(&command.prompt_body, &command.variables)?,
-        })
     }
 }

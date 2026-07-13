@@ -96,15 +96,6 @@ export interface PromptAnalyzeResult {
   invalidVariables: string[];
 }
 
-export interface PromptRenderPayload {
-  promptBody: string;
-  variables: Record<string, string>;
-}
-
-export interface PromptRenderResult {
-  renderedPrompt: string;
-}
-
 export interface PromptExportResult {
   fileName: string;
   content: string;

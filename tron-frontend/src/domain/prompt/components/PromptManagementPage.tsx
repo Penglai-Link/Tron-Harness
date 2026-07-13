@@ -27,15 +27,12 @@ import { Button } from "@/components/ui/button";
 import {
   ConfirmDialog,
   DataTable,
-  Field,
   InspectorPanel,
   PageHeader,
   SearchField,
   SelectInput,
   SurfaceCard,
   TablePagination,
-  TextArea,
-  TextInput,
   useConsoleShellConfig,
   useLocaleFormatters,
   useLocaleText,
@@ -52,7 +49,6 @@ import {
   duplicateWorkspacePrompt,
   exportWorkspacePrompts,
   revertWorkspacePrompt,
-  renderPromptTemplateApi,
   setPlatformPromptEnabled,
   setWorkspacePromptEnabled,
 } from "@/domain/prompt/api";
@@ -68,7 +64,6 @@ import {
   duplicatePlatformPromptMock,
   duplicateWorkspacePromptMock,
   exportWorkspacePromptsMock,
-  renderPromptTemplateMock,
   revertWorkspacePromptMock,
   setPlatformPromptEnabledMock,
   setWorkspacePromptEnabledMock,
@@ -77,7 +72,6 @@ import {
   getWorkspacePromptActions,
   type PromptCategory,
   type PromptPageQuery,
-  type PromptRenderResult,
   type PromptRecord,
   type PromptScopeKind,
   type PromptSourceKind,
@@ -104,51 +98,19 @@ function sourceTone(sourceKind: PromptSourceKind) {
   return "info" as const;
 }
 
-function promptVariableValues(prompt: PromptRecord) {
-  return Object.fromEntries(prompt.variables.map((variable) => [variable.name, ""]));
-}
-
 function PromptInspector({
   onClose,
   prompt,
-  useApi,
 }: {
   onClose: () => void;
   prompt: PromptRecord;
-  useApi: boolean;
 }) {
   const pt = useLocaleText();
   const toast = useToast();
-  const [testing, setTesting] = useState(false);
-  const [preview, setPreview] = useState<PromptRenderResult | null>(null);
-  const [variables, setVariables] = useState<Record<string, string>>(() => promptVariableValues(prompt));
-
-  useEffect(() => {
-    setPreview(null);
-    setVariables(promptVariableValues(prompt));
-  }, [prompt]);
 
   async function copyPrompt() {
     await navigator.clipboard?.writeText(prompt.promptBody);
     toast.success(pt("Prompt body copied"));
-  }
-
-  async function runPreview() {
-    if (testing) return;
-    setTesting(true);
-    try {
-      const payload = {
-        promptBody: prompt.promptBody,
-        variables,
-      };
-      const result = useApi ? await renderPromptTemplateApi(payload) : renderPromptTemplateMock(payload);
-      setPreview(result);
-      toast.success(pt("Preview completed"));
-    } catch (reason) {
-      toast.error(reason instanceof Error ? reason.message : pt("Preview failed"));
-    } finally {
-      setTesting(false);
-    }
   }
 
   return (
@@ -163,19 +125,17 @@ function PromptInspector({
       <div className="mt-5 flex justify-end">
         <Button size="sm" variant="secondary" onClick={() => void copyPrompt()}><Copy size={14} aria-hidden="true" />{pt("Copy")}</Button>
       </div>
-      <div className="mt-6 grid gap-3">
-        <h3 className="text-sm font-semibold">{pt("Test Variables")}</h3>
-        {prompt.variables.map((variable) => (
-          <Field label={variable.name} key={variable.name}>
-            {variable.name === "user_query" ? (
-              <TextArea value={variables[variable.name] ?? ""} onChange={(event) => setVariables((current) => ({ ...current, [variable.name]: event.target.value }))} />
-            ) : (
-              <TextInput value={variables[variable.name] ?? ""} onChange={(event) => setVariables((current) => ({ ...current, [variable.name]: event.target.value }))} />
-            )}
-          </Field>
-        ))}
-        <Button disabled={testing} aria-busy={testing} onClick={() => void runPreview()}>{pt("Render Preview")}</Button>
-        {preview ? <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-surface-container-low)] p-3 text-xs leading-5">{preview.renderedPrompt}</pre> : null}
+      <div className="mt-6 grid gap-2">
+        <div className="mb-1 flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">{pt("Variables")}</h3>
+          <Badge tone="info">{prompt.variables.length}</Badge>
+        </div>
+        {prompt.variables.length ? prompt.variables.map((variable) => (
+          <div key={variable.name} className="flex min-h-9 items-center justify-between gap-3 rounded-md bg-[var(--color-surface-container-low)] px-3 py-2">
+            <code className="min-w-0 break-all font-mono text-xs">{`{{${variable.name}}}`}</code>
+            <Badge tone="info">{variable.type}</Badge>
+          </div>
+        )) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("No variables detected")}</p>}
       </div>
     </InspectorPanel>
   );
@@ -267,10 +227,9 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
         key={selectedPrompt.promptCode}
         onClose={() => setPromptPanelOpen(false)}
         prompt={selectedPrompt}
-        useApi={dataSource === "api"}
       />
     ) : undefined
-  ), [dataSource, promptPanelOpen, scopeKind, selectedPrompt]);
+  ), [promptPanelOpen, scopeKind, selectedPrompt]);
 
   useConsoleShellConfig({ rightPanel });
 

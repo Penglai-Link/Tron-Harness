@@ -5,7 +5,6 @@ import {
   createWorkspacePrompt,
   fetchWorkspacePromptPage,
   promptApiEndpoints,
-  renderPromptTemplateApi,
   updateWorkspacePrompt,
 } from "./promptApi";
 
@@ -31,7 +30,6 @@ describe("prompt API", () => {
       duplicateWorkspace: "POST /api/v1/prompts/workspace-duplicate",
       pagePlatform: "POST /api/v1/admin/platform/prompts/page",
       pageWorkspace: "POST /api/v1/prompts/workspace-page",
-      renderTemplate: "POST /api/v1/prompts/render-template",
       revertWorkspace: "POST /api/v1/prompts/workspace-revert",
       setAllowInheritanceWorkspace: "POST /api/v1/prompts/workspace-set-allow-inheritance",
       setEnabledPlatform: "POST /api/v1/admin/platform/prompts/set-enabled",
@@ -79,21 +77,6 @@ describe("prompt API", () => {
     });
     expect(requestApi).toHaveBeenNthCalledWith(2, promptApiEndpoints.updateWorkspace, {
       body: expect.not.objectContaining({ category: expect.anything() }),
-    });
-  });
-
-  it("renders variables without sending model configuration", async () => {
-    await renderPromptTemplateApi({
-      promptBody: "Hello {{name}}",
-      variables: { name: "Ada" },
-    });
-
-    expect(requestApi).toHaveBeenCalledWith(promptApiEndpoints.renderTemplate, {
-      body: {
-        promptBody: "Hello {{name}}",
-        variables: { name: "Ada" },
-      },
-      signal: undefined,
     });
   });
 });

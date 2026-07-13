@@ -9,8 +9,6 @@ import type {
   PromptExportResult,
   PromptPage,
   PromptPageQuery,
-  PromptRenderPayload,
-  PromptRenderResult,
   PromptRecord,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
@@ -28,7 +26,6 @@ export const promptApiEndpoints = {
   duplicateWorkspace: "POST /api/v1/prompts/workspace-duplicate",
   pagePlatform: "POST /api/v1/admin/platform/prompts/page",
   pageWorkspace: "POST /api/v1/prompts/workspace-page",
-  renderTemplate: "POST /api/v1/prompts/render-template",
   revertWorkspace: "POST /api/v1/prompts/workspace-revert",
   setAllowInheritanceWorkspace: "POST /api/v1/prompts/workspace-set-allow-inheritance",
   setEnabledPlatform: "POST /api/v1/admin/platform/prompts/set-enabled",
@@ -104,10 +101,6 @@ export function setWorkspacePromptAllowInheritance(payload: PromptDetailPayload 
 
 export function analyzePromptTemplateApi(promptBody: string, signal?: AbortSignal) {
   return requestApi<PromptAnalyzeResult>(promptApiEndpoints.analyzeTemplate, { body: { promptBody }, signal });
-}
-
-export function renderPromptTemplateApi(payload: PromptRenderPayload, signal?: AbortSignal) {
-  return requestApi<PromptRenderResult>(promptApiEndpoints.renderTemplate, { body: payload, signal });
 }
 
 export function exportWorkspacePrompts(payload: PromptPageQuery & { workspaceCode: string }) {

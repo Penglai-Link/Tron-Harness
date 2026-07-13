@@ -1,5 +1,3 @@
-use std::collections::HashMap;
-
 use crate::domain::prompt::{Prompt, PromptError};
 
 pub trait PromptRepository: Send {
@@ -7,10 +5,4 @@ pub trait PromptRepository: Send {
     fn create_prompt(&mut self, prompt: &Prompt) -> Result<(), PromptError>;
     fn update_prompt(&mut self, prompt: &Prompt, expected_version: u64) -> Result<(), PromptError>;
     fn delete_prompt(&mut self, prompt_code: &str) -> Result<bool, PromptError>;
-}
-
-#[derive(Debug, Clone)]
-pub struct RenderTemplateCommand {
-    pub prompt_body: String,
-    pub variables: HashMap<String, String>,
 }

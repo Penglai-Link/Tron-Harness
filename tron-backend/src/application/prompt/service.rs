@@ -8,7 +8,7 @@ use crate::{
 
 mod catalog;
 mod platform;
-mod preview;
+mod template;
 mod validation;
 mod workspace;
 

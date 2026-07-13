@@ -6,15 +6,11 @@ import type {
   PromptDuplicatePayload,
   PromptPage,
   PromptPageQuery,
-  PromptRenderPayload,
   PromptRecord,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
 } from "@/domain/prompt/model";
-import {
-  analyzePromptTemplate,
-  renderPromptTemplate,
-} from "@/domain/prompt/model/promptTemplate";
+import { analyzePromptTemplate } from "@/domain/prompt/model/promptTemplate";
 
 const seedTimestamp = "2026-07-13T02:00:00.000Z";
 let nextPromptSequence = 1000;
@@ -371,16 +367,6 @@ export function analyzePromptTemplateMock(promptBody: string) {
   return {
     invalidVariables: analysis.invalidVariables,
     variables: analysis.variables.map((name) => ({ name, type: "STRING" as const })),
-  };
-}
-
-export function renderPromptTemplateMock(payload: PromptRenderPayload) {
-  const result = renderPromptTemplate(payload.promptBody, payload.variables);
-  if (result.errors.length) {
-    throw new Error(result.errors.map((error) => `${error.kind}: ${error.variableName}`).join(", "));
-  }
-  return {
-    renderedPrompt: result.renderedPrompt,
   };
 }
 
