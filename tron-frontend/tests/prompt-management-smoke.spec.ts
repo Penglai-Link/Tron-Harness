@@ -111,26 +111,24 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await page.getByLabel("Name").fill("Greeting Template");
   await page.getByLabel("Prompt body").fill("Hello {{name}} with priority {{priority}}.");
   await expect(page.getByText("STRING").first()).toBeVisible();
-  await expect(page.getByRole("code").filter({ hasText: "{{name}}" })).toBeVisible();
-  await expect(page.getByRole("code").filter({ hasText: "{{priority}}" })).toBeVisible();
-  await expect(page.getByLabel("{{name}}", { exact: true })).toHaveCount(0);
-  await expect(page.getByLabel("{{priority}}", { exact: true })).toHaveCount(0);
+  await expect(page.getByRole("code").filter({ hasText: /^name$/ })).toBeVisible();
+  await expect(page.getByRole("code").filter({ hasText: /^priority$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: "Preview", exact: true })).toHaveCount(0);
   await expect(page.getByText("Rendered prompt", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
-  await page.getByRole("textbox", { name: "Description {{name}}", exact: true }).fill("Customer display name");
-  await page.getByRole("textbox", { name: "Description {{priority}}", exact: true }).fill("Priority number");
-  await page.getByRole("combobox", { name: "Type {{priority}}", exact: true }).click();
+  await page.getByRole("textbox", { name: "Description name", exact: true }).fill("Customer display name");
+  await page.getByRole("textbox", { name: "Description priority", exact: true }).fill("Priority number");
+  await page.getByRole("combobox", { name: "Type priority", exact: true }).click();
   await page.getByRole("option", { name: "NUMBER", exact: true }).click();
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=/);
   await expect(page.getByRole("heading", { name: "Prompt Details" })).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Prompt code", exact: true })).toHaveAttribute("readonly", "");
-  await expect(page.getByRole("textbox", { name: "Description {{name}}", exact: true })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Description name", exact: true })).toHaveValue(
     "Customer display name",
   );
-  await expect(page.getByRole("textbox", { name: "Description {{priority}}", exact: true })).toHaveValue(
+  await expect(page.getByRole("textbox", { name: "Description priority", exact: true })).toHaveValue(
     "Priority number",
   );
 

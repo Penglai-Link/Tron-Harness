@@ -300,37 +300,38 @@ export function PromptEditorPage({
           </>
         )}
       />
-      <div className="max-w-5xl">
+      <div className="w-full">
         {scopeKind === "WORKSPACE" && !workspaceCode ? (
           <SurfaceCard className="text-sm text-[var(--color-on-surface-variant)]">{pt("Select a workspace to edit prompts.")}</SurfaceCard>
         ) : (
           <SurfaceCard className="space-y-5">
             {record ? (
-              <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--color-on-surface-variant)]">
-                <Badge tone={record.sourceKind === "OVERRIDE" ? "warning" : "info"}>{pt(record.sourceKind)}</Badge>
-                <span>{record.sourceLabel}</span>
-                {record.sourceWorkspacePath.length ? <span>{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</span> : null}
+              <div className="flex flex-col gap-4 border-b border-[var(--color-outline-variant)] pb-5 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--color-on-surface-variant)]">
+                  <Badge tone={record.sourceKind === "OVERRIDE" ? "warning" : "info"}>{pt(record.sourceKind)}</Badge>
+                  <span>{record.sourceLabel}</span>
+                  {record.sourceWorkspacePath.length ? <span>{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</span> : null}
+                </div>
+                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
+                  <span className="shrink-0 text-sm font-medium text-[var(--color-on-surface)]">{pt("Prompt code")}</span>
+                  <div className="flex min-w-0 gap-2">
+                    <TextInput aria-label={pt("Prompt code")} className="min-w-0 flex-1 font-mono sm:w-72" readOnly value={record.promptCode} />
+                    <Button size="icon" variant="outline" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record.promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
+                  </div>
+                </div>
               </div>
             ) : null}
 
-            <div className="grid gap-4 md:grid-cols-2">
-              {mode === "detail" ? (
-                <Field label={pt("Prompt code")}>
-                  <div className="flex gap-2">
-                    <TextInput aria-label={pt("Prompt code")} className="font-mono" readOnly value={record?.promptCode ?? promptCode} />
-                    <Button size="icon" variant="outline" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
-                  </div>
-                </Field>
-              ) : null}
-              <Field label={pt("Name")}>
-                <TextInput value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
-              </Field>
+            <div className="grid gap-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,1.55fr)]">
               <Field label={pt("Category")}>
                 {mode === "create" ? (
                   <SelectInput value={form.category} onValueChange={(value) => updateForm("category", value as PromptCategory)}>
                     {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
                   </SelectInput>
                 ) : <div className="flex h-10 items-center"><Badge>{pt(promptCategoryLabel(form.category))}</Badge></div>}
+              </Field>
+              <Field label={pt("Name")}>
+                <TextInput value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
               </Field>
             </div>
 
@@ -353,36 +354,44 @@ export function PromptEditorPage({
                 <Badge tone={analysis.invalidVariables.length || !variablesReady ? "error" : "info"}>{form.variables.length}</Badge>
               </div>
               {form.variables.length ? (
-                <div className="divide-y divide-[var(--color-outline-variant)]">
-                  {form.variables.map((variable) => (
-                    <div key={variable.name} className="grid gap-4 py-4 first:pt-0 last:pb-0 md:grid-cols-[minmax(0,1fr)_180px_minmax(0,2fr)]">
-                      <Field label={pt("Variable")}>
-                        <div className="flex min-h-10 items-center">
-                          <code className="min-w-0 break-all font-mono text-sm">{`{{${variable.name}}}`}</code>
+                <div className="overflow-hidden rounded-md border border-[var(--color-outline-variant)]">
+                  <div className="hidden bg-[var(--color-surface-container-low)] px-4 py-2 text-xs font-semibold text-[var(--color-on-surface-variant)] md:grid md:grid-cols-[minmax(180px,0.8fr)_180px_minmax(240px,1.6fr)] md:gap-4">
+                    <span>{pt("Variable")}</span>
+                    <span>{pt("Type")}</span>
+                    <span>{pt("Description")}</span>
+                  </div>
+                  <div className="divide-y divide-[var(--color-outline-variant)]">
+                    {form.variables.map((variable) => (
+                      <div key={variable.name} className="grid gap-4 px-4 py-3 md:grid-cols-[minmax(180px,0.8fr)_180px_minmax(240px,1.6fr)] md:items-start">
+                        <div className="space-y-2 md:space-y-0">
+                          <span className="block text-sm font-medium md:hidden">{pt("Variable")}</span>
+                          <code className="flex min-h-10 min-w-0 items-center break-all font-mono text-sm font-medium">{variable.name}</code>
                         </div>
-                      </Field>
-                      <Field label={<>{pt("Type")}<span className="sr-only">{` {{${variable.name}}}`}</span></>}>
-                        <SelectInput
-                          value={variable.type}
-                          onValueChange={(value) => updateVariable(variable.name, { type: value as PromptVariableType })}
-                        >
-                          {promptVariableTypeOptions.map((option) => (
-                            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-                          ))}
-                        </SelectInput>
-                      </Field>
-                      <Field
-                        label={<>{pt("Description")}<span className="sr-only">{` {{${variable.name}}}`}</span></>}
-                        error={!variable.description.trim() ? pt("Variable description is required") : undefined}
-                      >
-                        <TextInput
-                          maxLength={promptVariableDescriptionMaxLength}
-                          value={variable.description}
-                          onChange={(event) => updateVariable(variable.name, { description: event.target.value })}
-                        />
-                      </Field>
-                    </div>
-                  ))}
+                        <div className="space-y-2 md:space-y-0">
+                          <span className="block text-sm font-medium md:hidden">{pt("Type")}</span>
+                          <SelectInput
+                            aria-label={`${pt("Type")} ${variable.name}`}
+                            value={variable.type}
+                            onValueChange={(value) => updateVariable(variable.name, { type: value as PromptVariableType })}
+                          >
+                            {promptVariableTypeOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                          </SelectInput>
+                        </div>
+                        <div className="space-y-2 md:space-y-0">
+                          <span className="block text-sm font-medium md:hidden">{pt("Description")}</span>
+                          <TextInput
+                            aria-label={`${pt("Description")} ${variable.name}`}
+                            maxLength={promptVariableDescriptionMaxLength}
+                            value={variable.description}
+                            onChange={(event) => updateVariable(variable.name, { description: event.target.value })}
+                          />
+                          {!variable.description.trim() ? <p className="mt-2 text-xs text-destructive-foreground">{pt("Variable description is required")}</p> : null}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("No variables detected")}</p>}
             </div>
