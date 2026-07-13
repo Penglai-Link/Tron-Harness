@@ -97,6 +97,7 @@ export const shell = {
       memoryDomains: "记忆领域",
       models: "模型",
       openapi: "OpenAPI",
+      prompts: "提示词",
       roles: "角色",
       tools: "工具",
       skillCenter: "技能中心",

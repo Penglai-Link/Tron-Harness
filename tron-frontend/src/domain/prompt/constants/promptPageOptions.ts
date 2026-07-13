@@ -1,11 +1,21 @@
-export const promptWorkspaceTabs = [
-  { label: "Dashboard", value: "dashboard" },
-  { label: "Prompts", value: "prompts" },
-  { label: "Models", value: "models" },
-  { label: "Datasets", value: "datasets" },
-  { label: "Logs", value: "logs" },
-] as const;
+import type {
+  PromptCategory,
+  PromptSourceKind,
+} from "@/domain/prompt/model";
 
-export const promptVisibilityOptions = ["Workspace", "Private", "Public"] as const;
+export const promptCategoryOptions: Array<{ label: string; value: PromptCategory }> = [
+  { label: "System", value: "SYSTEM" },
+  { label: "Persona", value: "PERSONA" },
+  { label: "Tool", value: "TOOL" },
+  { label: "Template", value: "TEMPLATE" },
+];
 
-export const promptCategoryFilters = ["All", "System", "Persona", "Tools", "Templates"] as const;
+export const promptSourceOptions: Array<{ label: string; value: PromptSourceKind }> = [
+  { label: "Local", value: "LOCAL" },
+  { label: "Inherited", value: "INHERITED" },
+  { label: "Override", value: "OVERRIDE" },
+];
+
+export function promptCategoryLabel(category: PromptCategory) {
+  return promptCategoryOptions.find((option) => option.value === category)?.label ?? category;
+}

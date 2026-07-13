@@ -97,6 +97,7 @@ export const shell = {
       memoryDomains: "Memory Domains",
       models: "Models",
       openapi: "OpenAPI",
+      prompts: "Prompts",
       roles: "Roles",
       tools: "Tools",
       skillCenter: "Skill Center",

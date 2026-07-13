@@ -1,16 +1,123 @@
+export type PromptCategory = "SYSTEM" | "PERSONA" | "TOOL" | "TEMPLATE";
+export type PromptScopeKind = "PLATFORM" | "WORKSPACE";
+export type PromptSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
+export type PromptVariableType = "STRING";
+
 export interface PromptVariable {
   name: string;
-  type: string;
-  sample: string;
+  type: PromptVariableType;
+}
+
+export interface PromptWorkspacePathItem {
+  workspaceCode: string;
+  name: string;
 }
 
 export interface PromptRecord {
-  id: string;
-  name: string;
-  category: string;
-  inheritance: string;
-  updated: string;
-  owner: string;
-  body: string;
+  promptCode: string;
+  scopeKind: PromptScopeKind;
+  workspaceCode: string | null;
+  displayName: string;
+  category: PromptCategory;
+  promptBody: string;
+  description: string | null;
+  modelCode: string | null;
+  temperature: number | null;
+  maxOutputTokens: number | null;
+  enabled: boolean;
+  sourceKind: PromptSourceKind;
+  sourceLabel: string;
+  sourceWorkspaceCode: string | null;
+  sourceWorkspaceName: string | null;
+  sourceWorkspacePath: PromptWorkspacePathItem[];
+  allowInheritance: boolean | null;
+  variables: PromptVariable[];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface PromptPage<T> {
+  current: number;
+  size: number;
+  total: number;
+  records: T[];
+}
+
+export interface PromptPageQuery {
+  current: number;
+  size: number;
+  workspaceCode?: string;
+  search?: string;
+  category?: PromptCategory;
+  sourceKind?: PromptSourceKind;
+  enabled?: boolean;
+}
+
+export interface PromptCreateFields {
+  displayName: string;
+  category: PromptCategory;
+  promptBody: string;
+  description: string;
+  modelCode: string | null;
+  temperature: number | null;
+  maxOutputTokens: number | null;
+  enabled: boolean;
+}
+
+export interface WorkspacePromptCreatePayload extends PromptCreateFields {
+  workspaceCode: string;
+  allowInheritance: boolean;
+}
+
+export type PlatformPromptCreatePayload = PromptCreateFields;
+
+export interface PromptUpdateFields {
+  promptCode: string;
+  expectedVersion: number;
+  displayName: string;
+  promptBody: string;
+  description: string;
+  modelCode: string | null;
+  temperature: number | null;
+  maxOutputTokens: number | null;
+  enabled: boolean;
+}
+
+export interface WorkspacePromptUpdatePayload extends PromptUpdateFields {
+  workspaceCode: string;
+}
+
+export type PlatformPromptUpdatePayload = PromptUpdateFields;
+
+export interface PromptDetailPayload {
+  promptCode: string;
+  workspaceCode?: string;
+}
+
+export interface PromptDuplicatePayload extends PromptDetailPayload {
+  targetCategory: PromptCategory;
+}
+
+export interface PromptAnalyzeResult {
+  variables: PromptVariable[];
+  invalidVariables: string[];
+}
+
+export interface PromptPreviewPayload {
+  promptCode?: string;
+  workspaceCode?: string;
+  promptBody?: string;
   variables: Record<string, string>;
+}
+
+export interface PromptPreviewResult {
+  renderedPrompt: string;
+  modelCode: string | null;
+  output: string;
+}
+
+export interface PromptExportResult {
+  fileName: string;
+  content: string;
 }

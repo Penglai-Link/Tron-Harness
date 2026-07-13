@@ -6,6 +6,7 @@ import {
   LockKeyhole,
   Network,
   Package,
+  MessageSquareText,
   Settings2,
   ShieldCheck,
   Sparkles,
@@ -43,6 +44,12 @@ export const settingsNavigation = [
         href: "/settings/models",
         icon: Sparkles,
         translationKey: "shell:settings.items.models",
+      },
+      {
+        label: "Prompts",
+        href: "/settings/prompts",
+        icon: MessageSquareText,
+        translationKey: "shell:settings.items.prompts",
       },
       {
         label: "Agents",
