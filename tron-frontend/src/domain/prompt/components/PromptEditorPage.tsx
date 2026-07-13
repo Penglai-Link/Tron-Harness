@@ -306,23 +306,28 @@ export function PromptEditorPage({
         ) : (
           <SurfaceCard className="space-y-5">
             {record ? (
-              <div className="flex flex-col gap-4 border-b border-[var(--color-outline-variant)] pb-5 lg:flex-row lg:items-center lg:justify-between">
-                <div className="flex flex-wrap items-center gap-3 text-sm text-[var(--color-on-surface-variant)]">
-                  <Badge tone={record.sourceKind === "OVERRIDE" ? "warning" : "info"}>{pt(record.sourceKind)}</Badge>
-                  <span>{record.sourceLabel}</span>
-                  {record.sourceWorkspacePath.length ? <span>{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</span> : null}
-                </div>
-                <div className="flex min-w-0 flex-col gap-2 sm:flex-row sm:items-center">
-                  <span className="shrink-0 text-sm font-medium text-[var(--color-on-surface)]">{pt("Prompt code")}</span>
-                  <div className="flex min-w-0 gap-2">
-                    <TextInput aria-label={pt("Prompt code")} className="min-w-0 flex-1 font-mono sm:w-72" readOnly value={record.promptCode} />
-                    <Button size="icon" variant="outline" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record.promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
-                  </div>
-                </div>
+              <div className="flex flex-wrap items-center gap-3 border-b border-[var(--color-outline-variant)] pb-5 text-sm text-[var(--color-on-surface-variant)]">
+                <Badge tone={record.sourceKind === "OVERRIDE" ? "warning" : "info"}>{pt(record.sourceKind)}</Badge>
+                <span>{record.sourceLabel}</span>
+                {record.sourceWorkspacePath.length ? <span>{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</span> : null}
               </div>
             ) : null}
 
-            <div className="grid gap-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,1.55fr)]">
+            <div className={`grid gap-4 ${mode === "detail" ? "md:grid-cols-[minmax(360px,0.8fr)_minmax(0,1.2fr)]" : ""}`}>
+              {mode === "detail" ? (
+                <Field label={pt("Prompt code")}>
+                  <div className="flex min-w-0 gap-2">
+                    <TextInput aria-label={pt("Prompt code")} className="min-w-0 flex-1 font-mono" readOnly value={record?.promptCode ?? promptCode} />
+                    <Button size="icon" variant="outline" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
+                  </div>
+                </Field>
+              ) : null}
+              <Field label={pt("Name")}>
+                <TextInput value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
+              </Field>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,0.775fr)_minmax(0,0.775fr)] md:items-end">
               <Field label={pt("Category")}>
                 {mode === "create" ? (
                   <SelectInput value={form.category} onValueChange={(value) => updateForm("category", value as PromptCategory)}>
@@ -330,14 +335,14 @@ export function PromptEditorPage({
                   </SelectInput>
                 ) : <div className="flex h-10 items-center"><Badge>{pt(promptCategoryLabel(form.category))}</Badge></div>}
               </Field>
-              <Field label={pt("Name")}>
-                <TextInput value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
-              </Field>
-            </div>
-
-            <div className="grid gap-3 md:grid-cols-2">
-              <ToggleSwitch checked={form.enabled} label={pt("Enabled")} onCheckedChange={(checked) => updateForm("enabled", checked)} />
-              {scopeKind === "WORKSPACE" && (mode === "create" || record?.sourceKind === "LOCAL") ? <ToggleSwitch checked={form.allowInheritance} label={pt("Allow inheritance")} onCheckedChange={(checked) => updateForm("allowInheritance", checked)} /> : null}
+              <div className="flex min-h-10 items-center">
+                <ToggleSwitch checked={form.enabled} label={pt("Enabled")} onCheckedChange={(checked) => updateForm("enabled", checked)} />
+              </div>
+              {scopeKind === "WORKSPACE" && (mode === "create" || record?.sourceKind === "LOCAL") ? (
+                <div className="flex min-h-10 items-center">
+                  <ToggleSwitch checked={form.allowInheritance} label={pt("Allow inheritance")} onCheckedChange={(checked) => updateForm("allowInheritance", checked)} />
+                </div>
+              ) : null}
             </div>
 
             <Field label={pt("Description")}>
