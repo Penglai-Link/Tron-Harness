@@ -103,7 +103,8 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
 
   await page.getByRole("button", { name: "New", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Create Prompt" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Prompt Settings" })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Enabled", exact: true })).toBeVisible();
+  await expect(page.getByRole("switch", { name: "Allow inheritance", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Model Parameters" })).toHaveCount(0);
   await expect(page.getByText("Temperature", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Max output tokens", { exact: true })).toHaveCount(0);
