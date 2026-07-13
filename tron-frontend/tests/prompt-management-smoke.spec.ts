@@ -86,7 +86,14 @@ test.afterAll(async () => {
 test("manages workspace prompts and exposes platform prompt routes", async ({ page }) => {
   await page.goto(`${frontendBaseUrl}/prompts`);
   await expect(page.getByRole("heading", { name: "Prompt Management" })).toBeVisible();
-  await expect(page.getByText("Workspace Router")).toBeVisible();
+  await expect(page.getByRole("button", { name: "All Prompts" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Filter", exact: true })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Inheritance" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Last Updated" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Workspace Router", exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Workspace Router", exact: true }).click();
+  await expect(page.getByText("Prompt Details", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
   await expect(page.getByText("Create override", { exact: true })).toBeVisible();
