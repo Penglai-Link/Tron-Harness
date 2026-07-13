@@ -190,6 +190,7 @@ async fn workspace_update_syncs_variables_transactionally() {
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "promptCode": prompt_code,
+            "allowInheritance": false,
             "displayName": "Variable Sync",
             "promptBody": "Only {{third}} remains",
             "description": null,
@@ -202,6 +203,8 @@ async fn workspace_update_syncs_variables_transactionally() {
     )
     .await;
     assert_eq!(update_response.status(), StatusCode::OK);
+    let updated = response_json(update_response).await;
+    assert_eq!(updated["data"]["allowInheritance"], json!(false));
 
     let connection = Connection::open(database_url).expect("prompt database should open");
     let names = connection
@@ -259,6 +262,47 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
     let forbidden_payload = response_json(forbidden_request).await;
     assert_envelope_only(&forbidden_payload);
 
+    let missing_version = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/prompts/workspace-update",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "promptCode": prompt_code,
+            "displayName": "Immutable Prompt",
+            "promptBody": "Act as {{role}}",
+            "description": null,
+            "modelCode": null,
+            "temperature": null,
+            "maxOutputTokens": null,
+            "enabled": true
+        })),
+    )
+    .await;
+    assert_eq!(missing_version.status(), StatusCode::BAD_REQUEST);
+    assert_envelope_only(&response_json(missing_version).await);
+
+    let invalid_model = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/prompts/workspace-create",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "displayName": "Invalid Model Prompt",
+            "category": "SYSTEM",
+            "promptBody": "Hello",
+            "description": null,
+            "modelCode": "MODEL-NOT-VISIBLE",
+            "temperature": null,
+            "maxOutputTokens": null,
+            "enabled": true,
+            "allowInheritance": true
+        })),
+    )
+    .await;
+    assert_eq!(invalid_model.status(), StatusCode::BAD_REQUEST);
+    assert_envelope_only(&response_json(invalid_model).await);
+
     let connection = Connection::open(database_url).expect("prompt database should open");
     let category_update = connection.execute(
         "UPDATE prompts SET category = 'SYSTEM' WHERE prompt_code = ?1",
@@ -275,6 +319,21 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
     assert!(
         code_update.is_err(),
         "promptCode trigger must reject updates"
+    );
+    let invalid_scope_source = connection.execute(
+        "INSERT INTO prompts (
+            id, scope_kind, workspace_code, prompt_code, display_name, category, prompt_body,
+            description, model_code, temperature, max_output_tokens, enabled, source_kind,
+            source_prompt_code, allow_inheritance, version, created_at, updated_at
+         ) VALUES (
+            9000001, 'WORKSPACE', 'TRON_CORE', 'PROMPT-9000001', 'Invalid Scope', 'SYSTEM',
+            'Invalid', NULL, NULL, NULL, NULL, 1, 'PLATFORM', NULL, NULL, 1, 1, 1
+         )",
+        [],
+    );
+    assert!(
+        invalid_scope_source.is_err(),
+        "workspace records must not use the platform source kind"
     );
 }
 
@@ -293,6 +352,9 @@ async fn workspace_secondary_commands_follow_the_frozen_contract() {
     let prompt_code = created["data"]["promptCode"]
         .as_str()
         .expect("created prompt should return promptCode");
+    let created_version = created["data"]["version"]
+        .as_u64()
+        .expect("created prompt should return version");
 
     let inheritance = post_json(
         &router,
@@ -300,11 +362,15 @@ async fn workspace_secondary_commands_follow_the_frozen_contract() {
         json!({
             "workspaceCode": "TRON_CORE",
             "promptCode": prompt_code,
-            "allowInheritance": false
+            "allowInheritance": false,
+            "expectedVersion": created_version
         }),
     )
     .await;
     assert_eq!(inheritance["data"]["allowInheritance"], json!(false));
+    let inherited_version = inheritance["data"]["version"]
+        .as_u64()
+        .expect("inheritance update should return version");
 
     let disabled = post_json(
         &router,
@@ -312,7 +378,8 @@ async fn workspace_secondary_commands_follow_the_frozen_contract() {
         json!({
             "workspaceCode": "TRON_CORE",
             "promptCode": prompt_code,
-            "enabled": false
+            "enabled": false,
+            "expectedVersion": inherited_version
         }),
     )
     .await;
@@ -412,7 +479,11 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
     let disabled = post_json(
         &router,
         "/api/v1/admin/platform/prompts/set-enabled",
-        json!({ "promptCode": prompt_code, "enabled": false }),
+        json!({
+            "promptCode": prompt_code,
+            "enabled": false,
+            "expectedVersion": updated["data"]["version"]
+        }),
     )
     .await;
     assert_eq!(disabled["data"]["enabled"], json!(false));
@@ -436,7 +507,7 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
 
 #[tokio::test]
 async fn analyze_export_and_route_table_match_the_frozen_post_contract() {
-    let (router, _) = prompt_app("prompt-supporting-contracts");
+    let (router, database_url) = prompt_app("prompt-supporting-contracts");
     create_workspace_prompt(
         &router,
         "TRON_CORE",
@@ -446,6 +517,34 @@ async fn analyze_export_and_route_table_match_the_frozen_post_contract() {
         true,
     )
     .await;
+
+    let mut connection = Connection::open(database_url).expect("prompt database should open");
+    let transaction = connection
+        .transaction()
+        .expect("export fixtures should start a transaction");
+    for index in 0..205_i64 {
+        transaction
+            .execute(
+                "INSERT INTO prompts (
+                    id, scope_kind, workspace_code, prompt_code, display_name, category,
+                    prompt_body, description, model_code, temperature, max_output_tokens,
+                    enabled, source_kind, source_prompt_code, allow_inheritance, version,
+                    created_at, updated_at
+                 ) VALUES (
+                    ?1, 'WORKSPACE', 'TRON_CORE', ?2, ?3, 'TEMPLATE', 'Bulk export', NULL,
+                    NULL, NULL, NULL, 1, 'WORKSPACE_LOCAL', NULL, 1, 1, 1, 1
+                 )",
+                params![
+                    9_100_000_i64 + index,
+                    format!("PROMPT-BULK-{index}"),
+                    format!("Bulk Export {index:03}")
+                ],
+            )
+            .expect("bulk export fixture should insert");
+    }
+    transaction
+        .commit()
+        .expect("bulk export fixtures should commit");
 
     let analysis = post_json(
         &router,
@@ -479,6 +578,9 @@ async fn analyze_export_and_route_table_match_the_frozen_post_contract() {
         .as_str()
         .expect("workspace export should return JSON content");
     assert!(content.contains("Exported Prompt"));
+    let exported_records: Vec<Value> =
+        serde_json::from_str(content).expect("workspace export should contain JSON records");
+    assert_eq!(exported_records.len(), 206);
 
     for path in [
         "/api/v1/prompts/workspace-page",
@@ -546,6 +648,38 @@ async fn test_preview_renders_variables_and_calls_the_selected_model() {
         .as_str()
         .expect("preview model should return modelCode")
         .to_string();
+    let override_model_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/models",
+        Some(json!({
+            "displayName": "Prompt Preview Override Model",
+            "vendor": "OpenAI",
+            "protocol": "OPENAI_COMPATIBLE",
+            "modelType": "TEXT",
+            "modelCapabilities": ["TEXT_GENERATION"],
+            "baseUrl": preview_server.base_url,
+            "apiPath": "/chat/completions",
+            "apiKeyRef": "sk-prompt-preview-override",
+            "modelName": "prompt-preview-override-model",
+            "enabled": true,
+            "description": "prompt preview override fixture",
+            "thinkingEnabled": false,
+            "structuredOutputEnabled": false,
+            "temperature": 0.2,
+            "maxTokens": 512,
+            "contextWindowTokens": 8192,
+            "topP": 1.0,
+            "maxRetries": 0
+        })),
+    )
+    .await;
+    assert_eq!(override_model_response.status(), StatusCode::CREATED);
+    let override_model = response_json(override_model_response).await;
+    let override_model_code = override_model["data"]["modelCode"]
+        .as_str()
+        .expect("override preview model should return modelCode")
+        .to_string();
 
     let prompt = post_json(
         &router,
@@ -570,12 +704,13 @@ async fn test_preview_renders_variables_and_calls_the_selected_model() {
         json!({
             "workspaceCode": "TRON_CORE",
             "promptCode": prompt["data"]["promptCode"],
+            "modelCode": override_model_code,
             "variables": { "name": "Ada" }
         }),
     )
     .await;
     assert_eq!(preview["data"]["renderedPrompt"], json!("Hello Ada"));
-    assert_eq!(preview["data"]["modelCode"], json!(model_code));
+    assert_eq!(preview["data"]["modelCode"], json!(override_model_code));
     assert_eq!(preview["data"]["output"], json!("Preview output"));
 
     let platform_preview = post_json(

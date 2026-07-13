@@ -67,7 +67,7 @@ impl PromptService {
         let mut roots = prompts
             .iter()
             .filter(|prompt| match prompt.source_kind {
-                PromptSourceKind::Platform => true,
+                PromptSourceKind::Platform => prompt.scope_kind == PromptScopeKind::Platform,
                 PromptSourceKind::WorkspaceLocal => {
                     prompt.workspace_code.as_deref().is_some_and(|owner| {
                         owner == current

@@ -39,6 +39,7 @@ impl PromptService {
         command: CreatePromptCommand,
     ) -> Result<PromptView, PromptError> {
         let (spec, variables) = normalize_spec(command.spec)?;
+        self.validate_model_reference(None, spec.model_code.as_deref())?;
         ensure_platform_display_name_unique(&self.platform_prompts()?, &spec.display_name, None)?;
         let prompt =
             new_platform_prompt(self.next_platform_id()?, command.category, spec, variables);
@@ -54,8 +55,9 @@ impl PromptService {
         command: UpdatePromptCommand,
     ) -> Result<PromptView, PromptError> {
         let mut prompt = self.platform_prompt(&command.prompt_code)?;
-        ensure_version(prompt.version, command.expected_version)?;
+        ensure_version(prompt.version, Some(command.expected_version))?;
         let (spec, variables) = normalize_spec(command.spec)?;
+        self.validate_model_reference(None, spec.model_code.as_deref())?;
         ensure_platform_display_name_unique(
             &self.platform_prompts()?,
             &spec.display_name,
@@ -123,10 +125,10 @@ impl PromptService {
         &self,
         prompt_code: &str,
         enabled: bool,
-        expected_version: Option<u64>,
+        expected_version: u64,
     ) -> Result<PromptView, PromptError> {
         let mut prompt = self.platform_prompt(prompt_code)?;
-        ensure_version(prompt.version, expected_version)?;
+        ensure_version(prompt.version, Some(expected_version))?;
         let expected = prompt.version;
         prompt.enabled = enabled;
         prompt.version += 1;

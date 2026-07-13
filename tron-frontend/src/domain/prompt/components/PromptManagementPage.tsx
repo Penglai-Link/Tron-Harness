@@ -180,10 +180,10 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
     setBusyCode(record.promptCode);
     try {
       if (scopeKind === "WORKSPACE") {
-        const payload = { enabled: !record.enabled, promptCode: record.promptCode, workspaceCode };
+        const payload = { enabled: !record.enabled, expectedVersion: record.version, promptCode: record.promptCode, workspaceCode };
         await (dataSource === "api" ? setWorkspacePromptEnabled(payload) : setWorkspacePromptEnabledMock(payload));
       } else {
-        const payload = { enabled: !record.enabled, promptCode: record.promptCode };
+        const payload = { enabled: !record.enabled, expectedVersion: record.version, promptCode: record.promptCode };
         await (dataSource === "api" ? setPlatformPromptEnabled(payload) : setPlatformPromptEnabledMock(payload));
       }
       toast.success(record.enabled ? pt("Prompt disabled") : pt("Prompt enabled"));

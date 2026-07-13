@@ -36,7 +36,6 @@ import {
   createWorkspacePrompt,
   fetchPlatformPromptDetail,
   fetchWorkspacePromptDetail,
-  setWorkspacePromptAllowInheritance,
   testPromptPreview,
   updatePlatformPrompt,
   updateWorkspacePrompt,
@@ -52,7 +51,6 @@ import {
   createWorkspacePromptMock,
   getPlatformPromptMock,
   getWorkspacePromptMock,
-  setWorkspacePromptAllowInheritanceMock,
   testPromptPreviewMock,
   updatePlatformPromptMock,
   updateWorkspacePromptMock,
@@ -75,7 +73,7 @@ interface PromptFormState {
   maxOutputTokens: string;
   modelCode: string;
   promptBody: string;
-  temperature: number;
+  temperature: number | null;
 }
 
 function emptyForm(): PromptFormState {
@@ -102,7 +100,7 @@ function formFromRecord(record: PromptRecord): PromptFormState {
     maxOutputTokens: record.maxOutputTokens === null ? "" : String(record.maxOutputTokens),
     modelCode: record.modelCode ?? "",
     promptBody: record.promptBody,
-    temperature: record.temperature ?? 0.2,
+    temperature: record.temperature,
   };
 }
 
@@ -212,9 +210,9 @@ export function PromptEditorPage({
   }, [form.promptBody, promptDataSource]);
 
   useEffect(() => {
-    if (!modelOptions.length || form.modelCode) return;
+    if (mode !== "create" || !modelOptions.length || form.modelCode) return;
     setForm((current) => ({ ...current, modelCode: modelOptions[0].modelCode }));
-  }, [form.modelCode, modelOptions]);
+  }, [form.modelCode, mode, modelOptions]);
 
   function updateForm<Key extends keyof PromptFormState>(key: Key, value: PromptFormState[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
@@ -259,14 +257,14 @@ export function PromptEditorPage({
         saved = promptDataSource === "api" ? await createPlatformPrompt(payload) : createPlatformPromptMock(payload);
       } else if (scopeKind === "WORKSPACE") {
         if (!record) throw new Error(pt("Prompt details are not loaded"));
-        const payload = { ...commonFields, expectedVersion: record.version, promptCode, workspaceCode };
+        const payload = {
+          ...commonFields,
+          allowInheritance: record.sourceKind === "LOCAL" ? form.allowInheritance : undefined,
+          expectedVersion: record.version,
+          promptCode,
+          workspaceCode,
+        };
         saved = promptDataSource === "api" ? await updateWorkspacePrompt(payload) : updateWorkspacePromptMock(payload);
-        if (record?.sourceKind === "LOCAL" && form.allowInheritance !== record.allowInheritance) {
-          const inheritancePayload = { allowInheritance: form.allowInheritance, promptCode, workspaceCode };
-          saved = promptDataSource === "api"
-            ? await setWorkspacePromptAllowInheritance(inheritancePayload)
-            : setWorkspacePromptAllowInheritanceMock(inheritancePayload);
-        }
       } else {
         if (!record) throw new Error(pt("Prompt details are not loaded"));
         const payload = { ...commonFields, expectedVersion: record.version, promptCode };
@@ -289,8 +287,11 @@ export function PromptEditorPage({
     setPreview(null);
     try {
       const payload = {
+        maxOutputTokens: numericOutputTokens(form.maxOutputTokens),
+        modelCode: form.modelCode || undefined,
         promptBody: form.promptBody,
         promptCode: promptCode || undefined,
+        temperature: form.temperature,
         variables: variableValues,
         workspaceCode: workspaceCode || undefined,
       };
@@ -383,8 +384,8 @@ export function PromptEditorPage({
                 <Field label={pt("Model")}>
                   <OptionSelect ariaLabel={pt("Model")} emptyLabel={pt("No enabled text models")} loading={modelsLoading} onChange={(value) => updateForm("modelCode", value)} options={modelOptions.map((option) => ({ label: `${option.displayName} · ${option.sourceLabel}`, value: option.modelCode }))} value={form.modelCode} />
                 </Field>
-                <Field label={`${pt("Temperature")} ${form.temperature.toFixed(1)}`}>
-                  <input className="w-full accent-[var(--color-primary)]" type="range" min={0} max={2} step={0.1} value={form.temperature} onChange={(event) => updateForm("temperature", Number(event.target.value))} />
+                <Field label={`${pt("Temperature")} ${(form.temperature ?? 0.2).toFixed(1)}`}>
+                  <input className="w-full accent-[var(--color-primary)]" type="range" min={0} max={2} step={0.1} value={form.temperature ?? 0.2} onChange={(event) => updateForm("temperature", Number(event.target.value))} />
                 </Field>
                 <Field label={pt("Max output tokens")}>
                   <TextInput min={1} step={1} type="number" value={form.maxOutputTokens} onChange={(event) => updateForm("maxOutputTokens", event.target.value)} />

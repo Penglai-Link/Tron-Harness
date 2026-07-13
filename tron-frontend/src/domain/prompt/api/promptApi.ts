@@ -90,15 +90,15 @@ export function revertWorkspacePrompt(payload: PromptDetailPayload & { workspace
   return requestApi<PromptRecord>(promptApiEndpoints.revertWorkspace, { body: payload });
 }
 
-export function setWorkspacePromptEnabled(payload: PromptDetailPayload & { workspaceCode: string; enabled: boolean }) {
+export function setWorkspacePromptEnabled(payload: PromptDetailPayload & { workspaceCode: string; enabled: boolean; expectedVersion: number }) {
   return requestApi<PromptRecord>(promptApiEndpoints.setEnabledWorkspace, { body: payload });
 }
 
-export function setPlatformPromptEnabled(payload: PromptDetailPayload & { enabled: boolean }) {
+export function setPlatformPromptEnabled(payload: PromptDetailPayload & { enabled: boolean; expectedVersion: number }) {
   return requestApi<PromptRecord>(promptApiEndpoints.setEnabledPlatform, { body: payload });
 }
 
-export function setWorkspacePromptAllowInheritance(payload: PromptDetailPayload & { workspaceCode: string; allowInheritance: boolean }) {
+export function setWorkspacePromptAllowInheritance(payload: PromptDetailPayload & { workspaceCode: string; allowInheritance: boolean; expectedVersion: number }) {
   return requestApi<PromptRecord>(promptApiEndpoints.setAllowInheritanceWorkspace, { body: payload });
 }
 

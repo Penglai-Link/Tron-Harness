@@ -45,4 +45,17 @@ impl PromptService {
             preview_runtime,
         }
     }
+
+    fn validate_model_reference(
+        &self,
+        workspace_code: Option<&str>,
+        model_code: Option<&str>,
+    ) -> Result<(), crate::domain::prompt::PromptError> {
+        match model_code {
+            Some(model_code) => self
+                .preview_runtime
+                .validate_model(workspace_code, model_code),
+            None => Ok(()),
+        }
+    }
 }

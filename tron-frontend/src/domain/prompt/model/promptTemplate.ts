@@ -1,5 +1,4 @@
 const variableNamePattern = /^[A-Za-z_][A-Za-z0-9_]{0,63}$/;
-const placeholderPattern = /(\\)?\{\{([^{}]*)\}\}/g;
 
 export interface PromptTemplateAnalysis {
   variables: string[];
@@ -17,22 +16,55 @@ function pushOnce(values: string[], seen: Set<string>, value: string) {
   values.push(value);
 }
 
-export function analyzePromptTemplate(promptBody: string): PromptTemplateAnalysis {
+function walkPromptTemplate(
+  promptBody: string,
+  replace: (variableName: string, placeholder: string) => string,
+) {
   const variables: string[] = [];
   const invalidVariables: string[] = [];
   const seenVariables = new Set<string>();
   const seenInvalidVariables = new Set<string>();
+  let renderedPrompt = "";
+  let cursor = 0;
 
-  for (const match of promptBody.matchAll(placeholderPattern)) {
-    if (match[1]) continue;
-    const variableName = match[2];
-    if (variableNamePattern.test(variableName)) {
-      pushOnce(variables, seenVariables, variableName);
-    } else {
-      pushOnce(invalidVariables, seenInvalidVariables, variableName);
+  while (cursor < promptBody.length) {
+    if (promptBody.startsWith(String.raw`\{{`, cursor)) {
+      renderedPrompt += "{{";
+      cursor += 3;
+      continue;
     }
+    if (promptBody.startsWith("{{", cursor)) {
+      const contentStart = cursor + 2;
+      const contentEnd = promptBody.indexOf("}}", contentStart);
+      if (contentEnd < 0) {
+        pushOnce(invalidVariables, seenInvalidVariables, promptBody.slice(contentStart) || "unclosed placeholder");
+        renderedPrompt += promptBody.slice(cursor);
+        break;
+      }
+      const variableName = promptBody.slice(contentStart, contentEnd);
+      const placeholder = promptBody.slice(cursor, contentEnd + 2);
+      if (variableNamePattern.test(variableName)) {
+        pushOnce(variables, seenVariables, variableName);
+        renderedPrompt += replace(variableName, placeholder);
+      } else {
+        pushOnce(invalidVariables, seenInvalidVariables, variableName);
+        renderedPrompt += placeholder;
+      }
+      cursor = contentEnd + 2;
+      continue;
+    }
+    const codePoint = promptBody.codePointAt(cursor);
+    if (codePoint === undefined) break;
+    const character = String.fromCodePoint(codePoint);
+    renderedPrompt += character;
+    cursor += character.length;
   }
 
+  return { invalidVariables, renderedPrompt, variables };
+}
+
+export function analyzePromptTemplate(promptBody: string): PromptTemplateAnalysis {
+  const { invalidVariables, variables } = walkPromptTemplate(promptBody, (_name, placeholder) => placeholder);
   return { invalidVariables, variables };
 }
 
@@ -55,16 +87,9 @@ export function renderPromptTemplate(
       .map((variableName) => ({ kind: "UNKNOWN" as const, variableName })),
   ];
 
-  const renderedPrompt = promptBody.replace(
-    placeholderPattern,
-    (placeholder, escaped: string | undefined, variableName: string) => {
-      if (escaped) return placeholder.slice(1);
-      if (!variableNamePattern.test(variableName)) return placeholder;
-      return Object.hasOwn(variableValues, variableName)
-        ? variableValues[variableName]
-        : placeholder;
-    },
-  );
+  const { renderedPrompt } = walkPromptTemplate(promptBody, (variableName, placeholder) => (
+    Object.hasOwn(variableValues, variableName) ? variableValues[variableName] : placeholder
+  ));
 
   return { errors, renderedPrompt, variables: analysis.variables };
 }

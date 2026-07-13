@@ -26,6 +26,22 @@ impl PromptLlmPreviewRuntime {
 }
 
 impl PromptPreviewRuntime for PromptLlmPreviewRuntime {
+    fn validate_model(
+        &self,
+        workspace_code: Option<&str>,
+        model_code: &str,
+    ) -> Result<(), PromptError> {
+        let model = match workspace_code {
+            Some(workspace_code) => self.models.get_workspace_model(workspace_code, model_code),
+            None => self.models.get_platform_model(model_code),
+        }
+        .map_err(|_| invalid_model_reference())?;
+        if !model.enabled || model.model_type != ModelType::Text {
+            return Err(invalid_model_reference());
+        }
+        Ok(())
+    }
+
     fn generate<'a>(
         &'a self,
         command: PromptPreviewCommand,
@@ -63,6 +79,12 @@ impl PromptPreviewRuntime for PromptLlmPreviewRuntime {
             })
         })
     }
+}
+
+fn invalid_model_reference() -> PromptError {
+    PromptError::InvalidInput(
+        "modelCode must reference an enabled text model visible in prompt scope".into(),
+    )
 }
 
 fn platform_text_runtime_config(

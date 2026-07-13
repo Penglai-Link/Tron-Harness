@@ -45,17 +45,21 @@ impl PromptService {
                 PromptError::InvalidInput("promptCode or promptBody is required".into())
             })?;
         let rendered_prompt = render_template(prompt_body, &command.variables)?;
+        let model_code = command
+            .model_code
+            .or_else(|| stored.as_ref().and_then(|prompt| prompt.model_code.clone()));
         let generated = self
             .preview_runtime
             .generate(PromptPreviewCommand {
                 workspace_code: command.workspace_code,
-                model_code: stored
-                    .as_ref()
-                    .and_then(|prompt| prompt.model_code.clone())
-                    .or(command.model_code),
+                model_code,
                 rendered_prompt: rendered_prompt.clone(),
-                temperature: stored.as_ref().and_then(|prompt| prompt.temperature),
-                max_output_tokens: stored.as_ref().and_then(|prompt| prompt.max_output_tokens),
+                temperature: command
+                    .temperature
+                    .or_else(|| stored.as_ref().and_then(|prompt| prompt.temperature)),
+                max_output_tokens: command
+                    .max_output_tokens
+                    .or_else(|| stored.as_ref().and_then(|prompt| prompt.max_output_tokens)),
             })
             .await?;
         Ok(TestPreviewResult {

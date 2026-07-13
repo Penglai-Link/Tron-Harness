@@ -85,6 +85,7 @@ export interface PromptUpdateFields {
 }
 
 export interface WorkspacePromptUpdatePayload extends PromptUpdateFields {
+  allowInheritance?: boolean;
   workspaceCode: string;
 }
 
@@ -105,9 +106,12 @@ export interface PromptAnalyzeResult {
 }
 
 export interface PromptPreviewPayload {
+  maxOutputTokens?: number | null;
+  modelCode?: string;
   promptCode?: string;
   workspaceCode?: string;
   promptBody?: string;
+  temperature?: number | null;
   variables: Record<string, string>;
 }
 

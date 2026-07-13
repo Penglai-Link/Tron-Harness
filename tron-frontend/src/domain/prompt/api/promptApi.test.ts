@@ -90,14 +90,20 @@ describe("prompt API", () => {
 
   it("sends preview variables using the corrected contract", async () => {
     await testPromptPreview({
+      maxOutputTokens: 1024,
+      modelCode: "MODEL-1",
       promptBody: "Hello {{name}}",
+      temperature: 0.4,
       variables: { name: "Ada" },
       workspaceCode: "WORKSPACE-1",
     });
 
     expect(requestApi).toHaveBeenCalledWith(promptApiEndpoints.testPreview, {
       body: {
+        maxOutputTokens: 1024,
+        modelCode: "MODEL-1",
         promptBody: "Hello {{name}}",
+        temperature: 0.4,
         variables: { name: "Ada" },
         workspaceCode: "WORKSPACE-1",
       },

@@ -219,15 +219,25 @@ export function createPlatformPromptMock(payload: PlatformPromptCreatePayload) {
   return record;
 }
 
-function updateRecord(record: PromptRecord, payload: PlatformPromptUpdatePayload): PromptRecord {
+function updateRecord(
+  record: PromptRecord,
+  payload: PlatformPromptUpdatePayload | WorkspacePromptUpdatePayload,
+): PromptRecord {
   if (payload.expectedVersion !== record.version) {
     throw new Error("prompt version conflict");
   }
-  const { expectedVersion: _expectedVersion, ...fields } = payload;
   return {
     ...record,
-    ...fields,
+    allowInheritance: record.sourceKind === "LOCAL" && "allowInheritance" in payload
+      ? (payload.allowInheritance ?? record.allowInheritance)
+      : record.allowInheritance,
     description: payload.description || null,
+    displayName: payload.displayName,
+    enabled: payload.enabled,
+    maxOutputTokens: payload.maxOutputTokens,
+    modelCode: payload.modelCode,
+    promptBody: payload.promptBody,
+    temperature: payload.temperature,
     variables: promptVariables(payload.promptBody),
     version: record.version + 1,
     updatedAt: now(),
@@ -323,8 +333,9 @@ export function revertWorkspacePromptMock(payload: PromptDetailPayload & { works
   return getWorkspacePromptMock(payload);
 }
 
-export function setWorkspacePromptEnabledMock(payload: PromptDetailPayload & { workspaceCode: string; enabled: boolean }) {
+export function setWorkspacePromptEnabledMock(payload: PromptDetailPayload & { workspaceCode: string; enabled: boolean; expectedVersion: number }) {
   const current = getWorkspacePromptMock(payload);
+  if (current.version !== payload.expectedVersion) throw new Error("prompt version conflict");
   return updateWorkspacePromptMock({
     description: current.description ?? "",
     displayName: current.displayName,
@@ -333,14 +344,15 @@ export function setWorkspacePromptEnabledMock(payload: PromptDetailPayload & { w
     modelCode: current.modelCode,
     promptBody: current.promptBody,
     promptCode: current.promptCode,
-    expectedVersion: current.version,
+    expectedVersion: payload.expectedVersion,
     temperature: current.temperature,
     workspaceCode: payload.workspaceCode,
   });
 }
 
-export function setPlatformPromptEnabledMock(payload: PromptDetailPayload & { enabled: boolean }) {
+export function setPlatformPromptEnabledMock(payload: PromptDetailPayload & { enabled: boolean; expectedVersion: number }) {
   const current = getPlatformPromptMock(payload);
+  if (current.version !== payload.expectedVersion) throw new Error("prompt version conflict");
   return updatePlatformPromptMock({
     description: current.description ?? "",
     displayName: current.displayName,
@@ -349,22 +361,24 @@ export function setPlatformPromptEnabledMock(payload: PromptDetailPayload & { en
     modelCode: current.modelCode,
     promptBody: current.promptBody,
     promptCode: current.promptCode,
-    expectedVersion: current.version,
+    expectedVersion: payload.expectedVersion,
     temperature: current.temperature,
   });
 }
 
-export function setWorkspacePromptAllowInheritanceMock(payload: PromptDetailPayload & { workspaceCode: string; allowInheritance: boolean }) {
+export function setWorkspacePromptAllowInheritanceMock(payload: PromptDetailPayload & { workspaceCode: string; allowInheritance: boolean; expectedVersion: number }) {
   const index = workspacePrompts.findIndex((record) => (
     record.workspaceCode === payload.workspaceCode
     && record.promptCode === payload.promptCode
     && record.sourceKind === "LOCAL"
   ));
   if (index < 0) throw new Error("only local prompts can change inheritance");
+  if (workspacePrompts[index].version !== payload.expectedVersion) throw new Error("prompt version conflict");
   const updated = {
     ...workspacePrompts[index],
     allowInheritance: payload.allowInheritance,
     updatedAt: now(),
+    version: workspacePrompts[index].version + 1,
   };
   workspacePrompts = workspacePrompts.map((record, recordIndex) => recordIndex === index ? updated : record);
   return updated;
@@ -391,11 +405,11 @@ export function testPromptPreviewMock(payload: PromptPreviewPayload) {
     throw new Error(result.errors.map((error) => `${error.kind}: ${error.variableName}`).join(", "));
   }
   return {
-    modelCode: payload.workspaceCode && payload.promptCode
+    modelCode: payload.modelCode ?? (payload.workspaceCode && payload.promptCode
       ? getWorkspacePromptMock({ promptCode: payload.promptCode, workspaceCode: payload.workspaceCode }).modelCode
       : payload.promptCode
         ? getPlatformPromptMock({ promptCode: payload.promptCode }).modelCode
-        : null,
+        : null),
     renderedPrompt: result.renderedPrompt,
     output: `Mock output for ${result.renderedPrompt.slice(0, 120)}`,
   };

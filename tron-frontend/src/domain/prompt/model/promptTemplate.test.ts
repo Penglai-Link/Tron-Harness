@@ -48,4 +48,15 @@ describe("prompt template variables", () => {
       variables: ["known", "missing"],
     });
   });
+
+  it("matches backend handling for nested and unclosed placeholders", () => {
+    expect(analyzePromptTemplate("{{outer{{inner}}")).toEqual({
+      invalidVariables: ["outer{{inner"],
+      variables: [],
+    });
+    expect(analyzePromptTemplate("Hello {{name")).toEqual({
+      invalidVariables: ["name"],
+      variables: [],
+    });
+  });
 });

@@ -42,13 +42,18 @@ impl PromptService {
     pub fn workspace_export(
         &self,
         workspace_code: &str,
-        mut query: PromptPageQuery,
+        query: PromptPageQuery,
     ) -> Result<PromptExportResult, PromptError> {
-        query.current = 1;
-        query.size = 200;
-        let page = self.workspace_page(workspace_code, query)?;
+        validate_page_query(&query)?;
+        let workspace = self.active_workspace(workspace_code)?;
+        let mut records = self
+            .resolve_workspace(&workspace)?
+            .into_iter()
+            .map(|record| record.view)
+            .collect::<Vec<_>>();
+        filter_records(&mut records, &query);
         let content =
-            serde_json::to_string_pretty(&page.records).map_err(|_| PromptError::StorageFailure)?;
+            serde_json::to_string_pretty(&records).map_err(|_| PromptError::StorageFailure)?;
         Ok(PromptExportResult {
             file_name: format!("{}-prompts.json", workspace_code.trim().to_lowercase()),
             content,
@@ -62,6 +67,7 @@ impl PromptService {
     ) -> Result<PromptView, PromptError> {
         let workspace = self.active_workspace(workspace_code)?;
         let (spec, variables) = normalize_spec(command.spec)?;
+        self.validate_model_reference(Some(&workspace.workspace_code), spec.model_code.as_deref())?;
         ensure_display_name_unique(
             &self.resolve_workspace(&workspace)?,
             &spec.display_name,
@@ -92,8 +98,15 @@ impl PromptService {
     ) -> Result<PromptView, PromptError> {
         let (workspace, resolved) =
             self.resolve_workspace_prompt(workspace_code, &command.prompt_code)?;
-        ensure_version(resolved.view.version, command.expected_version)?;
+        ensure_version(resolved.view.version, Some(command.expected_version))?;
+        let requested_allow_inheritance = command.allow_inheritance;
         let (spec, variables) = normalize_spec(command.spec)?;
+        self.validate_model_reference(Some(&workspace.workspace_code), spec.model_code.as_deref())?;
+        if requested_allow_inheritance.is_some()
+            && resolved.view.source_kind != PromptViewSourceKind::Local
+        {
+            return Err(PromptError::AllowInheritanceUnsupported);
+        }
         let catalog = self.resolve_workspace(&workspace)?;
         ensure_display_name_unique(
             &catalog,
@@ -105,6 +118,9 @@ impl PromptService {
                 let mut owned = resolved.current_owned.ok_or(PromptError::StorageFailure)?;
                 let expected = owned.version;
                 apply_spec(&mut owned, spec, variables);
+                if let Some(allow_inheritance) = requested_allow_inheritance {
+                    owned.allow_inheritance = Some(allow_inheritance);
+                }
                 owned.version += 1;
                 self.repository
                     .lock()
@@ -232,10 +248,10 @@ impl PromptService {
         workspace_code: &str,
         prompt_code: &str,
         allow: bool,
-        expected_version: Option<u64>,
+        expected_version: u64,
     ) -> Result<PromptView, PromptError> {
         let (workspace, resolved) = self.resolve_workspace_prompt(workspace_code, prompt_code)?;
-        ensure_version(resolved.view.version, expected_version)?;
+        ensure_version(resolved.view.version, Some(expected_version))?;
         if resolved.view.source_kind != PromptViewSourceKind::Local {
             return Err(PromptError::AllowInheritanceUnsupported);
         }
@@ -256,10 +272,10 @@ impl PromptService {
         workspace_code: &str,
         prompt_code: &str,
         enabled: bool,
-        expected_version: Option<u64>,
+        expected_version: u64,
     ) -> Result<PromptView, PromptError> {
         let (workspace, resolved) = self.resolve_workspace_prompt(workspace_code, prompt_code)?;
-        ensure_version(resolved.view.version, expected_version)?;
+        ensure_version(resolved.view.version, Some(expected_version))?;
         match resolved.view.source_kind {
             PromptViewSourceKind::Local | PromptViewSourceKind::Override => {
                 let mut owned = resolved.current_owned.ok_or(PromptError::StorageFailure)?;
@@ -413,11 +429,7 @@ fn filter_records(records: &mut Vec<PromptView>, query: &PromptPageQuery) {
 }
 
 fn paginate(records: Vec<PromptView>, query: PromptPageQuery) -> Result<PromptPage, PromptError> {
-    if query.current == 0 || query.size == 0 || query.size > 200 {
-        return Err(PromptError::InvalidInput(
-            "current must be at least 1 and size must be between 1 and 200".into(),
-        ));
-    }
+    validate_page_query(&query)?;
     let total = records.len();
     let start = (query.current - 1).saturating_mul(query.size);
     let records = records.into_iter().skip(start).take(query.size).collect();
@@ -427,6 +439,15 @@ fn paginate(records: Vec<PromptView>, query: PromptPageQuery) -> Result<PromptPa
         total,
         records,
     })
+}
+
+fn validate_page_query(query: &PromptPageQuery) -> Result<(), PromptError> {
+    if query.current == 0 || query.size == 0 || query.size > 200 {
+        return Err(PromptError::InvalidInput(
+            "current must be at least 1 and size must be between 1 and 200".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn copy_display_name(existing: &[&str], base: &str) -> String {

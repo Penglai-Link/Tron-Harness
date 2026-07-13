@@ -41,8 +41,9 @@ pub struct PromptPage {
 
 #[derive(Debug, Clone)]
 pub struct UpdatePromptCommand {
+    pub allow_inheritance: Option<bool>,
     pub prompt_code: String,
-    pub expected_version: Option<u64>,
+    pub expected_version: u64,
     pub spec: PromptSpecCommand,
 }
 

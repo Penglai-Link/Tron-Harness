@@ -25,7 +25,8 @@ CREATE TABLE IF NOT EXISTS prompts (
         (scope_kind = 'PLATFORM' AND workspace_code IS NULL AND source_kind = 'PLATFORM'
             AND source_prompt_code IS NULL AND allow_inheritance IS NULL)
         OR
-        (scope_kind = 'WORKSPACE' AND workspace_code IS NOT NULL)
+        (scope_kind = 'WORKSPACE' AND workspace_code IS NOT NULL
+            AND source_kind IN ('WORKSPACE_LOCAL', 'WORKSPACE_OVERRIDE', 'WORKSPACE_STATUS_PATCH'))
     ),
     CHECK (
         (source_kind = 'WORKSPACE_LOCAL' AND source_prompt_code IS NULL

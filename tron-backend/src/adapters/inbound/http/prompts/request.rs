@@ -114,9 +114,10 @@ impl WorkspaceCreateRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct WorkspaceUpdateRequest {
+    pub allow_inheritance: Option<bool>,
     pub workspace_code: String,
     pub prompt_code: String,
-    pub expected_version: Option<u64>,
+    pub expected_version: u64,
     pub display_name: String,
     pub prompt_body: String,
     pub description: Option<String>,
@@ -129,6 +130,7 @@ pub struct WorkspaceUpdateRequest {
 impl WorkspaceUpdateRequest {
     pub fn into_parts(self) -> (String, UpdatePromptCommand) {
         let command = UpdatePromptCommand {
+            allow_inheritance: self.allow_inheritance,
             prompt_code: self.prompt_code,
             expected_version: self.expected_version,
             spec: PromptSpecCommand {
@@ -173,7 +175,7 @@ pub struct WorkspaceSetEnabledRequest {
     pub workspace_code: String,
     pub prompt_code: String,
     pub enabled: bool,
-    pub expected_version: Option<u64>,
+    pub expected_version: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -182,7 +184,7 @@ pub struct WorkspaceSetAllowInheritanceRequest {
     pub workspace_code: String,
     pub prompt_code: String,
     pub allow_inheritance: bool,
-    pub expected_version: Option<u64>,
+    pub expected_version: u64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -194,9 +196,11 @@ pub struct AnalyzeTemplateRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TestPreviewRequest {
+    pub max_output_tokens: Option<u32>,
     pub workspace_code: Option<String>,
     pub prompt_code: Option<String>,
     pub prompt_body: Option<String>,
+    pub temperature: Option<f64>,
     pub model_code: Option<String>,
     pub variables: HashMap<String, String>,
 }
@@ -204,9 +208,11 @@ pub struct TestPreviewRequest {
 impl From<TestPreviewRequest> for TestPreviewCommand {
     fn from(request: TestPreviewRequest) -> Self {
         Self {
+            max_output_tokens: request.max_output_tokens,
             workspace_code: request.workspace_code,
             prompt_code: request.prompt_code,
             prompt_body: request.prompt_body,
+            temperature: request.temperature,
             model_code: request.model_code,
             variables: request.variables,
         }
@@ -304,7 +310,7 @@ impl From<PlatformCreateRequest> for CreatePromptCommand {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PlatformUpdateRequest {
     pub prompt_code: String,
-    pub expected_version: Option<u64>,
+    pub expected_version: u64,
     pub display_name: String,
     pub prompt_body: String,
     pub description: Option<String>,
@@ -317,6 +323,7 @@ pub struct PlatformUpdateRequest {
 impl From<PlatformUpdateRequest> for UpdatePromptCommand {
     fn from(request: PlatformUpdateRequest) -> Self {
         Self {
+            allow_inheritance: None,
             prompt_code: request.prompt_code,
             expected_version: request.expected_version,
             spec: PromptSpecCommand {
@@ -350,5 +357,5 @@ pub struct PlatformDeleteRequest {
 pub struct PlatformSetEnabledRequest {
     pub prompt_code: String,
     pub enabled: bool,
-    pub expected_version: Option<u64>,
+    pub expected_version: u64,
 }

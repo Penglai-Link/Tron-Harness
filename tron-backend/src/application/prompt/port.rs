@@ -25,6 +25,12 @@ pub struct PromptPreviewOutput {
 }
 
 pub trait PromptPreviewRuntime: Send + Sync {
+    fn validate_model(
+        &self,
+        workspace_code: Option<&str>,
+        model_code: &str,
+    ) -> Result<(), PromptError>;
+
     fn generate<'a>(
         &'a self,
         command: PromptPreviewCommand,
@@ -33,9 +39,11 @@ pub trait PromptPreviewRuntime: Send + Sync {
 
 #[derive(Debug, Clone)]
 pub struct TestPreviewCommand {
+    pub max_output_tokens: Option<u32>,
     pub workspace_code: Option<String>,
     pub prompt_code: Option<String>,
     pub prompt_body: Option<String>,
+    pub temperature: Option<f64>,
     pub model_code: Option<String>,
     pub variables: HashMap<String, String>,
 }
