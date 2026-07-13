@@ -1,9 +1,15 @@
 export type PromptCategory = "SYSTEM" | "PERSONA" | "TOOL" | "TEMPLATE";
 export type PromptScopeKind = "PLATFORM" | "WORKSPACE";
 export type PromptSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
-export type PromptVariableType = "STRING";
+export type PromptVariableType = "STRING" | "NUMBER" | "BOOLEAN" | "JSON";
 
 export interface PromptVariable {
+  name: string;
+  type: PromptVariableType;
+  description: string;
+}
+
+export interface PromptAnalyzedVariable {
   name: string;
   type: PromptVariableType;
 }
@@ -57,6 +63,7 @@ export interface PromptCreateFields {
   promptBody: string;
   description: string;
   enabled: boolean;
+  variables: PromptVariable[];
 }
 
 export interface WorkspacePromptCreatePayload extends PromptCreateFields {
@@ -73,6 +80,7 @@ export interface PromptUpdateFields {
   promptBody: string;
   description: string;
   enabled: boolean;
+  variables: PromptVariable[];
 }
 
 export interface WorkspacePromptUpdatePayload extends PromptUpdateFields {
@@ -92,7 +100,7 @@ export interface PromptDuplicatePayload extends PromptDetailPayload {
 }
 
 export interface PromptAnalyzeResult {
-  variables: PromptVariable[];
+  variables: PromptAnalyzedVariable[];
   invalidVariables: string[];
 }
 

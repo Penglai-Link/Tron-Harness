@@ -1,6 +1,6 @@
 use crate::{
-    application::prompt::PromptAnalyzeResult,
-    domain::prompt::{PromptError, PromptVariable, analyze_template},
+    application::prompt::{PromptAnalyzeResult, PromptAnalyzedVariable},
+    domain::prompt::{PromptError, PromptVariableType, analyze_template},
 };
 
 use super::PromptService;
@@ -12,7 +12,13 @@ impl PromptService {
     ) -> Result<PromptAnalyzeResult, PromptError> {
         analyze_template(prompt_body)
             .map(|names| PromptAnalyzeResult {
-                variables: names.into_iter().map(PromptVariable::string).collect(),
+                variables: names
+                    .into_iter()
+                    .map(|name| PromptAnalyzedVariable {
+                        name,
+                        variable_type: PromptVariableType::String,
+                    })
+                    .collect(),
                 invalid_variables: Vec::new(),
             })
             .map_err(Into::into)

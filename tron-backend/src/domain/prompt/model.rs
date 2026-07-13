@@ -41,14 +41,26 @@ pub enum PromptViewSourceKind {
 pub struct PromptVariable {
     pub name: String,
     #[serde(rename = "type")]
-    pub variable_type: String,
+    pub variable_type: PromptVariableType,
+    pub description: String,
 }
 
-impl PromptVariable {
-    pub fn string(name: impl Into<String>) -> Self {
-        Self {
-            name: name.into(),
-            variable_type: "STRING".into(),
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PromptVariableType {
+    String,
+    Number,
+    Boolean,
+    Json,
+}
+
+impl PromptVariableType {
+    pub fn code(self) -> &'static str {
+        match self {
+            Self::String => "STRING",
+            Self::Number => "NUMBER",
+            Self::Boolean => "BOOLEAN",
+            Self::Json => "JSON",
         }
     }
 }

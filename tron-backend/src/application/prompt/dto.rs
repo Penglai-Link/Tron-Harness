@@ -1,6 +1,13 @@
 use serde::Serialize;
 
-use crate::domain::prompt::{PromptCategory, PromptView, PromptViewSourceKind};
+use crate::domain::prompt::{PromptCategory, PromptVariableType, PromptView, PromptViewSourceKind};
+
+#[derive(Debug, Clone)]
+pub struct PromptVariableSpecCommand {
+    pub name: String,
+    pub variable_type: PromptVariableType,
+    pub description: String,
+}
 
 #[derive(Debug, Clone)]
 pub struct PromptSpecCommand {
@@ -8,6 +15,7 @@ pub struct PromptSpecCommand {
     pub prompt_body: String,
     pub description: Option<String>,
     pub enabled: bool,
+    pub variables: Vec<PromptVariableSpecCommand>,
 }
 
 #[derive(Debug, Clone)]
@@ -54,8 +62,16 @@ pub struct PromptDeleteResult {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PromptAnalyzeResult {
-    pub variables: Vec<crate::domain::prompt::PromptVariable>,
+    pub variables: Vec<PromptAnalyzedVariable>,
     pub invalid_variables: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptAnalyzedVariable {
+    pub name: String,
+    #[serde(rename = "type")]
+    pub variable_type: PromptVariableType,
 }
 
 #[derive(Debug, Clone, Serialize)]

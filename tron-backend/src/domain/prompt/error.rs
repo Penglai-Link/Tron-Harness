@@ -3,12 +3,19 @@ use std::{
     fmt::{self, Display, Formatter},
 };
 
+use super::PromptVariableType;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum TemplateError {
     InvalidVariableName(String),
     UnclosedPlaceholder,
     MissingVariables(Vec<String>),
     UnknownVariables(Vec<String>),
+    VariableSchemaMismatch,
+    VariableTypeMismatch {
+        variable_name: String,
+        expected_type: PromptVariableType,
+    },
 }
 
 impl Display for TemplateError {
@@ -26,6 +33,17 @@ impl Display for TemplateError {
             Self::UnknownVariables(names) => {
                 write!(formatter, "unknown prompt variables: {}", names.join(", "))
             }
+            Self::VariableSchemaMismatch => {
+                formatter.write_str("prompt variable schema does not match template placeholders")
+            }
+            Self::VariableTypeMismatch {
+                variable_name,
+                expected_type,
+            } => write!(
+                formatter,
+                "prompt variable {variable_name} must be {}",
+                expected_type.code()
+            ),
         }
     }
 }

@@ -7,10 +7,15 @@ import type {
   PromptPage,
   PromptPageQuery,
   PromptRecord,
+  PromptVariable,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
 } from "@/domain/prompt/model";
-import { analyzePromptTemplate } from "@/domain/prompt/model/promptTemplate";
+import {
+  analyzePromptTemplate,
+  normalizePromptVariables,
+  reconcilePromptVariables,
+} from "@/domain/prompt/model";
 
 const seedTimestamp = "2026-07-13T02:00:00.000Z";
 let nextPromptSequence = 1000;
@@ -36,7 +41,7 @@ function platformPrompt(
     sourceWorkspaceName: null,
     sourceWorkspacePath: [],
     allowInheritance: null,
-    variables: analyzePromptTemplate(promptBody).variables.map((name) => ({ name, type: "STRING" as const })),
+    variables: seedPromptVariables(promptBody),
     version: 1,
     createdAt: seedTimestamp,
     updatedAt: seedTimestamp,
@@ -93,12 +98,15 @@ function generatePromptCode() {
   return `PROMPT-MOCK-${nextPromptSequence}`;
 }
 
-function promptVariables(promptBody: string) {
-  const analysis = analyzePromptTemplate(promptBody);
-  if (analysis.invalidVariables.length) {
-    throw new Error(`Invalid prompt variables: ${analysis.invalidVariables.join(", ")}`);
-  }
-  return analysis.variables.map((name) => ({ name, type: "STRING" as const }));
+function seedPromptVariables(promptBody: string) {
+  return reconcilePromptVariables(promptBody, []).map((variable) => ({
+    ...variable,
+    description: `Variable ${variable.name}`,
+  }));
+}
+
+function promptVariables(promptBody: string, variables: PromptVariable[]) {
+  return normalizePromptVariables(promptBody, variables);
 }
 
 function inheritedPrompt(record: PromptRecord, workspaceCode: string): PromptRecord {
@@ -181,7 +189,7 @@ export function createWorkspacePromptMock(payload: WorkspacePromptCreatePayload)
     sourceWorkspaceCode: payload.workspaceCode,
     sourceWorkspaceName: payload.workspaceCode,
     sourceWorkspacePath: [{ workspaceCode: payload.workspaceCode, name: payload.workspaceCode }],
-    variables: promptVariables(payload.promptBody),
+    variables: promptVariables(payload.promptBody, payload.variables),
     version: 1,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -203,7 +211,7 @@ export function createPlatformPromptMock(payload: PlatformPromptCreatePayload) {
     sourceWorkspaceName: null,
     sourceWorkspacePath: [],
     allowInheritance: null,
-    variables: promptVariables(payload.promptBody),
+    variables: promptVariables(payload.promptBody, payload.variables),
     version: 1,
     createdAt: timestamp,
     updatedAt: timestamp,
@@ -228,7 +236,7 @@ function updateRecord(
     displayName: payload.displayName,
     enabled: payload.enabled,
     promptBody: payload.promptBody,
-    variables: promptVariables(payload.promptBody),
+    variables: promptVariables(payload.promptBody, payload.variables),
     version: record.version + 1,
     updatedAt: now(),
   };
@@ -274,6 +282,7 @@ export function duplicateWorkspacePromptMock(payload: PromptDuplicatePayload & {
     displayName: `${source.displayName} Copy`,
     enabled: source.enabled,
     promptBody: source.promptBody,
+    variables: source.variables,
     workspaceCode: payload.workspaceCode,
   });
 }
@@ -286,6 +295,7 @@ export function duplicatePlatformPromptMock(payload: PromptDuplicatePayload) {
     displayName: `${source.displayName} Copy`,
     enabled: source.enabled,
     promptBody: source.promptBody,
+    variables: source.variables,
   });
 }
 
@@ -327,6 +337,7 @@ export function setWorkspacePromptEnabledMock(payload: PromptDetailPayload & { w
     promptBody: current.promptBody,
     promptCode: current.promptCode,
     expectedVersion: payload.expectedVersion,
+    variables: current.variables,
     workspaceCode: payload.workspaceCode,
   });
 }
@@ -341,6 +352,7 @@ export function setPlatformPromptEnabledMock(payload: PromptDetailPayload & { en
     promptBody: current.promptBody,
     promptCode: current.promptCode,
     expectedVersion: payload.expectedVersion,
+    variables: current.variables,
   });
 }
 

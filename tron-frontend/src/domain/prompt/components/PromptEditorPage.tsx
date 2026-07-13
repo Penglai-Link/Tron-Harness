@@ -40,6 +40,7 @@ import {
 import {
   promptCategoryLabel,
   promptCategoryOptions,
+  promptVariableTypeOptions,
 } from "@/domain/prompt/constants";
 import {
   analyzePromptTemplateMock,
@@ -52,10 +53,16 @@ import {
 } from "@/domain/prompt/mock";
 import {
   analyzePromptTemplate,
+  normalizePromptVariables,
+  promptVariableDescriptionMaxLength,
+  promptVariablesAreReady,
+  reconcilePromptVariables,
   type PromptAnalyzeResult,
   type PromptCategory,
   type PromptRecord,
   type PromptScopeKind,
+  type PromptVariable,
+  type PromptVariableType,
 } from "@/domain/prompt/model";
 
 interface PromptFormState {
@@ -65,6 +72,7 @@ interface PromptFormState {
   displayName: string;
   enabled: boolean;
   promptBody: string;
+  variables: PromptVariable[];
 }
 
 function emptyForm(): PromptFormState {
@@ -75,6 +83,7 @@ function emptyForm(): PromptFormState {
     displayName: "",
     enabled: true,
     promptBody: "",
+    variables: [],
   };
 }
 
@@ -86,6 +95,7 @@ function formFromRecord(record: PromptRecord): PromptFormState {
     displayName: record.displayName,
     enabled: record.enabled,
     promptBody: record.promptBody,
+    variables: record.variables,
   };
 }
 
@@ -116,6 +126,10 @@ export function PromptEditorPage({
     invalidVariables: localAnalysis.invalidVariables,
     variables: localAnalysis.variables.map((name) => ({ name, type: "STRING" as const })),
   };
+  const variablesReady = useMemo(
+    () => promptVariablesAreReady(form.promptBody, form.variables),
+    [form.promptBody, form.variables],
+  );
   const listHref = scopeKind === "WORKSPACE" ? "/prompts" : "/settings/prompts";
 
   useEffect(() => {
@@ -183,6 +197,23 @@ export function PromptEditorPage({
     setForm((current) => ({ ...current, [key]: value }));
   }
 
+  function updatePromptBody(promptBody: string) {
+    setForm((current) => ({
+      ...current,
+      promptBody,
+      variables: reconcilePromptVariables(promptBody, current.variables),
+    }));
+  }
+
+  function updateVariable(name: string, patch: Partial<Pick<PromptVariable, "description" | "type">>) {
+    setForm((current) => ({
+      ...current,
+      variables: current.variables.map((variable) => (
+        variable.name === name ? { ...variable, ...patch } : variable
+      )),
+    }));
+  }
+
   async function authoritativeAnalysis() {
     return promptDataSource === "api"
       ? analyzePromptTemplateApi(form.promptBody)
@@ -190,7 +221,7 @@ export function PromptEditorPage({
   }
 
   async function savePrompt() {
-    if (submitting || !form.displayName.trim() || !form.promptBody.trim()) return;
+    if (submitting || !form.displayName.trim() || !form.promptBody.trim() || !variablesReady) return;
     if (scopeKind === "WORKSPACE" && !workspaceCode) {
       toast.error(pt("Select a workspace before saving"));
       return;
@@ -203,11 +234,13 @@ export function PromptEditorPage({
         toast.error(pt("Fix invalid variables before saving"));
         return;
       }
+      const variables = normalizePromptVariables(form.promptBody, form.variables);
       const commonFields = {
         description: form.description.trim(),
         displayName: form.displayName.trim(),
         enabled: form.enabled,
         promptBody: form.promptBody,
+        variables,
       };
 
       let saved: PromptRecord;
@@ -255,7 +288,7 @@ export function PromptEditorPage({
         actions={(
           <>
             <Button variant="outline" onClick={() => navigate(listHref)}>{pt("Cancel")}</Button>
-            <Button disabled={submitting || loading || !form.displayName.trim() || !form.promptBody.trim()} onClick={() => void savePrompt()}><Save size={15} aria-hidden="true" />{pt("Save")}</Button>
+            <Button disabled={submitting || loading || !form.displayName.trim() || !form.promptBody.trim() || !variablesReady} onClick={() => void savePrompt()}><Save size={15} aria-hidden="true" />{pt("Save")}</Button>
           </>
         )}
       />
@@ -293,7 +326,7 @@ export function PromptEditorPage({
             </SurfaceCard>
             <SurfaceCard>
               <Field label={pt("Prompt body")} error={analysis.invalidVariables.length ? pt("Invalid variables: {{variables}}", { variables: analysis.invalidVariables.join(", ") }) : undefined}>
-                <TextArea aria-label={pt("Prompt body")} className="min-h-80 resize-y font-mono leading-6" value={form.promptBody} onChange={(event) => updateForm("promptBody", event.target.value)} />
+                <TextArea aria-label={pt("Prompt body")} className="min-h-80 resize-y font-mono leading-6" value={form.promptBody} onChange={(event) => updatePromptBody(event.target.value)} />
               </Field>
               <div className="mt-4">
                 <Field label={pt("Description")}>
@@ -313,14 +346,35 @@ export function PromptEditorPage({
             <SurfaceCard>
               <div className="mb-4 flex items-center justify-between gap-3">
                 <h2 className="text-base font-semibold">{pt("Variables")}</h2>
-                <Badge tone={analysis.invalidVariables.length ? "error" : "info"}>{analysis.variables.length}</Badge>
+                <Badge tone={analysis.invalidVariables.length || !variablesReady ? "error" : "info"}>{form.variables.length}</Badge>
               </div>
-              {analysis.variables.length ? (
-                <div className="grid gap-2">
-                  {analysis.variables.map((variable) => (
-                    <div key={variable.name} className="flex min-h-9 items-center justify-between gap-3 rounded-md bg-[var(--color-surface-container-low)] px-3 py-2">
+              {form.variables.length ? (
+                <div className="grid gap-3">
+                  {form.variables.map((variable) => (
+                    <div key={variable.name} className="grid gap-3 rounded-md bg-[var(--color-surface-container-low)] p-3">
                       <code className="min-w-0 break-all font-mono text-xs">{`{{${variable.name}}}`}</code>
-                      <Badge tone="info">{variable.type}</Badge>
+                      <div className="grid gap-3 sm:grid-cols-[120px_minmax(0,1fr)]">
+                        <Field label={<>{pt("Type")}<span className="sr-only">{` {{${variable.name}}}`}</span></>}>
+                          <SelectInput
+                            value={variable.type}
+                            onValueChange={(value) => updateVariable(variable.name, { type: value as PromptVariableType })}
+                          >
+                            {promptVariableTypeOptions.map((option) => (
+                              <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                            ))}
+                          </SelectInput>
+                        </Field>
+                        <Field
+                          label={<>{pt("Description")}<span className="sr-only">{` {{${variable.name}}}`}</span></>}
+                          error={!variable.description.trim() ? pt("Variable description is required") : undefined}
+                        >
+                          <TextInput
+                            maxLength={promptVariableDescriptionMaxLength}
+                            value={variable.description}
+                            onChange={(event) => updateVariable(variable.name, { description: event.target.value })}
+                          />
+                        </Field>
+                      </div>
                     </div>
                   ))}
                 </div>

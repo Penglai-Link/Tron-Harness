@@ -1,6 +1,10 @@
 use std::collections::HashMap;
 
-use tron_backend::domain::prompt::{TemplateError, analyze_template, render_template};
+use serde_json::json;
+use tron_backend::domain::prompt::{
+    PromptVariable, PromptVariableType, TemplateError, analyze_template, render_template,
+    render_typed_template,
+};
 
 #[test]
 fn template_analysis_collects_valid_variables_and_ignores_escaped_placeholders() {
@@ -57,5 +61,64 @@ fn template_rendering_rejects_missing_and_unknown_variables_before_generation() 
     assert_eq!(
         unknown,
         TemplateError::UnknownVariables(vec!["unknown".to_string()])
+    );
+}
+
+#[test]
+fn typed_template_rendering_validates_and_serializes_declared_types() {
+    let variables = vec![
+        PromptVariable {
+            name: "name".to_string(),
+            variable_type: PromptVariableType::String,
+            description: "Display name".to_string(),
+        },
+        PromptVariable {
+            name: "attempts".to_string(),
+            variable_type: PromptVariableType::Number,
+            description: "Retry count".to_string(),
+        },
+        PromptVariable {
+            name: "enabled".to_string(),
+            variable_type: PromptVariableType::Boolean,
+            description: "Feature flag".to_string(),
+        },
+        PromptVariable {
+            name: "options".to_string(),
+            variable_type: PromptVariableType::Json,
+            description: "Runtime options".to_string(),
+        },
+    ];
+    let values = HashMap::from([
+        ("name".to_string(), json!("Ada")),
+        ("attempts".to_string(), json!(3)),
+        ("enabled".to_string(), json!(true)),
+        ("options".to_string(), json!({ "mode": "safe" })),
+    ]);
+
+    assert_eq!(
+        render_typed_template(
+            "{{name}}/{{attempts}}/{{enabled}}/{{options}}",
+            &variables,
+            &values,
+        ),
+        Ok("Ada/3/true/{\"mode\":\"safe\"}".to_string())
+    );
+
+    let invalid_values = HashMap::from([
+        ("name".to_string(), json!("Ada")),
+        ("attempts".to_string(), json!("three")),
+        ("enabled".to_string(), json!(true)),
+        ("options".to_string(), json!({ "mode": "safe" })),
+    ]);
+    assert_eq!(
+        render_typed_template(
+            "{{name}}/{{attempts}}/{{enabled}}/{{options}}",
+            &variables,
+            &invalid_values,
+        ),
+        Err(TemplateError::VariableTypeMismatch {
+            variable_name: "attempts".to_string(),
+            expected_type: PromptVariableType::Number,
+        })
     );
 }

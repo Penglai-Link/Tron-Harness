@@ -53,7 +53,11 @@ CREATE INDEX IF NOT EXISTS idx_prompts_scope_workspace
 CREATE TABLE IF NOT EXISTS prompt_variables (
     prompt_code TEXT NOT NULL REFERENCES prompts(prompt_code) ON DELETE CASCADE,
     variable_name TEXT NOT NULL,
-    variable_type TEXT NOT NULL DEFAULT 'STRING' CHECK (variable_type = 'STRING'),
+    variable_type TEXT NOT NULL DEFAULT 'STRING'
+        CHECK (variable_type IN ('STRING', 'NUMBER', 'BOOLEAN', 'JSON')),
+    description TEXT NOT NULL CHECK (
+        length(trim(description)) BETWEEN 1 AND 200
+    ),
     position INTEGER NOT NULL,
     PRIMARY KEY (prompt_code, variable_name)
 );

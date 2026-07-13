@@ -10,6 +10,7 @@ use axum::http::{Method, StatusCode};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tron_backend::config::AppConfig;
+use tron_backend::domain::prompt::analyze_template;
 
 use common::{app_with_config, authenticated_request, response_json};
 
@@ -39,8 +40,8 @@ async fn workspace_create_page_and_detail_return_consensus_envelopes() {
     assert_eq!(
         created["data"]["variables"],
         json!([
-            { "name": "release_name", "type": "STRING" },
-            { "name": "audience", "type": "STRING" }
+            { "name": "release_name", "type": "STRING", "description": "Variable release_name" },
+            { "name": "audience", "type": "STRING", "description": "Variable audience" }
         ])
     );
     assert_envelope_only(&created);
@@ -85,15 +86,90 @@ async fn workspace_create_page_and_detail_return_consensus_envelopes() {
 }
 
 #[tokio::test]
+async fn prompt_variables_require_matching_descriptions_and_supported_types() {
+    let (router, _) = prompt_app("prompt-variable-metadata-contract");
+    let valid_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/prompts/workspace-create",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "displayName": "Typed Template",
+            "category": "TEMPLATE",
+            "promptBody": "Retry {{task}} {{attempts}} times with {{options}}",
+            "description": null,
+            "enabled": true,
+            "allowInheritance": true,
+            "variables": [
+                { "name": "task", "type": "STRING", "description": "Task description" },
+                { "name": "attempts", "type": "NUMBER", "description": "Retry count" },
+                { "name": "options", "type": "JSON", "description": "Runtime options object" }
+            ]
+        })),
+    )
+    .await;
+    assert_eq!(valid_response.status(), StatusCode::OK);
+    let valid = response_json(valid_response).await;
+    assert_eq!(
+        valid["data"]["variables"],
+        json!([
+            { "name": "task", "type": "STRING", "description": "Task description" },
+            { "name": "attempts", "type": "NUMBER", "description": "Retry count" },
+            { "name": "options", "type": "JSON", "description": "Runtime options object" }
+        ])
+    );
+
+    for (name, variables) in [
+        (
+            "Missing variable description",
+            json!([{ "name": "name", "type": "STRING", "description": "" }]),
+        ),
+        (
+            "Mismatched variable name",
+            json!([{ "name": "other", "type": "STRING", "description": "Other value" }]),
+        ),
+    ] {
+        let response = authenticated_request(
+            &router,
+            Method::POST,
+            "/api/v1/prompts/workspace-create",
+            Some(json!({
+                "workspaceCode": "TRON_CORE",
+                "displayName": name,
+                "category": "TEMPLATE",
+                "promptBody": "Hello {{name}}",
+                "description": null,
+                "enabled": true,
+                "allowInheritance": true,
+                "variables": variables
+            })),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{name}");
+        let body = response_json(response).await;
+        assert_eq!(body["code"], json!("PROMPT_INPUT_INVALID"), "{name}");
+    }
+}
+
+#[tokio::test]
 async fn workspace_update_creates_isolated_override_and_revert_restores_upstream() {
     let (router, _) = prompt_app("prompt-workspace-override-revert");
-    let parent = create_workspace_prompt(
+    let parent_variables = json!([
+        { "name": "topic", "type": "NUMBER", "description": "Parent topic number" }
+    ]);
+    let parent = post_json(
         &router,
-        "PLATFORM",
-        "Shared Writer",
-        "SYSTEM",
-        "Parent {{topic}}",
-        true,
+        "/api/v1/prompts/workspace-create",
+        json!({
+            "workspaceCode": "PLATFORM",
+            "displayName": "Shared Writer",
+            "category": "SYSTEM",
+            "promptBody": "Parent {{topic}}",
+            "description": null,
+            "enabled": true,
+            "allowInheritance": true,
+            "variables": parent_variables.clone()
+        }),
     )
     .await;
     let prompt_code = parent["data"]["promptCode"]
@@ -104,10 +180,15 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
     let inherited = workspace_detail(&router, "TRON_CORE", &prompt_code).await;
     assert_eq!(inherited["data"]["sourceKind"], json!("INHERITED"));
     assert_eq!(inherited["data"]["sourceWorkspaceCode"], json!("PLATFORM"));
+    assert_eq!(inherited["data"]["variables"], parent_variables);
     let inherited_version = inherited["data"]["version"]
         .as_u64()
         .expect("inherited prompt should return version");
 
+    let override_variables = json!([
+        { "name": "topic", "type": "JSON", "description": "Override topic payload" },
+        { "name": "audience", "type": "BOOLEAN", "description": "Audience feature flag" }
+    ]);
     let update_response = authenticated_request(
         &router,
         Method::POST,
@@ -119,7 +200,8 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
             "promptBody": "Child {{topic}} for {{audience}}",
             "description": "child-only override",
             "enabled": true,
-            "expectedVersion": inherited_version
+            "expectedVersion": inherited_version,
+            "variables": override_variables.clone()
         })),
     )
     .await;
@@ -132,6 +214,7 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
         overridden["data"]["promptBody"],
         json!("Child {{topic}} for {{audience}}")
     );
+    assert_eq!(overridden["data"]["variables"], override_variables);
 
     let unchanged_parent = workspace_detail(&router, "PLATFORM", &prompt_code).await;
     assert_eq!(unchanged_parent["data"]["sourceKind"], json!("LOCAL"));
@@ -139,6 +222,7 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
         unchanged_parent["data"]["promptBody"],
         json!("Parent {{topic}}")
     );
+    assert_eq!(unchanged_parent["data"]["variables"], parent_variables);
 
     let revert_response = authenticated_request(
         &router,
@@ -154,6 +238,7 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
     let reverted = response_json(revert_response).await;
     assert_eq!(reverted["data"]["sourceKind"], json!("INHERITED"));
     assert_eq!(reverted["data"]["promptBody"], json!("Parent {{topic}}"));
+    assert_eq!(reverted["data"]["variables"], parent_variables);
 }
 
 #[tokio::test]
@@ -188,7 +273,8 @@ async fn workspace_update_syncs_variables_transactionally() {
             "promptBody": "Only {{third}} remains",
             "description": null,
             "enabled": true,
-            "expectedVersion": version
+            "expectedVersion": version,
+            "variables": variable_metadata("Only {{third}} remains")
         })),
     )
     .await;
@@ -324,15 +410,26 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
 #[tokio::test]
 async fn workspace_secondary_commands_follow_the_frozen_contract() {
     let (router, _) = prompt_app("prompt-workspace-secondary-commands");
-    let created = create_workspace_prompt(
+    let variables = json!([
+        { "name": "name", "type": "STRING", "description": "Recipient name" },
+        { "name": "attempts", "type": "NUMBER", "description": "Retry attempts" }
+    ]);
+    let created = post_json(
         &router,
-        "TRON_CORE",
-        "Workspace Commands",
-        "SYSTEM",
-        "Hello {{name}}",
-        true,
+        "/api/v1/prompts/workspace-create",
+        json!({
+            "workspaceCode": "TRON_CORE",
+            "displayName": "Workspace Commands",
+            "category": "SYSTEM",
+            "promptBody": "Hello {{name}} after {{attempts}} attempts",
+            "description": null,
+            "enabled": true,
+            "allowInheritance": true,
+            "variables": variables.clone()
+        }),
     )
     .await;
+    assert_eq!(created["data"]["variables"], variables);
     let prompt_code = created["data"]["promptCode"]
         .as_str()
         .expect("created prompt should return promptCode");
@@ -352,6 +449,7 @@ async fn workspace_secondary_commands_follow_the_frozen_contract() {
     )
     .await;
     assert_eq!(inheritance["data"]["allowInheritance"], json!(false));
+    assert_eq!(inheritance["data"]["variables"], variables);
     let inherited_version = inheritance["data"]["version"]
         .as_u64()
         .expect("inheritance update should return version");
@@ -368,6 +466,7 @@ async fn workspace_secondary_commands_follow_the_frozen_contract() {
     )
     .await;
     assert_eq!(disabled["data"]["enabled"], json!(false));
+    assert_eq!(disabled["data"]["variables"], variables);
 
     let duplicated = post_json(
         &router,
@@ -381,6 +480,7 @@ async fn workspace_secondary_commands_follow_the_frozen_contract() {
     .await;
     assert_eq!(duplicated["data"]["category"], json!("TOOL"));
     assert_ne!(duplicated["data"]["promptCode"], json!(prompt_code));
+    assert_eq!(duplicated["data"]["variables"], variables);
 
     let deleted = post_json(
         &router,
@@ -405,7 +505,8 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
             "category": "PERSONA",
             "promptBody": "Write for {{audience}}",
             "description": "platform prompt",
-            "enabled": true
+            "enabled": true,
+            "variables": variable_metadata("Write for {{audience}}")
         }),
     )
     .await;
@@ -444,14 +545,17 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
             "displayName": "Platform Writer Updated",
             "promptBody": "Updated {{topic}}",
             "description": null,
-            "enabled": true
+            "enabled": true,
+            "variables": [
+                { "name": "topic", "type": "JSON", "description": "Updated topic payload" }
+            ]
         }),
     )
     .await;
     assert_eq!(updated["data"]["category"], json!("PERSONA"));
     assert_eq!(
         updated["data"]["variables"],
-        json!([{ "name": "topic", "type": "STRING" }])
+        json!([{ "name": "topic", "type": "JSON", "description": "Updated topic payload" }])
     );
 
     let disabled = post_json(
@@ -465,6 +569,7 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
     )
     .await;
     assert_eq!(disabled["data"]["enabled"], json!(false));
+    assert_eq!(disabled["data"]["variables"], updated["data"]["variables"]);
 
     let duplicated = post_json(
         &router,
@@ -473,6 +578,10 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
     )
     .await;
     assert_eq!(duplicated["data"]["category"], json!("TEMPLATE"));
+    assert_eq!(
+        duplicated["data"]["variables"],
+        updated["data"]["variables"]
+    );
 
     let deleted = post_json(
         &router,
@@ -602,7 +711,8 @@ async fn prompt_contract_excludes_model_configuration() {
             "promptBody": "Hello {{name}}",
             "description": null,
             "enabled": true,
-            "allowInheritance": true
+            "allowInheritance": true,
+            "variables": variable_metadata("Hello {{name}}")
         }),
     )
     .await;
@@ -680,12 +790,29 @@ async fn create_workspace_prompt(
             "promptBody": body,
             "description": null,
             "enabled": true,
-            "allowInheritance": allow_inheritance
+            "allowInheritance": allow_inheritance,
+            "variables": variable_metadata(body)
         })),
     )
     .await;
     assert_eq!(response.status(), StatusCode::OK);
     response_json(response).await
+}
+
+fn variable_metadata(body: &str) -> Value {
+    Value::Array(
+        analyze_template(body)
+            .expect("test prompt body should contain valid variables")
+            .into_iter()
+            .map(|name| {
+                json!({
+                    "description": format!("Variable {name}"),
+                    "name": name,
+                    "type": "STRING"
+                })
+            })
+            .collect(),
+    )
 }
 
 async fn workspace_detail(router: &axum::Router, workspace_code: &str, prompt_code: &str) -> Value {

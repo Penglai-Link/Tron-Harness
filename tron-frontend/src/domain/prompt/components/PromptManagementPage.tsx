@@ -131,9 +131,12 @@ function PromptInspector({
           <Badge tone="info">{prompt.variables.length}</Badge>
         </div>
         {prompt.variables.length ? prompt.variables.map((variable) => (
-          <div key={variable.name} className="flex min-h-9 items-center justify-between gap-3 rounded-md bg-[var(--color-surface-container-low)] px-3 py-2">
-            <code className="min-w-0 break-all font-mono text-xs">{`{{${variable.name}}}`}</code>
-            <Badge tone="info">{variable.type}</Badge>
+          <div key={variable.name} className="grid gap-1 rounded-md bg-[var(--color-surface-container-low)] px-3 py-2">
+            <div className="flex min-h-6 items-center justify-between gap-3">
+              <code className="min-w-0 break-all font-mono text-xs">{`{{${variable.name}}}`}</code>
+              <Badge tone="info">{variable.type}</Badge>
+            </div>
+            <p className="text-xs leading-5 text-[var(--color-on-surface-variant)]">{variable.description}</p>
           </div>
         )) : <p className="text-sm text-[var(--color-on-surface-variant)]">{pt("No variables detected")}</p>}
       </div>

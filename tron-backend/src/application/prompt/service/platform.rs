@@ -1,7 +1,7 @@
 use crate::{
     application::prompt::{
         CreatePromptCommand, PromptDeleteResult, PromptPage, PromptPageQuery, PromptSpecCommand,
-        UpdatePromptCommand,
+        PromptVariableSpecCommand, UpdatePromptCommand,
     },
     domain::prompt::{
         Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptView,
@@ -92,6 +92,15 @@ impl PromptService {
                 prompt_body: source.prompt_body,
                 description: source.description,
                 enabled: source.enabled,
+                variables: source
+                    .variables
+                    .into_iter()
+                    .map(|variable| PromptVariableSpecCommand {
+                        name: variable.name,
+                        variable_type: variable.variable_type,
+                        description: variable.description,
+                    })
+                    .collect(),
             },
             allow_inheritance: None,
         })

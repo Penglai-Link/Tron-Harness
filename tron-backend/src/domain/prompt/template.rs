@@ -1,6 +1,8 @@
 use std::collections::{BTreeSet, HashMap};
 
-use super::TemplateError;
+use serde_json::Value;
+
+use super::{PromptVariable, PromptVariableType, TemplateError};
 
 pub fn analyze_template(template: &str) -> Result<Vec<String>, TemplateError> {
     let mut names = Vec::new();
@@ -34,6 +36,53 @@ pub fn render_template(
             .expect("template values were validated")
             .clone())
     })
+}
+
+pub fn render_typed_template(
+    template: &str,
+    variables: &[PromptVariable],
+    values: &HashMap<String, Value>,
+) -> Result<String, TemplateError> {
+    let names = analyze_template(template)?;
+    let expected = names.iter().cloned().collect::<BTreeSet<_>>();
+    let declared = variables
+        .iter()
+        .map(|variable| variable.name.clone())
+        .collect::<BTreeSet<_>>();
+    if expected != declared || declared.len() != variables.len() {
+        return Err(TemplateError::VariableSchemaMismatch);
+    }
+
+    let provided = values.keys().cloned().collect::<BTreeSet<_>>();
+    let missing = expected.difference(&provided).cloned().collect::<Vec<_>>();
+    if !missing.is_empty() {
+        return Err(TemplateError::MissingVariables(missing));
+    }
+    let unknown = provided.difference(&expected).cloned().collect::<Vec<_>>();
+    if !unknown.is_empty() {
+        return Err(TemplateError::UnknownVariables(unknown));
+    }
+
+    let mut rendered_values = HashMap::with_capacity(variables.len());
+    for variable in variables {
+        let value = values
+            .get(&variable.name)
+            .expect("typed template values were validated");
+        let rendered = match (variable.variable_type, value) {
+            (PromptVariableType::String, Value::String(value)) => value.clone(),
+            (PromptVariableType::Number, Value::Number(value)) => value.to_string(),
+            (PromptVariableType::Boolean, Value::Bool(value)) => value.to_string(),
+            (PromptVariableType::Json, Value::Object(_) | Value::Array(_)) => value.to_string(),
+            _ => {
+                return Err(TemplateError::VariableTypeMismatch {
+                    variable_name: variable.name.clone(),
+                    expected_type: variable.variable_type,
+                });
+            }
+        };
+        rendered_values.insert(variable.name.clone(), rendered);
+    }
+    render_template(template, &rendered_values)
 }
 
 fn walk_template(

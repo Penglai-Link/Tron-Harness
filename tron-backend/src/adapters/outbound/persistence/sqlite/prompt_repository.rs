@@ -1,11 +1,12 @@
-use std::{fs, path::Path};
+use std::{fs, path::Path, time::Duration};
 
-use rusqlite::{Connection, OpenFlags, Transaction, params};
+use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior, params};
 
 use crate::{
     application::prompt::PromptRepository,
     domain::prompt::{
         Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptVariable,
+        PromptVariableType,
     },
     shared::{
         id::SnowflakeId,
@@ -13,7 +14,7 @@ use crate::{
     },
 };
 
-use super::migrations::PROMPTS_MIGRATION;
+use super::migrations::{PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION};
 
 pub struct SqlitePromptRepository {
     connection: Connection,
@@ -22,7 +23,7 @@ pub struct SqlitePromptRepository {
 impl SqlitePromptRepository {
     pub fn connect(database_url: &str) -> Result<Self, PromptError> {
         ensure_database_parent(database_url)?;
-        let connection = if database_url == ":memory:" || database_url.starts_with("file:") {
+        let mut connection = if database_url == ":memory:" || database_url.starts_with("file:") {
             Connection::open_with_flags(
                 database_url,
                 OpenFlags::SQLITE_OPEN_READ_WRITE
@@ -34,8 +35,12 @@ impl SqlitePromptRepository {
         }
         .map_err(storage_error)?;
         connection
+            .busy_timeout(Duration::from_secs(5))
+            .map_err(storage_error)?;
+        connection
             .execute_batch(PROMPTS_MIGRATION)
             .map_err(storage_error)?;
+        migrate_prompt_variable_metadata(&mut connection)?;
         Ok(Self { connection })
     }
 }
@@ -153,12 +158,14 @@ fn replace_variables(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(
     for (position, variable) in prompt.variables.iter().enumerate() {
         transaction
             .execute(
-                "INSERT INTO prompt_variables (prompt_code, variable_name, variable_type, position)
-             VALUES (?1, ?2, ?3, ?4)",
+                "INSERT INTO prompt_variables (
+                    prompt_code, variable_name, variable_type, description, position
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
                     prompt.prompt_code,
                     variable.name,
-                    variable.variable_type,
+                    variable.variable_type.code(),
+                    variable.description,
                     position
                 ],
             )
@@ -173,7 +180,7 @@ fn load_variables(
 ) -> Result<Vec<PromptVariable>, PromptError> {
     let mut statement = connection
         .prepare(
-            "SELECT variable_name, variable_type FROM prompt_variables
+            "SELECT variable_name, variable_type, description FROM prompt_variables
          WHERE prompt_code = ?1 ORDER BY position",
         )
         .map_err(storage_error)?;
@@ -181,7 +188,8 @@ fn load_variables(
         .query_map(params![prompt_code], |row| {
             Ok(PromptVariable {
                 name: row.get(0)?,
-                variable_type: row.get(1)?,
+                variable_type: variable_type_from_storage(&row.get::<_, String>(1)?)?,
+                description: row.get(2)?,
             })
         })
         .map_err(storage_error)?
@@ -244,6 +252,16 @@ fn category_from_storage(value: &str) -> rusqlite::Result<PromptCategory> {
     }
 }
 
+fn variable_type_from_storage(value: &str) -> rusqlite::Result<PromptVariableType> {
+    match value {
+        "STRING" => Ok(PromptVariableType::String),
+        "NUMBER" => Ok(PromptVariableType::Number),
+        "BOOLEAN" => Ok(PromptVariableType::Boolean),
+        "JSON" => Ok(PromptVariableType::Json),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
 fn source_kind_to_storage(value: PromptSourceKind) -> &'static str {
     match value {
         PromptSourceKind::Platform => "PLATFORM",
@@ -279,6 +297,103 @@ fn ensure_database_parent(database_url: &str) -> Result<(), PromptError> {
     Ok(())
 }
 
+fn column_exists(
+    connection: &Connection,
+    table_name: &str,
+    column_name: &str,
+) -> Result<bool, PromptError> {
+    let pragma = format!("PRAGMA table_info({table_name})");
+    let mut statement = connection.prepare(&pragma).map_err(storage_error)?;
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)?;
+    Ok(columns.iter().any(|value| value == column_name))
+}
+
+fn migrate_prompt_variable_metadata(connection: &mut Connection) -> Result<(), PromptError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(storage_error)?;
+    if column_exists(&transaction, "prompt_variables", "description")? {
+        return transaction.commit().map_err(storage_error);
+    }
+    transaction
+        .execute_batch(PROMPT_VARIABLE_METADATA_MIGRATION)
+        .map_err(storage_error)?;
+    transaction.commit().map_err(storage_error)
+}
+
 fn storage_error(_: impl std::fmt::Debug) -> PromptError {
     PromptError::StorageFailure
+}
+
+#[cfg(test)]
+mod tests {
+    use rusqlite::{Connection, params};
+
+    use super::migrate_prompt_variable_metadata;
+
+    #[test]
+    fn legacy_prompt_variables_are_migrated_to_typed_metadata() {
+        let mut connection = Connection::open_in_memory().expect("legacy database should open");
+        connection
+            .execute_batch(
+                "PRAGMA foreign_keys = ON;
+                 CREATE TABLE prompts (prompt_code TEXT PRIMARY KEY);
+                 CREATE TABLE prompt_variables (
+                    prompt_code TEXT NOT NULL REFERENCES prompts(prompt_code) ON DELETE CASCADE,
+                    variable_name TEXT NOT NULL,
+                    variable_type TEXT NOT NULL DEFAULT 'STRING'
+                        CHECK (variable_type = 'STRING'),
+                    position INTEGER NOT NULL,
+                    PRIMARY KEY (prompt_code, variable_name)
+                 );
+                 CREATE INDEX idx_prompt_variables_prompt_position
+                    ON prompt_variables(prompt_code, position);
+                 INSERT INTO prompts (prompt_code) VALUES ('PROMPT-LEGACY');
+                 INSERT INTO prompt_variables (
+                    prompt_code, variable_name, variable_type, position
+                 ) VALUES ('PROMPT-LEGACY', 'name', 'STRING', 0);",
+            )
+            .expect("legacy prompt schema should be created");
+
+        migrate_prompt_variable_metadata(&mut connection)
+            .expect("legacy variable metadata should migrate");
+
+        let migrated = connection
+            .query_row(
+                "SELECT variable_type, description FROM prompt_variables
+                 WHERE prompt_code = ?1 AND variable_name = ?2",
+                params!["PROMPT-LEGACY", "name"],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .expect("migrated variable should remain readable");
+        assert_eq!(
+            migrated,
+            ("STRING".to_string(), "Variable name".to_string())
+        );
+
+        connection
+            .execute(
+                "INSERT INTO prompt_variables (
+                    prompt_code, variable_name, variable_type, description, position
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params!["PROMPT-LEGACY", "count", "NUMBER", "Item count", 1],
+            )
+            .expect("migrated schema should accept supported variable types");
+
+        migrate_prompt_variable_metadata(&mut connection)
+            .expect("reapplying the migration should be safe");
+        let preserved = connection
+            .query_row(
+                "SELECT variable_type, description FROM prompt_variables
+                 WHERE prompt_code = ?1 AND variable_name = ?2",
+                params!["PROMPT-LEGACY", "count"],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+            )
+            .expect("reapplied migration should preserve typed metadata");
+        assert_eq!(preserved, ("NUMBER".to_string(), "Item count".to_string()));
+    }
 }

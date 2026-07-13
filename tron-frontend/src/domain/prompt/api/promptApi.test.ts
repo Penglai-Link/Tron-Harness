@@ -60,6 +60,7 @@ describe("prompt API", () => {
       displayName: "Router",
       enabled: true,
       promptBody: "Route {{request}}",
+      variables: [{ description: "Routing request", name: "request", type: "JSON" }],
       workspaceCode: "WORKSPACE-1",
     });
     await updateWorkspacePrompt({
@@ -69,11 +70,14 @@ describe("prompt API", () => {
       promptBody: "Route {{request}}",
       promptCode: "PROMPT-1",
       expectedVersion: 3,
+      variables: [{ description: "Routing request", name: "request", type: "JSON" }],
       workspaceCode: "WORKSPACE-1",
     });
 
     expect(requestApi).toHaveBeenNthCalledWith(1, promptApiEndpoints.createWorkspace, {
-      body: expect.not.objectContaining({ promptCode: expect.anything() }),
+      body: expect.objectContaining({
+        variables: [{ description: "Routing request", name: "request", type: "JSON" }],
+      }),
     });
     expect(requestApi).toHaveBeenNthCalledWith(2, promptApiEndpoints.updateWorkspace, {
       body: expect.not.objectContaining({ category: expect.anything() }),

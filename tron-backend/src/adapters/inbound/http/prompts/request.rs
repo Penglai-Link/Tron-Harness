@@ -8,9 +8,10 @@ use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{
     application::prompt::{
-        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, UpdatePromptCommand,
+        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, PromptVariableSpecCommand,
+        UpdatePromptCommand,
     },
-    domain::prompt::{PromptCategory, PromptViewSourceKind},
+    domain::prompt::{PromptCategory, PromptVariableType, PromptViewSourceKind},
 };
 
 use super::response::PromptApiResponse;
@@ -84,6 +85,7 @@ pub struct WorkspaceCreateRequest {
     pub description: Option<String>,
     pub enabled: bool,
     pub allow_inheritance: bool,
+    pub variables: Vec<PromptVariableRequest>,
 }
 
 impl WorkspaceCreateRequest {
@@ -95,6 +97,7 @@ impl WorkspaceCreateRequest {
                 prompt_body: self.prompt_body,
                 description: self.description,
                 enabled: self.enabled,
+                variables: variable_commands(self.variables),
             },
             allow_inheritance: Some(self.allow_inheritance),
         };
@@ -113,6 +116,7 @@ pub struct WorkspaceUpdateRequest {
     pub prompt_body: String,
     pub description: Option<String>,
     pub enabled: bool,
+    pub variables: Vec<PromptVariableRequest>,
 }
 
 impl WorkspaceUpdateRequest {
@@ -126,6 +130,7 @@ impl WorkspaceUpdateRequest {
                 prompt_body: self.prompt_body,
                 description: self.description,
                 enabled: self.enabled,
+                variables: variable_commands(self.variables),
             },
         };
         (self.workspace_code, command)
@@ -176,6 +181,30 @@ pub struct WorkspaceSetAllowInheritanceRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct AnalyzeTemplateRequest {
     pub prompt_body: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PromptVariableRequest {
+    pub name: String,
+    #[serde(rename = "type", default = "default_prompt_variable_type")]
+    pub variable_type: PromptVariableType,
+    pub description: String,
+}
+
+fn default_prompt_variable_type() -> PromptVariableType {
+    PromptVariableType::String
+}
+
+fn variable_commands(variables: Vec<PromptVariableRequest>) -> Vec<PromptVariableSpecCommand> {
+    variables
+        .into_iter()
+        .map(|variable| PromptVariableSpecCommand {
+            name: variable.name,
+            variable_type: variable.variable_type,
+            description: variable.description,
+        })
+        .collect()
 }
 
 #[derive(Debug, Deserialize)]
@@ -242,6 +271,7 @@ pub struct PlatformCreateRequest {
     pub prompt_body: String,
     pub description: Option<String>,
     pub enabled: bool,
+    pub variables: Vec<PromptVariableRequest>,
 }
 
 impl From<PlatformCreateRequest> for CreatePromptCommand {
@@ -253,6 +283,7 @@ impl From<PlatformCreateRequest> for CreatePromptCommand {
                 prompt_body: request.prompt_body,
                 description: request.description,
                 enabled: request.enabled,
+                variables: variable_commands(request.variables),
             },
             allow_inheritance: None,
         }
@@ -268,6 +299,7 @@ pub struct PlatformUpdateRequest {
     pub prompt_body: String,
     pub description: Option<String>,
     pub enabled: bool,
+    pub variables: Vec<PromptVariableRequest>,
 }
 
 impl From<PlatformUpdateRequest> for UpdatePromptCommand {
@@ -281,6 +313,7 @@ impl From<PlatformUpdateRequest> for UpdatePromptCommand {
                 prompt_body: request.prompt_body,
                 description: request.description,
                 enabled: request.enabled,
+                variables: variable_commands(request.variables),
             },
         }
     }
