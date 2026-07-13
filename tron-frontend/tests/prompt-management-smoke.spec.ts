@@ -142,6 +142,26 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await expect(page).toHaveURL(/\/settings\/prompts\/detail\?promptCode=/);
 });
 
+test("reverts a workspace override without leaving the prompt list", async ({ page }) => {
+  await page.goto(`${frontendBaseUrl}/prompts`);
+  await page.getByRole("row").filter({ hasText: "Workspace Router" }).click();
+  await expect(page.getByRole("heading", { name: "Create Prompt Override" })).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=/);
+
+  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await expect(page).toHaveURL(`${frontendBaseUrl}/prompts`);
+  await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
+  await page.getByRole("menuitem", { name: "Revert", exact: true }).click();
+  await expect(page).toHaveURL(`${frontendBaseUrl}/prompts`);
+
+  const confirmDialog = page.getByRole("dialog", { name: "Revert override?" });
+  await expect(confirmDialog).toBeVisible();
+  await confirmDialog.getByRole("button", { name: "Revert", exact: true }).click();
+  await expect(confirmDialog).toHaveCount(0);
+  await expect(page).toHaveURL(`${frontendBaseUrl}/prompts`);
+});
+
 test("localizes prompt UI while preserving prompt data and technical values", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("tron.locale", "zh-CN"));
   await page.goto(`${frontendBaseUrl}/prompts`);

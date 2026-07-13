@@ -218,15 +218,15 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       : (["EDIT", "SET_ENABLED", "DELETE"] as const);
     return workspaceActions.map((action) => {
       if (action === "EDIT" || action === "OVERRIDE") {
-        return <DropdownMenuItem key={action} onClick={() => navigate(detailHref(record, action === "OVERRIDE" ? "override" : undefined))}>{action === "OVERRIDE" ? pt("actions.createOverride", "Create override") : pt("actions.edit", "Edit")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); navigate(detailHref(record, action === "OVERRIDE" ? "override" : undefined)); }}>{action === "OVERRIDE" ? pt("actions.createOverride", "Create override") : pt("actions.edit", "Edit")}</DropdownMenuItem>;
       }
       if (action === "SET_ENABLED") {
-        return <DropdownMenuItem key={action} onClick={() => void toggleEnabled(record)}>{record.enabled ? pt("actions.disable", "Disable") : pt("actions.enable", "Enable")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); void toggleEnabled(record); }}>{record.enabled ? pt("actions.disable", "Disable") : pt("actions.enable", "Enable")}</DropdownMenuItem>;
       }
       if (action === "REVERT") {
-        return <DropdownMenuItem key={action} onClick={() => setConfirmTarget({ action, record })}><RotateCcw aria-hidden="true" />{pt("actions.revert", "Revert")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); setConfirmTarget({ action, record }); }}><RotateCcw aria-hidden="true" />{pt("actions.revert", "Revert")}</DropdownMenuItem>;
       }
-      return <DropdownMenuItem key={action} variant="destructive" onClick={() => setConfirmTarget({ action: "DELETE", record })}><Trash2 aria-hidden="true" />{pt("actions.delete", "Delete")}</DropdownMenuItem>;
+      return <DropdownMenuItem key={action} variant="destructive" onClick={(event) => { event.stopPropagation(); setConfirmTarget({ action: "DELETE", record }); }}><Trash2 aria-hidden="true" />{pt("actions.delete", "Delete")}</DropdownMenuItem>;
     });
   }
 
