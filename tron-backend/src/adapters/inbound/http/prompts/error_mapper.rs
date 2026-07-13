@@ -53,9 +53,6 @@ pub fn prompt_error_response(error: PromptError) -> Response {
             "PROMPT_VERSION_CONFLICT",
             "prompt version conflict".into(),
         ),
-        PromptError::PreviewFailed(message) => {
-            (StatusCode::BAD_GATEWAY, "PROMPT_PREVIEW_FAILED", message)
-        }
         PromptError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "PROMPT_STORAGE_FAILED",

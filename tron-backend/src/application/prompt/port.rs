@@ -1,4 +1,4 @@
-use std::{collections::HashMap, future::Future, pin::Pin};
+use std::collections::HashMap;
 
 use crate::domain::prompt::{Prompt, PromptError};
 
@@ -10,40 +10,7 @@ pub trait PromptRepository: Send {
 }
 
 #[derive(Debug, Clone)]
-pub struct PromptPreviewCommand {
-    pub workspace_code: Option<String>,
-    pub model_code: Option<String>,
-    pub rendered_prompt: String,
-    pub temperature: Option<f64>,
-    pub max_output_tokens: Option<u32>,
-}
-
-#[derive(Debug, Clone)]
-pub struct PromptPreviewOutput {
-    pub model_code: String,
-    pub output: String,
-}
-
-pub trait PromptPreviewRuntime: Send + Sync {
-    fn validate_model(
-        &self,
-        workspace_code: Option<&str>,
-        model_code: &str,
-    ) -> Result<(), PromptError>;
-
-    fn generate<'a>(
-        &'a self,
-        command: PromptPreviewCommand,
-    ) -> Pin<Box<dyn Future<Output = Result<PromptPreviewOutput, PromptError>> + Send + 'a>>;
-}
-
-#[derive(Debug, Clone)]
-pub struct TestPreviewCommand {
-    pub max_output_tokens: Option<u32>,
-    pub workspace_code: Option<String>,
-    pub prompt_code: Option<String>,
-    pub prompt_body: Option<String>,
-    pub temperature: Option<f64>,
-    pub model_code: Option<String>,
+pub struct RenderTemplateCommand {
+    pub prompt_body: String,
     pub variables: HashMap<String, String>,
 }

@@ -39,7 +39,6 @@ impl PromptService {
         command: CreatePromptCommand,
     ) -> Result<PromptView, PromptError> {
         let (spec, variables) = normalize_spec(command.spec)?;
-        self.validate_model_reference(None, spec.model_code.as_deref())?;
         ensure_platform_display_name_unique(&self.platform_prompts()?, &spec.display_name, None)?;
         let prompt =
             new_platform_prompt(self.next_platform_id()?, command.category, spec, variables);
@@ -57,7 +56,6 @@ impl PromptService {
         let mut prompt = self.platform_prompt(&command.prompt_code)?;
         ensure_version(prompt.version, Some(command.expected_version))?;
         let (spec, variables) = normalize_spec(command.spec)?;
-        self.validate_model_reference(None, spec.model_code.as_deref())?;
         ensure_platform_display_name_unique(
             &self.platform_prompts()?,
             &spec.display_name,
@@ -93,9 +91,6 @@ impl PromptService {
                 display_name,
                 prompt_body: source.prompt_body,
                 description: source.description,
-                model_code: source.model_code,
-                temperature: source.temperature,
-                max_output_tokens: source.max_output_tokens,
                 enabled: source.enabled,
             },
             allow_inheritance: None,
@@ -180,9 +175,6 @@ fn new_platform_prompt(
         category,
         prompt_body: spec.prompt_body,
         description: spec.description,
-        model_code: spec.model_code,
-        temperature: spec.temperature,
-        max_output_tokens: spec.max_output_tokens,
         enabled: spec.enabled,
         source_kind: PromptSourceKind::Platform,
         source_prompt_code: None,
@@ -203,9 +195,6 @@ fn platform_view(prompt: Prompt) -> PromptView {
         category: prompt.category,
         prompt_body: prompt.prompt_body,
         description: prompt.description,
-        model_code: prompt.model_code,
-        temperature: prompt.temperature,
-        max_output_tokens: prompt.max_output_tokens,
         enabled: prompt.enabled,
         source_kind: PromptViewSourceKind::Platform,
         source_label: "Platform".into(),
@@ -229,9 +218,6 @@ fn apply_platform_spec(
     prompt.display_name = spec.display_name;
     prompt.prompt_body = spec.prompt_body;
     prompt.description = spec.description;
-    prompt.model_code = spec.model_code;
-    prompt.temperature = spec.temperature;
-    prompt.max_output_tokens = spec.max_output_tokens;
     prompt.enabled = spec.enabled;
     prompt.variables = variables;
     prompt.updated_at = current_timestamp();

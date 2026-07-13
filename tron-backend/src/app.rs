@@ -15,10 +15,7 @@ use crate::{
         },
         outbound::{
             crypto::{BcryptPasswordHasher, Sm4GcmVariableCipher},
-            model::{
-                HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient,
-                PromptLlmPreviewRuntime,
-            },
+            model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
@@ -279,8 +276,6 @@ impl AppState {
         let prompts = build_prompt_service(
             &config.database_url,
             workspaces.clone(),
-            models.clone(),
-            HttpLlmRuntimeClient::new(model_inference_client.clone()),
             id_provider.clone(),
         );
         let llm_runtime = LlmRuntimeService::new(

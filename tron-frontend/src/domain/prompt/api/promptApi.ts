@@ -9,8 +9,8 @@ import type {
   PromptExportResult,
   PromptPage,
   PromptPageQuery,
-  PromptPreviewPayload,
-  PromptPreviewResult,
+  PromptRenderPayload,
+  PromptRenderResult,
   PromptRecord,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
@@ -28,11 +28,11 @@ export const promptApiEndpoints = {
   duplicateWorkspace: "POST /api/v1/prompts/workspace-duplicate",
   pagePlatform: "POST /api/v1/admin/platform/prompts/page",
   pageWorkspace: "POST /api/v1/prompts/workspace-page",
+  renderTemplate: "POST /api/v1/prompts/render-template",
   revertWorkspace: "POST /api/v1/prompts/workspace-revert",
   setAllowInheritanceWorkspace: "POST /api/v1/prompts/workspace-set-allow-inheritance",
   setEnabledPlatform: "POST /api/v1/admin/platform/prompts/set-enabled",
   setEnabledWorkspace: "POST /api/v1/prompts/workspace-set-enabled",
-  testPreview: "POST /api/v1/prompts/test-preview",
   updatePlatform: "POST /api/v1/admin/platform/prompts/update",
   updateWorkspace: "POST /api/v1/prompts/workspace-update",
   workspaceExport: "POST /api/v1/prompts/workspace-export",
@@ -106,8 +106,8 @@ export function analyzePromptTemplateApi(promptBody: string, signal?: AbortSigna
   return requestApi<PromptAnalyzeResult>(promptApiEndpoints.analyzeTemplate, { body: { promptBody }, signal });
 }
 
-export function testPromptPreview(payload: PromptPreviewPayload, signal?: AbortSignal) {
-  return requestApi<PromptPreviewResult>(promptApiEndpoints.testPreview, { body: payload, signal });
+export function renderPromptTemplateApi(payload: PromptRenderPayload, signal?: AbortSignal) {
+  return requestApi<PromptRenderResult>(promptApiEndpoints.renderTemplate, { body: payload, signal });
 }
 
 export function exportWorkspacePrompts(payload: PromptPageQuery & { workspaceCode: string }) {

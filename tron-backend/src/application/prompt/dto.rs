@@ -7,9 +7,6 @@ pub struct PromptSpecCommand {
     pub display_name: String,
     pub prompt_body: String,
     pub description: Option<String>,
-    pub model_code: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_output_tokens: Option<u32>,
     pub enabled: bool,
 }
 
@@ -56,10 +53,8 @@ pub struct PromptDeleteResult {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub struct TestPreviewResult {
+pub struct RenderTemplateResult {
     pub rendered_prompt: String,
-    pub model_code: Option<String>,
-    pub output: String,
 }
 
 #[derive(Debug, Clone, Serialize)]

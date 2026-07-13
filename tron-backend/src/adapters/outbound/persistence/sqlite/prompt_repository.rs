@@ -46,8 +46,8 @@ impl PromptRepository for SqlitePromptRepository {
             {
                 let mut statement = self.connection.prepare(
                 "SELECT id, scope_kind, workspace_code, prompt_code, display_name, category,
-                        prompt_body, description, model_code, temperature, max_output_tokens,
-                        enabled, source_kind, source_prompt_code, allow_inheritance, version,
+                        prompt_body, description, enabled, source_kind, source_prompt_code,
+                        allow_inheritance, version,
                         created_at, updated_at
                  FROM prompts
                  ORDER BY scope_kind, workspace_code, display_name, prompt_code",
@@ -76,18 +76,15 @@ impl PromptRepository for SqlitePromptRepository {
         let updated = transaction
             .execute(
                 "UPDATE prompts
-             SET display_name = ?2, prompt_body = ?3, description = ?4, model_code = ?5,
-                 temperature = ?6, max_output_tokens = ?7, enabled = ?8, source_kind = ?9,
-                 source_prompt_code = ?10, allow_inheritance = ?11, version = ?12, updated_at = ?13
-             WHERE prompt_code = ?1 AND version = ?14",
+             SET display_name = ?2, prompt_body = ?3, description = ?4, enabled = ?5,
+                 source_kind = ?6, source_prompt_code = ?7, allow_inheritance = ?8,
+                 version = ?9, updated_at = ?10
+             WHERE prompt_code = ?1 AND version = ?11",
                 params![
                     prompt.prompt_code,
                     prompt.display_name,
                     prompt.prompt_body,
                     prompt.description,
-                    prompt.model_code,
-                    prompt.temperature,
-                    prompt.max_output_tokens,
                     bool_to_int(prompt.enabled),
                     source_kind_to_storage(prompt.source_kind),
                     prompt.source_prompt_code,
@@ -117,33 +114,32 @@ impl PromptRepository for SqlitePromptRepository {
 }
 
 fn insert_prompt(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), PromptError> {
-    transaction.execute(
-        "INSERT INTO prompts (
+    transaction
+        .execute(
+            "INSERT INTO prompts (
             id, scope_kind, workspace_code, prompt_code, display_name, category, prompt_body,
-            description, model_code, temperature, max_output_tokens, enabled, source_kind,
+            description, enabled, source_kind,
             source_prompt_code, allow_inheritance, version, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
-        params![
-            prompt.id.value(),
-            scope_kind_to_storage(prompt.scope_kind),
-            prompt.workspace_code,
-            prompt.prompt_code,
-            prompt.display_name,
-            category_to_storage(prompt.category),
-            prompt.prompt_body,
-            prompt.description,
-            prompt.model_code,
-            prompt.temperature,
-            prompt.max_output_tokens,
-            bool_to_int(prompt.enabled),
-            source_kind_to_storage(prompt.source_kind),
-            prompt.source_prompt_code,
-            prompt.allow_inheritance.map(bool_to_int),
-            prompt.version,
-            timestamp_to_millis(&prompt.created_at),
-            timestamp_to_millis(&prompt.updated_at),
-        ],
-    ).map_err(storage_error)?;
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            params![
+                prompt.id.value(),
+                scope_kind_to_storage(prompt.scope_kind),
+                prompt.workspace_code,
+                prompt.prompt_code,
+                prompt.display_name,
+                category_to_storage(prompt.category),
+                prompt.prompt_body,
+                prompt.description,
+                bool_to_int(prompt.enabled),
+                source_kind_to_storage(prompt.source_kind),
+                prompt.source_prompt_code,
+                prompt.allow_inheritance.map(bool_to_int),
+                prompt.version,
+                timestamp_to_millis(&prompt.created_at),
+                timestamp_to_millis(&prompt.updated_at),
+            ],
+        )
+        .map_err(storage_error)?;
     Ok(())
 }
 
@@ -203,17 +199,14 @@ fn decode_prompt(row: &rusqlite::Row<'_>) -> rusqlite::Result<Prompt> {
         category: category_from_storage(&row.get::<_, String>(5)?)?,
         prompt_body: row.get(6)?,
         description: row.get(7)?,
-        model_code: row.get(8)?,
-        temperature: row.get(9)?,
-        max_output_tokens: row.get(10)?,
-        enabled: row.get::<_, i64>(11)? != 0,
-        source_kind: source_kind_from_storage(&row.get::<_, String>(12)?)?,
-        source_prompt_code: row.get(13)?,
-        allow_inheritance: row.get::<_, Option<i64>>(14)?.map(|value| value != 0),
-        version: row.get(15)?,
+        enabled: row.get::<_, i64>(8)? != 0,
+        source_kind: source_kind_from_storage(&row.get::<_, String>(9)?)?,
+        source_prompt_code: row.get(10)?,
+        allow_inheritance: row.get::<_, Option<i64>>(11)?.map(|value| value != 0),
+        version: row.get(12)?,
         variables: Vec::new(),
-        created_at: timestamp_from_millis(row.get(16)?),
-        updated_at: timestamp_from_millis(row.get(17)?),
+        created_at: timestamp_from_millis(row.get(13)?),
+        updated_at: timestamp_from_millis(row.get(14)?),
     })
 }
 

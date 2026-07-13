@@ -17,7 +17,6 @@ import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import {
   Field,
-  OptionSelect,
   PageHeader,
   SelectInput,
   SurfaceCard,
@@ -36,7 +35,7 @@ import {
   createWorkspacePrompt,
   fetchPlatformPromptDetail,
   fetchWorkspacePromptDetail,
-  testPromptPreview,
+  renderPromptTemplateApi,
   updatePlatformPrompt,
   updateWorkspacePrompt,
 } from "@/domain/prompt/api";
@@ -44,14 +43,13 @@ import {
   promptCategoryLabel,
   promptCategoryOptions,
 } from "@/domain/prompt/constants";
-import { usePromptModelOptions } from "@/domain/prompt/hooks";
 import {
   analyzePromptTemplateMock,
   createPlatformPromptMock,
   createWorkspacePromptMock,
   getPlatformPromptMock,
   getWorkspacePromptMock,
-  testPromptPreviewMock,
+  renderPromptTemplateMock,
   updatePlatformPromptMock,
   updateWorkspacePromptMock,
 } from "@/domain/prompt/mock";
@@ -59,7 +57,7 @@ import {
   analyzePromptTemplate,
   type PromptAnalyzeResult,
   type PromptCategory,
-  type PromptPreviewResult,
+  type PromptRenderResult,
   type PromptRecord,
   type PromptScopeKind,
 } from "@/domain/prompt/model";
@@ -70,10 +68,7 @@ interface PromptFormState {
   description: string;
   displayName: string;
   enabled: boolean;
-  maxOutputTokens: string;
-  modelCode: string;
   promptBody: string;
-  temperature: number | null;
 }
 
 function emptyForm(): PromptFormState {
@@ -83,10 +78,7 @@ function emptyForm(): PromptFormState {
     description: "",
     displayName: "",
     enabled: true,
-    maxOutputTokens: "2048",
-    modelCode: "",
     promptBody: "",
-    temperature: 0.2,
   };
 }
 
@@ -97,17 +89,8 @@ function formFromRecord(record: PromptRecord): PromptFormState {
     description: record.description ?? "",
     displayName: record.displayName,
     enabled: record.enabled,
-    maxOutputTokens: record.maxOutputTokens === null ? "" : String(record.maxOutputTokens),
-    modelCode: record.modelCode ?? "",
     promptBody: record.promptBody,
-    temperature: record.temperature,
   };
-}
-
-function numericOutputTokens(value: string) {
-  if (!value.trim()) return null;
-  const parsed = Number(value);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 export function PromptEditorPage({
@@ -134,13 +117,12 @@ export function PromptEditorPage({
   const [testing, setTesting] = useState(false);
   const [backendAnalysis, setBackendAnalysis] = useState<PromptAnalyzeResult | null>(null);
   const [variableValues, setVariableValues] = useState<Record<string, string>>({});
-  const [preview, setPreview] = useState<PromptPreviewResult | null>(null);
+  const [preview, setPreview] = useState<PromptRenderResult | null>(null);
   const localAnalysis = useMemo(() => analyzePromptTemplate(form.promptBody), [form.promptBody]);
   const analysis = backendAnalysis ?? {
     invalidVariables: localAnalysis.invalidVariables,
     variables: localAnalysis.variables.map((name) => ({ name, type: "STRING" as const })),
   };
-  const { loading: modelsLoading, options: modelOptions } = usePromptModelOptions(scopeKind, workspaceCode);
   const listHref = scopeKind === "WORKSPACE" ? "/prompts" : "/settings/prompts";
 
   useEffect(() => {
@@ -209,11 +191,6 @@ export function PromptEditorPage({
     };
   }, [form.promptBody, promptDataSource]);
 
-  useEffect(() => {
-    if (mode !== "create" || !modelOptions.length || form.modelCode) return;
-    setForm((current) => ({ ...current, modelCode: modelOptions[0].modelCode }));
-  }, [form.modelCode, mode, modelOptions]);
-
   function updateForm<Key extends keyof PromptFormState>(key: Key, value: PromptFormState[Key]) {
     setForm((current) => ({ ...current, [key]: value }));
   }
@@ -242,10 +219,7 @@ export function PromptEditorPage({
         description: form.description.trim(),
         displayName: form.displayName.trim(),
         enabled: form.enabled,
-        maxOutputTokens: numericOutputTokens(form.maxOutputTokens),
-        modelCode: form.modelCode || null,
         promptBody: form.promptBody,
-        temperature: form.temperature,
       };
 
       let saved: PromptRecord;
@@ -287,17 +261,12 @@ export function PromptEditorPage({
     setPreview(null);
     try {
       const payload = {
-        maxOutputTokens: numericOutputTokens(form.maxOutputTokens),
-        modelCode: form.modelCode || undefined,
         promptBody: form.promptBody,
-        promptCode: promptCode || undefined,
-        temperature: form.temperature,
         variables: variableValues,
-        workspaceCode: workspaceCode || undefined,
       };
       const result = promptDataSource === "api"
-        ? await testPromptPreview(payload)
-        : testPromptPreviewMock(payload);
+        ? await renderPromptTemplateApi(payload)
+        : renderPromptTemplateMock(payload);
       setPreview(result);
       toast.success(pt("Preview completed"));
     } catch (reason) {
@@ -319,7 +288,7 @@ export function PromptEditorPage({
         actions={(
           <>
             <Button variant="outline" onClick={() => navigate(listHref)}>{pt("Cancel")}</Button>
-            <Button variant="outline" disabled={testing || loading || !form.promptBody.trim()} onClick={() => void runPreview()}><Play size={15} aria-hidden="true" />{pt("Test")}</Button>
+            <Button variant="outline" disabled={testing || loading || !form.promptBody.trim()} onClick={() => void runPreview()}><Play size={15} aria-hidden="true" />{pt("Preview")}</Button>
             <Button disabled={submitting || loading || !form.displayName.trim() || !form.promptBody.trim()} onClick={() => void savePrompt()}><Save size={15} aria-hidden="true" />{pt("Save")}</Button>
           </>
         )}
@@ -368,28 +337,15 @@ export function PromptEditorPage({
             </SurfaceCard>
             {preview ? (
               <SurfaceCard>
-                <h2 className="text-base font-semibold">{pt("Test Preview")}</h2>
-                <div className="mt-3 text-xs text-[var(--color-on-surface-variant)]">{pt("Model")}: <span className="font-mono">{preview.modelCode ?? pt("Default")}</span></div>
-                <div className="mt-4 grid gap-4 lg:grid-cols-2">
-                  <div><h3 className="text-sm font-medium">{pt("Rendered prompt")}</h3><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-surface-container-low)] p-4 text-sm leading-6">{preview.renderedPrompt}</pre></div>
-                  <div><h3 className="text-sm font-medium">{pt("Output")}</h3><pre className="mt-2 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-surface-container-low)] p-4 text-sm leading-6">{preview.output}</pre></div>
-                </div>
+                <h2 className="text-base font-semibold">{pt("Rendered prompt")}</h2>
+                <pre className="mt-4 max-h-80 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-surface-container-low)] p-4 text-sm leading-6">{preview.renderedPrompt}</pre>
               </SurfaceCard>
             ) : null}
           </div>
           <div className="space-y-5">
             <SurfaceCard>
-              <h2 className="mb-4 text-base font-semibold">{pt("Model Parameters")}</h2>
+              <h2 className="mb-4 text-base font-semibold">{pt("Prompt Settings")}</h2>
               <div className="grid gap-4">
-                <Field label={pt("Model")}>
-                  <OptionSelect ariaLabel={pt("Model")} emptyLabel={pt("No enabled text models")} loading={modelsLoading} onChange={(value) => updateForm("modelCode", value)} options={modelOptions.map((option) => ({ label: `${option.displayName} · ${option.sourceLabel}`, value: option.modelCode }))} value={form.modelCode} />
-                </Field>
-                <Field label={`${pt("Temperature")} ${(form.temperature ?? 0.2).toFixed(1)}`}>
-                  <input className="w-full accent-[var(--color-primary)]" type="range" min={0} max={2} step={0.1} value={form.temperature ?? 0.2} onChange={(event) => updateForm("temperature", Number(event.target.value))} />
-                </Field>
-                <Field label={pt("Max output tokens")}>
-                  <TextInput min={1} step={1} type="number" value={form.maxOutputTokens} onChange={(event) => updateForm("maxOutputTokens", event.target.value)} />
-                </Field>
                 <ToggleSwitch checked={form.enabled} label={pt("Enabled")} onCheckedChange={(checked) => updateForm("enabled", checked)} />
                 {scopeKind === "WORKSPACE" && (mode === "create" || record?.sourceKind === "LOCAL") ? <ToggleSwitch checked={form.allowInheritance} label={pt("Allow inheritance")} onCheckedChange={(checked) => updateForm("allowInheritance", checked)} /> : null}
               </div>

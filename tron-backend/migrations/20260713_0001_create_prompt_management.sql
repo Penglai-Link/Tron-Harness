@@ -9,9 +9,6 @@ CREATE TABLE IF NOT EXISTS prompts (
     category TEXT NOT NULL CHECK (category IN ('SYSTEM', 'PERSONA', 'TOOL', 'TEMPLATE')),
     prompt_body TEXT NOT NULL,
     description TEXT NULL,
-    model_code TEXT NULL,
-    temperature REAL NULL,
-    max_output_tokens INTEGER NULL,
     enabled INTEGER NOT NULL CHECK (enabled IN (0, 1)),
     source_kind TEXT NOT NULL CHECK (source_kind IN (
         'PLATFORM', 'WORKSPACE_LOCAL', 'WORKSPACE_OVERRIDE', 'WORKSPACE_STATUS_PATCH'

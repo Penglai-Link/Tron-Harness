@@ -13,20 +13,6 @@ pub(super) fn normalize_spec(
     }
     spec.prompt_body = required(spec.prompt_body, "promptBody")?;
     spec.description = optional(spec.description);
-    spec.model_code = optional(spec.model_code);
-    if spec
-        .temperature
-        .is_some_and(|value| !value.is_finite() || !(0.0..=2.0).contains(&value))
-    {
-        return Err(PromptError::InvalidInput(
-            "temperature must be between 0 and 2".into(),
-        ));
-    }
-    if spec.max_output_tokens == Some(0) {
-        return Err(PromptError::InvalidInput(
-            "maxOutputTokens must be greater than zero".into(),
-        ));
-    }
     let variables = analyze_template(&spec.prompt_body)?
         .into_iter()
         .map(PromptVariable::string)

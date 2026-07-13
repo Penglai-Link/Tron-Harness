@@ -52,9 +52,9 @@ import {
   duplicateWorkspacePrompt,
   exportWorkspacePrompts,
   revertWorkspacePrompt,
+  renderPromptTemplateApi,
   setPlatformPromptEnabled,
   setWorkspacePromptEnabled,
-  testPromptPreview,
 } from "@/domain/prompt/api";
 import {
   promptCategoryLabel,
@@ -68,16 +68,16 @@ import {
   duplicatePlatformPromptMock,
   duplicateWorkspacePromptMock,
   exportWorkspacePromptsMock,
+  renderPromptTemplateMock,
   revertWorkspacePromptMock,
   setPlatformPromptEnabledMock,
   setWorkspacePromptEnabledMock,
-  testPromptPreviewMock,
 } from "@/domain/prompt/mock";
 import {
   getWorkspacePromptActions,
   type PromptCategory,
   type PromptPageQuery,
-  type PromptPreviewResult,
+  type PromptRenderResult,
   type PromptRecord,
   type PromptScopeKind,
   type PromptSourceKind,
@@ -112,17 +112,15 @@ function PromptInspector({
   onClose,
   prompt,
   useApi,
-  workspaceCode,
 }: {
   onClose: () => void;
   prompt: PromptRecord;
   useApi: boolean;
-  workspaceCode: string;
 }) {
   const pt = useLocaleText();
   const toast = useToast();
   const [testing, setTesting] = useState(false);
-  const [preview, setPreview] = useState<PromptPreviewResult | null>(null);
+  const [preview, setPreview] = useState<PromptRenderResult | null>(null);
   const [variables, setVariables] = useState<Record<string, string>>(() => promptVariableValues(prompt));
 
   useEffect(() => {
@@ -140,14 +138,10 @@ function PromptInspector({
     setTesting(true);
     try {
       const payload = {
-        maxOutputTokens: prompt.maxOutputTokens,
-        modelCode: prompt.modelCode ?? undefined,
-        promptCode: prompt.promptCode,
-        temperature: prompt.temperature,
+        promptBody: prompt.promptBody,
         variables,
-        workspaceCode,
       };
-      const result = useApi ? await testPromptPreview(payload) : testPromptPreviewMock(payload);
+      const result = useApi ? await renderPromptTemplateApi(payload) : renderPromptTemplateMock(payload);
       setPreview(result);
       toast.success(pt("Preview completed"));
     } catch (reason) {
@@ -180,8 +174,8 @@ function PromptInspector({
             )}
           </Field>
         ))}
-        <Button disabled={testing} aria-busy={testing} onClick={() => void runPreview()}>{pt("Run Test Preview")}</Button>
-        {preview ? <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-surface-container-low)] p-3 text-xs leading-5">{preview.output}</pre> : null}
+        <Button disabled={testing} aria-busy={testing} onClick={() => void runPreview()}>{pt("Render Preview")}</Button>
+        {preview ? <pre className="max-h-56 overflow-auto whitespace-pre-wrap rounded-lg bg-[var(--color-surface-container-low)] p-3 text-xs leading-5">{preview.renderedPrompt}</pre> : null}
       </div>
     </InspectorPanel>
   );
@@ -274,10 +268,9 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
         onClose={() => setPromptPanelOpen(false)}
         prompt={selectedPrompt}
         useApi={dataSource === "api"}
-        workspaceCode={workspaceCode}
       />
     ) : undefined
-  ), [dataSource, promptPanelOpen, scopeKind, selectedPrompt, workspaceCode]);
+  ), [dataSource, promptPanelOpen, scopeKind, selectedPrompt]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -510,7 +503,7 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
                 { id: "name", header: pt("Name"), render: (record) => <button className="text-left font-medium text-[var(--color-primary)]" type="button" onClick={() => navigate(detailHref(record))}>{record.displayName}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></button> },
                 { id: "category", header: pt("Category"), render: (record) => <Badge>{pt(promptCategoryLabel(record.category))}</Badge> },
                 { id: "source", header: pt("Source"), render: (record) => <div><Badge tone={sourceTone(record.sourceKind)}>{pt(record.sourceKind)}</Badge><span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{record.sourceLabel}</span></div> },
-                { id: "model", header: pt("Model"), render: (record) => <span className="font-mono text-xs">{record.modelCode ?? pt("Default")}</span> },
+                { id: "variables", header: pt("Variables"), render: (record) => <Badge tone="info">{record.variables.length}</Badge> },
                 { id: "status", header: pt("Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{pt(record.enabled ? "Enabled" : "Disabled")}</Badge> },
                 { id: "updated", header: pt("Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
                 { id: "actions", header: pt("Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },

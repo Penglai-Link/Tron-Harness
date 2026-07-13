@@ -101,14 +101,17 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
 
   await page.getByRole("button", { name: "New", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Create Prompt" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Prompt Settings" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Model Parameters" })).toHaveCount(0);
+  await expect(page.getByText("Temperature", { exact: false })).toHaveCount(0);
+  await expect(page.getByText("Max output tokens", { exact: true })).toHaveCount(0);
   await page.getByLabel("Name").fill("Greeting Template");
   await page.getByLabel("Prompt body").fill("Hello {{name}} from {{workspace_name}}.");
   await expect(page.getByText("STRING").first()).toBeVisible();
   await page.getByLabel("{{name}}").fill("Ada");
   await page.getByLabel("{{workspace_name}}").fill("Tron Core");
-  await page.getByRole("button", { name: "Test", exact: true }).click();
+  await page.getByRole("button", { name: "Preview", exact: true }).click();
   await expect(page.getByText("Hello Ada from Tron Core.", { exact: true })).toBeVisible();
-  await expect(page.getByText(/Mock output for Hello Ada/)).toBeVisible();
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=/);

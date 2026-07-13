@@ -44,7 +44,6 @@ pub enum PromptError {
     RevertUnsupported,
     VersionConflict,
     StorageFailure,
-    PreviewFailed(String),
 }
 
 impl Display for PromptError {
@@ -69,7 +68,6 @@ impl Display for PromptError {
             }
             Self::VersionConflict => formatter.write_str("prompt version conflict"),
             Self::StorageFailure => formatter.write_str("prompt storage operation failed"),
-            Self::PreviewFailed(message) => write!(formatter, "prompt preview failed: {message}"),
         }
     }
 }

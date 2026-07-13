@@ -10,7 +10,7 @@ use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{
     application::prompt::{
-        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, TestPreviewCommand,
+        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, RenderTemplateCommand,
         UpdatePromptCommand,
     },
     domain::prompt::{PromptCategory, PromptViewSourceKind},
@@ -85,9 +85,6 @@ pub struct WorkspaceCreateRequest {
     pub category: PromptCategory,
     pub prompt_body: String,
     pub description: Option<String>,
-    pub model_code: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_output_tokens: Option<u32>,
     pub enabled: bool,
     pub allow_inheritance: bool,
 }
@@ -100,9 +97,6 @@ impl WorkspaceCreateRequest {
                 display_name: self.display_name,
                 prompt_body: self.prompt_body,
                 description: self.description,
-                model_code: self.model_code,
-                temperature: self.temperature,
-                max_output_tokens: self.max_output_tokens,
                 enabled: self.enabled,
             },
             allow_inheritance: Some(self.allow_inheritance),
@@ -121,9 +115,6 @@ pub struct WorkspaceUpdateRequest {
     pub display_name: String,
     pub prompt_body: String,
     pub description: Option<String>,
-    pub model_code: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_output_tokens: Option<u32>,
     pub enabled: bool,
 }
 
@@ -137,9 +128,6 @@ impl WorkspaceUpdateRequest {
                 display_name: self.display_name,
                 prompt_body: self.prompt_body,
                 description: self.description,
-                model_code: self.model_code,
-                temperature: self.temperature,
-                max_output_tokens: self.max_output_tokens,
                 enabled: self.enabled,
             },
         };
@@ -195,25 +183,15 @@ pub struct AnalyzeTemplateRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct TestPreviewRequest {
-    pub max_output_tokens: Option<u32>,
-    pub workspace_code: Option<String>,
-    pub prompt_code: Option<String>,
-    pub prompt_body: Option<String>,
-    pub temperature: Option<f64>,
-    pub model_code: Option<String>,
+pub struct RenderTemplateRequest {
+    pub prompt_body: String,
     pub variables: HashMap<String, String>,
 }
 
-impl From<TestPreviewRequest> for TestPreviewCommand {
-    fn from(request: TestPreviewRequest) -> Self {
+impl From<RenderTemplateRequest> for RenderTemplateCommand {
+    fn from(request: RenderTemplateRequest) -> Self {
         Self {
-            max_output_tokens: request.max_output_tokens,
-            workspace_code: request.workspace_code,
-            prompt_code: request.prompt_code,
             prompt_body: request.prompt_body,
-            temperature: request.temperature,
-            model_code: request.model_code,
             variables: request.variables,
         }
     }
@@ -282,9 +260,6 @@ pub struct PlatformCreateRequest {
     pub category: PromptCategory,
     pub prompt_body: String,
     pub description: Option<String>,
-    pub model_code: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_output_tokens: Option<u32>,
     pub enabled: bool,
 }
 
@@ -296,9 +271,6 @@ impl From<PlatformCreateRequest> for CreatePromptCommand {
                 display_name: request.display_name,
                 prompt_body: request.prompt_body,
                 description: request.description,
-                model_code: request.model_code,
-                temperature: request.temperature,
-                max_output_tokens: request.max_output_tokens,
                 enabled: request.enabled,
             },
             allow_inheritance: None,
@@ -314,9 +286,6 @@ pub struct PlatformUpdateRequest {
     pub display_name: String,
     pub prompt_body: String,
     pub description: Option<String>,
-    pub model_code: Option<String>,
-    pub temperature: Option<f64>,
-    pub max_output_tokens: Option<u32>,
     pub enabled: bool,
 }
 
@@ -330,9 +299,6 @@ impl From<PlatformUpdateRequest> for UpdatePromptCommand {
                 display_name: request.display_name,
                 prompt_body: request.prompt_body,
                 description: request.description,
-                model_code: request.model_code,
-                temperature: request.temperature,
-                max_output_tokens: request.max_output_tokens,
                 enabled: request.enabled,
             },
         }

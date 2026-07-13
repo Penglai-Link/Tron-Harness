@@ -5,7 +5,7 @@ import {
   createWorkspacePrompt,
   fetchWorkspacePromptPage,
   promptApiEndpoints,
-  testPromptPreview,
+  renderPromptTemplateApi,
   updateWorkspacePrompt,
 } from "./promptApi";
 
@@ -31,11 +31,11 @@ describe("prompt API", () => {
       duplicateWorkspace: "POST /api/v1/prompts/workspace-duplicate",
       pagePlatform: "POST /api/v1/admin/platform/prompts/page",
       pageWorkspace: "POST /api/v1/prompts/workspace-page",
+      renderTemplate: "POST /api/v1/prompts/render-template",
       revertWorkspace: "POST /api/v1/prompts/workspace-revert",
       setAllowInheritanceWorkspace: "POST /api/v1/prompts/workspace-set-allow-inheritance",
       setEnabledPlatform: "POST /api/v1/admin/platform/prompts/set-enabled",
       setEnabledWorkspace: "POST /api/v1/prompts/workspace-set-enabled",
-      testPreview: "POST /api/v1/prompts/test-preview",
       updatePlatform: "POST /api/v1/admin/platform/prompts/update",
       updateWorkspace: "POST /api/v1/prompts/workspace-update",
       workspaceExport: "POST /api/v1/prompts/workspace-export",
@@ -61,22 +61,16 @@ describe("prompt API", () => {
       description: "",
       displayName: "Router",
       enabled: true,
-      maxOutputTokens: 2048,
-      modelCode: "MODEL-1",
       promptBody: "Route {{request}}",
-      temperature: 0.2,
       workspaceCode: "WORKSPACE-1",
     });
     await updateWorkspacePrompt({
       description: "Updated",
       displayName: "Router",
       enabled: true,
-      maxOutputTokens: 4096,
-      modelCode: "MODEL-1",
       promptBody: "Route {{request}}",
       promptCode: "PROMPT-1",
       expectedVersion: 3,
-      temperature: 0.1,
       workspaceCode: "WORKSPACE-1",
     });
 
@@ -88,24 +82,16 @@ describe("prompt API", () => {
     });
   });
 
-  it("sends preview variables using the corrected contract", async () => {
-    await testPromptPreview({
-      maxOutputTokens: 1024,
-      modelCode: "MODEL-1",
+  it("renders variables without sending model configuration", async () => {
+    await renderPromptTemplateApi({
       promptBody: "Hello {{name}}",
-      temperature: 0.4,
       variables: { name: "Ada" },
-      workspaceCode: "WORKSPACE-1",
     });
 
-    expect(requestApi).toHaveBeenCalledWith(promptApiEndpoints.testPreview, {
+    expect(requestApi).toHaveBeenCalledWith(promptApiEndpoints.renderTemplate, {
       body: {
-        maxOutputTokens: 1024,
-        modelCode: "MODEL-1",
         promptBody: "Hello {{name}}",
-        temperature: 0.4,
         variables: { name: "Ada" },
-        workspaceCode: "WORKSPACE-1",
       },
       signal: undefined,
     });

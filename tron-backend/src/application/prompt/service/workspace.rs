@@ -67,7 +67,6 @@ impl PromptService {
     ) -> Result<PromptView, PromptError> {
         let workspace = self.active_workspace(workspace_code)?;
         let (spec, variables) = normalize_spec(command.spec)?;
-        self.validate_model_reference(Some(&workspace.workspace_code), spec.model_code.as_deref())?;
         ensure_display_name_unique(
             &self.resolve_workspace(&workspace)?,
             &spec.display_name,
@@ -101,7 +100,6 @@ impl PromptService {
         ensure_version(resolved.view.version, Some(command.expected_version))?;
         let requested_allow_inheritance = command.allow_inheritance;
         let (spec, variables) = normalize_spec(command.spec)?;
-        self.validate_model_reference(Some(&workspace.workspace_code), spec.model_code.as_deref())?;
         if requested_allow_inheritance.is_some()
             && resolved.view.source_kind != PromptViewSourceKind::Local
         {
@@ -183,9 +181,6 @@ impl PromptService {
                     display_name,
                     prompt_body: resolved.view.prompt_body,
                     description: resolved.view.description,
-                    model_code: resolved.view.model_code,
-                    temperature: resolved.view.temperature,
-                    max_output_tokens: resolved.view.max_output_tokens,
                     enabled: resolved.view.enabled,
                 },
                 allow_inheritance: Some(true),
@@ -363,9 +358,6 @@ fn new_prompt(
         category,
         prompt_body: spec.prompt_body,
         description: spec.description,
-        model_code: spec.model_code,
-        temperature: spec.temperature,
-        max_output_tokens: spec.max_output_tokens,
         enabled: spec.enabled,
         source_kind,
         source_prompt_code,
@@ -385,9 +377,6 @@ fn apply_spec(
     prompt.display_name = spec.display_name;
     prompt.prompt_body = spec.prompt_body;
     prompt.description = spec.description;
-    prompt.model_code = spec.model_code;
-    prompt.temperature = spec.temperature;
-    prompt.max_output_tokens = spec.max_output_tokens;
     prompt.enabled = spec.enabled;
     prompt.variables = variables;
     prompt.updated_at = current_timestamp();

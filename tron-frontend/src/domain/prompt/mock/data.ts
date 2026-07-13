@@ -6,7 +6,7 @@ import type {
   PromptDuplicatePayload,
   PromptPage,
   PromptPageQuery,
-  PromptPreviewPayload,
+  PromptRenderPayload,
   PromptRecord,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
@@ -33,9 +33,6 @@ function platformPrompt(
     category,
     promptBody,
     description: `${displayName} shared platform prompt.`,
-    modelCode: "MODEL-734600000000000001",
-    temperature: 0.2,
-    maxOutputTokens: 2048,
     enabled: true,
     sourceKind: "PLATFORM",
     sourceLabel: "Platform",
@@ -234,10 +231,7 @@ function updateRecord(
     description: payload.description || null,
     displayName: payload.displayName,
     enabled: payload.enabled,
-    maxOutputTokens: payload.maxOutputTokens,
-    modelCode: payload.modelCode,
     promptBody: payload.promptBody,
-    temperature: payload.temperature,
     variables: promptVariables(payload.promptBody),
     version: record.version + 1,
     updatedAt: now(),
@@ -283,10 +277,7 @@ export function duplicateWorkspacePromptMock(payload: PromptDuplicatePayload & {
     description: source.description ?? "",
     displayName: `${source.displayName} Copy`,
     enabled: source.enabled,
-    maxOutputTokens: source.maxOutputTokens,
-    modelCode: source.modelCode,
     promptBody: source.promptBody,
-    temperature: source.temperature,
     workspaceCode: payload.workspaceCode,
   });
 }
@@ -298,10 +289,7 @@ export function duplicatePlatformPromptMock(payload: PromptDuplicatePayload) {
     description: source.description ?? "",
     displayName: `${source.displayName} Copy`,
     enabled: source.enabled,
-    maxOutputTokens: source.maxOutputTokens,
-    modelCode: source.modelCode,
     promptBody: source.promptBody,
-    temperature: source.temperature,
   });
 }
 
@@ -340,12 +328,9 @@ export function setWorkspacePromptEnabledMock(payload: PromptDetailPayload & { w
     description: current.description ?? "",
     displayName: current.displayName,
     enabled: payload.enabled,
-    maxOutputTokens: current.maxOutputTokens,
-    modelCode: current.modelCode,
     promptBody: current.promptBody,
     promptCode: current.promptCode,
     expectedVersion: payload.expectedVersion,
-    temperature: current.temperature,
     workspaceCode: payload.workspaceCode,
   });
 }
@@ -357,12 +342,9 @@ export function setPlatformPromptEnabledMock(payload: PromptDetailPayload & { en
     description: current.description ?? "",
     displayName: current.displayName,
     enabled: payload.enabled,
-    maxOutputTokens: current.maxOutputTokens,
-    modelCode: current.modelCode,
     promptBody: current.promptBody,
     promptCode: current.promptCode,
     expectedVersion: payload.expectedVersion,
-    temperature: current.temperature,
   });
 }
 
@@ -392,26 +374,13 @@ export function analyzePromptTemplateMock(promptBody: string) {
   };
 }
 
-export function testPromptPreviewMock(payload: PromptPreviewPayload) {
-  let promptBody = payload.promptBody;
-  if (promptBody === undefined) {
-    if (!payload.promptCode) throw new Error("promptCode or promptBody is required");
-    promptBody = payload.workspaceCode
-      ? getWorkspacePromptMock({ promptCode: payload.promptCode, workspaceCode: payload.workspaceCode }).promptBody
-      : getPlatformPromptMock({ promptCode: payload.promptCode }).promptBody;
-  }
-  const result = renderPromptTemplate(promptBody, payload.variables);
+export function renderPromptTemplateMock(payload: PromptRenderPayload) {
+  const result = renderPromptTemplate(payload.promptBody, payload.variables);
   if (result.errors.length) {
     throw new Error(result.errors.map((error) => `${error.kind}: ${error.variableName}`).join(", "));
   }
   return {
-    modelCode: payload.modelCode ?? (payload.workspaceCode && payload.promptCode
-      ? getWorkspacePromptMock({ promptCode: payload.promptCode, workspaceCode: payload.workspaceCode }).modelCode
-      : payload.promptCode
-        ? getPlatformPromptMock({ promptCode: payload.promptCode }).modelCode
-        : null),
     renderedPrompt: result.renderedPrompt,
-    output: `Mock output for ${result.renderedPrompt.slice(0, 120)}`,
   };
 }
 

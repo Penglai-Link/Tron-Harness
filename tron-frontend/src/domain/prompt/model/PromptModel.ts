@@ -21,9 +21,6 @@ export interface PromptRecord {
   category: PromptCategory;
   promptBody: string;
   description: string | null;
-  modelCode: string | null;
-  temperature: number | null;
-  maxOutputTokens: number | null;
   enabled: boolean;
   sourceKind: PromptSourceKind;
   sourceLabel: string;
@@ -59,9 +56,6 @@ export interface PromptCreateFields {
   category: PromptCategory;
   promptBody: string;
   description: string;
-  modelCode: string | null;
-  temperature: number | null;
-  maxOutputTokens: number | null;
   enabled: boolean;
 }
 
@@ -78,9 +72,6 @@ export interface PromptUpdateFields {
   displayName: string;
   promptBody: string;
   description: string;
-  modelCode: string | null;
-  temperature: number | null;
-  maxOutputTokens: number | null;
   enabled: boolean;
 }
 
@@ -105,20 +96,13 @@ export interface PromptAnalyzeResult {
   invalidVariables: string[];
 }
 
-export interface PromptPreviewPayload {
-  maxOutputTokens?: number | null;
-  modelCode?: string;
-  promptCode?: string;
-  workspaceCode?: string;
-  promptBody?: string;
-  temperature?: number | null;
+export interface PromptRenderPayload {
+  promptBody: string;
   variables: Record<string, string>;
 }
 
-export interface PromptPreviewResult {
+export interface PromptRenderResult {
   renderedPrompt: string;
-  modelCode: string | null;
-  output: string;
 }
 
 export interface PromptExportResult {

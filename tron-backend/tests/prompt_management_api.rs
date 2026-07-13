@@ -6,11 +6,7 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
-use axum::{
-    Json, Router,
-    http::{Method, StatusCode},
-    routing::post,
-};
+use axum::http::{Method, StatusCode};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
 use tron_backend::config::AppConfig;
@@ -122,9 +118,6 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
             "displayName": "Shared Writer Override",
             "promptBody": "Child {{topic}} for {{audience}}",
             "description": "child-only override",
-            "modelCode": null,
-            "temperature": 0.4,
-            "maxOutputTokens": 512,
             "enabled": true,
             "expectedVersion": inherited_version
         })),
@@ -194,9 +187,6 @@ async fn workspace_update_syncs_variables_transactionally() {
             "displayName": "Variable Sync",
             "promptBody": "Only {{third}} remains",
             "description": null,
-            "modelCode": null,
-            "temperature": null,
-            "maxOutputTokens": null,
             "enabled": true,
             "expectedVersion": version
         })),
@@ -250,9 +240,6 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
             "displayName": "Immutable Prompt",
             "promptBody": "Act as {{role}}",
             "description": null,
-            "modelCode": null,
-            "temperature": null,
-            "maxOutputTokens": null,
             "enabled": true,
             "expectedVersion": version
         })),
@@ -272,9 +259,6 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
             "displayName": "Immutable Prompt",
             "promptBody": "Act as {{role}}",
             "description": null,
-            "modelCode": null,
-            "temperature": null,
-            "maxOutputTokens": null,
             "enabled": true
         })),
     )
@@ -323,11 +307,11 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
     let invalid_scope_source = connection.execute(
         "INSERT INTO prompts (
             id, scope_kind, workspace_code, prompt_code, display_name, category, prompt_body,
-            description, model_code, temperature, max_output_tokens, enabled, source_kind,
+            description, enabled, source_kind,
             source_prompt_code, allow_inheritance, version, created_at, updated_at
          ) VALUES (
             9000001, 'WORKSPACE', 'TRON_CORE', 'PROMPT-9000001', 'Invalid Scope', 'SYSTEM',
-            'Invalid', NULL, NULL, NULL, NULL, 1, 'PLATFORM', NULL, NULL, 1, 1, 1
+            'Invalid', NULL, 1, 'PLATFORM', NULL, NULL, 1, 1, 1
          )",
         [],
     );
@@ -421,9 +405,6 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
             "category": "PERSONA",
             "promptBody": "Write for {{audience}}",
             "description": "platform prompt",
-            "modelCode": null,
-            "temperature": 0.3,
-            "maxOutputTokens": 512,
             "enabled": true
         }),
     )
@@ -463,9 +444,6 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
             "displayName": "Platform Writer Updated",
             "promptBody": "Updated {{topic}}",
             "description": null,
-            "modelCode": null,
-            "temperature": null,
-            "maxOutputTokens": null,
             "enabled": true
         }),
     )
@@ -527,12 +505,12 @@ async fn analyze_export_and_route_table_match_the_frozen_post_contract() {
             .execute(
                 "INSERT INTO prompts (
                     id, scope_kind, workspace_code, prompt_code, display_name, category,
-                    prompt_body, description, model_code, temperature, max_output_tokens,
-                    enabled, source_kind, source_prompt_code, allow_inheritance, version,
+                    prompt_body, description, enabled, source_kind, source_prompt_code,
+                    allow_inheritance, version,
                     created_at, updated_at
                  ) VALUES (
                     ?1, 'WORKSPACE', 'TRON_CORE', ?2, ?3, 'TEMPLATE', 'Bulk export', NULL,
-                    NULL, NULL, NULL, 1, 'WORKSPACE_LOCAL', NULL, 1, 1, 1, 1
+                    1, 'WORKSPACE_LOCAL', NULL, 1, 1, 1, 1
                  )",
                 params![
                     9_100_000_i64 + index,
@@ -593,7 +571,7 @@ async fn analyze_export_and_route_table_match_the_frozen_post_contract() {
         "/api/v1/prompts/workspace-set-enabled",
         "/api/v1/prompts/workspace-set-allow-inheritance",
         "/api/v1/prompts/analyze-template",
-        "/api/v1/prompts/test-preview",
+        "/api/v1/prompts/render-template",
         "/api/v1/prompts/workspace-export",
         "/api/v1/admin/platform/prompts/page",
         "/api/v1/admin/platform/prompts/detail",
@@ -613,123 +591,74 @@ async fn analyze_export_and_route_table_match_the_frozen_post_contract() {
 }
 
 #[tokio::test]
-async fn test_preview_renders_variables_and_calls_the_selected_model() {
-    let preview_server = preview_mock_server().await;
-    let (router, _) = prompt_app("prompt-test-preview");
-    let model_response = authenticated_request(
-        &router,
-        Method::POST,
-        "/api/v1/admin/platform/models",
-        Some(json!({
-            "displayName": "Prompt Preview Model",
-            "vendor": "OpenAI",
-            "protocol": "OPENAI_COMPATIBLE",
-            "modelType": "TEXT",
-            "modelCapabilities": ["TEXT_GENERATION"],
-            "baseUrl": preview_server.base_url,
-            "apiPath": "/chat/completions",
-            "apiKeyRef": "sk-prompt-preview",
-            "modelName": "prompt-preview-model",
-            "enabled": true,
-            "description": "prompt preview fixture",
-            "thinkingEnabled": false,
-            "structuredOutputEnabled": false,
-            "temperature": 0.2,
-            "maxTokens": 512,
-            "contextWindowTokens": 8192,
-            "topP": 1.0,
-            "maxRetries": 0
-        })),
-    )
-    .await;
-    assert_eq!(model_response.status(), StatusCode::CREATED);
-    let model = response_json(model_response).await;
-    let model_code = model["data"]["modelCode"]
-        .as_str()
-        .expect("preview model should return modelCode")
-        .to_string();
-    let override_model_response = authenticated_request(
-        &router,
-        Method::POST,
-        "/api/v1/admin/platform/models",
-        Some(json!({
-            "displayName": "Prompt Preview Override Model",
-            "vendor": "OpenAI",
-            "protocol": "OPENAI_COMPATIBLE",
-            "modelType": "TEXT",
-            "modelCapabilities": ["TEXT_GENERATION"],
-            "baseUrl": preview_server.base_url,
-            "apiPath": "/chat/completions",
-            "apiKeyRef": "sk-prompt-preview-override",
-            "modelName": "prompt-preview-override-model",
-            "enabled": true,
-            "description": "prompt preview override fixture",
-            "thinkingEnabled": false,
-            "structuredOutputEnabled": false,
-            "temperature": 0.2,
-            "maxTokens": 512,
-            "contextWindowTokens": 8192,
-            "topP": 1.0,
-            "maxRetries": 0
-        })),
-    )
-    .await;
-    assert_eq!(override_model_response.status(), StatusCode::CREATED);
-    let override_model = response_json(override_model_response).await;
-    let override_model_code = override_model["data"]["modelCode"]
-        .as_str()
-        .expect("override preview model should return modelCode")
-        .to_string();
-
-    let prompt = post_json(
+async fn prompt_contract_excludes_model_configuration() {
+    let (router, database_url) = prompt_app("prompt-without-model-configuration");
+    let created = post_json(
         &router,
         "/api/v1/prompts/workspace-create",
         json!({
             "workspaceCode": "TRON_CORE",
-            "displayName": "Preview Prompt",
+            "displayName": "Pure Template",
             "category": "TEMPLATE",
             "promptBody": "Hello {{name}}",
             "description": null,
-            "modelCode": model_code,
-            "temperature": 0.4,
-            "maxOutputTokens": 256,
             "enabled": true,
             "allowInheritance": true
         }),
     )
     .await;
-    let preview = post_json(
+    let data = created["data"]
+        .as_object()
+        .expect("created prompt data should be an object");
+    assert!(!data.contains_key("modelCode"));
+    assert!(!data.contains_key("temperature"));
+    assert!(!data.contains_key("maxOutputTokens"));
+
+    let rejected = authenticated_request(
         &router,
-        "/api/v1/prompts/test-preview",
-        json!({
+        Method::POST,
+        "/api/v1/prompts/workspace-create",
+        Some(json!({
             "workspaceCode": "TRON_CORE",
-            "promptCode": prompt["data"]["promptCode"],
-            "modelCode": override_model_code,
-            "variables": { "name": "Ada" }
-        }),
+            "displayName": "Prompt With Model",
+            "category": "TEMPLATE",
+            "promptBody": "Hello",
+            "description": null,
+            "modelCode": null,
+            "enabled": true,
+            "allowInheritance": true
+        })),
     )
     .await;
-    assert_eq!(preview["data"]["renderedPrompt"], json!("Hello Ada"));
-    assert_eq!(preview["data"]["modelCode"], json!(override_model_code));
-    assert_eq!(preview["data"]["output"], json!("Preview output"));
+    assert_eq!(rejected.status(), StatusCode::BAD_REQUEST);
 
-    let platform_preview = post_json(
+    let connection = Connection::open(database_url).expect("prompt database should open");
+    let mut statement = connection
+        .prepare("PRAGMA table_info(prompts)")
+        .expect("prompt schema should be readable");
+    let columns = statement
+        .query_map([], |row| row.get::<_, String>(1))
+        .expect("prompt schema should be queryable")
+        .collect::<Result<BTreeSet<_>, _>>()
+        .expect("prompt columns should decode");
+    assert!(!columns.contains("model_code"));
+    assert!(!columns.contains("temperature"));
+    assert!(!columns.contains("max_output_tokens"));
+}
+
+#[tokio::test]
+async fn render_template_only_substitutes_variables() {
+    let (router, _) = prompt_app("prompt-render-template");
+    let rendered = post_json(
         &router,
-        "/api/v1/prompts/test-preview",
+        "/api/v1/prompts/render-template",
         json!({
-            "promptBody": "Platform {{name}}",
+            "promptBody": "Hello {{name}}",
             "variables": { "name": "Ada" }
         }),
     )
     .await;
-    assert_eq!(
-        platform_preview["data"]["renderedPrompt"],
-        json!("Platform Ada")
-    );
-    assert_eq!(platform_preview["data"]["modelCode"], json!(model_code));
-    assert_eq!(platform_preview["data"]["output"], json!("Preview output"));
-
-    preview_server.task.abort();
+    assert_eq!(rendered["data"], json!({ "renderedPrompt": "Hello Ada" }));
 }
 
 async fn create_workspace_prompt(
@@ -750,9 +679,6 @@ async fn create_workspace_prompt(
             "category": category,
             "promptBody": body,
             "description": null,
-            "modelCode": null,
-            "temperature": 0.2,
-            "maxOutputTokens": 256,
             "enabled": true,
             "allowInheritance": allow_inheritance
         })),
@@ -826,38 +752,4 @@ fn assert_envelope_only(payload: &Value) {
             "message".to_string()
         ])
     );
-}
-
-struct PreviewMockServer {
-    base_url: String,
-    task: tokio::task::JoinHandle<()>,
-}
-
-async fn preview_mock_server() -> PreviewMockServer {
-    let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
-        .await
-        .expect("preview mock server should bind");
-    let address = listener
-        .local_addr()
-        .expect("preview mock server should expose an address");
-    let app = Router::new().route("/chat/completions", post(preview_completion));
-    let task = tokio::spawn(async move {
-        axum::serve(listener, app)
-            .await
-            .expect("preview mock server should stay available");
-    });
-    PreviewMockServer {
-        base_url: format!("http://{address}"),
-        task,
-    }
-}
-
-async fn preview_completion() -> Json<Value> {
-    Json(json!({
-        "choices": [{
-            "index": 0,
-            "message": { "role": "assistant", "content": "Preview output" },
-            "finish_reason": "stop"
-        }]
-    }))
 }
