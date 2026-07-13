@@ -279,6 +279,15 @@ export function PromptEditorPage({
   const title = mode === "create"
     ? pt(scopeKind === "WORKSPACE" ? "Create Prompt" : "Create Platform Prompt")
     : pt(isOverrideMode ? "Create Prompt Override" : "Prompt Details");
+  const categoryField = (
+    <Field label={pt("Category")}>
+      {mode === "create" ? (
+        <SelectInput value={form.category} onValueChange={(value) => updateForm("category", value as PromptCategory)}>
+          {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
+        </SelectInput>
+      ) : <div className="flex h-10 items-center"><Badge>{pt(promptCategoryLabel(form.category))}</Badge></div>}
+    </Field>
+  );
 
   return (
     <>
@@ -313,37 +322,44 @@ export function PromptEditorPage({
               </div>
             ) : null}
 
-            <div className={`grid gap-4 ${mode === "detail" ? "md:grid-cols-[minmax(360px,0.8fr)_minmax(0,1.2fr)]" : ""}`}>
+            <div className="grid gap-4 md:grid-cols-2">
               {mode === "detail" ? (
                 <Field label={pt("Prompt code")}>
-                  <div className="flex min-w-0 gap-2">
-                    <TextInput aria-label={pt("Prompt code")} className="min-w-0 flex-1 font-mono" readOnly value={record?.promptCode ?? promptCode} />
-                    <Button size="icon" variant="outline" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
+                  <div className="relative w-full min-w-0">
+                    <TextInput aria-label={pt("Prompt code")} className="w-full min-w-0 pr-12 font-mono" readOnly value={record?.promptCode ?? promptCode} />
+                    <Button className="absolute right-1 top-1/2 -translate-y-1/2" size="icon" variant="ghost" aria-label={pt("Copy prompt code")} onClick={() => { void navigator.clipboard?.writeText(record?.promptCode ?? promptCode); toast.success(pt("Prompt code copied")); }}><Clipboard size={15} aria-hidden="true" /></Button>
                   </div>
                 </Field>
-              ) : null}
+              ) : categoryField}
               <Field label={pt("Name")}>
                 <TextInput value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
               </Field>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,0.775fr)_minmax(0,0.775fr)] md:items-end">
-              <Field label={pt("Category")}>
-                {mode === "create" ? (
-                  <SelectInput value={form.category} onValueChange={(value) => updateForm("category", value as PromptCategory)}>
-                    {promptCategoryOptions.map((option) => <SelectItem key={option.value} value={option.value}>{pt(option.label)}</SelectItem>)}
-                  </SelectInput>
-                ) : <div className="flex h-10 items-center"><Badge>{pt(promptCategoryLabel(form.category))}</Badge></div>}
-              </Field>
-              <div className="flex min-h-10 items-center">
-                <ToggleSwitch checked={form.enabled} label={pt("Enabled")} onCheckedChange={(checked) => updateForm("enabled", checked)} />
-              </div>
-              {scopeKind === "WORKSPACE" && (mode === "create" || record?.sourceKind === "LOCAL") ? (
+            {mode === "detail" ? (
+              <div className="grid gap-4 md:grid-cols-[minmax(220px,0.45fr)_minmax(0,0.775fr)_minmax(0,0.775fr)] md:items-end">
+                {categoryField}
                 <div className="flex min-h-10 items-center">
-                  <ToggleSwitch checked={form.allowInheritance} label={pt("Allow inheritance")} onCheckedChange={(checked) => updateForm("allowInheritance", checked)} />
+                  <ToggleSwitch checked={form.enabled} label={pt("Enabled")} onCheckedChange={(checked) => updateForm("enabled", checked)} />
                 </div>
-              ) : null}
-            </div>
+                {scopeKind === "WORKSPACE" && record?.sourceKind === "LOCAL" ? (
+                  <div className="flex min-h-10 items-center">
+                    <ToggleSwitch checked={form.allowInheritance} label={pt("Allow inheritance")} onCheckedChange={(checked) => updateForm("allowInheritance", checked)} />
+                  </div>
+                ) : null}
+              </div>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2">
+                <div className="flex min-h-10 items-center">
+                  <ToggleSwitch checked={form.enabled} label={pt("Enabled")} onCheckedChange={(checked) => updateForm("enabled", checked)} />
+                </div>
+                {scopeKind === "WORKSPACE" ? (
+                  <div className="flex min-h-10 items-center">
+                    <ToggleSwitch checked={form.allowInheritance} label={pt("Allow inheritance")} onCheckedChange={(checked) => updateForm("allowInheritance", checked)} />
+                  </div>
+                ) : null}
+              </div>
+            )}
 
             <Field label={pt("Description")}>
               <TextArea aria-label={pt("Description")} className="min-h-24 resize-y" value={form.description} onChange={(event) => updateForm("description", event.target.value)} />
