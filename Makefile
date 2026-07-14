@@ -19,8 +19,8 @@ NPM_NODE_DIR := $(if $(wildcard $(NVM_NPM)),$(NVM_NODE_DIR),$(if $(wildcard $(LO
 ifneq ($(strip $(NPM_NODE_DIR)),)
 export PATH := $(subst /,\,$(NPM_NODE_DIR));$(PATH)
 endif
-# npm is a .cmd batch file on Windows.  With .ONESHELL, `call` is required so
-# control returns to the remaining recipe lines after invoking npm.
+# npm is a .cmd batch file on Windows.  `call` is required so control returns
+# to cmd.exe when npm runs inside a parenthesized or chained recipe.
 NPM = call $(NPM_BIN)
 CARGO := cargo.exe
 PYTHON ?= python
@@ -74,6 +74,12 @@ APP_FRONTEND_ENV = set "VITE_TRON_API_BASE_URL=" & $(FRONTEND_API_DATA_SOURCE_EN
 BE_RUN_ENV = $(if $(strip $(PORT)),set "TRON_BACKEND_PORT=$(PORT)" &) $(if $(strip $(GRAPH_STORAGE_PATH)),set "TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH)")
 ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),set "ELECTRON_MIRROR=$(ELECTRON_MIRROR)")
 ELECTRON_DEV_ENV = set "TRON_ELECTRON_DEVTOOLS=1" & set "TRON_ELECTRON_TARGET_DEVTOOLS=1"
+COMMAND_SEPARATOR := &
+RUN_WITH_ENV = $(if $(strip $(1)),$(strip $(1)) & )$(2)
+
+define RUN_IN_DIR
+cd "$(call WIN_PATH,$(1))" && ($(2))
+endef
 else
 HOST_OS := posix
 SHELL := /bin/sh
@@ -123,9 +129,13 @@ APP_FRONTEND_ENV = VITE_TRON_API_BASE_URL= $(FRONTEND_API_DATA_SOURCE_ENV) TRON_
 BE_RUN_ENV = $(if $(strip $(PORT)),TRON_BACKEND_PORT=$(PORT)) $(if $(strip $(GRAPH_STORAGE_PATH)),TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH))
 ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),ELECTRON_MIRROR=$(ELECTRON_MIRROR))
 ELECTRON_DEV_ENV = TRON_ELECTRON_DEVTOOLS=1 TRON_ELECTRON_TARGET_DEVTOOLS=1
-endif
+COMMAND_SEPARATOR := ;
+RUN_WITH_ENV = $(strip $(1)) $(2)
 
-.ONESHELL:
+define RUN_IN_DIR
+cd "$(1)" && $(2)
+endef
+endif
 
 ELECTRON_DIR := electron
 FRONTEND_DIR := tron-frontend
@@ -216,46 +226,32 @@ install: fe-install be-install
 
 .PHONY: fe-install
 fe-install:
-	cd "$(FRONTEND_DIR)"
-	$(NPM) install
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) install)
 
 .PHONY: fe-dev
 fe-dev:
-	cd "$(FRONTEND_DIR)"
-	$(NPM) run dev
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run dev)
 
 .PHONY: fe-dev-api
-ifeq ($(HOST_OS),windows)
 fe-dev-api:
-	cd "$(FRONTEND_DIR)"
-	$(FE_API_ENV)
-	$(NPM) run dev -- --host 0.0.0.0 --port $(API_FRONTEND_PORT)
-else
-fe-dev-api:
-	cd "$(FRONTEND_DIR)"
-	$(FE_API_ENV) $(NPM) run dev -- --host 0.0.0.0 --port $(API_FRONTEND_PORT)
-endif
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(call RUN_WITH_ENV,$(FE_API_ENV),$(NPM) run dev -- --host 0.0.0.0 --port $(API_FRONTEND_PORT)))
 
 .PHONY: fe-build
 fe-build:
-	cd "$(FRONTEND_DIR)"
-	$(NPM) run build
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run build)
 
 .PHONY: fe-check
 fe-check:
-	cd "$(FRONTEND_DIR)"
-	$(NPM) run typecheck
-	$(NPM) run build
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run typecheck)
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run build)
 
 .PHONY: fe-test
 fe-test:
-	cd "$(FRONTEND_DIR)"
-	$(NPM) exec playwright test -- $(TEST)
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) exec playwright test -- $(TEST))
 
 .PHONY: fe-unit-test
 fe-unit-test:
-	cd "$(FRONTEND_DIR)"
-	$(NPM) run test:unit
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run test:unit)
 
 .PHONY: fe-clean
 fe-clean:
@@ -283,16 +279,8 @@ be-clean:
 	$(call REMOVE_GLOB,$(TRON_SCRATCH_GLOB))
 
 .PHONY: be-dev
-ifeq ($(HOST_OS),windows)
 be-dev:
-	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
-	$(BE_RUN_ENV)
-	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
-else
-be-dev:
-	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
-	$(BE_RUN_ENV) $(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
-endif
+	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE)) $(COMMAND_SEPARATOR) $(call RUN_WITH_ENV,$(BE_RUN_ENV),$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)")
 
 .PHONY: dev-api
 ifeq ($(HOST_OS),windows)
@@ -300,56 +288,34 @@ dev-api:
 	$(POWERSHELL) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$backend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('be-dev','PORT=$(API_BACKEND_PORT)','GRAPH_STORAGE_PATH=$(API_GRAPH_STORAGE_PATH)') -WorkingDirectory '$(CURDIR)' -PassThru; $$frontend = $$null; try { do { if ($$backend.HasExited) { throw 'Backend exited before the health endpoint became ready.' }; Start-Sleep -Seconds 1; try { $$health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:$(API_BACKEND_PORT)/api/v1/health' -TimeoutSec 2 } catch { $$health = $$null } } while (-not $$health -or $$health.StatusCode -ne 200); Write-Host 'Starting frontend on http://localhost:$(API_FRONTEND_PORT) with /api proxy -> http://127.0.0.1:$(API_BACKEND_PORT)'; $$frontend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('fe-dev-api','PORT=$(API_BACKEND_PORT)','FE_PORT=$(API_FRONTEND_PORT)') -WorkingDirectory '$(CURDIR)' -PassThru; Wait-Process -Id $$frontend.Id } finally { if ($$frontend -and -not $$frontend.HasExited) { Stop-Process -Id $$frontend.Id -Force }; if ($$backend -and -not $$backend.HasExited) { Stop-Process -Id $$backend.Id -Force } }"
 else
 dev-api:
-	set -eu
-	backend_port='$(API_BACKEND_PORT)'
-	frontend_port='$(API_FRONTEND_PORT)'
-	graph_storage_path='$(API_GRAPH_STORAGE_PATH)'
-	backend_pid=''
-	frontend_pid=''
-	cleanup() { test -z "$$backend_pid" || kill "$$backend_pid" >/dev/null 2>&1 || true; test -z "$$frontend_pid" || kill "$$frontend_pid" >/dev/null 2>&1 || true; }
-	trap cleanup INT TERM EXIT
-	$(MAKE) be-dev PORT="$$backend_port" GRAPH_STORAGE_PATH="$$graph_storage_path" &
-	backend_pid=$$!
-	until curl -fsS "http://127.0.0.1:$$backend_port/api/v1/health" >/dev/null 2>&1; do sleep 1; done
-	echo "Starting frontend on http://localhost:$$frontend_port with /api proxy -> http://127.0.0.1:$$backend_port"
-	$(MAKE) fe-dev-api PORT="$$backend_port" FE_PORT="$$frontend_port" &
-	frontend_pid=$$!
+	@set -eu; \
+	backend_port='$(API_BACKEND_PORT)'; \
+	frontend_port='$(API_FRONTEND_PORT)'; \
+	graph_storage_path='$(API_GRAPH_STORAGE_PATH)'; \
+	backend_pid=''; \
+	frontend_pid=''; \
+	cleanup() { test -z "$$backend_pid" || kill "$$backend_pid" >/dev/null 2>&1 || true; test -z "$$frontend_pid" || kill "$$frontend_pid" >/dev/null 2>&1 || true; }; \
+	trap cleanup INT TERM EXIT; \
+	$(MAKE) be-dev PORT="$$backend_port" GRAPH_STORAGE_PATH="$$graph_storage_path" & \
+	backend_pid=$$!; \
+	until curl -fsS "http://127.0.0.1:$$backend_port/api/v1/health" >/dev/null 2>&1; do sleep 1; done; \
+	echo "Starting frontend on http://localhost:$$frontend_port with /api proxy -> http://127.0.0.1:$$backend_port"; \
+	$(MAKE) fe-dev-api PORT="$$backend_port" FE_PORT="$$frontend_port" & \
+	frontend_pid=$$!; \
 	wait "$$backend_pid" "$$frontend_pid"
 endif
 
 .PHONY: web-build
-ifeq ($(HOST_OS),windows)
 web-build:
 	$(call REMOVE,$(BACKEND_FRONTEND_DIR))
 	$(call MKDIR,$(BACKEND_FRONTEND_DIR))
-	cd "$(FRONTEND_DIR)"
-	$(APP_FRONTEND_ENV)
-	$(NPM) run build
-	cd "$(CURDIR)"
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(call RUN_WITH_ENV,$(APP_FRONTEND_ENV),$(NPM) run build))
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)"
-else
-web-build:
-	$(call REMOVE,$(BACKEND_FRONTEND_DIR))
-	$(call MKDIR,$(BACKEND_FRONTEND_DIR))
-	cd "$(FRONTEND_DIR)"
-	$(APP_FRONTEND_ENV) $(NPM) run build
-	cd "$(CURDIR)"
-	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)"
-endif
 
 .PHONY: web-dev
-ifeq ($(HOST_OS),windows)
 web-dev:
 	$(MAKE) web-build
-	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
-	$(BE_RUN_ENV)
-	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
-else
-web-dev:
-	$(MAKE) web-build
-	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE))
-	$(BE_RUN_ENV) $(CARGO) run --manifest-path "$(BACKEND_MANIFEST)"
-endif
+	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE)) $(COMMAND_SEPARATOR) $(call RUN_WITH_ENV,$(BE_RUN_ENV),$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)")
 
 .PHONY: web-clean
 web-clean: fe-clean
@@ -365,27 +331,13 @@ desktop-build: desktop-clean web-build
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	$(call ASSERT_FILE,$(BACKEND_RELEASE_PATH))
 	$(call COPY_FILE,$(BACKEND_RELEASE_PATH),$(DESKTOP_SIDECAR_PATH))
-	cd "$(ELECTRON_DIR)"
-ifeq ($(HOST_OS),windows)
-	$(ELECTRON_INSTALL_ENV)
-	$(NPM) install
-	$(ELECTRON_INSTALL_ENV)
-	$(NPM) run -s ensure-electron
-else
-	$(ELECTRON_INSTALL_ENV) $(NPM) install
-	$(ELECTRON_INSTALL_ENV) $(NPM) run -s ensure-electron
-endif
-	$(NPM) run -s build
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(NPM) install))
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(NPM) run -s ensure-electron))
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) run -s build)
 
 .PHONY: desktop-dev
 desktop-dev: desktop-build
-	cd "$(ELECTRON_DIR)"
-ifeq ($(HOST_OS),windows)
-	$(ELECTRON_DEV_ENV)
-	$(NPM) run -s dev
-else
-	$(ELECTRON_DEV_ENV) $(NPM) run -s dev
-endif
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_DEV_ENV),$(NPM) run -s dev))
 
 .PHONY: desktop-clean
 desktop-clean:
