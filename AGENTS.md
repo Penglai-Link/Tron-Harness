@@ -42,7 +42,3 @@ Pagable response body format:
 ## What's more
 - macOS ships GNU Make 3.81, which does not support `.ONESHELL`; keep recipes from relying on shell state across recipe lines.
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
-
-<!-- application.yaml currently contains plaintext credential material; configuration APIs must remain administrator-only and mask sensitive values. -->
-<!-- Structured configuration saves normalize application.yaml formatting and do not preserve YAML comments. -->
-<!-- On Windows, an interrupted concurrent Cargo test build can leave an incompatible test PDB (LNK1207); run `make be-clean` before retrying. -->
