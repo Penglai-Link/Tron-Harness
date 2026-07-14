@@ -13,6 +13,7 @@ pub mod rag;
 pub mod role;
 pub mod short_term_memory;
 pub mod skill;
+pub mod system_config;
 pub mod task;
 pub mod user;
 pub mod variable;

@@ -13,6 +13,10 @@ use super::{
 impl Default for AppConfig {
     fn default() -> Self {
         Self {
+            application_config_path: std::env::temp_dir()
+                .join("tron-application-test.yaml")
+                .display()
+                .to_string(),
             bind_address: DEFAULT_BIND_ADDRESS.into(),
             port: DEFAULT_PORT,
             database_url: TEST_DATABASE_URL.into(),

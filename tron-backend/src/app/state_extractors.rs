@@ -27,6 +27,12 @@ use crate::{
 
 use super::{AppMemoryService, AppRagService, AppReadiness, AppState};
 
+impl FromRef<AppState> for crate::application::system_config::SystemConfigService {
+    fn from_ref(state: &AppState) -> Self {
+        state.system_config.clone()
+    }
+}
+
 impl FromRef<AppState> for AppConfig {
     fn from_ref(state: &AppState) -> Self {
         state.config.clone()

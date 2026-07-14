@@ -40,7 +40,7 @@ const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
 const DEFAULT_AUTH_LDAP_NAME: &str = "LDAP";
 const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
-const DEFAULT_APPLICATION_CONFIG_PATH: &str =
+pub const DEFAULT_APPLICATION_CONFIG_PATH: &str =
     concat!(env!("CARGO_MANIFEST_DIR"), "/application.yaml");
 const ENV_BACKEND_PORT: &str = "TRON_BACKEND_PORT";
 const ENV_LDAP_URL: &str = "LDAP_URL";
@@ -56,6 +56,7 @@ const DEFAULT_HTTP_TCP_KEEPALIVE_MS: u64 = 30_000;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct AppConfig {
+    pub application_config_path: String,
     pub bind_address: String,
     pub port: u16,
     pub database_url: String,
@@ -149,6 +150,7 @@ pub struct LdapConfig {
 impl AppConfig {
     fn runtime_defaults() -> Self {
         Self {
+            application_config_path: DEFAULT_APPLICATION_CONFIG_PATH.into(),
             bind_address: DEFAULT_BIND_ADDRESS.into(),
             port: DEFAULT_PORT,
             database_url: default_database_url_from_home(),

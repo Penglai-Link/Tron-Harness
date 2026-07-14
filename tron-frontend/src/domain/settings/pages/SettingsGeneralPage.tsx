@@ -20,6 +20,7 @@ import {
   useAguiWorkReplayPreferences,
 } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { SelectItem } from "@/components/ui/select";
+import { SystemConfigTable } from "@/domain/settings/components/SystemConfigTable";
 
 export function SettingsGeneralPage() {
   const { t } = useTranslation(["shell"]);
@@ -34,13 +35,13 @@ export function SettingsGeneralPage() {
   } = useAguiWorkReplayPreferences();
   const readOnlyAguiCardList = aguiDebugPreferences.mode !== "custom";
   const selectedEventTypes = new Set(resolveAguiDebugEventTypes(aguiDebugPreferences));
-  const selectedMode = aguiDebugModeOptions.find((option) => option.value === aguiDebugPreferences.mode) ?? aguiDebugModeOptions[0];
 
   return (
     <>
       <PageHeader title={t("shell:settings.items.general")} />
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <SystemConfigTable />
         <SurfaceCard className="space-y-4 xl:col-span-2">
           <div>
             <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">AG-UI Debug</h2>
@@ -62,9 +63,7 @@ export function SettingsGeneralPage() {
               ))}
             </SelectInput>
           </Field>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">{selectedMode.description}</p>
-
-          <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="AG-UI event card types">
+          {aguiDebugPreferences.mode !== "off" && <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3" aria-label="AG-UI event card types">
             {aguiEventTypeOptions.map((option) => (
               <label
                 className="flex min-h-16 items-start gap-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm"
@@ -83,7 +82,7 @@ export function SettingsGeneralPage() {
                 </span>
               </label>
             ))}
-          </div>
+          </div>}
         </SurfaceCard>
 
         <SurfaceCard className="space-y-4 xl:col-span-2">

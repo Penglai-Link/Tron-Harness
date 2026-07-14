@@ -1,0 +1,150 @@
+import { useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
+import { ChevronRight } from "lucide-react";
+
+import { Badge, Button, InfoTooltip, SelectInput, SurfaceCard, TextInput, useToast } from "@/shared";
+import { SelectItem } from "@/components/ui/select";
+import { useSystemConfig } from "@/domain/settings/hooks/useSystemConfig";
+import type { SystemConfigItem, SystemConfigValue } from "@/domain/settings/model/SystemConfig";
+
+function displayGroup(path: string) {
+  return path.includes(".") ? path.slice(0, path.indexOf(".")) : "server";
+}
+
+function displayField(path: string) {
+  return path.slice(path.lastIndexOf(".") + 1);
+}
+
+export function SystemConfigTable() {
+  const { t } = useTranslation("pages");
+  const toast = useToast();
+  const { document, error, loading, refresh, save, saving } = useSystemConfig();
+  const [changes, setChanges] = useState<Record<string, SystemConfigValue>>({});
+  const [confirmMigration, setConfirmMigration] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
+  const groups = useMemo(() => {
+    const grouped = new Map<string, SystemConfigItem[]>();
+    document?.items.forEach((item) => {
+      const group = displayGroup(item.path);
+      grouped.set(group, [...(grouped.get(group) ?? []), item]);
+    });
+    return [...grouped.entries()];
+  }, [document]);
+  const dirtyItems = document?.items.filter((item) => Object.hasOwn(changes, item.path)) ?? [];
+  const hasMigration = dirtyItems.some((item) => item.effect === "migration");
+
+  function update(path: string, value: SystemConfigValue) {
+    setChanges((current) => ({ ...current, [path]: value }));
+  }
+
+  function toggleGroup(group: string) {
+    setExpandedGroups((current) => {
+      const next = new Set(current);
+      if (next.has(group)) next.delete(group);
+      else next.add(group);
+      return next;
+    });
+  }
+
+  function fieldDescription(item: SystemConfigItem) {
+    const field = displayField(item.path);
+    return t(`settingsGeneral.systemConfig.descriptions.fields.${field}`, {
+      defaultValue: t("settingsGeneral.systemConfig.descriptions.unknownField"),
+    });
+  }
+
+  async function handleSave() {
+    if (!document || dirtyItems.length === 0) return;
+    try {
+      await save(dirtyItems.map((item) => ({ path: item.path, value: changes[item.path] })), confirmMigration);
+      setChanges({});
+      setConfirmMigration(false);
+      toast.success(t("settingsGeneral.systemConfig.messages.saved"));
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : t("settingsGeneral.systemConfig.messages.saveFailed"));
+    }
+  }
+
+  return (
+    <SurfaceCard className="space-y-4 xl:col-span-2">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">{t("settingsGeneral.systemConfig.title")}</h2>
+          <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{t("settingsGeneral.systemConfig.description")}</p>
+        </div>
+        <div className="flex gap-2">
+          <Button disabled={loading || saving} onClick={refresh} variant="secondary">{t("settingsGeneral.systemConfig.actions.refresh")}</Button>
+          {dirtyItems.length > 0 && <Button disabled={saving || (hasMigration && !confirmMigration)} onClick={() => void handleSave()}>
+            {saving ? t("settingsGeneral.systemConfig.actions.saving") : t("settingsGeneral.systemConfig.actions.save", { count: dirtyItems.length })}
+          </Button>}
+        </div>
+      </div>
+
+      {loading && <p className="text-sm text-[var(--color-on-surface-variant)]">{t("settingsGeneral.systemConfig.loading")}</p>}
+      {Boolean(error) && !loading && <p className="rounded-lg bg-[var(--color-error-container)] p-3 text-sm text-[var(--color-on-error-container)]">{error instanceof Error ? error.message : t("settingsGeneral.systemConfig.messages.loadFailed")}</p>}
+
+      {!loading && groups.map(([group, items]) => (
+        <section className="overflow-hidden rounded-xl border border-[var(--color-outline-variant)]" key={group}>
+          <h3>
+            <button
+              aria-controls={`system-config-group-${group}`}
+              aria-expanded={expandedGroups.has(group)}
+              className="flex w-full items-center justify-between gap-3 bg-[var(--color-surface-container)] px-4 py-3 text-left text-sm font-semibold text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)]"
+              type="button"
+              onClick={() => toggleGroup(group)}
+            >
+              <span>{t(`settingsGeneral.systemConfig.categories.${group}.label`, { defaultValue: group })}</span>
+              <span className="flex items-center gap-2 text-xs font-normal text-[var(--color-on-surface-variant)]">
+                {t("settingsGeneral.systemConfig.itemCount", { count: items.length })}
+                <ChevronRight className={`size-4 transition-transform ${expandedGroups.has(group) ? "rotate-90" : ""}`} />
+              </span>
+            </button>
+          </h3>
+          {expandedGroups.has(group) && <div className="divide-y divide-[var(--color-outline-variant)]" id={`system-config-group-${group}`}>
+            {items.map((item) => {
+              const value = Object.hasOwn(changes, item.path) ? changes[item.path] : item.value;
+              return (
+                <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(300px,1fr)_minmax(260px,1.5fr)] lg:items-center" key={item.path}>
+                  <div className="min-w-0">
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className="text-xs text-[var(--color-on-surface-variant)]">{item.valueType}</span>
+                      <code className="break-all text-xs text-[var(--color-on-surface)]">{item.path}</code>
+                      <Badge tone={item.effect === "migration" ? "warning" : item.effect === "hotUpdate" ? "success" : "info"}>
+                        {t(`settingsGeneral.systemConfig.effects.${item.effect}`)}
+                      </Badge>
+                      {item.overriddenByEnvironment && <Badge tone="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
+                      <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
+                        {fieldDescription(item)}
+                      </InfoTooltip>
+                    </div>
+                  </div>
+                  {item.valueType === "boolean" ? (
+                    <SelectInput value={String(value)} onValueChange={(next) => update(item.path, next === "true")}>
+                      <SelectItem value="true">{t("settingsGeneral.systemConfig.values.true")}</SelectItem>
+                      <SelectItem value="false">{t("settingsGeneral.systemConfig.values.false")}</SelectItem>
+                    </SelectInput>
+                  ) : (
+                    <TextInput
+                      aria-label={item.path}
+                      placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : undefined}
+                      type={item.sensitive ? "password" : item.valueType === "number" ? "number" : "text"}
+                      value={value === null ? "" : String(value)}
+                      onChange={(event) => update(item.path, item.valueType === "number" ? Number(event.target.value) : event.target.value)}
+                    />
+                  )}
+                </div>
+              );
+            })}
+          </div>}
+        </section>
+      ))}
+
+      {hasMigration && (
+        <label className="flex items-start gap-3 rounded-lg bg-[var(--color-warning-container)] p-3 text-sm text-[var(--color-on-warning-container)]">
+          <input className="mt-1 size-4" type="checkbox" checked={confirmMigration} onChange={(event) => setConfirmMigration(event.target.checked)} />
+          <span>{t("settingsGeneral.systemConfig.confirmMigration")}</span>
+        </label>
+      )}
+    </SurfaceCard>
+  );
+}

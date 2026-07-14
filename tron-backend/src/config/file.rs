@@ -25,11 +25,24 @@ impl AppConfig {
     }
 
     pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {
+        let path = path.as_ref();
         let file_config = AppConfigFile::from_file(path)?;
         let mut config = Self::runtime_defaults();
+        config.application_config_path = path.display().to_string();
         config.apply_file_overrides(file_config)?;
         config.apply_env_overrides()?;
         Ok(config)
+    }
+
+    pub fn validate_yaml(content: &str, path: impl AsRef<Path>) -> Result<(), ConfigError> {
+        let path = path.as_ref();
+        let file_config = AppConfigFile::from_content(content, path)?;
+        let mut config = Self::runtime_defaults();
+        config.application_config_path = path.display().to_string();
+        config.apply_file_overrides(file_config)?;
+        config.apply_env_overrides()?;
+        config.socket_addr()?;
+        Ok(())
     }
 
     fn apply_file_overrides(&mut self, overrides: AppConfigFile) -> Result<(), ConfigError> {
@@ -141,8 +154,12 @@ impl AppConfigFile {
                 path: path_string.clone(),
                 source,
             })?;
-        serde_yaml::from_str::<Self>(&content).map_err(|source| ConfigError::ConfigFileInvalid {
-            path: path_string,
+        Self::from_content(&content, path)
+    }
+
+    fn from_content(content: &str, path: &Path) -> Result<Self, ConfigError> {
+        serde_yaml::from_str::<Self>(content).map_err(|source| ConfigError::ConfigFileInvalid {
+            path: path.display().to_string(),
             source,
         })
     }

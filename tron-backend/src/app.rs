@@ -14,6 +14,7 @@ use crate::{
             mcp::routes::transport_routes as mcp_transport_routes,
         },
         outbound::{
+            config::YamlSystemConfigStore,
             crypto::{BcryptPasswordHasher, Sm4GcmVariableCipher},
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
@@ -45,6 +46,7 @@ use crate::{
     application::role::RoleService,
     application::short_term_memory::ShortTermMemoryService,
     application::skill::SkillRegistryService,
+    application::system_config::SystemConfigService,
     application::task::TaskService,
     application::user::UserService,
     application::variable::VariableService,
@@ -117,6 +119,7 @@ pub struct AppState {
     pub variables: VariableService,
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
+    pub system_config: SystemConfigService,
     pub models: ModelService,
     pub prompts: PromptService,
     pub open_apps: OpenAppService,
@@ -390,6 +393,9 @@ impl AppState {
             .bootstrap_scheduler()
             .expect("automation scheduler should initialize");
         let readiness = AppReadiness::validated_ready();
+        let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
+            config.application_config_path.clone(),
+        )));
 
         Ok(Self {
             config,
@@ -418,6 +424,7 @@ impl AppState {
             memory_work_domains,
             rag,
             skills,
+            system_config,
             roles,
             tasks,
             users,
