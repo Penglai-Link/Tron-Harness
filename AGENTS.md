@@ -40,6 +40,5 @@ Pagable response body format:
 - Git Spec follows `$eliteforge-git-feature-oriented-lite-spec`
 
 ## What's more
-If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
-
-<!-- macOS ships GNU Make 3.81, which does not support `.ONESHELL`; keep recipes from relying on shell state across recipe lines. -->
+- macOS ships GNU Make 3.81, which does not support `.ONESHELL`; keep recipes from relying on shell state across recipe lines.
+- If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
