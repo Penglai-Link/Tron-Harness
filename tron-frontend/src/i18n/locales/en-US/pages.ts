@@ -121,6 +121,10 @@ export const pages = {
     title: "Knowledge Graph",
   },
   chat: {
+    attachments: {
+      annotationCount_one: "{{count}} annotation",
+      annotationCount_other: "{{count}} annotations",
+    },
     shortTermMemory: {
       workspace: "Execution",
       context: "Context",

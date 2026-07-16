@@ -121,6 +121,10 @@ export const pages = {
     title: "知识图谱",
   },
   chat: {
+    attachments: {
+      annotationCount_one: "{{count}} 条注释",
+      annotationCount_other: "{{count}} 条注释",
+    },
     shortTermMemory: {
       workspace: "执行",
       context: "上下文",

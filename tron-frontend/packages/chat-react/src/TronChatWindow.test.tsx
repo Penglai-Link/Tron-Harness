@@ -51,6 +51,54 @@ function renderWindow(props: Partial<ComponentProps<typeof TronChatWindow>> = {}
 }
 
 describe("TronChatWindow", () => {
+  it("renders inspection screenshots and the annotation count in a user message", () => {
+    const screenshot = "data:image/png;base64,AA==";
+    renderWindow({
+      messages: [
+        {
+          actor: "User",
+          attachments: [
+            {
+              id: "inspection-1",
+              imageUrl: screenshot,
+              kind: "inspection",
+              metadata: {},
+              summary: "Selected page element",
+            },
+          ],
+          channel: "MAIN_AGENT",
+          content: "Please inspect this element",
+          createdAt: "2026-07-16T00:00:00.000Z",
+          id: 1,
+          messageCode: "MESSAGE-1",
+          role: "USER",
+          sessionCode: "SESSION-1",
+        },
+      ],
+      sendDisabled: false,
+      session: {
+        agentCode: "main-agent",
+        createdAt: "2026-07-16T00:00:00.000Z",
+        id: 1,
+        sessionCode: "SESSION-1",
+        status: "ACTIVE",
+        title: "Inspection chat",
+        updatedAt: "2026-07-16T00:00:00.000Z",
+        workspaceCode: "WORKSPACE-1",
+      },
+    });
+
+    const annotationRegion = screen.getByRole("region", { name: "1 annotation" });
+    const userMessage = document.querySelector("article.tron-chat__message--user");
+
+    expect(annotationRegion).toBeTruthy();
+    expect(userMessage?.textContent).toContain("Please inspect this element");
+    expect(screen.getByText("1 annotation")).toBeTruthy();
+    expect(screen.getByRole("img", { name: "Selected page element" }).getAttribute("src")).toBe(screenshot);
+    expect(userMessage?.contains(annotationRegion)).toBe(false);
+    expect(annotationRegion.nextElementSibling).toBe(userMessage);
+  });
+
   it("persists collapse state in uncontrolled mode", () => {
     renderWindow({ storageKey: "tron.chat.window.test.uncontrolled" });
 

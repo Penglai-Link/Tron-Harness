@@ -46,10 +46,19 @@ export interface ChatMessage {
   channel: ChatMessageChannel;
   actor: string;
   content: string;
+  attachments?: ChatMessageAttachment[];
   inputTokens?: number | null;
   outputTokens?: number | null;
   totalTokens?: number | null;
   createdAt: string;
+}
+
+export interface ChatMessageAttachment {
+  id: string;
+  kind: "inspection";
+  imageUrl?: string | null;
+  metadata: Record<string, unknown>;
+  summary: string;
 }
 
 export interface ChatTokenUsage {
@@ -83,6 +92,7 @@ export interface SendChatMessageInput {
   agentCode?: string | null;
   modelCode?: string | null;
   systemModelId?: string | null;
+  attachments?: ChatMessageAttachment[];
 }
 
 export interface ChatAguiEvent {

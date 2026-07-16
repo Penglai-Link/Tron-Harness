@@ -44,3 +44,4 @@ Pagable response body format:
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
 
 <!-- `make dev-api` must depend on `install`; otherwise a fresh checkout starts the backend but the frontend exits with `vite: command not found`. -->
+<!-- The `/chats` transcript is rendered by `packages/chat-react/src/TronChatPanel.tsx`; the local `ChatBubble` in `ChatManagementPage.tsx` is not used by that route. -->

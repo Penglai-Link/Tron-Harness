@@ -4455,6 +4455,10 @@ export function ChatManagementPage() {
     selectedAgentCode,
     selectedModelCode,
   ]);
+  const formatAnnotationCount = useCallback(
+    (count: number) => t("chat.attachments.annotationCount", { count }),
+    [t],
+  );
 
   useConsoleShellConfig({ rightPanel });
 
@@ -5225,6 +5229,7 @@ export function ChatManagementPage() {
             ? "Create a new session or pick one from the left panel to view chat details and start messaging."
             : "Select or create a workspace before loading chat sessions."}
           footerAddon={transcriptFooterAddon}
+          formatAnnotationCount={formatAnnotationCount}
           inputPlaceholder="Enter to send, Shift+Enter for newline"
           liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
           liveAguiEvents={liveAguiEvents}

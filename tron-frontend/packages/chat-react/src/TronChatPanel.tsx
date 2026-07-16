@@ -90,6 +90,42 @@ function MarkdownBlock({ content }: { content: string }) {
   );
 }
 
+function defaultFormatAnnotationCount(count: number) {
+  return `${count} annotation${count === 1 ? "" : "s"}`;
+}
+
+function InspectionAttachments({
+  attachments,
+  formatAnnotationCount,
+}: {
+  attachments: ChatMessage["attachments"];
+  formatAnnotationCount: (count: number) => string;
+}) {
+  const inspectionAttachments = attachments?.filter((attachment) => attachment.kind === "inspection") ?? [];
+
+  if (!inspectionAttachments.length) return null;
+
+  const countLabel = formatAnnotationCount(inspectionAttachments.length);
+
+  return (
+    <section aria-label={countLabel} className="tron-chat__inspection-attachments">
+      <div className="tron-chat__inspection-previews">
+        {inspectionAttachments.map((attachment) => (
+          attachment.imageUrl ? (
+            <figure className="tron-chat__inspection-preview" key={attachment.id}>
+              <img alt={attachment.summary} src={attachment.imageUrl} />
+            </figure>
+          ) : null
+        ))}
+      </div>
+      <div className="tron-chat__inspection-count">
+        <MessageSquareText aria-hidden="true" size={16} />
+        <span>{countLabel}</span>
+      </div>
+    </section>
+  );
+}
+
 function CopyValueButton({
   ariaLabel,
   title,
@@ -659,6 +695,7 @@ export interface TronChatPanelProps {
   emptyDescription?: string;
   emptyTitle?: string;
   footerAddon?: ReactNode;
+  formatAnnotationCount?: (count: number) => string;
   headerContent?: ReactNode;
   inputPlaceholder?: string;
   liveAguiAnchorMessageCodes?: Record<string, string>;
@@ -694,6 +731,7 @@ export function TronChatPanel({
   emptyDescription = "Create a session to start chatting.",
   emptyTitle = "No session selected",
   footerAddon,
+  formatAnnotationCount = defaultFormatAnnotationCount,
   headerContent,
   inputPlaceholder = "Enter to send, Shift+Enter for newline",
   liveAguiAnchorMessageCodes,
@@ -862,11 +900,25 @@ export function TronChatPanel({
                     >
                       {(messagesByTurnId.get(turn.id) ?? []).map((message) => (
                         <Fragment key={message.messageCode}>
-                          <ChatBubble
-                            currentUserDisplayName={currentUserDisplayName}
-                            message={message}
-                            onEditMessage={onEditMessage}
-                          />
+                          {message.role === "USER" ? (
+                            <div className="tron-chat__user-message-group">
+                              <InspectionAttachments
+                                attachments={message.attachments}
+                                formatAnnotationCount={formatAnnotationCount}
+                              />
+                              <ChatBubble
+                                currentUserDisplayName={currentUserDisplayName}
+                                message={message}
+                                onEditMessage={onEditMessage}
+                              />
+                            </div>
+                          ) : (
+                            <ChatBubble
+                              currentUserDisplayName={currentUserDisplayName}
+                              message={message}
+                              onEditMessage={onEditMessage}
+                            />
+                          )}
                           {showAgui &&
                             message.messageCode ===
                             presentation.waitingForModelAnchorMessageCode ? (

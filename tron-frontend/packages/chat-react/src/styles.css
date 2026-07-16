@@ -443,6 +443,19 @@
   background: var(--tron-chat-surface-strong);
 }
 
+.tron-chat__user-message-group {
+  display: flex;
+  max-width: 920px;
+  align-self: flex-end;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tron-chat__user-message-group > .tron-chat__message {
+  max-width: 100%;
+}
+
 .tron-chat__message-header {
   display: flex;
   align-items: center;
@@ -476,6 +489,57 @@
   line-height: 1.7;
   white-space: pre-wrap;
   word-break: break-all;
+}
+
+.tron-chat__inspection-attachments {
+  display: flex;
+  max-width: 100%;
+  align-items: center;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tron-chat__inspection-previews {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tron-chat__inspection-preview {
+  display: flex;
+  max-width: min(224px, 100%);
+  max-height: 160px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid var(--tron-chat-border);
+  border-radius: 12px;
+  background: var(--tron-chat-surface-muted);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.tron-chat__inspection-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+}
+
+.tron-chat__inspection-count {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--tron-chat-border);
+  border-radius: 999px;
+  background: var(--tron-chat-surface-soft);
+  color: var(--tron-chat-text);
+  padding: 8px 16px;
+  font-size: 14px;
+  font-weight: 500;
 }
 
 .tron-chat__rail {
