@@ -3,6 +3,22 @@ port: 8080
 frontendDistDir: tron-backend/resources/frontend
 projectDocRoot: .
 
+resource:
+  storage:
+    defaultProfile: local-default
+    profiles:
+      local-default:
+        type: local
+        root: ~/.tron/resources
+  limits:
+    schemaMaxBytes: 1048576
+    attributesMaxBytes: 1048576
+    maxDepth: 128
+    maxValidationErrors: 100
+    maxBinaries: 500
+    maxBinaryBytes: 1073741824
+    maxBinaryNameLength: 255
+
 systemAgents:
   codexCommand: codex
   opencodeCommand: opencode

@@ -6,7 +6,7 @@ use super::{
     AppConfig, AuthConfig, DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS, DEFAULT_AUTH_DEV_OAUTH2_NAME,
     DEFAULT_AUTH_JWT_SECRET, DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS, DEFAULT_BIND_ADDRESS,
     DEFAULT_PORT, DEFAULT_SYSTEM_AGENT_CODEX_COMMAND, DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND,
-    HttpClientProfilesConfig, MineruConfig, SystemAgentConfig, TEST_DATABASE_URL,
+    HttpClientProfilesConfig, MineruConfig, ResourceConfig, SystemAgentConfig, TEST_DATABASE_URL,
     VariableCryptoConfig,
 };
 
@@ -30,6 +30,7 @@ impl Default for AppConfig {
                 .join("tron-skills-registry-test")
                 .display()
                 .to_string(),
+            resource: ResourceConfig::test_default(),
             system_agents: SystemAgentConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),

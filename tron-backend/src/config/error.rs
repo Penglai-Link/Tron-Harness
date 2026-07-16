@@ -9,6 +9,9 @@ pub enum ConfigError {
         key: String,
         value: String,
     },
+    InvalidResourceConfig {
+        message: String,
+    },
     InvalidSocketAddr {
         bind_address: String,
         port: u16,
@@ -33,6 +36,9 @@ impl fmt::Display for ConfigError {
             Self::InvalidEnvValue { key, value } => {
                 write!(formatter, "invalid value `{value}` for backend env `{key}`")
             }
+            Self::InvalidResourceConfig { message } => {
+                write!(formatter, "invalid resource configuration: {message}")
+            }
             Self::InvalidSocketAddr {
                 bind_address, port, ..
             } => write!(
@@ -52,7 +58,9 @@ impl fmt::Display for ConfigError {
 impl Error for ConfigError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
-            Self::MissingConfigField { .. } | Self::InvalidEnvValue { .. } => None,
+            Self::MissingConfigField { .. }
+            | Self::InvalidEnvValue { .. }
+            | Self::InvalidResourceConfig { .. } => None,
             Self::InvalidSocketAddr { source, .. } => Some(source),
             Self::ConfigFileReadFailed { source, .. } => Some(source),
             Self::ConfigFileInvalid { source, .. } => Some(source),

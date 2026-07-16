@@ -1,6 +1,31 @@
 use super::*;
 
 impl WorkspaceService {
+    pub fn user_has_effective_access(
+        &self,
+        workspace_code: &str,
+        user_code: &str,
+    ) -> Result<bool, WorkspaceError> {
+        self.ensure_workspace_exists(workspace_code)?;
+        let user = self.active_user_by_code(user_code)?;
+        let direct = self
+            .list_raw_user_access(workspace_code)?
+            .iter()
+            .any(|entry| entry.user_code == user.user_code);
+        if direct {
+            return Ok(true);
+        }
+        let granted_roles = self
+            .list_raw_role_access(workspace_code)?
+            .into_iter()
+            .map(|entry| entry.role_code)
+            .collect::<BTreeSet<_>>();
+        Ok(user
+            .role_codes
+            .iter()
+            .any(|role_code| granted_roles.contains(role_code)))
+    }
+
     pub fn list_user_access(
         &self,
         workspace_code: &str,

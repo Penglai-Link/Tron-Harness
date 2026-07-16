@@ -7,7 +7,10 @@ use crate::{
     domain::role::{Role, RoleError, RoleKind, RoleManagedBy},
 };
 
-use super::migrations::{ROLE_PERMISSIONS_MIGRATION, ROLES_MIGRATION};
+use super::migrations::{
+    RESOURCE_ROLE_DEFAULTS_MIGRATION, RESOURCE_ROLE_PERMISSION_DOMAIN_MIGRATION,
+    ROLE_PERMISSIONS_MIGRATION, ROLES_MIGRATION,
+};
 
 pub struct SqliteRoleRepository {
     connection: Connection,
@@ -39,7 +42,28 @@ impl SqliteRoleRepository {
             .map_err(storage_error)?;
         self.connection
             .execute_batch(ROLE_PERMISSIONS_MIGRATION)
+            .map_err(storage_error)?;
+        if !self.role_permissions_support_resources()? {
+            self.connection
+                .execute_batch(RESOURCE_ROLE_PERMISSION_DOMAIN_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        self.connection
+            .execute_batch(RESOURCE_ROLE_DEFAULTS_MIGRATION)
             .map_err(storage_error)
+    }
+
+    fn role_permissions_support_resources(&self) -> Result<bool, RoleError> {
+        let sql = self
+            .connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'role_permissions'",
+                [],
+                |row| row.get::<_, Option<String>>(0),
+            )
+            .map_err(storage_error)?
+            .unwrap_or_default();
+        Ok(sql.contains("'Resources'"))
     }
 
     fn permission_codes(&self, role_id: i64) -> Result<BTreeMap<String, Vec<String>>, RoleError> {

@@ -29,7 +29,15 @@ async fn list_permission_domains_returns_supported_matrix_headers() {
     assert_eq!(json["code"], "SUCCESS");
     assert_eq!(
         json["data"],
-        json!(["Workspace", "Models", "Tasks", "Memory", "Skills", "MCP"]),
+        json!([
+            "Workspace",
+            "Models",
+            "Tasks",
+            "Memory",
+            "Skills",
+            "MCP",
+            "Resources"
+        ]),
     );
 }
 
@@ -80,7 +88,8 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
                     "Tasks": ["R", "W", "D", "A"],
                     "Memory": ["R", "W", "D", "A"],
                     "Skills": ["R", "W", "D", "A"],
-                    "MCP": ["R", "W", "D", "A"]
+                    "MCP": ["R", "W", "D", "A"],
+                    "Resources": ["R", "W", "D", "A"]
                 }
             },
             {
@@ -97,7 +106,8 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
                     "Tasks": ["R", "W"],
                     "Memory": ["R"],
                     "Skills": ["R", "W"],
-                    "MCP": ["R"]
+                    "MCP": ["R"],
+                    "Resources": ["R", "W"]
                 }
             },
             {
@@ -114,7 +124,8 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
                     "Tasks": ["R", "W"],
                     "Memory": ["R"],
                     "Skills": ["R", "W"],
-                    "MCP": ["R"]
+                    "MCP": ["R"],
+                    "Resources": ["R", "W"]
                 }
             },
             {
@@ -131,7 +142,8 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
                     "Tasks": ["R"],
                     "Memory": ["R"],
                     "Skills": ["R"],
-                    "MCP": ["R"]
+                    "MCP": ["R"],
+                    "Resources": ["R"]
                 }
             },
             {
@@ -147,7 +159,8 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
                     "Tasks": ["R", "W", "A"],
                     "Memory": [],
                     "Skills": ["R", "W"],
-                    "MCP": ["R"]
+                    "MCP": ["R"],
+                    "Resources": []
                 }
             }
         ]
@@ -184,6 +197,14 @@ async fn replace_roles_persists_catalog_to_configured_sqlite_database() {
             .iter()
             .any(|role| role["code"] == "CUSTOM_RELEASE_MANAGER"),
         "AC-RM backend GREEN: saved custom role should survive a fresh router against the same SQLite database",
+    );
+    let custom_role = reloaded_roles
+        .iter()
+        .find(|role| role["code"] == "CUSTOM_RELEASE_MANAGER")
+        .expect("custom role should remain available after migration backfill");
+    assert!(
+        custom_role["permissions"].get("Resources").is_none(),
+        "resource permission backfill must not rewrite custom roles",
     );
 }
 

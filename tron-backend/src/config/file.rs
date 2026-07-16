@@ -8,7 +8,7 @@ use super::{
     DEFAULT_AUTH_GITHUB_USER_API_URL, DEFAULT_AUTH_LDAP_NAME, GitHubOAuthConfig,
     HttpClientProfileConfig, HttpClientProfilesConfig, LdapConfig, SystemAgentConfig,
     mineru::MineruFileConfig, parsing::required_config_string, paths::normalize_storage_path,
-    variable_crypto,
+    resource::ResourceFileConfig, variable_crypto,
 };
 
 #[path = "file_event_bus.rs"]
@@ -66,6 +66,9 @@ impl AppConfig {
         }
         if let Some(value) = overrides.skills_registry_root {
             self.skills_registry_root = value;
+        }
+        if let Some(value) = overrides.resource {
+            self.resource.apply_overrides(value)?;
         }
         if let Some(value) = overrides.system_agents {
             self.system_agents.apply_overrides(value);
@@ -136,6 +139,7 @@ struct AppConfigFile {
     frontend_dist_dir: Option<String>,
     project_doc_root: Option<String>,
     skills_registry_root: Option<String>,
+    resource: Option<ResourceFileConfig>,
     system_agents: Option<SystemAgentFileConfig>,
     variable_crypto: Option<variable_crypto::VariableCryptoFileConfig>,
     http_clients: Option<HttpClientProfilesFileConfig>,

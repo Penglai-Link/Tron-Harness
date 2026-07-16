@@ -127,6 +127,59 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.domains.model.description" => {
             "Inspect effective model catalog configuration."
         }
+        "agent.toolCatalog.domains.resource.name" => "Resource Tools",
+        "agent.toolCatalog.domains.resource.description" => {
+            "Manage versioned resource definitions, resources, and binary mappings."
+        }
+        "agent.toolCatalog.tools.resource_definition.query.name" => "Query resource definitions",
+        "agent.toolCatalog.tools.resource_definition.query.description" => {
+            "List effective resource definitions or inspect a specific snapshot."
+        }
+        "agent.toolCatalog.tools.resource_definition.query.sampleResultSummary" => {
+            "Returns resource definition records for the requested scope."
+        }
+        "agent.toolCatalog.tools.resource_definition.draft.name" => "Draft resource definition",
+        "agent.toolCatalog.tools.resource_definition.draft.description" => {
+            "Create, update, or discard a local resource definition draft."
+        }
+        "agent.toolCatalog.tools.resource_definition.draft.sampleResultSummary" => {
+            "Returns the draft version, revision, and validation status."
+        }
+        "agent.toolCatalog.tools.resource_definition.publish.name" => "Publish resource definition",
+        "agent.toolCatalog.tools.resource_definition.publish.description" => {
+            "Publish a definition draft or reactivate a historical definition."
+        }
+        "agent.toolCatalog.tools.resource_definition.publish.sampleResultSummary" => {
+            "Returns the active definition version and prior active version."
+        }
+        "agent.toolCatalog.tools.resource.query.name" => "Query resources",
+        "agent.toolCatalog.tools.resource.query.description" => {
+            "List effective workspace resources or local history."
+        }
+        "agent.toolCatalog.tools.resource.query.sampleResultSummary" => {
+            "Returns matching resource records and any local draft summary."
+        }
+        "agent.toolCatalog.tools.resource.draft.name" => "Draft resource",
+        "agent.toolCatalog.tools.resource.draft.description" => {
+            "Create, update, or discard a local resource draft."
+        }
+        "agent.toolCatalog.tools.resource.draft.sampleResultSummary" => {
+            "Returns the draft version, pinned definition, and validation status."
+        }
+        "agent.toolCatalog.tools.resource.publish.name" => "Publish resource",
+        "agent.toolCatalog.tools.resource.publish.description" => {
+            "Publish a resource draft or reactivate a local historical version."
+        }
+        "agent.toolCatalog.tools.resource.publish.sampleResultSummary" => {
+            "Returns the active resource version and prior active version."
+        }
+        "agent.toolCatalog.tools.resource.binary.name" => "Manage resource binary",
+        "agent.toolCatalog.tools.resource.binary.description" => {
+            "Upload, download, or remove a binary mapping for an authorized resource."
+        }
+        "agent.toolCatalog.tools.resource.binary.sampleResultSummary" => {
+            "Returns binary operation status without storage locator details."
+        }
         "agent.toolCatalog.domains.skill.name" => "Skill Tools",
         "agent.toolCatalog.domains.skill.description" => {
             "Inspect workspace skill bindings and registry entries."
@@ -314,6 +367,57 @@ fn translate_zh_cn(key: &str) -> &'static str {
         }
         "agent.toolCatalog.domains.model.name" => "模型工具",
         "agent.toolCatalog.domains.model.description" => "查看生效中的模型目录配置。",
+        "agent.toolCatalog.domains.resource.name" => "资源工具",
+        "agent.toolCatalog.domains.resource.description" => {
+            "管理版本化资源定义、资源实例和二进制映射。"
+        }
+        "agent.toolCatalog.tools.resource_definition.query.name" => "查询资源定义",
+        "agent.toolCatalog.tools.resource_definition.query.description" => {
+            "查询生效资源定义或查看特定快照。"
+        }
+        "agent.toolCatalog.tools.resource_definition.query.sampleResultSummary" => {
+            "返回指定作用域中的资源定义记录。"
+        }
+        "agent.toolCatalog.tools.resource_definition.draft.name" => "编辑资源定义草稿",
+        "agent.toolCatalog.tools.resource_definition.draft.description" => {
+            "创建、更新或丢弃本地资源定义草稿。"
+        }
+        "agent.toolCatalog.tools.resource_definition.draft.sampleResultSummary" => {
+            "返回草稿版本、修订号和校验状态。"
+        }
+        "agent.toolCatalog.tools.resource_definition.publish.name" => "发布资源定义",
+        "agent.toolCatalog.tools.resource_definition.publish.description" => {
+            "发布定义草稿或重新激活历史定义。"
+        }
+        "agent.toolCatalog.tools.resource_definition.publish.sampleResultSummary" => {
+            "返回生效定义版本和此前生效版本。"
+        }
+        "agent.toolCatalog.tools.resource.query.name" => "查询资源",
+        "agent.toolCatalog.tools.resource.query.description" => {
+            "查询工作区生效资源或本地历史版本。"
+        }
+        "agent.toolCatalog.tools.resource.query.sampleResultSummary" => {
+            "返回匹配的资源记录及本地草稿摘要。"
+        }
+        "agent.toolCatalog.tools.resource.draft.name" => "编辑资源草稿",
+        "agent.toolCatalog.tools.resource.draft.description" => "创建、更新或丢弃本地资源草稿。",
+        "agent.toolCatalog.tools.resource.draft.sampleResultSummary" => {
+            "返回草稿版本、固定定义和校验状态。"
+        }
+        "agent.toolCatalog.tools.resource.publish.name" => "发布资源",
+        "agent.toolCatalog.tools.resource.publish.description" => {
+            "发布资源草稿或重新激活本地历史版本。"
+        }
+        "agent.toolCatalog.tools.resource.publish.sampleResultSummary" => {
+            "返回生效资源版本和此前生效版本。"
+        }
+        "agent.toolCatalog.tools.resource.binary.name" => "管理资源二进制文件",
+        "agent.toolCatalog.tools.resource.binary.description" => {
+            "上传、下载或移除已授权资源的二进制映射。"
+        }
+        "agent.toolCatalog.tools.resource.binary.sampleResultSummary" => {
+            "返回二进制操作状态，不返回存储定位信息。"
+        }
         "agent.toolCatalog.domains.skill.name" => "技能工具",
         "agent.toolCatalog.domains.skill.description" => "查看工作区技能绑定和注册项。",
         "agent.toolCatalog.domains.task.name" => "任务工具",

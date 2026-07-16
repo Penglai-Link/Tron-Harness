@@ -74,6 +74,22 @@ impl RoleService {
         repository.list_roles()
     }
 
+    pub fn has_permission(
+        &self,
+        role_codes: &[String],
+        domain: &str,
+        permission_code: &str,
+    ) -> Result<bool, RoleError> {
+        let roles = self.list_roles()?;
+        Ok(roles.iter().any(|role| {
+            role_codes.iter().any(|code| code == &role.code)
+                && role
+                    .permissions
+                    .get(domain)
+                    .is_some_and(|codes| codes.iter().any(|code| code == permission_code))
+        }))
+    }
+
     pub fn replace_roles(
         &self,
         actor: &AuthenticatedUser,

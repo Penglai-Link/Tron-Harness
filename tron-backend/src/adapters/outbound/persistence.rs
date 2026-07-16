@@ -21,6 +21,7 @@ pub use sqlite::SqliteMemoryWorkDomainRepository;
 pub use sqlite::SqliteModelRepository;
 pub use sqlite::SqliteOpenAppRepository;
 pub use sqlite::SqlitePromptRepository;
+pub use sqlite::SqliteResourceRepository;
 pub use sqlite::SqliteRoleRepository;
 pub use sqlite::SqliteShortTermMemoryRepository;
 pub use sqlite::SqliteSkillRegistryRepository;

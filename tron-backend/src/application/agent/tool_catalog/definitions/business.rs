@@ -44,6 +44,13 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         variable_create_definition(),
         variable_update_definition(),
         variable_delete_definition(),
+        resource_definition_query_definition(),
+        resource_definition_draft_definition(),
+        resource_definition_publish_definition(),
+        resource_query_definition(),
+        resource_draft_definition(),
+        resource_publish_definition(),
+        resource_binary_definition(),
     ]
 }
 
@@ -461,4 +468,236 @@ fn variable_delete_definition() -> ToolCatalogDefinition {
             }),
         ),
     )
+}
+
+fn resource_definition_query_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource_definition.query",
+        "resource",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.resource_definition.query.description",
+            json!([{ "scopeKind": "WORKSPACE", "definitionCode": "FILE", "current": 1, "size": 20 }]),
+            json!({
+                "type": "object",
+                "required": ["scopeKind"],
+                "properties": {
+                    "scopeKind": resource_scope_schema(),
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "search": { "type": "string" },
+                    "definitionCode": resource_code_schema(),
+                    "definitionVersion": resource_version_schema(),
+                    "definitionStatus": { "type": "string", "enum": ["ENABLED", "DISABLED"] },
+                    "lifecycleStatus": resource_lifecycle_schema(),
+                    "includeHistory": { "type": "boolean", "default": false },
+                    "current": { "type": "integer", "minimum": 1, "default": 1 },
+                    "size": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+                },
+                "allOf": [{ "not": { "allOf": [{ "required": ["definitionVersion", "includeHistory"] }, { "properties": { "includeHistory": { "const": true } } }] } }],
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_definition_draft_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource_definition.draft",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource_definition.draft.description",
+            json!([{ "scopeKind": "WORKSPACE", "action": "create", "definitionCode": "CUSTOM_FILE", "name": "Custom file", "attributesSchema": { "type": "object" }, "binarySchema": { "minCount": 0, "maxCount": 1 } }]),
+            json!({
+                "type": "object",
+                "required": ["scopeKind", "action", "definitionCode"],
+                "properties": {
+                    "scopeKind": resource_scope_schema(),
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "action": { "type": "string", "enum": ["create", "update", "discard"] },
+                    "definitionCode": resource_code_schema(),
+                    "definitionVersion": resource_version_schema(),
+                    "expectedDraftRevision": { "type": "integer", "minimum": 1 },
+                    "name": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "definitionStatus": { "type": "string", "enum": ["ENABLED", "DISABLED"] },
+                    "allowInheritance": { "type": "boolean" },
+                    "attributesSchema": { "type": "object" },
+                    "binarySchema": { "type": "object" },
+                    "binaryStorageProfile": { "type": "string" }
+                },
+                "allOf": [{ "oneOf": [
+                    { "properties": { "action": { "const": "create" } }, "required": ["name"], "not": { "anyOf": [{ "required": ["definitionVersion"] }, { "required": ["expectedDraftRevision"] }] } },
+                    { "properties": { "action": { "const": "update" } }, "required": ["definitionVersion"] },
+                    { "properties": { "action": { "const": "discard" } }, "required": ["definitionVersion", "expectedDraftRevision"], "not": { "anyOf": [{ "required": ["name"] }, { "required": ["description"] }, { "required": ["definitionStatus"] }, { "required": ["allowInheritance"] }, { "required": ["attributesSchema"] }, { "required": ["binarySchema"] }, { "required": ["binaryStorageProfile"] }] } }
+                ] }],
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_definition_publish_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource_definition.publish",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource_definition.publish.description",
+            json!([{ "scopeKind": "WORKSPACE", "definitionCode": "CUSTOM_FILE", "definitionVersion": "v1-A1B", "expectedDraftRevision": 1 }]),
+            json!({
+                "type": "object",
+                "required": ["scopeKind", "definitionCode", "definitionVersion"],
+                "properties": {
+                    "scopeKind": resource_scope_schema(),
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "definitionCode": resource_code_schema(),
+                    "definitionVersion": resource_version_schema(),
+                    "expectedDraftRevision": { "type": "integer", "minimum": 1 },
+                    "expectedActiveDefinitionVersion": resource_version_schema()
+                },
+                "not": { "required": ["expectedDraftRevision", "expectedActiveDefinitionVersion"] },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_query_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.query",
+        "resource",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.resource.query.description",
+            json!([{ "workspaceCode": "TRON_CORE", "definitionCode": "FILE", "current": 1, "size": 20 }]),
+            json!({
+                "type": "object",
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "search": { "type": "string" },
+                    "definitionCode": resource_code_schema(),
+                    "resourceCode": resource_code_schema(),
+                    "resourceVersion": resource_version_schema(),
+                    "includeHistory": { "type": "boolean", "default": false },
+                    "current": { "type": "integer", "minimum": 1, "default": 1 },
+                    "size": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+                },
+                "allOf": [{ "not": { "allOf": [{ "required": ["resourceVersion", "includeHistory"] }, { "properties": { "includeHistory": { "const": true } } }] } }],
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_draft_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.draft",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.draft.description",
+            json!([{ "action": "create", "resourceCode": "release-notes", "definitionCode": "FILE", "attributes": { "fileName": "notes.txt", "sizeBytes": 0 } }]),
+            json!({
+                "type": "object",
+                "required": ["action", "resourceCode"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "action": { "type": "string", "enum": ["create", "update", "discard"] },
+                    "resourceCode": resource_code_schema(),
+                    "resourceVersion": resource_version_schema(),
+                    "expectedDraftRevision": { "type": "integer", "minimum": 1 },
+                    "definitionCode": resource_code_schema(),
+                    "name": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "attributes": { "type": "object" },
+                    "allowInheritance": { "type": "boolean" }
+                },
+                "allOf": [{ "oneOf": [
+                    { "properties": { "action": { "const": "create" } }, "required": ["definitionCode", "name"], "not": { "anyOf": [{ "required": ["resourceVersion"] }, { "required": ["expectedDraftRevision"] }] } },
+                    { "properties": { "action": { "const": "update" } }, "required": ["resourceVersion"], "not": { "required": ["definitionCode"] } },
+                    { "properties": { "action": { "const": "discard" } }, "required": ["resourceVersion", "expectedDraftRevision"], "not": { "anyOf": [{ "required": ["definitionCode"] }, { "required": ["name"] }, { "required": ["description"] }, { "required": ["attributes"] }, { "required": ["allowInheritance"] }] } }
+                ] }],
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_publish_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.publish",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.publish.description",
+            json!([{ "resourceCode": "release-notes", "resourceVersion": "v1-A1B", "expectedDraftRevision": 1 }]),
+            json!({
+                "type": "object",
+                "required": ["resourceCode", "resourceVersion"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "resourceCode": resource_code_schema(),
+                    "resourceVersion": resource_version_schema(),
+                    "expectedDraftRevision": { "type": "integer", "minimum": 1 },
+                    "expectedActiveResourceVersion": resource_version_schema()
+                },
+                "not": { "required": ["expectedDraftRevision", "expectedActiveResourceVersion"] },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_binary_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.binary",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.binary.description",
+            json!([{ "action": "upload", "resourceCode": "release-notes", "resourceVersion": "v1-A1B", "expectedDraftRevision": 1, "binaryName": "notes.txt", "sourcePath": "notes.txt" }]),
+            json!({
+                "type": "object",
+                "required": ["action", "resourceCode", "binaryName"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "action": { "type": "string", "enum": ["upload", "download", "remove"] },
+                    "resourceCode": resource_code_schema(),
+                    "resourceVersion": resource_version_schema(),
+                    "expectedDraftRevision": { "type": "integer", "minimum": 1 },
+                    "binaryName": { "type": "string", "minLength": 1, "maxLength": 255 },
+                    "sourcePath": { "type": "string", "minLength": 1 },
+                    "targetPath": { "type": "string", "minLength": 1 },
+                    "overwrite": { "type": "boolean", "default": false }
+                },
+                "allOf": [{ "oneOf": [
+                    { "properties": { "action": { "const": "upload" } }, "required": ["resourceVersion", "expectedDraftRevision", "sourcePath"], "not": { "required": ["targetPath"] } },
+                    { "properties": { "action": { "const": "download" } }, "required": ["targetPath"], "not": { "anyOf": [{ "required": ["sourcePath"] }, { "required": ["expectedDraftRevision"] }] } },
+                    { "properties": { "action": { "const": "remove" } }, "required": ["resourceVersion", "expectedDraftRevision"], "not": { "anyOf": [{ "required": ["sourcePath"] }, { "required": ["targetPath"] }] } }
+                ] }],
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_scope_schema() -> serde_json::Value {
+    json!({ "type": "string", "enum": ["PLATFORM", "WORKSPACE"] })
+}
+
+fn resource_workspace_code_schema() -> serde_json::Value {
+    json!({ "type": "string", "minLength": 1 })
+}
+
+fn resource_code_schema() -> serde_json::Value {
+    json!({ "type": "string", "minLength": 1, "maxLength": 64 })
+}
+
+fn resource_version_schema() -> serde_json::Value {
+    json!({ "type": "string", "pattern": "^v[1-9][0-9]*-[A-Za-z0-9]{3}$" })
+}
+
+fn resource_lifecycle_schema() -> serde_json::Value {
+    json!({ "type": "string", "enum": ["DRAFT", "ACTIVE", "HISTORICAL"] })
 }

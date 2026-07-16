@@ -4,6 +4,7 @@ mod file;
 mod mineru;
 mod parsing;
 mod paths;
+mod resource;
 mod variable_crypto;
 
 use std::net::SocketAddr;
@@ -17,8 +18,11 @@ pub use self::mineru::MineruConfig;
 use self::parsing::{env_port_override, ldap_env_override};
 use self::paths::{
     default_database_url_from_home, default_graph_storage_path_from_home,
-    default_skills_registry_root_from_home, env_database_url_override,
-    env_graph_storage_path_override, normalize_storage_path,
+    default_resource_storage_root_from_home, default_skills_registry_root_from_home,
+    env_database_url_override, env_graph_storage_path_override, normalize_storage_path,
+};
+pub use self::resource::{
+    LocalResourceStorageProfile, ResourceConfig, ResourceLimits, ResourceStorageConfig,
 };
 pub use variable_crypto::VariableCryptoConfig;
 
@@ -64,6 +68,7 @@ pub struct AppConfig {
     pub frontend_dist_dir: String,
     pub project_doc_root: String,
     pub skills_registry_root: String,
+    pub resource: ResourceConfig,
     pub system_agents: SystemAgentConfig,
     pub variable_crypto: VariableCryptoConfig,
     pub http_clients: HttpClientProfilesConfig,
@@ -158,6 +163,7 @@ impl AppConfig {
             frontend_dist_dir: DEFAULT_FRONTEND_DIST_DIR.into(),
             project_doc_root: DEFAULT_PROJECT_DOC_ROOT.into(),
             skills_registry_root: default_skills_registry_root_from_home(),
+            resource: ResourceConfig::with_default_root(default_resource_storage_root_from_home()),
             system_agents: SystemAgentConfig {
                 codex_command: DEFAULT_SYSTEM_AGENT_CODEX_COMMAND.into(),
                 opencode_command: DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND.into(),

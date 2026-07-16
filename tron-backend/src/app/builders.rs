@@ -101,6 +101,47 @@ fn build_variable_service(
     VariableService::new(repository, workspaces, cipher)
 }
 
+fn build_resource_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    roles: RoleService,
+    users: UserService,
+    variables: VariableService,
+    config: &AppConfig,
+    event_bus: EventBusHandle,
+) -> ResourceService {
+    let repository = SqliteResourceRepository::connect(database_url)
+        .expect("resource SQLite repository should initialize");
+    let storage_profiles = config
+        .resource
+        .storage
+        .profiles
+        .iter()
+        .map(|(profile_code, profile)| {
+            let storage: Arc<dyn ObjectStorage> = Arc::new(
+                LocalObjectStorage::new(&profile.root)
+                    .expect("local resource storage should initialize"),
+            );
+            (profile_code.clone(), storage)
+        })
+        .collect::<BTreeMap<_, _>>();
+    let service = ResourceService::with_event_bus(
+        repository,
+        workspaces,
+        roles,
+        users,
+        variables,
+        config.resource.clone(),
+        storage_profiles,
+        event_bus,
+    )
+    .expect("resource service should initialize");
+    service
+        .bootstrap_seed_definitions()
+        .expect("resource definition seeds should initialize");
+    service
+}
+
 fn build_memory_work_domain_service(database_url: &str) -> MemoryWorkDomainService {
     let repository = SqliteMemoryWorkDomainRepository::connect(database_url)
         .expect("memory work domain SQLite repository should initialize");

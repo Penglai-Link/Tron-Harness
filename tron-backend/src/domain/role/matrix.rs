@@ -9,8 +9,15 @@ use serde::{Deserialize, Serialize};
 use crate::shared::id::SnowflakeId;
 
 pub const DEFAULT_ROLE_UPDATED_AT: &str = "2026-05-15T00:00:00Z";
-pub const PERMISSION_DOMAINS: [&str; 6] =
-    ["Workspace", "Models", "Tasks", "Memory", "Skills", "MCP"];
+pub const PERMISSION_DOMAINS: [&str; 7] = [
+    "Workspace",
+    "Models",
+    "Tasks",
+    "Memory",
+    "Skills",
+    "MCP",
+    "Resources",
+];
 pub const PERMISSION_CODES: [&str; 4] = ["R", "W", "D", "A"];
 pub const FIXED_SYSTEM_ROLE_CODES: [&str; 4] = ["ADMIN", "WORKSPACE_ADMIN", "DEVELOPER", "VIEWER"];
 
@@ -105,6 +112,7 @@ pub fn seeded_roles() -> Vec<Role> {
                 ("Memory", &["R"]),
                 ("Skills", &["R", "W"]),
                 ("MCP", &["R"]),
+                ("Resources", &["R", "W"]),
             ]),
             updated_at: DEFAULT_ROLE_UPDATED_AT.into(),
         },
@@ -122,6 +130,7 @@ pub fn seeded_roles() -> Vec<Role> {
                 ("Memory", &["R"]),
                 ("Skills", &["R", "W"]),
                 ("MCP", &["R"]),
+                ("Resources", &["R", "W"]),
             ]),
             updated_at: DEFAULT_ROLE_UPDATED_AT.into(),
         },
@@ -139,6 +148,7 @@ pub fn seeded_roles() -> Vec<Role> {
                 ("Memory", &["R"]),
                 ("Skills", &["R"]),
                 ("MCP", &["R"]),
+                ("Resources", &["R"]),
             ]),
             updated_at: DEFAULT_ROLE_UPDATED_AT.into(),
         },
@@ -253,6 +263,7 @@ fn full_permissions() -> BTreeMap<String, Vec<String>> {
         ("Memory", &["R", "W", "D", "A"]),
         ("Skills", &["R", "W", "D", "A"]),
         ("MCP", &["R", "W", "D", "A"]),
+        ("Resources", &["R", "W", "D", "A"]),
     ])
 }
 

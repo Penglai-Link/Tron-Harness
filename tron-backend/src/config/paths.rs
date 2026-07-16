@@ -3,6 +3,7 @@ use std::{env, path::PathBuf};
 const DEFAULT_DATABASE_URL_SUFFIX: &str = ".tron/tron.sqlite3";
 const DEFAULT_GRAPH_STORAGE_PATH_SUFFIX: &str = ".tron/tron.graph.grafeo";
 const DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX: &str = ".tron/skills-registry";
+const DEFAULT_RESOURCE_STORAGE_ROOT_SUFFIX: &str = ".tron/resources";
 const ENV_DATABASE_URL: &str = "TRON_BACKEND_DATABASE_URL";
 const ENV_GRAPH_STORAGE_PATH: &str = "TRON_BACKEND_GRAPH_STORAGE_PATH";
 
@@ -16,6 +17,10 @@ pub(super) fn default_graph_storage_path_from_home() -> String {
 
 pub(super) fn default_skills_registry_root_from_home() -> String {
     default_path_from_home(env::var("HOME").ok(), DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX)
+}
+
+pub(super) fn default_resource_storage_root_from_home() -> String {
+    default_path_from_home(env::var("HOME").ok(), DEFAULT_RESOURCE_STORAGE_ROOT_SUFFIX)
 }
 
 pub(super) fn env_database_url_override() -> Option<String> {

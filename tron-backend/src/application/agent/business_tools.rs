@@ -16,6 +16,7 @@ use crate::{
             RagIngestRepository, RagRetryIndexRepository, RagSearchRepository, RagSearchRuntime,
             RagStrategyRegistry,
         },
+        resource::ResourceService,
         short_term_memory::ShortTermMemoryService,
         skill::SkillRegistryService,
         task::TaskService,
@@ -50,6 +51,7 @@ pub fn register_default_agent_tools<R, S, E>(
     models: ModelService,
     skills: SkillRegistryService,
     variables: VariableService,
+    resources: ResourceService,
     memory: MemoryService<R, S, E>,
     short_term_memory: ShortTermMemoryService,
 ) -> Result<(), ToolError>
@@ -73,6 +75,7 @@ where
         models,
         skills,
         variables,
+        resources,
     );
     tools.extend(coding_tools::coding_domain_tools());
     tools.extend(memory_tools::memory_business_tools(memory));

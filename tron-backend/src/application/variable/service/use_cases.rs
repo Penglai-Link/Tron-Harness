@@ -1,3 +1,5 @@
+use std::collections::{BTreeMap, BTreeSet};
+
 use super::*;
 mod payload;
 use self::payload::{
@@ -371,6 +373,50 @@ impl VariableService {
                 })
             })
             .collect()
+    }
+
+    pub(crate) fn ensure_runtime_variable_keys(
+        &self,
+        workspace_code: &str,
+        keys: &BTreeSet<String>,
+    ) -> Result<(), VariableError> {
+        let workspace = self.active_workspace_detail(workspace_code)?;
+        let resolved = self.resolve_raw_variables(&workspace)?;
+        for key in keys {
+            let key = normalized_key(key.clone())?;
+            if !resolved.iter().any(|record| record.variable.key == key) {
+                return Err(VariableError::NotFound);
+            }
+        }
+        Ok(())
+    }
+
+    pub(crate) fn resolve_runtime_variable_values(
+        &self,
+        workspace_code: &str,
+        keys: &BTreeSet<String>,
+    ) -> Result<BTreeMap<String, String>, VariableError> {
+        let workspace = self.active_workspace_detail(workspace_code)?;
+        let resolved = self.resolve_raw_variables(&workspace)?;
+        let mut values = BTreeMap::new();
+        for key in keys {
+            let key = normalized_key(key.clone())?;
+            let variable = resolved
+                .iter()
+                .find(|record| record.variable.key == key)
+                .map(|record| record.variable.clone())
+                .ok_or(VariableError::NotFound)?;
+            let aad = if variable.workspace_code == "PLATFORM" {
+                PlatformVariableIdentity::new(&key).aad()
+            } else {
+                WorkspaceVariableIdentity::new(&variable.workspace_code, &key).aad()
+            };
+            values.insert(
+                key,
+                reveal_stored_value(self.cipher.as_ref(), &variable, aad.as_bytes())?,
+            );
+        }
+        Ok(values)
     }
 
     fn resolve_raw_variables(

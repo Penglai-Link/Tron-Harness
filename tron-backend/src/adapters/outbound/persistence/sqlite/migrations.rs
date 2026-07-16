@@ -15,6 +15,12 @@ pub(super) const ROLES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0004_create_role_management_roles.sql");
 pub(super) const ROLE_PERMISSIONS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260515_0005_create_role_management_permissions.sql");
+pub(super) const RESOURCE_ROLE_PERMISSION_DOMAIN_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260716_0001_add_resource_permission_domain.sql");
+pub(super) const RESOURCE_ROLE_DEFAULTS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260716_0002_seed_resource_role_permissions.sql");
+pub(super) const RESOURCE_MANAGEMENT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260716_0003_create_resource_management.sql");
 pub(super) const WORKSPACES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260516_0006_create_workspace_management_workspaces.sql"
 );

@@ -1,4 +1,7 @@
-use std::sync::{Arc, Mutex, OnceLock};
+use std::{
+    collections::BTreeMap,
+    sync::{Arc, Mutex, OnceLock},
+};
 
 mod automation_runner;
 mod routing;
@@ -22,10 +25,12 @@ use crate::{
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository, SqliteOpenAppRepository,
-                SqlitePromptRepository, SqliteRoleRepository, SqliteShortTermMemoryRepository,
-                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteUserRepository,
+                SqlitePromptRepository, SqliteResourceRepository, SqliteRoleRepository,
+                SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
+                SqliteTaskRepository, SqliteUserRepository,
                 SqliteVariableRepository, SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
+            resource_storage::LocalObjectStorage,
         },
     },
     application::agent::{
@@ -43,6 +48,7 @@ use crate::{
     application::open_app::OpenAppService,
     application::prompt::PromptService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
+    application::resource::{ObjectStorage, ResourceService},
     application::role::RoleService,
     application::short_term_memory::ShortTermMemoryService,
     application::skill::SkillRegistryService,
@@ -75,6 +81,7 @@ static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
 static GLOBAL_APP_SERVICE: OnceLock<AppService> = OnceLock::new();
 static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
 static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
+static GLOBAL_RESOURCE_SERVICE: OnceLock<ResourceService> = OnceLock::new();
 static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
@@ -117,6 +124,7 @@ pub struct AppState {
     pub tasks: TaskService,
     pub users: UserService,
     pub variables: VariableService,
+    pub resources: ResourceService,
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
     pub system_config: SystemConfigService,
@@ -226,6 +234,31 @@ impl AppState {
                 .clone()
         } else {
             build_variable_service(&config.database_url, workspaces.clone(), &config)
+        };
+        let resources = if config.database_url == ":memory:" {
+            GLOBAL_RESOURCE_SERVICE
+                .get_or_init(|| {
+                    build_resource_service(
+                        ":memory:",
+                        workspaces.clone(),
+                        roles.clone(),
+                        users.clone(),
+                        variables.clone(),
+                        &config,
+                        event_bus.clone(),
+                    )
+                })
+                .clone()
+        } else {
+            build_resource_service(
+                &config.database_url,
+                workspaces.clone(),
+                roles.clone(),
+                users.clone(),
+                variables.clone(),
+                &config,
+                event_bus.clone(),
+            )
         };
         let mcp = build_mcp_service(
             &config.database_url,
@@ -341,6 +374,7 @@ impl AppState {
             models.clone(),
             skills.clone(),
             variables.clone(),
+            resources.clone(),
             memory.clone(),
             short_term_memory.clone(),
         )
@@ -429,6 +463,7 @@ impl AppState {
             tasks,
             users,
             variables,
+            resources,
             workspaces,
         })
     }
