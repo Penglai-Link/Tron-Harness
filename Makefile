@@ -283,6 +283,7 @@ be-dev:
 	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE)) $(COMMAND_SEPARATOR) $(call RUN_WITH_ENV,$(BE_RUN_ENV),$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)")
 
 .PHONY: dev-api
+dev-api: install
 ifeq ($(HOST_OS),windows)
 dev-api:
 	$(POWERSHELL) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$backend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('be-dev','PORT=$(API_BACKEND_PORT)','GRAPH_STORAGE_PATH=$(API_GRAPH_STORAGE_PATH)') -WorkingDirectory '$(CURDIR)' -PassThru; $$frontend = $$null; try { do { if ($$backend.HasExited) { throw 'Backend exited before the health endpoint became ready.' }; Start-Sleep -Seconds 1; try { $$health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:$(API_BACKEND_PORT)/api/v1/health' -TimeoutSec 2 } catch { $$health = $$null } } while (-not $$health -or $$health.StatusCode -ne 200); Write-Host 'Starting frontend on http://localhost:$(API_FRONTEND_PORT) with /api proxy -> http://127.0.0.1:$(API_BACKEND_PORT)'; $$frontend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('fe-dev-api','PORT=$(API_BACKEND_PORT)','FE_PORT=$(API_FRONTEND_PORT)') -WorkingDirectory '$(CURDIR)' -PassThru; Wait-Process -Id $$frontend.Id } finally { if ($$frontend -and -not $$frontend.HasExited) { Stop-Process -Id $$frontend.Id -Force }; if ($$backend -and -not $$backend.HasExited) { Stop-Process -Id $$backend.Id -Force } }"

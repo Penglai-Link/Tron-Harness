@@ -42,3 +42,5 @@ Pagable response body format:
 ## What's more
 - macOS ships GNU Make 3.81, which does not support `.ONESHELL`; keep recipes from relying on shell state across recipe lines.
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
+
+<!-- `make dev-api` must depend on `install`; otherwise a fresh checkout starts the backend but the frontend exits with `vite: command not found`. -->
