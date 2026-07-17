@@ -1,4 +1,4 @@
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 use rand::{Rng, RngCore};
 use serde_json::{Value, json};
@@ -39,41 +39,11 @@ impl ResourceService {
             query.workspace_code.as_deref(),
             false,
         )?;
-        let exact_detail = query.definition_code.is_some() && !query.include_history;
-        let default_view = !query.include_history && query.lifecycle_status.is_none();
-        let mut records = if default_view {
-            match query.scope_kind {
-                ResourceScopeKind::Platform => self
-                    .repository(|repository| repository.list_definitions())?
-                    .into_iter()
-                    .filter(|definition| {
-                        definition.key.scope_kind == ResourceScopeKind::Platform
-                            && definition.key.scope_code == scope_code
-                            && definition.lifecycle_status == ResourceLifecycleStatus::Active
-                    })
-                    .map(|definition| {
-                        self.definition_record(
-                            &definition,
-                            ResourceSourceKind::Platform,
-                            exact_detail,
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-                ResourceScopeKind::Workspace => self
-                    .effective_definitions(&scope_code)?
-                    .into_values()
-                    .map(|effective| {
-                        self.definition_record(
-                            &effective.definition,
-                            effective.source_kind,
-                            exact_detail,
-                        )
-                    })
-                    .collect::<Vec<_>>(),
-            }
-        } else {
-            self.repository(|repository| repository.list_definitions())?
-                .into_iter()
+        let definitions = self.repository(|repository| repository.list_definitions())?;
+        let exact_version = query.definition_version.is_some();
+        let mut records = if exact_version || query.include_history {
+            definitions
+                .iter()
                 .filter(|definition| {
                     definition.key.scope_kind == query.scope_kind
                         && definition.key.scope_code == scope_code
@@ -86,10 +56,17 @@ impl ResourceService {
                         } else {
                             ResourceSourceKind::Local
                         },
-                        exact_detail,
+                        exact_version,
                     )
                 })
                 .collect::<Vec<_>>()
+        } else {
+            self.logical_definition_records(
+                query.scope_kind,
+                &scope_code,
+                query.definition_code.as_deref(),
+                &definitions,
+            )?
         };
         records.retain(|record| definition_matches(record, &query));
         records.sort_by(|left, right| {
@@ -260,7 +237,7 @@ impl ResourceService {
                 return Err(ResourceError::ValidationFailed);
             }
         }
-        let previous_active_definition_version = self.repository(|repository| {
+        let activation = self.repository(|repository| {
             repository.activate_definition(
                 &key,
                 command.expected_draft_revision,
@@ -268,25 +245,93 @@ impl ResourceService {
                 &current_timestamp(),
             )
         })?;
-        let activation_result = match definition.lifecycle_status {
-            ResourceLifecycleStatus::Draft => ResourceActivationResult::DraftPublished,
-            ResourceLifecycleStatus::Historical => ResourceActivationResult::HistoricalReactivated,
-            ResourceLifecycleStatus::Active => ResourceActivationResult::AlreadyActive,
-        };
-        self.publish_audit(
-            "resource_definition.published",
-            actor_user_code,
-            &command.definition_code,
-            &scope_code,
-            &command.definition_version,
-        );
+        if activation.activation_result != ResourceActivationResult::AlreadyActive {
+            self.publish_audit(
+                "resource_definition.published",
+                actor_user_code,
+                &command.definition_code,
+                &scope_code,
+                &command.definition_version,
+            );
+        }
         Ok(ResourceDefinitionActivationResult {
             definition_code: command.definition_code,
             definition_version: command.definition_version,
             lifecycle_status: ResourceLifecycleStatus::Active,
-            activation_result,
-            previous_active_definition_version,
+            activation_result: activation.activation_result,
+            previous_active_definition_version: activation.previous_active_version,
         })
+    }
+
+    fn logical_definition_records(
+        &self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        definition_code: Option<&str>,
+        definitions: &[ResourceDefinition],
+    ) -> Result<Vec<crate::application::resource::ResourceDefinitionRecord>, ResourceError> {
+        let (effective, drafts) = match scope_kind {
+            ResourceScopeKind::Platform => {
+                let effective = definitions
+                    .iter()
+                    .filter(|definition| {
+                        definition.key.scope_kind == ResourceScopeKind::Platform
+                            && definition.key.scope_code == scope_code
+                            && definition.lifecycle_status == ResourceLifecycleStatus::Active
+                    })
+                    .map(|definition| {
+                        (
+                            definition.key.definition_code.clone(),
+                            super::projection::EffectiveDefinition {
+                                definition: definition.clone(),
+                                source_kind: ResourceSourceKind::Platform,
+                            },
+                        )
+                    })
+                    .collect::<BTreeMap<_, _>>();
+                (effective, BTreeMap::new())
+            }
+            ResourceScopeKind::Workspace => (
+                self.effective_definitions(scope_code)?,
+                scoped_definition_drafts(definitions, scope_kind, scope_code),
+            ),
+        };
+        let mut codes = effective.keys().cloned().collect::<BTreeSet<_>>();
+        codes.extend(drafts.keys().cloned());
+
+        Ok(codes
+            .into_iter()
+            .filter(|code| definition_code.map_or(true, |expected| expected == code))
+            .filter_map(|code| {
+                let draft = drafts.get(&code);
+                effective.get(&code).map_or_else(
+                    || {
+                        draft.map(|draft| {
+                            self.definition_record(
+                                draft,
+                                if scope_kind == ResourceScopeKind::Platform {
+                                    ResourceSourceKind::Platform
+                                } else {
+                                    ResourceSourceKind::Local
+                                },
+                                definition_code.is_some(),
+                            )
+                        })
+                    },
+                    |effective| {
+                        let mut record = self.definition_record(
+                            &effective.definition,
+                            effective.source_kind,
+                            definition_code.is_some() && draft.is_none(),
+                        );
+                        record.local_draft = draft.map(|draft| {
+                            self.definition_draft_record(draft, definition_code.is_some())
+                        });
+                        Some(record)
+                    },
+                )
+            })
+            .collect())
     }
 
     fn create_definition_draft(
@@ -517,6 +562,22 @@ fn definition_matches(
     })
 }
 
+fn scoped_definition_drafts(
+    definitions: &[ResourceDefinition],
+    scope_kind: ResourceScopeKind,
+    scope_code: &str,
+) -> BTreeMap<String, ResourceDefinition> {
+    definitions
+        .iter()
+        .filter(|definition| {
+            definition.key.scope_kind == scope_kind
+                && definition.key.scope_code == scope_code
+                && definition.lifecycle_status == ResourceLifecycleStatus::Draft
+        })
+        .map(|definition| (definition.key.definition_code.clone(), definition.clone()))
+        .collect()
+}
+
 fn validate_definition_query(query: &ResourceDefinitionQuery) -> Result<(), ResourceError> {
     if query.definition_version.is_some() && query.definition_code.is_none()
         || query.definition_version.is_some() && query.include_history
@@ -610,7 +671,7 @@ fn default_binary_schema() -> Value {
     json!({ "minCount": 0, "maxCount": 0 })
 }
 
-fn next_definition_version(
+pub(super) fn next_definition_version(
     definitions: &[ResourceDefinition],
     scope_kind: ResourceScopeKind,
     scope_code: &str,

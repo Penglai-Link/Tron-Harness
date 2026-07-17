@@ -2,7 +2,8 @@ use std::collections::BTreeMap;
 
 use crate::{
     application::resource::{
-        ResourceBinarySummary, ResourceDefinitionRecord, ResourceDraftSummary, ResourceRecord,
+        ResourceBinarySummary, ResourceDefinitionDraftRecord, ResourceDefinitionRecord,
+        ResourceDraftSummary, ResourceRecord,
     },
     domain::{
         resource::{
@@ -183,6 +184,32 @@ impl ResourceService {
             binary_storage_profile: include_schema
                 .then(|| definition.binary_storage_profile.clone()),
             published_at: definition.published_at.clone(),
+            local_draft: None,
+        }
+    }
+
+    pub(super) fn definition_draft_record(
+        &self,
+        definition: &ResourceDefinition,
+        include_schema: bool,
+    ) -> ResourceDefinitionDraftRecord {
+        ResourceDefinitionDraftRecord {
+            scope_kind: definition.key.scope_kind,
+            scope_code: definition.key.scope_code.clone(),
+            definition_code: definition.key.definition_code.clone(),
+            definition_version: definition.key.definition_version.clone(),
+            name: definition.name.clone(),
+            description: definition.description.clone(),
+            definition_status: definition.definition_status,
+            allow_inheritance: definition.allow_inheritance,
+            lifecycle_status: definition.lifecycle_status,
+            validation_status: definition.validation_status,
+            draft_revision: definition.draft_revision,
+            attributes_schema: include_schema.then(|| definition.attributes_schema.clone()),
+            binary_schema: include_schema.then(|| definition.binary_schema.clone()),
+            binary_storage_profile: include_schema
+                .then(|| definition.binary_storage_profile.clone()),
+            published_at: definition.published_at.clone(),
         }
     }
 
@@ -211,21 +238,39 @@ impl ResourceService {
             draft_revision: (include_detail
                 && resource.lifecycle_status == ResourceLifecycleStatus::Draft)
                 .then_some(resource.draft_revision),
-            binaries: include_detail.then(|| {
-                mappings
-                    .iter()
-                    .filter(|mapping| mapping.resource_key == resource.key)
-                    .map(|mapping| ResourceBinarySummary {
-                        binary_name: mapping.binary_name.clone(),
-                        byte_size: mapping.byte_size,
-                    })
-                    .collect()
-            }),
+            binaries: include_detail.then(|| binary_summaries(resource, mappings)),
             local_draft: local_draft.map(|draft| ResourceDraftSummary {
                 resource_version: draft.key.resource_version.clone(),
                 draft_revision: draft.draft_revision,
                 validation_status: draft.validation_status,
+                name: include_detail.then(|| draft.name.clone()),
+                description: include_detail.then(|| draft.description.clone()),
+                definition_scope_kind: include_detail.then_some(draft.definition_key.scope_kind),
+                definition_scope_code: include_detail
+                    .then(|| draft.definition_key.scope_code.clone()),
+                definition_code: include_detail
+                    .then(|| draft.definition_key.definition_code.clone()),
+                definition_version: include_detail
+                    .then(|| draft.definition_key.definition_version.clone()),
+                attributes: include_detail.then(|| draft.attributes.clone()),
+                allow_inheritance: include_detail.then_some(draft.allow_inheritance),
+                lifecycle_status: include_detail.then_some(draft.lifecycle_status),
+                binaries: include_detail.then(|| binary_summaries(draft, mappings)),
             }),
         }
     }
+}
+
+fn binary_summaries(
+    resource: &Resource,
+    mappings: &[ResourceBinaryMapping],
+) -> Vec<ResourceBinarySummary> {
+    mappings
+        .iter()
+        .filter(|mapping| mapping.resource_key == resource.key)
+        .map(|mapping| ResourceBinarySummary {
+            binary_name: mapping.binary_name.clone(),
+            byte_size: mapping.byte_size,
+        })
+        .collect()
 }

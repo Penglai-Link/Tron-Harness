@@ -1,4 +1,5 @@
 import {
+  Archive,
   Bot,
   Boxes,
   FileClock,
@@ -50,6 +51,18 @@ export const settingsNavigation = [
         href: "/settings/prompts",
         icon: MessageSquareText,
         translationKey: "shell:settings.items.prompts",
+      },
+      {
+        label: "Resources",
+        href: "/settings/resources",
+        icon: Archive,
+        translationKey: "shell:settings.items.resources",
+      },
+      {
+        label: "Resource Definitions",
+        href: "/settings/resource-definitions",
+        icon: Boxes,
+        translationKey: "shell:settings.items.resourceDefinitions",
       },
       {
         label: "Agents",

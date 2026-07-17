@@ -4,11 +4,11 @@ use rusqlite::{Connection, Error as SqliteError, OptionalExtension, Transaction,
 use serde_json::Value;
 
 use crate::{
-    application::resource::ResourceRepository,
+    application::resource::{ResourceActivationOutcome, ResourceRepository},
     domain::resource::{
-        Resource, ResourceBinaryMapping, ResourceDefinition, ResourceDefinitionKey,
-        ResourceDefinitionStatus, ResourceError, ResourceKey, ResourceLifecycleStatus,
-        ResourceScopeKind, ResourceValidationStatus,
+        Resource, ResourceActivationResult, ResourceBinaryMapping, ResourceDefinition,
+        ResourceDefinitionKey, ResourceDefinitionStatus, ResourceError, ResourceKey,
+        ResourceLifecycleStatus, ResourceScopeKind, ResourceValidationStatus,
     },
     shared::time::{
         option_timestamp_from_millis, option_timestamp_to_millis, timestamp_from_millis,
@@ -139,6 +139,79 @@ impl ResourceRepository for SqliteResourceRepository {
         Ok(())
     }
 
+    fn upgrade_builtin_definition(
+        &mut self,
+        expected_legacy: &ResourceDefinition,
+        replacement: &ResourceDefinition,
+    ) -> Result<bool, ResourceError> {
+        if expected_legacy.key.scope_kind != replacement.key.scope_kind
+            || expected_legacy.key.scope_code != replacement.key.scope_code
+            || expected_legacy.key.definition_code != replacement.key.definition_code
+            || expected_legacy.lifecycle_status != ResourceLifecycleStatus::Active
+            || replacement.lifecycle_status != ResourceLifecycleStatus::Active
+        {
+            return Err(ResourceError::InvalidInput);
+        }
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        let current = tx
+            .query_row(
+                "SELECT scope_kind, scope_code, definition_code, definition_version, name, description,
+                        definition_status, allow_inheritance, attributes_schema, binary_schema,
+                        binary_storage_profile, draft_revision, validation_status, lifecycle_status,
+                        created_at, updated_at, published_at
+                 FROM resource_definitions
+                 WHERE scope_kind = ?1 AND scope_code = ?2 AND definition_code = ?3 AND definition_version = ?4",
+                params![
+                    scope_kind_to_storage(expected_legacy.key.scope_kind),
+                    expected_legacy.key.scope_code,
+                    expected_legacy.key.definition_code,
+                    expected_legacy.key.definition_version,
+                ],
+                definition_from_row,
+            )
+            .optional()
+            .map_err(storage_error)?;
+        if current.as_ref() != Some(expected_legacy)
+            || definition_draft_exists(&tx, &expected_legacy.key)?
+        {
+            tx.commit().map_err(storage_error)?;
+            return Ok(false);
+        }
+        demote_active_definition(&tx, &expected_legacy.key, &replacement.updated_at)?;
+        tx.execute(
+            "INSERT INTO resource_definitions (
+                scope_kind, scope_code, definition_code, definition_version, name, description,
+                definition_status, allow_inheritance, attributes_schema, binary_schema,
+                binary_storage_profile, draft_revision, validation_status, lifecycle_status,
+                created_at, updated_at, published_at
+            ) VALUES (
+                ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
+            )",
+            params![
+                scope_kind_to_storage(replacement.key.scope_kind),
+                replacement.key.scope_code,
+                replacement.key.definition_code,
+                replacement.key.definition_version,
+                replacement.name,
+                replacement.description,
+                definition_status_to_storage(replacement.definition_status),
+                bool_to_int(replacement.allow_inheritance),
+                value_to_storage(&replacement.attributes_schema)?,
+                value_to_storage(&replacement.binary_schema)?,
+                replacement.binary_storage_profile,
+                replacement.draft_revision,
+                validation_status_to_storage(replacement.validation_status),
+                lifecycle_status_to_storage(replacement.lifecycle_status),
+                timestamp_to_millis(&replacement.created_at),
+                timestamp_to_millis(&replacement.updated_at),
+                option_timestamp_to_millis(replacement.published_at.as_deref()),
+            ],
+        )
+        .map_err(storage_error)?;
+        tx.commit().map_err(storage_error)?;
+        Ok(true)
+    }
+
     fn update_definition_draft(
         &mut self,
         definition: &ResourceDefinition,
@@ -185,23 +258,17 @@ impl ResourceRepository for SqliteResourceRepository {
         expected_draft_revision: Option<i64>,
         expected_active_version: Option<&str>,
         published_at: &str,
-    ) -> Result<Option<String>, ResourceError> {
+    ) -> Result<ResourceActivationOutcome, ResourceError> {
         let tx = self.connection.transaction().map_err(storage_error)?;
         let (lifecycle, draft_revision) = definition_lifecycle(&tx, key)?;
         let prior_active = active_definition_version(&tx, key)?;
         match lifecycle {
             ResourceLifecycleStatus::Active => {
-                tx.execute(
-                    "UPDATE resource_definitions SET published_at = ?5, updated_at = ?5
-                     WHERE scope_kind = ?1 AND scope_code = ?2 AND definition_code = ?3 AND definition_version = ?4",
-                    params![
-                        scope_kind_to_storage(key.scope_kind), key.scope_code, key.definition_code,
-                        key.definition_version, timestamp_to_millis(published_at)
-                    ],
-                )
-                .map_err(storage_error)?;
                 tx.commit().map_err(storage_error)?;
-                Ok(None)
+                Ok(ResourceActivationOutcome {
+                    activation_result: ResourceActivationResult::AlreadyActive,
+                    previous_active_version: None,
+                })
             }
             ResourceLifecycleStatus::Draft => {
                 if expected_draft_revision != Some(draft_revision)
@@ -226,7 +293,10 @@ impl ResourceRepository for SqliteResourceRepository {
                     return Err(ResourceError::Conflict);
                 }
                 tx.commit().map_err(storage_error)?;
-                Ok(prior_active)
+                Ok(ResourceActivationOutcome {
+                    activation_result: ResourceActivationResult::DraftPublished,
+                    previous_active_version: prior_active,
+                })
             }
             ResourceLifecycleStatus::Historical => {
                 if expected_draft_revision.is_some() || expected_active_version.is_none() {
@@ -255,7 +325,10 @@ impl ResourceRepository for SqliteResourceRepository {
                     return Err(ResourceError::Conflict);
                 }
                 tx.commit().map_err(storage_error)?;
-                Ok(prior_active)
+                Ok(ResourceActivationOutcome {
+                    activation_result: ResourceActivationResult::HistoricalReactivated,
+                    previous_active_version: prior_active,
+                })
             }
         }
     }
@@ -343,23 +416,17 @@ impl ResourceRepository for SqliteResourceRepository {
         expected_draft_revision: Option<i64>,
         expected_active_version: Option<&str>,
         published_at: &str,
-    ) -> Result<Option<String>, ResourceError> {
+    ) -> Result<ResourceActivationOutcome, ResourceError> {
         let tx = self.connection.transaction().map_err(storage_error)?;
         let (lifecycle, draft_revision) = resource_lifecycle(&tx, key)?;
         let prior_active = active_resource_version(&tx, key)?;
         match lifecycle {
             ResourceLifecycleStatus::Active => {
-                tx.execute(
-                    "UPDATE resources SET published_at = ?5, updated_at = ?5
-                     WHERE scope_kind = ?1 AND scope_code = ?2 AND resource_code = ?3 AND resource_version = ?4",
-                    params![
-                        scope_kind_to_storage(key.scope_kind), key.scope_code, key.resource_code,
-                        key.resource_version, timestamp_to_millis(published_at)
-                    ],
-                )
-                .map_err(storage_error)?;
                 tx.commit().map_err(storage_error)?;
-                Ok(None)
+                Ok(ResourceActivationOutcome {
+                    activation_result: ResourceActivationResult::AlreadyActive,
+                    previous_active_version: None,
+                })
             }
             ResourceLifecycleStatus::Draft => {
                 if expected_draft_revision != Some(draft_revision)
@@ -384,7 +451,10 @@ impl ResourceRepository for SqliteResourceRepository {
                     return Err(ResourceError::Conflict);
                 }
                 tx.commit().map_err(storage_error)?;
-                Ok(prior_active)
+                Ok(ResourceActivationOutcome {
+                    activation_result: ResourceActivationResult::DraftPublished,
+                    previous_active_version: prior_active,
+                })
             }
             ResourceLifecycleStatus::Historical => {
                 if expected_draft_revision.is_some() || expected_active_version.is_none() {
@@ -413,7 +483,10 @@ impl ResourceRepository for SqliteResourceRepository {
                     return Err(ResourceError::Conflict);
                 }
                 tx.commit().map_err(storage_error)?;
-                Ok(prior_active)
+                Ok(ResourceActivationOutcome {
+                    activation_result: ResourceActivationResult::HistoricalReactivated,
+                    previous_active_version: prior_active,
+                })
             }
         }
     }

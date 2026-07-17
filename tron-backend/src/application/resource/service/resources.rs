@@ -65,7 +65,14 @@ impl ResourceService {
                 .collect::<Vec<_>>()
         } else {
             let drafts = local_drafts(&all_resources, &workspace_code);
-            self.effective_resources(&workspace_code)?
+            let effective = self.effective_resources(&workspace_code)?;
+            let effective_codes = include_detail.then(|| {
+                effective
+                    .keys()
+                    .cloned()
+                    .collect::<std::collections::BTreeSet<_>>()
+            });
+            let mut records = effective
                 .into_values()
                 .map(|effective| {
                     self.resource_record(
@@ -76,7 +83,29 @@ impl ResourceService {
                         include_detail,
                     )
                 })
-                .collect::<Vec<_>>()
+                .collect::<Vec<_>>();
+            if include_detail {
+                records.extend(
+                    drafts
+                        .into_iter()
+                        .filter(|(resource_code, _)| {
+                            !effective_codes
+                                .as_ref()
+                                .expect("exact resource query has effective codes")
+                                .contains(resource_code)
+                        })
+                        .map(|(_, draft)| {
+                            self.resource_record(
+                                draft,
+                                ResourceSourceKind::Local,
+                                &mappings,
+                                None,
+                                true,
+                            )
+                        }),
+                );
+            }
+            records
         };
         records.retain(|record| resource_matches(record, &query));
         records.sort_by(|left, right| left.resource_code.cmp(&right.resource_code));
@@ -287,7 +316,7 @@ impl ResourceService {
                 .map_err(|_| ResourceError::ValidationFailed)?;
             drop(runtime_values);
         }
-        let previous_active_resource_version = self.repository(|repository| {
+        let activation = self.repository(|repository| {
             repository.activate_resource(
                 &key,
                 command.expected_draft_revision,
@@ -295,18 +324,15 @@ impl ResourceService {
                 &current_timestamp(),
             )
         })?;
-        let activation_result = match resource.lifecycle_status {
-            ResourceLifecycleStatus::Draft => ResourceActivationResult::DraftPublished,
-            ResourceLifecycleStatus::Historical => ResourceActivationResult::HistoricalReactivated,
-            ResourceLifecycleStatus::Active => ResourceActivationResult::AlreadyActive,
-        };
-        self.publish_resource_audit(
-            actor_user_code,
-            &resource,
-            &workspace_code,
-            activation_result,
-            previous_active_resource_version.as_deref(),
-        );
+        if activation.activation_result != ResourceActivationResult::AlreadyActive {
+            self.publish_resource_audit(
+                actor_user_code,
+                &resource,
+                &workspace_code,
+                activation.activation_result,
+                activation.previous_active_version.as_deref(),
+            );
+        }
         Ok(ResourceActivationOutput {
             resource_code: resource.key.resource_code,
             resource_version: resource.key.resource_version,
@@ -315,8 +341,8 @@ impl ResourceService {
             definition_code: resource.definition_key.definition_code,
             definition_version: resource.definition_key.definition_version,
             lifecycle_status: ResourceLifecycleStatus::Active,
-            activation_result,
-            previous_active_resource_version,
+            activation_result: activation.activation_result,
+            previous_active_resource_version: activation.previous_active_version,
         })
     }
 

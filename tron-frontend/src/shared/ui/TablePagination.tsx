@@ -24,6 +24,7 @@ interface TablePaginationProps {
   pageSize: number;
   pageSizeOptions?: readonly number[];
   startItem: number;
+  showRange?: boolean;
   totalItems: number;
 }
 
@@ -36,6 +37,7 @@ export function TablePagination({
   pageCount,
   pageSize,
   pageSizeOptions = defaultPageSizeOptions,
+  showRange = true,
   startItem,
   totalItems,
 }: TablePaginationProps) {
@@ -49,18 +51,20 @@ export function TablePagination({
   const pageCountLabel = formatNumber(pageCount);
 
   return (
-    <div className="flex w-full flex-wrap items-center justify-between gap-3">
-      <span>
-        {totalItems
-          ? t("pagination.range", {
-            defaultValue: "{{start}}-{{end}} of {{total}} {{itemLabel}} visible",
-            end: endLabel,
-            itemLabel,
-            start: startLabel,
-            total: totalLabel,
-          })
-          : formatNumber(0)}
-      </span>
+    <div className={`flex w-full flex-wrap items-center gap-3 ${showRange ? "justify-between" : "justify-end"}`}>
+      {showRange ? (
+        <span>
+          {totalItems
+            ? t("pagination.range", {
+              defaultValue: "{{start}}-{{end}} of {{total}} {{itemLabel}} visible",
+              end: endLabel,
+              itemLabel,
+              start: startLabel,
+              total: totalLabel,
+            })
+            : formatNumber(0)}
+        </span>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex items-center gap-2">
           <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.rows")}</span>

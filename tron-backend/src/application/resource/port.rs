@@ -1,13 +1,24 @@
 use crate::domain::resource::{
-    Resource, ResourceBinaryMapping, ResourceDefinition, ResourceDefinitionKey, ResourceError,
-    ResourceKey,
+    Resource, ResourceActivationResult, ResourceBinaryMapping, ResourceDefinition,
+    ResourceDefinitionKey, ResourceError, ResourceKey,
 };
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ResourceActivationOutcome {
+    pub activation_result: ResourceActivationResult,
+    pub previous_active_version: Option<String>,
+}
 
 pub trait ResourceRepository: Send {
     fn list_definitions(&mut self) -> Result<Vec<ResourceDefinition>, ResourceError>;
     fn list_resources(&mut self) -> Result<Vec<Resource>, ResourceError>;
     fn list_binary_mappings(&mut self) -> Result<Vec<ResourceBinaryMapping>, ResourceError>;
     fn insert_definition(&mut self, definition: &ResourceDefinition) -> Result<(), ResourceError>;
+    fn upgrade_builtin_definition(
+        &mut self,
+        expected_legacy: &ResourceDefinition,
+        replacement: &ResourceDefinition,
+    ) -> Result<bool, ResourceError>;
     fn update_definition_draft(
         &mut self,
         definition: &ResourceDefinition,
@@ -19,7 +30,7 @@ pub trait ResourceRepository: Send {
         expected_draft_revision: Option<i64>,
         expected_active_version: Option<&str>,
         published_at: &str,
-    ) -> Result<Option<String>, ResourceError>;
+    ) -> Result<ResourceActivationOutcome, ResourceError>;
     fn discard_definition_draft(
         &mut self,
         key: &ResourceDefinitionKey,
@@ -42,7 +53,7 @@ pub trait ResourceRepository: Send {
         expected_draft_revision: Option<i64>,
         expected_active_version: Option<&str>,
         published_at: &str,
-    ) -> Result<Option<String>, ResourceError>;
+    ) -> Result<ResourceActivationOutcome, ResourceError>;
     fn discard_resource_draft(
         &mut self,
         key: &ResourceKey,

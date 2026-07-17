@@ -6,6 +6,7 @@ import { cn } from "@/shared/lib/utils";
 export interface DataTableColumn<T> {
   align?: "left" | "right";
   cellClassName?: string;
+  colClassName?: string;
   header: string;
   headerClassName?: string;
   id: string;
@@ -80,7 +81,11 @@ export function DataTable<T>({
           {columns.some((column) => column.width) ? (
             <colgroup>
               {columns.map((column) => (
-                <col key={column.id} style={column.width ? { width: column.width } : undefined} />
+                <col
+                  className={column.colClassName}
+                  key={column.id}
+                  style={column.width ? { width: column.width } : undefined}
+                />
               ))}
             </colgroup>
           ) : null}

@@ -1,6 +1,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -82,6 +83,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => (
     Object.fromEntries(visibleItems.map((group) => [group.groupKey, false]))
   ));
+  const mobileActiveItemRef = useRef<HTMLAnchorElement | null>(null);
   const activeGroupKey = useMemo(
     () => visibleItems.find((group) => group.items.some((item) => item.label === activeItem))?.groupKey ?? null,
     [activeItem, visibleItems],
@@ -99,6 +101,17 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
       current[activeGroupKey] ? { ...current, [activeGroupKey]: false } : current
     ));
   }, [activeGroupKey]);
+
+  useEffect(() => {
+    const frame = window.requestAnimationFrame(() => {
+      mobileActiveItemRef.current?.scrollIntoView({
+        behavior: "auto",
+        block: "nearest",
+        inline: "center",
+      });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeItem]);
 
   function toggleGroup(groupKey: string) {
     if (groupKey === activeGroupKey) {
@@ -138,6 +151,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
               const selected = item.label === activeItem;
               return (
                 <Link
+                  ref={selected ? mobileActiveItemRef : undefined}
                   key={item.href}
                   className={cn(
                     "flex shrink-0 items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors",

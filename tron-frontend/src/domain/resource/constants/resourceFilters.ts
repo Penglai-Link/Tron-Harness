@@ -1,3 +1,13 @@
-export const resourceStatusFilters = ["Active", "Inherited", "Deprecated"] as const;
+import type {
+  ResourceContextFilter,
+  ResourceLifecycleFilter,
+  ResourceValidationFilter,
+} from "@/domain/resource/model";
 
-export const resourceTypeFilters = ["All", "PostgreSQL 14", "AWS S3 Bucket", "JSON Config File", "Media Library", "Redis 5.0"] as const;
+export const resourceLifecycleFilters: ResourceLifecycleFilter[] = ["ACTIVE", "DRAFT", "HISTORICAL", "ALL"];
+
+export const resourceSourceFilters: ResourceContextFilter[] = ["ALL", "PLATFORM", "LOCAL", "INHERITED", "OVERRIDE"];
+
+export const resourceScopeFilters: ResourceContextFilter[] = ["ALL", "PLATFORM", "WORKSPACE"];
+
+export const resourceValidationFilters: ResourceValidationFilter[] = ["ALL", "VALID", "INVALID"];

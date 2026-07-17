@@ -172,8 +172,42 @@ pub(super) fn declared_variable_references(
     schema: &Value,
     attributes: &Value,
 ) -> Result<BTreeSet<String>, ResourceError> {
+    let validator = build_validator(schema)?;
+    let evaluation = serde_json::to_value(validator.evaluate(attributes).list())
+        .map_err(|_| ResourceError::InvalidSchema)?;
+    let details = evaluation
+        .get("details")
+        .and_then(Value::as_array)
+        .ok_or(ResourceError::InvalidSchema)?;
     let mut references = BTreeSet::new();
-    collect_variable_references(schema, attributes, schema, 0, &mut references)?;
+    let mut visited = BTreeSet::new();
+    for detail in details {
+        let Some(schema_location) = detail.get("schemaLocation").and_then(Value::as_str) else {
+            continue;
+        };
+        if !evaluation_location_is_variable_reference(schema, schema_location) {
+            continue;
+        }
+        let instance_location = detail
+            .get("instanceLocation")
+            .and_then(Value::as_str)
+            .ok_or(ResourceError::InvalidSchema)?;
+        if !visited.insert((schema_location.to_string(), instance_location.to_string())) {
+            continue;
+        }
+        if detail.get("valid").and_then(Value::as_bool) != Some(true) {
+            return Err(ResourceError::InvalidVariableReference);
+        }
+        let value = if instance_location.is_empty() {
+            Some(attributes)
+        } else {
+            attributes.pointer(instance_location)
+        }
+        .and_then(Value::as_str)
+        .ok_or(ResourceError::InvalidVariableReference)?;
+        validate_variable_key(value).map_err(|_| ResourceError::InvalidVariableReference)?;
+        references.insert(value.trim().to_string());
+    }
     Ok(references)
 }
 
@@ -354,99 +388,18 @@ fn declares_string(schema: &Map<String, Value>) -> bool {
     }
 }
 
-fn collect_variable_references(
-    schema: &Value,
-    instance: &Value,
-    root_schema: &Value,
-    depth: usize,
-    references: &mut BTreeSet<String>,
-) -> Result<(), ResourceError> {
-    if depth > 128 {
-        return Err(ResourceError::InvalidSchema);
-    }
-    let Some(object) = schema.as_object() else {
-        return Ok(());
-    };
-    if let Some(reference) = object.get("$ref").and_then(Value::as_str) {
-        let target = local_reference(root_schema, reference).ok_or(ResourceError::InvalidSchema)?;
-        return collect_variable_references(target, instance, root_schema, depth + 1, references);
-    }
-    if object
-        .get("format")
-        .and_then(Value::as_str)
-        .is_some_and(|format| format == "tron-variable-ref")
-    {
-        let value = instance
-            .as_str()
-            .ok_or(ResourceError::InvalidVariableReference)?;
-        validate_variable_key(value).map_err(|_| ResourceError::InvalidVariableReference)?;
-        references.insert(value.trim().to_string());
-    }
-    if let (Some(properties), Some(values)) = (
-        object.get("properties").and_then(Value::as_object),
-        instance.as_object(),
-    ) {
-        for (key, property_schema) in properties {
-            if let Some(value) = values.get(key) {
-                collect_variable_references(
-                    property_schema,
-                    value,
-                    root_schema,
-                    depth + 1,
-                    references,
-                )?;
-            }
-        }
-    }
-    if let Some(values) = instance.as_array() {
-        if let Some(items) = object.get("items") {
-            match items {
-                Value::Array(tuple) => {
-                    for (index, value) in values.iter().enumerate() {
-                        if let Some(item_schema) = tuple.get(index) {
-                            collect_variable_references(
-                                item_schema,
-                                value,
-                                root_schema,
-                                depth + 1,
-                                references,
-                            )?;
-                        }
-                    }
-                }
-                _ => {
-                    for value in values {
-                        collect_variable_references(
-                            items,
-                            value,
-                            root_schema,
-                            depth + 1,
-                            references,
-                        )?;
-                    }
-                }
-            }
-        }
-    }
-    for keyword in ["allOf", "anyOf", "oneOf"] {
-        if let Some(items) = object.get(keyword).and_then(Value::as_array) {
-            for item in items {
-                collect_variable_references(item, instance, root_schema, depth + 1, references)?;
-            }
-        }
-    }
-    for keyword in ["if", "then", "else"] {
-        if let Some(item) = object.get(keyword) {
-            collect_variable_references(item, instance, root_schema, depth + 1, references)?;
-        }
-    }
-    Ok(())
-}
-
-fn local_reference<'a>(root: &'a Value, reference: &str) -> Option<&'a Value> {
-    if reference == "#" {
-        Some(root)
+fn evaluation_location_is_variable_reference(schema: &Value, location: &str) -> bool {
+    let pointer = location
+        .rsplit_once('#')
+        .map_or(location, |(_, fragment)| fragment);
+    let Some(node) = (if pointer.is_empty() {
+        Some(schema)
+    } else if pointer.starts_with('/') {
+        schema.pointer(pointer)
     } else {
-        root.pointer(reference.strip_prefix('#')?)
-    }
+        None
+    }) else {
+        return false;
+    };
+    node.as_str() == Some("tron-variable-ref")
 }

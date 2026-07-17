@@ -30,3 +30,4 @@ export * from "./ui/SearchField";
 export * from "./ui/TablePagination";
 export * from "./ui/Tabs";
 export * from "./ui/Toast";
+export * from "./ui/json-schema-draft7";

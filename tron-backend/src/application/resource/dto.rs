@@ -146,6 +146,27 @@ pub struct ResourceDefinitionRecord {
     pub binary_schema: Option<Value>,
     pub binary_storage_profile: Option<String>,
     pub published_at: Option<String>,
+    pub local_draft: Option<ResourceDefinitionDraftRecord>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ResourceDefinitionDraftRecord {
+    pub scope_kind: ResourceScopeKind,
+    pub scope_code: String,
+    pub definition_code: String,
+    pub definition_version: String,
+    pub name: String,
+    pub description: String,
+    pub definition_status: ResourceDefinitionStatus,
+    pub allow_inheritance: bool,
+    pub lifecycle_status: ResourceLifecycleStatus,
+    pub validation_status: ResourceValidationStatus,
+    pub draft_revision: i64,
+    pub attributes_schema: Option<Value>,
+    pub binary_schema: Option<Value>,
+    pub binary_storage_profile: Option<String>,
+    pub published_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
@@ -210,12 +231,22 @@ pub struct ResourceRecord {
     pub local_draft: Option<ResourceDraftSummary>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
+#[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceDraftSummary {
     pub resource_version: String,
     pub draft_revision: i64,
     pub validation_status: ResourceValidationStatus,
+    pub name: Option<String>,
+    pub description: Option<String>,
+    pub definition_scope_kind: Option<ResourceScopeKind>,
+    pub definition_scope_code: Option<String>,
+    pub definition_code: Option<String>,
+    pub definition_version: Option<String>,
+    pub attributes: Option<Value>,
+    pub allow_inheritance: Option<bool>,
+    pub lifecycle_status: Option<ResourceLifecycleStatus>,
+    pub binaries: Option<Vec<ResourceBinarySummary>>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
