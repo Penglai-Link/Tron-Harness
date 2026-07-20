@@ -272,7 +272,7 @@ function SchemaPropertyRow({
         <div className="flex min-w-0 flex-1 basis-[calc(100%-26px)] items-center gap-2 sm:basis-auto">
           {editingName && !readOnly ? (
             <DenseTextInput
-              aria-label={tr("fields.code", "Property code")}
+              aria-label={tr("fields.code", "Field code")}
               autoFocus
               className="w-36 font-mono"
               defaultValue={name}
@@ -382,7 +382,7 @@ function ObjectPropertiesEditor({ depth, formatOptions, onChange, readOnly, root
     const collection = pattern ? patternProperties : properties;
     if (!nextName || nextName === previousName) return;
     if (!pattern && !/^[A-Za-z_][A-Za-z0-9_]*$/.test(nextName)) {
-      setPropertyError(tr("errors.propertyCode", "Property codes must start with a letter or underscore and contain only letters, numbers, or underscores."));
+      setPropertyError(tr("errors.propertyCode", "Field codes must start with a letter or underscore and contain only letters, numbers, or underscores."));
       return;
     }
     if (pattern) {
@@ -392,7 +392,7 @@ function ObjectPropertiesEditor({ depth, formatOptions, onChange, readOnly, root
       }
     }
     if (collection[nextName]) {
-      setPropertyError(tr("errors.duplicateCode", "Property code already exists."));
+      setPropertyError(tr("errors.duplicateCode", "Field code already exists."));
       return;
     }
     const renamed = renameProperty(collection, previousName, nextName);

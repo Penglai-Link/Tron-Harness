@@ -14,6 +14,7 @@ function definitionRecord(index: number): ResourceDefinitionVersionApiRecord {
     allowInheritance: true,
     attributesSchema: null,
     binarySchema: null,
+    effectiveBinaryPolicy: null,
     binaryStorageProfile: null,
     builtIn: false,
     createdAt: index,

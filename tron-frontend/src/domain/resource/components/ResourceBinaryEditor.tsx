@@ -100,7 +100,7 @@ export function ResourceBinaryEditor({
     <section aria-labelledby="resource-binaries-heading">
       <div className="mb-3 flex min-w-0 items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2">
-          <h2 className="text-sm font-semibold" id="resource-binaries-heading">{binaryT("title", "Binary data")}</h2>
+          <h2 className="text-sm font-semibold" id="resource-binaries-heading">{binaryT("title", "Files")}</h2>
           <span className="rounded-full bg-[var(--color-surface-container)] px-2 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
             {binaries.length} / {schema.maxCount}
           </span>
@@ -123,11 +123,11 @@ export function ResourceBinaryEditor({
           />
           <div className="flex min-w-0 gap-2">
             <TextInput
-              aria-label={binaryT("name", "Binary name")}
+              aria-label={binaryT("name", "Stored file name")}
               className="h-9 min-w-0 flex-1 font-mono text-[12px]"
               disabled={Boolean(pendingAction)}
               maxLength={schema.maxNameLength}
-              placeholder={binaryT("namePlaceholder", "Binary name")}
+              placeholder={binaryT("namePlaceholder", "Stored file name")}
               value={binaryName}
               onChange={(event) => setBinaryName(event.target.value)}
             />
@@ -136,6 +136,9 @@ export function ResourceBinaryEditor({
               {staged ? binaryT("add", "Add") : binaryT("upload", "Upload")}
             </Button>
           </div>
+          <p className="text-[12px] text-[var(--color-on-surface-variant)]">
+            {binaryT("nameHint", "Uses the selected file name by default. Change it if needed.")}
+          </p>
         </div>
       ) : null}
 
@@ -195,7 +198,7 @@ export function ResourceBinaryEditor({
         })}
         {!binaries.length ? (
           <p className="px-3 py-4 text-center text-[12px] text-[var(--color-on-surface-variant)]">
-            {binaryT("empty", "No binary data")}
+            {binaryT("empty", "No files added yet")}
           </p>
         ) : null}
       </div>

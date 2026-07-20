@@ -556,6 +556,15 @@ pub struct ResourceBinaryResult {
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize)]
+pub struct ResourceDefinitionEffectiveBinaryPolicy {
+    pub min_count: usize,
+    pub max_count: usize,
+    pub max_size_bytes: u64,
+    pub max_name_length: usize,
+    pub name_pattern: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize)]
 pub struct ResourceDefinitionVersionView {
     pub scope_kind: ResourceScopeKind,
     pub scope_code: String,
@@ -572,6 +581,7 @@ pub struct ResourceDefinitionVersionView {
     pub draft_revision: Option<i64>,
     pub attributes_schema: Option<Value>,
     pub binary_schema: Option<Value>,
+    pub effective_binary_policy: Option<ResourceDefinitionEffectiveBinaryPolicy>,
     pub binary_storage_profile: Option<String>,
     pub created_at: String,
     pub updated_at: String,

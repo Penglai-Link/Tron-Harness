@@ -111,7 +111,7 @@ const workspaceDefinitionVersions: ResourceDefinitionVersionRecord[] = [
   {
     definitionCode: "FILE",
     definitionVersion: "v1-F8s",
-    description: "General files with structured metadata and binary mappings.",
+    description: "General files with resource information.",
     draftRevision: null,
     enabled: true,
     lifecycleStatus: "ACTIVE",
@@ -401,12 +401,14 @@ const schemaByDefinitionCode: Record<string, ResourceDefinitionAttributesSchema>
     additionalProperties: false,
     properties: {
       fileName: { minLength: 1, title: "File name", type: "string" },
-      fileExtension: { default: "pdf", title: "File extension", type: "string" },
+      sizeBytes: { minimum: 0, title: "File size (bytes)", type: "integer" },
+      pageCount: { minimum: 1, title: "Page count", type: "integer" },
       title: { title: "Document title", type: "string" },
-      description: { title: "Description", type: "string" },
-      tags: { items: { type: "string" }, title: "Tags", type: "array" },
+      author: { title: "Author", type: "string" },
+      pdfVersion: { pattern: "^[0-9]+\\.[0-9]+$", title: "PDF version", type: "string" },
+      encrypted: { title: "Encrypted", type: "boolean" },
     },
-    required: ["fileName", "fileExtension"],
+    required: ["fileName", "sizeBytes", "pageCount"],
     title: "PDF document metadata",
     type: "object",
   },
@@ -416,11 +418,39 @@ const schemaByDefinitionCode: Record<string, ResourceDefinitionAttributesSchema>
     properties: {
       fileName: { minLength: 1, title: "File name", type: "string" },
       fileExtension: { title: "File extension", type: "string" },
-      description: { title: "Description", type: "string" },
-      tags: { items: { type: "string" }, title: "Tags", type: "array" },
+      sizeBytes: { minimum: 0, title: "File size (bytes)", type: "integer" },
     },
-    required: ["fileName"],
+    required: ["fileName", "sizeBytes"],
     title: "File metadata",
+    type: "object",
+  },
+  IMAGE: {
+    $schema: draft7,
+    additionalProperties: false,
+    properties: {
+      images: {
+        items: {
+          additionalProperties: false,
+          properties: {
+            binaryName: { maxLength: 128, minLength: 1, title: "Stored file name", type: "string" },
+            fileName: { minLength: 1, title: "File name", type: "string" },
+            fileExtension: { title: "File extension", type: "string" },
+            imageFormat: { enum: ["JPEG", "PNG", "GIF", "WEBP", "SVG", "BMP", "AVIF"], title: "Image format", type: "string" },
+            sizeBytes: { minimum: 0, title: "File size (bytes)", type: "integer" },
+            width: { minimum: 1, title: "Width", type: "integer" },
+            height: { minimum: 1, title: "Height", type: "integer" },
+          },
+          required: ["binaryName", "fileName", "imageFormat", "sizeBytes"],
+          type: "object",
+        },
+        maxItems: 10,
+        minItems: 1,
+        title: "Images",
+        type: "array",
+      },
+    },
+    required: ["images"],
+    title: "Image metadata",
     type: "object",
   },
 };
@@ -482,16 +512,28 @@ function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
+function effectiveBinaryPolicy(schema: ResourceDefinitionBinarySchema) {
+  return {
+    maxCount: schema.maxCount,
+    maxNameLength: schema.maxNameLength,
+    maxSizeBytes: schema.maxSizeBytes,
+    minCount: schema.minCount,
+    namePattern: schema.namePattern || null,
+  };
+}
+
 function detailForRecord(record: ResourceDefinitionVersionRecord): ResourceDefinitionVersionDetail {
   const updatedAt = Date.parse(record.updatedAt);
   const createdAt = new Date(updatedAt - (record.lifecycleStatus === "DRAFT" ? 2 : 14) * 24 * 60 * 60 * 1000).toISOString();
+  const binarySchema = clone(binarySchemaByDefinitionCode[record.definitionCode] ?? noBinaries);
 
   return {
     ...clone(record),
     allowInheritance: record.scopeKind === "PLATFORM" || record.sourceKind !== "INHERITED",
     attributesSchema: clone(schemaByDefinitionCode[record.definitionCode] ?? emptyAttributesSchema),
-    binarySchema: clone(binarySchemaByDefinitionCode[record.definitionCode] ?? noBinaries),
+    binarySchema,
     createdAt,
+    effectiveBinaryPolicy: effectiveBinaryPolicy(binarySchema),
     publishedAt: record.lifecycleStatus === "DRAFT" ? null : record.updatedAt,
   };
 }
@@ -521,6 +563,7 @@ export function createWorkspaceResourceDefinitionDraft(workspaceCode: string, wo
     attributesSchema: clone(emptyAttributesSchema),
     binarySchema: clone(noBinaries),
     createdAt: now,
+    effectiveBinaryPolicy: effectiveBinaryPolicy(noBinaries),
     definitionCode: "",
     definitionVersion: "v1-A7q",
     description: "",

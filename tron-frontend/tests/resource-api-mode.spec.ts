@@ -1073,7 +1073,7 @@ test("workspace resource editor commits staged binary changes as one ACTIVE vers
 
   await page.goto(`${frontend!.baseUrl}/resources/detail?resourceCode=release-archive&resourceVersion=v2-A1b`);
   await expect(page.getByRole("heading", { exact: true, name: "Release archive" })).toBeVisible({ timeout: 15_000 });
-  await expect(page.getByRole("heading", { name: "Binary data" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Files" })).toBeVisible();
 
   await page.getByRole("button", { exact: true, name: "Edit" }).click();
   await expect(page.getByText("ACTIVE", { exact: true }).first()).toBeVisible();
@@ -1089,7 +1089,7 @@ test("workspace resource editor commits staged binary changes as one ACTIVE vers
     mimeType: "application/octet-stream",
     name: "new.bin",
   });
-  await expect(page.getByLabel("Binary name")).toHaveValue("new.bin");
+  await expect(page.getByLabel("Stored file name")).toHaveValue("new.bin");
   await page.getByRole("button", { exact: true, name: "Add" }).click();
   await expect(page.getByText("new.bin", { exact: true })).toBeVisible();
   expect(multipartRequests).toHaveLength(0);

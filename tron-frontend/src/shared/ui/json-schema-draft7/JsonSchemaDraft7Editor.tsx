@@ -96,7 +96,7 @@ export function JsonSchemaDraft7Editor({
       setJsonError("");
       onChange(parsed);
     } catch (error) {
-      setJsonError(error instanceof Error ? error.message : tr("errors.invalidJson", "Schema JSON is invalid."));
+      setJsonError(error instanceof Error ? error.message : tr("errors.invalidJson", "JSON is invalid."));
     }
   }
 
@@ -180,16 +180,16 @@ export function JsonSchemaDraft7Editor({
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-4 py-3">
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
-            <h2 className="text-base font-semibold">{tr("title", "Structured attributes")}</h2>
+            <h2 className="text-base font-semibold">{tr("title", "Information fields")}</h2>
             <Badge tone="success">Draft 7</Badge>
             {readOnly ? <Badge tone="outline">{tr("readOnly", "READ ONLY")}</Badge> : null}
           </div>
-          <p className="mt-0.5 text-[12px] text-[var(--color-on-surface-variant)]">{tr("subtitle", "Visual fields and JSON edit the same schema document.")}</p>
+          <p className="mt-0.5 text-[12px] text-[var(--color-on-surface-variant)]">{tr("subtitle", "Visual fields and JSON edit the same field settings.")}</p>
         </div>
         <div className="flex items-center gap-2">
           <Button size="sm" variant="outline" onClick={() => { setTestResult(null); setTestOpen(true); }}>
             <FlaskConical aria-hidden="true" size={14} />
-            {tr("actions.test", "Test data")}
+            {tr("actions.test", "Test entry")}
           </Button>
           <Button aria-label={isFullscreen ? tr("actions.exitFullscreen", "Exit fullscreen") : tr("actions.fullscreen", "Open fullscreen")} size="icon-sm" variant="ghost" onClick={() => setIsFullscreen((current) => !current)}>
             {isFullscreen ? <Minimize2 aria-hidden="true" size={15} /> : <Maximize2 aria-hidden="true" size={15} />}
@@ -226,13 +226,13 @@ export function JsonSchemaDraft7Editor({
           <section aria-labelledby="json-schema-test-title" aria-modal="true" className="w-full max-w-2xl overflow-hidden rounded-2xl bg-[var(--color-elevated-surface)] shadow-2xl" role="dialog">
             <header className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
-                <h2 id="json-schema-test-title" className="text-lg font-semibold">{tr("test.title", "Test structured data")}</h2>
-                <p className="mt-0.5 text-[12px] text-[var(--color-on-surface-variant)]">{tr("test.description", "Validate JSON data against the current Draft 7 schema.")}</p>
+              <h2 id="json-schema-test-title" className="text-lg font-semibold">{tr("test.title", "Test entry")}</h2>
+                <p className="mt-0.5 text-[12px] text-[var(--color-on-surface-variant)]">{tr("test.description", "Check an entry against the current field rules.")}</p>
               </div>
               <Button aria-label={tr("test.close", "Close test data dialog")} size="icon-sm" variant="ghost" onClick={() => setTestOpen(false)}><X aria-hidden="true" size={15} /></Button>
             </header>
             <div className="space-y-4 p-5">
-              <Field label={tr("test.data", "JSON data")}>
+              <Field label={tr("test.data", "Entry data (JSON)")}>
                 <TextArea className="min-h-64 font-mono text-[12px] leading-6" spellCheck={false} value={testData} onChange={(event) => { setTestData(event.target.value); setTestResult(null); }} />
               </Field>
               {testResult ? (

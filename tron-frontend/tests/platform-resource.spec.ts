@@ -60,15 +60,15 @@ test("platform lifecycle filters keep only meaningful platform source options", 
   await expect(page.getByLabel("Filter resources by validation status")).toBeVisible();
 });
 
-test("platform resource detail keeps Schema fields left and binary data right", async ({ page }) => {
+test("platform resource detail keeps resource information left and files right", async ({ page }) => {
   await routeResourceUiShellApi(page);
   await seedResourceUiShell(page);
   await page.goto(`${frontend!.baseUrl}/settings/resources/detail?resourceCode=customer-import-templates&resourceVersion=v2-P9x`);
 
   await expect(page.getByRole("heading", { exact: true, name: "Customer Import Templates" })).toBeVisible();
   await expect(page.getByText("Platform resources", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("File name")).toHaveValue("customer-import-template.xlsx");
-  await expect(page.getByText("Binary data", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { exact: true, name: "File name" })).toHaveValue("customer-import-template.xlsx");
+  await expect(page.getByText("Files", { exact: true })).toBeVisible();
   await expect(page.getByText("customer-import-template.xlsx", { exact: true })).toBeVisible();
   await expect(page.getByText(/MIME|content type/i)).toHaveCount(0);
   await expect(page.getByRole("switch", { name: "Allow inheritance" })).toBeDisabled();
@@ -103,8 +103,8 @@ test("a new platform Resource binds an active platform definition", async ({ pag
   await expect(page.getByText("PLATFORM", { exact: true }).first()).toBeVisible();
   await page.getByLabel("Resource type").click();
   await page.getByRole("option", { name: /File · v1-F8s/ }).click();
-  await expect(page.getByLabel("File name")).toBeVisible();
-  await expect(page.getByText("Binary data", { exact: true })).toBeVisible();
+  await expect(page.getByRole("textbox", { exact: true, name: "File name" })).toBeVisible();
+  await expect(page.getByText("Files", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { exact: true, name: "Create" })).toBeDisabled();
 });
 

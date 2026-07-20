@@ -54,6 +54,7 @@ async fn resource_definition_and_resource_lifecycle_use_the_management_contract(
     assert_eq!(file_definition["scopeKind"], "PLATFORM");
     assert!(file_definition["createdAt"].is_i64());
     assert!(file_definition["attributesSchema"].is_null());
+    assert!(file_definition["effectiveBinaryPolicy"].is_null());
 
     let draft_definition = api_json(
         &app,
@@ -194,6 +195,41 @@ async fn resource_definition_and_resource_lifecycle_use_the_management_contract(
     assert!(detail["data"]["draftRevision"].is_null());
     assert!(detail["data"]["attributesSchema"].is_object());
     assert_eq!(detail["data"]["binaryStorageProfile"], "@default");
+    let _ = fs::remove_dir_all(storage_root);
+}
+
+#[tokio::test]
+async fn definition_detail_returns_resolved_binary_policy_without_rewriting_schema() {
+    let (app, storage_root) = resource_app("effective-binary-policy");
+    let token = authenticated_bearer_token(&app).await;
+
+    let detail = api_json(
+        &app,
+        &token,
+        "/api/v1/resource-definitions/get",
+        json!({
+            "scopeKind": "PLATFORM",
+            "workspaceCode": null,
+            "definitionCode": "IMAGE",
+            "definitionVersion": "v1-000"
+        }),
+    )
+    .await;
+
+    assert_eq!(
+        detail["data"]["binarySchema"],
+        json!({ "minCount": 1, "maxCount": 10 })
+    );
+    assert_eq!(
+        detail["data"]["effectiveBinaryPolicy"],
+        json!({
+            "minCount": 1,
+            "maxCount": 10,
+            "maxSizeBytes": 1_073_741_824_u64,
+            "maxNameLength": 255,
+            "namePattern": null
+        })
+    );
     let _ = fs::remove_dir_all(storage_root);
 }
 

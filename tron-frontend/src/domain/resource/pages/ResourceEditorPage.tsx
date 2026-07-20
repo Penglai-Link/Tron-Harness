@@ -70,6 +70,10 @@ import type {
   ResourceVersionDetail,
 } from "@/domain/resource/model";
 import {
+  useQuickResourceUploadHandoffStore,
+  type QuickResourceUploadHandoff,
+} from "@/domain/resource/model";
+import {
   Badge,
   ConfirmDialog,
   SelectInput,
@@ -276,6 +280,14 @@ export function ResourceEditorPage() {
   const [deleting, setDeleting] = useState(false);
   const [committingActive, setCommittingActive] = useState(false);
   const apiLoadEpoch = useRef(0);
+  const quickUploadId = searchParams.get("quickUpload");
+  const quickUploadHandoff = useRef<QuickResourceUploadHandoff | null | undefined>(undefined);
+  const quickUploadWarningShown = useRef(false);
+  if (quickUploadHandoff.current === undefined) {
+    quickUploadHandoff.current = quickUploadId
+      ? useQuickResourceUploadHandoffStore.getState().peek(quickUploadId)
+      : null;
+  }
   const editorT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:resourceEditor.${key}`, { defaultValue, ...options })
   );
@@ -285,8 +297,45 @@ export function ResourceEditorPage() {
     if (isNew) {
       setEditMode("COMMIT_ACTIVE");
       setBaseBinaryNames([]);
-      setStagedBinaryFiles({});
       setRemovedBinaryNames([]);
+      const handoff = quickUploadHandoff.current;
+      if (handoff && handoff.scopeKind === scopeKind && handoff.scopeCode === scopeCode) {
+        const restored: ResourceVersionDetail = {
+          ...createUnsavedResource(scopeKind, scopeCode, scopeName),
+          allowInheritance: scopeKind === "PLATFORM" ? true : handoff.allowInheritance,
+          attributes: cloneJson(handoff.attributes),
+          attributesSchema: cloneJson(handoff.definition.attributesSchema),
+          binaries: [{ binaryName: handoff.binaryName, byteSize: handoff.file.size }],
+          binarySchema: cloneJson(handoff.definition.binarySchema),
+          definitionCode: handoff.definition.definitionCode,
+          definitionName: handoff.definition.name,
+          definitionVersion: handoff.definition.definitionVersion,
+          description: handoff.description,
+          name: handoff.name,
+          resourceCode: handoff.resourceCode,
+        };
+        setStagedBinaryFiles({ [handoff.binaryName]: handoff.file });
+        setVersions([]);
+        setResource(restored);
+        if (quickUploadId) useQuickResourceUploadHandoffStore.getState().clear(quickUploadId);
+        if (!quickUploadWarningShown.current) {
+          quickUploadWarningShown.current = true;
+          toast.info(editorT("messages.quickUploadRestored", "File and detected details were added. Complete the remaining fields before creating the resource."));
+        }
+        return;
+      }
+      setStagedBinaryFiles({});
+      if (quickUploadId && !quickUploadWarningShown.current) {
+        quickUploadWarningShown.current = true;
+        toast.warning(editorT(
+          handoff
+            ? "messages.quickUploadScopeMismatch"
+            : "messages.quickUploadFileMissing",
+          handoff
+            ? "The quick-upload file belongs to a different scope. Choose it again from this Resource list."
+            : "The selected quick-upload file is no longer available. Choose it again in Files to continue.",
+        ));
+      }
       if (isApi) {
         const draft = createUnsavedResource(scopeKind, scopeCode, scopeName);
         setVersions([]);
@@ -330,7 +379,7 @@ export function ResourceEditorPage() {
     setBaseBinaryNames([]);
     setStagedBinaryFiles({});
     setRemovedBinaryNames([]);
-  }, [isApi, isNew, isPlatform, mockSourceVersions, requestedResourceCode, requestedVersion, scopeCode, scopeKind, scopeName, scopeReady, toast]);
+  }, [isApi, isNew, isPlatform, mockSourceVersions, quickUploadId, requestedResourceCode, requestedVersion, scopeCode, scopeKind, scopeName, scopeReady, toast]);
 
   const attributeErrors = useMemo(
     () => resource ? validateJsonValue(resource.attributesSchema, resource.attributes) : [],
@@ -1086,7 +1135,7 @@ export function ResourceEditorPage() {
     : resource.lifecycleStatus;
   const locallyOwned = resource.scopeKind === scopeKind;
   const tabItems: Array<{ count?: number; label: string; value: EditorSection }> = [
-    { label: editorT("tabs.data", "Resource data"), value: "data" },
+    { label: editorT("tabs.data", "Resource information"), value: "data" },
     { count: versions.length, label: editorT("tabs.history", "Version history"), value: "history" },
   ];
 
@@ -1355,7 +1404,7 @@ export function ResourceEditorPage() {
       <ConfirmDialog
         cancelText={editorT("actions.cancel", "Cancel")}
         confirmText={editorT("actions.delete", "Delete resource")}
-        description={editorT("messages.deleteDescription", "Delete every version and binary mapping for this resource. This cannot be undone.")}
+        description={editorT("messages.deleteDescription", "Delete every version of this resource and its files. This cannot be undone.")}
         open={deleteOpen}
         pending={deleting}
         title={editorT("messages.deleteTitle", "Delete {{name}}?", { name: resource.name })}

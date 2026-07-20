@@ -49,7 +49,7 @@ describe("Resource API client", () => {
     const definition = adaptResourceDefinitionVersionDetail({
       allowInheritance: true,
       attributesSchema: { properties: { title: { type: "string" } }, type: "object" },
-      binarySchema: { maxCount: 2, maxSizeBytes: 1024 },
+      binarySchema: { maxCount: 10, minCount: 1 },
       binaryStorageProfile: "local-default",
       builtIn: false,
       createdAt: 1_767_225_600_000,
@@ -58,6 +58,13 @@ describe("Resource API client", () => {
       definitionVersion: "v2-A1b",
       description: "Document resource",
       draftRevision: "12",
+      effectiveBinaryPolicy: {
+        maxCount: 10,
+        maxNameLength: 255,
+        maxSizeBytes: 1_073_741_824,
+        minCount: 1,
+        namePattern: null,
+      },
       lifecycleStatus: "DRAFT",
       name: "Document",
       publishedAt: null,
@@ -96,8 +103,9 @@ describe("Resource API client", () => {
     });
 
     expect(definition).toMatchObject({
-      binarySchema: { maxCount: 2, maxSizeBytes: 1024, storageProfile: "local-default" },
+      binarySchema: { maxCount: 10, maxSizeBytes: 0, storageProfile: "local-default" },
       draftRevision: 12,
+      effectiveBinaryPolicy: { maxCount: 10, maxSizeBytes: 1_073_741_824, namePattern: null },
       enabled: false,
       preset: false,
       updatedAt: new Date(1_767_312_000_000).toISOString(),

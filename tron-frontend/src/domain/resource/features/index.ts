@@ -1,1 +1,1 @@
-export {};
+export * from "./quick-upload";

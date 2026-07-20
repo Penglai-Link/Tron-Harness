@@ -3,6 +3,7 @@ import type {
   ResourceVersionDetail,
   ResourceVersionRecord,
 } from "@/domain/resource/model/ResourceModel";
+import type { ResourceDefinitionVersionDetail } from "@/domain/resource/model/ResourceDefinitionModel";
 import {
   createWorkspaceResourceDefinitionDraft,
   getWorkspaceResourceDefinitionVersionDetail,
@@ -10,6 +11,11 @@ import {
   listWorkspaceResourceDefinitionVersionDetails,
 } from "./resourceDefinitionData";
 import { createJsonSchemaDraft7FormValue } from "@/shared/ui/json-schema-draft7";
+import {
+  readMockCreatedResourceRecords,
+  writeMockCreatedResourceRecords,
+  writeResourceVersionsToUiSession,
+} from "./uiSession";
 
 const workspaceResourceVersions: ResourceVersionRecord[] = [
   {
@@ -345,7 +351,7 @@ const platformResourceVersions: ResourceVersionRecord[] = [
 export function listWorkspaceResourceVersions(workspaceCode: string, workspaceName: string) {
   if (!workspaceCode) return [];
 
-  return workspaceResourceVersions.map((record) => {
+  const baseRecords = workspaceResourceVersions.map((record) => {
     if (record.ownerWorkspaceCode !== "TRON_CORE") return { ...record };
     return {
       ...record,
@@ -353,10 +359,72 @@ export function listWorkspaceResourceVersions(workspaceCode: string, workspaceNa
       ownerWorkspaceName: workspaceName || record.ownerWorkspaceName,
     };
   });
+  return [...readMockCreatedResourceRecords(workspaceCode), ...baseRecords];
 }
 
 export function listPlatformResourceVersions() {
-  return platformResourceVersions.map(clone);
+  return [...readMockCreatedResourceRecords("PLATFORM"), ...platformResourceVersions.map(clone)];
+}
+
+function mockVersionSuffix() {
+  return Math.random().toString(36).slice(2, 5).padEnd(3, "0");
+}
+
+export interface MockQuickResourceCreateInput {
+  allowInheritance: boolean;
+  attributes: Record<string, unknown>;
+  binaryName: string;
+  definition: ResourceDefinitionVersionDetail;
+  description: string;
+  name: string;
+  resourceCode: string;
+  scopeCode: string;
+  scopeKind: "PLATFORM" | "WORKSPACE";
+  byteSize: number;
+}
+
+/**
+ * Mirrors the direct ACTIVE creation path for frontend-only UI regression.
+ * The bytes themselves remain in the browser and are intentionally not put in
+ * sessionStorage; only the resource projection and byte size are persisted.
+ */
+export function createMockQuickResource(input: MockQuickResourceCreateInput): ResourceVersionDetail {
+  const now = new Date().toISOString();
+  const resourceVersion = `v1-${mockVersionSuffix()}`;
+  const isPlatform = input.scopeKind === "PLATFORM";
+  const record: ResourceVersionRecord = {
+    definitionCode: input.definition.definitionCode,
+    definitionName: input.definition.name,
+    definitionVersion: input.definition.definitionVersion,
+    description: input.description,
+    draftRevision: null,
+    lifecycleStatus: "ACTIVE",
+    name: input.name,
+    ownerWorkspaceCode: isPlatform ? null : input.scopeCode,
+    ownerWorkspaceName: isPlatform ? null : input.scopeCode,
+    resourceCode: input.resourceCode,
+    resourceVersion,
+    scopeKind: input.scopeKind,
+    sourceKind: isPlatform ? "PLATFORM" : "LOCAL",
+    updatedAt: now,
+    validationIssueCount: 0,
+    validationStatus: "VALID",
+  };
+  const detail: ResourceVersionDetail = {
+    ...record,
+    allowInheritance: input.allowInheritance,
+    attributes: clone(input.attributes),
+    attributesSchema: clone(input.definition.attributesSchema),
+    binaries: [{ binaryName: input.binaryName, byteSize: input.byteSize }],
+    binarySchema: clone(input.definition.binarySchema),
+    createdAt: now,
+    publishedAt: now,
+  };
+  const records = readMockCreatedResourceRecords(input.scopeCode)
+    .filter((item) => item.resourceCode !== record.resourceCode);
+  writeMockCreatedResourceRecords(input.scopeCode, [record, ...records]);
+  writeResourceVersionsToUiSession(input.scopeCode, input.resourceCode, [detail]);
+  return detail;
 }
 
 function clone<T>(value: T): T {
@@ -400,20 +468,28 @@ function attributesForRecord(record: ResourceVersionRecord) {
   }
   if (record.definitionCode === "PDF") {
     return {
-      description: "Workspace policy document maintained by the knowledge team.",
-      fileExtension: "pdf",
       fileName: record.lifecycleStatus === "DRAFT" ? "" : "workspace-policy.pdf",
-      tags: ["policy", "knowledge"],
-      title: "Workspace Knowledge Policy",
+      pageCount: record.lifecycleStatus === "DRAFT" ? 0 : 18,
+      sizeBytes: 184_320,
     };
   }
   if (record.definitionCode === "FILE") {
     const incompleteDraft = record.resourceCode === "customer-upload-archive" || record.resourceCode === "support-bundle";
     return {
-      description: incompleteDraft ? "" : "Template used by customer import workflows.",
       fileExtension: record.resourceCode === "support-bundle" ? "zip" : "xlsx",
       fileName: incompleteDraft ? "" : "customer-import-template.xlsx",
-      tags: incompleteDraft ? [] : ["customer", "import"],
+      sizeBytes: 63_488,
+    };
+  }
+  if (record.definitionCode === "IMAGE") {
+    return {
+      images: [{
+        binaryName: "tron-mark.svg",
+        fileExtension: "svg",
+        fileName: "tron-mark.svg",
+        imageFormat: "SVG",
+        sizeBytes: 12_288,
+      }],
     };
   }
   return {};

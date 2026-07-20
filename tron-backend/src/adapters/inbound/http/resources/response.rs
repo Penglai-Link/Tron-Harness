@@ -100,6 +100,16 @@ impl From<ResourceDefinitionVersionPage> for DefinitionVersionPageResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct EffectiveBinaryPolicyResponse {
+    pub min_count: usize,
+    pub max_count: usize,
+    pub max_size_bytes: u64,
+    pub max_name_length: usize,
+    pub name_pattern: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct DefinitionVersionResponse {
     pub scope_kind: &'static str,
     pub scope_code: String,
@@ -116,6 +126,7 @@ pub struct DefinitionVersionResponse {
     pub draft_revision: Option<String>,
     pub attributes_schema: Option<Value>,
     pub binary_schema: Option<Value>,
+    pub effective_binary_policy: Option<EffectiveBinaryPolicyResponse>,
     pub binary_storage_profile: Option<String>,
     pub created_at: i64,
     pub updated_at: i64,
@@ -140,6 +151,15 @@ impl From<ResourceDefinitionVersionView> for DefinitionVersionResponse {
             draft_revision: value.draft_revision.map(|revision| revision.to_string()),
             attributes_schema: value.attributes_schema,
             binary_schema: value.binary_schema,
+            effective_binary_policy: value.effective_binary_policy.map(|policy| {
+                EffectiveBinaryPolicyResponse {
+                    min_count: policy.min_count,
+                    max_count: policy.max_count,
+                    max_size_bytes: policy.max_size_bytes,
+                    max_name_length: policy.max_name_length,
+                    name_pattern: policy.name_pattern,
+                }
+            }),
             binary_storage_profile: value.binary_storage_profile,
             created_at: timestamp_to_millis(&value.created_at),
             updated_at: timestamp_to_millis(&value.updated_at),

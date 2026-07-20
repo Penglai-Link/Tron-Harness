@@ -39,10 +39,23 @@ export interface ResourceDefinitionBinarySchema {
   storageProfile: string;
 }
 
+/**
+ * Backend-resolved binary limits used for read-time guidance. These values do
+ * not replace the user-authored `binarySchema` shown by the definition editor.
+ */
+export interface ResourceDefinitionEffectiveBinaryPolicy {
+  maxCount: number;
+  maxNameLength: number;
+  maxSizeBytes: number;
+  minCount: number;
+  namePattern: string | null;
+}
+
 export interface ResourceDefinitionVersionDetail extends ResourceDefinitionVersionRecord {
   allowInheritance: boolean;
   attributesSchema: ResourceDefinitionAttributesSchema;
   binarySchema: ResourceDefinitionBinarySchema;
+  effectiveBinaryPolicy: ResourceDefinitionEffectiveBinaryPolicy | null;
   createdAt: string;
   publishedAt: string | null;
 }

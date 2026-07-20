@@ -10,6 +10,7 @@ import {
 } from "react-router";
 import {
   MoreHorizontal,
+  Upload,
   Plus,
   RefreshCcw,
 } from "lucide-react";
@@ -28,7 +29,12 @@ import {
 } from "@/components/ui/button";
 import { ResourceVersionSource } from "@/domain/resource/components";
 import {
+  QuickResourceUploadDialog,
+  type QuickResourceCreateCommand,
+} from "@/domain/resource/features/quick-upload";
+import {
   activateResourceVersion,
+  createResource,
   createResourceDraft,
   discardResourceDraft,
   pageResources,
@@ -41,16 +47,21 @@ import {
   resourceValidationFilters,
 } from "@/domain/resource/constants";
 import {
+  useActivePlatformResourceDefinitions,
   useActivePlatformResourceDefinitionRecords,
+  useActiveResourceDefinitions,
   useActiveResourceDefinitionRecords,
   useResourcePage,
 } from "@/domain/resource/hooks";
+import { createMockQuickResource } from "@/domain/resource/mock";
 import type {
   ResourceContextFilter,
   ResourceLifecycleFilter,
+  QuickResourceUploadHandoffPayload,
   ResourceValidationFilter,
   ResourceVersionRecord,
 } from "@/domain/resource/model";
+import { useQuickResourceUploadHandoffStore } from "@/domain/resource/model";
 import {
   DataTable,
   Field,
@@ -90,6 +101,7 @@ export function ResourcesPage() {
   const [current, setCurrent] = useState(1);
   const [size, setSize] = useState(15);
   const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [quickUploadOpen, setQuickUploadOpen] = useState(false);
   const resourcePage = useResourcePage({
     context: contextFilter,
     current,
@@ -107,9 +119,15 @@ export function ResourcesPage() {
     isPlatform ? "" : activeWorkspaceName,
   );
   const platformDefinitionRecords = useActivePlatformResourceDefinitionRecords(isPlatform);
+  const workspaceQuickUploadDefinitions = useActiveResourceDefinitions(
+    isPlatform ? "" : activeWorkspaceCode,
+    isPlatform ? "" : activeWorkspaceName,
+  );
+  const platformQuickUploadDefinitions = useActivePlatformResourceDefinitions();
   const records = resourcePage.data.records;
   const definitionQuery = isPlatform ? platformDefinitionRecords : workspaceDefinitionRecords;
   const definitionRecords = definitionQuery.data;
+  const quickUploadDefinitions = isPlatform ? platformQuickUploadDefinitions : workspaceQuickUploadDefinitions;
 
   const pageT = (key: string, options?: Record<string, unknown>) => (
     t(`pages:resources.${key}`, options)
@@ -269,6 +287,54 @@ export function ResourcesPage() {
     }
   }
 
+  async function createQuickResource(command: QuickResourceCreateCommand) {
+    if (isApi) {
+      const result = await createResource({
+        allowInheritance: command.allowInheritance,
+        attributes: command.attributes,
+        binaryFiles: [{ binaryName: command.binaryName, file: command.file }],
+        definitionCode: command.definitionCode,
+        description: command.description,
+        expectedActiveResourceVersion: null,
+        name: command.name,
+        removedBinaryNames: [],
+        resourceCode: command.resourceCode,
+        scopeKind: command.scopeKind,
+        workspaceCode: command.workspaceCode,
+      });
+      return { resourceCode: result.resourceCode, resourceVersion: result.resourceVersion };
+    }
+
+    const definition = quickUploadDefinitions.find((item) => item.definitionCode === command.definitionCode);
+    if (!definition) throw new Error(pageT("quickUpload.blocked.definition_unavailable"));
+    const created = createMockQuickResource({
+      allowInheritance: command.allowInheritance,
+      attributes: command.attributes,
+      binaryName: command.binaryName,
+      byteSize: command.file.size,
+      definition,
+      description: command.description,
+      name: command.name,
+      resourceCode: command.resourceCode,
+      scopeCode: isPlatform ? "PLATFORM" : activeWorkspaceCode,
+      scopeKind,
+    });
+    return { resourceCode: created.resourceCode, resourceVersion: created.resourceVersion };
+  }
+
+  function continueQuickResourceInEditor(payload: QuickResourceUploadHandoffPayload) {
+    const handoffId = useQuickResourceUploadHandoffStore.getState().put(payload);
+    setQuickUploadOpen(false);
+    navigate(`${basePath}/new?quickUpload=${encodeURIComponent(handoffId)}`);
+  }
+
+  function openQuickResource(result: { resourceCode: string; resourceVersion: string }) {
+    setQuickUploadOpen(false);
+    resourcePage.refresh();
+    navigate(`${basePath}/detail?resourceCode=${encodeURIComponent(result.resourceCode)}&resourceVersion=${encodeURIComponent(result.resourceVersion)}`);
+    toast.success(pageT("quickUpload.messages.created", { name: result.resourceCode }));
+  }
+
   function renderActions(record: ResourceVersionRecord) {
     const stopPropagation = (event: React.SyntheticEvent) => event.stopPropagation();
     const disabled = pendingAction !== null;
@@ -331,6 +397,14 @@ export function ResourcesPage() {
             }}>
               <RefreshCcw aria-hidden="true" size={15} />
               {t("common:actions.refresh")}
+            </Button>
+            <Button
+              disabled={!isPlatform && !activeWorkspace}
+              variant="outline"
+              onClick={() => setQuickUploadOpen(true)}
+            >
+              <Upload aria-hidden="true" size={15} />
+              {pageT("actions.quickUpload")}
             </Button>
             <Button disabled={!isPlatform && !activeWorkspace} onClick={() => navigate(`${basePath}/new`)}>
               <Plus aria-hidden="true" size={15} />
@@ -556,6 +630,17 @@ export function ResourcesPage() {
           tableClassName="min-w-full table-fixed max-sm:w-[calc(100%-1px)] max-sm:min-w-0 max-sm:[&>colgroup]:hidden xl:min-w-[900px]"
         />
       </div>
+      <QuickResourceUploadDialog
+        definitions={quickUploadDefinitions}
+        isPlatform={isPlatform}
+        open={quickUploadOpen}
+        scopeCode={isPlatform ? "PLATFORM" : activeWorkspaceCode}
+        scopeKind={scopeKind}
+        onClose={() => setQuickUploadOpen(false)}
+        onContinueInEditor={continueQuickResourceInEditor}
+        onCreate={createQuickResource}
+        onCreated={openQuickResource}
+      />
     </div>
   );
 }

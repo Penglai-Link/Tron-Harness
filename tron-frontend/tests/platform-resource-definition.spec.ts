@@ -65,8 +65,8 @@ test("the platform detail reuses the JSONJoy-based Draft 7 editor", async ({ pag
   await expect(page.getByRole("heading", { exact: true, name: "MySQL Connection" })).toBeVisible();
   await expect(page.getByText("Platform resource definitions", { exact: true })).toBeVisible();
   await expect(page.getByText("PLATFORM", { exact: true }).first()).toBeVisible();
-  await expect(page.getByLabel("Attributes Schema JSON")).toHaveValue(/"credentials"/);
-  await expect(page.getByRole("tab", { name: "Structured attributes 6" })).toBeVisible();
+  await expect(page.getByLabel("Resource information JSON")).toHaveValue(/"credentials"/);
+  await expect(page.getByRole("tab", { name: "Information fields 6" })).toBeVisible();
 
   await page.getByRole("button", { exact: true, name: "Edit" }).click();
   await expect(page.getByText("DRAFT", { exact: true }).first()).toBeVisible();

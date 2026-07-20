@@ -12,17 +12,18 @@ use crate::{
         ResourceDefinitionDeleteCommand, ResourceDefinitionDeleteResult,
         ResourceDefinitionDiscardDraftCommand, ResourceDefinitionDraftAction,
         ResourceDefinitionDraftCommand, ResourceDefinitionDraftResult,
-        ResourceDefinitionPublishDraftCommand, ResourceDefinitionSetEnabledCommand,
-        ResourceDefinitionUpdateDraftCommand, ResourceDefinitionVersionGetQuery,
-        ResourceDefinitionVersionPage, ResourceDefinitionVersionPageQuery,
-        ResourceDefinitionVersionView, ResourceDeleteCommand, ResourceDeleteResult,
-        ResourceDiscardDraftCommand, ResourceDraftAction, ResourceDraftCommand,
-        ResourceDraftResult, ResourceHttpBinaryDownload, ResourceHttpBinaryDownloadCommand,
-        ResourceHttpBinaryRemoveCommand, ResourceHttpBinaryUploadCommand,
-        ResourcePublishDraftCommand, ResourceUpdateDraftCommand, ResourceValidationIssue,
-        ResourceVersionGetQuery, ResourceVersionPage, ResourceVersionPageQuery,
-        ResourceVersionView,
+        ResourceDefinitionEffectiveBinaryPolicy, ResourceDefinitionPublishDraftCommand,
+        ResourceDefinitionSetEnabledCommand, ResourceDefinitionUpdateDraftCommand,
+        ResourceDefinitionVersionGetQuery, ResourceDefinitionVersionPage,
+        ResourceDefinitionVersionPageQuery, ResourceDefinitionVersionView, ResourceDeleteCommand,
+        ResourceDeleteResult, ResourceDiscardDraftCommand, ResourceDraftAction,
+        ResourceDraftCommand, ResourceDraftResult, ResourceHttpBinaryDownload,
+        ResourceHttpBinaryDownloadCommand, ResourceHttpBinaryRemoveCommand,
+        ResourceHttpBinaryUploadCommand, ResourcePublishDraftCommand, ResourceUpdateDraftCommand,
+        ResourceValidationIssue, ResourceVersionGetQuery, ResourceVersionPage,
+        ResourceVersionPageQuery, ResourceVersionView,
     },
+    config::ResourceLimits,
     domain::{
         resource::{
             PLATFORM_SCOPE_CODE, Resource, ResourceActivationResult, ResourceBinaryMapping,
@@ -41,7 +42,7 @@ use super::{
     definitions::{definition_validation_issues, next_definition_version},
     resources::next_resource_version,
     seeds::is_builtin_definition_code,
-    validation::{declared_variable_references, validate_binary_upload},
+    validation::{declared_variable_references, parse_binary_policy, validate_binary_upload},
 };
 
 impl ResourceService {
@@ -65,7 +66,12 @@ impl ResourceService {
                         && definition.key.scope_code == scope_code
                 })
                 .map(|definition| {
-                    definition_version_view(definition, ResourceSourceKind::Platform, false)
+                    definition_version_view(
+                        definition,
+                        ResourceSourceKind::Platform,
+                        false,
+                        &self.config.limits,
+                    )
                 })
                 .collect(),
             ResourceScopeKind::Workspace => self.workspace_definition_version_views(
@@ -105,7 +111,12 @@ impl ResourceService {
             &query.definition_code,
             &query.definition_version,
         )?;
-        Ok(definition_version_view(&definition, source_kind, true))
+        Ok(definition_version_view(
+            &definition,
+            source_kind,
+            true,
+            &self.config.limits,
+        ))
     }
 
     pub fn create_definition_draft_for_http(
@@ -557,7 +568,12 @@ impl ResourceService {
                 self.effective_definitions(workspace_code)?
                     .into_values()
                     .map(|effective| {
-                        definition_version_view(&effective.definition, effective.source_kind, false)
+                        definition_version_view(
+                            &effective.definition,
+                            effective.source_kind,
+                            false,
+                            &self.config.limits,
+                        )
                     }),
             );
         }
@@ -576,7 +592,12 @@ impl ResourceService {
                                 .is_none_or(|expected| definition.lifecycle_status == expected)
                     })
                     .map(|definition| {
-                        definition_version_view(definition, ResourceSourceKind::Local, false)
+                        definition_version_view(
+                            definition,
+                            ResourceSourceKind::Local,
+                            false,
+                            &self.config.limits,
+                        )
                     }),
             );
         }
@@ -624,6 +645,7 @@ fn definition_version_view(
     definition: &ResourceDefinition,
     source_kind: ResourceSourceKind,
     include_detail: bool,
+    limits: &ResourceLimits,
 ) -> ResourceDefinitionVersionView {
     ResourceDefinitionVersionView {
         scope_kind: definition.key.scope_kind,
@@ -644,11 +666,31 @@ fn definition_version_view(
             .then_some(definition.draft_revision),
         attributes_schema: include_detail.then(|| definition.attributes_schema.clone()),
         binary_schema: include_detail.then(|| definition.binary_schema.clone()),
+        effective_binary_policy: include_detail
+            .then(|| effective_binary_policy(definition, limits))
+            .flatten(),
         binary_storage_profile: include_detail.then(|| definition.binary_storage_profile.clone()),
         created_at: definition.created_at.clone(),
         updated_at: definition.updated_at.clone(),
         published_at: definition.published_at.clone(),
     }
+}
+
+/// The raw binary schema may intentionally omit limits and inherit the service
+/// defaults.  Detail consumers need the resolved values for client-side
+/// guidance, while the persisted schema must remain unchanged for editing.
+fn effective_binary_policy(
+    definition: &ResourceDefinition,
+    limits: &ResourceLimits,
+) -> Option<ResourceDefinitionEffectiveBinaryPolicy> {
+    let policy = parse_binary_policy(&definition.binary_schema, limits).ok()?;
+    Some(ResourceDefinitionEffectiveBinaryPolicy {
+        min_count: policy.min_count,
+        max_count: policy.max_count,
+        max_size_bytes: policy.max_size_bytes,
+        max_name_length: policy.max_name_length,
+        name_pattern: policy.name_pattern,
+    })
 }
 
 fn definition_page_matches(

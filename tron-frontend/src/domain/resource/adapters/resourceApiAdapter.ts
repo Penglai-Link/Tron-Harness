@@ -5,6 +5,7 @@ import type {
 import type {
   ResourceDefinitionAttributesSchema,
   ResourceDefinitionBinarySchema,
+  ResourceDefinitionEffectiveBinaryPolicy,
   ResourceDefinitionVersionDetail,
   ResourceDefinitionVersionRecord,
   ResourceDefinitionValidationStatus,
@@ -59,6 +60,10 @@ function stringValue(value: unknown, fallback = "") {
   return typeof value === "string" ? value : fallback;
 }
 
+function nullableStringValue(value: unknown) {
+  return typeof value === "string" ? value : null;
+}
+
 function mapBinarySchema(
   value: Record<string, unknown> | null,
   binaryStorageProfile: string | null,
@@ -71,6 +76,34 @@ function mapBinarySchema(
     minCount: numberValue(schema.minCount, 0),
     namePattern: stringValue(schema.namePattern),
     storageProfile: binaryStorageProfile ?? "@default",
+  };
+}
+
+function mapEffectiveBinaryPolicy(
+  value: ResourceDefinitionVersionApiRecord["effectiveBinaryPolicy"],
+): ResourceDefinitionEffectiveBinaryPolicy | null {
+  if (!value || typeof value !== "object") return null;
+
+  const minCount = numberValue(value.minCount, -1);
+  const maxCount = numberValue(value.maxCount, -1);
+  const maxSizeBytes = numberValue(value.maxSizeBytes, -1);
+  const maxNameLength = numberValue(value.maxNameLength, -1);
+  if (
+    minCount < 0
+    || maxCount < 0
+    || minCount > maxCount
+    || maxSizeBytes < 0
+    || maxNameLength < 1
+  ) {
+    return null;
+  }
+
+  return {
+    maxCount,
+    maxNameLength,
+    maxSizeBytes,
+    minCount,
+    namePattern: nullableStringValue(value.namePattern),
   };
 }
 
@@ -112,6 +145,7 @@ export function adaptResourceDefinitionVersionDetail(
     allowInheritance: record.allowInheritance,
     attributesSchema: asRecord(record.attributesSchema) as ResourceDefinitionAttributesSchema,
     binarySchema: mapBinarySchema(record.binarySchema, record.binaryStorageProfile),
+    effectiveBinaryPolicy: mapEffectiveBinaryPolicy(record.effectiveBinaryPolicy),
     createdAt: toRequiredTimestamp(record.createdAt),
     publishedAt: toTimestamp(record.publishedAt),
   };

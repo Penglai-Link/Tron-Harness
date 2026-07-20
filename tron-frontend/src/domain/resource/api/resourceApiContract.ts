@@ -11,6 +11,19 @@ export interface ResourceApiPage<T> {
   records: T[];
 }
 
+/**
+ * Resolved read-only limits for a definition's binaries. The raw
+ * `binarySchema` remains the editable source configuration and may omit a
+ * field that the backend supplies from its service-level defaults.
+ */
+export interface ResourceDefinitionEffectiveBinaryPolicyApiRecord {
+  minCount: number;
+  maxCount: number;
+  maxSizeBytes: number;
+  maxNameLength: number;
+  namePattern: string | null;
+}
+
 export interface ResourceDefinitionVersionApiRecord {
   scopeKind: ResourceScopeCode;
   scopeCode: string;
@@ -27,6 +40,8 @@ export interface ResourceDefinitionVersionApiRecord {
   draftRevision: string | null;
   attributesSchema: Record<string, unknown> | null;
   binarySchema: Record<string, unknown> | null;
+  /** Optional while a frontend is compatible with a pre-policy backend. */
+  effectiveBinaryPolicy?: ResourceDefinitionEffectiveBinaryPolicyApiRecord | null;
   binaryStorageProfile: string | null;
   createdAt: number;
   updatedAt: number;

@@ -1,6 +1,7 @@
 import type {
   ResourceDefinitionVersionDetail,
   ResourceVersionDetail,
+  ResourceVersionRecord,
 } from "@/domain/resource/model";
 
 const sessionPrefix = "tron.resource-ui";
@@ -22,6 +23,10 @@ function writeSessionValue<T>(key: string, value: T) {
 
 function versionKey(kind: "definition" | "resource", scopeCode: string, businessCode: string) {
   return `${sessionPrefix}.${kind}.${scopeCode || "unknown"}.${businessCode || "new"}`;
+}
+
+function resourcePageKey(scopeCode: string) {
+  return `${sessionPrefix}.resource-page.${scopeCode || "unknown"}`;
 }
 
 export function readResourceDefinitionVersionsFromUiSession(scopeCode: string, definitionCode: string) {
@@ -46,4 +51,17 @@ export function writeResourceVersionsToUiSession(
   versions: ResourceVersionDetail[],
 ) {
   writeSessionValue(versionKey("resource", scopeCode, resourceCode), versions);
+}
+
+/**
+ * The Mock list has a small session-only overlay for actions that create a
+ * resource directly from the list. It avoids pretending that an API request
+ * happened while still letting the resulting version appear after refresh.
+ */
+export function readMockCreatedResourceRecords(scopeCode: string) {
+  return readSessionValue<ResourceVersionRecord[]>(resourcePageKey(scopeCode)) ?? [];
+}
+
+export function writeMockCreatedResourceRecords(scopeCode: string, records: ResourceVersionRecord[]) {
+  writeSessionValue(resourcePageKey(scopeCode), records);
 }

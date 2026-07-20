@@ -39,13 +39,13 @@ test("the draft editor keeps visual fields and Draft 7 JSON on one source of tru
   await openEditor(page);
 
   await expect(page.getByText("DRAFT", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("tab", { name: "Structured attributes 5" })).toHaveAttribute("aria-selected", "true");
-  const schemaJson = page.getByLabel("Attributes Schema JSON");
+  await expect(page.getByRole("tab", { name: "Information fields 5" })).toHaveAttribute("aria-selected", "true");
+  const schemaJson = page.getByLabel("Resource information JSON");
   await expect(schemaJson).toContainText('"title": "Product code"');
 
   await page.getByRole("button", { name: "Edit display label for productCode" }).click();
-  await page.getByRole("textbox", { exact: true, name: "Display label" }).fill("Product identifier");
-  await page.getByRole("textbox", { exact: true, name: "Display label" }).press("Enter");
+  await page.getByRole("textbox", { exact: true, name: "Field label" }).fill("Product identifier");
+  await page.getByRole("textbox", { exact: true, name: "Field label" }).press("Enter");
   await expect(schemaJson).toContainText('"title": "Product identifier"');
 
   const originalSchema = await schemaJson.inputValue();
@@ -55,10 +55,10 @@ test("the draft editor keeps visual fields and Draft 7 JSON on one source of tru
   await schemaJson.fill(originalSchema);
   await expect(page.getByText("VALID JSON", { exact: true })).toBeVisible();
 
-  await page.getByRole("button", { name: "Test data" }).click();
-  await expect(page.getByRole("dialog", { name: "Test structured data" })).toBeVisible();
+  await page.getByRole("button", { name: "Test entry" }).click();
+  await expect(page.getByRole("dialog", { name: "Test entry" })).toBeVisible();
   await page.getByRole("button", { name: "Validate", exact: true }).click();
-  await expect(page.getByText("Test data matches this Schema.", { exact: true })).toBeVisible();
+  await expect(page.getByText("Entry matches the current field rules.", { exact: true })).toBeVisible();
 });
 
 test("the shared Draft 7 editor recursively edits arrays and nested objects", async ({ page }) => {
@@ -70,7 +70,7 @@ test("the shared Draft 7 editor recursively edits arrays and nested objects", as
   );
 
   await page.getByLabel("Expand endpoints").click();
-  await expect(page.getByText("Item schema", { exact: true })).toBeVisible();
+  await expect(page.getByText("List item settings", { exact: true })).toBeVisible();
   await expect(page.getByText("Host", { exact: true })).toBeVisible();
   await expect(page.getByText("Port", { exact: true })).toBeVisible();
   await expect(page.getByText("Role", { exact: true })).toBeVisible();
@@ -81,15 +81,15 @@ test("the shared Draft 7 editor recursively edits arrays and nested objects", as
   await page.getByLabel("Expand username").click();
   await page.getByLabel("Expand password").click();
   await expect(page.locator('[data-slot="badge"]', { hasText: "tron-variable-ref" })).toHaveCount(2);
-  await expect(page.getByLabel("Attributes Schema JSON")).toHaveValue(/"credentials"/);
+  await expect(page.getByLabel("Resource information JSON")).toHaveValue(/"credentials"/);
 });
 
-test("binary constraints remain generic and version history exposes lifecycle actions", async ({ page }) => {
+test("file rules remain generic and version history exposes lifecycle actions", async ({ page }) => {
   await openEditor(page);
 
-  await page.getByRole("tab", { name: "Binary constraints 12" }).click();
-  await expect(page.getByText("Storage profile", { exact: true }).first()).toBeVisible();
-  await expect(page.getByText("Names are unique within one Resource version", { exact: true })).toBeVisible();
+  await page.getByRole("tab", { name: "File rules 12" }).click();
+  await expect(page.getByText("File storage location", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("File names must be unique within a resource version", { exact: true })).toBeVisible();
   await expect(page.getByText(/MIME/i)).toHaveCount(0);
 
   await page.getByRole("tab", { name: "Version history 3" }).click();
@@ -111,9 +111,9 @@ test("the Chinese editor is readable and keeps the workspace page free of module
   await page.setViewportSize({ height: 900, width: 1280 });
   await openEditor(page, "zh-CN");
 
-  await expect(page.getByRole("tab", { name: "结构化属性 5" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "信息字段 5" })).toBeVisible();
   await expect(page.getByRole("button", { name: "保存草稿", exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { name: "添加属性", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "添加字段", exact: true })).toBeVisible();
   await expect(page.getByRole("navigation", { name: "Resource management" })).toHaveCount(0);
   await expect.poll(async () => page.evaluate(() => (
     document.documentElement.scrollWidth <= document.documentElement.clientWidth
@@ -125,9 +125,9 @@ test("the phone editor switches between one visual and one JSON pane without pag
   await openEditor(page);
 
   await expect(page.getByRole("tab", { name: "Visual", exact: true })).toBeVisible();
-  await expect(page.getByLabel("Attributes Schema JSON")).toBeHidden();
+  await expect(page.getByLabel("Resource information JSON")).toBeHidden();
   await page.getByRole("tab", { name: "JSON", exact: true }).click();
-  await expect(page.getByLabel("Attributes Schema JSON")).toBeVisible();
+  await expect(page.getByLabel("Resource information JSON")).toBeVisible();
   await expect(page.getByRole("tab", { name: "Visual", exact: true })).toHaveCount(1);
   await expect.poll(async () => page.evaluate(() => (
     document.documentElement.scrollWidth <= document.documentElement.clientWidth

@@ -102,6 +102,7 @@ function createUnsavedDefinition(scopeKind: "PLATFORM" | "WORKSPACE", scopeCode:
       storageProfile: "@default",
     },
     createdAt: "",
+    effectiveBinaryPolicy: null,
     definitionCode: "",
     definitionVersion: "",
     description: "",
@@ -744,8 +745,8 @@ export function ResourceDefinitionEditorPage() {
     && !blockingDraft;
   const lifecycleTone = definition.lifecycleStatus === "ACTIVE" ? "success" : definition.lifecycleStatus === "DRAFT" ? "warning" : "info";
   const tabItems: Array<{ count: number; label: string; value: EditorSection }> = [
-    { count: propertyCount, label: editorT("tabs.attributes", "Structured attributes"), value: "attributes" },
-    { count: binaryCount, label: editorT("tabs.binaries", "Binary constraints"), value: "binaries" },
+    { count: propertyCount, label: editorT("tabs.attributes", "Information fields"), value: "attributes" },
+    { count: binaryCount, label: editorT("tabs.binaries", "File rules"), value: "binaries" },
     { count: versions.length, label: editorT("tabs.history", "Version history"), value: "history" },
   ];
 
