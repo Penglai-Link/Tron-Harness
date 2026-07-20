@@ -27,6 +27,7 @@ use crate::adapters::{
         models::routes::routes as model_routes,
         prompts::routes::routes as prompt_routes,
         rag::routes as rag_routes,
+        resources::routes::routes as resource_routes,
         skills::routes::routes as skill_routes,
         system_config::routes as system_config_routes,
         tasks::routes as task_routes,
@@ -60,6 +61,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(variable_routes())
         .merge(memory_routes())
         .merge(rag_routes())
+        .merge(resource_routes(&state.resources))
         .merge(knowledge_graph_routes::routes())
         .merge(skill_routes())
         .merge(system_config_routes())

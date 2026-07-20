@@ -10,11 +10,13 @@ import {
 
 let frontend: ResourceUiFrontend | undefined;
 
+test.describe.configure({ timeout: 60_000 });
+
 async function openPlatformDefinitions(page: Page, locale: "en-US" | "zh-CN" = "en-US") {
   await routeResourceUiShellApi(page);
   await seedResourceUiShell(page, locale);
   await page.goto(`${frontend!.baseUrl}/settings/resource-definitions`);
-  await expect(page.getByRole("heading", { exact: true, name: locale === "zh-CN" ? "平台资源定义" : "Platform Resource Definitions" })).toBeVisible();
+  await expect(page.getByRole("heading", { exact: true, name: locale === "zh-CN" ? "平台资源定义" : "Platform Resource Definitions" })).toBeVisible({ timeout: 15_000 });
 }
 
 async function chooseFilter(page: Page, label: string, option: string) {

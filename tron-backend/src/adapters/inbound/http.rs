@@ -13,6 +13,7 @@ pub mod memory;
 pub mod models;
 pub mod prompts;
 pub mod rag;
+pub mod resources;
 pub mod skills;
 pub mod system_config;
 pub mod tasks;

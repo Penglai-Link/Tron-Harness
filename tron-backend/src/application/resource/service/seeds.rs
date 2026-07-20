@@ -15,6 +15,19 @@ use super::{
 
 const DRAFT_7: &str = "http://json-schema.org/draft-07/schema#";
 
+pub(super) fn is_builtin_definition_code(code: &str) -> bool {
+    matches!(
+        code,
+        "FILE"
+            | "IMAGE"
+            | "PDF"
+            | "MYSQL_CONNECTION"
+            | "POSTGRESQL_CONNECTION"
+            | "REDIS_CONNECTION"
+            | "KAFKA_CONNECTION"
+    )
+}
+
 impl ResourceService {
     pub fn bootstrap_seed_definitions(&self) -> Result<(), ResourceError> {
         let seeds = builtin_definitions();

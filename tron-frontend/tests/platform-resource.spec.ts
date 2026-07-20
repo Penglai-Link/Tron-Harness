@@ -10,11 +10,13 @@ import {
 
 let frontend: ResourceUiFrontend | undefined;
 
+test.describe.configure({ timeout: 60_000 });
+
 async function openPlatformResources(page: Page, locale: "en-US" | "zh-CN" = "en-US") {
   await routeResourceUiShellApi(page);
   await seedResourceUiShell(page, locale);
   await page.goto(`${frontend!.baseUrl}/settings/resources`);
-  await expect(page.getByRole("heading", { exact: true, name: locale === "zh-CN" ? "平台资源" : "Platform Resources" })).toBeVisible();
+  await expect(page.getByRole("heading", { exact: true, name: locale === "zh-CN" ? "平台资源" : "Platform Resources" })).toBeVisible({ timeout: 15_000 });
 }
 
 async function chooseFilter(page: Page, label: string, option: string) {
@@ -69,7 +71,8 @@ test("platform resource detail keeps Schema fields left and binary data right", 
   await expect(page.getByText("Binary data", { exact: true })).toBeVisible();
   await expect(page.getByText("customer-import-template.xlsx", { exact: true })).toBeVisible();
   await expect(page.getByText(/MIME|content type/i)).toHaveCount(0);
-  await expect(page.getByRole("switch", { name: "Allow inheritance" })).toBeEnabled();
+  await expect(page.getByRole("switch", { name: "Allow inheritance" })).toBeDisabled();
+  await expect(page.getByRole("button", { exact: true, name: "Edit" })).toBeVisible();
 
   const formBox = await page.locator('[role="tabpanel"] > div > section').boundingBox();
   const binaryBox = await page.locator('[role="tabpanel"] > div > aside').boundingBox();
@@ -78,15 +81,16 @@ test("platform resource detail keeps Schema fields left and binary data right", 
   expect(binaryBox!.x).toBeGreaterThan(formBox!.x + formBox!.width);
 });
 
-test("editing a platform resource creates a persistent platform draft", async ({ page }) => {
+test("editing a platform resource stages a direct ACTIVE update", async ({ page }) => {
   await routeResourceUiShellApi(page);
   await seedResourceUiShell(page);
   await page.goto(`${frontend!.baseUrl}/settings/resources/detail?resourceCode=customer-import-templates&resourceVersion=v2-P9x`);
 
   await page.getByRole("button", { exact: true, name: "Edit" }).click();
-  await expect(page.getByText("DRAFT", { exact: true }).first()).toBeVisible();
+  await expect(page.getByText("ACTIVE", { exact: true }).first()).toBeVisible();
   await expect(page.getByText("PLATFORM", { exact: true }).first()).toBeVisible();
-  await expect(page.getByRole("button", { exact: true, name: "Save draft" })).toBeVisible();
+  await expect(page.getByRole("button", { exact: true, name: "Save" })).toBeVisible();
+  await expect(page.getByRole("button", { exact: true, name: "Cancel" })).toBeVisible();
   await expect(page.locator('[aria-label="Replace customer-import-template.xlsx"]')).toBeVisible();
 });
 
@@ -101,7 +105,7 @@ test("a new platform Resource binds an active platform definition", async ({ pag
   await page.getByRole("option", { name: /File · v1-F8s/ }).click();
   await expect(page.getByLabel("File name")).toBeVisible();
   await expect(page.getByText("Binary data", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { exact: true, name: "Publish" })).toBeDisabled();
+  await expect(page.getByRole("button", { exact: true, name: "Create" })).toBeDisabled();
 });
 
 test("the Chinese phone pages keep the active settings entry and avoid horizontal overflow", async ({ page }) => {

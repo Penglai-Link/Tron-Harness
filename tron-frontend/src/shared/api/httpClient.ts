@@ -2,7 +2,7 @@ import { fallbackLocale, i18n } from "@/i18n";
 
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
 
-interface ApiRequestOptions {
+export interface ApiRequestOptions {
   body?: BodyInit | object | unknown[];
   credentials?: RequestCredentials;
   headers?: HeadersInit;
@@ -198,4 +198,65 @@ export async function requestApi<T>(endpoint: string, options: ApiRequestOptions
   }
 
   return unwrapApiEnvelope<T>(payload);
+}
+
+export interface ApiBlobResponse {
+  blob: Blob;
+  contentDisposition: string | null;
+  contentType: string | null;
+}
+
+/**
+ * The Resource binary download endpoint returns a raw stream on success and
+ * the standard JSON envelope on failure. Keep that distinction here so callers
+ * do not accidentally attempt `response.json()` on a binary body.
+ */
+export async function requestApiBlob(
+  endpoint: string,
+  options: ApiRequestOptions = {},
+): Promise<ApiBlobResponse> {
+  const { method, path } = parseEndpoint(endpoint);
+  const headers = resolveHeaders(options.body, options.headers);
+  const response = await fetch(buildApiUrl(path, options.pathParams, options.queryParams), {
+    body: resolveRequestBody(options.body),
+    credentials: options.credentials ?? "include",
+    headers,
+    method,
+    signal: options.signal,
+  });
+
+  if (
+    response.status === 401
+    && options.retryOnUnauthorized !== false
+    && apiAccessToken
+    && readBearerToken(headers) !== apiAccessToken
+  ) {
+    return requestApiBlob(endpoint, {
+      ...options,
+      retryOnUnauthorized: false,
+    });
+  }
+
+  if (
+    response.status === 401
+    && options.retryOnUnauthorized !== false
+    && unauthorizedHandler
+    && await unauthorizedHandler()
+  ) {
+    return requestApiBlob(endpoint, {
+      ...options,
+      retryOnUnauthorized: false,
+    });
+  }
+
+  if (!response.ok) {
+    const payload = await response.json().catch(() => null);
+    throw createApiError(response, payload, method);
+  }
+
+  return {
+    blob: await response.blob(),
+    contentDisposition: response.headers.get("Content-Disposition"),
+    contentType: response.headers.get("Content-Type"),
+  };
 }

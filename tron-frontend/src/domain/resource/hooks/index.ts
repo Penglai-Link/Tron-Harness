@@ -5,3 +5,8 @@ export * from "./useResourceList";
 export * from "./useResourceDefinitionVersions";
 export * from "./useResourceDefinitionVersionDetails";
 export * from "./useResourceVersionDetails";
+export * from "./useResourceApiQuery";
+export * from "./useResourceDefinitionDetail";
+export * from "./useResourceDefinitionPage";
+export * from "./useResourceDetail";
+export * from "./useResourcePage";

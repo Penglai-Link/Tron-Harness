@@ -1,5 +1,6 @@
 use std::{
     collections::BTreeMap,
+    io::{Read, Write},
     path::{Path, PathBuf},
     sync::Arc,
 };
@@ -66,9 +67,25 @@ impl StorageRouter {
         Ok((self.locator(profile, object_key), bytes))
     }
 
+    pub fn put_reader(
+        &self,
+        configured_profile: &str,
+        object_key: &str,
+        source: &mut dyn Read,
+    ) -> Result<(String, u64), ResourceError> {
+        let profile = self.resolve_profile(configured_profile)?;
+        let bytes = self.storage(profile)?.put_reader(object_key, source)?;
+        Ok((self.locator(profile, object_key), bytes))
+    }
+
     pub fn get_file(&self, locator: &str, target: &Path) -> Result<u64, ResourceError> {
         let (profile, key) = self.parse_locator(locator)?;
         self.storage(&profile)?.get_file(&key, target)
+    }
+
+    pub fn get_writer(&self, locator: &str, target: &mut dyn Write) -> Result<u64, ResourceError> {
+        let (profile, key) = self.parse_locator(locator)?;
+        self.storage(&profile)?.get_writer(&key, target)
     }
 
     pub fn delete(&self, locator: &str) -> Result<(), ResourceError> {

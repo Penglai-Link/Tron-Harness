@@ -1,4 +1,5 @@
 import {
+  useEffect,
   useMemo,
   useState,
 } from "react";
@@ -27,16 +28,22 @@ import {
 } from "@/components/ui/button";
 import { ResourceVersionSource } from "@/domain/resource/components";
 import {
+  activateResourceVersion,
+  createResourceDraft,
+  discardResourceDraft,
+  pageResources,
+  publishResourceDraft,
+} from "@/domain/resource/api";
+import {
   resourceLifecycleFilters,
   resourceScopeFilters,
   resourceSourceFilters,
   resourceValidationFilters,
 } from "@/domain/resource/constants";
 import {
-  useResourceDefinitionVersions,
-  usePlatformResourceDefinitionVersions,
-  usePlatformResourceList,
-  useResourceList,
+  useActivePlatformResourceDefinitionRecords,
+  useActiveResourceDefinitionRecords,
+  useResourcePage,
 } from "@/domain/resource/hooks";
 import type {
   ResourceContextFilter,
@@ -53,11 +60,13 @@ import {
   TablePagination,
   TextInput,
   useLocaleFormatters,
-  useTablePagination,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/shared/ui/Badge";
+
+type ResourceListAction = "activate" | "createDraft" | "discard" | "publish";
 
 export function ResourcesPage() {
   const { t } = useTranslation(["pages", "common"]);
@@ -71,17 +80,36 @@ export function ResourcesPage() {
   const basePath = isPlatform ? "/settings/resources" : "/resources";
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
   const activeWorkspaceName = activeWorkspace?.name ?? "";
-  const workspaceRecords = useResourceList(activeWorkspaceCode, activeWorkspaceName);
-  const platformRecords = usePlatformResourceList();
-  const records = isPlatform ? platformRecords : workspaceRecords;
-  const workspaceDefinitionRecords = useResourceDefinitionVersions(activeWorkspaceCode, activeWorkspaceName);
-  const platformDefinitionRecords = usePlatformResourceDefinitionVersions();
-  const definitionRecords = isPlatform ? platformDefinitionRecords : workspaceDefinitionRecords;
+  const scopeKind = isPlatform ? "PLATFORM" as const : "WORKSPACE" as const;
+  const isApi = getServiceDataSource("resource") === "api";
   const [query, setQuery] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState<ResourceLifecycleFilter>("ACTIVE");
   const [definitionFilter, setDefinitionFilter] = useState("ALL");
   const [contextFilter, setContextFilter] = useState<ResourceContextFilter>("ALL");
   const [validationFilter, setValidationFilter] = useState<ResourceValidationFilter>("ALL");
+  const [current, setCurrent] = useState(1);
+  const [size, setSize] = useState(15);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const resourcePage = useResourcePage({
+    context: contextFilter,
+    current,
+    definitionCode: definitionFilter === "ALL" ? null : definitionFilter,
+    lifecycle: lifecycleFilter,
+    scopeKind,
+    search: query,
+    size,
+    validation: validationFilter,
+    workspaceCode: isPlatform ? null : activeWorkspaceCode || null,
+    workspaceName: activeWorkspaceName,
+  });
+  const workspaceDefinitionRecords = useActiveResourceDefinitionRecords(
+    isPlatform ? "" : activeWorkspaceCode,
+    isPlatform ? "" : activeWorkspaceName,
+  );
+  const platformDefinitionRecords = useActivePlatformResourceDefinitionRecords(isPlatform);
+  const records = resourcePage.data.records;
+  const definitionQuery = isPlatform ? platformDefinitionRecords : workspaceDefinitionRecords;
+  const definitionRecords = definitionQuery.data;
 
   const pageT = (key: string, options?: Record<string, unknown>) => (
     t(`pages:resources.${key}`, options)
@@ -106,26 +134,19 @@ export function ResourcesPage() {
       .sort((left, right) => left.label.localeCompare(right.label));
   }, [definitionRecords, records]);
 
-  const filteredRecords = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return records.filter((record) => {
-      if (lifecycleFilter !== "ALL" && record.lifecycleStatus !== lifecycleFilter) return false;
-      if (definitionFilter !== "ALL" && record.definitionCode !== definitionFilter) return false;
-      if (showEffectiveSource && contextFilter !== "ALL" && record.sourceKind !== contextFilter) return false;
-      if (!showEffectiveSource && contextFilter !== "ALL" && record.scopeKind !== contextFilter) return false;
-      if (showValidationFilter && validationFilter !== "ALL" && record.validationStatus !== validationFilter) return false;
-      if (!normalizedQuery) return true;
+  const pageCount = Math.max(1, Math.ceil(resourcePage.data.total / size));
+  const startItem = resourcePage.data.total ? (current - 1) * size + 1 : 0;
+  const endItem = Math.min(current * size, resourcePage.data.total);
 
-      return [record.resourceCode, record.name, record.description]
-        .some((value) => value.toLowerCase().includes(normalizedQuery));
-    });
-  }, [contextFilter, definitionFilter, lifecycleFilter, query, records, showEffectiveSource, showValidationFilter, validationFilter]);
-  const pagination = useTablePagination(filteredRecords);
+  useEffect(() => {
+    if (!resourcePage.loading && current > pageCount) setCurrent(pageCount);
+  }, [current, pageCount, resourcePage.loading]);
 
   function changeLifecycle(value: ResourceLifecycleFilter) {
     setLifecycleFilter(value);
     setContextFilter("ALL");
     if (value !== "DRAFT") setValidationFilter("ALL");
+    setCurrent(1);
   }
 
   function renderState(record: ResourceVersionRecord) {
@@ -150,19 +171,107 @@ export function ResourcesPage() {
     );
   }
 
-  function announceAction(record: ResourceVersionRecord, action: string) {
-    toast.info(pageT(`messages.${action}`, {
-      name: record.name,
-      version: record.resourceVersion,
-    }));
-  }
-
   function openResource(record: ResourceVersionRecord) {
     navigate(`${basePath}/detail?resourceCode=${encodeURIComponent(record.resourceCode)}&resourceVersion=${encodeURIComponent(record.resourceVersion)}`);
   }
 
+  function actionKey(record: ResourceVersionRecord, action: ResourceListAction) {
+    return `${record.scopeKind}:${record.resourceCode}:${record.resourceVersion}:${action}`;
+  }
+
+  function apiScope() {
+    return {
+      scopeKind,
+      workspaceCode: isPlatform ? null : activeWorkspaceCode,
+    };
+  }
+
+  async function activeResourceVersion(record: ResourceVersionRecord) {
+    const activePage = await pageResources({
+      ...apiScope(),
+      current: 1,
+      definitionCode: null,
+      definitionStatus: null,
+      lifecycleStatus: "ACTIVE",
+      resourceCode: record.resourceCode,
+      search: null,
+      size: 1,
+      sourceKind: null,
+      validationStatus: null,
+    });
+    return activePage.records.find((item) => item.scopeKind === scopeKind)?.resourceVersion ?? null;
+  }
+
+  async function executeAction(record: ResourceVersionRecord, action: ResourceListAction) {
+    if (!isApi) {
+      openResource(record);
+      return;
+    }
+
+    const key = actionKey(record, action);
+    setPendingAction(key);
+    try {
+      if (action === "createDraft") {
+        const draft = await createResourceDraft({
+          ...apiScope(),
+          allowInheritance: null,
+          attributes: null,
+          definitionCode: null,
+          description: record.description,
+          name: record.name,
+          resourceCode: record.resourceCode,
+          sourceResourceVersion: record.resourceVersion,
+        });
+        resourcePage.refresh();
+        navigate(`${basePath}/detail?resourceCode=${encodeURIComponent(draft.resourceCode)}&resourceVersion=${encodeURIComponent(draft.resourceVersion)}`);
+        toast.success(pageT("messages.createdDraft", { name: record.name, version: draft.resourceVersion }));
+        return;
+      }
+
+      if (action === "publish") {
+        if (record.draftRevision === null) throw new Error(pageT("messages.missingDraftRevision"));
+        await publishResourceDraft({
+          ...apiScope(),
+          expectedDraftRevision: String(record.draftRevision),
+          resourceCode: record.resourceCode,
+          resourceVersion: record.resourceVersion,
+        });
+        resourcePage.refresh();
+        toast.success(pageT("messages.published", { name: record.name, version: record.resourceVersion }));
+        return;
+      }
+
+      if (action === "discard") {
+        if (record.draftRevision === null) throw new Error(pageT("messages.missingDraftRevision"));
+        await discardResourceDraft({
+          ...apiScope(),
+          expectedDraftRevision: String(record.draftRevision),
+          resourceCode: record.resourceCode,
+          resourceVersion: record.resourceVersion,
+        });
+        resourcePage.refresh();
+        toast.success(pageT("messages.discarded", { name: record.name, version: record.resourceVersion }));
+        return;
+      }
+
+      await activateResourceVersion({
+        ...apiScope(),
+        expectedActiveResourceVersion: await activeResourceVersion(record),
+        resourceCode: record.resourceCode,
+        resourceVersion: record.resourceVersion,
+      });
+      resourcePage.refresh();
+      toast.success(pageT("messages.activated", { name: record.name, version: record.resourceVersion }));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : pageT("messages.actionFailed"));
+    } finally {
+      setPendingAction((currentAction) => currentAction === key ? null : currentAction);
+    }
+  }
+
   function renderActions(record: ResourceVersionRecord) {
     const stopPropagation = (event: React.SyntheticEvent) => event.stopPropagation();
+    const disabled = pendingAction !== null;
 
     return (
       <div className="flex justify-end" onClick={stopPropagation} onKeyDown={stopPropagation}>
@@ -179,23 +288,28 @@ export function ResourcesPage() {
           <DropdownMenuContent align="end" className="w-44" onClick={stopPropagation}>
             {record.lifecycleStatus === "DRAFT" ? (
               <>
-                <DropdownMenuItem onClick={() => openResource(record)}>{pageT("actions.editDraft")}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => announceAction(record, "publish")}>{pageT("actions.publish")}</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => announceAction(record, "discardDraft")}>
-                  {pageT("actions.discardDraft")}
-                </DropdownMenuItem>
+                <DropdownMenuItem disabled={disabled} onClick={() => openResource(record)}>{pageT("actions.editDraft")}</DropdownMenuItem>
+                {isApi ? (
+                  <>
+                    <DropdownMenuItem disabled={disabled} onClick={() => { void executeAction(record, "publish"); }}>{pageT("actions.publish")}</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled={disabled} variant="destructive" onClick={() => { void executeAction(record, "discard"); }}>
+                      {pageT("actions.discardDraft")}
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </>
             ) : (
               <>
-                <DropdownMenuItem onClick={() => openResource(record)}>{pageT("actions.open")}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => announceAction(
-                  record,
-                  record.lifecycleStatus === "ACTIVE" ? "createDraft" : "activate",
-                )}
-                >
-                  {pageT(record.lifecycleStatus === "ACTIVE" ? "actions.createDraft" : "actions.activate")}
-                </DropdownMenuItem>
+                <DropdownMenuItem disabled={disabled} onClick={() => openResource(record)}>{pageT("actions.open")}</DropdownMenuItem>
+                {isApi ? (
+                  <DropdownMenuItem
+                    disabled={disabled}
+                    onClick={() => { void executeAction(record, record.lifecycleStatus === "ACTIVE" ? "createDraft" : "activate"); }}
+                  >
+                    {pageT(record.lifecycleStatus === "ACTIVE" ? "actions.createDraft" : "actions.activate")}
+                  </DropdownMenuItem>
+                ) : null}
               </>
             )}
           </DropdownMenuContent>
@@ -210,7 +324,11 @@ export function ResourcesPage() {
         title={pageT(isPlatform ? "title.platform" : "title.workspace")}
         actions={(
           <>
-            <Button variant="outline" onClick={() => toast.success(pageT("messages.refreshed"))}>
+            <Button variant="outline" onClick={() => {
+              resourcePage.refresh();
+              definitionQuery.refresh();
+              toast.success(pageT("messages.refreshed"));
+            }}>
               <RefreshCcw aria-hidden="true" size={15} />
               {t("common:actions.refresh")}
             </Button>
@@ -232,7 +350,10 @@ export function ResourcesPage() {
                   placeholder={pageT("search.placeholder")}
                   type="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setCurrent(1);
+                  }}
                 />
               </Field>
             </div>
@@ -258,7 +379,10 @@ export function ResourcesPage() {
                   aria-label={pageT("filters.definitionAria")}
                   className="w-full"
                   value={definitionFilter}
-                  onValueChange={(value) => setDefinitionFilter(value ?? "ALL")}
+                  onValueChange={(value) => {
+                    setDefinitionFilter(value ?? "ALL");
+                    setCurrent(1);
+                  }}
                 >
                   <SelectItem value="ALL">{pageT("filters.allDefinitions")}</SelectItem>
                   {definitionOptions.map((option) => (
@@ -273,7 +397,10 @@ export function ResourcesPage() {
                   aria-label={pageT(showEffectiveSource ? "filters.sourceAria" : "filters.scopeAria")}
                   className="w-full"
                   value={contextFilter}
-                  onValueChange={(value) => setContextFilter(value as ResourceContextFilter)}
+                  onValueChange={(value) => {
+                    setContextFilter(value as ResourceContextFilter);
+                    setCurrent(1);
+                  }}
                 >
                   {contextOptions.map((value) => (
                     <SelectItem key={value} value={value}>
@@ -292,7 +419,10 @@ export function ResourcesPage() {
                     aria-label={pageT("filters.validationAria")}
                     className="w-full"
                     value={validationFilter}
-                    onValueChange={(value) => setValidationFilter(value as ResourceValidationFilter)}
+                    onValueChange={(value) => {
+                      setValidationFilter(value as ResourceValidationFilter);
+                      setCurrent(1);
+                    }}
                   >
                     {resourceValidationFilters.map((value) => (
                       <SelectItem key={value} value={value}>
@@ -307,12 +437,23 @@ export function ResourcesPage() {
         </SurfaceCard>
 
         <DataTable<ResourceVersionRecord>
-          rows={pagination.visibleItems}
+          rows={records}
           pagination={(
             <TablePagination
               itemLabel={pageT("pagination.itemLabel")}
+              pageSizeOptions={[15, 25, 50]}
               showRange={false}
-              {...pagination.paginationProps}
+              endItem={endItem}
+              onPageChange={(next) => setCurrent(Math.min(Math.max(next, 1), pageCount))}
+              onPageSizeChange={(next) => {
+                setSize(next);
+                setCurrent(1);
+              }}
+              page={Math.min(current, pageCount)}
+              pageCount={pageCount}
+              pageSize={size}
+              startItem={startItem}
+              totalItems={resourcePage.data.total}
             />
           )}
           rowKey={(row) => `${row.scopeKind}:${row.ownerWorkspaceCode ?? "PLATFORM"}:${row.resourceCode}:${row.resourceVersion}`}

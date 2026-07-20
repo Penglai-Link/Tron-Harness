@@ -90,8 +90,16 @@ function isAdministrationRoute(pathname: string) {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
+function usesInPlaceSearch(pageId?: string) {
+  return pageId === "chats.index"
+    || pageId === "resources.detail"
+    || pageId === "resourceDefinitions.detail"
+    || pageId === "settings.resourcesDetail"
+    || pageId === "settings.resourceDefinitionsDetail";
+}
+
 function routeRenderKeyForLocation(pathname: string, search: string, pageId?: string) {
-  return pageId === "chats.index" ? pathname : `${pathname}${search}`;
+  return usesInPlaceSearch(pageId) ? pathname : `${pathname}${search}`;
 }
 
 function isConsoleShellConfigEqual(left: ConsoleShellConfig, right: ConsoleShellConfig) {
@@ -233,10 +241,10 @@ function AppRoutePage() {
   // 渲染所有缓存的 tab 内容
   const cachedRouteContents = useMemo(() => {
     return cachedTabsList.map((cachedTab) => {
-      // 对于 chats.index 等页面，需要使用当前的 search 参数，而不是缓存的
-      // 因为这些页面的查询参数可能随时变化，但共用一个组件实例
+      // These editors own version selection in the query string. Keep their
+      // instance alive while injecting the current query into the active tab.
       const isCurrentTab = cachedTab.tabId === activeTabId;
-      const useCurrentSearch = isCurrentTab && cachedTab.pageId === "chats.index";
+      const useCurrentSearch = isCurrentTab && usesInPlaceSearch(cachedTab.pageId);
 
       // cachedTab.path 可能包含查询参数，需要拆分为 pathname 和 search
       const questionMarkIndex = cachedTab.path.indexOf("?");
@@ -284,9 +292,9 @@ function AppRoutePage() {
           : resolved.route.title;
       const activeNav = resolved.route.activeNav;
 
-      // 对于某些页面（如 chats.index），查询参数变化不应该被视为 path 变化
-      // 这些页面使用 pathname 作为 key，而不是完整的 path
-      const shouldIgnoreSearch = resolved.route.pageId === "chats.index";
+      // Stateful detail pages react to their query themselves. Replacing their
+      // cache entry on every version change races with that page-level reload.
+      const shouldIgnoreSearch = usesInPlaceSearch(resolved.route.pageId);
       const lookupPath = shouldIgnoreSearch ? pathname : currentPath;
 
       // 调用 addTab，它会根据 activeNav 复用已存在的 tab，或创建新 tab
@@ -302,7 +310,7 @@ function AppRoutePage() {
 
       if (tab) {
         // 检查 path 是否改变
-        const pathChanged = tab.path !== currentPath;
+        const pathChanged = tab.path !== lookupPath;
 
         // 如果 path 改变了，需要清除该 tab 的缓存，让组件重新渲染
         if (pathChanged) {
@@ -310,8 +318,8 @@ function AppRoutePage() {
         }
 
         // 更新 tab 的 path 和 title（如果它们与当前路径不一致）
-        if (tab.path !== currentPath) {
-          useTabStore.getState().updateTab(tabId, { path: currentPath });
+        if (tab.path !== lookupPath) {
+          useTabStore.getState().updateTab(tabId, { path: lookupPath });
         }
         if (tab.title !== tabTitle) {
           useTabStore.getState().updateTab(tabId, { title: tabTitle });
@@ -321,7 +329,7 @@ function AppRoutePage() {
         useTabStore.getState().setActiveTab(tabId);
 
         // 更新缓存
-        addToCache(tabId, currentPath, resolved.route.pageId);
+        addToCache(tabId, lookupPath, resolved.route.pageId);
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps

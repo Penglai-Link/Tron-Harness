@@ -143,6 +143,7 @@ impl ResourceService {
                     self.effective_definition_for_resource(&workspace_code, definition_code)?;
                 self.ensure_resource_create_is_available(&workspace_code, &command.resource_code)?;
                 let resource = self.create_resource_draft(
+                    ResourceScopeKind::Workspace,
                     &workspace_code,
                     &command,
                     &definition,
@@ -209,6 +210,7 @@ impl ResourceService {
                         )?;
                         let source_mappings = self.mappings_for_resource(&source.key)?;
                         let resource = self.create_resource_draft(
+                            ResourceScopeKind::Workspace,
                             &workspace_code,
                             &command,
                             &definition,
@@ -372,41 +374,51 @@ impl ResourceService {
         }
     }
 
-    fn create_resource_draft(
+    pub(super) fn create_resource_draft(
         &self,
-        workspace_code: &str,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
         command: &ResourceDraftCommand,
         definition: &ResourceDefinition,
         source: Option<Resource>,
         mappings: Vec<ResourceBinaryMapping>,
     ) -> Result<Resource, ResourceError> {
-        if definition.definition_status
-            != crate::domain::resource::ResourceDefinitionStatus::Enabled
+        // Disabling a definition prevents creating a new resource, but it must
+        // not strand an existing resource that a user explicitly chose to keep
+        // as incomplete work.  Existing sources retain their versioned
+        // definition contract while the draft is completed.
+        if source.is_none()
+            && definition.definition_status
+                != crate::domain::resource::ResourceDefinitionStatus::Enabled
         {
             return Err(ResourceError::DefinitionDisabled);
         }
         let all_resources = self.repository(|repository| repository.list_resources())?;
         if all_resources.iter().any(|resource| {
-            resource.key.scope_kind == ResourceScopeKind::Workspace
-                && resource.key.scope_code == workspace_code
+            resource.key.scope_kind == scope_kind
+                && resource.key.scope_code == scope_code
                 && resource.key.resource_code == command.resource_code
                 && resource.lifecycle_status == ResourceLifecycleStatus::Draft
         }) {
             return Err(ResourceError::Conflict);
         }
         let now = current_timestamp();
-        let resource_version =
-            next_resource_version(&all_resources, workspace_code, &command.resource_code)?;
+        let resource_version = next_resource_version(
+            &all_resources,
+            scope_kind,
+            scope_code,
+            &command.resource_code,
+        )?;
         let based_on_resource_version = source.as_ref().and_then(|source| {
-            (source.key.scope_kind == ResourceScopeKind::Workspace
-                && source.key.scope_code == workspace_code
+            (source.key.scope_kind == scope_kind
+                && source.key.scope_code == scope_code
                 && source.lifecycle_status != ResourceLifecycleStatus::Draft)
                 .then(|| source.key.resource_version.clone())
         });
         let base = source.unwrap_or_else(|| Resource {
             key: ResourceKey {
-                scope_kind: ResourceScopeKind::Workspace,
-                scope_code: workspace_code.to_string(),
+                scope_kind,
+                scope_code: scope_code.to_string(),
                 resource_code: command.resource_code.clone(),
                 resource_version: resource_version.clone(),
             },
@@ -425,8 +437,8 @@ impl ResourceService {
         });
         let mut resource = Resource {
             key: ResourceKey {
-                scope_kind: ResourceScopeKind::Workspace,
-                scope_code: workspace_code.to_string(),
+                scope_kind,
+                scope_code: scope_code.to_string(),
                 resource_code: command.resource_code.clone(),
                 resource_version,
             },
@@ -443,7 +455,7 @@ impl ResourceService {
         Ok(resource)
     }
 
-    fn apply_resource_changes(
+    pub(super) fn apply_resource_changes(
         &self,
         mut resource: Resource,
         command: &ResourceDraftCommand,
@@ -481,7 +493,7 @@ impl ResourceService {
         Ok(resource)
     }
 
-    fn resource_validation_issues(
+    pub(super) fn resource_validation_issues(
         &self,
         resource: &Resource,
         definition: &ResourceDefinition,
@@ -495,10 +507,15 @@ impl ResourceService {
         )?;
         let keys =
             declared_variable_references(&definition.attributes_schema, &resource.attributes)?;
-        match self
-            .variables
-            .ensure_runtime_variable_keys(&resource.key.scope_code, &keys)
-        {
+        let variable_check = match resource.key.scope_kind {
+            ResourceScopeKind::Platform => {
+                self.variables.ensure_platform_runtime_variable_keys(&keys)
+            }
+            ResourceScopeKind::Workspace => self
+                .variables
+                .ensure_runtime_variable_keys(&resource.key.scope_code, &keys),
+        };
+        match variable_check {
             Ok(()) => {}
             Err(VariableError::NotFound) => issues.push(ResourceValidationIssue {
                 path: "/".to_string(),
@@ -520,14 +537,31 @@ impl ResourceService {
         workspace_code: &str,
         resource_code: &str,
     ) -> Result<(), ResourceError> {
+        self.ensure_resource_create_is_available_for_scope(
+            ResourceScopeKind::Workspace,
+            workspace_code,
+            resource_code,
+        )
+    }
+
+    pub(super) fn ensure_resource_create_is_available_for_scope(
+        &self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        resource_code: &str,
+    ) -> Result<(), ResourceError> {
         let locally_owned = self.repository(|repository| repository.list_resources())?;
         if locally_owned.iter().any(|resource| {
-            resource.key.scope_kind == ResourceScopeKind::Workspace
-                && resource.key.scope_code == workspace_code
+            resource.key.scope_kind == scope_kind
+                && resource.key.scope_code == scope_code
                 && resource.key.resource_code == resource_code
-        }) || self
-            .effective_resources(workspace_code)?
-            .contains_key(resource_code)
+        }) {
+            return Err(ResourceError::Conflict);
+        }
+        if scope_kind == ResourceScopeKind::Workspace
+            && self
+                .effective_resources(scope_code)?
+                .contains_key(resource_code)
         {
             return Err(ResourceError::Conflict);
         }
@@ -539,11 +573,35 @@ impl ResourceService {
         workspace_code: &str,
         definition_code: &str,
     ) -> Result<ResourceDefinition, ResourceError> {
-        let definition = self
-            .effective_definitions(workspace_code)?
-            .remove(definition_code)
-            .map(|effective| effective.definition)
-            .ok_or(ResourceError::NotFound)?;
+        self.definition_for_resource_scope(
+            ResourceScopeKind::Workspace,
+            workspace_code,
+            definition_code,
+        )
+    }
+
+    pub(super) fn definition_for_resource_scope(
+        &self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        definition_code: &str,
+    ) -> Result<ResourceDefinition, ResourceError> {
+        let definition = match scope_kind {
+            ResourceScopeKind::Platform => self
+                .repository(|repository| repository.list_definitions())?
+                .into_iter()
+                .find(|definition| {
+                    definition.key.scope_kind == ResourceScopeKind::Platform
+                        && definition.key.scope_code == scope_code
+                        && definition.key.definition_code == definition_code
+                        && definition.lifecycle_status == ResourceLifecycleStatus::Active
+                }),
+            ResourceScopeKind::Workspace => self
+                .effective_definitions(scope_code)?
+                .remove(definition_code)
+                .map(|effective| effective.definition),
+        }
+        .ok_or(ResourceError::NotFound)?;
         if definition.definition_status
             != crate::domain::resource::ResourceDefinitionStatus::Enabled
         {
@@ -584,7 +642,10 @@ impl ResourceService {
         Ok(source)
     }
 
-    fn resource_by_key(&self, key: &ResourceKey) -> Result<Option<Resource>, ResourceError> {
+    pub(super) fn resource_by_key(
+        &self,
+        key: &ResourceKey,
+    ) -> Result<Option<Resource>, ResourceError> {
         self.repository(|repository| {
             Ok(repository
                 .list_resources()?
@@ -593,7 +654,7 @@ impl ResourceService {
         })
     }
 
-    fn definition_by_resource(
+    pub(super) fn definition_by_resource(
         &self,
         resource: &Resource,
     ) -> Result<ResourceDefinition, ResourceError> {
@@ -606,7 +667,7 @@ impl ResourceService {
         })
     }
 
-    fn mappings_for_resource(
+    pub(super) fn mappings_for_resource(
         &self,
         key: &ResourceKey,
     ) -> Result<Vec<ResourceBinaryMapping>, ResourceError> {
@@ -763,7 +824,7 @@ impl ResourceService {
         }
     }
 
-    fn update_resource_with_mappings(
+    pub(super) fn update_resource_with_mappings(
         &self,
         resource: Resource,
         definition: &ResourceDefinition,
@@ -830,7 +891,7 @@ impl ResourceService {
         })
     }
 
-    fn resource_for_binary_download(
+    pub(super) fn resource_for_binary_download(
         &self,
         workspace_code: &str,
         command: &ResourceBinaryCommand,
@@ -952,7 +1013,7 @@ impl ResourceService {
         Ok(canonical)
     }
 
-    fn next_object_key(&self, resource: &Resource) -> String {
+    pub(super) fn next_object_key(&self, resource: &Resource) -> String {
         format!(
             "resources/{}/{}/{}/{:016X}",
             resource.key.scope_code,
@@ -962,7 +1023,7 @@ impl ResourceService {
         )
     }
 
-    fn delete_unreferenced_locators(&self, locators: Vec<String>) {
+    pub(super) fn delete_unreferenced_locators(&self, locators: Vec<String>) {
         for locator in locators {
             let referenced = self
                 .repository(|repository| repository.locator_reference_count(&locator))
@@ -973,7 +1034,7 @@ impl ResourceService {
         }
     }
 
-    fn publish_resource_audit(
+    pub(super) fn publish_resource_audit(
         &self,
         actor_user_code: &str,
         resource: &Resource,
@@ -1090,16 +1151,17 @@ fn resource_draft_result(
     }
 }
 
-fn next_resource_version(
+pub(super) fn next_resource_version(
     resources: &[Resource],
-    workspace_code: &str,
+    scope_kind: ResourceScopeKind,
+    scope_code: &str,
     resource_code: &str,
 ) -> Result<String, ResourceError> {
     let sequence = resources
         .iter()
         .filter(|resource| {
-            resource.key.scope_kind == ResourceScopeKind::Workspace
-                && resource.key.scope_code == workspace_code
+            resource.key.scope_kind == scope_kind
+                && resource.key.scope_code == scope_code
                 && resource.key.resource_code == resource_code
                 && resource.lifecycle_status != ResourceLifecycleStatus::Draft
         })
@@ -1108,8 +1170,8 @@ fn next_resource_version(
     let existing = resources
         .iter()
         .filter(|resource| {
-            resource.key.scope_kind == ResourceScopeKind::Workspace
-                && resource.key.scope_code == workspace_code
+            resource.key.scope_kind == scope_kind
+                && resource.key.scope_code == scope_code
                 && resource.key.resource_code == resource_code
         })
         .map(|resource| resource.key.resource_version.as_str())
@@ -1154,6 +1216,7 @@ fn validate_resource_query(query: &ResourceQuery) -> Result<(), ResourceError> {
 
 fn activation_result_code(value: ResourceActivationResult) -> &'static str {
     match value {
+        ResourceActivationResult::DirectCommitted => "COMMITTED",
         ResourceActivationResult::DraftPublished => "DRAFT_PUBLISHED",
         ResourceActivationResult::HistoricalReactivated => "HISTORICAL_REACTIVATED",
         ResourceActivationResult::AlreadyActive => "ALREADY_ACTIVE",

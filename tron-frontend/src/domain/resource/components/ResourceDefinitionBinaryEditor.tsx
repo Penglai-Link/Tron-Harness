@@ -6,12 +6,10 @@ import {
   LockKeyhole,
 } from "lucide-react";
 
-import { SelectItem } from "@/components/ui/select";
 import type { ResourceDefinitionBinarySchema } from "@/domain/resource/model";
 import {
   Badge,
   Field,
-  SelectInput,
   SurfaceCard,
   TextInput,
   ToggleSwitch,
@@ -106,22 +104,17 @@ export function ResourceDefinitionBinaryEditor({ onChange, readOnly, schema }: R
                 {editorT("storage.title", "Storage profile")}
               </div>
               <p className="mt-1 text-[12px] leading-5 text-[var(--color-on-surface-variant)]">
-                {editorT("storage.description", "Select a configured tron.yaml profile. Resolved paths and credentials stay hidden.")}
+                {editorT("storage.description", "Enter a profile configured in tron.yaml. Leave it empty to use the default; resolved paths and credentials stay hidden.")}
               </p>
             </div>
             <Field label={editorT("storage.field", "Profile")}>
-              <SelectInput
+              <TextInput
                 className="w-full"
                 disabled={readOnly}
+                placeholder="@default"
                 value={schema.storageProfile}
-                onValueChange={(value) => {
-                  if (value) patch({ storageProfile: value });
-                }}
-              >
-                <SelectItem value="@default">@default</SelectItem>
-                <SelectItem value="media-local">media-local</SelectItem>
-                <SelectItem value="documents-local">documents-local</SelectItem>
-              </SelectInput>
+                onChange={(event) => patch({ storageProfile: event.target.value })}
+              />
             </Field>
           </section>
 

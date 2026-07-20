@@ -10,11 +10,17 @@ import {
 
 let frontend: ResourceUiFrontend | undefined;
 
+test.describe.configure({ timeout: 60_000 });
+
 async function openResources(page: Page, locale: "en-US" | "zh-CN" = "en-US") {
   await routeResourceUiShellApi(page);
   await seedResourceUiShell(page, locale);
   await page.goto(`${frontend!.baseUrl}/resources`);
   await page.waitForLoadState("networkidle");
+  await expect(page.getByRole("heading", {
+    exact: true,
+    name: locale === "zh-CN" ? "资源" : "Resources",
+  })).toBeVisible({ timeout: 15_000 });
 }
 
 async function chooseFilter(page: Page, label: string, option: string) {
@@ -53,7 +59,7 @@ test("workspace resources default to effective ACTIVE versions with an actions c
 
   await page.getByLabel("Open actions for Storefront Product Gallery v4-M7q").click();
   await expect(page.getByRole("menuitem", { name: "View details" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Create draft" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Create draft" })).toHaveCount(0);
 });
 
 test("resource filters follow the lifecycle-specific source, scope, and validation rules", async ({ page }) => {

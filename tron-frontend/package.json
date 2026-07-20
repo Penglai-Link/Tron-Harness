@@ -10,7 +10,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "test:unit": "vitest run --dir packages",
+    "test:unit": "vitest run packages src/domain/resource",
     "typecheck": "tsc -b --pretty false"
   },
   "dependencies": {

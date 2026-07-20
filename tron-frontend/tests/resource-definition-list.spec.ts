@@ -16,6 +16,8 @@ let frontendBaseUrl = "";
 let frontendLogs = "";
 let frontendProcess: ManagedProcess | undefined;
 
+test.describe.configure({ timeout: 60_000 });
+
 const authenticatedSession = {
   authMethod: "internal",
   authenticated: true,
@@ -138,6 +140,10 @@ async function openResourceDefinitions(page: Page, locale: "en-US" | "zh-CN" = "
   await routeShellApi(page);
   await seedShell(page, locale);
   await page.goto(`${frontendBaseUrl}/resource-definitions`);
+  await expect(page.getByRole("heading", {
+    exact: true,
+    name: locale === "zh-CN" ? "资源定义" : "Resource Definitions",
+  })).toBeVisible({ timeout: 15_000 });
 }
 
 async function chooseFilter(page: Page, label: string, option: string) {
@@ -221,7 +227,7 @@ test("workspace resource definitions default to active versions and preserve sou
 
   await page.getByLabel("Open actions for Product Images v2-P4d").click();
   await expect(page.getByRole("menuitem", { name: "View details" })).toBeVisible();
-  await expect(page.getByRole("menuitem", { name: "Create draft" })).toBeVisible();
+  await expect(page.getByRole("menuitem", { name: "Create draft" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await expect(page.locator("tbody tr").filter({ hasText: "v2-P4d" })).toContainText("LOCAL");

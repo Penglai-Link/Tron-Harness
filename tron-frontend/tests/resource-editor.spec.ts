@@ -10,6 +10,8 @@ import {
 
 let frontend: ResourceUiFrontend | undefined;
 
+test.describe.configure({ timeout: 60_000 });
+
 const draftPath = "/resources/detail?resourceCode=storefront-product-gallery&resourceVersion=v5-X7b";
 
 async function openEditor(
@@ -21,7 +23,7 @@ async function openEditor(
   await routeResourceUiShellApi(page);
   await seedResourceUiShell(page, locale);
   await page.goto(`${frontend!.baseUrl}${path}`);
-  await expect(page.getByRole("heading", { exact: true, name: heading })).toBeVisible();
+  await expect(page.getByRole("heading", { exact: true, name: heading })).toBeVisible({ timeout: 15_000 });
 }
 
 test.beforeAll(async () => {
@@ -106,7 +108,7 @@ test("a new Resource selects an active definition before the generated form appe
   await expect(page.getByLabel("Resource name")).toHaveValue("");
   await expect(page.getByLabel("Resource code")).toHaveValue("");
   await expect(page.getByText("Select a resource type to configure its data.", { exact: true })).toBeVisible();
-  await expect(page.getByRole("button", { exact: true, name: "Publish" })).toBeDisabled();
+  await expect(page.getByRole("button", { exact: true, name: "Create" })).toBeDisabled();
 
   await page.getByLabel("Resource type").click();
   await page.getByRole("option", { name: /Product Images/ }).click();

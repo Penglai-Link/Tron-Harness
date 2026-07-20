@@ -1,5 +1,5 @@
 import {
-  useMemo,
+  useEffect,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/dropdown-menu";
 
 import {
+  ConfirmDialog,
   DataTable,
   Field,
   PageHeader,
@@ -30,7 +31,6 @@ import {
   TablePagination,
   TextInput,
   useLocaleFormatters,
-  useTablePagination,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -40,8 +40,16 @@ import {
 } from "@/components/ui/button";
 import { ResourceDefinitionSource } from "@/domain/resource/components";
 import {
-  usePlatformResourceDefinitionVersions,
-  useResourceDefinitionVersions,
+  activateResourceDefinitionVersion,
+  createResourceDefinitionDraft,
+  deleteResourceDefinition,
+  discardResourceDefinitionDraft,
+  pageResourceDefinitions,
+  publishResourceDefinitionDraft,
+  setResourceDefinitionEnabled,
+} from "@/domain/resource/api";
+import {
+  useResourceDefinitionPage,
 } from "@/domain/resource/hooks";
 import type {
   ResourceDefinitionEnabledFilter,
@@ -49,11 +57,13 @@ import type {
   ResourceDefinitionValidationFilter,
   ResourceDefinitionVersionRecord,
 } from "@/domain/resource/model";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/shared/ui/Badge";
 
 const lifecycleFilters: ResourceDefinitionLifecycleFilter[] = ["ACTIVE", "DRAFT", "HISTORICAL", "ALL"];
 const enabledFilters: ResourceDefinitionEnabledFilter[] = ["ALL", "ENABLED", "DISABLED"];
 const validationFilters: ResourceDefinitionValidationFilter[] = ["ALL", "VALID", "INVALID"];
+type ResourceDefinitionListAction = "activate" | "createDraft" | "delete" | "discard" | "publish" | "setEnabled";
 
 export function ResourceDefinitionsPage() {
   const { t } = useTranslation(["pages", "common"]);
@@ -67,37 +77,40 @@ export function ResourceDefinitionsPage() {
   const basePath = isPlatform ? "/settings/resource-definitions" : "/resource-definitions";
   const workspaceCode = isPlatform ? "PLATFORM" : activeWorkspace?.workspaceCode ?? "";
   const workspaceName = isPlatform ? "Platform" : activeWorkspace?.name ?? "";
-  const sourceRecords = useResourceDefinitionVersions(
-    workspaceCode,
-    workspaceName,
-  );
-  const platformRecords = usePlatformResourceDefinitionVersions();
-  const records = useMemo(() => (
-    isPlatform ? platformRecords : sourceRecords
-  ), [isPlatform, platformRecords, sourceRecords]);
+  const scopeKind = isPlatform ? "PLATFORM" as const : "WORKSPACE" as const;
+  const isApi = getServiceDataSource("resource") === "api";
   const [query, setQuery] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState<ResourceDefinitionLifecycleFilter>("ACTIVE");
   const [enabledFilter, setEnabledFilter] = useState<ResourceDefinitionEnabledFilter>("ALL");
   const [validationFilter, setValidationFilter] = useState<ResourceDefinitionValidationFilter>("ALL");
+  const [current, setCurrent] = useState(1);
+  const [size, setSize] = useState(15);
+  const [pendingAction, setPendingAction] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ResourceDefinitionVersionRecord | null>(null);
+  const page = useResourceDefinitionPage({
+    current,
+    enabled: enabledFilter,
+    lifecycle: lifecycleFilter,
+    scopeKind,
+    search: query,
+    size,
+    validation: validationFilter,
+    workspaceCode: isPlatform ? null : workspaceCode || null,
+    workspaceName,
+  });
+  const records = page.data.records;
 
   const pageT = (key: string, options?: Record<string, unknown>) => (
     t(`pages:resourceDefinitions.${key}`, options)
   );
 
-  const filteredRecords = useMemo(() => {
-    const normalizedQuery = query.trim().toLowerCase();
-    return records.filter((record) => {
-      if (lifecycleFilter !== "ALL" && record.lifecycleStatus !== lifecycleFilter) return false;
-      if (enabledFilter === "ENABLED" && !record.enabled) return false;
-      if (enabledFilter === "DISABLED" && record.enabled) return false;
-      if (validationFilter !== "ALL" && record.validationStatus !== validationFilter) return false;
-      if (!normalizedQuery) return true;
+  const pageCount = Math.max(1, Math.ceil(page.data.total / size));
+  const startItem = page.data.total ? (current - 1) * size + 1 : 0;
+  const endItem = Math.min(current * size, page.data.total);
 
-      return [record.definitionCode, record.name, record.description]
-        .some((value) => value.toLowerCase().includes(normalizedQuery));
-    });
-  }, [enabledFilter, lifecycleFilter, query, records, validationFilter]);
-  const pagination = useTablePagination(filteredRecords);
+  useEffect(() => {
+    if (!page.loading && current > pageCount) setCurrent(pageCount);
+  }, [current, page.loading, pageCount]);
 
   function renderLifecycle(record: ResourceDefinitionVersionRecord) {
     const tone = record.lifecycleStatus === "ACTIVE"
@@ -130,20 +143,150 @@ export function ResourceDefinitionsPage() {
     );
   }
 
-  function announceAction(record: ResourceDefinitionVersionRecord, action: string) {
-    const draft = action === "createDraft"
-      ? records.find((item) => item.definitionCode === record.definitionCode && item.lifecycleStatus === "DRAFT")
-      : null;
-    const target = draft ?? record;
-    navigate(`${basePath}/detail?definitionCode=${encodeURIComponent(target.definitionCode)}&definitionVersion=${encodeURIComponent(target.definitionVersion)}`);
-    toast.info(pageT(`messages.${action}`, {
-      name: record.name,
-      version: record.definitionVersion,
-    }));
+  function openDefinition(record: ResourceDefinitionVersionRecord) {
+    navigate(`${basePath}/detail?definitionCode=${encodeURIComponent(record.definitionCode)}&definitionVersion=${encodeURIComponent(record.definitionVersion)}`);
+  }
+
+  function actionKey(record: ResourceDefinitionVersionRecord, action: ResourceDefinitionListAction) {
+    return `${record.scopeKind}:${record.definitionCode}:${record.definitionVersion}:${action}`;
+  }
+
+  function apiScope() {
+    return {
+      scopeKind,
+      workspaceCode: isPlatform ? null : workspaceCode,
+    };
+  }
+
+  async function activeDefinitionVersion(record: ResourceDefinitionVersionRecord) {
+    const activePage = await pageResourceDefinitions({
+      ...apiScope(),
+      current: 1,
+      definitionCode: record.definitionCode,
+      definitionStatus: null,
+      lifecycleStatus: "ACTIVE",
+      search: null,
+      size: 1,
+      sourceKind: null,
+      validationStatus: null,
+    });
+    return activePage.records.find((item) => item.scopeKind === scopeKind)?.definitionVersion ?? null;
+  }
+
+  function ownsActiveDefinition(record: ResourceDefinitionVersionRecord) {
+    return record.lifecycleStatus === "ACTIVE" && record.scopeKind === scopeKind;
+  }
+
+  async function executeAction(record: ResourceDefinitionVersionRecord, action: ResourceDefinitionListAction) {
+    if (!isApi) {
+      openDefinition(record);
+      return;
+    }
+
+    const key = actionKey(record, action);
+    setPendingAction(key);
+    try {
+      if (action === "createDraft") {
+        const draft = await createResourceDefinitionDraft({
+          ...apiScope(),
+          allowInheritance: null,
+          attributesSchema: null,
+          binarySchema: null,
+          binaryStorageProfile: null,
+          definitionCode: record.definitionCode,
+          definitionStatus: null,
+          description: record.description,
+          name: record.name,
+          sourceDefinitionVersion: record.definitionVersion,
+        });
+        page.refresh();
+        navigate(`${basePath}/detail?definitionCode=${encodeURIComponent(draft.definitionCode)}&definitionVersion=${encodeURIComponent(draft.definitionVersion)}`);
+        toast.success(pageT("messages.createdDraft", { name: record.name, version: draft.definitionVersion }));
+        return;
+      }
+
+      if (action === "publish") {
+        if (record.draftRevision === null) throw new Error(pageT("messages.missingDraftRevision"));
+        await publishResourceDefinitionDraft({
+          ...apiScope(),
+          definitionCode: record.definitionCode,
+          definitionVersion: record.definitionVersion,
+          expectedDraftRevision: String(record.draftRevision),
+        });
+        page.refresh();
+        toast.success(pageT("messages.published", { name: record.name, version: record.definitionVersion }));
+        return;
+      }
+
+      if (action === "discard") {
+        if (record.draftRevision === null) throw new Error(pageT("messages.missingDraftRevision"));
+        await discardResourceDefinitionDraft({
+          ...apiScope(),
+          definitionCode: record.definitionCode,
+          definitionVersion: record.definitionVersion,
+          expectedDraftRevision: String(record.draftRevision),
+        });
+        page.refresh();
+        toast.success(pageT("messages.discarded", { name: record.name, version: record.definitionVersion }));
+        return;
+      }
+
+      if (action === "setEnabled") {
+        if (!ownsActiveDefinition(record)) {
+          throw new Error(pageT("messages.setEnabledBlocked"));
+        }
+        await setResourceDefinitionEnabled({
+          ...apiScope(),
+          definitionCode: record.definitionCode,
+          enabled: !record.enabled,
+          expectedActiveDefinitionVersion: record.definitionVersion,
+        });
+        page.refresh();
+        toast.success(pageT(
+          record.enabled ? "messages.disabled" : "messages.enabled",
+          { name: record.name },
+        ));
+        return;
+      }
+
+      if (action === "delete") {
+        if (!ownsActiveDefinition(record) || record.preset || record.enabled) {
+          throw new Error(pageT("messages.deleteBlocked"));
+        }
+        const result = await deleteResourceDefinition({
+          ...apiScope(),
+          definitionCode: record.definitionCode,
+          expectedActiveDefinitionVersion: record.definitionVersion,
+        });
+        if (!result.deleted) {
+          throw new Error(pageT("messages.deleteFailed"));
+        }
+        setDeleteTarget(null);
+        page.refresh();
+        toast.success(pageT("messages.deleted", { name: record.name }));
+        return;
+      }
+
+      await activateResourceDefinitionVersion({
+        ...apiScope(),
+        definitionCode: record.definitionCode,
+        definitionVersion: record.definitionVersion,
+        expectedActiveDefinitionVersion: await activeDefinitionVersion(record),
+      });
+      page.refresh();
+      toast.success(pageT("messages.activated", { name: record.name, version: record.definitionVersion }));
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : pageT("messages.actionFailed"));
+    } finally {
+      setPendingAction((currentAction) => currentAction === key ? null : currentAction);
+    }
   }
 
   function renderActions(record: ResourceDefinitionVersionRecord) {
     const stopPropagation = (event: React.SyntheticEvent) => event.stopPropagation();
+    const disabled = pendingAction !== null;
+    const canManageActive = isApi && ownsActiveDefinition(record);
+    const canDelete = canManageActive && !record.preset && !record.enabled;
 
     return (
       <div className="flex justify-end" onClick={stopPropagation} onKeyDown={stopPropagation}>
@@ -160,23 +303,43 @@ export function ResourceDefinitionsPage() {
           <DropdownMenuContent align="end" className="w-44" onClick={stopPropagation}>
             {record.lifecycleStatus === "DRAFT" ? (
               <>
-                <DropdownMenuItem onClick={() => announceAction(record, "editDraft")}>{pageT("actions.editDraft")}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => announceAction(record, "publish")}>{pageT("actions.publish")}</DropdownMenuItem>
-                <DropdownMenuSeparator />
-                <DropdownMenuItem variant="destructive" onClick={() => announceAction(record, "discardDraft")}>
-                  {pageT("actions.discardDraft")}
-                </DropdownMenuItem>
+                <DropdownMenuItem disabled={disabled} onClick={() => openDefinition(record)}>{pageT("actions.editDraft")}</DropdownMenuItem>
+                {isApi ? (
+                  <>
+                    <DropdownMenuItem disabled={disabled} onClick={() => { void executeAction(record, "publish"); }}>{pageT("actions.publish")}</DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuItem disabled={disabled} variant="destructive" onClick={() => { void executeAction(record, "discard"); }}>
+                      {pageT("actions.discardDraft")}
+                    </DropdownMenuItem>
+                  </>
+                ) : null}
               </>
             ) : (
               <>
-                <DropdownMenuItem onClick={() => announceAction(record, "open")}>{pageT("actions.open")}</DropdownMenuItem>
-                <DropdownMenuItem onClick={() => announceAction(
-                  record,
-                  record.lifecycleStatus === "ACTIVE" ? "createDraft" : "activate",
-                )}
-                >
-                  {pageT(record.lifecycleStatus === "ACTIVE" ? "actions.createDraft" : "actions.activate")}
-                </DropdownMenuItem>
+                <DropdownMenuItem disabled={disabled} onClick={() => openDefinition(record)}>{pageT("actions.open")}</DropdownMenuItem>
+                {isApi ? (
+                  <>
+                    <DropdownMenuItem
+                      disabled={disabled}
+                      onClick={() => { void executeAction(record, record.lifecycleStatus === "ACTIVE" ? "createDraft" : "activate"); }}
+                    >
+                      {pageT(record.lifecycleStatus === "ACTIVE" ? "actions.createDraft" : "actions.activate")}
+                    </DropdownMenuItem>
+                    {canManageActive ? (
+                      <>
+                        <DropdownMenuSeparator />
+                        <DropdownMenuItem disabled={disabled} onClick={() => { void executeAction(record, "setEnabled"); }}>
+                          {pageT(record.enabled ? "actions.disable" : "actions.enable")}
+                        </DropdownMenuItem>
+                        {canDelete ? (
+                          <DropdownMenuItem disabled={disabled} variant="destructive" onClick={() => setDeleteTarget(record)}>
+                            {pageT("actions.delete")}
+                          </DropdownMenuItem>
+                        ) : null}
+                      </>
+                    ) : null}
+                  </>
+                ) : null}
               </>
             )}
           </DropdownMenuContent>
@@ -193,7 +356,10 @@ export function ResourceDefinitionsPage() {
           <>
             <Button
               variant="outline"
-              onClick={() => toast.success(pageT("messages.refreshed"))}
+              onClick={() => {
+                page.refresh();
+                toast.success(pageT("messages.refreshed"));
+              }}
             >
               <RefreshCcw aria-hidden="true" size={15} />
               {t("common:actions.refresh")}
@@ -216,7 +382,10 @@ export function ResourceDefinitionsPage() {
                   placeholder={pageT("search.placeholder")}
                   type="search"
                   value={query}
-                  onChange={(event) => setQuery(event.target.value)}
+                  onChange={(event) => {
+                    setQuery(event.target.value);
+                    setCurrent(1);
+                  }}
                 />
               </Field>
             </div>
@@ -226,7 +395,10 @@ export function ResourceDefinitionsPage() {
                   aria-label={pageT("filters.lifecycleAria")}
                   className="w-full"
                   value={lifecycleFilter}
-                  onValueChange={(value) => setLifecycleFilter(value as ResourceDefinitionLifecycleFilter)}
+                  onValueChange={(value) => {
+                    setLifecycleFilter(value as ResourceDefinitionLifecycleFilter);
+                    setCurrent(1);
+                  }}
                 >
                   {lifecycleFilters.map((value) => (
                     <SelectItem key={value} value={value}>
@@ -244,7 +416,10 @@ export function ResourceDefinitionsPage() {
                   aria-label={pageT("filters.enabledAria")}
                   className="w-full"
                   value={enabledFilter}
-                  onValueChange={(value) => setEnabledFilter(value as ResourceDefinitionEnabledFilter)}
+                  onValueChange={(value) => {
+                    setEnabledFilter(value as ResourceDefinitionEnabledFilter);
+                    setCurrent(1);
+                  }}
                 >
                   {enabledFilters.map((value) => (
                     <SelectItem key={value} value={value}>
@@ -262,7 +437,10 @@ export function ResourceDefinitionsPage() {
                   aria-label={pageT("filters.validationAria")}
                   className="w-full"
                   value={validationFilter}
-                  onValueChange={(value) => setValidationFilter(value as ResourceDefinitionValidationFilter)}
+                  onValueChange={(value) => {
+                    setValidationFilter(value as ResourceDefinitionValidationFilter);
+                    setCurrent(1);
+                  }}
                 >
                   {validationFilters.map((value) => (
                     <SelectItem key={value} value={value}>
@@ -278,12 +456,23 @@ export function ResourceDefinitionsPage() {
         </SurfaceCard>
 
         <DataTable<ResourceDefinitionVersionRecord>
-        rows={pagination.visibleItems}
+        rows={records}
         pagination={(
           <TablePagination
             itemLabel={pageT("pagination.itemLabel")}
+            pageSizeOptions={[15, 25, 50]}
             showRange={false}
-            {...pagination.paginationProps}
+            endItem={endItem}
+            onPageChange={(next) => setCurrent(Math.min(Math.max(next, 1), pageCount))}
+            onPageSizeChange={(next) => {
+              setSize(next);
+              setCurrent(1);
+            }}
+            page={Math.min(current, pageCount)}
+            pageCount={pageCount}
+            pageSize={size}
+            startItem={startItem}
+            totalItems={page.data.total}
           />
         )}
         rowKey={(row) => `${row.definitionCode}:${row.definitionVersion}`}
@@ -392,6 +581,23 @@ export function ResourceDefinitionsPage() {
         tableClassName="min-w-full table-fixed max-sm:w-[calc(100%-1px)] max-sm:min-w-0 max-sm:[&>colgroup]:hidden xl:min-w-[900px]"
         />
       </div>
+      <ConfirmDialog
+        ariaLabel={pageT("deleteDialog.aria")}
+        cancelText={pageT("deleteDialog.cancel")}
+        confirmText={pendingAction === (deleteTarget ? actionKey(deleteTarget, "delete") : null)
+          ? pageT("deleteDialog.deleting")
+          : pageT("actions.delete")}
+        description={deleteTarget ? pageT("deleteDialog.description", {
+          name: deleteTarget.name,
+        }) : undefined}
+        open={deleteTarget !== null}
+        pending={pendingAction === (deleteTarget ? actionKey(deleteTarget, "delete") : null)}
+        title={pageT("deleteDialog.title")}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          if (deleteTarget) void executeAction(deleteTarget, "delete");
+        }}
+      />
     </div>
   );
 }

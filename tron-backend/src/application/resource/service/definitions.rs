@@ -334,7 +334,7 @@ impl ResourceService {
             .collect())
     }
 
-    fn create_definition_draft(
+    pub(super) fn create_definition_draft(
         &self,
         scope_code: &str,
         command: &ResourceDefinitionDraftCommand,
@@ -401,7 +401,7 @@ impl ResourceService {
         Ok(draft)
     }
 
-    fn apply_definition_changes(
+    pub(super) fn apply_definition_changes(
         &self,
         mut definition: ResourceDefinition,
         command: &ResourceDefinitionDraftCommand,
@@ -492,7 +492,7 @@ impl ResourceService {
         Ok(source)
     }
 
-    fn definition_by_key(
+    pub(super) fn definition_by_key(
         &self,
         key: &ResourceDefinitionKey,
     ) -> Result<Option<ResourceDefinition>, ResourceError> {
@@ -504,7 +504,7 @@ impl ResourceService {
         })
     }
 
-    fn publish_audit(
+    pub(super) fn publish_audit(
         &self,
         event_name: &'static str,
         actor_user_code: &str,
@@ -606,7 +606,7 @@ fn definition_draft_result(
     }
 }
 
-fn definition_validation_issues(
+pub(super) fn definition_validation_issues(
     definition: &ResourceDefinition,
     service: &ResourceService,
 ) -> Result<Vec<ResourceValidationIssue>, ResourceError> {

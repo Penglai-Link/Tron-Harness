@@ -150,7 +150,10 @@ export interface ResourceUiFrontend {
   process: ManagedProcess;
 }
 
-export async function startResourceUiFrontend(initialPath: string): Promise<ResourceUiFrontend> {
+export async function startResourceUiFrontend(
+  initialPath: string,
+  environment: NodeJS.ProcessEnv = {},
+): Promise<ResourceUiFrontend> {
   const port = await reservePort();
   const baseUrl = `http://127.0.0.1:${port}`;
   let logs = "";
@@ -159,7 +162,7 @@ export async function startResourceUiFrontend(initialPath: string): Promise<Reso
     ["run", "dev", "--", "--host", "127.0.0.1", "--port", String(port), "--strictPort"],
     {
       cwd: frontendRoot,
-      env: { ...process.env, CI: "1" },
+      env: { ...process.env, ...environment, CI: "1" },
       stdio: "pipe",
     },
   );

@@ -9,6 +9,7 @@ pub const DEFAULT_RESOURCE_MAX_DEPTH: usize = 128;
 pub const DEFAULT_RESOURCE_MAX_VALIDATION_ERRORS: usize = 100;
 pub const DEFAULT_RESOURCE_MAX_BINARIES: usize = 500;
 pub const DEFAULT_RESOURCE_MAX_BINARY_BYTES: u64 = 1_073_741_824;
+pub const DEFAULT_RESOURCE_MAX_COMMIT_BYTES: u64 = 1_073_741_824;
 pub const DEFAULT_RESOURCE_MAX_BINARY_NAME_LENGTH: usize = 255;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -36,6 +37,7 @@ pub struct ResourceLimits {
     pub max_validation_errors: usize,
     pub max_binaries: usize,
     pub max_binary_bytes: u64,
+    pub max_commit_bytes: u64,
     pub max_binary_name_length: usize,
 }
 
@@ -106,6 +108,7 @@ impl ResourceConfig {
             || self.limits.max_validation_errors == 0
             || self.limits.max_binaries == 0
             || self.limits.max_binary_bytes == 0
+            || self.limits.max_commit_bytes == 0
             || self.limits.max_binary_name_length == 0
         {
             return Err(invalid_config("resource limits must be greater than zero"));
@@ -123,6 +126,7 @@ impl Default for ResourceLimits {
             max_validation_errors: DEFAULT_RESOURCE_MAX_VALIDATION_ERRORS,
             max_binaries: DEFAULT_RESOURCE_MAX_BINARIES,
             max_binary_bytes: DEFAULT_RESOURCE_MAX_BINARY_BYTES,
+            max_commit_bytes: DEFAULT_RESOURCE_MAX_COMMIT_BYTES,
             max_binary_name_length: DEFAULT_RESOURCE_MAX_BINARY_NAME_LENGTH,
         }
     }
@@ -181,6 +185,9 @@ impl ResourceLimits {
         if let Some(value) = overrides.max_binary_bytes {
             self.max_binary_bytes = value;
         }
+        if let Some(value) = overrides.max_commit_bytes {
+            self.max_commit_bytes = value;
+        }
         if let Some(value) = overrides.max_binary_name_length {
             self.max_binary_name_length = value;
         }
@@ -225,5 +232,6 @@ struct ResourceLimitsFileConfig {
     max_validation_errors: Option<usize>,
     max_binaries: Option<usize>,
     max_binary_bytes: Option<u64>,
+    max_commit_bytes: Option<u64>,
     max_binary_name_length: Option<usize>,
 }

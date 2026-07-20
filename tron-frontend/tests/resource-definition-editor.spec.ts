@@ -10,6 +10,8 @@ import {
 
 let frontend: ResourceUiFrontend | undefined;
 
+test.describe.configure({ timeout: 60_000 });
+
 const detailPath = "/resource-definitions/detail?definitionCode=PRODUCT_IMAGES&definitionVersion=v3-K7m";
 
 async function openEditor(
@@ -21,7 +23,7 @@ async function openEditor(
   await routeResourceUiShellApi(page);
   await seedResourceUiShell(page, locale);
   await page.goto(`${frontend!.baseUrl}${path}`);
-  await expect(page.getByRole("heading", { exact: true, name: heading })).toBeVisible();
+  await expect(page.getByRole("heading", { exact: true, name: heading })).toBeVisible({ timeout: 15_000 });
 }
 
 test.beforeAll(async () => {

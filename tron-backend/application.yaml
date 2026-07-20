@@ -17,6 +17,7 @@ resource:
     maxValidationErrors: 100
     maxBinaries: 500
     maxBinaryBytes: 1073741824
+    maxCommitBytes: 1073741824
     maxBinaryNameLength: 255
 
 systemAgents:

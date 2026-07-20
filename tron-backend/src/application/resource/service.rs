@@ -1,5 +1,6 @@
 mod authorization;
 mod definitions;
+mod http;
 mod projection;
 mod resources;
 mod seeds;

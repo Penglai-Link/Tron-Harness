@@ -30,8 +30,8 @@ pub fn validate_version_code(value: &str) -> Result<(), ResourceError> {
 }
 
 pub fn validate_binary_name(value: &str, max_length: usize) -> Result<(), ResourceError> {
-    let value = value.trim();
-    if value.is_empty()
+    if value != value.trim()
+        || value.is_empty()
         || value.len() > max_length
         || value == "."
         || value == ".."
@@ -45,8 +45,8 @@ pub fn validate_binary_name(value: &str, max_length: usize) -> Result<(), Resour
 }
 
 fn validate_business_code(value: &str, max_length: usize) -> Result<(), ResourceError> {
-    let value = value.trim();
-    if value.is_empty()
+    if value != value.trim()
+        || value.is_empty()
         || value.len() > max_length
         || !value.chars().all(|character| {
             character.is_ascii_alphanumeric() || matches!(character, '-' | '_' | '.')

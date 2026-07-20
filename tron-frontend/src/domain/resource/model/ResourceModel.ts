@@ -32,6 +32,7 @@ export interface ResourceVersionRecord {
 
 export interface ResourceBinaryMapping {
   binaryName: string;
+  byteSize?: number;
 }
 
 export interface ResourceVersionDetail extends ResourceVersionRecord {

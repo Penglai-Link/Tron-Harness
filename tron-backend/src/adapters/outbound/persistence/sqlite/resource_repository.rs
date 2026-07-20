@@ -367,6 +367,122 @@ impl ResourceRepository for SqliteResourceRepository {
         Ok(true)
     }
 
+    fn commit_active_definition(
+        &mut self,
+        definition: &ResourceDefinition,
+        expected_local_active_version: Option<&str>,
+        expected_effective_source: &ResourceDefinitionKey,
+    ) -> Result<ResourceActivationOutcome, ResourceError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        ensure_definition_remains_active(&tx, expected_effective_source)?;
+        let active = active_definition_version(&tx, &definition.key)?;
+        if active.as_deref() != expected_local_active_version {
+            return Err(ResourceError::ActiveVersionConflict);
+        }
+        if definition_draft_exists(&tx, &definition.key)? {
+            return Err(ResourceError::Conflict);
+        }
+        demote_active_definition(&tx, &definition.key, &definition.updated_at)?;
+        insert_definition(&tx, definition)?;
+        tx.commit().map_err(storage_error)?;
+        Ok(ResourceActivationOutcome {
+            activation_result: ResourceActivationResult::DirectCommitted,
+            previous_active_version: active,
+        })
+    }
+
+    fn delete_definition_group(
+        &mut self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        definition_code: &str,
+        expected_active_version: &str,
+    ) -> Result<bool, ResourceError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        let key = ResourceDefinitionKey {
+            scope_kind,
+            scope_code: scope_code.to_string(),
+            definition_code: definition_code.to_string(),
+            definition_version: expected_active_version.to_string(),
+        };
+        let active = active_definition_version(&tx, &key)?;
+        if active.as_deref() != Some(expected_active_version) {
+            return Err(ResourceError::ActiveVersionConflict);
+        }
+        if definition_draft_exists(&tx, &key)? {
+            return Err(ResourceError::Conflict);
+        }
+        let active_status: String = tx
+            .query_row(
+                "SELECT definition_status FROM resource_definitions
+                 WHERE scope_kind = ?1 AND scope_code = ?2 AND definition_code = ?3
+                   AND definition_version = ?4 AND lifecycle_status = 'ACTIVE'",
+                params![
+                    scope_kind_to_storage(scope_kind),
+                    scope_code,
+                    definition_code,
+                    expected_active_version
+                ],
+                |row| row.get(0),
+            )
+            .map_err(storage_error)?;
+        if definition_status_from_storage(&active_status)? != ResourceDefinitionStatus::Disabled {
+            return Err(ResourceError::LifecycleDenied);
+        }
+        let references: i64 = tx
+            .query_row(
+                "SELECT count(*) FROM resources
+                 WHERE definition_scope_kind = ?1 AND definition_scope_code = ?2
+                   AND definition_code = ?3",
+                params![
+                    scope_kind_to_storage(scope_kind),
+                    scope_code,
+                    definition_code
+                ],
+                |row| row.get(0),
+            )
+            .map_err(storage_error)?;
+        if references > 0 {
+            return Err(ResourceError::DefinitionInUse);
+        }
+        let deleted = tx
+            .execute(
+                "DELETE FROM resource_definitions
+                 WHERE scope_kind = ?1 AND scope_code = ?2 AND definition_code = ?3",
+                params![
+                    scope_kind_to_storage(scope_kind),
+                    scope_code,
+                    definition_code
+                ],
+            )
+            .map_err(storage_error)?;
+        tx.commit().map_err(storage_error)?;
+        Ok(deleted > 0)
+    }
+
+    fn definition_resource_reference_count(
+        &mut self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        definition_code: &str,
+    ) -> Result<usize, ResourceError> {
+        let count: i64 = self
+            .connection
+            .query_row(
+                "SELECT count(*) FROM resources
+                 WHERE definition_scope_kind = ?1 AND definition_scope_code = ?2
+                   AND definition_code = ?3",
+                params![
+                    scope_kind_to_storage(scope_kind),
+                    scope_code,
+                    definition_code
+                ],
+                |row| row.get(0),
+            )
+            .map_err(storage_error)?;
+        Ok(count as usize)
+    }
+
     fn insert_resource(
         &mut self,
         resource: &Resource,
@@ -374,6 +490,7 @@ impl ResourceRepository for SqliteResourceRepository {
     ) -> Result<(), ResourceError> {
         let tx = self.connection.transaction().map_err(storage_error)?;
         ensure_resource_definition_code(&tx, resource)?;
+        ensure_resource_definition_exists(&tx, resource)?;
         insert_resource(&tx, resource)?;
         replace_mappings(&tx, &resource.key, mappings)?;
         tx.commit().map_err(storage_error)
@@ -527,6 +644,112 @@ impl ResourceRepository for SqliteResourceRepository {
         Ok((true, locators))
     }
 
+    fn commit_active_resource(
+        &mut self,
+        resource: &Resource,
+        mappings: &[ResourceBinaryMapping],
+        expected_local_active_version: Option<&str>,
+        expected_effective_source: Option<&ResourceKey>,
+        expected_enabled_definition: Option<&ResourceDefinitionKey>,
+    ) -> Result<ResourceActivationOutcome, ResourceError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        ensure_resource_definition_code(&tx, resource)?;
+        ensure_resource_definition_exists(&tx, resource)?;
+        if let Some(expected_effective_source) = expected_effective_source {
+            ensure_resource_remains_active(&tx, expected_effective_source)?;
+        }
+        if let Some(expected_enabled_definition) = expected_enabled_definition {
+            ensure_definition_remains_active_and_enabled(&tx, expected_enabled_definition)?;
+        }
+        let active = active_resource_version(&tx, &resource.key)?;
+        if active.as_deref() != expected_local_active_version {
+            return Err(ResourceError::ActiveVersionConflict);
+        }
+        if resource_draft_exists(&tx, &resource.key)? {
+            return Err(ResourceError::Conflict);
+        }
+        demote_active_resource(&tx, &resource.key, &resource.updated_at)?;
+        insert_resource(&tx, resource)?;
+        replace_mappings(&tx, &resource.key, mappings)?;
+        tx.commit().map_err(storage_error)?;
+        Ok(ResourceActivationOutcome {
+            activation_result: ResourceActivationResult::DirectCommitted,
+            previous_active_version: active,
+        })
+    }
+
+    fn delete_resource_group(
+        &mut self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        resource_code: &str,
+        expected_active_version: Option<&str>,
+        expected_draft_version: Option<&str>,
+        expected_draft_revision: Option<i64>,
+    ) -> Result<(bool, Vec<String>), ResourceError> {
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        let key = ResourceKey {
+            scope_kind,
+            scope_code: scope_code.to_string(),
+            resource_code: resource_code.to_string(),
+            resource_version: String::new(),
+        };
+        let active = active_resource_version(&tx, &key)?;
+        if active.as_deref() != expected_active_version {
+            return Err(ResourceError::ActiveVersionConflict);
+        }
+        let draft: Option<(String, i64)> = tx
+            .query_row(
+                "SELECT resource_version, draft_revision FROM resources
+                 WHERE scope_kind = ?1 AND scope_code = ?2 AND resource_code = ?3
+                   AND lifecycle_status = 'DRAFT'",
+                params![scope_kind_to_storage(scope_kind), scope_code, resource_code],
+                |row| Ok((row.get(0)?, row.get(1)?)),
+            )
+            .optional()
+            .map_err(storage_error)?;
+        match draft {
+            Some((version, revision))
+                if expected_draft_version == Some(version.as_str())
+                    && expected_draft_revision == Some(revision) => {}
+            Some(_) => return Err(ResourceError::DraftRevisionConflict),
+            None if expected_draft_version.is_some() || expected_draft_revision.is_some() => {
+                return Err(ResourceError::DraftRevisionConflict);
+            }
+            None => {}
+        }
+        let mut statement = tx
+            .prepare(
+                "SELECT storage_locator FROM resource_binary_mappings
+                 WHERE scope_kind = ?1 AND scope_code = ?2 AND resource_code = ?3",
+            )
+            .map_err(storage_error)?;
+        let locators = statement
+            .query_map(
+                params![scope_kind_to_storage(scope_kind), scope_code, resource_code],
+                |row| row.get(0),
+            )
+            .map_err(storage_error)?
+            .collect::<Result<Vec<String>, _>>()
+            .map_err(storage_error)?;
+        drop(statement);
+        tx.execute(
+            "DELETE FROM resource_binary_mappings
+             WHERE scope_kind = ?1 AND scope_code = ?2 AND resource_code = ?3",
+            params![scope_kind_to_storage(scope_kind), scope_code, resource_code],
+        )
+        .map_err(storage_error)?;
+        let deleted = tx
+            .execute(
+                "DELETE FROM resources
+                 WHERE scope_kind = ?1 AND scope_code = ?2 AND resource_code = ?3",
+                params![scope_kind_to_storage(scope_kind), scope_code, resource_code],
+            )
+            .map_err(storage_error)?;
+        tx.commit().map_err(storage_error)?;
+        Ok((deleted > 0, locators))
+    }
+
     fn locator_reference_count(&mut self, locator: &str) -> Result<usize, ResourceError> {
         let count = self
             .connection
@@ -564,6 +787,69 @@ fn ensure_resource_definition_code(
     {
         return Err(ResourceError::Conflict);
     }
+    Ok(())
+}
+
+fn ensure_resource_definition_exists(
+    tx: &Transaction<'_>,
+    resource: &Resource,
+) -> Result<(), ResourceError> {
+    let exists = tx
+        .query_row(
+            "SELECT 1 FROM resource_definitions
+             WHERE scope_kind = ?1 AND scope_code = ?2 AND definition_code = ?3
+               AND definition_version = ?4",
+            params![
+                scope_kind_to_storage(resource.definition_key.scope_kind),
+                resource.definition_key.scope_code,
+                resource.definition_key.definition_code,
+                resource.definition_key.definition_version,
+            ],
+            |_| Ok(()),
+        )
+        .optional()
+        .map_err(storage_error)?
+        .is_some();
+    if !exists {
+        return Err(ResourceError::NotFound);
+    }
+    Ok(())
+}
+
+fn insert_definition(
+    tx: &Transaction<'_>,
+    definition: &ResourceDefinition,
+) -> Result<(), ResourceError> {
+    tx.execute(
+        "INSERT INTO resource_definitions (
+            scope_kind, scope_code, definition_code, definition_version, name, description,
+            definition_status, allow_inheritance, attributes_schema, binary_schema,
+            binary_storage_profile, draft_revision, validation_status, lifecycle_status,
+            created_at, updated_at, published_at
+        ) VALUES (
+            ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17
+        )",
+        params![
+            scope_kind_to_storage(definition.key.scope_kind),
+            definition.key.scope_code,
+            definition.key.definition_code,
+            definition.key.definition_version,
+            definition.name,
+            definition.description,
+            definition_status_to_storage(definition.definition_status),
+            bool_to_int(definition.allow_inheritance),
+            value_to_storage(&definition.attributes_schema)?,
+            value_to_storage(&definition.binary_schema)?,
+            definition.binary_storage_profile,
+            definition.draft_revision,
+            validation_status_to_storage(definition.validation_status),
+            lifecycle_status_to_storage(definition.lifecycle_status),
+            timestamp_to_millis(&definition.created_at),
+            timestamp_to_millis(&definition.updated_at),
+            option_timestamp_to_millis(definition.published_at.as_deref()),
+        ],
+    )
+    .map_err(storage_error)?;
     Ok(())
 }
 
@@ -695,6 +981,48 @@ fn active_definition_version(
     .map_err(storage_error)
 }
 
+fn ensure_definition_remains_active(
+    tx: &Transaction<'_>,
+    expected_key: &ResourceDefinitionKey,
+) -> Result<(), ResourceError> {
+    if active_definition_version(tx, expected_key)?.as_deref()
+        != Some(expected_key.definition_version.as_str())
+    {
+        return Err(ResourceError::ActiveVersionConflict);
+    }
+    Ok(())
+}
+
+fn ensure_definition_remains_active_and_enabled(
+    tx: &Transaction<'_>,
+    expected_key: &ResourceDefinitionKey,
+) -> Result<(), ResourceError> {
+    let active = tx
+        .query_row(
+            "SELECT definition_version, definition_status FROM resource_definitions
+             WHERE scope_kind = ?1 AND scope_code = ?2 AND definition_code = ?3
+               AND lifecycle_status = 'ACTIVE'",
+            params![
+                scope_kind_to_storage(expected_key.scope_kind),
+                expected_key.scope_code,
+                expected_key.definition_code
+            ],
+            |row| Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?)),
+        )
+        .optional()
+        .map_err(storage_error)?;
+    let Some((active_version, active_status)) = active else {
+        return Err(ResourceError::ActiveVersionConflict);
+    };
+    if active_version != expected_key.definition_version {
+        return Err(ResourceError::ActiveVersionConflict);
+    }
+    if definition_status_from_storage(&active_status)? != ResourceDefinitionStatus::Enabled {
+        return Err(ResourceError::DefinitionDisabled);
+    }
+    Ok(())
+}
+
 fn definition_draft_exists(
     tx: &Transaction<'_>,
     key: &ResourceDefinitionKey,
@@ -762,6 +1090,18 @@ fn active_resource_version(
     )
     .optional()
     .map_err(storage_error)
+}
+
+fn ensure_resource_remains_active(
+    tx: &Transaction<'_>,
+    expected_key: &ResourceKey,
+) -> Result<(), ResourceError> {
+    if active_resource_version(tx, expected_key)?.as_deref()
+        != Some(expected_key.resource_version.as_str())
+    {
+        return Err(ResourceError::ActiveVersionConflict);
+    }
+    Ok(())
 }
 
 fn resource_draft_exists(tx: &Transaction<'_>, key: &ResourceKey) -> Result<bool, ResourceError> {
