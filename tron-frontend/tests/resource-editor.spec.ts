@@ -107,6 +107,7 @@ test("a new Resource selects an active definition before the generated form appe
 
   await expect(page.getByLabel("Resource name")).toHaveValue("");
   await expect(page.getByLabel("Resource code")).toHaveValue("");
+  await expect(page.getByText("r0", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Select a resource type to enter resource information.", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { exact: true, name: "Create" })).toBeDisabled();
 

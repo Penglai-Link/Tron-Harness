@@ -1228,7 +1228,7 @@ export function ResourceEditorPage() {
                 />
               ) : <span className="font-mono font-medium text-[var(--color-on-surface)]">{resource.resourceCode}</span>}
               {resource.resourceVersion ? <span className="font-mono">{resource.resourceVersion}</span> : null}
-              {resource.draftRevision !== null ? <span className="font-mono">r{resource.draftRevision}</span> : null}
+              {!isNew && resource.draftRevision !== null ? <span className="font-mono">r{resource.draftRevision}</span> : null}
               {isNew ? (
                 <SelectInput
                   aria-label={editorT("fields.definition", "Resource type")}
