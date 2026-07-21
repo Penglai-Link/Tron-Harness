@@ -1,4 +1,6 @@
 export * from "./config";
+export * from "./chatMessages";
+export * from "./chatQueue";
 export * from "./display";
 export * from "./mock";
 export * from "./normalize";

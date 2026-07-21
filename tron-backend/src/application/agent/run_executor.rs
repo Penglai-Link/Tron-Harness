@@ -3,8 +3,8 @@ use std::sync::Arc;
 use crate::domain::agent::{AgentRunContext, AgentRunResult};
 
 use super::{
-    AgentInvocationError, AgentRuntime, AgentRuntimeRegistry, ModelStreamSink,
-    RuntimeAdapterSelection,
+    ActiveRunGuard, AgentInvocationError, AgentRuntime, AgentRuntimeRegistry, ModelStreamSink,
+    RuntimeAdapterSelection, run_cancellation::cancel_runtime_after_stop,
 };
 
 const MAX_AGENT_RUN_RETRIES: u32 = 3;
@@ -49,10 +49,17 @@ impl AgentRunExecutor {
         context: AgentRunContext,
         requested_session_id: Option<String>,
         sink: Option<ModelStreamSink>,
+        reservation: Option<ActiveRunGuard>,
     ) -> Result<AgentRunExecutionResult, AgentInvocationError> {
         let runtime = self.resolve_runtime(selection);
-        self.execute_with_runtime(runtime, context, requested_session_id, sink)
-            .await
+        self.execute_with_runtime_admission(
+            runtime,
+            context,
+            requested_session_id,
+            sink,
+            reservation,
+        )
+        .await
     }
 
     pub async fn execute_with_runtime(
@@ -62,7 +69,56 @@ impl AgentRunExecutor {
         requested_session_id: Option<String>,
         sink: Option<ModelStreamSink>,
     ) -> Result<AgentRunExecutionResult, AgentInvocationError> {
+        self.execute_with_runtime_admission(runtime, context, requested_session_id, sink, None)
+            .await
+    }
+
+    async fn execute_with_runtime_admission(
+        &self,
+        runtime: Arc<dyn AgentRuntime>,
+        context: AgentRunContext,
+        requested_session_id: Option<String>,
+        sink: Option<ModelStreamSink>,
+        reservation: Option<ActiveRunGuard>,
+    ) -> Result<AgentRunExecutionResult, AgentInvocationError> {
         let runtime_adapter_key = runtime.key().code().to_string();
+        let active_runs = self.runtime_registry.active_runs();
+        let active_run_guard = match reservation {
+            Some(guard) => {
+                let session_code = context.conversation_code.as_deref().ok_or_else(|| {
+                    AgentInvocationError::RuntimeFailed(
+                        "reserved run requires conversationCode".into(),
+                    )
+                })?;
+                active_runs
+                    .activate_reservation(
+                        &guard,
+                        session_code,
+                        &context.run_code,
+                        &runtime_adapter_key,
+                        runtime.capabilities().supports_steer,
+                    )
+                    .map_err(|error| match error {
+                        super::ActiveRunError::RunFinishing => AgentInvocationError::RunStopped,
+                        error => AgentInvocationError::RuntimeFailed(error.to_string()),
+                    })?;
+                Some(guard)
+            }
+            None => context
+                .conversation_code
+                .as_deref()
+                .map(|session_code| {
+                    active_runs.register(
+                        session_code,
+                        &context.run_code,
+                        &runtime_adapter_key,
+                        runtime.capabilities().supports_steer,
+                    )
+                })
+                .transpose()
+                .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?,
+        };
+        let mut cancellation = active_run_guard.as_ref().map(|guard| guard.cancellation());
         let retry_budget = max_retry_budget(&context);
         let resumed = requested_session_id.is_some() && runtime.capabilities().supports_resume;
         let mut attempts = 0;
@@ -78,7 +134,22 @@ impl AgentRunExecutor {
                 _ => runtime.start(context.clone(), sink.clone()),
             };
 
-            match run_future.await {
+            let run_result = if let Some(cancellation) = cancellation.as_mut() {
+                tokio::select! {
+                    biased;
+                    _ = cancellation.cancelled() => {
+                        lifecycle_trace.push(AgentRunLifecycleState::Cancelling);
+                        cancel_runtime_after_stop(&runtime, &context.run_code).await;
+                        lifecycle_trace.push(AgentRunLifecycleState::Cancelled);
+                        return Err(AgentInvocationError::RunStopped);
+                    }
+                    result = run_future => result,
+                }
+            } else {
+                run_future.await
+            };
+
+            match run_result {
                 Ok(run) => {
                     lifecycle_trace.push(AgentRunLifecycleState::Completed);
                     return Ok(AgentRunExecutionResult {
@@ -324,6 +395,7 @@ mod tests {
                 skill_name: Some("planner".into()),
                 required_variable_keys: Vec::new(),
             }],
+            effective_tools: Vec::new(),
             tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),
@@ -338,6 +410,7 @@ mod tests {
         RuntimeCapabilities {
             supports_resume: resume,
             supports_cancel: cancel,
+            supports_steer: false,
             supports_streaming: true,
             supports_ephemeral: false,
             supports_workdir: true,
@@ -462,5 +535,40 @@ mod tests {
         );
         assert_eq!(result.lifecycle_state, AgentRunLifecycleState::Completed);
         assert_eq!(runtime.calls(), vec!["start"]);
+    }
+
+    #[tokio::test]
+    async fn pre_start_stop_of_reserved_run_maps_to_run_stopped() {
+        let executor = run_executor();
+        let active_runs = executor.runtime_registry.active_runs();
+        let reservation = active_runs
+            .reserve("CONV-1", "RUN-1", "CODEX_EXEC", false)
+            .expect("run admission should reserve the conversation");
+        active_runs
+            .request_stop("CONV-1", "RUN-1")
+            .expect("pre-start stop should be accepted");
+        let runtime = std::sync::Arc::new(FakeRuntime::new(
+            RuntimeAdapterKey::CodexExec,
+            runtime_caps(false, false),
+            vec![Ok(scripted_run("RUN-1", "must not run"))],
+            0,
+        ));
+
+        let error = executor
+            .execute_with_runtime_admission(
+                runtime.clone(),
+                context(0),
+                None,
+                None,
+                Some(reservation),
+            )
+            .await
+            .expect_err("stopped admission must fail as stopped");
+
+        assert_eq!(error, AgentInvocationError::RunStopped);
+        assert!(
+            runtime.calls().is_empty(),
+            "runtime must not start after stop"
+        );
     }
 }

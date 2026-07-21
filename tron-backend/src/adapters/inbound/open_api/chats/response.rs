@@ -2,7 +2,13 @@ use serde::Serialize;
 use serde_json::Value;
 
 use crate::{
-    application::{agent::AgentInvocationResult, chat::ChatSendResult},
+    application::{
+        agent::AgentInvocationResult,
+        chat::{
+            ActiveChatRunSnapshot, ChatSendResult, ChatSteerResult, GetActiveChatRunResult,
+            StopChatRunResult,
+        },
+    },
     domain::{
         agent::{AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent},
         chat::{ChatMessage, ChatSession},
@@ -77,6 +83,29 @@ pub struct OpenApiChatSessionGroupResponse {
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct OpenApiGetActiveChatRunResponse {
+    pub session_code: String,
+    pub active_run: Option<OpenApiActiveChatRunResponse>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenApiActiveChatRunResponse {
+    pub run_code: String,
+    pub runtime_adapter_key: String,
+    pub supports_steer: bool,
+    pub state: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenApiStopChatRunResponse {
+    pub session_code: String,
+    pub run_code: String,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct OpenApiChatMessageResponse {
     pub id: i64,
     pub message_code: String,
@@ -86,6 +115,7 @@ pub struct OpenApiChatMessageResponse {
     pub channel: String,
     pub actor: String,
     pub content: String,
+    pub attachments: Vec<crate::domain::chat::ChatMessageAttachment>,
     pub input_tokens: Option<u32>,
     pub output_tokens: Option<u32>,
     pub total_tokens: Option<u32>,
@@ -103,6 +133,7 @@ impl From<ChatMessage> for OpenApiChatMessageResponse {
             channel: upper_snake_case(&format!("{:?}", value.channel)),
             actor: value.actor,
             content: value.content,
+            attachments: value.attachments,
             input_tokens: value.input_tokens,
             output_tokens: value.output_tokens,
             total_tokens: value.total_tokens,
@@ -147,6 +178,118 @@ pub struct OpenApiChatSendResultResponse {
     pub session: OpenApiChatSessionResponse,
     pub run: OpenApiChatRunSummaryResponse,
     pub messages: Vec<OpenApiChatMessageResponse>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenApiChatSteerResultResponse {
+    pub session_code: String,
+    pub run_code: String,
+    pub message: OpenApiSteeredChatMessageResponse,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenApiSteeredChatMessageResponse {
+    pub id: i64,
+    pub message_code: String,
+    pub session_code: String,
+    pub run_code: String,
+    pub role: String,
+    pub channel: String,
+    pub actor: String,
+    pub content: String,
+    pub attachments: Vec<crate::domain::chat::ChatMessageAttachment>,
+    pub created_at: String,
+}
+
+impl From<ChatSteerResult> for OpenApiChatSteerResultResponse {
+    fn from(value: ChatSteerResult) -> Self {
+        let message = value.message;
+        Self {
+            session_code: value.session_code,
+            run_code: value.run_code,
+            message: OpenApiSteeredChatMessageResponse {
+                id: message.id,
+                message_code: message.message_code,
+                session_code: message.session_code,
+                run_code: message.run_code.unwrap_or_default(),
+                role: upper_snake_case(&format!("{:?}", message.role)),
+                channel: upper_snake_case(&format!("{:?}", message.channel)),
+                actor: message.actor,
+                content: message.content,
+                attachments: message.attachments,
+                created_at: message.created_at,
+            },
+        }
+    }
+}
+
+impl From<GetActiveChatRunResult> for OpenApiGetActiveChatRunResponse {
+    fn from(value: GetActiveChatRunResult) -> Self {
+        Self {
+            session_code: value.session_code,
+            active_run: value.active_run.map(OpenApiActiveChatRunResponse::from),
+        }
+    }
+}
+
+impl From<ActiveChatRunSnapshot> for OpenApiActiveChatRunResponse {
+    fn from(value: ActiveChatRunSnapshot) -> Self {
+        Self {
+            run_code: value.run_code,
+            runtime_adapter_key: value.runtime_adapter_key,
+            supports_steer: value.supports_steer,
+            state: value.state.code().to_string(),
+        }
+    }
+}
+
+impl From<StopChatRunResult> for OpenApiStopChatRunResponse {
+    fn from(value: StopChatRunResult) -> Self {
+        Self {
+            session_code: value.session_code,
+            run_code: value.run_code,
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use serde_json::json;
+
+    use crate::{
+        application::chat::ChatSteerResult,
+        domain::chat::{ChatMessage, ChatMessageChannel, ChatMessageRole},
+    };
+
+    use super::OpenApiChatSteerResultResponse;
+
+    #[test]
+    fn steer_ack_keeps_message_id_numeric_like_message_list() {
+        let response = OpenApiChatSteerResultResponse::from(ChatSteerResult {
+            session_code: "SESSION-1".into(),
+            run_code: "RUN-1".into(),
+            message: ChatMessage {
+                id: 9_007_199_254_740_993,
+                message_code: "MSG-1".into(),
+                session_code: "SESSION-1".into(),
+                run_code: Some("RUN-1".into()),
+                role: ChatMessageRole::User,
+                channel: ChatMessageChannel::MainAgent,
+                actor: "User".into(),
+                content: "steer".into(),
+                attachments: Vec::new(),
+                input_tokens: None,
+                output_tokens: None,
+                total_tokens: None,
+                created_at: "2026-07-17T00:00:00Z".into(),
+            },
+        });
+
+        let value = serde_json::to_value(response).expect("response should serialize");
+        assert_eq!(value["message"]["id"], json!(9_007_199_254_740_993_i64));
+    }
 }
 
 impl From<ChatSendResult> for OpenApiChatSendResultResponse {

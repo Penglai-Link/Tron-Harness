@@ -5,9 +5,7 @@ use std::sync::{
 
 use tokio::task::JoinHandle;
 
-use serde_json::json;
-
-use crate::{application::agent::AgentAguiStreamService, domain::agent::AgentAguiProtocolEvent};
+use crate::application::agent::AgentAguiStreamService;
 
 #[derive(Clone)]
 pub(crate) struct ChatStreamForwardingGate {
@@ -35,8 +33,6 @@ pub(crate) struct ChatStreamLifecycleGuard {
     forwarding_gate: ChatStreamForwardingGate,
     stream_service: AgentAguiStreamService,
     stream_key: Option<String>,
-    run_code: String,
-    abort_on_drop: bool,
 }
 
 impl ChatStreamLifecycleGuard {
@@ -45,20 +41,17 @@ impl ChatStreamLifecycleGuard {
         forwarding_gate: ChatStreamForwardingGate,
         stream_service: AgentAguiStreamService,
         stream_key: String,
-        run_code: String,
+        _run_code: String,
     ) -> Self {
         Self {
             run_task: Some(run_task),
             forwarding_gate,
             stream_service,
             stream_key: Some(stream_key),
-            run_code,
-            abort_on_drop: true,
         }
     }
 
     pub(crate) fn complete(&mut self) {
-        self.abort_on_drop = false;
         self.forwarding_gate.close();
         self.run_task.take();
         self.deactivate_stream();
@@ -69,37 +62,12 @@ impl ChatStreamLifecycleGuard {
             let _ = self.stream_service.deactivate(&stream_key);
         }
     }
-
-    fn record_cancelled_run(&self) {
-        let Some(stream_key) = self.stream_key.as_deref() else {
-            return;
-        };
-        let _ = self.stream_service.record_protocol_event(
-            stream_key,
-            AgentAguiProtocolEvent {
-                sse_event: "RUN_ERROR".to_string(),
-                data: json!({
-                    "type": "RUN_ERROR",
-                    "threadId": stream_key,
-                    "runId": self.run_code,
-                    "code": "CHAT_STREAM_STOPPED",
-                    "message": "Stopped.",
-                    "timestamp": chrono::Utc::now().timestamp_millis(),
-                }),
-            },
-        );
-    }
 }
 
 impl Drop for ChatStreamLifecycleGuard {
     fn drop(&mut self) {
         self.forwarding_gate.close();
-        if self.abort_on_drop {
-            self.record_cancelled_run();
-            if let Some(run_task) = self.run_task.take() {
-                run_task.abort();
-            }
-        }
+        self.run_task.take();
         self.deactivate_stream();
     }
 }
@@ -175,7 +143,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn drop_aborts_run_task_records_stop_closes_forwarding_and_deactivates_stream() {
+    async fn drop_detaches_run_task_closes_forwarding_and_deactivates_stream() {
         let service = stream_service();
         service
             .activate("SESSION-1")
@@ -205,7 +173,12 @@ mod tests {
         drop(guard);
 
         assert!(!forwarding_gate_for_assert.is_open());
-        timeout_abort_notification(dropped_receiver).await;
+        assert!(
+            tokio::time::timeout(Duration::from_millis(25), dropped_receiver)
+                .await
+                .is_err(),
+            "dropping the observer must not abort the run task"
+        );
         let snapshot = service
             .events("SESSION-1")
             .expect("stream snapshot should load after guard drop");
@@ -213,18 +186,6 @@ mod tests {
         let protocol_events = service
             .protocol_events("SESSION-1")
             .expect("protocol events should load after guard drop");
-        assert!(protocol_events.iter().any(|event| {
-            event.sse_event == "RUN_ERROR"
-                && event.data.get("runId").and_then(serde_json::Value::as_str) == Some("RUN-1")
-                && event.data.get("code").and_then(serde_json::Value::as_str)
-                    == Some("CHAT_STREAM_STOPPED")
-        }));
-    }
-
-    async fn timeout_abort_notification(receiver: oneshot::Receiver<()>) {
-        tokio::time::timeout(Duration::from_secs(1), receiver)
-            .await
-            .expect("run task should be aborted when guard drops")
-            .expect("run task drop notification should be delivered");
+        assert!(protocol_events.is_empty());
     }
 }

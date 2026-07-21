@@ -8,8 +8,8 @@ use crate::{
 
 use super::super::ReactAgentBuilder;
 use super::{
-    AgentInvocationError, AgentRuntime, ModelClient, ModelStreamSink, RuntimeAdapterKey,
-    RuntimeCapabilities,
+    ActiveRunRegistry, AgentInvocationError, AgentRuntime, ModelClient, ModelStreamSink,
+    RuntimeAdapterKey, RuntimeCapabilities,
 };
 
 #[derive(Clone)]
@@ -20,6 +20,7 @@ pub(super) struct ReactRuntime {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
+    active_runs: ActiveRunRegistry,
 }
 
 impl ReactRuntime {
@@ -30,6 +31,7 @@ impl ReactRuntime {
         tool_registry: Arc<ToolRegistry>,
         event_bus: EventBusHandle,
         short_term_memory: Option<ShortTermMemoryService>,
+        active_runs: ActiveRunRegistry,
     ) -> Self {
         Self {
             key,
@@ -38,6 +40,7 @@ impl ReactRuntime {
             tool_registry,
             event_bus,
             short_term_memory,
+            active_runs,
         }
     }
 
@@ -48,6 +51,14 @@ impl ReactRuntime {
     ) -> Pin<Box<dyn Future<Output = Result<AgentRunResult, AgentInvocationError>> + Send + 'a>>
     {
         Box::pin(async move {
+            let steer_control = context
+                .conversation_code
+                .as_deref()
+                .and_then(|session_code| {
+                    self.active_runs
+                        .control(session_code, &context.run_code)
+                        .ok()
+                });
             let agent = ReactAgentBuilder::new(
                 self.model_client.clone(),
                 self.tool_registry.clone(),
@@ -56,12 +67,52 @@ impl ReactRuntime {
             .with_short_term_memory(self.short_term_memory.clone())
             .build()
             .map_err(map_agent_error)?;
-            match sink {
-                Some(sink) => agent.run_stream(context, sink).await,
-                None => agent.run(context).await,
-            }
-            .map_err(map_agent_error)
+            let mut cancellation_cleanup = ReactRuntimeCancellationCleanup::new(
+                self.short_term_memory.clone(),
+                context.clone(),
+            );
+            let result = match sink {
+                Some(sink) => {
+                    agent
+                        .run_stream_with_control(context, sink, steer_control)
+                        .await
+                }
+                None => agent.run_with_control(context, steer_control).await,
+            };
+            cancellation_cleanup.disarm();
+            result.map_err(map_agent_error)
         })
+    }
+}
+
+struct ReactRuntimeCancellationCleanup {
+    short_term_memory: Option<ShortTermMemoryService>,
+    context: AgentRunContext,
+    armed: bool,
+}
+
+impl ReactRuntimeCancellationCleanup {
+    fn new(short_term_memory: Option<ShortTermMemoryService>, context: AgentRunContext) -> Self {
+        Self {
+            armed: short_term_memory.is_some() && context.short_term_memory.is_some(),
+            short_term_memory,
+            context,
+        }
+    }
+
+    fn disarm(&mut self) {
+        self.armed = false;
+    }
+}
+
+impl Drop for ReactRuntimeCancellationCleanup {
+    fn drop(&mut self) {
+        if !self.armed {
+            return;
+        }
+        if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+            let _ = short_term_memory.record_run_failed(&self.context, "run_stopped");
+        }
     }
 }
 

@@ -4,6 +4,8 @@ mod helpers;
 mod run_context_builder;
 mod short_term_memory;
 
+pub(crate) use attachments::user_prompt_message;
+
 use std::sync::Arc;
 
 use rand::RngCore;
@@ -21,9 +23,10 @@ use crate::{
 };
 
 use super::{
-    AgentInvocationCommand, AgentInvocationError, AgentInvocationResult, AgentManagementService,
-    AgentOrchestrationRun, AgentOrchestrator, AgentRunExecutionMetadata, AgentRunExecutor,
-    AgentRunHistoryService, AgentRuntimeRegistry, ModelClient, ModelStreamSink,
+    ActiveRunGuard, ActiveRunRegistry, AgentInvocationCommand, AgentInvocationError,
+    AgentInvocationResult, AgentManagementService, AgentOrchestrationRun, AgentOrchestrator,
+    AgentRunExecutionMetadata, AgentRunExecutor, AgentRunHistoryService, AgentRuntimeRegistry,
+    ModelClient, ModelStreamSink,
 };
 use helpers::safe_preview;
 pub(crate) use run_context_builder::{AgentRunContextBuilder, PreparedAgentRun};
@@ -42,6 +45,7 @@ pub struct AgentInvocationService {
     tool_registry: Arc<ToolRegistry>,
     runtime_http_client: reqwest::Client,
     short_term_memory: Option<ShortTermMemoryService>,
+    active_runs: ActiveRunRegistry,
 }
 
 impl AgentInvocationService {
@@ -71,11 +75,17 @@ impl AgentInvocationService {
             tool_registry,
             runtime_http_client,
             short_term_memory: None,
+            active_runs: ActiveRunRegistry::new(),
         }
     }
 
     pub fn with_short_term_memory(mut self, service: ShortTermMemoryService) -> Self {
         self.short_term_memory = Some(service);
+        self
+    }
+
+    pub fn with_active_runs(mut self, active_runs: ActiveRunRegistry) -> Self {
+        self.active_runs = active_runs;
         self
     }
 
@@ -114,7 +124,7 @@ impl AgentInvocationService {
         user_code: Option<String>,
         locale: Option<String>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
-        self.invoke_with_stream(command, user_code, locale, None)
+        self.invoke_with_stream(command, user_code, locale, None, None)
             .await
     }
 
@@ -125,7 +135,30 @@ impl AgentInvocationService {
         locale: Option<String>,
         sink: ModelStreamSink,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
-        self.invoke_with_stream(command, user_code, locale, Some(sink))
+        self.invoke_with_stream(command, user_code, locale, Some(sink), None)
+            .await
+    }
+
+    pub(crate) async fn invoke_reserved(
+        &self,
+        command: AgentInvocationCommand,
+        user_code: Option<String>,
+        locale: Option<String>,
+        reservation: ActiveRunGuard,
+    ) -> Result<AgentInvocationResult, AgentInvocationError> {
+        self.invoke_with_stream(command, user_code, locale, None, Some(reservation))
+            .await
+    }
+
+    pub(crate) async fn invoke_stream_reserved(
+        &self,
+        command: AgentInvocationCommand,
+        user_code: Option<String>,
+        locale: Option<String>,
+        sink: ModelStreamSink,
+        reservation: ActiveRunGuard,
+    ) -> Result<AgentInvocationResult, AgentInvocationError> {
+        self.invoke_with_stream(command, user_code, locale, Some(sink), Some(reservation))
             .await
     }
 
@@ -135,6 +168,7 @@ impl AgentInvocationService {
         user_code: Option<String>,
         locale: Option<String>,
         sink: Option<ModelStreamSink>,
+        reservation: Option<ActiveRunGuard>,
     ) -> Result<AgentInvocationResult, AgentInvocationError> {
         let runtime_registry = AgentRuntimeRegistry::new(
             self.model_client.clone(),
@@ -142,7 +176,8 @@ impl AgentInvocationService {
             self.event_bus.clone(),
             self.runtime_http_client.clone(),
         )
-        .with_short_term_memory(self.short_term_memory.clone());
+        .with_short_term_memory(self.short_term_memory.clone())
+        .with_active_runs(self.active_runs.clone());
         let executor = AgentRunExecutor::new(runtime_registry);
         let orchestrator = AgentOrchestrator::new(self.run_context_builder(), executor);
         let AgentOrchestrationRun {
@@ -152,7 +187,7 @@ impl AgentInvocationService {
             metadata,
             execution,
         } = orchestrator
-            .execute(command, user_code, locale, sink)
+            .execute(command, user_code, locale, sink, reservation)
             .await?;
         let AgentRunExecutionMetadata {
             run_code,

@@ -959,6 +959,119 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
 }
 
 #[tokio::test]
+async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authorized() {
+    let codex_command = temp_command_path("codex-domain-effective-tools");
+    let opencode_command = temp_command_path("opencode-domain-effective-tools");
+    write_fake_command(&codex_command);
+    write_fake_command(&opencode_command);
+
+    let model_server = scripted_model_server(vec![
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "tool_calls": [
+                        {
+                            "function": {
+                                "name": "fs.write_text",
+                                "arguments": "{\"path\":\"long_running_test.sh\",\"relativeTo\":\"workspaceRoot\",\"text\":\"echo test\"}"
+                            }
+                        },
+                        {
+                            "function": {
+                                "name": "discovery.expand_tool_domain",
+                                "arguments": "{\"domainCode\":\"fs\"}"
+                            }
+                        }
+                    ]
+                }
+            }]
+        }),
+        json!({
+            "choices": [{
+                "message": {
+                    "role": "assistant",
+                    "content": "recovered with the discovered schema"
+                }
+            }]
+        }),
+    ])
+    .await;
+    let app = app_with_config(test_config(&codex_command, &opencode_command));
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let patch_policy = request_with_headers(
+        &app,
+        Method::PATCH,
+        "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
+        Some(json!({
+            "toolExposureMode": "domain_discovery",
+            "expandedDomainPersistenceMode": "sticky_expanded"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(patch_policy.status(), StatusCode::OK);
+
+    let run_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/agents/runs",
+        Some(json!({
+            "prompt": "Create a script after discovering filesystem tools.",
+            "workspaceCode": "TRON_CORE",
+            "model": {
+                "modelCode": "TEST_MODEL",
+                "protocol": "CHAT_COMPLETIONS",
+                "baseUrl": model_server.base_url,
+                "apiKey": "sk-test-api",
+                "modelName": "gpt-test"
+            }
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_body = response_json(run_response).await;
+    assert_eq!(
+        run_body["data"]["finalOutput"],
+        json!("recovered with the discovered schema")
+    );
+
+    let recorded_requests = model_server
+        .requests
+        .lock()
+        .expect("recorded scripted model request mutex poisoned")
+        .clone();
+    assert_eq!(recorded_requests.len(), 2);
+
+    let first_tools = recorded_requests[0]["tools"]
+        .as_array()
+        .expect("first request tools should be an array");
+    assert_eq!(first_tools.len(), 1);
+    assert_eq!(
+        first_tools[0]["function"]["name"],
+        json!("discovery.expand_tool_domain")
+    );
+
+    let second_tools = recorded_requests[1]["tools"]
+        .as_array()
+        .expect("second request tools should be an array");
+    assert!(
+        second_tools
+            .iter()
+            .any(|tool| tool["function"]["name"] == json!("fs.write_text"))
+    );
+    let second_request = recorded_requests[1].to_string();
+    assert!(second_request.contains("tool input is invalid"));
+    assert!(second_request.contains("fs.write_text"));
+    assert!(!second_request.contains("is not allowed"));
+}
+
+#[tokio::test]
 async fn internal_agent_skill_view_loads_progressive_skill_detail() {
     let codex_command = temp_command_path("codex-skill-view");
     let opencode_command = temp_command_path("opencode-skill-view");
@@ -1254,6 +1367,12 @@ async fn runtime_registry_capabilities_are_discoverable() {
     assert_eq!(codex_row["enabled"], json!(true));
     assert_eq!(codex_row["supportsResume"], json!(true));
     assert_eq!(codex_row["supportsCancel"], json!(false));
+    assert_eq!(codex_row["supportsSteer"], json!(false));
+    let react_row = rows
+        .iter()
+        .find(|row| row["adapterKey"] == json!("REACT"))
+        .expect("react runtime row should exist");
+    assert_eq!(react_row["supportsSteer"], json!(true));
 
     let detail_response = request_with_headers(
         &app,
@@ -1268,6 +1387,7 @@ async fn runtime_registry_capabilities_are_discoverable() {
     let detail_body = response_json(detail_response).await;
     assert_eq!(detail_body["data"]["adapterKey"], json!("CODEX_EXEC"));
     assert_eq!(detail_body["data"]["supportsResume"], json!(true));
+    assert_eq!(detail_body["data"]["supportsSteer"], json!(false));
 
     let missing_response = request_with_headers(
         &app,

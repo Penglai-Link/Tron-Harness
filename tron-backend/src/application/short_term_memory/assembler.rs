@@ -70,7 +70,10 @@ pub(super) fn assemble_context(
             let is_current_user_input = current_run_code.is_some_and(|run_code| {
                 entry.0.run_code.as_deref() == Some(run_code) && entry.0.role == "user"
             });
-            if is_current_user_input && let Some(current_input_message) = current_input_message {
+            if is_current_user_input
+                && !current_input_inserted
+                && let Some(current_input_message) = current_input_message
+            {
                 current_input_inserted = true;
                 return Some(current_input_message.clone());
             }

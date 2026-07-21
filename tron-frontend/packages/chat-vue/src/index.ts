@@ -1,5 +1,6 @@
 import "./styles.css";
 
+import TronChatPanel from "./components/TronChatPanel.vue";
 import TronChatRuntimeWindow from "./components/TronChatRuntimeWindow.vue";
 import TronChatWindow from "./components/TronChatWindow.vue";
 
@@ -10,4 +11,4 @@ export type {
   TronChatWindowProps,
 } from "./types";
 
-export { TronChatRuntimeWindow, TronChatWindow };
+export { TronChatPanel, TronChatRuntimeWindow, TronChatWindow };

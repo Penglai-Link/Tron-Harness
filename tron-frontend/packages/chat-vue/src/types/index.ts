@@ -5,7 +5,10 @@ import type {
   ChatDebugOptions,
   ChatFloatingState,
   ChatMessage,
+  ChatQueuedSubmission,
+  ChatRunningSubmitMode,
   ChatSession,
+  ChatSubmitMode,
 } from "@tron/chat-core";
 
 export interface TronChatPanelProps {
@@ -25,15 +28,23 @@ export interface TronChatPanelProps {
   onNewSession?: () => void;
   onDraftChange: (value: string) => void;
   onEditMessage?: (content: string) => void;
-  onSend: () => void;
+  onEditQueuedMessage?: (id: string, content: string) => void;
+  onRemoveQueuedMessage?: (id: string) => void;
+  onSend: (mode?: ChatSubmitMode) => void;
   onStop?: () => void;
   protocolEvents?: ChatAguiStreamEvent[];
+  queueDisabled?: boolean;
+  queuedLabel?: string;
+  queuedMessages?: ChatQueuedSubmission[];
+  runningSubmitModes?: ChatRunningSubmitMode[];
   sendDisabled?: boolean;
   sendLabel?: string;
   sending?: boolean;
   session?: ChatSession | null;
   showAgui?: boolean;
   showHeader?: boolean;
+  showStop?: boolean;
+  steerDisabled?: boolean;
   stopLabel?: string;
   title?: string;
 }

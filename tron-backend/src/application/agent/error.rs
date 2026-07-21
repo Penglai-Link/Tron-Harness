@@ -5,6 +5,7 @@ pub enum AgentInvocationError {
     WorkspaceInvalid,
     ModelRequired,
     HistoryStorageFailed,
+    RunStopped,
     RuntimeFailed(String),
     RuntimeSecretDeliveryUntrusted,
     ModelFailed(String),
@@ -21,6 +22,7 @@ impl AgentInvocationError {
             Self::WorkspaceInvalid => "AGENT_WORKSPACE_INVALID",
             Self::ModelRequired => "AGENT_MODEL_REQUIRED",
             Self::HistoryStorageFailed => "AGENT_HISTORY_STORAGE_FAILED",
+            Self::RunStopped => "AGENT_RUN_STOPPED",
             Self::RuntimeFailed(_) => "AGENT_RUNTIME_FAILED",
             Self::RuntimeSecretDeliveryUntrusted => "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
             Self::ModelFailed(_) => "AGENT_MODEL_FAILED",
@@ -37,6 +39,7 @@ impl AgentInvocationError {
             Self::WorkspaceInvalid => "workspace must reference an active workspace".into(),
             Self::ModelRequired => "model config is required".into(),
             Self::HistoryStorageFailed => "agent run history storage failed".into(),
+            Self::RunStopped => "agent run was stopped".into(),
             Self::RuntimeFailed(message)
             | Self::ModelFailed(message)
             | Self::ToolFailed(message) => message.clone(),

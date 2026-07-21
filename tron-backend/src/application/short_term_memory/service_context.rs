@@ -29,7 +29,9 @@ impl ShortTermMemoryService {
         };
         let now = current_timestamp();
         let prompt_prefix_hash = hash_json(&prompt_prefix_snapshot(&memory.prompt_prefix));
-        let tool_hash = hash_json(&tools_snapshot(context));
+        let exposed_tools_snapshot = tools_snapshot(&context.tools);
+        let effective_tools_snapshot = tools_snapshot(context.authorized_tools());
+        let tool_hash = hash_json(&exposed_tools_snapshot);
         let skill_hash = hash_json(&skills_snapshot(context));
         let variable_hash = hash_json(&variables_snapshot(context));
         let execution_scope_hash = hash_json(&json!(context.execution_scope));
@@ -59,7 +61,10 @@ impl ShortTermMemoryService {
                     "hash": prompt_prefix_hash,
                     "preview": prompt_prefix_preview(&memory.prompt_prefix),
                 },
-                "tools": tools_snapshot(context),
+                // Keep `tools` as the backward-compatible model-exposure snapshot.
+                "tools": exposed_tools_snapshot.clone(),
+                "exposedTools": exposed_tools_snapshot,
+                "effectiveTools": effective_tools_snapshot,
                 "skills": skills_snapshot(context),
                 "variables": variables_snapshot(context),
                 "executionScope": context.execution_scope,
@@ -192,10 +197,9 @@ fn role_hash(messages: &[AgentMessage], role: &str) -> Option<String> {
     (!values.is_empty()).then(|| hash_text(&values.join("\n")))
 }
 
-fn tools_snapshot(context: &AgentRunContext) -> Value {
+fn tools_snapshot(tools: &[crate::domain::agent::EffectiveTool]) -> Value {
     json!(
-        context
-            .tools
+        tools
             .iter()
             .map(|tool| json!({
                 "name": tool.tool_name,

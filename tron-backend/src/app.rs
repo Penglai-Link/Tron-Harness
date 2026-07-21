@@ -34,7 +34,7 @@ use crate::{
         },
     },
     application::agent::{
-        AgentAguiReplayStore, AgentInvocationService, AgentManagementService,
+        ActiveRunRegistry, AgentAguiReplayStore, AgentInvocationService, AgentManagementService,
         AgentRunHistoryService, ModelClient, register_default_agent_tools,
     },
     application::app::AppService,
@@ -112,6 +112,7 @@ pub struct AppState {
     pub agent_management: AgentManagementService,
     pub agent_runs: AgentRunHistoryService,
     pub agent_tool_registry: Arc<ToolRegistry>,
+    pub active_runs: ActiveRunRegistry,
     pub apps: AppService,
     pub automations: AutomationService,
     pub chats: ChatService,
@@ -395,6 +396,7 @@ impl AppState {
             build_graph_services(graph_core, workspaces.clone(), llm_runtime.clone())
         };
         let agent_runs = build_agent_run_history_service(&config.database_url);
+        let active_runs = ActiveRunRegistry::new();
         let chats = if config.database_url == ":memory:" {
             GLOBAL_CHAT_SERVICE
                 .get_or_init(|| {
@@ -403,7 +405,8 @@ impl AppState {
                 .clone_with_id_provider(id_provider.clone())
         } else {
             build_chat_service_with_id_provider(&config.database_url, id_provider)
-        };
+        }
+        .with_active_runs(active_runs.clone());
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
             automations.clone(),
             chats.clone(),
@@ -421,7 +424,8 @@ impl AppState {
                 agent_model_client.clone(),
                 agent_tool_registry.clone(),
                 runtime_http_client.clone(),
-            ),
+            )
+            .with_active_runs(active_runs.clone()),
         )));
         automations
             .bootstrap_scheduler()
@@ -441,6 +445,7 @@ impl AppState {
             agent_management,
             agent_runs,
             agent_tool_registry,
+            active_runs,
             apps,
             automations,
             chats,

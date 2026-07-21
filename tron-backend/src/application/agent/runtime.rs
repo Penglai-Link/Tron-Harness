@@ -16,8 +16,8 @@ use crate::{
 };
 
 use super::{
-    TurnStateAdapter, TurnStateKind, request_estimate_snapshot, usage_audit_snapshot,
-    usage_event_payload,
+    ActiveRunControl, TurnStateAdapter, TurnStateKind, request_estimate_snapshot,
+    usage_audit_snapshot, usage_event_payload,
 };
 
 #[path = "runtime_tool_calls.rs"]
@@ -32,6 +32,9 @@ mod runtime_compaction;
 #[path = "runtime_model_request.rs"]
 mod runtime_model_request;
 
+#[path = "runtime_steering.rs"]
+mod runtime_steering;
+
 use runtime_helpers::{
     agent_kind_label, compact_event_payload_value, compact_event_value,
     model_stream_delta_payloads, record_failure_on_short_term_memory_error,
@@ -40,6 +43,7 @@ use runtime_helpers::{
 use runtime_model_request::{
     estimate_tool_schema_tokens, model_request_facts, prepared_context_event_payload,
 };
+use runtime_steering::RuntimeSteering;
 
 pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
 
@@ -113,7 +117,7 @@ pub struct ReactAgent {
 
 impl ReactAgent {
     pub async fn run(&self, mut context: AgentRunContext) -> Result<AgentRunResult, AgentError> {
-        self.run_with_model(&mut context, None).await
+        self.run_with_model(&mut context, None, None).await
     }
 
     pub async fn run_stream(
@@ -121,14 +125,17 @@ impl ReactAgent {
         mut context: AgentRunContext,
         sink: ModelStreamSink,
     ) -> Result<AgentRunResult, AgentError> {
-        self.run_with_model(&mut context, Some(sink)).await
+        self.run_with_model(&mut context, Some(sink), None).await
     }
 
     async fn run_with_model(
         &self,
         context: &mut AgentRunContext,
         sink: Option<ModelStreamSink>,
+        steer_control: Option<ActiveRunControl>,
     ) -> Result<AgentRunResult, AgentError> {
+        let mut steering = RuntimeSteering::new(steer_control);
+        steering.install_continuity_guidance(context);
         validate_context(&context)?;
         let mut turn_state = TurnStateAdapter::new(
             context.model.protocol,
@@ -151,7 +158,7 @@ impl ReactAgent {
         let mut tool_calls = 0;
         let mut token_usage: Option<ModelTokenUsage> = None;
         let mut overflow_retries = 0;
-
+        let mut final_output = String::new();
         loop {
             if step_count >= context.limits.max_steps {
                 self.publish(
@@ -163,6 +170,7 @@ impl ReactAgent {
                 self.record_short_term_memory_failure(context, "max_steps_exceeded")?;
                 return Err(AgentError::MaxStepsExceeded);
             }
+            steering.inject_at_loop_boundary(context, self.short_term_memory.as_ref())?;
             step_count += 1;
             let prepared_context = if let Some(short_term_memory) = self.short_term_memory.as_ref()
             {
@@ -229,6 +237,7 @@ impl ReactAgent {
                 ));
             }
             context.messages = prepared_context.messages.clone();
+            steering.inject_before_model_request(context, self.short_term_memory.as_ref())?;
             let request = turn_state.build_request(
                 context,
                 &context.messages,
@@ -354,6 +363,15 @@ impl ReactAgent {
 
             match response.finish {
                 crate::domain::agent::ModelFinish::Final => {
+                    final_output.push_str(&response.output_text());
+                    if steering.continue_after_final_response(
+                        context,
+                        self.short_term_memory.as_ref(),
+                        turn_state_kind,
+                        &response,
+                    )? {
+                        continue;
+                    }
                     self.publish(
                         &context,
                         "agent.output.created",
@@ -378,7 +396,7 @@ impl ReactAgent {
                         run_code: context.run_code.clone(),
                         conversation_code: context.conversation_code.clone(),
                         workspace_code: context.workspace_code.clone(),
-                        final_output: response.output_text(),
+                        final_output,
                         step_count,
                         token_usage,
                         latest_request_estimate: Some(request_estimate),

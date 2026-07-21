@@ -156,6 +156,7 @@ impl AgentRunContextBuilder {
         let locale = locale.unwrap_or_else(|| "en-US".to_string());
         let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
         let mut tools = requested_tools;
+        let mut effective_tools = tools.clone();
         let mut tool_exposure = AgentToolExposureState::default();
         let internal_agent_policy = if is_internal_agent(&resolved_agent.agent_code) {
             Some(
@@ -190,6 +191,7 @@ impl AgentRunContextBuilder {
                         .into_iter()
                         .map(tool_record_to_effective_tool)
                         .collect();
+                    effective_tools = tools.clone();
                 }
                 ToolExposureMode::DomainDiscovery => {
                     let visible_domains =
@@ -198,7 +200,11 @@ impl AgentRunContextBuilder {
                         .into_iter()
                         .map(tool_record_to_effective_tool)
                         .collect::<Vec<_>>();
-                    tools = vec![discovery_expand_tool_definition(&locale)];
+                    let discovery_tool = discovery_expand_tool_definition(&locale);
+                    tools = vec![discovery_tool.clone()];
+                    effective_tools = Vec::with_capacity(hidden_tools.len() + 1);
+                    effective_tools.push(discovery_tool);
+                    effective_tools.extend(hidden_tools.iter().cloned());
                     tool_exposure = AgentToolExposureState {
                         tool_exposure_mode: Some(policy.tool_exposure_mode),
                         expanded_domain_persistence_mode: Some(
@@ -282,6 +288,7 @@ impl AgentRunContextBuilder {
                 },
                 &materialization.warnings,
             );
+            effective_tools.extend(materialization.tools.iter().cloned());
             tools.extend(materialization.tools);
         }
 
@@ -335,6 +342,7 @@ impl AgentRunContextBuilder {
             variables,
             skills,
             tools,
+            effective_tools,
             tool_exposure,
             execution_scope: AgentExecutionScope {
                 app_code: app_code.clone(),

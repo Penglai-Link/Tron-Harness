@@ -1,6 +1,8 @@
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
 export type ChatMessageRole = "USER" | "ASSISTANT";
 export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
+export type ChatRunningSubmitMode = "steer" | "queue";
+export type ChatSubmitMode = "send" | ChatRunningSubmitMode;
 
 export interface ChatSession {
   id: number;
@@ -38,7 +40,7 @@ export interface UpdateChatSessionInput {
 }
 
 export interface ChatMessage {
-  id: number;
+  id: number | string;
   messageCode: string;
   sessionCode: string;
   runCode?: string | null;
@@ -95,6 +97,45 @@ export interface SendChatMessageInput {
   attachments?: ChatMessageAttachment[];
 }
 
+export interface ChatQueuedSubmission {
+  id: string;
+  sessionCode: string;
+  input: SendChatMessageInput;
+}
+
+export interface ChatSteerContext {
+  expectedRunCode: string;
+}
+
+export interface ChatSteerResult {
+  sessionCode: string;
+  runCode: string;
+  message: ChatMessage;
+}
+
+export type ChatActiveRunState = "RUNNING" | "FINISHING";
+
+export interface ChatActiveRun {
+  runCode: string;
+  runtimeAdapterKey: string;
+  supportsSteer: boolean;
+  state: ChatActiveRunState;
+}
+
+export interface ChatActiveRunResult {
+  sessionCode: string;
+  activeRun: ChatActiveRun | null;
+}
+
+export interface ChatStopContext {
+  expectedRunCode: string;
+}
+
+export interface ChatStopResult {
+  sessionCode: string;
+  runCode: string;
+}
+
 export interface ChatAguiEvent {
   id: string;
   type: string;
@@ -130,6 +171,7 @@ export interface ChatAguiStreamEvent {
   type: ChatAguiStreamEventType;
   threadId?: string;
   runId?: string;
+  supportsSteer?: boolean;
   messageId?: string;
   role?: string;
   delta?: string | unknown[];
@@ -154,17 +196,35 @@ export interface ChatStreamHandlers {
 
 export interface ChatAdapterCapabilities {
   supportsAbort: boolean;
+  supportsActiveRun?: boolean;
   supportsAgui: boolean;
   supportsProtocolReplay: boolean;
+  supportsSteer?: boolean;
+  supportsStop?: boolean;
   supportsStreaming: boolean;
 }
 
 export interface ChatAdapter {
   capabilities: ChatAdapterCapabilities;
   createSession: (input: CreateChatSessionInput) => Promise<ChatSession>;
+  getActiveRun?: (
+    sessionCode: string,
+    signal?: AbortSignal,
+  ) => Promise<ChatActiveRunResult>;
   loadAguiEvents: (sessionCode: string) => Promise<ChatAguiEvent[]>;
   loadMessages: (sessionCode: string) => Promise<ChatMessage[]>;
   loadProtocolEvents?: (sessionCode: string) => Promise<ChatAguiStreamEvent[]>;
+  steerMessage?: (
+    session: ChatSession,
+    input: SendChatMessageInput,
+    context: ChatSteerContext,
+    signal?: AbortSignal,
+  ) => Promise<ChatSteerResult>;
+  stopRun?: (
+    session: ChatSession,
+    context: ChatStopContext,
+    signal?: AbortSignal,
+  ) => Promise<ChatStopResult>;
   streamMessage: (
     session: ChatSession,
     input: SendChatMessageInput,

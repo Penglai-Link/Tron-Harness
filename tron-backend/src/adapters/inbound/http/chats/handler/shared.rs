@@ -86,6 +86,7 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => "CHAT_WORKSPACE_FORBIDDEN",
         ChatSendError::Chat(ChatError::StorageFailure) => "CHAT_STORAGE_FAILED",
         ChatSendError::Agent(error) => error.code(),
+        ChatSendError::RunAlreadyActive { .. } => "CHAT_RUN_ALREADY_ACTIVE",
     }
 }
 
@@ -101,6 +102,7 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         }
         ChatSendError::Chat(ChatError::StorageFailure) => "chat storage failed".into(),
         ChatSendError::Agent(error) => error.message(),
+        ChatSendError::RunAlreadyActive { .. } => "chat session already has an active run".into(),
     }
 }
 
@@ -246,4 +248,23 @@ fn validate_system_agent_model(
             system_agent.agent_code
         ),
     )))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::application::chat::ChatSendError;
+
+    use super::{chat_send_error_code, chat_send_error_message};
+
+    #[test]
+    fn active_run_race_uses_dedicated_stream_error_code() {
+        let error = ChatSendError::RunAlreadyActive {
+            active_run_code: Some("RUN-ACTIVE".into()),
+        };
+        assert_eq!(chat_send_error_code(&error), "CHAT_RUN_ALREADY_ACTIVE");
+        assert_eq!(
+            chat_send_error_message(error),
+            "chat session already has an active run"
+        );
+    }
 }

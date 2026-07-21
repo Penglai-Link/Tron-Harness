@@ -58,10 +58,14 @@ import {
   archiveChatSession,
   createChatSession,
   deleteChatSession,
+  getChatActiveRun,
+  stopChatRun,
+  steerChatMessage,
   streamChatMessage,
   updateChatSession,
   useChatAguiEvents,
   useChatAguiProtocolEvents,
+  useChatActiveRunState,
   createChatCompaction,
   cancelChatSessionGoal,
   clearChatSessionGoal,
@@ -83,6 +87,7 @@ import type { SystemAgentModelRecord, WorkspaceSystemAgentRecord } from "@/domai
 import { fetchWorkspaceModelCatalog } from "@/domain/model/api";
 import { getWorkspaceModelCatalog } from "@/domain/model/mock";
 import type { ModelRecord } from "@/domain/model/model";
+import { isApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   resolveAguiDebugEventTypes,
@@ -92,7 +97,21 @@ import {
 } from "@/domain/settings/model/aguiDebugPreferences";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { TronChatPanel } from "@tron/chat-react";
+import {
+  enqueueChatSubmission,
+  isSteerQueueFallbackCode,
+  mergeChatMessagesChronologically,
+  removeQueuedChatSubmission,
+  takeNextQueuedChatSubmission,
+  type ChatQueuedSubmission,
+  type ChatSubmitMode,
+} from "@tron/chat-core";
 import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
+import {
+  isChatReplayRunTerminal,
+  resolveLatestOpenChatReplayRun,
+} from "../model/chatReplayRun";
+import { resolveChatRunUiState } from "../model/chatRunUiState";
 import { inferChatAgentCodeFromModel } from "../model/chatAgentCode";
 import { parseGoalCommand } from "../model/goalCommand";
 import {
@@ -702,11 +721,109 @@ function contextWindowLimitFromSources(
 
 type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
 
+export interface ChatStreamOwner {
+  controller: AbortController;
+  generation: number;
+  sessionCode: string;
+}
+
+export class ChatStreamOwnershipRegistry {
+  private activeOwner: ChatStreamOwner | null = null;
+  private nextGeneration = 0;
+
+  get current() {
+    return this.activeOwner;
+  }
+
+  acquire(sessionCode: string, controller: AbortController) {
+    this.nextGeneration += 1;
+    const owner: ChatStreamOwner = {
+      controller,
+      generation: this.nextGeneration,
+      sessionCode,
+    };
+    this.activeOwner = owner;
+    return owner;
+  }
+
+  owns(owner: ChatStreamOwner) {
+    return this.activeOwner === owner;
+  }
+
+  detach(sessionCode?: string) {
+    const owner = this.activeOwner;
+    if (!owner || (sessionCode && owner.sessionCode !== sessionCode)) {
+      return null;
+    }
+    this.activeOwner = null;
+    return owner;
+  }
+
+  release(owner: ChatStreamOwner) {
+    if (!this.owns(owner)) return false;
+    this.activeOwner = null;
+    return true;
+  }
+}
+
+export interface ChatStreamSettlement {
+  canCommit: boolean;
+  restoreSourceSubmission: boolean;
+}
+
+export function resolveChatStreamSettlement(args: {
+  activeSessionCode: string;
+  detached: boolean;
+  owner: ChatStreamOwner;
+  registry: ChatStreamOwnershipRegistry;
+  stopped: boolean;
+}): ChatStreamSettlement {
+  if (args.stopped) {
+    return { canCommit: false, restoreSourceSubmission: false };
+  }
+  const canCommit = !args.detached
+    && args.registry.owns(args.owner)
+    && args.activeSessionCode === args.owner.sessionCode;
+  return {
+    canCommit,
+    restoreSourceSubmission: false,
+  };
+}
+
 const chatScrollBottomThreshold = 96;
 const chatScrollJumpButtonThreshold = 160;
 const liveAguiStartToleranceMs = 5_000;
 const activeChatReplayPollIntervalMs = 1_000;
 const activeChatReplayPendingTurnMaxAgeMs = 30 * 60_000;
+
+export function shouldPollChatRunRecovery({
+  currentRunActive,
+  hasQueuedSubmission,
+  sessionCode,
+  shouldPollData,
+}: {
+  currentRunActive: boolean;
+  hasQueuedSubmission: boolean;
+  sessionCode: string;
+  shouldPollData: boolean;
+}) {
+  return Boolean(
+    sessionCode
+    && (currentRunActive || hasQueuedSubmission || shouldPollData),
+  );
+}
+
+export function claimChatRunTerminalDrain(
+  drainedRunKeys: Set<string>,
+  sessionCode: string,
+  runCode: string,
+) {
+  if (!sessionCode || !runCode) return false;
+  const drainKey = `${sessionCode}:${runCode}`;
+  if (drainedRunKeys.has(drainKey)) return false;
+  drainedRunKeys.add(drainKey);
+  return true;
+}
 
 function aguiEventType(event: TranscriptAguiEvent) {
   if (typeof event.type === "string") return event.type;
@@ -769,6 +886,43 @@ function aguiEventMillis(event: TranscriptAguiEvent) {
   if ("timestamp" in event && typeof event.timestamp === "number") return event.timestamp;
   const parsed = Date.parse(aguiEventTime(event));
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+export function latestTerminalChatRunCode(
+  events: TranscriptAguiEvent[],
+  sessionCode: string,
+) {
+  const terminalEvents = events
+    .map((event, index) => {
+      const occurredAt = "occurredAt" in event && typeof event.occurredAt === "string"
+        ? Date.parse(event.occurredAt)
+        : Number.NaN;
+      return {
+        event,
+        index,
+        timestamp: "timestamp" in event
+          && typeof event.timestamp === "number"
+          && Number.isFinite(event.timestamp)
+          ? event.timestamp
+          : (Number.isNaN(occurredAt) ? null : occurredAt),
+      };
+    })
+    .filter(({ event }) => {
+      const threadId = aguiEventThreadId(event);
+      if (threadId && threadId !== sessionCode) return false;
+      const runCode = aguiEventRunCode(event);
+      if (!runCode || runCode === "stream") return false;
+      const type = aguiEventType(event).toUpperCase();
+      return type === "RUN_FINISHED" || type === "RUN_ERROR";
+    });
+  if (!terminalEvents.length) return "";
+  const ordered = terminalEvents.every(({ timestamp }) => timestamp !== null)
+    ? terminalEvents.sort((left, right) => (
+      (left.timestamp as number) - (right.timestamp as number)
+      || left.index - right.index
+    ))
+    : terminalEvents;
+  return aguiEventRunCode(ordered[ordered.length - 1].event);
 }
 
 function terminalAguiEvent(events: TranscriptAguiEvent[]) {
@@ -1525,6 +1679,10 @@ function chatSendErrorToastMessage(message: string) {
 function isAbortError(error: unknown) {
   if (error instanceof DOMException && error.name === "AbortError") return true;
   return error instanceof Error && error.name === "AbortError";
+}
+
+function isChatRunAlreadyActiveError(error: unknown) {
+  return isApiError(error) && error.code === "CHAT_RUN_ALREADY_ACTIVE";
 }
 
 function stoppedAguiEvents(sessionCode: string, runCodes: Iterable<string>): ChatAguiStreamEvent[] {
@@ -3780,6 +3938,7 @@ export function ChatManagementPage() {
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
+  const [activeRunRefreshKey, setActiveRunRefreshKey] = useState(0);
   const [shortTermMemoryRefreshKey, setShortTermMemoryRefreshKey] = useState(0);
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
@@ -3806,6 +3965,10 @@ export function ChatManagementPage() {
       : undefined
   );
   const messages = useChatMessageListBySession(activeSession?.sessionCode ?? "", activeChatDataRefreshKey);
+  const activeRunState = useChatActiveRunState(
+    activeSession?.sessionCode ?? "",
+    activeRunRefreshKey,
+  );
   const shortTermMemoryTodosState = useChatSessionTodosState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const latestCompactionState = useChatLatestCompactionState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
   const activeGoalState = useChatSessionLatestGoalState(activeSession?.sessionCode ?? "", shortTermMemoryRefreshKey);
@@ -3835,6 +3998,10 @@ export function ChatManagementPage() {
   const [latestRequestEstimatesBySessionCode, setLatestRequestEstimatesBySessionCode] = useState<Record<string, ChatTokenEstimateSnapshot>>({});
   const [latestUsageAuditsBySessionCode, setLatestUsageAuditsBySessionCode] = useState<Record<string, ChatUsageAuditSnapshot>>({});
   const [sending, setSending] = useState(false);
+  const [steering, setSteering] = useState(false);
+  const [activeRunCode, setActiveRunCode] = useState("");
+  const [activeRunSupportsSteer, setActiveRunSupportsSteer] = useState<boolean | null>(null);
+  const [queuedSubmissions, setQueuedSubmissions] = useState<ChatQueuedSubmission[]>([]);
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
   const [selectedModelCode, setSelectedModelCode] = useState("");
@@ -3856,8 +4023,24 @@ export function ChatManagementPage() {
   const [inspectionAttachments, setInspectionAttachments] = useState<ChatMessageAttachment[]>([]);
   const activeSessionCodeRef = useRef("");
   const modelSelectionSessionRef = useRef("");
-  const streamAbortControllerRef = useRef<AbortController | null>(null);
-  const streamAbortRequestedRef = useRef(false);
+  const streamOwnershipRegistryRef = useRef(new ChatStreamOwnershipRegistry());
+  const detachedStreamControllersRef = useRef(new WeakSet<AbortController>());
+  const stopRequestedStreamControllersRef = useRef(new WeakSet<AbortController>());
+  const steerAbortControllerRef = useRef<AbortController | null>(null);
+  const stopAbortControllerRef = useRef<AbortController | null>(null);
+  const sendingRef = useRef(false);
+  const steeringRef = useRef(false);
+  const steeringSessionCodeRef = useRef("");
+  const stoppingRunRef = useRef(false);
+  const activeRunCodeRef = useRef("");
+  const activeRunSupportsSteerRef = useRef<boolean | null>(null);
+  const autoDrainEpochRef = useRef(0);
+  const runningSessionCodeRef = useRef("");
+  const queuedSubmissionsRef = useRef<ChatQueuedSubmission[]>([]);
+  const queuedSubmissionSequenceRef = useRef(0);
+  const invalidatedQueueSessionCodesRef = useRef<Set<string>>(new Set());
+  const observedRecoveredRunCodesRef = useRef<Map<string, string>>(new Map());
+  const drainedRecoveredRunKeysRef = useRef<Set<string>>(new Set());
   const requestedSessionCodeSyncedRef = useRef("");
   const autoStickToBottomRef = useRef(true);
   const messageScrollRef = useRef<HTMLElement | null>(null);
@@ -3866,7 +4049,6 @@ export function ChatManagementPage() {
   const visibleSessionCodeRef = useRef("");
   const liveAssistantDraftRef = useRef("");
   const liveAguiObservedRef = useRef(false);
-  const currentLiveAguiRunCodesRef = useRef<Set<string>>(new Set());
   const selectedAgent = chatAgents.find((agent) => agent.agentCode === selectedAgentCode) ?? null;
   const agentScopedModels = useMemo(
     () => modelsForAgent(chatModels, selectedAgent),
@@ -3889,6 +4071,79 @@ export function ChatManagementPage() {
     : `No models for ${selectedAgent?.name ?? effectiveAgentCode}`;
   const currentUserDisplayName = authSession?.user.displayName ?? "";
   const { createInspectionAttachment } = useInspection()
+
+  function setSendingState(value: boolean) {
+    sendingRef.current = value;
+    setSending(value);
+  }
+
+  function replaceQueuedSubmissions(next: ChatQueuedSubmission[]) {
+    queuedSubmissionsRef.current = next;
+    setQueuedSubmissions(next);
+  }
+
+  function enqueueSubmission(
+    session: ChatSession,
+    input: SendChatMessageInput,
+    position: "front" | "back" = "back",
+  ) {
+    if (invalidatedQueueSessionCodesRef.current.has(session.sessionCode)) {
+      return null;
+    }
+    queuedSubmissionSequenceRef.current += 1;
+    const submission: ChatQueuedSubmission = {
+      id: `QUEUED-${Date.now()}-${queuedSubmissionSequenceRef.current}`,
+      input,
+      sessionCode: session.sessionCode,
+    };
+    replaceQueuedSubmissions(
+      position === "front"
+        ? [submission, ...queuedSubmissionsRef.current]
+        : enqueueChatSubmission(queuedSubmissionsRef.current, submission),
+    );
+    return submission;
+  }
+
+  function takeNextQueuedSubmission(sessionCode: string) {
+    if (invalidatedQueueSessionCodesRef.current.has(sessionCode)) return null;
+    const result = takeNextQueuedChatSubmission(
+      queuedSubmissionsRef.current,
+      sessionCode,
+    );
+    replaceQueuedSubmissions(result.remaining);
+    return result.submission;
+  }
+
+  function invalidateQueuedSession(sessionCode: string) {
+    invalidatedQueueSessionCodesRef.current.add(sessionCode);
+    replaceQueuedSubmissions(
+      queuedSubmissionsRef.current.filter((submission) => (
+        submission.sessionCode !== sessionCode
+      )),
+    );
+  }
+
+  function createSendInput(
+    session: ChatSession,
+    content: string,
+    attachments: ChatMessageAttachment[],
+  ): SendChatMessageInput | null {
+    if (!selectedModel) return null;
+    const input: SendChatMessageInput = {
+      agentCode: effectiveAgentCode,
+      appCode: session.appCode,
+      content,
+      taskCode: session.taskCode,
+      workspaceCode: session.workspaceCode,
+    };
+    if (attachments.length) input.attachments = attachments;
+    if (selectedModel.source === "system-agent") {
+      input.systemModelId = selectedModel.modelName;
+    } else {
+      input.modelCode = selectedModel.modelCode;
+    }
+    return input;
+  }
 
   const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
     const currentPathname = typeof window === "undefined" ? "/chats" : window.location.pathname;
@@ -4178,8 +4433,27 @@ export function ChatManagementPage() {
 
   useEffect(() => () => {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
-    streamAbortControllerRef.current?.abort();
+    const owner = streamOwnershipRegistryRef.current.current;
+    if (owner) {
+      autoDrainEpochRef.current += 1;
+      detachedStreamControllersRef.current.add(owner.controller);
+      streamOwnershipRegistryRef.current.release(owner);
+      sendingRef.current = false;
+      runningSessionCodeRef.current = "";
+      owner.controller.abort();
+    }
+    steerAbortControllerRef.current?.abort();
   }, []);
+
+  useEffect(() => {
+    const owner = streamOwnershipRegistryRef.current.current;
+    if (
+      owner
+      && owner.sessionCode !== (activeSession?.sessionCode ?? "")
+    ) {
+      detachLocalRunObserver(owner.sessionCode);
+    }
+  }, [activeSession?.sessionCode]);
 
   useEffect(() => {
     autoStickToBottomRef.current = true;
@@ -4269,22 +4543,69 @@ export function ChatManagementPage() {
     && activeSession
     && runningSessionCode === activeSession.sessionCode,
   );
-  const hasOpenReplayRun = useMemo(() => (
-    Boolean(activeSession?.sessionCode)
-    && openAguiProtocolRunCodes(aguiProtocolEvents, activeSession?.sessionCode ?? "").size > 0
-  ), [activeSession?.sessionCode, aguiProtocolEvents]);
+  const replayActiveRunHint = useMemo(
+    () => resolveLatestOpenChatReplayRun(
+      aguiProtocolEvents,
+      activeSession?.sessionCode ?? "",
+    ),
+    [activeSession?.sessionCode, aguiProtocolEvents],
+  );
+  const activeRunQueryMatchesSession = Boolean(
+    activeSession?.sessionCode
+    && activeRunState.data.sessionCode === activeSession.sessionCode,
+  );
+  const authoritativeActiveRun = activeRunQueryMatchesSession
+    ? activeRunState.data.activeRun
+    : null;
+  const replayActiveRunLoadingHint = (
+    activeRunState.loading
+    || Boolean(activeRunState.error)
+    || !activeRunQueryMatchesSession
+  )
+    ? replayActiveRunHint
+    : null;
+  const runUiState = resolveChatRunUiState({
+    authoritativeRun: authoritativeActiveRun,
+    localRunActive: canAbortCurrentSession,
+    localRunCode: activeRunCode,
+    localRunSupportsSteer: activeRunSupportsSteer,
+    replayRunHint: replayActiveRunLoadingHint,
+  });
+  const currentSessionRunActive = runUiState.active;
+  const effectiveActiveRunCode = runUiState.runCode;
+  const canSteerCurrentRun = runUiState.canSteer;
+  const canStopCurrentRun = runUiState.canStop;
+  const runningSubmitModes = runUiState.runningSubmitModes;
+  const visibleQueuedSubmissions = useMemo(
+    () => queuedSubmissions.filter((submission) => (
+      submission.sessionCode === activeSession?.sessionCode
+    )),
+    [activeSession?.sessionCode, queuedSubmissions],
+  );
+  const hasQueuedSubmissionForActiveSession = visibleQueuedSubmissions.length > 0;
+  const queueDisabled = Boolean(
+    !activeSession
+    || !selectedModel
+    || !composer.trim()
+    || creatingSession,
+  );
+  const steerDisabled = queueDisabled || steering || !canSteerCurrentRun;
+  const hasOpenReplayRun = Boolean(replayActiveRunHint);
   const shouldPollActiveChatData = Boolean(
     activeSession?.sessionCode
     && !(sending && runningSessionCode === activeSession.sessionCode)
-    && (isRecentPendingUserTurn(visibleMessages) || hasOpenReplayRun)
-  );
-  const shouldPollActiveChatReplay = Boolean(
-    activeSession?.sessionCode
     && (
-      (sending && runningSessionCode === activeSession.sessionCode)
-      || shouldPollActiveChatData
+      isRecentPendingUserTurn(visibleMessages)
+      || hasOpenReplayRun
+      || hasQueuedSubmissionForActiveSession
     )
   );
+  const shouldPollActiveChatReplay = shouldPollChatRunRecovery({
+    currentRunActive: currentSessionRunActive,
+    hasQueuedSubmission: hasQueuedSubmissionForActiveSession,
+    sessionCode: activeSession?.sessionCode ?? "",
+    shouldPollData: shouldPollActiveChatData,
+  });
   const handleCreateCompactionForRightPanel = useStableCallback(handleCreateCompaction);
   const handleCancelGoalForRightPanel = useStableCallback(handleCancelGoal);
   const handleClearGoalForRightPanel = useStableCallback(handleClearGoal);
@@ -4467,6 +4788,7 @@ export function ChatManagementPage() {
     if (!shouldPollActiveChatReplay) return;
     const intervalId = window.setInterval(() => {
       setActiveChatReplayRefreshKey((current) => current + 1);
+      setActiveRunRefreshKey((current) => current + 1);
     }, activeChatReplayPollIntervalMs);
     return () => window.clearInterval(intervalId);
   }, [activeSession?.sessionCode, shouldPollActiveChatReplay]);
@@ -4480,6 +4802,57 @@ export function ChatManagementPage() {
   }, [activeSession?.sessionCode, shouldPollActiveChatData]);
 
   useEffect(() => {
+    if (!activeSession || canAbortCurrentSession) return;
+    const sessionCode = activeSession.sessionCode;
+    const observedRemoteRun = authoritativeActiveRun ?? replayActiveRunHint;
+    if (observedRemoteRun) {
+      observedRecoveredRunCodesRef.current.set(
+        sessionCode,
+        observedRemoteRun.runCode,
+      );
+      return;
+    }
+    const observedRunCode = observedRecoveredRunCodesRef.current.get(sessionCode)
+      ?? (hasQueuedSubmissionForActiveSession
+        ? latestTerminalChatRunCode(aguiProtocolEvents, sessionCode)
+        : "");
+    if (
+      !observedRunCode
+      || !isChatReplayRunTerminal(
+        aguiProtocolEvents,
+        sessionCode,
+        observedRunCode,
+      )
+    ) return;
+    observedRecoveredRunCodesRef.current.delete(sessionCode);
+    if (!claimChatRunTerminalDrain(
+      drainedRecoveredRunKeysRef.current,
+      sessionCode,
+      observedRunCode,
+    )) return;
+    if (
+      sendingRef.current
+      || invalidatedQueueSessionCodesRef.current.has(sessionCode)
+    ) return;
+    const nextSubmission = takeNextQueuedSubmission(sessionCode);
+    if (nextSubmission) {
+      void runChatInput(
+        activeSession,
+        nextSubmission.input,
+        false,
+        nextSubmission,
+      );
+    }
+  }, [
+    activeSession,
+    aguiProtocolEvents,
+    authoritativeActiveRun,
+    canAbortCurrentSession,
+    hasQueuedSubmissionForActiveSession,
+    replayActiveRunHint,
+  ]);
+
+  useEffect(() => {
     if (autoStickToBottomRef.current) scrollToLatestMessage("auto");
     else handleTranscriptScroll();
   }, [transcriptAguiEvents, visibleMessages]);
@@ -4487,6 +4860,10 @@ export function ChatManagementPage() {
   function handleSessionSelect(sessionOrCode: ChatSession | string, sourceTab?: ChatSessionSourceTab) {
     const sessionCode = typeof sessionOrCode === "string" ? sessionOrCode : sessionOrCode.sessionCode;
     const selected = typeof sessionOrCode === "string" ? findSession(sessionGroups, sessionCode) : sessionOrCode;
+    const currentOwner = streamOwnershipRegistryRef.current.current;
+    if (currentOwner && currentOwner.sessionCode !== sessionCode) {
+      detachLocalRunObserver(currentOwner.sessionCode);
+    }
     if (sessionCode !== activeSessionCode) setVisibleMessages([]);
     setOptimisticActiveSession(selected ?? null);
     activeSessionCodeRef.current = sessionCode;
@@ -4517,6 +4894,7 @@ export function ChatManagementPage() {
       handleSessionSelect(nextSession, sourceTab);
       return;
     }
+    detachLocalRunObserver();
     activeSessionCodeRef.current = "";
     setOptimisticActiveSession(null);
     setActiveSessionCode("");
@@ -4535,6 +4913,7 @@ export function ChatManagementPage() {
       return;
     }
 
+    detachLocalRunObserver();
     activeSessionCodeRef.current = "";
     setOptimisticActiveSession(null);
     setActiveSessionCode("");
@@ -4577,10 +4956,122 @@ export function ChatManagementPage() {
     ));
   }
 
-  function handleAbortSend() {
-    if (!sending) return;
-    streamAbortRequestedRef.current = true;
-    streamAbortControllerRef.current?.abort();
+  function clearLocalStreamState() {
+    setSendingState(false);
+    runningSessionCodeRef.current = "";
+    setRunningSessionCode("");
+    liveAssistantDraftRef.current = "";
+    liveAguiObservedRef.current = false;
+    activeRunCodeRef.current = "";
+    activeRunSupportsSteerRef.current = null;
+    setActiveRunCode("");
+    setActiveRunSupportsSteer(null);
+  }
+
+  function clearLocalStreamOwnership(owner: ChatStreamOwner) {
+    if (!streamOwnershipRegistryRef.current.release(owner)) return false;
+    clearLocalStreamState();
+    return true;
+  }
+
+  function detachLocalRunObserver(sessionCode?: string) {
+    const owner = streamOwnershipRegistryRef.current.current;
+    const ownsStream = Boolean(owner && (!sessionCode || owner.sessionCode === sessionCode));
+    const ownsSteer = steeringRef.current
+      && (!sessionCode || steeringSessionCodeRef.current === sessionCode);
+    if (!ownsStream && !ownsSteer) return;
+    if (ownsStream) {
+      const detachedOwner = streamOwnershipRegistryRef.current.detach(sessionCode);
+      if (!detachedOwner) return;
+      autoDrainEpochRef.current += 1;
+      detachedStreamControllersRef.current.add(detachedOwner.controller);
+      clearLocalStreamState();
+      detachedOwner.controller.abort();
+    }
+    if (ownsSteer) steerAbortControllerRef.current?.abort();
+  }
+
+  async function handleStopRun() {
+    if (stoppingRunRef.current || !activeSession || !canStopCurrentRun) return;
+    const sessionCode = activeSession.sessionCode;
+    const expectedRunCode = effectiveActiveRunCode;
+    const currentOwner = streamOwnershipRegistryRef.current.current;
+    const localOwner = currentOwner?.sessionCode === sessionCode
+      ? currentOwner
+      : null;
+    const abortController = new AbortController();
+    stopAbortControllerRef.current = abortController;
+    stoppingRunRef.current = true;
+    autoDrainEpochRef.current += 1;
+    try {
+      await stopChatRun(
+        { expectedRunCode, sessionCode },
+        abortController.signal,
+      );
+      drainedRecoveredRunKeysRef.current.add(`${sessionCode}:${expectedRunCode}`);
+      observedRecoveredRunCodesRef.current.delete(sessionCode);
+      if (localOwner) {
+        stopRequestedStreamControllersRef.current.add(localOwner.controller);
+      }
+      if (localOwner && clearLocalStreamOwnership(localOwner)) {
+        localOwner.controller.abort();
+      }
+      if (steeringSessionCodeRef.current === sessionCode) {
+        steerAbortControllerRef.current?.abort();
+      }
+      setActiveRunRefreshKey((current) => current + 1);
+      setActiveChatReplayRefreshKey((current) => current + 1);
+      setActiveChatDataRefreshKey((current) => current + 1);
+      toast.info("Current response has been stopped", { title: "Chat stopped" });
+    } catch (error) {
+      if (!isAbortError(error)) {
+        toast.error(
+          error instanceof Error ? error.message : "Chat stop failed",
+          { title: "Chat stop failed" },
+        );
+      }
+    } finally {
+      if (stopAbortControllerRef.current === abortController) {
+        stopAbortControllerRef.current = null;
+      }
+      stoppingRunRef.current = false;
+    }
+  }
+
+  async function stopSessionRunBeforeMutation(sessionCode: string) {
+    const currentOwner = streamOwnershipRegistryRef.current.current;
+    const localOwner = currentOwner?.sessionCode === sessionCode
+      ? currentOwner
+      : null;
+    const snapshot = await getChatActiveRun(sessionCode);
+    const expectedRunCode = snapshot.activeRun?.runCode
+      ?? (localOwner ? activeRunCodeRef.current : "");
+    if (!expectedRunCode) {
+      if (localOwner) {
+        throw new Error("The current response is still starting; try again shortly");
+      }
+      return;
+    }
+
+    if (localOwner) {
+      detachedStreamControllersRef.current.add(localOwner.controller);
+    }
+    try {
+      await stopChatRun({ expectedRunCode, sessionCode });
+    } catch (error) {
+      if (localOwner) {
+        detachedStreamControllersRef.current.delete(localOwner.controller);
+      }
+      throw error;
+    }
+    drainedRecoveredRunKeysRef.current.add(`${sessionCode}:${expectedRunCode}`);
+    observedRecoveredRunCodesRef.current.delete(sessionCode);
+    if (localOwner) detachLocalRunObserver(sessionCode);
+    if (activeSessionCodeRef.current === sessionCode) {
+      setActiveRunRefreshKey((current) => current + 1);
+      setActiveChatReplayRefreshKey((current) => current + 1);
+      setActiveChatDataRefreshKey((current) => current + 1);
+    }
   }
 
   function forgetSessionModelSelection(sessionCode: string) {
@@ -4593,7 +5084,7 @@ export function ChatManagementPage() {
   }
 
   async function handleSend(contentOverride?: string, attachmentOverride?: ChatMessageAttachment[]) {
-    if (sending) return;
+    if (sendingRef.current) return;
     if (!activeSession) return;
     const rawContent = contentOverride ?? composer;
     const goalCommand = contentOverride === undefined
@@ -4617,7 +5108,14 @@ export function ChatManagementPage() {
       if (!goalSet) return;
     }
 
-    await sendChatContent(content, attachmentOverride, contentOverride === undefined);
+    const attachments = attachmentOverride ?? inspectionAttachments;
+    const sendInput = createSendInput(activeSession, content, attachments);
+    if (!sendInput) return;
+    await runChatInput(
+      activeSession,
+      sendInput,
+      contentOverride === undefined,
+    );
   }
 
   async function setGoalFromComposerCommand(objective: string) {
@@ -4646,33 +5144,52 @@ export function ChatManagementPage() {
     }
   }
 
-  async function sendChatContent(
-    content: string,
-    attachmentOverride?: ChatMessageAttachment[],
+  async function runChatInput(
+    targetSession: ChatSession,
+    sendInput: SendChatMessageInput,
     shouldClearComposer = false,
+    sourceSubmission: ChatQueuedSubmission | null = null,
   ) {
-    if (!activeSession || !selectedModel) return;
-    const sendInput: SendChatMessageInput = {
-      agentCode: effectiveAgentCode,
-      appCode: activeSession.appCode,
-      content,
-      taskCode: activeSession.taskCode,
-      workspaceCode: activeSession.workspaceCode,
+    const restoreSourceSubmission = () => {
+      if (
+        !sourceSubmission
+        || invalidatedQueueSessionCodesRef.current.has(sourceSubmission.sessionCode)
+      ) return;
+      const remaining = removeQueuedChatSubmission(
+        queuedSubmissionsRef.current,
+        sourceSubmission.id,
+      );
+      replaceQueuedSubmissions([sourceSubmission, ...remaining]);
     };
-    const pendingInspectionAttachments = attachmentOverride ?? inspectionAttachments;
-    if (pendingInspectionAttachments.length) {
-      sendInput.attachments = pendingInspectionAttachments;
+    if (streamOwnershipRegistryRef.current.current || sendingRef.current) {
+      restoreSourceSubmission();
+      return false;
     }
-    if (selectedModel.source === "system-agent") {
-      sendInput.systemModelId = selectedModel.modelName;
-    } else {
-      sendInput.modelCode = selectedModel.modelCode;
+    const content = sendInput.content.trim();
+    if (!content) {
+      restoreSourceSubmission();
+      return false;
     }
-    const sendingSessionCode = activeSession.sessionCode;
+    const pendingInspectionAttachments = sendInput.attachments ?? [];
+    const autoDrainEpoch = autoDrainEpochRef.current;
+    const sendingSessionCode = targetSession.sessionCode;
     const abortController = new AbortController();
-    streamAbortRequestedRef.current = false;
-    streamAbortControllerRef.current = abortController;
-    currentLiveAguiRunCodesRef.current.clear();
+    const streamOwner = streamOwnershipRegistryRef.current.acquire(
+      sendingSessionCode,
+      abortController,
+    );
+    const currentStreamSettlement = () => resolveChatStreamSettlement({
+      activeSessionCode: activeSessionCodeRef.current,
+      detached: detachedStreamControllersRef.current.has(abortController),
+      owner: streamOwner,
+      registry: streamOwnershipRegistryRef.current,
+      stopped: stopRequestedStreamControllersRef.current.has(abortController),
+    });
+    const liveRunCodes = new Set<string>();
+    activeRunCodeRef.current = "";
+    activeRunSupportsSteerRef.current = null;
+    setActiveRunCode("");
+    setActiveRunSupportsSteer(null);
     const sendStartedAt = Date.now();
     const streamAcceptedAfter = sendStartedAt - liveAguiStartToleranceMs;
     const optimisticUserCode = `LOCAL-${sendStartedAt}-USER`;
@@ -4680,7 +5197,7 @@ export function ChatManagementPage() {
     const optimisticCreatedAt = new Date().toISOString();
     const optimisticUserMessage: ChatMessage = {
       actor: "User",
-      channel: activeSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
+      channel: targetSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
       content,
       attachments: pendingInspectionAttachments,
       createdAt: optimisticCreatedAt,
@@ -4692,7 +5209,7 @@ export function ChatManagementPage() {
     };
     const optimisticAssistantMessage: ChatMessage = {
       actor: "Assistant",
-      channel: activeSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
+      channel: targetSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
       content: "",
       createdAt: optimisticCreatedAt,
       id: -sendStartedAt - 1,
@@ -4701,12 +5218,13 @@ export function ChatManagementPage() {
       runCode: null,
       sessionCode: sendingSessionCode,
     };
-    setSending(true);
+    setSendingState(true);
+    runningSessionCodeRef.current = sendingSessionCode;
     setRunningSessionCode(sendingSessionCode);
     if (shouldClearComposer) {
       setComposer("");
     }
-    if (attachmentOverride === undefined) {
+    if (shouldClearComposer) {
       setInspectionAttachments([]);
     }
     if (activeSessionCodeRef.current === sendingSessionCode) {
@@ -4718,18 +5236,35 @@ export function ChatManagementPage() {
       setShowScrollToBottom(false);
       scrollToLatestMessage("auto");
     }
+    let completed = false;
+    let completedRunCode = "";
+    let completedSession: ChatSession | null = null;
+    // Once a request crosses the transport boundary, automatic retry is unsafe:
+    // the backend may already have persisted its USER message. The sole safe
+    // restore path is CHAT_RUN_ALREADY_ACTIVE, which rejects before admission.
+    let shouldRestoreSourceSubmission = false;
     try {
       const result = await streamChatMessage(
-        activeSession,
+        targetSession,
         sendInput,
         {
           onAguiEvent: (event) => {
+            if (!streamOwnershipRegistryRef.current.owns(streamOwner)) return;
             if (event.threadId && event.threadId !== sendingSessionCode) return;
             const eventMillis = aguiEventMillis(event);
             if (eventMillis !== null && eventMillis < streamAcceptedAfter) return;
             const runCode = aguiEventRunCode(event);
+            if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {
+              activeRunCodeRef.current = runCode;
+              setActiveRunCode(runCode);
+              const supportsSteer = typeof event.supportsSteer === "boolean"
+                ? event.supportsSteer
+                : null;
+              activeRunSupportsSteerRef.current = supportsSteer;
+              setActiveRunSupportsSteer(supportsSteer);
+            }
             if (runCode && runCode !== "stream") {
-              currentLiveAguiRunCodesRef.current.add(runCode);
+              liveRunCodes.add(runCode);
               setLiveAguiAnchorMessageCodesBySessionCode((current) => {
                 const sessionAnchors = current[sendingSessionCode] ?? {};
                 if (sessionAnchors[runCode]) return current;
@@ -4756,6 +5291,7 @@ export function ChatManagementPage() {
             }));
           },
           onDelta: (delta) => {
+            if (!streamOwnershipRegistryRef.current.owns(streamOwner)) return;
             liveAssistantDraftRef.current = `${liveAssistantDraftRef.current}${delta}`;
             if (activeSessionCodeRef.current !== sendingSessionCode) return;
             setVisibleMessages((current) => {
@@ -4776,6 +5312,13 @@ export function ChatManagementPage() {
         },
         abortController.signal,
       );
+      if (!currentStreamSettlement().canCommit) {
+        // Some transports settle normally after AbortSignal fires. Reuse the
+        // same observer-settlement path as a rejected stream before applying
+        // any session, usage, transcript, or queue side effects.
+        throw new Error("Chat stream observer closed");
+      }
+      shouldRestoreSourceSubmission = false;
       setSessionGroups((current) => replaceSession(current, result.session));
       setLatestRequestEstimatesBySessionCode((current) => {
         if (result.run.latestRequestEstimate) {
@@ -4803,7 +5346,7 @@ export function ChatManagementPage() {
       });
       const resultUserMessage = result.messages.find((message) => message.role === "USER") ?? null;
       const persistedUserCode = resultUserMessage?.messageCode ?? optimisticUserCode;
-      const runCodes = Array.from(currentLiveAguiRunCodesRef.current);
+      const runCodes = Array.from(liveRunCodes);
       if (runCodes.length) {
         setLiveAguiAnchorMessageCodesBySessionCode((current) => {
           const sessionAnchors = current[result.session.sessionCode] ?? {};
@@ -4818,13 +5361,11 @@ export function ChatManagementPage() {
         });
       }
       if (activeSessionCodeRef.current === result.session.sessionCode) {
-        setVisibleMessages((current) => [
-          ...current.filter((message) => (
-            message.messageCode !== optimisticUserCode
-            && message.messageCode !== optimisticAssistantCode
-          )),
-          ...result.messages,
-        ]);
+        setVisibleMessages((current) => mergeChatMessagesChronologically(
+          current,
+          result.messages,
+          [optimisticUserCode, optimisticAssistantCode],
+        ));
       }
       setShortTermMemoryRefreshKey((current) => current + 1);
       setUnseenSessionCodes((current) => {
@@ -4833,45 +5374,246 @@ export function ChatManagementPage() {
         else next.add(result.session.sessionCode);
         return next;
       });
+      completedSession = result.session;
+      completedRunCode = result.run.runCode;
+      completed = !stopRequestedStreamControllersRef.current.has(abortController)
+        && !detachedStreamControllersRef.current.has(abortController)
+        && autoDrainEpochRef.current === autoDrainEpoch;
     } catch (error) {
-      const stopped = streamAbortRequestedRef.current || isAbortError(error);
-      if (stopped) {
-        const terminalEvents = stoppedAguiEvents(sendingSessionCode, currentLiveAguiRunCodesRef.current);
-        if (terminalEvents.length) {
-          setLiveAguiEventsBySessionCode((current) => ({
-            ...current,
-            [sendingSessionCode]: mergeTranscriptAguiEvents(current[sendingSessionCode] ?? [], terminalEvents),
-          }));
+      const settlement = currentStreamSettlement();
+      const explicitlyStopped = stopRequestedStreamControllersRef.current.has(abortController);
+      if (!settlement.canCommit) {
+        shouldRestoreSourceSubmission = settlement.restoreSourceSubmission;
+        if (explicitlyStopped) {
+          const terminalEvents = stoppedAguiEvents(sendingSessionCode, liveRunCodes);
+          if (terminalEvents.length) {
+            setLiveAguiEventsBySessionCode((current) => ({
+              ...current,
+              [sendingSessionCode]: mergeTranscriptAguiEvents(current[sendingSessionCode] ?? [], terminalEvents),
+            }));
+          }
         }
         if (activeSessionCodeRef.current === sendingSessionCode) {
           setVisibleMessages((current) => current.filter((item) => (
             item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
           )));
         }
-        toast.info("Current response has been stopped", { title: "Chat stopped" });
-        return;
+      } else if (isChatRunAlreadyActiveError(error)) {
+        if (sourceSubmission) {
+          restoreSourceSubmission();
+        } else {
+          enqueueSubmission(targetSession, sendInput, "front");
+        }
+        setActiveChatReplayRefreshKey((current) => current + 1);
+        setActiveRunRefreshKey((current) => current + 1);
+        if (activeSessionCodeRef.current === sendingSessionCode) {
+          setVisibleMessages((current) => current.filter((item) => (
+            item.messageCode !== optimisticUserCode
+            && item.messageCode !== optimisticAssistantCode
+          )));
+        }
+        toast.info(
+          "Message was kept in the queue while the current response finishes",
+          { title: "Active response recovered" },
+        );
+      } else {
+        const rawMessage = error instanceof Error ? error.message : "Chat send failed";
+        const toastMessage = chatSendErrorToastMessage(rawMessage);
+        if (!sourceSubmission && pendingInspectionAttachments.length) {
+          setInspectionAttachments((current) => [...pendingInspectionAttachments, ...current]);
+        }
+        if (activeSessionCodeRef.current === sendingSessionCode) {
+          setVisibleMessages((current) => current.filter((item) => (
+            item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
+          )));
+        }
+        toast.error(toastMessage, { title: "Chat send failed" });
       }
-      const rawMessage = error instanceof Error ? error.message : "Chat send failed";
-      const toastMessage = chatSendErrorToastMessage(rawMessage);
-      if (pendingInspectionAttachments.length) {
-        setInspectionAttachments((current) => [...pendingInspectionAttachments, ...current]);
-      }
-      if (activeSessionCodeRef.current === sendingSessionCode) {
-        setVisibleMessages((current) => current.filter((item) => (
-          item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
-        )));
-      }
-      toast.error(toastMessage, { title: "Chat send failed" });
     } finally {
-      setSending(false);
-      setRunningSessionCode("");
-      liveAssistantDraftRef.current = "";
-      liveAguiObservedRef.current = false;
-      if (streamAbortControllerRef.current === abortController) {
-        streamAbortControllerRef.current = null;
-      }
-      streamAbortRequestedRef.current = false;
+      clearLocalStreamOwnership(streamOwner);
     }
+
+    if (shouldRestoreSourceSubmission) restoreSourceSubmission();
+
+    if (completed && completedSession) {
+      drainedRecoveredRunKeysRef.current.add(
+        `${sendingSessionCode}:${completedRunCode}`,
+      );
+      if (
+        observedRecoveredRunCodesRef.current.get(sendingSessionCode)
+        === completedRunCode
+      ) {
+        observedRecoveredRunCodesRef.current.delete(sendingSessionCode);
+      }
+      const nextSubmission = takeNextQueuedSubmission(sendingSessionCode);
+      if (nextSubmission) {
+        void runChatInput(
+          completedSession,
+          nextSubmission.input,
+          false,
+          nextSubmission,
+        );
+      }
+    }
+    return completed;
+  }
+
+  async function handleQueueMessage() {
+    if (queueDisabled || !activeSession) return;
+    const content = composer.trim();
+    if (!content) return;
+    const sendInput = createSendInput(
+      activeSession,
+      content,
+      inspectionAttachments,
+    );
+    if (!sendInput) return;
+    setComposer("");
+    setInspectionAttachments([]);
+    if (sendingRef.current || authoritativeActiveRun || replayActiveRunLoadingHint) {
+      enqueueSubmission(activeSession, sendInput);
+      return;
+    }
+    await runChatInput(activeSession, sendInput);
+  }
+
+  async function handleSteerMessage() {
+    if (steeringRef.current || steerDisabled || !activeSession) return;
+    const content = composer.trim();
+    if (!content) return;
+    const sendInput = createSendInput(
+      activeSession,
+      content,
+      inspectionAttachments,
+    );
+    if (!sendInput) return;
+    const localRunIsTarget = sendingRef.current
+      && runningSessionCodeRef.current === activeSession.sessionCode;
+    const expectedRunCode = localRunIsTarget
+      ? activeRunCodeRef.current
+      : (authoritativeActiveRun?.runCode ?? "");
+    const authoritativeRunIsTarget = !localRunIsTarget
+      && authoritativeActiveRun?.runCode === expectedRunCode;
+    const targetSupportsSteer = localRunIsTarget
+      ? activeRunSupportsSteerRef.current === true
+      : Boolean(
+        authoritativeActiveRun?.supportsSteer
+        && authoritativeActiveRun.state.toUpperCase() !== "FINISHING",
+      );
+    const autoDrainEpoch = autoDrainEpochRef.current;
+    setComposer("");
+    setInspectionAttachments([]);
+    if (
+      (!localRunIsTarget && !authoritativeRunIsTarget)
+      || !expectedRunCode
+      || !targetSupportsSteer
+    ) {
+      enqueueSubmission(activeSession, sendInput);
+      return;
+    }
+
+    const steerSession = activeSession;
+    const abortController = new AbortController();
+    steerAbortControllerRef.current = abortController;
+    steeringRef.current = true;
+    steeringSessionCodeRef.current = steerSession.sessionCode;
+    setSteering(true);
+    try {
+      const result = await steerChatMessage(
+        {
+          attachments: sendInput.attachments ?? [],
+          content: sendInput.content,
+          expectedRunCode,
+          sessionCode: steerSession.sessionCode,
+        },
+        abortController.signal,
+      );
+      if (activeSessionCodeRef.current === result.sessionCode) {
+        setVisibleMessages((current) => (
+          current.some((message) => message.messageCode === result.message.messageCode)
+            ? current
+            : [...current, result.message]
+        ));
+      }
+    } catch (error) {
+      const sessionInvalidated = invalidatedQueueSessionCodesRef.current.has(
+        steerSession.sessionCode,
+      );
+      const safeQueueFallback = isApiError(error)
+        && isSteerQueueFallbackCode(error.code);
+      if (!sessionInvalidated && safeQueueFallback) {
+        enqueueSubmission(steerSession, sendInput, "front");
+        if (
+          !sendingRef.current
+          && !authoritativeRunIsTarget
+          && autoDrainEpochRef.current === autoDrainEpoch
+        ) {
+          const nextSubmission = takeNextQueuedSubmission(
+            steerSession.sessionCode,
+          );
+          if (nextSubmission) {
+            void runChatInput(
+              steerSession,
+              nextSubmission.input,
+              false,
+              nextSubmission,
+            );
+          }
+        }
+      }
+      if (sessionInvalidated) {
+        toast.info("Steer message was discarded with its session", { title: "Session closed" });
+      } else if (safeQueueFallback) {
+        toast.info(
+          "The active run rejected steer; the message was queued",
+          { title: "Message queued" },
+        );
+      } else if (isAbortError(error)) {
+        toast.info(
+          "Steer delivery was not confirmed and was not retried",
+          { title: "Steer not retried" },
+        );
+      } else {
+        toast.error(
+          error instanceof Error ? error.message : "Chat steer failed",
+          { title: "Chat steer failed" },
+        );
+      }
+    } finally {
+      if (steerAbortControllerRef.current === abortController) {
+        steerAbortControllerRef.current = null;
+      }
+      steeringRef.current = false;
+      steeringSessionCodeRef.current = "";
+      setSteering(false);
+    }
+  }
+
+  async function handleSubmit(mode: ChatSubmitMode = "send") {
+    if (mode === "queue") {
+      await handleQueueMessage();
+      return;
+    }
+    if (mode === "steer") {
+      await handleSteerMessage();
+      return;
+    }
+    await handleSend();
+  }
+
+  function handleEditQueuedMessage(id: string, content: string) {
+    const submission = queuedSubmissionsRef.current.find((item) => item.id === id);
+    replaceQueuedSubmissions(
+      removeQueuedChatSubmission(queuedSubmissionsRef.current, id),
+    );
+    setComposer(content);
+    setInspectionAttachments(submission?.input.attachments ?? []);
+  }
+
+  function handleRemoveQueuedMessage(id: string) {
+    replaceQueuedSubmissions(
+      removeQueuedChatSubmission(queuedSubmissionsRef.current, id),
+    );
   }
 
   async function handleCreateCompaction() {
@@ -4992,6 +5734,7 @@ export function ChatManagementPage() {
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });
+      invalidatedQueueSessionCodesRef.current.delete(session.sessionCode);
       setSessionGroups((current) => insertSession(current, session));
       handleSessionSelect(session);
       setVisibleMessages([]);
@@ -5009,7 +5752,9 @@ export function ChatManagementPage() {
     const returnSourceTab = requestedSourceTab ?? activeSourceTab;
     setSessionActionPendingCode(session.sessionCode);
     try {
+      await stopSessionRunBeforeMutation(session.sessionCode);
       const archived = await archiveChatSession(session.sessionCode);
+      invalidateQueuedSession(archived.sessionCode);
       const nextGroups = removeSession(sessionGroups, archived.sessionCode);
       setSessionGroups(nextGroups);
       setUnseenSessionCodes((current) => {
@@ -5038,7 +5783,9 @@ export function ChatManagementPage() {
 
     setSessionActionPendingCode(session.sessionCode);
     try {
+      await stopSessionRunBeforeMutation(session.sessionCode);
       const deleted = await deleteChatSession(session.sessionCode);
+      invalidateQueuedSession(deleted.sessionCode);
       const nextGroups = removeSession(sessionGroups, deleted.sessionCode);
       setSessionGroups(nextGroups);
       setUnseenSessionCodes((current) => {
@@ -5241,15 +5988,24 @@ export function ChatManagementPage() {
           }}
           onDraftChange={setComposer}
           onEditMessage={setComposer}
-          onSend={() => {
-            void handleSend();
+          onEditQueuedMessage={handleEditQueuedMessage}
+          onRemoveQueuedMessage={handleRemoveQueuedMessage}
+          onSend={(mode) => {
+            void handleSubmit(mode);
           }}
-          onStop={handleAbortSend}
+          onStop={() => {
+            void handleStopRun();
+          }}
           protocolEvents={aguiProtocolEvents}
-          sendDisabled={!canAbortCurrentSession && (sending || !activeSession || !selectedModel)}
-          sending={canAbortCurrentSession}
+          queueDisabled={queueDisabled}
+          queuedMessages={visibleQueuedSubmissions}
+          runningSubmitModes={runningSubmitModes}
+          sendDisabled={!currentSessionRunActive && (sending || !activeSession || !selectedModel)}
+          sending={currentSessionRunActive}
           session={activeSession}
           showHeader={false}
+          showStop={canStopCurrentRun}
+          steerDisabled={steerDisabled}
           title={activeSession?.title ?? "Chat Management"}
         />
       </main>

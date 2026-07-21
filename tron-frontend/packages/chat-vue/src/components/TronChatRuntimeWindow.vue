@@ -2,23 +2,46 @@
 import {
   buildTranscriptPresentation,
   createMockChatAdapter,
+  enqueueChatSubmission,
+  FetchTransportError,
+  mergeChatMessagesChronologically,
   mergeTranscriptAguiEvents,
   normalizeChatSession,
+  removeQueuedChatSubmission,
+  takeNextQueuedChatSubmission,
+  type ChatActiveRun,
   type ChatAguiEvent,
   type ChatAguiStreamEvent,
-  type ChatMessage,
-  type ChatSession,
-  type SendChatMessageInput,
   type ChatFloatingState,
+  type ChatMessage,
+  type ChatQueuedSubmission,
+  type ChatRunningSubmitMode,
+  type ChatSession,
+  type ChatSubmitMode,
+  type SendChatMessageInput,
   isRecentPendingUserTurn,
+  isSteerQueueFallbackCode,
   openAguiProtocolRunCodes,
 } from "@tron/chat-core";
-import { computed, ref, useSlots, watch } from "vue";
 import {
-  defaultErrorReporter,
-  dedupeMessages,
-  normalizeOptionalValue,
-} from "../utils";
+  computed,
+  onBeforeUnmount,
+  ref,
+  shallowRef,
+  useSlots,
+  watch,
+} from "vue";
+import { defaultErrorReporter, normalizeOptionalValue } from "../utils";
+import {
+  resolveSuccessfulActiveRunSnapshot,
+  retainActiveRunOnStatusFailure,
+  type RuntimeActiveRunTrackingState,
+} from "../runtimeActiveRun";
+import {
+  ownsRuntimeStreamObserver,
+  resolveRuntimeStreamSettlement,
+  type RuntimeStreamAbortReason,
+} from "../runtimeStreamObserver";
 import TronChatPanel from "./TronChatPanel.vue";
 import TronChatWindow from "./TronChatWindow.vue";
 import { TronChatRuntimeWindowProps } from "../types";
@@ -58,10 +81,29 @@ const liveAguiEvents = ref<ChatAguiStreamEvent[]>([]);
 const liveAguiAnchorMessageCodes = ref<Record<string, string>>({});
 const draft = ref("");
 const sending = ref(false);
+const steering = ref(false);
 const loading = ref(false);
 const liveAguiPending = ref(false);
-const abortRef = ref<AbortController | null>(null);
-const streamAbortRequestedRef = ref(false);
+const activeRunCode = ref("");
+const activeRunSupportsSteer = ref<boolean | null>(null);
+const remoteActiveRun = ref<ChatActiveRun | null>(null);
+const pendingProtocolTerminalRun = ref<ChatActiveRun | null>(null);
+const activeRunStatusPending = ref(false);
+const stopping = ref(false);
+const queuedSubmissions = ref<ChatQueuedSubmission[]>([]);
+const activeSessionCodeRef = ref("");
+const activeObserverRef = shallowRef<{
+  abortReason: RuntimeStreamAbortReason;
+  controller: AbortController;
+  sessionCode: string;
+} | null>(null);
+const steerAbortRef = ref<AbortController | null>(null);
+const stopAbortRef = ref<AbortController | null>(null);
+const autoDrainEpochRef = ref(0);
+const queuedSubmissionSequenceRef = ref(0);
+const optimisticMessageSequenceRef = ref(0);
+const queueGenerationRef = ref(0);
+const terminalHandledRunCodesRef = new Set<string>();
 
 const aguiEnabled = computed(
   () =>
@@ -74,10 +116,305 @@ const protocolReplayEnabled = computed(
     activeAdapter.value.capabilities.supportsProtocolReplay &&
     Boolean(activeAdapter.value.loadProtocolEvents),
 );
+const effectiveActiveRunCode = computed(
+  () =>
+    activeRunCode.value ||
+    remoteActiveRun.value?.runCode ||
+    pendingProtocolTerminalRun.value?.runCode ||
+    "",
+);
+const runActive = computed(
+  () =>
+    sending.value ||
+    Boolean(remoteActiveRun.value) ||
+    Boolean(pendingProtocolTerminalRun.value) ||
+    activeRunStatusPending.value,
+);
+const effectiveRunState = computed(() => {
+  if (
+    pendingProtocolTerminalRun.value?.runCode === effectiveActiveRunCode.value
+  ) {
+    return "FINISHING";
+  }
+  return remoteActiveRun.value?.runCode === effectiveActiveRunCode.value
+    ? remoteActiveRun.value.state
+    : "RUNNING";
+});
+const effectiveSupportsSteer = computed(() => {
+  if (
+    pendingProtocolTerminalRun.value?.runCode === effectiveActiveRunCode.value
+  ) {
+    return false;
+  }
+  return remoteActiveRun.value?.runCode === effectiveActiveRunCode.value
+    ? remoteActiveRun.value.supportsSteer
+    : activeRunSupportsSteer.value;
+});
+const canSteer = computed(() =>
+  Boolean(
+      activeAdapter.value.capabilities.supportsSteer &&
+      activeAdapter.value.steerMessage &&
+      effectiveActiveRunCode.value &&
+      effectiveRunState.value === "RUNNING" &&
+      effectiveSupportsSteer.value !== false,
+  ),
+);
+const runningSubmitModes = computed<ChatRunningSubmitMode[]>(() =>
+  canSteer.value ? ["steer", "queue"] : ["queue"],
+);
+const visibleQueuedSubmissions = computed(() =>
+  queuedSubmissions.value.filter(
+    (submission) => submission.sessionCode === session.value?.sessionCode,
+  ),
+);
+const canStop = computed(() =>
+  Boolean(
+    session.value &&
+      !stopping.value &&
+      ((effectiveActiveRunCode.value &&
+        effectiveRunState.value === "RUNNING" &&
+        activeAdapter.value.capabilities.supportsStop &&
+        activeAdapter.value.stopRun) ||
+        (sending.value &&
+          activeAdapter.value.capabilities.supportsAbort &&
+          !(
+            activeAdapter.value.capabilities.supportsStop &&
+            activeAdapter.value.stopRun
+          ))),
+  ),
+);
+
+function isRunAlreadyActiveError(error: unknown) {
+  return (
+    (error instanceof FetchTransportError &&
+      error.code === "CHAT_RUN_ALREADY_ACTIVE") ||
+    (typeof error === "object" &&
+      error !== null &&
+      "code" in error &&
+      error.code === "CHAT_RUN_ALREADY_ACTIVE")
+  );
+}
+
+function detachRunObserver(reason: "detach" | "stop") {
+  const observer = activeObserverRef.value;
+  if (observer) {
+    observer.abortReason = reason;
+    observer.controller.abort();
+    if (activeObserverRef.value === observer) {
+      activeObserverRef.value = null;
+      sending.value = false;
+      liveAguiPending.value = false;
+      activeRunCode.value = "";
+      activeRunSupportsSteer.value = null;
+    }
+  }
+  detachSteerObserver();
+}
+
+function detachSteerObserver() {
+  const controller = steerAbortRef.value;
+  if (controller) {
+    steerAbortRef.value = null;
+    controller.abort();
+  }
+  steering.value = false;
+}
+
+async function loadActiveRunSnapshot(
+  sessionCode: string,
+  signal?: AbortSignal,
+) {
+  const adapter = activeAdapter.value;
+  if (!adapter.capabilities.supportsActiveRun || !adapter.getActiveRun) {
+    throw new Error("Active-run status is not supported by this adapter");
+  }
+  const result = await adapter.getActiveRun(sessionCode, signal);
+  return result.activeRun;
+}
+
+type ActiveRunQueryResult =
+  | { activeRun: ChatActiveRun | null; kind: "success" }
+  | { kind: "failure" }
+  | { kind: "unsupported" };
+
+async function queryActiveRunSnapshot(
+  sessionCode: string,
+  signal?: AbortSignal,
+): Promise<ActiveRunQueryResult> {
+  const adapter = activeAdapter.value;
+  if (!adapter.capabilities.supportsActiveRun || !adapter.getActiveRun) {
+    return { kind: "unsupported" };
+  }
+  try {
+    return {
+      activeRun: await loadActiveRunSnapshot(sessionCode, signal),
+      kind: "success",
+    };
+  } catch {
+    return { kind: "failure" };
+  }
+}
+
+function replaceQueuedSubmissions(next: ChatQueuedSubmission[]) {
+  queuedSubmissions.value = next;
+}
+
+function createSendInput(
+  activeSession: ChatSession,
+  content: string,
+): SendChatMessageInput {
+  return {
+    agentCode: normalizeOptionalValue(props.config.agentCode),
+    appCode: normalizeOptionalValue(
+      activeSession.appCode ?? props.config.appCode,
+    ),
+    content,
+    taskCode: normalizeOptionalValue(
+      activeSession.taskCode ?? props.config.taskCode,
+    ),
+    workspaceCode: activeSession.workspaceCode,
+  };
+}
+
+function enqueueSubmission(
+  activeSession: ChatSession,
+  input: SendChatMessageInput,
+  position: "front" | "back" = "back",
+) {
+  queuedSubmissionSequenceRef.value += 1;
+  const submission: ChatQueuedSubmission = {
+    id: `QUEUED-${Date.now()}-${queuedSubmissionSequenceRef.value}`,
+    input,
+    sessionCode: activeSession.sessionCode,
+  };
+  replaceQueuedSubmissions(
+    position === "front"
+      ? [submission, ...queuedSubmissions.value]
+      : enqueueChatSubmission(queuedSubmissions.value, submission),
+  );
+  return submission;
+}
+
+function takeNextQueuedSubmission(sessionCode: string) {
+  const result = takeNextQueuedChatSubmission(
+    queuedSubmissions.value,
+    sessionCode,
+  );
+  replaceQueuedSubmissions(result.remaining);
+  return result.submission;
+}
+
+function drainNextQueuedSubmission(sessionCode: string) {
+  const currentSession = session.value;
+  if (
+    !currentSession ||
+    currentSession.sessionCode !== sessionCode ||
+    sending.value ||
+    remoteActiveRun.value ||
+    pendingProtocolTerminalRun.value ||
+    activeRunStatusPending.value
+  ) {
+    return;
+  }
+  const nextSubmission = takeNextQueuedSubmission(sessionCode);
+  if (nextSubmission) {
+    void runMessage(currentSession, nextSubmission.input, nextSubmission);
+  }
+}
+
+function currentActiveRunTrackingState(): RuntimeActiveRunTrackingState {
+  return {
+    activeRun: remoteActiveRun.value,
+    pendingProtocolTerminalRun: pendingProtocolTerminalRun.value,
+    statusPending: activeRunStatusPending.value,
+  };
+}
+
+function applyActiveRunTrackingState(state: RuntimeActiveRunTrackingState) {
+  remoteActiveRun.value = state.activeRun;
+  pendingProtocolTerminalRun.value = state.pendingProtocolTerminalRun;
+  activeRunStatusPending.value = state.statusPending;
+}
+
+function markActiveRunStatusPending(sessionCode: string) {
+  if (activeSessionCodeRef.value !== sessionCode) return;
+  applyActiveRunTrackingState(
+    retainActiveRunOnStatusFailure(currentActiveRunTrackingState()),
+  );
+}
+
+function acceptActiveRunSnapshot(
+  nextActiveRun: ChatActiveRun | null,
+  sessionCode: string,
+  protocolSnapshot: ChatAguiStreamEvent[] = protocolEvents.value,
+  drainNow = true,
+) {
+  if (activeSessionCodeRef.value !== sessionCode) return false;
+  const resolution = resolveSuccessfulActiveRunSnapshot({
+    nextActiveRun,
+    protocolEvents: protocolSnapshot,
+    protocolReplayEnabled: protocolReplayEnabled.value,
+    sessionCode,
+    state: currentActiveRunTrackingState(),
+    suppressedRunCodes: terminalHandledRunCodesRef,
+  });
+  applyActiveRunTrackingState(resolution.state);
+  if (resolution.consumedSuppressedRunCode) {
+    terminalHandledRunCodesRef.delete(resolution.consumedSuppressedRunCode);
+  }
+  if (resolution.shouldDrainQueue && drainNow && !sending.value) {
+    drainNextQueuedSubmission(sessionCode);
+  }
+  return resolution.shouldDrainQueue;
+}
+
+function releasePendingProtocolTerminal(
+  sessionCode: string,
+  protocolSnapshot: ChatAguiStreamEvent[],
+) {
+  if (!pendingProtocolTerminalRun.value) return false;
+  return acceptActiveRunSnapshot(
+    null,
+    sessionCode,
+    protocolSnapshot,
+    true,
+  );
+}
+
+async function refreshActiveRun(
+  sessionCode: string,
+  signal?: AbortSignal,
+  drainNow = true,
+) {
+  const next = await loadActiveRunSnapshot(sessionCode, signal);
+  acceptActiveRunSnapshot(next, sessionCode, protocolEvents.value, drainNow);
+  return next;
+}
+
+function prependQueuedSubmission(submission: ChatQueuedSubmission) {
+  replaceQueuedSubmissions([
+    submission,
+    ...removeQueuedChatSubmission(queuedSubmissions.value, submission.id),
+  ]);
+}
+
+function restoreSourceSubmission(
+  sourceSubmission: ChatQueuedSubmission | undefined,
+  queueGeneration: number,
+) {
+  if (
+    !sourceSubmission ||
+    queueGeneration !== queueGenerationRef.value
+  ) {
+    return;
+  }
+  prependQueuedSubmission(sourceSubmission);
+}
 
 watch(
   normalizedInitialSession,
   (nextSession) => {
+    activeSessionCodeRef.value = nextSession?.sessionCode ?? "";
     session.value = nextSession;
   },
   { immediate: true },
@@ -85,7 +422,23 @@ watch(
 
 watch(
   session,
-  (nextSession) => {
+  (nextSession, previousSession) => {
+    if (
+      previousSession?.sessionCode &&
+      previousSession.sessionCode !== nextSession?.sessionCode
+    ) {
+      queueGenerationRef.value += 1;
+      detachRunObserver("detach");
+      stopAbortRef.value?.abort();
+      stopping.value = false;
+      terminalHandledRunCodesRef.clear();
+      remoteActiveRun.value = null;
+      pendingProtocolTerminalRun.value = null;
+      activeRunStatusPending.value = false;
+      activeRunCode.value = "";
+      activeRunSupportsSteer.value = null;
+    }
+    activeSessionCodeRef.value = nextSession?.sessionCode ?? "";
     props.onSessionChange?.(nextSession);
     emit("session-change", nextSession);
   },
@@ -93,47 +446,72 @@ watch(
 );
 
 watch(
-  session,
-  async (nextSession, _, onCleanup) => {
+  () => session.value?.sessionCode,
+  async (nextSessionCode, _, onCleanup) => {
     let active = true;
+    const abortController = new AbortController();
     onCleanup(() => {
       active = false;
+      abortController.abort();
     });
 
-    if (!nextSession?.sessionCode) {
+    if (!nextSessionCode) {
       messages.value = [];
       aguiEvents.value = [];
       protocolEvents.value = [];
+      remoteActiveRun.value = null;
+      pendingProtocolTerminalRun.value = null;
+      activeRunStatusPending.value = false;
       return;
     }
 
     loading.value = true;
-    try {
-      const [nextMessages, nextAguiEvents, nextProtocolEvents] =
-        await Promise.all([
-          activeAdapter.value.loadMessages(nextSession.sessionCode),
-          aguiEnabled.value
-            ? activeAdapter.value.loadAguiEvents(nextSession.sessionCode)
-            : Promise.resolve([]),
-          protocolReplayEnabled.value && activeAdapter.value.loadProtocolEvents
-            ? activeAdapter.value.loadProtocolEvents(nextSession.sessionCode)
-            : Promise.resolve([]),
-        ]);
-      if (!active) return;
-      messages.value = nextMessages;
-      aguiEvents.value = nextAguiEvents;
-      protocolEvents.value = nextProtocolEvents;
-    } catch (error) {
-      if (!active) return;
+    const [dataResult, activeRunResult] = await Promise.all([
+      Promise.all([
+        activeAdapter.value.loadMessages(nextSessionCode),
+        aguiEnabled.value
+          ? activeAdapter.value.loadAguiEvents(nextSessionCode)
+          : Promise.resolve([]),
+        protocolReplayEnabled.value && activeAdapter.value.loadProtocolEvents
+          ? activeAdapter.value.loadProtocolEvents(nextSessionCode)
+          : Promise.resolve([]),
+      ]).then(
+        ([nextMessages, nextAguiEvents, nextProtocolEvents]) => ({
+          kind: "success" as const,
+          nextAguiEvents,
+          nextMessages,
+          nextProtocolEvents,
+        }),
+        (error: unknown) => ({ error, kind: "failure" as const }),
+      ),
+      queryActiveRunSnapshot(nextSessionCode, abortController.signal),
+    ]);
+    if (!active || abortController.signal.aborted) return;
+    if (dataResult.kind === "success") {
+      messages.value = dataResult.nextMessages;
+      aguiEvents.value = dataResult.nextAguiEvents;
+      protocolEvents.value = dataResult.nextProtocolEvents;
+    } else {
       const message =
-        error instanceof Error
-          ? error.message
+        dataResult.error instanceof Error
+          ? dataResult.error.message
           : "Chat data could not be loaded";
       props.onError?.(message, "Chat load failed");
       emit("error", message, "Chat load failed");
-    } finally {
-      if (active) loading.value = false;
     }
+    if (activeRunResult.kind === "success") {
+      acceptActiveRunSnapshot(
+        activeRunResult.activeRun,
+        nextSessionCode,
+        dataResult.kind === "success"
+          ? dataResult.nextProtocolEvents
+          : protocolEvents.value,
+        false,
+      );
+    } else if (activeRunResult.kind === "failure") {
+      markActiveRunStatusPending(nextSessionCode);
+    }
+    loading.value = false;
   },
   { immediate: true },
 );
@@ -141,7 +519,6 @@ watch(
 const shouldPollData = computed(() =>
   Boolean(
     session.value?.sessionCode &&
-    !sending.value &&
     (isRecentPendingUserTurn(messages.value) ||
       (protocolReplayEnabled.value &&
         openAguiProtocolRunCodes(
@@ -150,37 +527,67 @@ const shouldPollData = computed(() =>
         ).size > 0)),
   ),
 );
+const shouldPollRuntime = computed(() =>
+  Boolean(
+    session.value?.sessionCode &&
+      (runActive.value ||
+        shouldPollData.value ||
+        activeRunStatusPending.value ||
+        pendingProtocolTerminalRun.value),
+  ),
+);
 
 watch(
-  [session, sending, shouldPollData],
+  [() => session.value?.sessionCode, shouldPollRuntime],
   (_, __, onCleanup) => {
-    if (
-      !session.value?.sessionCode ||
-      (!sending.value && !shouldPollData.value)
-    )
-      return;
+    const sessionCode = session.value?.sessionCode;
+    if (!sessionCode || !shouldPollRuntime.value) return;
+    let refreshing = false;
     const intervalId = window.setInterval(async () => {
-      if (!session.value?.sessionCode) return;
-      try {
-        const [nextMessages, nextAguiEvents, nextProtocolEvents] =
-          await Promise.all([
-            activeAdapter.value.loadMessages(session.value.sessionCode),
-            aguiEnabled.value
-              ? activeAdapter.value.loadAguiEvents(session.value.sessionCode)
-              : Promise.resolve([]),
-            protocolReplayEnabled.value &&
-            activeAdapter.value.loadProtocolEvents
-              ? activeAdapter.value.loadProtocolEvents(
-                  session.value.sessionCode,
-                )
-              : Promise.resolve([]),
-          ]);
-        messages.value = nextMessages;
-        aguiEvents.value = nextAguiEvents;
-        protocolEvents.value = nextProtocolEvents;
-      } catch {
-        // Keep the last successful snapshot.
+      if (refreshing || activeSessionCodeRef.value !== sessionCode) return;
+      refreshing = true;
+      const [dataResult, activeRunResult] = await Promise.all([
+        Promise.all([
+          activeAdapter.value.loadMessages(sessionCode),
+          aguiEnabled.value
+            ? activeAdapter.value.loadAguiEvents(sessionCode)
+            : Promise.resolve([]),
+          protocolReplayEnabled.value && activeAdapter.value.loadProtocolEvents
+            ? activeAdapter.value.loadProtocolEvents(sessionCode)
+            : Promise.resolve([]),
+        ]).then(
+          ([nextMessages, nextAguiEvents, nextProtocolEvents]) => ({
+            kind: "success" as const,
+            nextAguiEvents,
+            nextMessages,
+            nextProtocolEvents,
+          }),
+          () => ({ kind: "failure" as const }),
+        ),
+        queryActiveRunSnapshot(sessionCode),
+      ]);
+      if (activeSessionCodeRef.value === sessionCode) {
+        let protocolSnapshot = protocolEvents.value;
+        if (dataResult.kind === "success") {
+          messages.value = dataResult.nextMessages;
+          aguiEvents.value = dataResult.nextAguiEvents;
+          protocolEvents.value = dataResult.nextProtocolEvents;
+          protocolSnapshot = dataResult.nextProtocolEvents;
+        }
+        if (activeRunResult.kind === "success") {
+          acceptActiveRunSnapshot(
+            activeRunResult.activeRun,
+            sessionCode,
+            protocolSnapshot,
+          );
+        } else if (activeRunResult.kind === "failure") {
+          markActiveRunStatusPending(sessionCode);
+          releasePendingProtocolTerminal(sessionCode, protocolSnapshot);
+        } else {
+          releasePendingProtocolTerminal(sessionCode, protocolSnapshot);
+        }
       }
+      refreshing = false;
     }, 1000);
 
     onCleanup(() => {
@@ -191,10 +598,20 @@ watch(
 );
 
 const sendDisabled = computed(() => {
-  if (loading.value || sending.value || props.config.disabledInput) return true;
+  if (loading.value || props.config.disabledInput) return true;
   if (!draft.value.trim()) return true;
   return !session.value && !props.config.workspaceCode;
 });
+const queueDisabled = computed(
+  () =>
+    loading.value ||
+    Boolean(props.config.disabledInput) ||
+    !draft.value.trim() ||
+    !session.value,
+);
+const steerDisabled = computed(
+  () => queueDisabled.value || steering.value || !canSteer.value,
+);
 
 function reportError(message: string, title?: string) {
   props.onError?.(message, title);
@@ -223,6 +640,7 @@ async function ensureSession() {
     title: normalizeOptionalValue(props.config.title) ?? props.floatingTitle,
     workspaceCode: props.config.workspaceCode,
   });
+  activeSessionCodeRef.value = created.sessionCode;
   session.value = created;
   messages.value = [];
   aguiEvents.value = [];
@@ -230,34 +648,45 @@ async function ensureSession() {
   return created;
 }
 
-async function handleSend() {
-  if (sendDisabled.value) return;
-  const activeSession = await ensureSession();
-  if (!activeSession) return;
-  const content = draft.value.trim();
-  if (!content) return;
-
-  const sendInput: SendChatMessageInput = {
-    agentCode: normalizeOptionalValue(props.config.agentCode),
-    appCode: normalizeOptionalValue(
-      activeSession.appCode ?? props.config.appCode,
-    ),
-    content,
-    taskCode: normalizeOptionalValue(
-      activeSession.taskCode ?? props.config.taskCode,
-    ),
-    workspaceCode: activeSession.workspaceCode,
-  };
+async function runMessage(
+  activeSession: ChatSession,
+  sendInput: SendChatMessageInput,
+  sourceSubmission?: ChatQueuedSubmission,
+) {
+  const queueGeneration = queueGenerationRef.value;
+  const autoDrainEpoch = autoDrainEpochRef.value;
+  if (
+    sending.value ||
+    remoteActiveRun.value ||
+    pendingProtocolTerminalRun.value ||
+    activeRunStatusPending.value
+  ) {
+    restoreSourceSubmission(sourceSubmission, queueGeneration);
+    return false;
+  }
+  const content = sendInput.content.trim();
+  if (!content) {
+    restoreSourceSubmission(sourceSubmission, queueGeneration);
+    return false;
+  }
+  const adapter = activeAdapter.value;
+  const isAguiEnabled = aguiEnabled.value;
   const abortController = new AbortController();
-  abortRef.value = abortController;
-  streamAbortRequestedRef.value = false;
-
+  const observer = {
+    abortReason: "none" as RuntimeStreamAbortReason,
+    controller: abortController,
+    sessionCode: activeSession.sessionCode,
+  };
+  activeObserverRef.value = observer;
+  activeRunCode.value = "";
+  activeRunSupportsSteer.value = null;
+  optimisticMessageSequenceRef.value += 1;
+  const optimisticKey = `${Date.now()}-${optimisticMessageSequenceRef.value}`;
   const optimisticCreatedAt = new Date().toISOString();
-  const optimisticUserCode = `LOCAL-${Date.now()}-USER`;
-  const optimisticAssistantCode = `LOCAL-${Date.now()}-ASSISTANT`;
+  const optimisticUserCode = `LOCAL-${optimisticKey}-USER`;
+  const optimisticAssistantCode = `LOCAL-${optimisticKey}-ASSISTANT`;
   sending.value = true;
-  liveAguiPending.value = aguiEnabled.value;
-  draft.value = "";
+  liveAguiPending.value = isAguiEnabled;
   messages.value = [
     ...messages.value,
     {
@@ -265,7 +694,7 @@ async function handleSend() {
       channel: activeSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
       content,
       createdAt: optimisticCreatedAt,
-      id: -Date.now(),
+      id: -Date.now() - optimisticMessageSequenceRef.value,
       messageCode: optimisticUserCode,
       role: "USER",
       runCode: null,
@@ -276,7 +705,7 @@ async function handleSend() {
       channel: activeSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
       content: "",
       createdAt: optimisticCreatedAt,
-      id: -Date.now() - 1,
+      id: -Date.now() - optimisticMessageSequenceRef.value - 1,
       messageCode: optimisticAssistantCode,
       role: "ASSISTANT",
       runCode: null,
@@ -284,15 +713,37 @@ async function handleSend() {
     },
   ];
 
+  let completed = false;
+  let completedRunCode = "";
+  let completedSession: ChatSession | null = null;
+  let streamSucceeded = false;
+  // Once a request crosses the transport boundary, automatic retry is unsafe:
+  // the backend may already have persisted its USER message. The sole safe
+  // restore path is CHAT_RUN_ALREADY_ACTIVE, which rejects before admission.
+  let shouldRestoreSourceSubmission = false;
+  let drainConflictQueue = false;
   try {
-    const result = await activeAdapter.value.streamMessage(
+    const result = await adapter.streamMessage(
       activeSession,
       sendInput,
       {
         onAguiEvent: (event) => {
-          if (!aguiEnabled.value) return;
+          if (
+            !ownsRuntimeStreamObserver(
+              activeObserverRef.value,
+              observer,
+              activeSessionCodeRef.value,
+            )
+          ) {
+            return;
+          }
+          const runCode = String(event.runId ?? event.runCode ?? "");
+          if (typeof event.supportsSteer === "boolean") {
+            activeRunSupportsSteer.value = event.supportsSteer;
+          }
+          if (runCode && !activeRunCode.value) activeRunCode.value = runCode;
+          if (!isAguiEnabled) return;
           liveAguiEvents.value = [...liveAguiEvents.value, event];
-          const runCode = event.runId ?? "";
           if (!runCode) return;
           liveAguiAnchorMessageCodes.value = liveAguiAnchorMessageCodes.value[
             runCode
@@ -304,6 +755,15 @@ async function handleSend() {
               };
         },
         onDelta: (delta) => {
+          if (
+            !ownsRuntimeStreamObserver(
+              activeObserverRef.value,
+              observer,
+              activeSessionCodeRef.value,
+            )
+          ) {
+            return;
+          }
           liveAguiPending.value = false;
           messages.value = messages.value.map((message) =>
             message.messageCode === optimisticAssistantCode
@@ -314,65 +774,419 @@ async function handleSend() {
       },
       abortController.signal,
     );
-    session.value = result.session;
-    messages.value = dedupeMessages([
-      ...messages.value.filter(
+    const settlement = resolveRuntimeStreamSettlement({
+      activeObserver: activeObserverRef.value,
+      activeSessionCode: activeSessionCodeRef.value,
+      observer,
+    });
+    streamSucceeded = settlement.streamSucceeded;
+    shouldRestoreSourceSubmission = settlement.restoreSourceSubmission;
+
+    if (
+      settlement.canCommit &&
+      result.session.sessionCode === activeSession.sessionCode
+    ) {
+      const [nextMessages, nextAguiEvents, nextProtocolEvents] =
+        await Promise.all([
+          adapter
+            .loadMessages(result.session.sessionCode)
+            .catch(() => null),
+          isAguiEnabled
+            ? adapter
+                .loadAguiEvents(result.session.sessionCode)
+                .catch(() => null)
+            : Promise.resolve(null),
+          isAguiEnabled &&
+          protocolReplayEnabled.value &&
+          adapter.loadProtocolEvents
+            ? adapter
+                .loadProtocolEvents(result.session.sessionCode)
+                .catch(() => null)
+            : Promise.resolve(isAguiEnabled ? [] : null),
+        ]);
+
+      if (
+        ownsRuntimeStreamObserver(
+          activeObserverRef.value,
+          observer,
+          activeSessionCodeRef.value,
+        )
+      ) {
+        completedRunCode = result.run.runCode;
+        terminalHandledRunCodesRef.add(result.run.runCode);
+        if (remoteActiveRun.value?.runCode === result.run.runCode) {
+          remoteActiveRun.value = null;
+        }
+        pendingProtocolTerminalRun.value = null;
+        activeRunStatusPending.value = false;
+        session.value = result.session;
+        if (nextMessages) {
+          messages.value = nextMessages;
+        } else {
+          messages.value = mergeChatMessagesChronologically(
+            messages.value,
+            result.messages,
+            [optimisticUserCode, optimisticAssistantCode],
+          );
+        }
+        if (isAguiEnabled) {
+          if (nextAguiEvents) aguiEvents.value = nextAguiEvents;
+          if (nextProtocolEvents) protocolEvents.value = nextProtocolEvents;
+        }
+        liveAguiEvents.value = [];
+        liveAguiAnchorMessageCodes.value = {};
+        completedSession = result.session;
+        completed = autoDrainEpochRef.value === autoDrainEpoch;
+      }
+    }
+  } catch (error) {
+    const settlement = resolveRuntimeStreamSettlement({
+      activeObserver: activeObserverRef.value,
+      activeSessionCode: activeSessionCodeRef.value,
+      observer,
+    });
+    const stillViewingSession =
+      activeSessionCodeRef.value === activeSession.sessionCode;
+    if (!settlement.canCommit) {
+      streamSucceeded = settlement.streamSucceeded;
+      shouldRestoreSourceSubmission = settlement.restoreSourceSubmission;
+      if (observer.abortReason === "stop" && stillViewingSession) {
+        messages.value = messages.value.filter(
+          (message) =>
+            message.messageCode !== optimisticAssistantCode ||
+            Boolean(message.content.trim()),
+        );
+      }
+    } else if (isRunAlreadyActiveError(error)) {
+      messages.value = messages.value.filter(
         (message) =>
           message.messageCode !== optimisticUserCode &&
           message.messageCode !== optimisticAssistantCode,
-      ),
-      ...result.messages,
-    ]);
-    if (aguiEnabled.value) {
-      const [nextAguiEvents, nextProtocolEvents] = await Promise.all([
-        activeAdapter.value.loadAguiEvents(result.session.sessionCode),
-        protocolReplayEnabled.value && activeAdapter.value.loadProtocolEvents
-          ? activeAdapter.value.loadProtocolEvents(result.session.sessionCode)
-          : Promise.resolve([]),
-      ]);
-      aguiEvents.value = nextAguiEvents;
-      protocolEvents.value = nextProtocolEvents;
-    }
-    liveAguiEvents.value = [];
-    liveAguiAnchorMessageCodes.value = {};
-  } catch (error) {
-    const stopped =
-      streamAbortRequestedRef.value ||
-      (error instanceof Error && error.name === "AbortError");
-    messages.value = messages.value.filter(
-      (message) =>
-        message.messageCode !== optimisticAssistantCode ||
-        Boolean(message.content.trim()),
-    );
-    if (stopped) {
-      reportInfo("Current response has been stopped", "Chat stopped");
+      );
+      if (sourceSubmission) {
+        restoreSourceSubmission(sourceSubmission, queueGeneration);
+      } else if (queueGeneration === queueGenerationRef.value) {
+        enqueueSubmission(activeSession, sendInput, "front");
+      }
+      shouldRestoreSourceSubmission = false;
+      markActiveRunStatusPending(activeSession.sessionCode);
+      try {
+        const nextActiveRun = await loadActiveRunSnapshot(
+          activeSession.sessionCode,
+        );
+        drainConflictQueue = acceptActiveRunSnapshot(
+          nextActiveRun,
+          activeSession.sessionCode,
+          protocolEvents.value,
+          false,
+        );
+      } catch {
+        // Keep the queued message until authoritative status can be refreshed.
+      }
+      if (activeSessionCodeRef.value === activeSession.sessionCode) {
+        reportInfo(
+          "The active run changed before send; the message was kept in the queue",
+          "Message queued",
+        );
+      }
     } else {
+      messages.value = messages.value.filter(
+        (message) =>
+          message.messageCode !== optimisticAssistantCode ||
+          Boolean(message.content.trim()),
+      );
+    }
+    if (settlement.canCommit && !isRunAlreadyActiveError(error)) {
       const message =
         error instanceof Error ? error.message : "Chat send failed";
       reportError(message, "Chat send failed");
     }
   } finally {
-    sending.value = false;
-    liveAguiPending.value = false;
-    abortRef.value = null;
-    streamAbortRequestedRef.value = false;
+    if (activeObserverRef.value === observer) {
+      sending.value = false;
+      liveAguiPending.value = false;
+      activeObserverRef.value = null;
+      activeRunCode.value = "";
+      activeRunSupportsSteer.value = null;
+    }
+  }
+
+  if (!streamSucceeded && shouldRestoreSourceSubmission) {
+    restoreSourceSubmission(sourceSubmission, queueGeneration);
+  }
+
+  if (
+    drainConflictQueue &&
+    activeSessionCodeRef.value === activeSession.sessionCode
+  ) {
+    drainNextQueuedSubmission(activeSession.sessionCode);
+  }
+
+  if (
+    completed &&
+    completedSession &&
+    activeSessionCodeRef.value === activeSession.sessionCode
+  ) {
+    if (remoteActiveRun.value?.runCode === completedRunCode) {
+      remoteActiveRun.value = null;
+    }
+    const nextSubmission = takeNextQueuedSubmission(activeSession.sessionCode);
+    if (nextSubmission) {
+      void runMessage(completedSession, nextSubmission.input, nextSubmission);
+    }
+  }
+  return completed;
+}
+
+async function handleSend() {
+  if (sendDisabled.value) return;
+  const activeSession = await ensureSession();
+  if (!activeSession) return;
+  const content = draft.value.trim();
+  if (!content) return;
+  const sendInput = createSendInput(activeSession, content);
+  draft.value = "";
+  if (runActive.value) {
+    enqueueSubmission(activeSession, sendInput);
+    return;
+  }
+  await runMessage(activeSession, sendInput);
+}
+
+async function handleQueue() {
+  if (queueDisabled.value) return;
+  const activeSession = await ensureSession();
+  if (!activeSession) return;
+  const content = draft.value.trim();
+  if (!content) return;
+  const sendInput = createSendInput(activeSession, content);
+  draft.value = "";
+  if (runActive.value) {
+    enqueueSubmission(activeSession, sendInput);
+    return;
+  }
+  await runMessage(activeSession, sendInput);
+}
+
+async function handleSteer() {
+  if (steerDisabled.value) return;
+  const activeSession = session.value;
+  if (!activeSession) return;
+  const content = draft.value.trim();
+  if (!content) return;
+  const sendInput = createSendInput(activeSession, content);
+  const expectedRunCode = effectiveActiveRunCode.value;
+  const adapter = activeAdapter.value;
+  const queueGeneration = queueGenerationRef.value;
+  draft.value = "";
+  if (
+    !runActive.value ||
+    !expectedRunCode ||
+    !adapter.capabilities.supportsSteer ||
+    !adapter.steerMessage
+  ) {
+    enqueueSubmission(activeSession, sendInput);
+    return;
+  }
+
+  const abortController = new AbortController();
+  steerAbortRef.value = abortController;
+  steering.value = true;
+  try {
+    const result = await adapter.steerMessage(
+      activeSession,
+      sendInput,
+      { expectedRunCode },
+      abortController.signal,
+    );
+    if (steerAbortRef.value !== abortController) {
+      // A resolved ACK means the backend accepted and persisted the steer.
+      // Ignore a stale observer result without sending the same input again.
+      return;
+    }
+    if (activeSessionCodeRef.value === result.sessionCode) {
+      messages.value = mergeChatMessagesChronologically(
+        messages.value,
+        [result.message],
+      );
+    }
+  } catch (error) {
+    const observerDetached = steerAbortRef.value !== abortController;
+    const queueIsCurrent = queueGeneration === queueGenerationRef.value;
+    const safeQueueFallback = error instanceof FetchTransportError &&
+      isSteerQueueFallbackCode(error.code);
+    if (safeQueueFallback && queueIsCurrent) {
+      enqueueSubmission(activeSession, sendInput, "front");
+      try {
+        await refreshActiveRun(
+          activeSession.sessionCode,
+          undefined,
+          true,
+        );
+      } catch {
+        markActiveRunStatusPending(activeSession.sessionCode);
+        // Keep the queued fallback until the next authoritative refresh.
+      }
+    }
+    const stopped = error instanceof Error && error.name === "AbortError";
+    if (safeQueueFallback) {
+      if (queueIsCurrent) {
+        reportInfo(
+          "The active run rejected steer; the message was queued",
+          "Message queued",
+        );
+      }
+    } else if (observerDetached || stopped) {
+      if (queueIsCurrent) {
+        reportInfo(
+          "Steer delivery was not confirmed and was not retried",
+          "Steer not retried",
+        );
+      }
+    } else {
+      const message =
+        error instanceof Error ? error.message : "Chat steer failed";
+      reportError(message, "Chat steer failed");
+    }
+  } finally {
+    if (steerAbortRef.value === abortController) {
+      steerAbortRef.value = null;
+      steering.value = false;
+    }
   }
 }
 
-function handleStop() {
-  streamAbortRequestedRef.value = true;
-  abortRef.value?.abort();
+async function handleSubmit(mode: ChatSubmitMode = "send") {
+  if (mode === "queue") {
+    await handleQueue();
+    return;
+  }
+  if (mode === "steer") {
+    await handleSteer();
+    return;
+  }
+  await handleSend();
+}
+
+function handleEditQueuedMessage(id: string, content: string) {
+  replaceQueuedSubmissions(
+    removeQueuedChatSubmission(queuedSubmissions.value, id),
+  );
+  draft.value = content;
+}
+
+function handleRemoveQueuedMessage(id: string) {
+  replaceQueuedSubmissions(
+    removeQueuedChatSubmission(queuedSubmissions.value, id),
+  );
+}
+
+async function handleStop() {
+  if (stopping.value) return;
+  const activeSession = session.value;
+  if (!activeSession) return;
+
+  const adapter = activeAdapter.value;
+  let expectedRunCode = effectiveActiveRunCode.value;
+  if (!expectedRunCode && adapter.capabilities.supportsStop && adapter.stopRun) {
+    try {
+      expectedRunCode =
+        (await refreshActiveRun(activeSession.sessionCode, undefined, false))
+          ?.runCode ?? "";
+    } catch {
+      markActiveRunStatusPending(activeSession.sessionCode);
+      // Fall back only when this adapter explicitly supports local abort.
+    }
+  }
+  if (
+    expectedRunCode &&
+    adapter.capabilities.supportsStop &&
+    adapter.stopRun
+  ) {
+    const abortController = new AbortController();
+    stopAbortRef.value = abortController;
+    stopping.value = true;
+    autoDrainEpochRef.value += 1;
+    terminalHandledRunCodesRef.add(expectedRunCode);
+    try {
+      await adapter.stopRun(
+        activeSession,
+        { expectedRunCode },
+        abortController.signal,
+      );
+      if (activeSessionCodeRef.value !== activeSession.sessionCode) return;
+      remoteActiveRun.value = {
+        runCode: expectedRunCode,
+        runtimeAdapterKey: remoteActiveRun.value?.runtimeAdapterKey ?? "",
+        state: "FINISHING",
+        supportsSteer: false,
+      };
+      pendingProtocolTerminalRun.value = null;
+      activeRunStatusPending.value = false;
+      detachRunObserver("stop");
+      reportInfo("Current response has been stopped", "Chat stopped");
+    } catch (error) {
+      terminalHandledRunCodesRef.delete(expectedRunCode);
+      if (abortController.signal.aborted) return;
+      const message =
+        error instanceof Error ? error.message : "Chat stop failed";
+      reportError(message, "Chat stop failed");
+      try {
+        await refreshActiveRun(
+          activeSession.sessionCode,
+          undefined,
+          true,
+        );
+      } catch {
+        markActiveRunStatusPending(activeSession.sessionCode);
+        // Keep the queue paused until the next successful status refresh.
+      }
+    } finally {
+      if (stopAbortRef.value === abortController) {
+        stopAbortRef.value = null;
+        stopping.value = false;
+      }
+    }
+    return;
+  }
+
+  if (
+    sending.value &&
+    adapter.capabilities.supportsAbort &&
+    !(adapter.capabilities.supportsStop && adapter.stopRun)
+  ) {
+    autoDrainEpochRef.value += 1;
+    if (expectedRunCode) terminalHandledRunCodesRef.add(expectedRunCode);
+    detachRunObserver("stop");
+    reportInfo("Current response has been stopped", "Chat stopped");
+  }
 }
 
 function handleNewSession() {
-  handleStop();
+  queueGenerationRef.value += 1;
+  detachRunObserver("detach");
+  stopAbortRef.value?.abort();
   session.value = null;
   messages.value = [];
   aguiEvents.value = [];
   protocolEvents.value = [];
   liveAguiEvents.value = [];
   liveAguiAnchorMessageCodes.value = {};
+  activeSessionCodeRef.value = "";
+  activeRunCode.value = "";
+  activeRunSupportsSteer.value = null;
+  remoteActiveRun.value = null;
+  pendingProtocolTerminalRun.value = null;
+  activeRunStatusPending.value = false;
+  stopping.value = false;
+  replaceQueuedSubmissions([]);
 }
+
+onBeforeUnmount(() => {
+  queueGenerationRef.value += 1;
+  detachRunObserver("detach");
+  stopAbortRef.value?.abort();
+});
 
 const presentationDebugEvents = computed(
   () =>
@@ -437,15 +1251,24 @@ const panelCommonProps = computed(() => ({
   onNewSession: handleNewSession,
   onDraftChange: handleDraftChange,
   onEditMessage: handleEditMessage,
-  onSend: () => {
-    void handleSend();
+  onEditQueuedMessage: handleEditQueuedMessage,
+  onRemoveQueuedMessage: handleRemoveQueuedMessage,
+  onSend: (mode?: ChatSubmitMode) => {
+    void handleSubmit(mode);
   },
-  onStop: handleStop,
+  onStop: () => {
+    void handleStop();
+  },
   protocolEvents: protocolEvents.value,
+  queueDisabled: queueDisabled.value,
+  queuedMessages: visibleQueuedSubmissions.value,
+  runningSubmitModes: runningSubmitModes.value,
   sendDisabled: sendDisabled.value,
-  sending: sending.value,
+  sending: runActive.value,
   session: session.value,
   showAgui: aguiEnabled.value,
+  showStop: canStop.value,
+  steerDisabled: steerDisabled.value,
   stopLabel: "Stop",
   title: props.config.title || props.floatingTitle,
 }));

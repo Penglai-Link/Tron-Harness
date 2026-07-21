@@ -32,6 +32,127 @@ use tron_backend::{
 };
 
 #[test]
+fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
+    let database_url = temp_database_url("short-term-memory-tool-replay");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("tool replay".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+
+    let mut first_context = base_context(&session.session_code);
+    first_context.run_code = "RUN-TOOL-REPLAY-1".into();
+    let first_input = service
+        .record_user_input(&first_context, "create a script")
+        .expect("first input should be recorded");
+    first_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code: first_input,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    service
+        .record_model_response(
+            &first_context,
+            &ModelResponse::from_tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call-write".into()),
+                    tool_name: "fs.write_text".into(),
+                    input: json!({
+                        "path": "long_running_test.sh",
+                        "relativeTo": "workspaceRoot",
+                        "text": "echo test"
+                    }),
+                },
+                ToolCall {
+                    call_id: Some("call-discovery".into()),
+                    tool_name: "discovery.expand_tool_domain".into(),
+                    input: json!({"domainCode": "fs"}),
+                },
+            ]),
+        )
+        .expect("tool calls should be recorded");
+    service
+        .record_tool_result(
+            &first_context,
+            &ToolObservation {
+                tool_name: "fs.write_text".into(),
+                output: "tool input is invalid: missing field `content`".into(),
+            },
+            Some("call-write".into()),
+            1,
+            ToolTranscriptStatus::Failed,
+        )
+        .expect("failed tool result should be recorded");
+    service
+        .record_tool_result(
+            &first_context,
+            &ToolObservation {
+                tool_name: "discovery.expand_tool_domain".into(),
+                output: json!({
+                    "domain": {"domainCode": "fs"},
+                    "tools": [{"toolName": "fs.write_text"}]
+                })
+                .to_string(),
+            },
+            Some("call-discovery".into()),
+            2,
+            ToolTranscriptStatus::Completed,
+        )
+        .expect("discovery result should be recorded");
+
+    let mut second_context = base_context(&session.session_code);
+    second_context.run_code = "RUN-TOOL-REPLAY-2".into();
+    let second_input = service
+        .record_user_input(&second_context, "continue")
+        .expect("second input should be recorded");
+    second_context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code,
+        input_code: second_input,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+    let prepared = service
+        .prepare_model_context(&second_context)
+        .expect("next run context should assemble");
+
+    assert!(prepared.messages.iter().flat_map(|message| &message.parts).any(
+        |part| matches!(part, AgentMessagePart::ToolCall { tool_name, .. } if tool_name == "fs.write_text")
+    ));
+    assert!(prepared.messages.iter().flat_map(|message| &message.parts).any(
+        |part| matches!(part, AgentMessagePart::ToolResult { tool_name, output, .. } if tool_name == "fs.write_text" && output.contains("missing field"))
+    ));
+    assert!(prepared.messages.iter().flat_map(|message| &message.parts).any(
+        |part| matches!(part, AgentMessagePart::ToolResult { tool_name, output, .. } if tool_name == "discovery.expand_tool_domain" && output.contains("fs.write_text"))
+    ));
+}
+
+#[test]
 fn transcript_service_records_todos_and_compaction() {
     let database_url = temp_database_url("short-term-memory-transcript");
     let chat_repository =
@@ -694,8 +815,10 @@ fn transcript_service_records_todos_and_compaction() {
             [second_session.session_code.as_str()],
             |row| row.get(0),
         )
-        .expect("context epoch should be persisted");
+    .expect("context epoch should be persisted");
     assert!(context_epoch_snapshot.contains("promptPrefix"));
+    assert!(context_epoch_snapshot.contains("exposedTools"));
+    assert!(context_epoch_snapshot.contains("effectiveTools"));
     assert!(context_epoch_snapshot.contains("budgetPlan"));
     assert!(context_epoch_snapshot.contains("policyHash"));
     let context_event_count: i64 = connection
@@ -5317,6 +5440,7 @@ fn base_context(session_code: &str) -> AgentRunContext {
             skill_name: None,
             required_variable_keys: Vec::new(),
         }],
+        effective_tools: Vec::new(),
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
             app_code: None,

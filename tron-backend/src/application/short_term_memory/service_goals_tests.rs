@@ -361,6 +361,7 @@ fn base_context() -> AgentRunContext {
         variables: Vec::<EffectiveVariable>::new(),
         skills: Vec::<EffectiveSkill>::new(),
         tools: Vec::<EffectiveTool>::new(),
+        effective_tools: Vec::<EffectiveTool>::new(),
         tool_exposure: AgentToolExposureState::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits::default(),

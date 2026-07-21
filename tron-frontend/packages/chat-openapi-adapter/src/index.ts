@@ -1,18 +1,24 @@
 import {
   buildOpenApiSignedHeaders,
   createFetchTransport,
+  FetchTransportError,
+  normalizeChatActiveRunResult,
   normalizeChatMessage,
   normalizeChatSendResult,
   normalizeChatSession,
+  normalizeChatSteerResult,
   type FetchTransportRequestContext,
   type BodyInitLike,
   type ChatAdapter,
+  type ChatActiveRunResult,
   type ChatAguiEvent,
   type ChatAguiStreamEvent,
   type ChatMessage,
   type ChatClientConfig,
   type ChatSendResult,
   type ChatSession,
+  type ChatSteerResult,
+  type ChatStopResult,
   type CreateChatSessionInput,
   type SendChatMessageInput,
 } from "@tron/chat-core";
@@ -65,8 +71,11 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
   return {
     capabilities: {
       supportsAbort: true,
+      supportsActiveRun: true,
       supportsAgui: true,
       supportsProtocolReplay: true,
+      supportsSteer: true,
+      supportsStop: true,
       supportsStreaming: true,
     },
     createSession(input: CreateChatSessionInput) {
@@ -81,6 +90,13 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
         method: "POST",
         path: "/open-api/v1/chats/sessions",
       }).then(normalizeChatSession);
+    },
+    getActiveRun(sessionCode, signal) {
+      return transport.requestJson<ChatActiveRunResult>({
+        path: "/open-api/v1/chats/sessions/get-active-run",
+        queryParams: { sessionCode },
+        signal,
+      }).then(normalizeChatActiveRunResult);
     },
     async loadAguiEvents(sessionCode: string) {
       const payload = await transport.requestJson<AguiEventSnapshot>({
@@ -105,6 +121,31 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
         type: String(event.data?.type ?? event.sseEvent).toUpperCase(),
       }));
     },
+    async steerMessage(session, input, context, signal) {
+      const result = await transport.requestJson<ChatSteerResult>({
+        body: {
+          attachments: input.attachments ?? [],
+          content: input.content,
+          expectedRunCode: context.expectedRunCode,
+          sessionCode: session.sessionCode,
+        },
+        method: "POST",
+        path: "/open-api/v1/chats/sessions/steer-message",
+        signal,
+      });
+      return normalizeChatSteerResult(result);
+    },
+    stopRun(session, context, signal) {
+      return transport.requestJson<ChatStopResult>({
+        body: {
+          expectedRunCode: context.expectedRunCode,
+          sessionCode: session.sessionCode,
+        },
+        method: "POST",
+        path: "/open-api/v1/chats/sessions/stop-run",
+        signal,
+      });
+    },
     streamMessage(session: ChatSession, input: SendChatMessageInput, handlers, signal) {
       return transport.streamSse<ChatSendResult>({
         body: input,
@@ -121,7 +162,14 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
         onResult: (payload) => {
           const type = String(payload.type ?? "").toUpperCase();
           if (type === "RUN_ERROR") {
-            throw new Error(String(payload.message ?? payload.code ?? "Chat stream failed"));
+            throw new FetchTransportError(
+              String(payload.message ?? payload.code ?? "Chat stream failed"),
+              {
+                code: typeof payload.code === "string" ? payload.code : undefined,
+                data: payload,
+                status: 200,
+              },
+            );
           }
           return type === "RUN_FINISHED" && payload.result
             ? normalizeChatSendResult(payload.result as ChatSendResult)

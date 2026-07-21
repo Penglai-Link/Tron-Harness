@@ -47,6 +47,8 @@ pub struct AgentToolExposureState {
     pub expanded_domain_persistence_mode: Option<ExpandedDomainPersistenceMode>,
     #[serde(default)]
     pub visible_domains: Vec<ToolDomainRecord>,
+    /// Effective tool schemas withheld from the current model request until
+    /// their domain is expanded. This is an exposure concern, not permission.
     #[serde(default)]
     pub hidden_tools: Vec<EffectiveTool>,
     #[serde(default)]
@@ -118,7 +120,14 @@ pub struct AgentRunContext {
     pub model: AgentModelConfig,
     pub variables: Vec<EffectiveVariable>,
     pub skills: Vec<EffectiveSkill>,
+    /// Tool schemas currently exposed to the model.
     pub tools: Vec<EffectiveTool>,
+    /// Complete tool set authorized by the resolved agent policy.
+    ///
+    /// Older manually-constructed contexts may omit this field. In that case
+    /// `authorized_tools` falls back to the exposed tool set.
+    #[serde(default)]
+    pub effective_tools: Vec<EffectiveTool>,
     #[serde(default)]
     pub tool_exposure: AgentToolExposureState,
     pub execution_scope: AgentExecutionScope,
@@ -128,4 +137,14 @@ pub struct AgentRunContext {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub short_term_memory: Option<AgentShortTermMemoryRunContext>,
     pub started_at: String,
+}
+
+impl AgentRunContext {
+    pub fn authorized_tools(&self) -> &[EffectiveTool] {
+        if self.effective_tools.is_empty() {
+            &self.tools
+        } else {
+            &self.effective_tools
+        }
+    }
 }

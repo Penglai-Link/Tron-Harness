@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import type {
   ChatSendResult,
   ChatSession,
+  SendChatMessageInput,
 } from "@tron/chat-core";
 
 import { createOpenApiChatAdapter } from "./index";
@@ -30,12 +31,99 @@ function sessionFixture(overrides: Partial<ChatSession> = {}): ChatSession {
   };
 }
 
+function steerResultFixture() {
+  return {
+    message: {
+      actor: "User",
+      channel: "mainAgent",
+      content: "Steer the active response",
+      createdAt: "2026-07-16T00:00:01Z",
+      id: 2,
+      messageCode: "MSG-2",
+      role: "user",
+      runCode: "RUN-1",
+      sessionCode: "SESSION-1",
+    },
+    runCode: "RUN-1",
+    sessionCode: "SESSION-1",
+  };
+}
+
 afterEach(() => {
   vi.restoreAllMocks();
   globalThis.fetch = originalFetch;
 });
 
 describe("createOpenApiChatAdapter", () => {
+  it("signs authoritative active-run lookup and stop control requests", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope({
+        activeRun: {
+          runCode: "RUN-1",
+          runtimeAdapterKey: "react",
+          state: "finishing",
+          supportsSteer: true,
+        },
+        sessionCode: "SESSION-1",
+      })), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope({
+        runCode: "RUN-1",
+        sessionCode: "SESSION-1",
+      })), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createOpenApiChatAdapter({
+      appKey: "secret-key-123",
+      baseUrl: "https://openapi.example.com",
+      nonceFactory: () => "controlnonce1",
+      openAppCode: "OPENAPP-TEST-0001",
+      timestampFactory: () => 1718100003,
+      userCode: "USR-0001",
+    });
+    const abortController = new AbortController();
+
+    await expect(adapter.getActiveRun?.(
+      "SESSION-1",
+      abortController.signal,
+    )).resolves.toEqual({
+      activeRun: {
+        runCode: "RUN-1",
+        runtimeAdapterKey: "react",
+        state: "FINISHING",
+        supportsSteer: true,
+      },
+      sessionCode: "SESSION-1",
+    });
+    await adapter.stopRun?.(
+      sessionFixture(),
+      { expectedRunCode: "RUN-1" },
+      abortController.signal,
+    );
+
+    const [activeUrl, activeInit] = fetchMock.mock.calls[0] ?? [];
+    const [stopUrl, stopInit] = fetchMock.mock.calls[1] ?? [];
+    expect(activeUrl).toBe(
+      "https://openapi.example.com/open-api/v1/chats/sessions/get-active-run?sessionCode=SESSION-1",
+    );
+    expect(new Headers(activeInit?.headers).get("X-Tron-Signature")).toMatch(
+      /^[a-f0-9]{64}$/,
+    );
+    expect(stopUrl).toBe(
+      "https://openapi.example.com/open-api/v1/chats/sessions/stop-run",
+    );
+    expect(stopInit?.method).toBe("POST");
+    expect(JSON.parse(String(stopInit?.body))).toEqual({
+      expectedRunCode: "RUN-1",
+      sessionCode: "SESSION-1",
+    });
+  });
+
   it("signs JSON requests with HMAC headers and user-code semantics", async () => {
     const fetchMock = vi.fn(async () => new Response(JSON.stringify(successEnvelope(sessionFixture())), {
       headers: { "Content-Type": "application/json" },
@@ -122,5 +210,64 @@ describe("createOpenApiChatAdapter", () => {
     expect(headers.get("X-Tron-User-Id")).toBeNull();
     expect(headers.get("X-Tron-User-Code")).toBe("USR-0001");
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+  });
+
+  it("signs steer requests with protected turn identifiers and the abort signal", async () => {
+    const fetchMock = vi.fn(async () => new Response(
+      JSON.stringify(successEnvelope(steerResultFixture())),
+      {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      },
+    ));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createOpenApiChatAdapter({
+      openAppCode: "OPENAPP-TEST-0001",
+      appKey: "secret-key-123",
+      baseUrl: "https://openapi.example.com",
+      nonceFactory: () => "steernonce123",
+      timestampFactory: () => 1718100002,
+      userCode: "USR-0001",
+    });
+    const abortController = new AbortController();
+    const input = {
+      content: "Steer the active response",
+      expectedRunCode: "FORGED-RUN",
+      sessionCode: "FORGED-SESSION",
+      systemModelId: "SYSTEM-MODEL-1",
+      workspaceCode: "TRON_CORE",
+    } as SendChatMessageInput;
+
+    const result = await adapter.steerMessage?.(
+      sessionFixture(),
+      input,
+      { expectedRunCode: "RUN-1" },
+      abortController.signal,
+    );
+
+    expect(adapter.capabilities.supportsSteer).toBe(true);
+    expect(result).toEqual({
+      ...steerResultFixture(),
+      message: {
+        ...steerResultFixture().message,
+        channel: "MAIN_AGENT",
+        role: "USER",
+      },
+    });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const headers = new Headers(init?.headers);
+
+    expect(url).toBe("https://openapi.example.com/open-api/v1/chats/sessions/steer-message");
+    expect(init?.method).toBe("POST");
+    expect(init?.signal).toBe(abortController.signal);
+    expect(headers.get("X-Tron-User-Code")).toBe("USR-0001");
+    expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      attachments: [],
+      content: "Steer the active response",
+      expectedRunCode: "RUN-1",
+      sessionCode: "SESSION-1",
+    });
   });
 });

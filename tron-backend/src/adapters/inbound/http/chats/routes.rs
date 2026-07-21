@@ -7,8 +7,9 @@ use crate::app::AppState;
 
 use super::handler::{
     archive_session, create_session, delete_session, list_messages, list_session_groups,
-    patch_session, send_message, stream_message,
+    patch_session, send_message, steer_message, stream_message,
 };
+use super::run_control::{get_active_run, stop_run};
 use super::short_term_memory::{
     cancel_goal, clear_goal, create_compaction, get_goal, get_latest_compaction, get_latest_goal,
     get_todos, pause_goal, resume_goal, set_goal, update_goal,
@@ -18,6 +19,9 @@ pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/chats/session-groups", get(list_session_groups))
         .route("/api/v1/chats/sessions", post(create_session))
+        .route("/api/v1/chats/sessions/get-active-run", get(get_active_run))
+        .route("/api/v1/chats/sessions/steer-message", post(steer_message))
+        .route("/api/v1/chats/sessions/stop-run", post(stop_run))
         .route("/api/v1/chats/sessions/get-todos", get(get_todos))
         .route(
             "/api/v1/chats/sessions/get-latest-compaction",

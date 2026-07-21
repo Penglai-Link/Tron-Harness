@@ -242,6 +242,7 @@ mod tests {
             variables: Vec::new(),
             skills: Vec::new(),
             tools: Vec::new(),
+            effective_tools: Vec::new(),
             tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),

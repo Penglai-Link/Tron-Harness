@@ -448,13 +448,16 @@ fn public_work_domain_memory_scope_keeps_agent_rag_wire_contract() {
 }
 
 #[tokio::test]
-async fn unauthorized_memory_tool_call_is_rejected_before_execution() {
-    let model_server = scripted_model_server(vec![tool_call_response(
-        "memory.delete",
-        json!({
-            "memoryCode": MEMORY_CODE
-        }),
-    )])
+async fn unauthorized_memory_tool_call_is_rejected_without_aborting_run() {
+    let model_server = scripted_model_server(vec![
+        tool_call_response(
+            "memory.delete",
+            json!({
+                "memoryCode": MEMORY_CODE
+            }),
+        ),
+        final_response("recovered after unauthorized memory tool"),
+    ])
     .await;
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -478,15 +481,18 @@ async fn unauthorized_memory_tool_call_is_rejected_before_execution() {
     let body = response_json(response).await;
     assert_eq!(
         status,
-        StatusCode::BAD_GATEWAY,
+        StatusCode::OK,
         "unexpected unauthorized response body: {body}"
     );
-    assert_eq!(body["code"], json!("AGENT_TOOL_FAILED"));
-    assert!(
-        body["message"]
-            .as_str()
-            .is_some_and(|value| value.contains("memory.delete"))
+    assert_eq!(body["code"], json!("SUCCESS"));
+    assert_eq!(
+        body["data"]["finalOutput"],
+        json!("recovered after unauthorized memory tool")
     );
+    let requests = recorded_requests(&model_server);
+    assert_eq!(requests.len(), 2);
+    assert_json_mentions(&requests[1]["messages"], "memory.delete");
+    assert_json_mentions(&requests[1]["messages"], "is not allowed");
 }
 
 #[tokio::test]

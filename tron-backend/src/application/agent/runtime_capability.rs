@@ -19,6 +19,7 @@ pub(super) fn build_runtime_capabilities(
                 enabled,
                 supports_resume: descriptor.capabilities.supports_resume,
                 supports_cancel: descriptor.capabilities.supports_cancel,
+                supports_steer: descriptor.capabilities.supports_steer,
                 supports_streaming: descriptor.capabilities.supports_streaming,
                 supports_ephemeral: descriptor.capabilities.supports_ephemeral,
                 supports_workdir: descriptor.capabilities.supports_workdir,

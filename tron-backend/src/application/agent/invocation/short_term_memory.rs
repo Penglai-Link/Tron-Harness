@@ -188,6 +188,7 @@ mod tests {
             variables: Vec::<EffectiveVariable>::new(),
             skills: Vec::<EffectiveSkill>::new(),
             tools,
+            effective_tools: Vec::new(),
             tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),

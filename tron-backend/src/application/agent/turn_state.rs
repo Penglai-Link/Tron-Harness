@@ -255,6 +255,7 @@ mod tests {
                 skill_name: Some("planner".into()),
                 required_variable_keys: vec![],
             }],
+            effective_tools: Vec::new(),
             tool_exposure: AgentToolExposureState::default(),
             execution_scope: AgentExecutionScope::default(),
             limits: AgentRunLimits::default(),

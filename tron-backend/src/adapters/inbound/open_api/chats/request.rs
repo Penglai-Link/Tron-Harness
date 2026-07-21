@@ -45,3 +45,26 @@ pub struct OpenApiSendChatMessageRequest {
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
 }
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpenApiSteerChatMessageRequest {
+    pub session_code: Option<String>,
+    pub expected_run_code: Option<String>,
+    pub content: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<ChatMessageAttachment>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpenApiGetActiveChatRunQuery {
+    pub session_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpenApiStopChatRunRequest {
+    pub session_code: Option<String>,
+    pub expected_run_code: Option<String>,
+}

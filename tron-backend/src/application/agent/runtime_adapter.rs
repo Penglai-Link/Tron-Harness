@@ -6,7 +6,7 @@ use crate::{
     shared::event_bus::EventBusHandle,
 };
 
-use super::{AgentInvocationError, ModelClient, ModelStreamSink};
+use super::{ActiveRunRegistry, AgentInvocationError, ModelClient, ModelStreamSink};
 
 mod react_runtime;
 mod service_mode_runtime;
@@ -135,6 +135,7 @@ pub fn runtime_adapter_descriptors() -> Vec<RuntimeAdapterDescriptor> {
 pub struct RuntimeCapabilities {
     pub supports_resume: bool,
     pub supports_cancel: bool,
+    pub supports_steer: bool,
     pub supports_streaming: bool,
     pub supports_ephemeral: bool,
     pub supports_workdir: bool,
@@ -145,6 +146,7 @@ impl RuntimeCapabilities {
         Self {
             supports_resume: false,
             supports_cancel: false,
+            supports_steer: true,
             supports_streaming: true,
             supports_ephemeral: true,
             supports_workdir: true,
@@ -155,6 +157,7 @@ impl RuntimeCapabilities {
         Self {
             supports_resume: true,
             supports_cancel: false,
+            supports_steer: false,
             supports_streaming: true,
             supports_ephemeral: false,
             supports_workdir: true,
@@ -165,6 +168,7 @@ impl RuntimeCapabilities {
         Self {
             supports_resume: true,
             supports_cancel: true,
+            supports_steer: false,
             supports_streaming: true,
             supports_ephemeral: false,
             supports_workdir: true,
@@ -227,6 +231,7 @@ pub struct AgentRuntimeRegistry {
     event_bus: EventBusHandle,
     runtime_http_client: reqwest::Client,
     short_term_memory: Option<ShortTermMemoryService>,
+    active_runs: ActiveRunRegistry,
 }
 
 impl AgentRuntimeRegistry {
@@ -242,12 +247,22 @@ impl AgentRuntimeRegistry {
             event_bus,
             runtime_http_client,
             short_term_memory: None,
+            active_runs: ActiveRunRegistry::new(),
         }
     }
 
     pub fn with_short_term_memory(mut self, service: Option<ShortTermMemoryService>) -> Self {
         self.short_term_memory = service;
         self
+    }
+
+    pub fn with_active_runs(mut self, active_runs: ActiveRunRegistry) -> Self {
+        self.active_runs = active_runs;
+        self
+    }
+
+    pub fn active_runs(&self) -> ActiveRunRegistry {
+        self.active_runs.clone()
     }
 
     pub fn resolve(&self, selection: RuntimeAdapterSelection) -> Arc<dyn AgentRuntime> {
@@ -259,6 +274,7 @@ impl AgentRuntimeRegistry {
                 self.tool_registry.clone(),
                 self.event_bus.clone(),
                 self.short_term_memory.clone(),
+                self.active_runs.clone(),
             )),
             RuntimeAdapterSelection::CodexExec {
                 command_name,

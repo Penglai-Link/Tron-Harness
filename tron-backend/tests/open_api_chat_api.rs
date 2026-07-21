@@ -159,6 +159,145 @@ async fn open_api_chat_session_groups_and_messages_use_public_contract() {
 }
 
 #[tokio::test]
+async fn open_api_chat_steer_endpoint_uses_public_body_contract() {
+    let app = app();
+    let created = signed_open_api_request(
+        &app,
+        Method::POST,
+        "/open-api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Open steer contract"
+        })),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned");
+
+    let response = signed_open_api_request(
+        &app,
+        Method::POST,
+        "/open-api/v1/chats/sessions/steer-message",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE",
+            "content": "open steer now",
+            "attachments": []
+        })),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = response_json(response).await;
+    assert_eq!(body["code"], json!("CHAT_STEER_NO_ACTIVE_RUN"));
+    assert_eq!(body["data"], json!({}));
+}
+
+#[tokio::test]
+async fn open_api_chat_run_control_routes_are_exposed_with_strict_contracts() {
+    let app = app();
+    let created = signed_open_api_request(
+        &app,
+        Method::POST,
+        "/open-api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Open run control contract"
+        })),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned");
+
+    let active = signed_open_api_request(
+        &app,
+        Method::GET,
+        &format!("/open-api/v1/chats/sessions/get-active-run?sessionCode={session_code}"),
+        None,
+    )
+    .await;
+    assert_eq!(active.status(), StatusCode::OK);
+    let active_body = response_json(active).await;
+    assert_eq!(active_body["data"]["sessionCode"], json!(session_code));
+    assert_eq!(active_body["data"]["activeRun"], Value::Null);
+
+    let malformed_query = signed_open_api_request(
+        &app,
+        Method::GET,
+        "/open-api/v1/chats/sessions/get-active-run?unexpected=true",
+        None,
+    )
+    .await;
+    assert_eq!(malformed_query.status(), StatusCode::BAD_REQUEST);
+    let malformed_query_body = response_json(malformed_query).await;
+    assert_eq!(
+        malformed_query_body["code"],
+        json!("CHAT_ACTIVE_RUN_QUERY_INVALID")
+    );
+    assert_eq!(malformed_query_body["data"], json!({}));
+
+    let invalid = signed_open_api_request(
+        &app,
+        Method::POST,
+        "/open-api/v1/chats/sessions/stop-run",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE",
+            "unexpected": true
+        })),
+    )
+    .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let invalid_body = response_json(invalid).await;
+    assert_eq!(invalid_body["code"], json!("CHAT_STOP_RUN_REQUEST_INVALID"));
+    assert_eq!(invalid_body["data"], json!({}));
+
+    let no_active = signed_open_api_request(
+        &app,
+        Method::POST,
+        "/open-api/v1/chats/sessions/stop-run",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE"
+        })),
+    )
+    .await;
+    assert_eq!(no_active.status(), StatusCode::CONFLICT);
+    let no_active_body = response_json(no_active).await;
+    assert_eq!(
+        no_active_body["code"],
+        json!("CHAT_RUN_CONTROL_NO_ACTIVE_RUN")
+    );
+
+    let invalid_steer = signed_open_api_request(
+        &app,
+        Method::POST,
+        "/open-api/v1/chats/sessions/steer-message",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE",
+            "content": "invalid extra field",
+            "attachments": [],
+            "unexpected": true
+        })),
+    )
+    .await;
+    assert_eq!(invalid_steer.status(), StatusCode::BAD_REQUEST);
+    let invalid_steer_body = response_json(invalid_steer).await;
+    assert_eq!(
+        invalid_steer_body["code"],
+        json!("CHAT_STEER_REQUEST_INVALID")
+    );
+    assert_eq!(invalid_steer_body["data"], json!({}));
+}
+
+#[tokio::test]
 async fn open_api_chat_routes_support_browser_cors_preflight() {
     let app = app();
     let response = app
@@ -399,6 +538,7 @@ async fn open_api_chat_stream_and_agui_replay_follow_public_contract() {
         .expect("stream body should be readable");
     let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
     assert!(body.contains("event: RUN_STARTED"));
+    assert!(body.contains("\"supportsSteer\":true"));
     assert!(body.contains("event: RUN_FINISHED"));
     assert!(body.contains("\"type\":\"RUN_FINISHED\""));
     assert!(body.contains("\"reply: stream via open api\""));

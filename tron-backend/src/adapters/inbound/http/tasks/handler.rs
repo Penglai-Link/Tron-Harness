@@ -159,7 +159,8 @@ pub async fn execute_task(
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
-    );
+    )
+    .with_active_runs(state.active_runs.clone());
     let chats = state.chats.clone();
     let session_code = session.session_code.clone();
     let background_session_code = session_code.clone();

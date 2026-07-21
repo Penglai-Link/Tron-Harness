@@ -992,6 +992,7 @@ fn resource_tool_context(
             tool_names: tools.iter().map(|tool| tool.tool_name.clone()).collect(),
         }],
         tools,
+        effective_tools: Vec::new(),
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits::default(),

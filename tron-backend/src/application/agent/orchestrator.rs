@@ -1,6 +1,6 @@
 use super::{
-    AgentInvocationCommand, AgentInvocationError, AgentRunContextBuilder, AgentRunExecutionResult,
-    AgentRunExecutor, ModelStreamSink, PreparedAgentRun,
+    ActiveRunGuard, AgentInvocationCommand, AgentInvocationError, AgentRunContextBuilder,
+    AgentRunExecutionResult, AgentRunExecutor, ModelStreamSink, PreparedAgentRun,
 };
 
 use crate::{
@@ -52,10 +52,11 @@ impl AgentOrchestrator {
         user_code: Option<String>,
         locale: Option<String>,
         sink: Option<ModelStreamSink>,
+        reservation: Option<ActiveRunGuard>,
     ) -> Result<AgentOrchestrationRun, AgentInvocationError> {
         match self.execution_mode_for(&command) {
             AgentExecutionMode::SingleAgent => {
-                self.execute_single_agent(command, user_code, locale, sink)
+                self.execute_single_agent(command, user_code, locale, sink, reservation)
                     .await
             }
             AgentExecutionMode::Collaboration => Err(AgentInvocationError::RuntimeFailed(
@@ -70,6 +71,7 @@ impl AgentOrchestrator {
         user_code: Option<String>,
         locale: Option<String>,
         sink: Option<ModelStreamSink>,
+        reservation: Option<ActiveRunGuard>,
     ) -> Result<AgentOrchestrationRun, AgentInvocationError> {
         let prepared = self
             .run_context_builder
@@ -118,6 +120,7 @@ impl AgentOrchestrator {
                 context,
                 requested_system_agent_session_id,
                 sink,
+                reservation,
             )
             .await;
         let finished_at = current_timestamp();

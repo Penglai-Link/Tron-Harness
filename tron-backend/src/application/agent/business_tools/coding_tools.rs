@@ -339,6 +339,7 @@ mod tests {
                 skill_name: Some("planner".into()),
                 required_variable_keys: vec![],
             }],
+            effective_tools: Vec::new(),
             tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope {
                 app_code: Some("APP-1".into()),

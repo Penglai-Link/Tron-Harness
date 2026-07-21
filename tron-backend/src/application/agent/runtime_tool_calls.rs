@@ -9,9 +9,7 @@ use crate::{
     },
 };
 
-use super::super::{
-    DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, TurnStateAdapter, discovery_expand_tool_definition,
-};
+use super::super::{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, TurnStateAdapter};
 use super::ReactAgent;
 
 impl ReactAgent {
@@ -161,7 +159,6 @@ impl ReactAgent {
                     None,
                     Some(error_message.as_str()),
                 )?;
-                let should_continue = error.is_execution_failure();
                 self.record_tool_failure_observation(
                     context,
                     &tool_call_id,
@@ -171,15 +168,6 @@ impl ReactAgent {
                     sequence,
                     error_message,
                 )?;
-                if !should_continue {
-                    self.publish(
-                        &context,
-                        "agent.run.failed",
-                        BusOutcome::Failure,
-                        Some("tool_failure"),
-                    )?;
-                    return Err(error.into());
-                }
             }
         }
 
@@ -299,7 +287,6 @@ impl ReactAgent {
             });
         }
 
-        let mut first_error: Option<AgentError> = None;
         for planned_call in planned_calls {
             let ParallelToolCall {
                 tool_call_id,
@@ -335,7 +322,6 @@ impl ReactAgent {
                         None,
                         Some(error_message.as_str()),
                     )?;
-                    let should_continue = error.is_execution_failure();
                     self.record_tool_failure_observation(
                         context,
                         &tool_call_id,
@@ -345,21 +331,8 @@ impl ReactAgent {
                         sequence,
                         error_message,
                     )?;
-                    if !should_continue && first_error.is_none() {
-                        first_error = Some(error.into());
-                    }
                 }
             }
-        }
-
-        if let Some(error) = first_error {
-            self.publish(
-                &context,
-                "agent.run.failed",
-                BusOutcome::Failure,
-                Some("tool_failure"),
-            )?;
-            return Err(error);
         }
 
         Ok(())
@@ -529,6 +502,14 @@ fn collapse_ephemeral_expanded_domains(context: &mut AgentRunContext, tool_name:
     if tool_name == DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL {
         return;
     }
-    context.tools = vec![discovery_expand_tool_definition(&context.locale)];
+    let expanded_domain_codes = context.tool_exposure.expanded_domain_codes.clone();
+    context.tools.retain(|tool| {
+        tool.tool_name == DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL
+            || tool.domain_code.as_deref().is_none_or(|domain_code| {
+                expanded_domain_codes
+                    .iter()
+                    .all(|expanded| !expanded.eq_ignore_ascii_case(domain_code))
+            })
+    });
     context.tool_exposure.expanded_domain_codes.clear();
 }

@@ -9,11 +9,13 @@ use std::{
 use crate::{
     application::{
         agent::{
-            AgentInvocationCommand, AgentInvocationError, AgentInvocationService, ModelStreamSink,
+            ActiveRunRegistry, AgentInvocationCommand, AgentInvocationError,
+            AgentInvocationService, AgentSteerInput, ModelStreamSink,
         },
         chat::{
-            ChatRepository, ChatSendResult, ChatSessionQuery, CreateChatSessionCommand,
-            SendChatMessageCommand, UpdateChatSessionCommand,
+            ChatRepository, ChatSendResult, ChatSessionQuery, ChatSteerError, ChatSteerResult,
+            CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
+            UpdateChatSessionCommand,
         },
         llm::LlmRuntimeService,
     },
@@ -34,9 +36,6 @@ use super::{
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
-const MAIN_RUNTIME_ADAPTER_KEY: &str = "REACT";
-const CODEX_RUNTIME_ADAPTER_KEY: &str = "CODEX_EXEC";
-const OPENCODE_RUNTIME_ADAPTER_KEY: &str = "OPENCODE_RUN";
 static SESSION_RUN_COORDINATOR: OnceLock<Mutex<BTreeSet<String>>> = OnceLock::new();
 static CHAT_SERVICE_COORDINATOR_NAMESPACE: AtomicU64 = AtomicU64::new(1);
 
@@ -45,6 +44,7 @@ pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
     coordinator_namespace: u64,
+    pub(super) active_runs: ActiveRunRegistry,
 }
 
 impl ChatService {
@@ -64,6 +64,7 @@ impl ChatService {
             id_provider,
             coordinator_namespace: CHAT_SERVICE_COORDINATOR_NAMESPACE
                 .fetch_add(1, Ordering::Relaxed),
+            active_runs: ActiveRunRegistry::new(),
         }
     }
 
@@ -72,7 +73,13 @@ impl ChatService {
             repository: self.repository.clone(),
             id_provider,
             coordinator_namespace: self.coordinator_namespace,
+            active_runs: self.active_runs.clone(),
         }
+    }
+
+    pub fn with_active_runs(mut self, active_runs: ActiveRunRegistry) -> Self {
+        self.active_runs = active_runs;
+        self
     }
 
     pub fn create_session(
@@ -195,6 +202,64 @@ impl ChatService {
         self.repository().list_messages(session_code)
     }
 
+    pub fn steer_message(
+        &self,
+        command: SteerChatMessageCommand,
+    ) -> Result<ChatSteerResult, ChatSteerError> {
+        let session_code =
+            normalized_required(command.session_code).ok_or(ChatSteerError::SessionCodeRequired)?;
+        let expected_run_code = normalized_required(command.expected_run_code)
+            .ok_or(ChatSteerError::ExpectedRunCodeRequired)?;
+        let content = normalized_required(command.content)
+            .ok_or(ChatSteerError::Chat(ChatError::MessageRequired))?;
+        let attachments =
+            normalize_chat_attachments(command.attachments).map_err(ChatSteerError::Chat)?;
+        let session = self
+            .repository()
+            .get_session(&session_code)
+            .map_err(ChatSteerError::Chat)?;
+        let channel = if session.task_code.is_some() {
+            ChatMessageChannel::TaskAgent
+        } else {
+            ChatMessageChannel::MainAgent
+        };
+
+        match self
+            .active_runs
+            .accept_steer(&session_code, &expected_run_code, || {
+                let message = self.create_message(
+                    &session_code,
+                    Some(expected_run_code.clone()),
+                    ChatMessageRole::User,
+                    channel,
+                    "User",
+                    &content,
+                    attachments.clone(),
+                    None,
+                )?;
+                let input = AgentSteerInput {
+                    steer_code: message.message_code.clone(),
+                    content: content.clone(),
+                    attachments: attachments.clone(),
+                };
+                Ok::<_, ChatSendError>((
+                    ChatSteerResult {
+                        session_code: session_code.clone(),
+                        run_code: expected_run_code.clone(),
+                        message,
+                    },
+                    input,
+                ))
+            }) {
+            Ok(Ok(result)) => Ok(result),
+            Ok(Err(ChatSendError::Chat(error))) => Err(ChatSteerError::Chat(error)),
+            Ok(Err(ChatSendError::Agent(_) | ChatSendError::RunAlreadyActive { .. })) => {
+                Err(ChatSteerError::RegistryUnavailable)
+            }
+            Err(error) => Err(ChatSteerError::from(error)),
+        }
+    }
+
     pub async fn send_message(
         &self,
         session_code: &str,
@@ -262,7 +327,6 @@ impl ChatService {
             .get_session(session_code)
             .map_err(ChatSendError::Chat)?;
         let should_generate_title = should_generate_manual_session_title(&session);
-        let _session_run_guard = acquire_session_run(self.coordinator_namespace, session_code)?;
         let workspace_code = session.workspace_code.clone();
         let channel = if command
             .task_code
@@ -280,7 +344,15 @@ impl ChatService {
             normalized_optional(command.agent_code.clone()).or(session.agent_code.clone())
         }
         .unwrap_or_else(|| MAIN_AGENT_CODE.to_string());
-        let runtime_adapter_key = runtime_adapter_key_for_agent(&effective_agent_code);
+        let reservation = self.reserve_run(
+            session_code,
+            command.run_code.clone(),
+            &effective_agent_code,
+        )?;
+        let run_code = reservation.run_code;
+        let runtime_adapter_key = reservation.runtime_adapter_key;
+        let active_run_reservation = reservation.guard;
+        let _session_run_guard = acquire_session_run(self.coordinator_namespace, session_code)?;
         let mapped_runtime_session_id = self
             .repository()
             .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)
@@ -301,7 +373,7 @@ impl ChatService {
         let limits_for_invocation = command.limits;
         let tools_for_invocation = command.tools;
         let invocation = AgentInvocationCommand {
-            run_code: command.run_code,
+            run_code: Some(run_code),
             prompt: Some(content.clone()),
             workspace_code: Some(workspace_code.clone()),
             conversation_code: Some(session.session_code.clone()),
@@ -320,11 +392,22 @@ impl ChatService {
         };
         let run = if let Some(sink) = sink {
             agent
-                .invoke_stream(invocation, user_code.clone(), locale.clone(), sink)
+                .invoke_stream_reserved(
+                    invocation,
+                    user_code.clone(),
+                    locale.clone(),
+                    sink,
+                    active_run_reservation,
+                )
                 .await
         } else {
             agent
-                .invoke(invocation, user_code.clone(), locale.clone())
+                .invoke_reserved(
+                    invocation,
+                    user_code.clone(),
+                    locale.clone(),
+                    active_run_reservation,
+                )
                 .await
         }
         .map_err(ChatSendError::Agent)?;
@@ -454,6 +537,7 @@ impl ChatService {
 pub enum ChatSendError {
     Agent(AgentInvocationError),
     Chat(ChatError),
+    RunAlreadyActive { active_run_code: Option<String> },
 }
 
 struct SessionRunGuard {
@@ -482,9 +566,9 @@ fn acquire_session_run(
     })?;
     let run_key = format!("{coordinator_namespace}:{session_code}");
     if !active_sessions.insert(run_key.clone()) {
-        return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
-            "session already has an active run".into(),
-        )));
+        return Err(ChatSendError::RunAlreadyActive {
+            active_run_code: None,
+        });
     }
     Ok(SessionRunGuard { run_key })
 }
@@ -497,12 +581,4 @@ fn normalized_optional(value: Option<String>) -> Option<String> {
 
 fn normalized_required(value: Option<String>) -> Option<String> {
     normalized_optional(value)
-}
-
-fn runtime_adapter_key_for_agent(agent_code: &str) -> &'static str {
-    match agent_code.trim().to_ascii_lowercase().as_str() {
-        "codex" => CODEX_RUNTIME_ADAPTER_KEY,
-        "opencode" => OPENCODE_RUNTIME_ADAPTER_KEY,
-        _ => MAIN_RUNTIME_ADAPTER_KEY,
-    }
 }

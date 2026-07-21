@@ -13,6 +13,7 @@ import {
   Square,
   Terminal,
   UserRound,
+  X,
 } from "lucide-react";
 import {
   aguiEventMillis,
@@ -30,7 +31,10 @@ import {
   type ChatAguiStreamEvent,
   type ChatDebugOptions,
   type ChatMessage,
+  type ChatQueuedSubmission,
+  type ChatRunningSubmitMode,
   type ChatSession,
+  type ChatSubmitMode,
   type ToolGroupWorkCard,
   type ToolWorkCard,
 } from "@tron/chat-core";
@@ -706,16 +710,24 @@ export interface TronChatPanelProps {
   onNewSession?: () => void;
   onDraftChange: (value: string) => void;
   onEditMessage?: (content: string) => void;
-  onSend: () => void;
+  onEditQueuedMessage?: (id: string, content: string) => void;
+  onRemoveQueuedMessage?: (id: string) => void;
+  onSend: (mode?: ChatSubmitMode) => void;
   onStop?: () => void;
   protocolEvents?: ChatAguiStreamEvent[];
+  queueDisabled?: boolean;
+  queuedLabel?: string;
+  queuedMessages?: ChatQueuedSubmission[];
+  runningSubmitModes?: ChatRunningSubmitMode[];
   sendDisabled?: boolean;
   sendLabel?: string;
   sending?: boolean;
   session?: ChatSession | null;
   showAgui?: boolean;
   showHeader?: boolean;
+  showStop?: boolean;
   sidebarContent?: ReactNode;
+  steerDisabled?: boolean;
   stopLabel?: string;
   title?: string;
 }
@@ -742,16 +754,24 @@ export function TronChatPanel({
   onNewSession,
   onDraftChange,
   onEditMessage,
+  onEditQueuedMessage,
+  onRemoveQueuedMessage,
   onSend,
   onStop,
   protocolEvents,
+  queueDisabled = false,
+  queuedLabel = "Queued",
+  queuedMessages = [],
+  runningSubmitModes = [],
   sendDisabled,
   sendLabel = "Send",
   sending = false,
   session,
   showAgui = true,
   showHeader = true,
+  showStop = true,
   sidebarContent,
+  steerDisabled = false,
   stopLabel = "Stop",
   title,
 }: TronChatPanelProps) {
@@ -759,6 +779,17 @@ export function TronChatPanel({
   const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
   const [showJumpButton, setShowJumpButton] = useState(false);
   const autoStickToBottomRef = useRef(true);
+  const canQueueWhileRunning = runningSubmitModes.includes("queue");
+  const canSteerWhileRunning = runningSubmitModes.includes("steer");
+  const primarySubmitMode: ChatSubmitMode | null = !sending
+    ? "send"
+    : canQueueWhileRunning
+      ? "queue"
+      : null;
+  const primarySubmitDisabled = disabledInput
+    || (primarySubmitMode === "queue"
+        ? queueDisabled
+        : Boolean(sendDisabled));
   const presentation = useMemo(
     () =>
       buildTranscriptPresentation({
@@ -848,6 +879,14 @@ export function TronChatPanel({
       return;
     }
     composerRef.current = node;
+  }
+
+  function handleStopSubmit() {
+    if (onStop) {
+      onStop();
+      return;
+    }
+    onSend("send");
   }
 
   return (
@@ -969,6 +1008,58 @@ export function TronChatPanel({
                 <ArrowDown size={16} />
               </button>
             ) : null}
+            {queuedMessages.length ? (
+              <section
+                aria-label={queuedLabel}
+                className="tron-chat__queued-messages"
+              >
+                <div className="tron-chat__queued-messages-header">
+                  <span>{queuedLabel}</span>
+                  <span className="tron-chat__queued-messages-count">
+                    {queuedMessages.length}
+                  </span>
+                </div>
+                <ol className="tron-chat__queued-messages-list">
+                  {queuedMessages.map((queuedMessage) => (
+                    <li
+                      className="tron-chat__queued-message"
+                      key={queuedMessage.id}
+                    >
+                      <span className="tron-chat__queued-message-content">
+                        {queuedMessage.input.content}
+                      </span>
+                      <span className="tron-chat__queued-message-actions">
+                        {onEditQueuedMessage ? (
+                          <button
+                            aria-label="Edit queued message"
+                            className="tron-chat__icon-button"
+                            title="Edit queued message"
+                            type="button"
+                            onClick={() => onEditQueuedMessage(
+                              queuedMessage.id,
+                              queuedMessage.input.content,
+                            )}
+                          >
+                            <Pencil size={14} />
+                          </button>
+                        ) : null}
+                        {onRemoveQueuedMessage ? (
+                          <button
+                            aria-label="Remove queued message"
+                            className="tron-chat__icon-button"
+                            title="Remove queued message"
+                            type="button"
+                            onClick={() => onRemoveQueuedMessage(queuedMessage.id)}
+                          >
+                            <X size={15} />
+                          </button>
+                        ) : null}
+                      </span>
+                    </li>
+                  ))}
+                </ol>
+              </section>
+            ) : null}
             <div className="tron-chat__composer">
               <textarea
                 autoFocus={autoFocusComposer}
@@ -980,39 +1071,65 @@ export function TronChatPanel({
                 value={draft}
                 onChange={(event) => onDraftChange(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key !== "Enter" || event.nativeEvent.isComposing)
-                    return;
-                  event.preventDefault();
-                  if (event.shiftKey) {
+                  if (event.nativeEvent.isComposing) return;
+                  if (event.key === "Enter" && event.shiftKey) {
+                    event.preventDefault();
                     onDraftChange(insertNewlineAtCursor(event.currentTarget));
                     return;
                   }
-                  if (sending && onStop) {
-                    onStop();
+                  const commandShortcut = event.metaKey || event.ctrlKey;
+                  if (
+                    sending
+                    && commandShortcut
+                    && (event.key === "Enter" || event.key === "End")
+                  ) {
+                    event.preventDefault();
+                    if (
+                      canSteerWhileRunning
+                      && !disabledInput
+                      && !steerDisabled
+                    ) {
+                      onSend("steer");
+                    }
                     return;
                   }
-                  onSend();
+                  if (event.key !== "Enter") return;
+                  event.preventDefault();
+                  if (primarySubmitMode && !primarySubmitDisabled) {
+                    onSend(primarySubmitMode);
+                  }
                 }}
+                aria-keyshortcuts={sending && canSteerWhileRunning
+                  ? "Meta+Enter Control+Enter Meta+End Control+End"
+                  : undefined}
               />
               <div className="tron-chat__composer-row">
                 <div className="tron-chat__composer-addon">{footerAddon}</div>
-                <button
-                  className={cx(
-                    "tron-chat__button tron-chat__button_send",
-                    sending && "tron-chat__button--danger",
-                  )}
-                  type="button"
-                  disabled={disabledInput || (!sending && sendDisabled)}
-                  onClick={() => {
-                    if (sending && onStop) {
-                      onStop();
-                      return;
-                    }
-                    onSend();
-                  }}
-                >
-                  {sending ? <Square size={14} /> : <Send size={15} />}
-                </button>
+                <div className="tron-chat__composer-actions">
+                  {sending && showStop ? (
+                    <button
+                      aria-label={stopLabel}
+                      className="tron-chat__button tron-chat__button_send tron-chat__button--danger"
+                      title={stopLabel}
+                      type="button"
+                      onClick={handleStopSubmit}
+                    >
+                      <Square size={14} />
+                    </button>
+                  ) : null}
+                  {!sending ? (
+                    <button
+                      aria-label={sendLabel}
+                      className="tron-chat__button tron-chat__button_send"
+                      disabled={disabledInput || Boolean(sendDisabled)}
+                      title={sendLabel}
+                      type="button"
+                      onClick={() => onSend("send")}
+                    >
+                      <Send size={15} />
+                    </button>
+                  ) : null}
+                </div>
               </div>
             </div>
           </footer>

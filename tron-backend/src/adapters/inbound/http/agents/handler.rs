@@ -48,7 +48,8 @@ pub async fn create_agent_run(
         state.agent_model_client.clone(),
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
-    );
+    )
+    .with_active_runs(state.active_runs.clone());
     match service
         .invoke(
             request,

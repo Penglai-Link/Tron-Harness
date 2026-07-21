@@ -212,6 +212,7 @@ pub struct RuntimeAdapterCapabilityRecord {
     pub enabled: bool,
     pub supports_resume: bool,
     pub supports_cancel: bool,
+    pub supports_steer: bool,
     pub supports_streaming: bool,
     pub supports_ephemeral: bool,
     pub supports_workdir: bool,

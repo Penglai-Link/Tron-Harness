@@ -6,18 +6,24 @@ import type {
   ChatMessage,
   ChatSendResult,
   ChatSession,
+  ChatSteerResult,
+  GetActiveChatRunResult,
   SendChatMessageInput,
+  SteerChatMessageInput,
+  StopChatRunInput,
+  StopChatRunResult,
 } from "@/domain/chat/model";
 import {
+  ApiError,
   buildApiUrl,
   getApiAccessToken,
   parseEndpoint,
   requestApi,
-  unwrapApiEnvelope,
 } from "@/shared/api/httpClient";
 import {
   getServiceDataSource,
   useServiceQuery,
+  useServiceQueryState,
 } from "@/shared/api/serviceConfig";
 
 interface AguiEventSnapshot {
@@ -31,6 +37,10 @@ interface AguiProtocolEvent {
 
 interface ChatMessageListQueryOptions {
   suppressErrorToast?: boolean;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }
 
 export function useChatMessageListBySession(sessionCode: string, refreshKey = 0, options: ChatMessageListQueryOptions = {}) {
@@ -89,6 +99,33 @@ export function useChatAguiProtocolEvents(sessionCode: string, refreshKey = 0) {
   });
 }
 
+export function useChatActiveRunState(sessionCode: string, refreshKey = 0) {
+  return useServiceQueryState<GetActiveChatRunResult>({
+    apiInitialData: () => ({ activeRun: null, sessionCode }),
+    domain: "chat",
+    enabled: Boolean(sessionCode),
+    endpoint: chatApiEndpoints.getActiveChatRun,
+    mockData: () => ({ activeRun: null, sessionCode }),
+    deps: [sessionCode],
+    params: { sessionCode },
+    refreshKey,
+    suppressErrorToast: true,
+  });
+}
+
+export async function getChatActiveRun(
+  sessionCode: string,
+  signal?: AbortSignal,
+): Promise<GetActiveChatRunResult> {
+  if (getServiceDataSource("chat") === "mock") {
+    return { activeRun: null, sessionCode };
+  }
+  return requestApi<GetActiveChatRunResult>(chatApiEndpoints.getActiveChatRun, {
+    pathParams: { sessionCode },
+    signal,
+  });
+}
+
 export async function sendChatMessage(session: ChatSession, input: SendChatMessageInput): Promise<ChatSendResult> {
   if (getServiceDataSource("chat") === "mock") {
     return createMockChatSendResult(session, input);
@@ -97,6 +134,52 @@ export async function sendChatMessage(session: ChatSession, input: SendChatMessa
   return requestApi<ChatSendResult>(chatApiEndpoints.sendChatMessage, {
     body: input,
     pathParams: { sessionCode: session.sessionCode },
+  });
+}
+
+export async function steerChatMessage(
+  input: SteerChatMessageInput,
+  signal?: AbortSignal,
+): Promise<ChatSteerResult> {
+  if (getServiceDataSource("chat") === "mock") {
+    const createdAt = new Date().toISOString();
+    return {
+      sessionCode: input.sessionCode,
+      runCode: input.expectedRunCode,
+      message: {
+        actor: "User",
+        attachments: input.attachments,
+        channel: "MAIN_AGENT",
+        content: input.content,
+        createdAt,
+        id: -Date.now(),
+        messageCode: `MOCK-STEER-${Date.now()}`,
+        role: "USER",
+        runCode: input.expectedRunCode,
+        sessionCode: input.sessionCode,
+      },
+    };
+  }
+
+  return requestApi<ChatSteerResult>(chatApiEndpoints.steerChatMessage, {
+    body: input,
+    signal,
+  });
+}
+
+export async function stopChatRun(
+  input: StopChatRunInput,
+  signal?: AbortSignal,
+): Promise<StopChatRunResult> {
+  if (getServiceDataSource("chat") === "mock") {
+    return {
+      runCode: input.expectedRunCode,
+      sessionCode: input.sessionCode,
+    };
+  }
+  return requestApi<StopChatRunResult>(chatApiEndpoints.stopChatRun, {
+    body: input,
+    signal,
   });
 }
 
@@ -222,7 +305,13 @@ export async function streamChatMessage(
       { type: "REASONING_MESSAGE_END", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, timestamp: startedAt - 653_000 },
       { type: "REASONING_END", threadId: session.sessionCode, runId: staleRunId, messageId: `${staleRunId}-reasoning`, timestamp: startedAt - 652_000 },
       { type: "RUN_FINISHED", threadId: session.sessionCode, runId: staleRunId, timestamp: startedAt - 651_000 },
-      { type: "RUN_STARTED", threadId: session.sessionCode, runId, timestamp: startedAt },
+      {
+        type: "RUN_STARTED",
+        threadId: session.sessionCode,
+        runId,
+        supportsSteer: input.agentCode === "main-agent",
+        timestamp: startedAt,
+      },
       { type: "REASONING_START", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + 1 },
       { type: "REASONING_MESSAGE_START", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + 2 },
       ...firstReasoningContentEvents,
@@ -283,8 +372,15 @@ export async function streamChatMessage(
 
   if (!response.ok) {
     const payload = await response.json().catch(() => null);
-    if (payload) return unwrapApiEnvelope<ChatSendResult>(payload);
-    throw new Error(`POST ${response.url} failed with ${response.status}`);
+    const message = isRecord(payload) && typeof payload.message === "string"
+      ? payload.message
+      : `POST ${response.url} failed with ${response.status}`;
+    throw new ApiError(message, response.status, {
+      code: isRecord(payload) && typeof payload.code === "string"
+        ? payload.code
+        : undefined,
+      data: isRecord(payload) && "data" in payload ? payload.data : undefined,
+    });
   }
   if (!response.body) {
     throw new Error("Chat stream response did not include a body");
@@ -328,7 +424,11 @@ export async function streamChatMessage(
       return;
     }
     if (type === "RUN_ERROR") {
-      throw new Error(payload.message ?? payload.code ?? "Chat stream failed");
+      throw new ApiError(
+        payload.message ?? payload.code ?? "Chat stream failed",
+        200,
+        { code: payload.code },
+      );
     }
   }
 

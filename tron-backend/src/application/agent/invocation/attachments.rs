@@ -5,7 +5,7 @@ use crate::domain::{
     chat::ChatMessageAttachment,
 };
 
-pub(super) fn user_prompt_message(
+pub(crate) fn user_prompt_message(
     prompt: String,
     attachments: &[ChatMessageAttachment],
 ) -> AgentMessage {

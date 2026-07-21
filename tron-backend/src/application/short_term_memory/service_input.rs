@@ -20,6 +20,20 @@ impl ShortTermMemoryService {
         self.record_invocation_input(context, prompt, "USER_PROMPT", None)
     }
 
+    pub fn record_steer_input(
+        &self,
+        context: &AgentRunContext,
+        prompt: &str,
+        steer_code: &str,
+    ) -> Result<String, ShortTermMemoryError> {
+        self.record_invocation_input(
+            context,
+            prompt,
+            "USER_STEER",
+            Some(json!({"steerCode": steer_code})),
+        )
+    }
+
     pub fn record_invocation_input(
         &self,
         context: &AgentRunContext,
@@ -70,7 +84,7 @@ impl ShortTermMemoryService {
             cancelled_at: None,
         };
         let mut payload = json!({"inputCode": input_code, "inputKind": input_kind});
-        if input_kind == "USER_PROMPT" {
+        if matches!(input_kind, "USER_PROMPT" | "USER_STEER") {
             let (message_code, message, parts) = self.build_transcript_message(
                 session_code,
                 &workspace_code,
@@ -190,6 +204,13 @@ fn transcript_input_idempotency_key(
     metadata_json: Option<&Value>,
 ) -> String {
     let normalized_kind = input_kind.trim().to_ascii_uppercase();
+    if normalized_kind == "USER_STEER" {
+        let steer_code = metadata_string(metadata_json, "steerCode").unwrap_or("NO_STEER_CODE");
+        return format!(
+            "stm:v1:user_steer:{}:{steer_code}",
+            input_request_or_run_key(context)
+        );
+    }
     if normalized_kind == "CONTINUATION" {
         let source = metadata_string(metadata_json, "source").unwrap_or("RUNTIME");
         let goal_code = metadata_string(metadata_json, "goalCode")

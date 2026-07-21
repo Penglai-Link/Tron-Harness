@@ -9,6 +9,7 @@ import {
   resolveFloatingViewportBounds,
   writeFloatingState,
   type ChatFloatingState,
+  type ChatSubmitMode,
 } from "@tron/chat-core";
 import { computed, onBeforeUnmount, ref, useSlots, watch } from "vue";
 import { cx } from "../utils";
@@ -26,14 +27,22 @@ const props = withDefaults(defineProps<TronChatWindowProps>(), {
   liveAguiAnchorMessageCodes: () => ({}),
   liveAguiEvents: () => [],
   liveAguiPending: false,
+  onEditQueuedMessage: undefined,
+  onRemoveQueuedMessage: undefined,
   onStateChange: undefined,
   protocolEvents: () => [],
+  queueDisabled: false,
+  queuedLabel: "Queued",
+  queuedMessages: () => [],
+  runningSubmitModes: () => [],
   sendDisabled: false,
   sendLabel: "Send",
   sending: false,
   session: null,
   showAgui: true,
+  showStop: true,
   state: undefined,
+  steerDisabled: false,
   stopLabel: "Stop",
   storageKey: "tron.chat.window",
   title: "Chat",
@@ -45,7 +54,9 @@ const emit = defineEmits<{
   "new-session": [];
   "draft-change": [value: string];
   "edit-message": [value: string];
-  send: [];
+  "edit-queued-message": [id: string, content: string];
+  "remove-queued-message": [id: string];
+  send: [mode?: ChatSubmitMode];
   stop: [];
   "state-change": [state: ChatFloatingState];
 }>();
@@ -278,8 +289,7 @@ function endResize(event: PointerEvent) {
       "
     >
       <Bot :size="16" />
-      <span>{{ title }}</span
-      >12
+      <span>{{ title }}</span>
     </button>
   </div>
   <div v-else class="tron-chat-window">
@@ -348,19 +358,27 @@ function endResize(event: PointerEvent) {
           :live-agui-pending="liveAguiPending"
           :messages="messages"
           :protocol-events="protocolEvents"
+          :queue-disabled="queueDisabled"
+          :queued-label="queuedLabel"
+          :queued-messages="queuedMessages"
+          :running-submit-modes="runningSubmitModes"
           :send-disabled="sendDisabled"
           :send-label="sendLabel"
           :sending="sending"
           :session="session"
           :show-agui="showAgui"
           :show-header="false"
+          :show-stop="showStop"
+          :steer-disabled="steerDisabled"
           :stop-label="stopLabel"
           :title="title"
           @create-session="emit('create-session')"
           @new-session="emit('new-session')"
           @draft-change="(v: string) => emit('draft-change', v)"
           @edit-message="(v: string) => emit('edit-message', v)"
-          @send="emit('send')"
+          @edit-queued-message="(id: string, content: string) => emit('edit-queued-message', id, content)"
+          @remove-queued-message="(id: string) => emit('remove-queued-message', id)"
+          @send="(mode?: ChatSubmitMode) => emit('send', mode)"
           @stop="emit('stop')"
         >
           <template v-for="name in forwardedSlotNames" #[name]="slotProps">

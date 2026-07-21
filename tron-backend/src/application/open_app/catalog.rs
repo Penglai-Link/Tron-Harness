@@ -56,6 +56,16 @@ const OPEN_API_ROUTE_DEFINITIONS: &[OpenApiRouteDefinition] = &[
         operation_description: "Create or update agent chat sessions.",
     },
     OpenApiRouteDefinition {
+        method: "GET",
+        path_template: "/open-api/v1/chats/sessions/get-active-run",
+        capability_code: OPEN_API_CAPABILITY_AGENT_CHAT,
+        capability_name: "Agent Chat OpenAPI",
+        capability_description: "External session and message access for agent chat.",
+        operation_code: "session.read",
+        operation_name: "Read Sessions",
+        operation_description: "Read the active run attached to an agent chat session.",
+    },
+    OpenApiRouteDefinition {
         method: "PATCH",
         path_template: "/open-api/v1/chats/sessions/{sessionCode}",
         capability_code: OPEN_API_CAPABILITY_AGENT_CHAT,
@@ -74,6 +84,26 @@ const OPEN_API_ROUTE_DEFINITIONS: &[OpenApiRouteDefinition] = &[
         operation_code: "message.read",
         operation_name: "Read Messages",
         operation_description: "Read session message history.",
+    },
+    OpenApiRouteDefinition {
+        method: "POST",
+        path_template: "/open-api/v1/chats/sessions/steer-message",
+        capability_code: OPEN_API_CAPABILITY_AGENT_CHAT,
+        capability_name: "Agent Chat OpenAPI",
+        capability_description: "External session and message access for agent chat.",
+        operation_code: "message.write",
+        operation_name: "Write Messages",
+        operation_description: "Steer an active agent chat run with a user message.",
+    },
+    OpenApiRouteDefinition {
+        method: "POST",
+        path_template: "/open-api/v1/chats/sessions/stop-run",
+        capability_code: OPEN_API_CAPABILITY_AGENT_CHAT,
+        capability_name: "Agent Chat OpenAPI",
+        capability_description: "External session and message access for agent chat.",
+        operation_code: "message.write",
+        operation_name: "Write Messages",
+        operation_description: "Stop the active run attached to an agent chat session.",
     },
     OpenApiRouteDefinition {
         method: "POST",
@@ -275,6 +305,23 @@ mod tests {
                 .routes
                 .iter()
                 .any(|route| route == "GET /open-api/v1/agents/agui/streams/{streamKey}/events")
+        );
+        assert!(
+            session_read
+                .routes
+                .iter()
+                .any(|route| { route == "GET /open-api/v1/chats/sessions/get-active-run" })
+        );
+        let message_write = agent_chat
+            .operations
+            .iter()
+            .find(|operation| operation.operation_code == "message.write")
+            .expect("message.write should be catalogued");
+        assert!(
+            message_write
+                .routes
+                .iter()
+                .any(|route| { route == "POST /open-api/v1/chats/sessions/stop-run" })
         );
     }
 

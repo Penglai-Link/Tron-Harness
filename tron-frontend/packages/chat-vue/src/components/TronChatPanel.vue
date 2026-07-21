@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ArrowDown, Send, Square, Bot } from "lucide-vue-next";
+import { ArrowDown, Bot, Pencil, Send, Square, X } from "lucide-vue-next";
 import {
   buildTranscriptPresentation,
   describeDebugEvent,
   sessionAgentTagLabel,
   type ChatMessage,
+  type ChatSubmitMode,
 } from "@tron/chat-core";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { cx, insertNewlineAtCursor } from "../utils";
@@ -26,14 +27,22 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
   liveAguiPending: false,
   onCreateSession: undefined,
   onEditMessage: undefined,
+  onEditQueuedMessage: undefined,
+  onRemoveQueuedMessage: undefined,
   onStop: undefined,
   protocolEvents: () => [],
+  queueDisabled: false,
+  queuedLabel: "Queued",
+  queuedMessages: () => [],
+  runningSubmitModes: () => [],
   sendDisabled: false,
   sendLabel: "Send",
   sending: false,
   session: null,
   showAgui: true,
   showHeader: true,
+  showStop: true,
+  steerDisabled: false,
   stopLabel: "Stop",
   title: "",
 });
@@ -43,13 +52,32 @@ const emit = defineEmits<{
   "new-session": [];
   "draft-change": [value: string];
   "edit-message": [value: string];
-  send: [];
+  "edit-queued-message": [id: string, content: string];
+  "remove-queued-message": [id: string];
+  send: [mode?: ChatSubmitMode];
   stop: [];
 }>();
 
 const transcriptRef = ref<HTMLElement | null>(null);
 const showJumpButton = ref(false);
 const autoStickToBottom = ref(true);
+
+const canQueueWhileRunning = computed(() =>
+  props.runningSubmitModes.includes("queue"),
+);
+const canSteerWhileRunning = computed(() =>
+  props.runningSubmitModes.includes("steer"),
+);
+const primarySubmitMode = computed<ChatSubmitMode | null>(() => {
+  if (!props.sending) return "send";
+  if (canQueueWhileRunning.value) return "queue";
+  return null;
+});
+const primarySubmitDisabled = computed(() => {
+  if (props.disabledInput) return true;
+  if (primarySubmitMode.value === "queue") return props.queueDisabled;
+  return props.sendDisabled;
+});
 
 const presentation = computed(() =>
   buildTranscriptPresentation({
@@ -81,20 +109,44 @@ function handleScroll() {
 }
 
 function handleKeydown(event: KeyboardEvent) {
-  if (event.key !== "Enter" || event.isComposing) return;
-  event.preventDefault();
-  if (event.shiftKey) {
+  if (event.isComposing) return;
+  if (event.key === "Enter" && event.shiftKey) {
+    event.preventDefault();
     emit(
       "draft-change",
       insertNewlineAtCursor(event.currentTarget as HTMLTextAreaElement),
     );
     return;
   }
-  if (props.sending) {
-    emit("stop");
+  const commandShortcut = event.metaKey || event.ctrlKey;
+  if (
+    props.sending &&
+    commandShortcut &&
+    (event.key === "Enter" || event.key === "End")
+  ) {
+    event.preventDefault();
+    if (
+      canSteerWhileRunning.value &&
+      !props.disabledInput &&
+      !props.steerDisabled
+    ) {
+      emit("send", "steer");
+    }
     return;
   }
-  emit("send");
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  if (primarySubmitMode.value && !primarySubmitDisabled.value) {
+    emit("send", primarySubmitMode.value);
+  }
+}
+
+function handleStopSubmit() {
+  if (props.onStop) {
+    props.onStop();
+    return;
+  }
+  emit("stop");
 }
 
 function workRailsForMessage(message: ChatMessage) {
@@ -210,12 +262,68 @@ onMounted(() => {
         >
           <ArrowDown :size="16" />
         </button>
+        <section
+          v-if="queuedMessages.length"
+          :aria-label="queuedLabel"
+          class="tron-chat__queued-messages"
+        >
+          <div class="tron-chat__queued-messages-header">
+            <span>{{ queuedLabel }}</span>
+            <span class="tron-chat__queued-messages-count">{{
+              queuedMessages.length
+            }}</span>
+          </div>
+          <ol class="tron-chat__queued-messages-list">
+            <li
+              v-for="queuedMessage in queuedMessages"
+              :key="queuedMessage.id"
+              class="tron-chat__queued-message"
+            >
+              <span class="tron-chat__queued-message-content">{{
+                queuedMessage.input.content
+              }}</span>
+              <span class="tron-chat__queued-message-actions">
+                <button
+                  v-if="onEditQueuedMessage"
+                  aria-label="Edit queued message"
+                  class="tron-chat__icon-button"
+                  title="Edit queued message"
+                  type="button"
+                  @click="
+                    emit(
+                      'edit-queued-message',
+                      queuedMessage.id,
+                      queuedMessage.input.content,
+                    )
+                  "
+                >
+                  <Pencil :size="14" />
+                </button>
+                <button
+                  v-if="onRemoveQueuedMessage"
+                  aria-label="Remove queued message"
+                  class="tron-chat__icon-button"
+                  title="Remove queued message"
+                  type="button"
+                  @click="emit('remove-queued-message', queuedMessage.id)"
+                >
+                  <X :size="15" />
+                </button>
+              </span>
+            </li>
+          </ol>
+        </section>
         <div class="tron-chat__composer">
           <textarea
             class="tron-chat__textarea"
             :disabled="disabledInput"
             :placeholder="inputPlaceholder"
             :value="draft"
+            :aria-keyshortcuts="
+              sending && canSteerWhileRunning
+                ? 'Meta+Enter Control+Enter Meta+End Control+End'
+                : undefined
+            "
             @input="
               (e: Event) =>
                 emit('draft-change', (e.target as HTMLTextAreaElement).value)
@@ -226,20 +334,29 @@ onMounted(() => {
             <div class="tron-chat__composer-addon">
               <slot name="footerAddon" />
             </div>
-            <button
-              :class="
-                cx(
-                  'tron-chat__button tron-chat__button_send',
-                  sending && 'tron-chat__button--danger',
-                )
-              "
-              :disabled="disabledInput || (!sending && sendDisabled)"
-              type="button"
-              @click="sending ? emit('stop') : emit('send')"
-            >
-              <Square v-if="sending" :size="14" />
-              <Send v-else :size="15" />
-            </button>
+            <div class="tron-chat__composer-actions">
+              <button
+                v-if="sending && showStop"
+                :aria-label="stopLabel"
+                class="tron-chat__button tron-chat__button_send tron-chat__button--danger"
+                :title="stopLabel"
+                type="button"
+                @click="handleStopSubmit"
+              >
+                <Square :size="14" />
+              </button>
+              <button
+                v-if="!sending"
+                :aria-label="sendLabel"
+                class="tron-chat__button tron-chat__button_send"
+                :disabled="disabledInput || sendDisabled"
+                :title="sendLabel"
+                type="button"
+                @click="emit('send', 'send')"
+              >
+                <Send :size="15" />
+              </button>
+            </div>
           </div>
         </div>
       </footer>

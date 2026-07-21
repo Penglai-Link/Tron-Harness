@@ -6,26 +6,35 @@ use crate::{
     application::{
         agent::{AgentAguiStreamService, AgentInvocationService, generate_agent_run_code},
         chat::{
-            ChatSessionQuery, CreateChatSessionCommand, SendChatMessageCommand,
-            UpdateChatSessionCommand,
+            ChatSendError, ChatSessionQuery, CreateChatSessionCommand, SendChatMessageCommand,
+            SteerChatMessageCommand, UpdateChatSessionCommand,
         },
     },
-    domain::{agent::ModelStreamEvent, chat::ChatError},
+    domain::{
+        agent::{AgentRuntimeType, ModelStreamEvent},
+        chat::ChatError,
+    },
     response::ApiResponse,
     shared::auth_holder::AuthHolder,
 };
 use axum::{
     Json,
-    extract::{Path, Query, State},
+    extract::{Path, Query, State, rejection::JsonRejection},
     http::StatusCode,
     response::{
         IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
     },
 };
+use serde_json::Value;
 
-use super::error_mapper::{chat_error_response, chat_send_error_response};
+use super::error_mapper::{
+    chat_error_response, chat_send_error_response, chat_steer_error_response,
+    steer_chat_message_request_rejection_response,
+};
 use super::protocol_replay::record_protocol_event;
+use super::request::SteerChatMessageRequest;
+use super::response::ChatSteerResultResponse;
 use super::stream_live::{SystemAgentLiveEventBuilder, SystemAgentLiveReplayRecorder};
 use super::stream_task::{ChatStreamForwardingGate, ChatStreamLifecycleGuard};
 mod shared;
@@ -130,6 +139,9 @@ pub async fn send_message(
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
+    if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
     let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
@@ -152,7 +164,8 @@ pub async fn send_message(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
-    .with_short_term_memory(state.short_term_memory.clone());
+    .with_short_term_memory(state.short_term_memory.clone())
+    .with_active_runs(state.active_runs.clone());
     match state
         .chats
         .send_message(
@@ -171,6 +184,40 @@ pub async fn send_message(
     }
 }
 
+pub(crate) fn ensure_no_active_run(state: &AppState, session_code: &str) -> Result<(), Response> {
+    match state.active_runs.snapshot(session_code) {
+        Ok(None) => Ok(()),
+        Ok(Some(active_run)) => Err(chat_send_error_response(ChatSendError::RunAlreadyActive {
+            active_run_code: Some(active_run.run_code),
+        })),
+        Err(error) => Err(chat_send_error_response(ChatSendError::Agent(
+            crate::application::agent::AgentInvocationError::RuntimeFailed(error.to_string()),
+        ))),
+    }
+}
+
+pub async fn steer_message(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    request: Result<Json<SteerChatMessageRequest>, JsonRejection>,
+) -> Response {
+    let Json(request) = match request {
+        Ok(request) => request,
+        Err(error) => return steer_chat_message_request_rejection_response(error),
+    };
+    match state.chats.steer_message(SteerChatMessageCommand {
+        session_code: request.session_code,
+        expected_run_code: request.expected_run_code,
+        content: request.content,
+        attachments: request.attachments,
+    }) {
+        Ok(result) => {
+            Json(ApiResponse::success(ChatSteerResultResponse::from(result))).into_response()
+        }
+        Err(error) => chat_steer_error_response(error),
+    }
+}
+
 pub async fn stream_message(
     State(state): State<AppState>,
     auth: RequestAuthContext,
@@ -180,11 +227,15 @@ pub async fn stream_message(
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
+    if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
     let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
     };
     let system_agent_live_stream = uses_system_live_stream(&resolved_runtime);
+    let supports_steer = matches!(resolved_runtime.runtime_type, AgentRuntimeType::React);
     let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
@@ -226,16 +277,16 @@ pub async fn stream_message(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
-    .with_short_term_memory(state.short_term_memory.clone());
+    .with_short_term_memory(state.short_term_memory.clone())
+    .with_active_runs(state.active_runs.clone());
     let live_replay_recorder_for_sink = live_replay_recorder.clone();
     let forwarding_gate = ChatStreamForwardingGate::new();
     let forwarding_gate_for_sink = forwarding_gate.clone();
     let sink = Arc::new(move |event: ModelStreamEvent| {
-        if !forwarding_gate_for_sink.is_open() {
-            return;
-        }
         live_replay_recorder_for_sink.ingest(event.clone());
-        let _ = model_event_sender.send(event);
+        if forwarding_gate_for_sink.is_open() {
+            let _ = model_event_sender.send(event);
+        }
     });
 
     let replay_service_for_task = agui_stream.clone();
@@ -276,14 +327,15 @@ pub async fn stream_message(
     let stream_key = session_code.clone();
     let stream_run_code = run_code.clone();
     let stream_service = agui_stream.clone();
+    let lifecycle_guard = ChatStreamLifecycleGuard::new(
+        run_task,
+        forwarding_gate,
+        stream_service.clone(),
+        stream_key.clone(),
+        stream_run_code.clone(),
+    );
     let stream = async_stream::stream! {
-        let mut lifecycle_guard = ChatStreamLifecycleGuard::new(
-            run_task,
-            forwarding_gate,
-            stream_service.clone(),
-            stream_key.clone(),
-            stream_run_code.clone(),
-        );
+        let mut lifecycle_guard = lifecycle_guard;
         let mut seen = BTreeSet::<String>::new();
         let mut completion: Option<ChatSsePayload> = None;
         let mut drain_ticks = 0u16;
@@ -306,11 +358,16 @@ pub async fn stream_message(
             let mut emitted = false;
             while let Ok(event) = model_event_receiver.try_recv() {
                 for payload in live_event_builder.ingest(event) {
-                    let key = format!("{}:{}", payload.sse_event, payload.data);
+                    let data = run_started_with_supports_steer(
+                        &payload.sse_event,
+                        payload.data,
+                        supports_steer,
+                    );
+                    let key = format!("{}:{}", payload.sse_event, data);
                     if seen.insert(key) {
                         emitted = true;
                         yield Ok::<Event, Infallible>(
-                            ChatSsePayload::agui(payload.sse_event, payload.data).event()
+                            ChatSsePayload::agui(payload.sse_event, data).event()
                         );
                     }
                 }
@@ -340,10 +397,15 @@ pub async fn stream_message(
                     {
                         continue;
                     }
-                    let key = format!("{}:{}", event.sse_event, event.data);
+                    let data = run_started_with_supports_steer(
+                        &event.sse_event,
+                        event.data,
+                        supports_steer,
+                    );
+                    let key = format!("{}:{}", event.sse_event, data);
                     if seen.insert(key) {
                         emitted = true;
-                        yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, event.data).event());
+                        yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, data).event());
                     }
                 }
             }
@@ -377,4 +439,17 @@ pub async fn stream_message(
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+pub(crate) fn run_started_with_supports_steer(
+    sse_event: &str,
+    mut data: Value,
+    supports_steer: bool,
+) -> Value {
+    if sse_event == "RUN_STARTED"
+        && let Some(object) = data.as_object_mut()
+    {
+        object.insert("supportsSteer".to_string(), Value::Bool(supports_steer));
+    }
+    data
 }

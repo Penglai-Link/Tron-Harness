@@ -1,6 +1,6 @@
 use std::{
     sync::{
-        Arc, Barrier,
+        Arc, Barrier, Condvar, Mutex,
         atomic::{AtomicUsize, Ordering},
     },
     thread,
@@ -8,11 +8,12 @@ use std::{
 };
 
 use serde_json::json;
+use tokio::sync::Notify;
 use tron_backend::{
     adapters::outbound::model::{chat_completions_request, embeddings_request, responses_request},
     adapters::outbound::persistence::{SqliteChatRepository, SqliteShortTermMemoryRepository},
     application::{
-        agent::{ModelClient, ReactAgentBuilder},
+        agent::{ActiveRunRegistry, AgentSteerInput, ModelClient, ReactAgentBuilder},
         chat::{ChatService, CreateChatSessionCommand},
         short_term_memory::{
             ShortTermMemoryConfig, ShortTermMemoryRepository, ShortTermMemoryService,
@@ -78,6 +79,57 @@ impl ModelClient for ScriptedModelClient {
 struct ScriptedResultModelClient {
     results: Arc<std::sync::Mutex<Vec<Result<ModelResponse, String>>>>,
     requests: Arc<std::sync::Mutex<Vec<(AgentModelConfig, ModelRequest)>>>,
+}
+
+#[derive(Clone)]
+struct BlockingFirstResponseModelClient {
+    requests: Arc<Mutex<Vec<ModelRequest>>>,
+    calls: Arc<AtomicUsize>,
+    started: Arc<Notify>,
+    release: Arc<Notify>,
+}
+
+impl BlockingFirstResponseModelClient {
+    fn new() -> Self {
+        Self {
+            requests: Arc::new(Mutex::new(Vec::new())),
+            calls: Arc::new(AtomicUsize::new(0)),
+            started: Arc::new(Notify::new()),
+            release: Arc::new(Notify::new()),
+        }
+    }
+
+    fn requests(&self) -> Vec<ModelRequest> {
+        self.requests
+            .lock()
+            .expect("blocking model requests mutex poisoned")
+            .clone()
+    }
+}
+
+impl ModelClient for BlockingFirstResponseModelClient {
+    fn generate<'a>(
+        &'a self,
+        _config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            self.requests
+                .lock()
+                .expect("blocking model requests mutex poisoned")
+                .push(request.clone());
+            let call = self.calls.fetch_add(1, Ordering::SeqCst);
+            if call == 0 {
+                self.started.notify_one();
+                self.release.notified().await;
+                Ok(ModelResponse::final_output("first boundary output"))
+            } else {
+                Ok(ModelResponse::final_output("steered final output"))
+            }
+        })
+    }
 }
 
 impl ScriptedResultModelClient {
@@ -537,6 +589,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
             skill_name: Some("planner".into()),
             required_variable_keys: vec![],
         }],
+        effective_tools: Vec::new(),
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
             app_code: Some("APP-1".into()),
@@ -1385,6 +1438,68 @@ async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
 }
 
 #[tokio::test]
+async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new(
+            "echo",
+            |request: ToolRequest| {
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: "echo completed".into(),
+                })
+            },
+        )))
+        .expect("allowed tool should register");
+    let hidden_executions = Arc::new(AtomicUsize::new(0));
+    registry
+        .register(Arc::new(InProcessTool::new("hidden.tool", {
+            let hidden_executions = Arc::clone(&hidden_executions);
+            move |request: ToolRequest| {
+                hidden_executions.fetch_add(1, Ordering::SeqCst);
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: "hidden tool must not execute".into(),
+                })
+            }
+        })))
+        .expect("hidden tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::from_tool_calls(vec![
+                ToolCall {
+                    call_id: Some("call-allowed".into()),
+                    tool_name: "echo".into(),
+                    input: json!({}),
+                },
+                ToolCall {
+                    call_id: Some("call-unauthorized".into()),
+                    tool_name: "hidden.tool".into(),
+                    input: json!({}),
+                },
+            ]),
+            ModelResponse::final_output("recovered after parallel rejection"),
+        ])),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let result = agent
+        .run(base_context("RUN-PARALLEL-UNAUTHORIZED"))
+        .await
+        .expect("an unauthorized parallel tool should not abort the run");
+
+    assert_eq!(result.final_output, "recovered after parallel rejection");
+    assert_eq!(result.observations.len(), 2);
+    assert_eq!(result.observations[0].output, "echo completed");
+    assert_eq!(result.observations[1].tool_name, "hidden.tool");
+    assert!(result.observations[1].output.contains("is not allowed"));
+    assert_eq!(hidden_executions.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn react_agent_executes_single_tool_call_without_parallel_batching() {
     let registry = ToolRegistry::default();
     let running = Arc::new(AtomicUsize::new(0));
@@ -2089,8 +2204,64 @@ async fn tool_registry_rejects_missing_or_unauthorized_tools() {
     assert!(matches!(unauthorized, ToolError::UnauthorizedTool(_)));
 }
 
+#[test]
+fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new("fs.write_text", |request| {
+            Ok(ToolObservation {
+                tool_name: request.tool_name,
+                output: "written".into(),
+            })
+        })))
+        .expect("effective tool should register");
+
+    let discovery = EffectiveTool {
+        tool_name: "discovery.expand_tool_domain".into(),
+        domain_code: Some("discovery".into()),
+        description: "Expand one tool domain".into(),
+        input_schema: json!({"type": "object"}),
+        skill_name: None,
+        required_variable_keys: Vec::new(),
+    };
+    let write_text = EffectiveTool {
+        tool_name: "fs.write_text".into(),
+        domain_code: Some("fs".into()),
+        description: "Write text".into(),
+        input_schema: json!({"type": "object"}),
+        skill_name: None,
+        required_variable_keys: Vec::new(),
+    };
+    let mut context = base_context("RUN-EFFECTIVE-HIDDEN");
+    context.tools = vec![discovery.clone()];
+    context.effective_tools = vec![discovery, write_text];
+
+    let execution = registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "fs.write_text".into(),
+                input: json!({}),
+            },
+            &context,
+        )
+        .expect("an effective tool should remain authorized before model exposure");
+
+    assert_eq!(execution.observation.output, "written");
+    assert_eq!(
+        context.tools.len(),
+        1,
+        "model exposure should stay progressive"
+    );
+    let serialized = serde_json::to_value(&context).expect("context should serialize");
+    assert_eq!(serialized["tools"].as_array().map(Vec::len), Some(1));
+    assert_eq!(
+        serialized["effectiveTools"].as_array().map(Vec::len),
+        Some(2)
+    );
+}
+
 #[tokio::test]
-async fn react_agent_records_stm_tool_failed_for_missing_and_unauthorized_tools() {
+async fn react_agent_recovers_after_missing_and_unauthorized_tools() {
     for (label, tool_name, register_tool, allow_tool, expected_fragment) in [
         ("missing", "missing.tool", false, true, "is not registered"),
         ("unauthorized", "hidden.tool", true, false, "is not allowed"),
@@ -2159,11 +2330,12 @@ async fn react_agent_records_stm_tool_failed_for_missing_and_unauthorized_tools(
                 })))
                 .expect("hidden tool should register");
         }
+        let final_output = format!("recovered after {label} tool");
         let agent = ReactAgentBuilder::new(
-            Arc::new(ScriptedModelClient::new(vec![ModelResponse::tool_call(
-                tool_name,
-                json!({}),
-            )])),
+            Arc::new(ScriptedModelClient::new(vec![
+                ModelResponse::tool_call(tool_name, json!({})),
+                ModelResponse::final_output(final_output.clone()),
+            ])),
             Arc::new(registry),
             tron_backend::shared::event_bus::EventBusHandle::disabled(),
         )
@@ -2171,11 +2343,18 @@ async fn react_agent_records_stm_tool_failed_for_missing_and_unauthorized_tools(
         .build()
         .expect("agent builder should succeed");
 
-        let error = agent
+        let result = agent
             .run(context)
             .await
-            .expect_err("non-execution tool errors should fail the run");
-        assert!(error.to_string().contains(tool_name), "{label}: {error}");
+            .expect("a rejected tool invocation should be recoverable by the model");
+        assert_eq!(result.final_output, final_output, "{label}");
+        assert_eq!(result.observations.len(), 1, "{label}");
+        assert_eq!(result.observations[0].tool_name, tool_name, "{label}");
+        assert!(
+            result.observations[0].output.contains(expected_fragment),
+            "{label}: {}",
+            result.observations[0].output
+        );
 
         let connection = rusqlite::Connection::open(&database_url)
             .expect("short-term memory database should reopen");
@@ -2199,21 +2378,36 @@ async fn react_agent_records_stm_tool_failed_for_missing_and_unauthorized_tools(
                 |row| row.get(0),
             )
             .expect("tool failed event should be queryable");
-        let (status, content_text, content_json): (String, String, String) = connection
-            .query_row(
-                "SELECT status, content_text, content_json
+        let (status, visibility, content_text, content_json): (String, String, String, String) =
+            connection
+                .query_row(
+                    "SELECT status, visibility, content_text, content_json
                  FROM agent_transcript_parts
                  WHERE session_code = ?1
                    AND part_type = 'tool_result'
                  ORDER BY id DESC
                  LIMIT 1",
+                    [session.session_code.as_str()],
+                    |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?, row.get(3)?)),
+                )
+                .expect("failed tool result should be queryable");
+        let tool_call_visibility: String = connection
+            .query_row(
+                "SELECT visibility
+                 FROM agent_transcript_parts
+                 WHERE session_code = ?1
+                   AND part_type = 'tool_call'
+                 ORDER BY id DESC
+                 LIMIT 1",
                 [session.session_code.as_str()],
-                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+                |row| row.get(0),
             )
-            .expect("failed tool result should be queryable");
+            .expect("failed tool call should remain in model-visible memory");
         assert_eq!(tool_started_count, 1, "{label}");
         assert_eq!(tool_failed_count, 1, "{label}");
         assert_eq!(status, "failed", "{label}");
+        assert_eq!(visibility, "model", "{label}");
+        assert_eq!(tool_call_visibility, "model", "{label}");
         assert!(
             content_text.contains(expected_fragment),
             "{label}: {content_text}"
@@ -2390,5 +2584,292 @@ async fn zero_parallel_tool_call_limit_is_rejected_before_model_execution() {
     assert_eq!(
         error.to_string(),
         "maxParallelToolCalls must be greater than zero"
+    );
+}
+
+#[tokio::test]
+async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_second_run() {
+    let active_runs = ActiveRunRegistry::new();
+    let guard = active_runs
+        .register("SESSION-STEER", "RUN-STEER", "REACT", true)
+        .expect("active run should register");
+    let control = active_runs
+        .control("SESSION-STEER", "RUN-STEER")
+        .expect("react run control should resolve");
+    let model_client = BlockingFirstResponseModelClient::new();
+    let started = model_client.started.clone();
+    let release = model_client.release.clone();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(model_client.clone()),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+    let mut context = base_context("RUN-STEER");
+    context.conversation_code = Some("SESSION-STEER".into());
+    let started_signal = started.notified();
+    tokio::pin!(started_signal);
+    let run = tokio::spawn(async move { agent.run_with_control(context, Some(control)).await });
+
+    started_signal.await;
+    active_runs
+        .accept_steer("SESSION-STEER", "RUN-STEER", || {
+            Ok::<_, ()>((
+                (),
+                AgentSteerInput {
+                    steer_code: "MSG-STEER-1".into(),
+                    content: "change direction now".into(),
+                    attachments: Vec::new(),
+                },
+            ))
+        })
+        .expect("steer should route to the active run")
+        .expect("steer acceptance should succeed");
+    release.notify_one();
+
+    let result = run
+        .await
+        .expect("react run task should join")
+        .expect("react run should complete");
+    assert_eq!(result.run_code, "RUN-STEER");
+    assert_eq!(result.step_count, 2);
+    assert_eq!(
+        result.final_output,
+        "first boundary outputsteered final output"
+    );
+    let requests = model_client.requests();
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        assert!(request.messages.iter().any(|message| {
+            message.role == "system"
+                && message
+                    .plain_text_content()
+                    .contains("unresolved earlier user requests")
+        }));
+        assert!(
+            request.messages.iter().any(|message| {
+                message.role == "user" && message.plain_text_content() == "hello"
+            })
+        );
+    }
+    assert!(requests[1].messages.iter().any(|message| {
+        message.role == "assistant" && message.plain_text_content() == "first boundary output"
+    }));
+    assert_eq!(
+        requests[1]
+            .messages
+            .last()
+            .expect("second request should contain steer input")
+            .plain_text_content(),
+        "change direction now"
+    );
+    drop(guard);
+}
+
+#[tokio::test]
+async fn react_agent_preserves_unresolved_requests_when_steering_with_short_term_memory() {
+    let database_url = temp_database_url("agent-runtime-steer-memory");
+    let chat_repository =
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
+    let chats = ChatService::new(chat_repository);
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("Steer memory".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USR-1".into()),
+        )
+        .expect("session should be created");
+    let memory_repository = SqliteShortTermMemoryRepository::connect(&database_url)
+        .expect("short-term memory repository should connect");
+    let short_term_memory =
+        ShortTermMemoryService::new(memory_repository, ShortTermMemoryConfig::default());
+
+    let active_runs = ActiveRunRegistry::new();
+    let guard = active_runs
+        .register(&session.session_code, "RUN-STEER-MEMORY", "REACT", true)
+        .expect("active run should register");
+    let control = active_runs
+        .control(&session.session_code, "RUN-STEER-MEMORY")
+        .expect("react run control should resolve");
+    let model_client = BlockingFirstResponseModelClient::new();
+    let started = model_client.started.clone();
+    let release = model_client.release.clone();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(model_client.clone()),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_short_term_memory(Some(short_term_memory.clone()))
+    .build()
+    .expect("agent builder should succeed");
+
+    let original_request = "summarize today's five trending AI projects";
+    let mut context = base_context("RUN-STEER-MEMORY");
+    context.conversation_code = Some(session.session_code.clone());
+    context.workspace_code = session.workspace_code.clone();
+    context.messages = vec![AgentMessage::user(original_request)];
+    let input_code = short_term_memory
+        .record_user_input(&context, original_request)
+        .expect("original request should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    let started_signal = started.notified();
+    tokio::pin!(started_signal);
+    let run = tokio::spawn(async move { agent.run_with_control(context, Some(control)).await });
+
+    started_signal.await;
+    active_runs
+        .accept_steer(&session.session_code, "RUN-STEER-MEMORY", || {
+            Ok::<_, ()>((
+                (),
+                AgentSteerInput {
+                    steer_code: "MSG-STEER-MEMORY-1".into(),
+                    content: "what time is it?".into(),
+                    attachments: Vec::new(),
+                },
+            ))
+        })
+        .expect("steer should route to the active run")
+        .expect("steer acceptance should succeed");
+    release.notify_one();
+
+    let result = run
+        .await
+        .expect("react run task should join")
+        .expect("react run should complete");
+    assert_eq!(result.step_count, 2);
+
+    let requests = model_client.requests();
+    assert_eq!(requests.len(), 2);
+    for request in &requests {
+        assert!(request.messages.iter().any(|message| {
+            message.role == "system"
+                && message
+                    .plain_text_content()
+                    .contains("unresolved earlier user requests")
+        }));
+        assert!(request.messages.iter().any(|message| {
+            message.role == "user" && message.plain_text_content() == original_request
+        }));
+    }
+    assert!(requests[1].messages.iter().any(|message| {
+        message.role == "user" && message.plain_text_content() == "what time is it?"
+    }));
+    drop(guard);
+}
+
+#[tokio::test]
+async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
+    let active_runs = ActiveRunRegistry::new();
+    let _guard = active_runs
+        .register("SESSION-TOOL-STEER", "RUN-TOOL-STEER", "REACT", true)
+        .expect("active run should register");
+    let control = active_runs
+        .control("SESSION-TOOL-STEER", "RUN-TOOL-STEER")
+        .expect("react run control should resolve");
+    let tool_started = Arc::new(Notify::new());
+    let tool_gate = Arc::new((Mutex::new(false), Condvar::new()));
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new("blocking-tool", {
+            let tool_started = tool_started.clone();
+            let tool_gate = tool_gate.clone();
+            move |request: ToolRequest| {
+                tool_started.notify_one();
+                let (released, condition) = &*tool_gate;
+                let mut released = released.lock().expect("tool gate mutex poisoned");
+                while !*released {
+                    released = condition
+                        .wait(released)
+                        .expect("tool gate condvar should wait");
+                }
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: "tool completed".into(),
+                })
+            }
+        })))
+        .expect("blocking tool should register");
+    let model_client = ScriptedResultModelClient::new(vec![
+        Ok(ModelResponse::tool_call("blocking-tool", json!({}))),
+        Ok(ModelResponse::final_output("after tool steer")),
+    ]);
+    let agent = ReactAgentBuilder::new(
+        Arc::new(model_client.clone()),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+    let mut context = base_context("RUN-TOOL-STEER");
+    context.conversation_code = Some("SESSION-TOOL-STEER".into());
+    context.tools.push(EffectiveTool {
+        tool_name: "blocking-tool".into(),
+        domain_code: None,
+        description: "blocks until the test releases it".into(),
+        input_schema: json!({"type": "object"}),
+        skill_name: None,
+        required_variable_keys: Vec::new(),
+    });
+    let tool_started_signal = tool_started.notified();
+    tokio::pin!(tool_started_signal);
+    let run = tokio::spawn(async move { agent.run_with_control(context, Some(control)).await });
+
+    tool_started_signal.await;
+    active_runs
+        .accept_steer("SESSION-TOOL-STEER", "RUN-TOOL-STEER", || {
+            Ok::<_, ()>((
+                (),
+                AgentSteerInput {
+                    steer_code: "MSG-STEER-TOOL".into(),
+                    content: "use the completed tool result differently".into(),
+                    attachments: Vec::new(),
+                },
+            ))
+        })
+        .expect("steer should route while the tool is in flight")
+        .expect("steer acceptance should succeed");
+    {
+        let (released, condition) = &*tool_gate;
+        *released.lock().expect("tool gate mutex poisoned") = true;
+        condition.notify_all();
+    }
+
+    let result = run
+        .await
+        .expect("react run task should join")
+        .expect("react run should complete");
+    assert_eq!(result.run_code, "RUN-TOOL-STEER");
+    assert_eq!(result.final_output, "after tool steer");
+    let requests = model_client.requests();
+    assert_eq!(requests.len(), 2);
+    assert!(requests[1].1.messages.iter().any(|message| {
+        message.role == "tool" && message.text_content().contains("tool completed")
+    }));
+    assert_eq!(
+        requests[1]
+            .1
+            .messages
+            .last()
+            .expect("second request should contain steer input")
+            .plain_text_content(),
+        "use the completed tool result differently"
     );
 }

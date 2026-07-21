@@ -51,10 +51,28 @@ pub struct SendChatMessageCommand {
     pub attachments: Vec<ChatMessageAttachment>,
 }
 
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SteerChatMessageCommand {
+    pub session_code: Option<String>,
+    pub expected_run_code: Option<String>,
+    pub content: Option<String>,
+    #[serde(default)]
+    pub attachments: Vec<ChatMessageAttachment>,
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatSendResult {
     pub session: ChatSession,
     pub run: AgentInvocationResult,
     pub messages: Vec<ChatMessage>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatSteerResult {
+    pub session_code: String,
+    pub run_code: String,
+    pub message: ChatMessage,
 }

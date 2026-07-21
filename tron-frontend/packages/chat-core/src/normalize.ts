@@ -1,7 +1,10 @@
 import type {
+  ChatActiveRunState,
+  ChatActiveRunResult,
   ChatMessage,
   ChatSendResult,
   ChatSession,
+  ChatSteerResult,
 } from "./types";
 
 function toScreamingSnakeCase(value: string | null | undefined) {
@@ -39,5 +42,26 @@ export function normalizeChatSendResult(result: ChatSendResult): ChatSendResult 
       status: toScreamingSnakeCase(result.run.status) as ChatSendResult["run"]["status"],
     },
     session: normalizeChatSession(result.session),
+  };
+}
+
+export function normalizeChatSteerResult(result: ChatSteerResult): ChatSteerResult {
+  return {
+    ...result,
+    message: normalizeChatMessage(result.message),
+  };
+}
+
+export function normalizeChatActiveRunResult(
+  result: ChatActiveRunResult,
+): ChatActiveRunResult {
+  return {
+    ...result,
+    activeRun: result.activeRun
+      ? {
+          ...result.activeRun,
+          state: toScreamingSnakeCase(result.activeRun.state) as ChatActiveRunState,
+        }
+      : null,
   };
 }

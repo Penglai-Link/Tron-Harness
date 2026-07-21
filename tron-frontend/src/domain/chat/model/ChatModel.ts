@@ -42,7 +42,7 @@ export interface UpdateChatSessionInput {
 }
 
 export interface ChatMessage {
-  id: number;
+  id: string | number;
   messageCode: string;
   sessionCode: string;
   runCode?: string | null;
@@ -163,6 +163,41 @@ export interface SendChatMessageInput {
   modelCode?: string | null;
   systemModelId?: string | null;
   attachments?: ChatMessageAttachment[];
+}
+
+export interface SteerChatMessageInput {
+  sessionCode: string;
+  expectedRunCode: string;
+  content: string;
+  attachments: ChatMessageAttachment[];
+}
+
+export interface ChatSteerResult {
+  sessionCode: string;
+  runCode: string;
+  message: ChatMessage;
+}
+
+export interface ActiveChatRun {
+  runCode: string;
+  runtimeAdapterKey: string;
+  supportsSteer: boolean;
+  state: string;
+}
+
+export interface GetActiveChatRunResult {
+  sessionCode: string;
+  activeRun: ActiveChatRun | null;
+}
+
+export interface StopChatRunInput {
+  sessionCode: string;
+  expectedRunCode: string;
+}
+
+export interface StopChatRunResult {
+  sessionCode: string;
+  runCode: string;
 }
 
 export type ChatSessionTodoStatus = "pending" | "in_progress" | "completed" | "cancelled";
@@ -295,6 +330,7 @@ export interface ChatAguiStreamEvent {
   type: ChatAguiStreamEventType;
   threadId?: string;
   runId?: string;
+  supportsSteer?: boolean;
   messageId?: string;
   role?: string;
   delta?: string | unknown[];

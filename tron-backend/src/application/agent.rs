@@ -1,3 +1,4 @@
+mod active_run;
 mod agui_stream;
 pub(crate) mod agui_translate;
 mod business_tools;
@@ -9,6 +10,7 @@ mod invocation;
 mod management;
 mod orchestrator;
 mod port;
+mod run_cancellation;
 mod run_executor;
 mod runtime;
 mod runtime_adapter;
@@ -19,6 +21,10 @@ mod tool_catalog;
 mod turn_state;
 mod usage_snapshots;
 
+pub use active_run::{
+    ActiveRunCancellation, ActiveRunControl, ActiveRunError, ActiveRunGuard, ActiveRunRegistry,
+    ActiveRunSnapshot, ActiveRunState, AgentSteerInput,
+};
 pub use agui_stream::{AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStreamService};
 pub use business_tools::{
     DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, build_domain_discovery_guidance,
@@ -31,6 +37,7 @@ pub use history::AgentRunHistoryService;
 pub use invocation::{AgentInvocationService, generate_agent_run_code};
 pub(crate) use invocation::{
     AgentRunContextBuilder, PreparedAgentRun, build_system_runtime_model_config,
+    user_prompt_message,
 };
 pub use management::{
     AgentManagementRepository, AgentManagementService, ResolvedAgentRuntime,

@@ -3,14 +3,19 @@ mod common;
 use std::{
     collections::VecDeque,
     convert::Infallible,
+    future::poll_fn,
     path::PathBuf,
-    sync::{Arc, Mutex},
+    pin::Pin,
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicUsize, Ordering},
+    },
     time::{Duration, SystemTime, UNIX_EPOCH},
 };
 
 use axum::{
     Json, Router,
-    body::{Body, to_bytes},
+    body::{Body, HttpBody, to_bytes},
     extract::State,
     http::{Method, Request, StatusCode, header},
     response::{
@@ -44,6 +49,12 @@ struct ScriptedAgentModelMockState {
     responses: Arc<Mutex<VecDeque<String>>>,
 }
 
+#[derive(Clone)]
+struct DelayedSteerModelMockState {
+    calls: Arc<AtomicUsize>,
+    requests: Arc<Mutex<Vec<Value>>>,
+}
+
 async fn agent_model_mock_server() -> AgentModelMockServer {
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
@@ -56,6 +67,47 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
         axum::serve(listener, app)
             .await
             .expect("agent mock server should stay available");
+    });
+    AgentModelMockServer {
+        base_url: format!("http://{address}/v1"),
+        _task: task,
+    }
+}
+
+async fn delayed_agent_model_mock_server() -> AgentModelMockServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("delayed agent mock server should bind");
+    let address = listener
+        .local_addr()
+        .expect("delayed agent mock server should expose address");
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post(|Json(payload): Json<Value>| async move {
+            sleep(Duration::from_millis(750)).await;
+            let prompt = payload["messages"]
+                .as_array()
+                .and_then(|messages| {
+                    messages
+                        .iter()
+                        .rev()
+                        .find_map(|message| message["content"].as_str())
+                })
+                .unwrap_or_default();
+            Json(json!({
+                "choices": [{
+                    "message": {
+                        "role": "assistant",
+                        "content": format!("delayed reply: {prompt}")
+                    }
+                }]
+            }))
+        }),
+    );
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("delayed agent mock server should stay available");
     });
     AgentModelMockServer {
         base_url: format!("http://{address}/v1"),
@@ -85,6 +137,34 @@ async fn scripted_agent_model_mock_server(responses: Vec<String>) -> AgentModelM
         base_url: format!("http://{address}/v1"),
         _task: task,
     }
+}
+
+async fn delayed_steer_model_mock_server() -> (AgentModelMockServer, DelayedSteerModelMockState) {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("steer model server should bind");
+    let address = listener
+        .local_addr()
+        .expect("steer model server should expose address");
+    let state = DelayedSteerModelMockState {
+        calls: Arc::new(AtomicUsize::new(0)),
+        requests: Arc::new(Mutex::new(Vec::new())),
+    };
+    let app = Router::new()
+        .route("/v1/chat/completions", post(delayed_steer_chat_completion))
+        .with_state(state.clone());
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("steer model server should stay available");
+    });
+    (
+        AgentModelMockServer {
+            base_url: format!("http://{address}/v1"),
+            _task: task,
+        },
+        state,
+    )
 }
 
 async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
@@ -162,6 +242,36 @@ async fn scripted_agent_chat_completion(
         }]
     }))
     .into_response()
+}
+
+async fn delayed_steer_chat_completion(
+    State(state): State<DelayedSteerModelMockState>,
+    Json(payload): Json<Value>,
+) -> Response {
+    state
+        .requests
+        .lock()
+        .expect("steer model requests mutex should lock")
+        .push(payload);
+    let call = state.calls.fetch_add(1, Ordering::SeqCst);
+    if call == 0 {
+        sleep(Duration::from_millis(750)).await;
+    }
+    let content = if call == 0 {
+        "first boundary output"
+    } else {
+        "steered final output"
+    };
+    let chunk = json!({
+        "choices": [{
+            "delta": {"content": content}
+        }]
+    });
+    let stream = async_stream::stream! {
+        yield Ok::<Event, Infallible>(Event::default().data(chunk.to_string()));
+        yield Ok::<Event, Infallible>(Event::default().data("[DONE]"));
+    };
+    Sse::new(stream).into_response()
 }
 
 #[tokio::test]
@@ -293,6 +403,664 @@ async fn chat_message_history_requires_an_existing_session() {
     assert_eq!(response.status(), StatusCode::NOT_FOUND);
     let body = response_json(response).await;
     assert_eq!(body["code"], json!("CHAT_SESSION_NOT_FOUND"));
+}
+
+#[tokio::test]
+async fn chat_steer_endpoint_uses_body_contract_and_rejects_when_no_run_is_active() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Steer contract"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned");
+
+    let response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/steer-message",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE",
+            "content": "steer now",
+            "attachments": []
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+
+    assert_eq!(response.status(), StatusCode::CONFLICT);
+    let body = response_json(response).await;
+    assert_eq!(body["code"], json!("CHAT_STEER_NO_ACTIVE_RUN"));
+    assert_eq!(body["data"], json!({}));
+}
+
+#[tokio::test]
+async fn chat_run_control_routes_use_query_and_strict_body_contracts() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Run control contract"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned");
+
+    let active = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/get-active-run?sessionCode={session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(active.status(), StatusCode::OK);
+    let active_body = response_json(active).await;
+    assert_eq!(active_body["data"]["sessionCode"], json!(session_code));
+    assert_eq!(active_body["data"]["activeRun"], Value::Null);
+
+    let malformed_query = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/chats/sessions/get-active-run?unexpected=true",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(malformed_query.status(), StatusCode::BAD_REQUEST);
+    let malformed_query_body = response_json(malformed_query).await;
+    assert_eq!(
+        malformed_query_body["code"],
+        json!("CHAT_ACTIVE_RUN_QUERY_INVALID")
+    );
+    assert_eq!(malformed_query_body["data"], json!({}));
+
+    let missing_query = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/chats/sessions/get-active-run",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(missing_query.status(), StatusCode::BAD_REQUEST);
+    let missing_query_body = response_json(missing_query).await;
+    assert_eq!(
+        missing_query_body["code"],
+        json!("CHAT_RUN_CONTROL_SESSION_CODE_REQUIRED")
+    );
+
+    let missing_session = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/chats/sessions/get-active-run?sessionCode=SESSION-MISSING",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(missing_session.status(), StatusCode::NOT_FOUND);
+    let missing_session_body = response_json(missing_session).await;
+    assert_eq!(
+        missing_session_body["code"],
+        json!("CHAT_RUN_CONTROL_SESSION_NOT_FOUND")
+    );
+
+    let missing_expected_run = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/stop-run",
+        Some(json!({"sessionCode": session_code})),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(missing_expected_run.status(), StatusCode::BAD_REQUEST);
+    let missing_expected_run_body = response_json(missing_expected_run).await;
+    assert_eq!(
+        missing_expected_run_body["code"],
+        json!("CHAT_RUN_CONTROL_EXPECTED_RUN_CODE_REQUIRED")
+    );
+
+    let invalid = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/stop-run",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE",
+            "unexpected": true
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+    let invalid_body = response_json(invalid).await;
+    assert_eq!(invalid_body["code"], json!("CHAT_STOP_RUN_REQUEST_INVALID"));
+    assert_eq!(invalid_body["data"], json!({}));
+
+    let no_active = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/stop-run",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(no_active.status(), StatusCode::CONFLICT);
+    let no_active_body = response_json(no_active).await;
+    assert_eq!(
+        no_active_body["code"],
+        json!("CHAT_RUN_CONTROL_NO_ACTIVE_RUN")
+    );
+
+    let invalid_steer = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/steer-message",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-NOT-ACTIVE",
+            "content": "invalid extra field",
+            "attachments": [],
+            "unexpected": true
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(invalid_steer.status(), StatusCode::BAD_REQUEST);
+    let invalid_steer_body = response_json(invalid_steer).await;
+    assert_eq!(
+        invalid_steer_body["code"],
+        json!("CHAT_STEER_REQUEST_INVALID")
+    );
+    assert_eq!(invalid_steer_body["data"], json!({}));
+}
+
+#[tokio::test]
+async fn generic_agent_reservation_blocks_chat_before_user_message_persistence() {
+    let app = app();
+    let server = delayed_agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Shared agent admission"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let run_app = app.clone();
+    let run_authorization = authorization.clone();
+    let run_session_code = session_code.clone();
+    let run_base_url = server.base_url.clone();
+    let generic_run = tokio::spawn(async move {
+        request_with_headers(
+            &run_app,
+            Method::POST,
+            "/api/v1/agents/runs",
+            Some(json!({
+                "prompt": "hold the shared conversation",
+                "workspaceCode": "TRON_CORE",
+                "conversationCode": run_session_code,
+                "model": {
+                    "modelCode": "GENERIC_DELAYED_MODEL",
+                    "protocol": "CHAT_COMPLETIONS",
+                    "baseUrl": run_base_url,
+                    "apiKey": "sk-test",
+                    "modelName": "generic-delayed"
+                }
+            })),
+            None,
+            Some(&run_authorization),
+        )
+        .await
+    });
+
+    let mut generic_is_active = false;
+    for _ in 0..50 {
+        let active = request_with_headers(
+            &app,
+            Method::GET,
+            &format!("/api/v1/chats/sessions/get-active-run?sessionCode={session_code}"),
+            None,
+            None,
+            Some(&authorization),
+        )
+        .await;
+        let active_body = response_json(active).await;
+        if active_body["data"]["activeRun"]["runCode"]
+            .as_str()
+            .is_some()
+        {
+            generic_is_active = true;
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    if !generic_is_active {
+        let generic_response = generic_run
+            .await
+            .expect("failed generic run request should join");
+        let status = generic_response.status();
+        let body = response_json(generic_response).await;
+        panic!("generic run should own the shared admission; response {status}: {body}");
+    }
+
+    let chat_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "must not become an orphan user message"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(chat_send.status(), StatusCode::CONFLICT);
+    let chat_send_body = response_json(chat_send).await;
+    assert_eq!(chat_send_body["code"], json!("CHAT_RUN_ALREADY_ACTIVE"));
+
+    let messages = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(messages.status(), StatusCode::OK);
+    let messages_body = response_json(messages).await;
+    assert_eq!(messages_body["data"], json!([]));
+
+    let generic_response = generic_run.await.expect("generic run request should join");
+    assert_eq!(generic_response.status(), StatusCode::OK);
+}
+
+#[tokio::test]
+async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_stream_run() {
+    let app = app();
+    let (server, model_state) = delayed_steer_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Steer HTTP success"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+    let stream = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "initial request",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(stream.status(), StatusCode::OK);
+
+    let mut active_run_code = None;
+    for _ in 0..50 {
+        let replay = request_with_headers(
+            &app,
+            Method::GET,
+            &format!("/api/v1/agents/agui/streams/{session_code}/protocol-events"),
+            None,
+            None,
+            Some(&authorization),
+        )
+        .await;
+        assert_eq!(replay.status(), StatusCode::OK);
+        let replay_body = response_json(replay).await;
+        active_run_code = replay_body["data"].as_array().and_then(|events| {
+            events.iter().find_map(|event| {
+                (event["sseEvent"] == json!("RUN_STARTED"))
+                    .then(|| event["data"]["runId"].as_str().map(str::to_string))
+                    .flatten()
+            })
+        });
+        if active_run_code.is_some() {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    let active_run_code = active_run_code.expect("active run code should be observable");
+    let steer = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/steer-message",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": active_run_code,
+            "content": "change direction in this run",
+            "attachments": []
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(steer.status(), StatusCode::OK);
+    let steer_body = response_json(steer).await;
+    assert_eq!(steer_body["data"]["sessionCode"], json!(session_code));
+    assert_eq!(steer_body["data"]["runCode"], json!(active_run_code));
+    assert!(steer_body["data"]["message"]["id"].as_str().is_some());
+    assert_eq!(
+        steer_body["data"]["message"]["content"],
+        json!("change direction in this run")
+    );
+    assert_eq!(
+        steer_body["data"]["message"]["runCode"],
+        json!(active_run_code)
+    );
+    let steer_message_code = steer_body["data"]["message"]["messageCode"]
+        .as_str()
+        .expect("server messageCode should be returned")
+        .to_string();
+
+    let stream_body = to_bytes(stream.into_body(), usize::MAX)
+        .await
+        .expect("steered stream body should be readable");
+    let stream_body =
+        String::from_utf8(stream_body.to_vec()).expect("steered stream body should be utf8");
+    assert!(stream_body.contains("\"supportsSteer\":true"));
+    assert!(stream_body.contains("steered final output"));
+    assert!(stream_body.contains("event: RUN_FINISHED"));
+    assert_eq!(model_state.calls.load(Ordering::SeqCst), 2);
+    let model_requests = model_state
+        .requests
+        .lock()
+        .expect("steer model requests mutex should lock");
+    assert!(
+        model_requests[1]
+            .to_string()
+            .contains("change direction in this run")
+    );
+
+    let messages = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let messages_body = response_json(messages).await;
+    assert!(messages_body["data"].as_array().is_some_and(|records| {
+        records.iter().any(|message| {
+            message["messageCode"] == json!(steer_message_code)
+                && message["runCode"] == json!(active_run_code)
+                && message["content"] == json!("change direction in this run")
+        })
+    }));
+    assert!(messages_body["data"].as_array().is_some_and(|records| {
+        records.iter().any(|message| {
+            message["role"] == json!("ASSISTANT")
+                && message["runCode"] == json!(active_run_code)
+                && message["content"] == json!("first boundary outputsteered final output")
+        })
+    }));
+}
+
+#[tokio::test]
+async fn chat_stop_run_cancels_runtime_cleans_lease_and_prevents_orphan_messages() {
+    let app = app();
+    let (server, model_state) = delayed_steer_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Stop active run"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+    let stream = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "long running request",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(stream.status(), StatusCode::OK);
+
+    let mut active_run_code = None;
+    for _ in 0..50 {
+        let active = request_with_headers(
+            &app,
+            Method::GET,
+            &format!("/api/v1/chats/sessions/get-active-run?sessionCode={session_code}"),
+            None,
+            None,
+            Some(&authorization),
+        )
+        .await;
+        assert_eq!(active.status(), StatusCode::OK);
+        let active_body = response_json(active).await;
+        active_run_code = active_body["data"]["activeRun"]["runCode"]
+            .as_str()
+            .map(str::to_string);
+        if active_run_code.is_some() && model_state.calls.load(Ordering::SeqCst) > 0 {
+            assert_eq!(
+                active_body["data"]["activeRun"]["runtimeAdapterKey"],
+                json!("REACT")
+            );
+            assert_eq!(
+                active_body["data"]["activeRun"]["supportsSteer"],
+                json!(true)
+            );
+            assert_eq!(active_body["data"]["activeRun"]["state"], json!("RUNNING"));
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    let active_run_code = active_run_code.expect("active run should be queryable");
+
+    let conflicting_send = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "must not be persisted",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(conflicting_send.status(), StatusCode::CONFLICT);
+    let conflicting_body = response_json(conflicting_send).await;
+    assert_eq!(conflicting_body["code"], json!("CHAT_RUN_ALREADY_ACTIVE"));
+
+    let before_stop_messages = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let before_stop_messages = response_json(before_stop_messages).await;
+    assert_eq!(
+        before_stop_messages["data"]
+            .as_array()
+            .expect("messages should be an array")
+            .iter()
+            .filter(|message| message["role"] == json!("USER"))
+            .count(),
+        1,
+        "a rejected concurrent send must not persist an orphan user message"
+    );
+
+    let mismatched_stop = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/stop-run",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": "RUN-STALE"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(mismatched_stop.status(), StatusCode::CONFLICT);
+    let mismatched_body = response_json(mismatched_stop).await;
+    assert_eq!(
+        mismatched_body["code"],
+        json!("CHAT_RUN_CONTROL_RUN_MISMATCH")
+    );
+
+    let stop = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions/stop-run",
+        Some(json!({
+            "sessionCode": session_code,
+            "expectedRunCode": active_run_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(stop.status(), StatusCode::OK);
+    let stop_body = response_json(stop).await;
+    assert_eq!(stop_body["data"]["sessionCode"], json!(session_code));
+    assert_eq!(stop_body["data"]["runCode"], json!(active_run_code));
+
+    let stream_body = to_bytes(stream.into_body(), usize::MAX)
+        .await
+        .expect("stopped stream body should complete");
+    let stream_body =
+        String::from_utf8(stream_body.to_vec()).expect("stopped stream should be utf8");
+    assert!(stream_body.contains("event: RUN_ERROR"));
+    assert!(stream_body.contains("AGENT_RUN_STOPPED"));
+
+    let mut became_idle = false;
+    for _ in 0..50 {
+        let active = request_with_headers(
+            &app,
+            Method::GET,
+            &format!("/api/v1/chats/sessions/get-active-run?sessionCode={session_code}"),
+            None,
+            None,
+            Some(&authorization),
+        )
+        .await;
+        let active_body = response_json(active).await;
+        if active_body["data"]["activeRun"].is_null() {
+            became_idle = true;
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    assert!(became_idle, "stopped run should leave the active registry");
+
+    let next_stream = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "request after stop",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(next_stream.status(), StatusCode::OK);
+    let next_stream_body = to_bytes(next_stream.into_body(), usize::MAX)
+        .await
+        .expect("next stream should complete");
+    let next_stream_body =
+        String::from_utf8(next_stream_body.to_vec()).expect("next stream should be utf8");
+    assert!(next_stream_body.contains("event: RUN_FINISHED"));
 }
 
 #[tokio::test]
@@ -971,6 +1739,7 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
     assert!(body.contains("event: RUN_STARTED"));
     assert!(body.contains("\"type\":\"RUN_STARTED\""));
+    assert!(body.contains("\"supportsSteer\":true"));
     assert!(body.contains("event: REASONING_TEXT_CONTENT"));
     assert!(body.contains("thinking about stream this session"));
     assert!(body.contains("done thinking."));
@@ -1114,6 +1883,7 @@ async fn chat_stream_downgrades_unreachable_mcp_server_to_agui_warning_and_finis
     assert!(body.contains("continuing without its tools"));
     assert!(body.contains("hanging_stdio"));
     assert!(body.contains("event: RUN_STARTED"));
+    assert!(body.contains("\"supportsSteer\":true"));
     assert!(body.contains("event: RUN_FINISHED"));
     assert!(body.contains("reply: stream with degraded mcp"));
 
@@ -1662,6 +2432,7 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
         .expect("stream body should be readable");
     let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
     assert!(body.contains("event: RUN_STARTED"));
+    assert!(body.contains("\"supportsSteer\":false"));
     assert!(body.contains("event: REASONING_START"));
     assert!(body.contains("event: REASONING_MESSAGE_CONTENT"));
     assert!(body.contains("\"delta\":\"stream thinking\""));
@@ -1735,7 +2506,26 @@ async fn chat_stream_protocol_replay_survives_client_disconnect() {
     )
     .await;
     assert_eq!(stream_response.status(), StatusCode::OK);
-    drop(stream_response);
+    let mut stream_body = stream_response.into_body();
+    let mut observed_stream = String::new();
+    for _ in 0..20 {
+        let frame = tokio::time::timeout(
+            Duration::from_secs(2),
+            poll_fn(|context| Pin::new(&mut stream_body).poll_frame(context)),
+        )
+        .await
+        .expect("RUN_STARTED should be emitted before disconnect")
+        .expect("stream should remain open before disconnect")
+        .expect("stream frame should be readable");
+        if let Ok(data) = frame.into_data() {
+            observed_stream.push_str(&String::from_utf8_lossy(&data));
+        }
+        if observed_stream.contains("event: RUN_STARTED") {
+            break;
+        }
+    }
+    assert!(observed_stream.contains("event: RUN_STARTED"));
+    drop(stream_body);
 
     let mut replay_payload = json!(null);
     for _ in 0..40 {
@@ -1763,6 +2553,83 @@ async fn chat_stream_protocol_replay_survives_client_disconnect() {
     assert!(replay_json.contains("disconnect thinking"));
     assert!(replay_json.contains("TEXT_MESSAGE_CONTENT"));
     assert!(replay_json.contains("disconnect reply"));
+    assert!(replay_json.contains("RUN_FINISHED"));
+}
+
+#[tokio::test]
+async fn unpolled_chat_stream_drop_detaches_observer_without_aborting_run() {
+    let app = app();
+    let (server, _) = delayed_steer_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Unpolled stream detach"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let created_body = response_json(created).await;
+    let session_code = created_body["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+    let stream = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+        Some(json!({
+            "content": "finish after unpolled disconnect",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(stream.status(), StatusCode::OK);
+    drop(stream);
+
+    let snapshot = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/agents/agui/streams/{session_code}/events"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(snapshot.status(), StatusCode::OK);
+    let snapshot_body = response_json(snapshot).await;
+    assert_eq!(snapshot_body["data"]["activeStreams"], json!(0));
+
+    let mut replay_payload = json!(null);
+    for _ in 0..60 {
+        let replay = request_with_headers(
+            &app,
+            Method::GET,
+            &format!("/api/v1/agents/agui/streams/{session_code}/protocol-events"),
+            None,
+            None,
+            Some(&authorization),
+        )
+        .await;
+        replay_payload = response_json(replay).await;
+        let serialized = replay_payload.to_string();
+        if serialized.contains("RUN_FINISHED") && serialized.contains("first boundary output") {
+            break;
+        }
+        sleep(Duration::from_millis(25)).await;
+    }
+    let replay_json = replay_payload.to_string();
+    assert!(replay_json.contains("RUN_STARTED"));
+    assert!(replay_json.contains("first boundary output"));
     assert!(replay_json.contains("RUN_FINISHED"));
 }
 

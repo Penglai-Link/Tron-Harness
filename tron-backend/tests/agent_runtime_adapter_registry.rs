@@ -10,11 +10,15 @@ use axum::{
     routing::post,
 };
 use serde_json::json;
-use tokio::{net::TcpListener, task::JoinHandle};
+use tokio::{
+    net::TcpListener,
+    task::JoinHandle,
+    time::{Duration, sleep},
+};
 use tron_backend::{
     application::agent::{
-        AgentRuntimeRegistry, ModelClient, RuntimeAdapterKey, RuntimeAdapterSelection,
-        runtime_adapter_descriptors,
+        AgentInvocationError, AgentRunExecutor, AgentRuntimeRegistry, ModelClient,
+        RuntimeAdapterKey, RuntimeAdapterSelection, runtime_adapter_descriptors,
     },
     domain::agent::{
         AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
@@ -83,6 +87,7 @@ fn base_context() -> AgentRunContext {
             skill_name: Some("planner".into()),
             required_variable_keys: Vec::new(),
         }],
+        effective_tools: Vec::new(),
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope::default(),
         limits: AgentRunLimits::default(),
@@ -105,18 +110,30 @@ fn registry() -> AgentRuntimeRegistry {
 #[derive(Clone, Default)]
 struct ServiceRuntimeMockState {
     cancelled: Arc<Mutex<Vec<String>>>,
+    cancel_requests: Arc<Mutex<Vec<serde_json::Value>>>,
     requests: Arc<Mutex<Vec<serde_json::Value>>>,
+    start_delay_ms: u64,
 }
 
 struct ServiceRuntimeMockServer {
     base_url: String,
     cancelled: Arc<Mutex<Vec<String>>>,
+    cancel_requests: Arc<Mutex<Vec<serde_json::Value>>>,
     requests: Arc<Mutex<Vec<serde_json::Value>>>,
     _task: JoinHandle<()>,
 }
 
 async fn service_runtime_mock_server() -> ServiceRuntimeMockServer {
-    let state = ServiceRuntimeMockState::default();
+    service_runtime_mock_server_with_start_delay(0).await
+}
+
+async fn service_runtime_mock_server_with_start_delay(
+    start_delay_ms: u64,
+) -> ServiceRuntimeMockServer {
+    let state = ServiceRuntimeMockState {
+        start_delay_ms,
+        ..ServiceRuntimeMockState::default()
+    };
     let listener = TcpListener::bind("127.0.0.1:0")
         .await
         .expect("service runtime mock server should bind");
@@ -136,6 +153,7 @@ async fn service_runtime_mock_server() -> ServiceRuntimeMockServer {
     ServiceRuntimeMockServer {
         base_url: format!("http://{address}"),
         cancelled: state.cancelled,
+        cancel_requests: state.cancel_requests,
         requests: state.requests,
         _task: task,
     }
@@ -150,6 +168,9 @@ async fn service_runtime_start(
         .lock()
         .expect("service runtime requests mutex poisoned")
         .push(payload.clone());
+    if state.start_delay_ms > 0 {
+        sleep(Duration::from_millis(state.start_delay_ms)).await;
+    }
     let context = payload.get("context").cloned().unwrap_or_else(|| json!({}));
     Json(json!({
         "runCode": context.get("runCode").and_then(|value| value.as_str()).unwrap_or("RUN-SVC-START"),
@@ -200,12 +221,18 @@ async fn service_runtime_resume(
 async fn service_runtime_cancel(
     State(state): State<ServiceRuntimeMockState>,
     Path(run_code): Path<String>,
+    Json(payload): Json<serde_json::Value>,
 ) -> Json<serde_json::Value> {
     state
         .cancelled
         .lock()
         .expect("service runtime cancelled mutex poisoned")
         .push(run_code);
+    state
+        .cancel_requests
+        .lock()
+        .expect("service runtime cancel requests mutex poisoned")
+        .push(payload);
     Json(json!({ "cancelled": true }))
 }
 
@@ -299,6 +326,12 @@ async fn service_mode_runtime_factory_supports_start_resume_and_cancel() {
         .expect("service runtime cancelled mutex poisoned")
         .clone();
     assert_eq!(cancelled, vec!["RUN-1".to_string()]);
+    let cancel_requests = server
+        .cancel_requests
+        .lock()
+        .expect("service runtime cancel requests mutex poisoned")
+        .clone();
+    assert_eq!(cancel_requests, vec![json!({ "runCode": "RUN-1" })]);
 
     let requests = server
         .requests
@@ -313,6 +346,69 @@ async fn service_mode_runtime_factory_supports_start_resume_and_cancel() {
     assert_eq!(
         requests[1]["context"]["systemAgentSessionId"],
         json!("thr-1")
+    );
+}
+
+#[tokio::test]
+async fn executor_stop_cancels_in_flight_service_runtime_by_run_code() {
+    let server = service_runtime_mock_server_with_start_delay(2_000).await;
+    let runtime_registry = registry();
+    let active_runs = runtime_registry.active_runs();
+    let executor = AgentRunExecutor::new(runtime_registry);
+    let runtime = executor.resolve_runtime(RuntimeAdapterSelection::OpenCodeServe {
+        endpoint: server.base_url.clone(),
+        working_directory: None,
+    });
+    let execution = tokio::spawn(async move {
+        executor
+            .execute_with_runtime(runtime, base_context(), None, None)
+            .await
+    });
+
+    for _ in 0..100 {
+        if !server
+            .requests
+            .lock()
+            .expect("service runtime requests mutex poisoned")
+            .is_empty()
+        {
+            break;
+        }
+        sleep(Duration::from_millis(10)).await;
+    }
+    assert!(
+        !server
+            .requests
+            .lock()
+            .expect("service runtime requests mutex poisoned")
+            .is_empty(),
+        "service runtime start request should be in flight before stop"
+    );
+
+    active_runs
+        .request_stop("CONV-1", "RUN-1")
+        .expect("matching active service run should stop");
+    let error = tokio::time::timeout(Duration::from_secs(1), execution)
+        .await
+        .expect("local execution should stop after remote cancel")
+        .expect("service execution task should join")
+        .expect_err("stopped service execution should not complete");
+    assert_eq!(error, AgentInvocationError::RunStopped);
+    assert_eq!(
+        server
+            .cancelled
+            .lock()
+            .expect("service runtime cancelled mutex poisoned")
+            .as_slice(),
+        ["RUN-1"]
+    );
+    assert_eq!(
+        server
+            .cancel_requests
+            .lock()
+            .expect("service runtime cancel requests mutex poisoned")
+            .as_slice(),
+        [json!({ "runCode": "RUN-1" })]
     );
 }
 

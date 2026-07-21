@@ -37,6 +37,11 @@ pub fn agent_error_response(error: AgentInvocationError) -> Response {
             "AGENT_HISTORY_STORAGE_FAILED",
             "agent run history storage failed".to_string(),
         ),
+        AgentInvocationError::RunStopped => (
+            StatusCode::CONFLICT,
+            "AGENT_RUN_STOPPED",
+            "agent run was stopped".to_string(),
+        ),
         AgentInvocationError::RuntimeFailed(message) => {
             (StatusCode::BAD_REQUEST, "AGENT_RUNTIME_FAILED", message)
         }

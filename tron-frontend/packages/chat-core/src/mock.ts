@@ -24,8 +24,11 @@ export function createMockChatAdapter(): ChatAdapter {
   return {
     capabilities: {
       supportsAbort: true,
+      supportsActiveRun: false,
       supportsAgui: true,
       supportsProtocolReplay: true,
+      supportsSteer: false,
+      supportsStop: false,
       supportsStreaming: true,
     },
     async createSession(input: CreateChatSessionInput) {

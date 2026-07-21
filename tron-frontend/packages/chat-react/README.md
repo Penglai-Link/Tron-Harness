@@ -2,6 +2,12 @@
 
 `TronChatRuntimeWindow` 是一个用于渲染聊天运行时窗口的 React 组件。它支持悬浮窗或内嵌面板模式，并提供完整的会话状态管理、消息收发和 Agui 事件处理等功能。
 
+运行中输入遵循 Codex 风格的两种意图：`steer` 将消息注入当前 `runCode`，`queue` 将消息加入当前会话的本地 FIFO 队列。运行中唯一动作按钮仍为原 Stop，不渲染 Queue 或 Steer 按钮：Enter 默认 queue，`Command/Ctrl+Enter`（并兼容 `Command/Ctrl+End`）才触发 steer。Runtime 会通过 `getActiveRun` 恢复刷新前已经存在的 run：`RUNNING` 且 runtime 支持 steer 时允许 queue/steer，`FINISHING` 时只允许 queue。排队消息显示在输入框上方，可编辑或撤回；远端 run 自然结束后只取出一条 queued message。显式 Stop 将当前已提交项视为已消费，并暂停剩余 FIFO，不会盲目重发已持久化的 USER 消息。
+
+Stop 是独立的后端控制操作。Runtime 先调用 `stopRun`，收到 ACK 后才断开本地 SSE observer。切换会话、新建会话或卸载组件只会断开 observer，不会停止后端 run。
+
+steer 被服务端明确以“run 已结束、run 不匹配或 runtime 不支持”等 pre-admission 状态拒绝时，Runtime 才会回退到 queue。Abort、断网或其他没有 ACK 的不确定投递不会自动重试；否则服务端已持久化但 ACK 丢失时会产生重复 USER。可靠重试需要由 adapter 提供幂等键。
+
 ## 属性参数 (Props)
 
 该组件接受 `TronChatRuntimeWindowProps` 对象作为参数，以下是各属性的详细说明：
@@ -51,9 +57,24 @@
 export interface ChatAdapter {
   capabilities: ChatAdapterCapabilities; // 声明该适配器支持的能力 (例如是否支持流式返回、中断、Agui 等)
   createSession: (input: CreateChatSessionInput) => Promise<ChatSession>;
+  getActiveRun?: (
+    sessionCode: string,
+    signal?: AbortSignal,
+  ) => Promise<ChatActiveRunResult>;
   loadMessages: (sessionCode: string) => Promise<ChatMessage[]>;
   loadAguiEvents: (sessionCode: string) => Promise<ChatAguiEvent[]>;
   loadProtocolEvents?: (sessionCode: string) => Promise<ChatAguiStreamEvent[]>;
+  steerMessage?: (
+    session: ChatSession,
+    input: SendChatMessageInput,
+    context: { expectedRunCode: string },
+    signal?: AbortSignal,
+  ) => Promise<ChatSteerResult>;
+  stopRun?: (
+    session: ChatSession,
+    context: { expectedRunCode: string },
+    signal?: AbortSignal,
+  ) => Promise<ChatStopResult>;
   streamMessage: (
     session: ChatSession,
     input: SendChatMessageInput,
@@ -62,6 +83,14 @@ export interface ChatAdapter {
   ) => Promise<ChatSendResult>;
 }
 ```
+
+启用 steer 时，`capabilities.supportsSteer` 必须为 `true`，并实现 `steerMessage`。内置 Internal/OpenAPI adapter 会向各自的 `/chats/sessions/steer-message` POST `sessionCode`、`expectedRunCode` 和消息内容；该请求返回包含服务端 `messageCode` 的 ACK，当前 SSE 输出流保持不变。`RUN_STARTED.supportsSteer` 会进一步声明当前 runtime 是否支持 steer。
+
+恢复和停止远端 run 时，适配器需分别声明 `capabilities.supportsActiveRun`、`capabilities.supportsStop`，并实现 `getActiveRun`、`stopRun`。低层 SSE 的 abort 仅表示 observer detach，不等同于 Stop。
+
+直接使用低层 `TronChatPanel` 时，调用方负责通过 `runningSubmitModes`、`queuedMessages`、`onSend(mode)`、`onEditQueuedMessage` 和 `onRemoveQueuedMessage` 控制运行中意图与队列；运行中 Enter 只会触发 queue，steer 只接受 `Command/Ctrl+Enter` 或 `Command/Ctrl+End`，不会渲染独立按钮。省略 `runningSubmitModes` 时，运行中按 Enter 不会提交或停止，Stop 只能通过独立按钮显式触发。
+
+普通业务接入应优先使用 `TronChatRuntimeWindow`；只有调用方已经自行管理会话、active run、SSE observer、队列和 Stop 生命周期时，才直接使用 `TronChatPanel`。
 
 ### ChatSession (聊天会话)
 

@@ -24,6 +24,23 @@ export interface ApiEnvelope<T> {
   message: string;
 }
 
+export class FetchTransportError extends Error {
+  readonly code?: string;
+  readonly data?: unknown;
+  readonly status: number;
+
+  constructor(
+    message: string,
+    options: { code?: string; data?: unknown; status: number },
+  ) {
+    super(message);
+    this.name = "FetchTransportError";
+    this.code = options.code;
+    this.data = options.data;
+    this.status = options.status;
+  }
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null;
 }
@@ -49,9 +66,29 @@ export function unwrapEnvelope<T>(payload: unknown): T {
     return payload as T;
   }
   if (payload.code !== "SUCCESS") {
-    throw new Error(typeof payload.message === "string" ? payload.message : "API request failed");
+    throw transportErrorFromPayload(payload, 200, "API request failed");
   }
   return payload.data as T;
+}
+
+function transportErrorFromPayload(
+  payload: unknown,
+  status: number,
+  fallbackMessage: string,
+) {
+  const envelope = isRecord(payload) ? payload : null;
+  return new FetchTransportError(
+    envelope && typeof envelope.message === "string"
+      ? envelope.message
+      : fallbackMessage,
+    {
+      code: envelope && typeof envelope.code === "string"
+        ? envelope.code
+        : undefined,
+      data: envelope?.data,
+      status,
+    },
+  );
 }
 
 function resolveRequestBody(body: BodyInitLike | undefined) {
@@ -123,10 +160,11 @@ export function createFetchTransport(options: FetchTransportOptions = {}) {
     });
     const payload = await response.json().catch(() => null);
     if (!response.ok) {
-      if (payload && isRecord(payload) && typeof payload.message === "string") {
-        throw new Error(payload.message);
-      }
-      throw new Error(`${args.method ?? "GET"} ${response.url} failed with ${response.status}`);
+      throw transportErrorFromPayload(
+        payload,
+        response.status,
+        `${args.method ?? "GET"} ${response.url} failed with ${response.status}`,
+      );
     }
     return (options.unwrapEnvelope === false ? payload : unwrapEnvelope<T>(payload)) as T;
   }
@@ -165,12 +203,11 @@ export function createFetchTransport(options: FetchTransportOptions = {}) {
 
     if (!response.ok) {
       const payload = await response.json().catch(() => null);
-      if (payload) {
-        return options.unwrapEnvelope === false
-          ? payload as T
-          : unwrapEnvelope<T>(payload);
-      }
-      throw new Error(`${args.method ?? "POST"} ${response.url} failed with ${response.status}`);
+      throw transportErrorFromPayload(
+        payload,
+        response.status,
+        `${args.method ?? "POST"} ${response.url} failed with ${response.status}`,
+      );
     }
     if (!response.body) {
       throw new Error("Streaming response did not include a body");
