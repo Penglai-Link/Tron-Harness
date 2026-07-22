@@ -42,3 +42,5 @@ Pagable response body format:
 ## What's more
 - macOS ships GNU Make 3.81, which does not support `.ONESHELL`; keep recipes from relying on shell state across recipe lines.
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
+
+<!-- Project note: docs/brainstorm is ignored even though the brainstorming workflow requires committed specs there; add an individual spec with git add -f instead of changing the repository-wide ignore policy implicitly. -->
