@@ -38,6 +38,7 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 .npm/
+.turbo/
 .yarn/cache/
 .yarn/unplugged/
 .yarn/build-state.yml
@@ -49,3 +50,4 @@ lerna-debug.log*
 .env.*
 !.env.example
 !.env.*.example
+.npmrc

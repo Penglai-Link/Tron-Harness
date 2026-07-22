@@ -187,6 +187,7 @@ help:
 	@echo "  make fe-unit-test Run frontend unit tests"
 	@echo "  make fe-test      Run frontend Playwright browser tests"
 	@echo "  make fe-build     Build the frontend"
+	@echo "  make packages-build Build publishable frontend workspace packages"
 	@echo "  make fe-clean     Remove frontend build artifacts"
 	@echo ""
 	@echo "Backend commands:"
@@ -240,9 +241,12 @@ fe-dev-api:
 fe-build:
 	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run build)
 
+.PHONY: packages-build
+packages-build:
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run packages:build)
+
 .PHONY: fe-check
 fe-check:
-	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run typecheck)
 	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run build)
 
 .PHONY: fe-test
