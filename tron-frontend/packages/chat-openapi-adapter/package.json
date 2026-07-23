@@ -23,6 +23,9 @@
   "dependencies": {
     "@tron/chat-core": "^0.1.1"
   },
+  "peerDependencies": {
+    "@tron/chat-core": "^0.1.1"
+  },
   "publishConfig": {
     "registry": "http://nexus.cisdigital.cn/repository/npm-internal/",
     "access": "restricted"

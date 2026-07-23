@@ -34,7 +34,11 @@
   },
   "peerDependencies": {
     "react": "^19.2.5",
-    "react-dom": "^19.2.5"
+    "react-dom": "^19.2.5",
+    "@tron/chat-core": "^0.1.1",
+    "lucide-react": "^0.553.0",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1"
   },
   "publishConfig": {
     "registry": "http://nexus.cisdigital.cn/repository/npm-internal/",
