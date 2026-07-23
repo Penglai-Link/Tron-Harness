@@ -9,6 +9,7 @@ import {
 } from "@tron/chat-core";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import { TronChatRuntimeWindow } from "@tron/chat-react";
+import "@tron/chat-react/styles.css"
 import {
   useCallback,
   useEffect,
@@ -86,8 +87,8 @@ export function MainAgentChatWindow({
       getServiceDataSource("chat") === "mock"
         ? createMockChatAdapter()
         : createInternalChatAdapter({
-            getAccessToken: getApiAccessToken,
-          }),
+          getAccessToken: getApiAccessToken,
+        }),
     [],
   );
   const controlledWindowState = Boolean(windowState && onWindowStateChange);
