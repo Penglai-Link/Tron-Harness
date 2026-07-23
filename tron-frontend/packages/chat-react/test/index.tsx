@@ -12,9 +12,10 @@ fetch("/api/v1/auth/refresh", { method: "POST" })
     createRoot(root!).render(
       <TronChatRuntimeWindow
         adapter={createOpenApiChatAdapter({
-          openAppCode: "",
-          appKey: "",
-          userCode: "",
+          accessToken: data.accessToken,
+          appKey: "LycT3LVqDxemYEhDJa9sc7JCg4qXVP-7sy8pnhKP348",
+          openAppCode: "OPENAPP-0A331A39DC1F0001",
+          userCode: "USR-ADMIN",
           getAccessToken: () => {
             return data.accessToken;
           },
