@@ -1,0 +1,886 @@
+import {
+  Terminal as XTerminal,
+  type IDisposable,
+  type ITerminalAddon,
+} from "@xterm/xterm";
+import {
+  computed,
+  effect,
+  signal,
+  type ReadonlySignal,
+  type Signal,
+} from "@preact/signals-core";
+import { createModelSessionHost, renderModelSession } from "../ui/modelSession";
+import { getTerminalCellMetrics, writeTerminalAsync } from "../utils";
+import type {
+  ModelSessionAddonOptions,
+  ModelSessionCommandActionPayload,
+  ModelSessionCommandCardState,
+  ModelSessionCommandToken,
+  ModelSessionMessageChunk,
+  ModelSessionRenderActions,
+  ModelSessionToken,
+} from "../types/modelSession";
+
+interface ParsedSsePayload {
+  requestId: string;
+  conversationId: string;
+  response: string;
+}
+
+interface BlockParserResult {
+  index: number;
+  token: ModelSessionCommandToken;
+  endIndex: number;
+}
+
+interface BlockParser {
+  findStart(input: string, startIndex: number): number;
+  parse(input: string, startIndex: number): BlockParserResult | null;
+}
+
+interface ModelSessionInstance {
+  key: string;
+  requestId: string;
+  conversationId: string;
+  rawMessage: Signal<string>;
+  tokens: ReadonlySignal<ModelSessionToken[]>;
+  anchorRow: number;
+  reservedRows: number;
+  host: HTMLElement;
+  commandStates: Signal<ReadonlyMap<string, ModelSessionCommandCardState>>;
+  actions: ModelSessionRenderActions;
+  renderAnimationFrame?: number;
+  disposeRenderEffect: () => void;
+}
+
+const COMMAND_PARSERS: BlockParser[] = [
+  {
+    findStart: findNextExecuteCommandStart,
+    parse: parseExecuteCommandBlock,
+  },
+];
+const MODEL_SESSION_ROOT_CLASS = "ai-terminal-model-session-root";
+
+export class ModelSessionAddon implements ITerminalAddon {
+  private terminal?: XTerminal;
+  private scrollDisposable?: IDisposable;
+  private resizeDisposable?: IDisposable;
+  private viewportElement?: HTMLElement;
+  private positionAnimationFrame?: number;
+  private shouldMeasureSessions = false;
+  private sseBuffer = "";
+  private readonly sessions = new Map<string, ModelSessionInstance>();
+  private activeSessionKey?: string;
+  private readonly isVisible: Signal<boolean>;
+  private readonly handleViewportScroll = () => {
+    this.scheduleInlineLayoutUpdate();
+  };
+
+  constructor(private readonly options: ModelSessionAddonOptions = {}) {
+    this.isVisible = signal(options.visible ?? false);
+  }
+
+  activate(terminal: XTerminal) {
+    if (this.options.enabled === false) {
+      return;
+    }
+
+    if (!terminal.element) {
+      throw new Error(
+        "ModelSessionAddon must be loaded after terminal.open().",
+      );
+    }
+
+    this.terminal = terminal;
+    terminal.element.classList.add(MODEL_SESSION_ROOT_CLASS);
+    this.scrollDisposable = terminal.onScroll(() => {
+      this.scheduleInlineLayoutUpdate();
+    });
+    this.resizeDisposable = terminal.onResize(() => {
+      this.scheduleInlineLayoutUpdate(true);
+    });
+    this.viewportElement =
+      terminal.element.querySelector<HTMLElement>(".xterm-viewport") ??
+      undefined;
+    this.viewportElement?.addEventListener(
+      "scroll",
+      this.handleViewportScroll,
+      { passive: true },
+    );
+  }
+
+  dispose() {
+    this.scrollDisposable?.dispose();
+    this.scrollDisposable = undefined;
+    this.resizeDisposable?.dispose();
+    this.resizeDisposable = undefined;
+    this.viewportElement?.removeEventListener(
+      "scroll",
+      this.handleViewportScroll,
+    );
+    this.viewportElement = undefined;
+    if (this.positionAnimationFrame !== undefined) {
+      window.cancelAnimationFrame(this.positionAnimationFrame);
+      this.positionAnimationFrame = undefined;
+    }
+    this.sessions.forEach((session) => this.disposeSession(session));
+    this.sessions.clear();
+    this.terminal?.element?.classList.remove(MODEL_SESSION_ROOT_CLASS);
+    this.terminal = undefined;
+    this.sseBuffer = "";
+    this.activeSessionKey = undefined;
+    this.shouldMeasureSessions = false;
+  }
+
+  appendSseChunk(chunk: string) {
+    this.sseBuffer += chunk.replace(/\r\n/g, "\n");
+
+    let frameEnd = this.sseBuffer.indexOf("\n\n");
+    while (frameEnd !== -1) {
+      const frame = this.sseBuffer.slice(0, frameEnd).trim();
+      this.sseBuffer = this.sseBuffer.slice(frameEnd + 2);
+      this.consumeSseFrame(frame);
+      frameEnd = this.sseBuffer.indexOf("\n\n");
+    }
+  }
+
+  appendMessageChunk(chunk: ModelSessionMessageChunk) {
+    const session = this.getOrCreateSession(chunk);
+    if (!session) {
+      return;
+    }
+
+    session.rawMessage.value += chunk.response ?? "";
+    this.show();
+  }
+
+  async complete(requestId?: string) {
+    const completedSessions: ModelSessionInstance[] = [];
+
+    if (!requestId) {
+      const activeSession = this.activeSessionKey
+        ? this.sessions.get(this.activeSessionKey)
+        : undefined;
+      if (activeSession) {
+        completedSessions.push(activeSession);
+      }
+    } else {
+      this.sessions.forEach((session) => {
+        if (session.requestId === requestId) {
+          completedSessions.push(session);
+        }
+      });
+    }
+
+    for (const session of completedSessions) {
+      this.flushSessionRender(session);
+      await this.reserveSessionRows(session);
+    }
+  }
+
+  clear() {
+    this.sseBuffer = "";
+    this.sessions.forEach((session) => this.disposeSession(session));
+    this.sessions.clear();
+    this.activeSessionKey = undefined;
+    this.isVisible.value = false;
+  }
+
+  show() {
+    if (this.isVisible.peek()) {
+      return;
+    }
+
+    this.isVisible.value = true;
+    this.sessions.forEach((session) => {
+      session.host.hidden = false;
+    });
+    this.scheduleInlineLayoutUpdate(true);
+  }
+
+  hide() {
+    if (!this.isVisible.peek()) {
+      return;
+    }
+
+    this.isVisible.value = false;
+    this.sessions.forEach((session) => {
+      session.host.hidden = true;
+    });
+  }
+
+  private consumeSseFrame(frame: string) {
+    if (!frame) {
+      return;
+    }
+
+    const dataLine = frame
+      .split("\n")
+      .map((line) => line.trim())
+      .find((line) => line.startsWith("data:"));
+
+    if (!dataLine) {
+      return;
+    }
+
+    const jsonText = dataLine.slice(5).trim();
+    if (!jsonText) {
+      return;
+    }
+
+    try {
+      const payload = JSON.parse(jsonText) as unknown;
+      const chunk = normalizeSsePayload(payload);
+
+      if (chunk) {
+        this.appendMessageChunk(chunk);
+      }
+    } catch (error) {
+      console.warn("Failed to parse model session SSE chunk", error);
+    }
+  }
+
+  private getOrCreateSession(chunk: ModelSessionMessageChunk) {
+    if (!this.terminal?.element) {
+      return undefined;
+    }
+
+    const key = createSessionKey(chunk.requestId, chunk.conversationId);
+    const existing = this.sessions.get(key);
+    if (existing) {
+      this.activeSessionKey = key;
+      return existing;
+    }
+
+    const buffer = this.terminal.buffer.active;
+    const host = createModelSessionHost();
+    const rawMessage = signal("");
+    const commandStates = signal<
+      ReadonlyMap<string, ModelSessionCommandCardState>
+    >(new Map());
+    const tokens = computed(() =>
+      this.parseTokens(rawMessage.value, chunk.requestId, chunk.conversationId),
+    );
+    let session: ModelSessionInstance;
+    const actions: ModelSessionRenderActions = {
+      onExecuteCommand: (token) => {
+        void this.executeCommand(session, token);
+      },
+      onStartEditCommand: (token, editorHeight) => {
+        this.startEditCommand(session, token, editorHeight);
+      },
+      onDraftCommandChange: (token, command) => {
+        this.updateDraftCommand(session, token, command);
+      },
+      onSaveCommandEdit: (token) => {
+        void this.saveCommandEdit(session, token);
+      },
+      onGenerateCommand: this.options.onGenerateCommand
+        ? (token) => {
+            void this.generateCommand(session, token);
+          }
+        : undefined,
+      onCancelCommandEdit: (token) => {
+        this.cancelCommandEdit(session, token);
+      },
+      onRejectCommand: (token) => {
+        void this.rejectCommand(session, token);
+      },
+    };
+    session = {
+      key,
+      requestId: chunk.requestId,
+      conversationId: chunk.conversationId,
+      rawMessage,
+      tokens,
+      anchorRow: buffer.baseY + buffer.cursorY,
+      reservedRows: 0,
+      host,
+      commandStates,
+      actions,
+      disposeRenderEffect: () => {},
+    };
+
+    host.dataset.sessionKey = key;
+    host.hidden = !this.isVisible.peek();
+    this.terminal.element.appendChild(host);
+    this.sessions.set(key, session);
+    this.activeSessionKey = key;
+    session.disposeRenderEffect = effect(() => {
+      tokens.value;
+      commandStates.value;
+      this.scheduleSessionRender(session);
+    });
+    return session;
+  }
+
+  private scheduleSessionRender(session: ModelSessionInstance) {
+    if (session.renderAnimationFrame !== undefined) {
+      return;
+    }
+
+    session.renderAnimationFrame = window.requestAnimationFrame(() => {
+      session.renderAnimationFrame = undefined;
+      this.renderSession(session);
+    });
+  }
+
+  private flushSessionRender(session: ModelSessionInstance) {
+    if (session.renderAnimationFrame !== undefined) {
+      window.cancelAnimationFrame(session.renderAnimationFrame);
+      session.renderAnimationFrame = undefined;
+    }
+
+    this.renderSession(session);
+  }
+
+  private renderSession(session: ModelSessionInstance) {
+    session.host.hidden = !this.isVisible.peek();
+
+    renderModelSession(
+      session.host,
+      {
+        tokens: session.tokens.peek(),
+        commandStates: session.commandStates.peek(),
+      },
+      session.actions,
+    );
+    this.scheduleInlineLayoutUpdate(true);
+  }
+
+  private disposeSession(session: ModelSessionInstance) {
+    session.disposeRenderEffect();
+
+    if (session.renderAnimationFrame !== undefined) {
+      window.cancelAnimationFrame(session.renderAnimationFrame);
+      session.renderAnimationFrame = undefined;
+    }
+
+    session.host.remove();
+  }
+
+  private scheduleInlineLayoutUpdate(shouldMeasure = false) {
+    this.shouldMeasureSessions ||= shouldMeasure;
+
+    if (this.positionAnimationFrame !== undefined) {
+      return;
+    }
+
+    this.positionAnimationFrame = window.requestAnimationFrame(() => {
+      this.positionAnimationFrame = undefined;
+      const measureSessions = this.shouldMeasureSessions;
+      this.shouldMeasureSessions = false;
+      this.updateInlineLayout(measureSessions);
+    });
+  }
+
+  private updateInlineLayout(shouldMeasure: boolean) {
+    if (!this.terminal || !this.isVisible.peek() || this.sessions.size === 0) {
+      return;
+    }
+
+    const cell = getTerminalCellMetrics(this.terminal);
+    const viewportY = this.terminal.buffer.active.viewportY;
+    let rowsAdded = 0;
+
+    if (shouldMeasure) {
+      this.sessions.forEach((session) => {
+        const requiredRows = Math.max(
+          1,
+          Math.ceil(session.host.scrollHeight / cell.height),
+        );
+
+        if (requiredRows > session.reservedRows) {
+          rowsAdded += requiredRows - session.reservedRows;
+          session.reservedRows = requiredRows;
+        }
+      });
+    }
+
+    this.sessions.forEach((session) => {
+      const viewportTop = (session.anchorRow - viewportY) * cell.height;
+      session.host.style.transform = `translate3d(0, ${viewportTop}px, 0)`;
+    });
+
+    if (rowsAdded > 0) {
+      this.terminal.write("\r\n".repeat(rowsAdded));
+      this.scheduleInlineLayoutUpdate();
+    }
+  }
+
+  private async reserveSessionRows(session: ModelSessionInstance) {
+    if (!this.terminal || !this.isVisible.peek()) {
+      return;
+    }
+
+    const cell = getTerminalCellMetrics(this.terminal);
+    const requiredRows = Math.max(
+      1,
+      Math.ceil(session.host.scrollHeight / cell.height),
+    );
+    const rowsToAdd = requiredRows - session.reservedRows;
+
+    if (rowsToAdd <= 0) {
+      return;
+    }
+
+    session.reservedRows = requiredRows;
+    await writeTerminalAsync(this.terminal, "\r\n".repeat(rowsToAdd));
+    this.scheduleInlineLayoutUpdate();
+  }
+
+  private parseTokens(
+    text: string,
+    requestId: string,
+    conversationId: string,
+  ): ModelSessionToken[] {
+    const tokens: ModelSessionToken[] = [];
+    let cursor = 0;
+
+    while (cursor < text.length) {
+      const nextBlock = this.findNextBlock(text, cursor);
+      if (!nextBlock) {
+        const markdown = text.slice(cursor);
+        if (markdown) {
+          tokens.push({ type: "markdown", content: markdown });
+        }
+        break;
+      }
+
+      if (nextBlock.index > cursor) {
+        const markdown = text.slice(cursor, nextBlock.index);
+        if (markdown) {
+          tokens.push({ type: "markdown", content: markdown });
+        }
+      }
+
+      nextBlock.token.requestId = requestId;
+      nextBlock.token.conversationId = conversationId;
+      tokens.push(nextBlock.token);
+      cursor = nextBlock.endIndex;
+    }
+
+    return tokens;
+  }
+
+  private findNextBlock(
+    text: string,
+    startIndex: number,
+  ): BlockParserResult | null {
+    let nearest: BlockParserResult | null = null;
+
+    for (const parser of COMMAND_PARSERS) {
+      const parserStart = parser.findStart(text, startIndex);
+      if (parserStart === -1) {
+        continue;
+      }
+
+      const result = parser.parse(text, parserStart);
+      if (!result) {
+        continue;
+      }
+
+      if (!nearest || result.index < nearest.index) {
+        nearest = result;
+      }
+    }
+
+    return nearest;
+  }
+
+  private startEditCommand(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+    editorHeight?: number,
+  ) {
+    const state = this.getCommandState(session, token);
+    if (
+      state.status === "executing" ||
+      state.status === "executed" ||
+      state.status === "rejected"
+    ) {
+      return;
+    }
+
+    this.setCommandState(session, token.blockId, {
+      ...state,
+      status: "editing",
+      draftCommand: state.command,
+      editorHeight,
+      error: undefined,
+    });
+  }
+
+  private updateDraftCommand(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+    command: string,
+  ) {
+    const state = this.getCommandState(session, token);
+    if (state.status !== "editing" || state.isGenerating) {
+      return;
+    }
+
+    this.setCommandState(session, token.blockId, {
+      ...state,
+      draftCommand: command,
+    });
+  }
+
+  private async saveCommandEdit(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+  ) {
+    const state = this.getCommandState(session, token);
+    if (state.status !== "editing" || state.isGenerating) {
+      return;
+    }
+
+    const payload = this.createPayload(token, state.draftCommand);
+    try {
+      const nextCommand = this.options.onModifyCommand
+        ? await this.options.onModifyCommand(payload)
+        : undefined;
+      const command = nextCommand ?? state.draftCommand;
+      this.setCommandState(session, token.blockId, {
+        ...state,
+        status: "pending",
+        command,
+        draftCommand: command,
+        error: undefined,
+      });
+    } catch (error) {
+      this.setCommandState(session, token.blockId, {
+        ...state,
+        status: "error",
+        error: error instanceof Error ? error.message : "修改失败",
+      });
+    }
+  }
+
+  private cancelCommandEdit(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+  ) {
+    const state = this.getCommandState(session, token);
+    this.setCommandState(session, token.blockId, {
+      ...state,
+      status: "pending",
+      draftCommand: state.command,
+      error: undefined,
+    });
+  }
+
+  private async generateCommand(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+  ) {
+    const state = this.getCommandState(session, token);
+    if (state.status !== "editing" || state.isGenerating) {
+      return;
+    }
+
+    if (!state.draftCommand.trim()) {
+      this.setCommandState(session, token.blockId, {
+        ...state,
+        error: "请输入需要重新生成的命令",
+      });
+      return;
+    }
+
+    this.setCommandState(session, token.blockId, {
+      ...state,
+      isGenerating: true,
+      error: undefined,
+    });
+
+    try {
+      const nextCommand = await this.options.onGenerateCommand?.(
+        this.createPayload(token, state.draftCommand),
+      );
+      const generatedCommand = nextCommand?.trim();
+      if (!generatedCommand) {
+        throw new Error("大模型未返回命令");
+      }
+
+      const latestState = this.getCommandState(session, token);
+      if (latestState.status !== "editing" || !latestState.isGenerating) {
+        return;
+      }
+
+      this.setCommandState(session, token.blockId, {
+        ...latestState,
+        draftCommand: generatedCommand,
+        isGenerating: false,
+        error: undefined,
+      });
+    } catch (error) {
+      const latestState = this.getCommandState(session, token);
+      if (latestState.status !== "editing") {
+        return;
+      }
+
+      this.setCommandState(session, token.blockId, {
+        ...latestState,
+        isGenerating: false,
+        error: error instanceof Error ? error.message : "命令生成失败",
+      });
+    }
+  }
+
+  private async executeCommand(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+  ) {
+    const state = this.getCommandState(session, token);
+    if (
+      state.status === "executing" ||
+      state.status === "rejected" ||
+      state.status === "executed" ||
+      state.isGenerating
+    ) {
+      return;
+    }
+
+    const command = state.command;
+    const payload = this.createPayload(token, command);
+
+    this.setCommandState(session, token.blockId, {
+      ...state,
+      status: "executing",
+      error: undefined,
+    });
+
+    try {
+      if (this.options.onExecuteCommand) {
+        await this.options.onExecuteCommand(payload);
+      }
+      this.setCommandState(session, token.blockId, {
+        ...state,
+        status: "executed",
+        command,
+        draftCommand: command,
+        output: undefined,
+        error: undefined,
+      });
+    } catch (error) {
+      this.setCommandState(session, token.blockId, {
+        ...state,
+        status: "error",
+        error: error instanceof Error ? error.message : "执行失败",
+      });
+    }
+  }
+
+  private async rejectCommand(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+  ) {
+    const state = this.getCommandState(session, token);
+    if (
+      state.status === "executing" ||
+      state.status === "executed" ||
+      state.isGenerating
+    ) {
+      return;
+    }
+
+    const payload = this.createPayload(token, state.command);
+    try {
+      if (this.options.onRejectCommand) {
+        await this.options.onRejectCommand(payload);
+      }
+      this.setCommandState(session, token.blockId, {
+        ...state,
+        status: "rejected",
+        error: undefined,
+      });
+    } catch (error) {
+      this.setCommandState(session, token.blockId, {
+        ...state,
+        status: "error",
+        error: error instanceof Error ? error.message : "拒绝失败",
+      });
+    }
+  }
+
+  private createPayload(
+    token: ModelSessionCommandToken,
+    command: string,
+  ): ModelSessionCommandActionPayload {
+    return {
+      requestId: token.requestId,
+      conversationId: token.conversationId,
+      blockId: token.blockId,
+      command,
+    };
+  }
+
+  private getCommandState(
+    session: ModelSessionInstance,
+    token: ModelSessionCommandToken,
+  ) {
+    const existing = session.commandStates.peek().get(token.blockId);
+    if (existing) {
+      return existing;
+    }
+
+    return {
+      status: "pending",
+      command: token.command,
+      draftCommand: token.command,
+    } satisfies ModelSessionCommandCardState;
+  }
+
+  private setCommandState(
+    session: ModelSessionInstance,
+    blockId: string,
+    state: ModelSessionCommandCardState,
+  ) {
+    const nextStates = new Map(session.commandStates.peek());
+    nextStates.set(blockId, state);
+    session.commandStates.value = nextStates;
+  }
+}
+
+function createSessionKey(requestId: string, conversationId: string) {
+  return `${encodeURIComponent(conversationId)}:${encodeURIComponent(requestId)}`;
+}
+
+function normalizeSsePayload(payload: unknown): ParsedSsePayload | null {
+  if (!isRecord(payload)) {
+    return null;
+  }
+
+  if (isParsedSsePayload(payload)) {
+    return payload;
+  }
+
+  const data = payload.data;
+  if (isParsedSsePayload(data)) {
+    return data;
+  }
+
+  return null;
+}
+
+function isParsedSsePayload(payload: unknown): payload is ParsedSsePayload {
+  return (
+    isRecord(payload) &&
+    typeof payload.requestId === "string" &&
+    typeof payload.conversationId === "string" &&
+    typeof payload.response === "string"
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function parseExecuteCommandBlock(
+  input: string,
+  startIndex: number,
+): BlockParserResult | null {
+  const fenced = parseFencedExecuteCommandBlock(input, startIndex);
+  if (fenced) {
+    return fenced;
+  }
+
+  return parseXmlExecuteCommandBlock(input, startIndex);
+}
+
+function findNextExecuteCommandStart(input: string, startIndex: number) {
+  const fenced = input.indexOf("```execute_command", startIndex);
+  const xml = input.indexOf("<execute_command>", startIndex);
+
+  if (fenced === -1) {
+    return xml;
+  }
+
+  if (xml === -1) {
+    return fenced;
+  }
+
+  return Math.min(fenced, xml);
+}
+
+function parseFencedExecuteCommandBlock(
+  input: string,
+  startIndex: number,
+): BlockParserResult | null {
+  const opening = "```execute_command";
+  if (!input.startsWith(opening, startIndex)) {
+    return null;
+  }
+
+  const lineBreak = input.indexOf("\n", startIndex);
+  if (lineBreak === -1) {
+    return null;
+  }
+
+  const contentStart = lineBreak + 1;
+  const closing = input.indexOf("\n```", contentStart);
+  if (closing === -1) {
+    return null;
+  }
+
+  const command = input.slice(contentStart, closing).trim();
+  const token = createCommandToken(command, startIndex, closing + 4);
+
+  return {
+    index: startIndex,
+    endIndex: closing + 4,
+    token,
+  };
+}
+
+function parseXmlExecuteCommandBlock(
+  input: string,
+  startIndex: number,
+): BlockParserResult | null {
+  const opening = "<execute_command>";
+  const closing = "</execute_command>";
+  if (!input.startsWith(opening, startIndex)) {
+    return null;
+  }
+
+  const bodyStart = startIndex + opening.length;
+  const closeIndex = input.indexOf(closing, bodyStart);
+  if (closeIndex === -1) {
+    return null;
+  }
+
+  const commandMatch = input
+    .slice(bodyStart, closeIndex)
+    .match(/<command>([\s\S]*?)<\/command>/);
+  const command = commandMatch?.[1]?.trim() ?? "";
+
+  const token = createCommandToken(
+    command,
+    startIndex,
+    closeIndex + closing.length,
+  );
+
+  return {
+    index: startIndex,
+    endIndex: closeIndex + closing.length,
+    token,
+  };
+}
+
+function createCommandToken(
+  command: string,
+  startIndex: number,
+  endIndex: number,
+): ModelSessionCommandToken {
+  const blockId = `cmd-${startIndex}-${endIndex}`;
+
+  return {
+    type: "execute_command",
+    blockId,
+    requestId: "",
+    conversationId: "",
+    command,
+  };
+}

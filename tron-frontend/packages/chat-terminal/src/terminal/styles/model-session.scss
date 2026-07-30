@@ -1,0 +1,293 @@
+.ai-terminal-model-session-root {
+  overflow: hidden;
+  height: 100%;
+}
+
+.ai-terminal-model-session-host {
+  position: absolute;
+  top: 0;
+  left: 0px;
+  width: 100%;
+  box-sizing: border-box;
+  padding-top: 10px;
+  z-index: 8;
+  pointer-events: auto;
+  transform: translate3d(0, 0, 0);
+  will-change: transform;
+}
+
+.ai-terminal-model-session-host[hidden] {
+  display: none;
+}
+
+.ai-terminal-model-session {
+  position: relative;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  box-sizing: border-box;
+  border-radius: 6px;
+  background: rgba(31, 31, 31, 0.96);
+  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.42);
+  color: #ededed;
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
+    "Segoe UI", sans-serif;
+  overflow: hidden;
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+.ai-terminal-model-session__body {
+  padding: 10px 12px 12px;
+}
+
+.ai-terminal-model-session__markdown {
+  color: rgba(255, 255, 255, 0.78);
+  font-size: 13px;
+  line-height: 1.55;
+}
+
+.ai-terminal-model-session-md__h1,
+.ai-terminal-model-session-md__h2,
+.ai-terminal-model-session-md__h3 {
+  margin: 10px 0 6px;
+  color: rgba(255, 255, 255, 0.92);
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.ai-terminal-model-session-md__h1 {
+  font-size: 18px;
+}
+
+.ai-terminal-model-session-md__h2 {
+  font-size: 16px;
+}
+
+.ai-terminal-model-session-md__h3 {
+  font-size: 14px;
+}
+
+.ai-terminal-model-session-md__paragraph {
+  margin: 0 0 8px;
+}
+
+.ai-terminal-model-session-md__list {
+  margin: 0 0 8px 18px;
+  padding: 0;
+}
+
+.ai-terminal-model-session-md__list-item {
+  margin: 2px 0;
+}
+
+.ai-terminal-model-session-md__quote {
+  margin: 0 0 8px;
+  border-left: 3px solid rgba(255, 255, 255, 0.24);
+  padding-left: 10px;
+  color: rgba(255, 255, 255, 0.64);
+}
+
+.ai-terminal-model-session-md__code,
+.ai-terminal-model-session-command__code,
+.ai-terminal-model-session-command__editor,
+.ai-terminal-model-session-command__output {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+}
+
+.ai-terminal-model-session-md__code {
+  margin: 0 0 8px;
+  overflow-x: auto;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.28);
+  padding: 8px 10px;
+  color: rgba(255, 255, 255, 0.86);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.ai-terminal-model-session-md__inline-code {
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.1);
+  padding: 1px 4px;
+  color: #f8f8f2;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
+    "Liberation Mono", "Courier New", monospace;
+  font-size: 0.92em;
+}
+
+.ai-terminal-model-session-md__link {
+  color: #8ab4f8;
+  text-decoration: none;
+
+  &:hover {
+    text-decoration: underline;
+  }
+}
+
+.ai-terminal-model-session-command {
+  position: relative;
+  margin: 8px 0 10px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.05);
+  padding: 10px;
+  &__type {
+    color: rgba(255, 255, 255, 0.86);
+    font-size: 12px;
+    font-weight: 700;
+  }
+  &__status {
+    flex: 0 0 auto;
+    color: rgba(255, 255, 255, 0.48);
+    font-size: 12px;
+  }
+  &__code {
+    margin: 0;
+    overflow-x: auto;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.32);
+    padding: 10px;
+    color: #f8f8f2;
+    font-size: 12px;
+    line-height: 1.45;
+    white-space: pre-wrap;
+    word-break: break-word;
+    height: 38px;
+    box-sizing: border-box;
+  }
+  &__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 8px;
+    min-height: 30px;
+  }
+
+  &__output,
+  &__error {
+    margin-top: 8px;
+    border-radius: 4px;
+    padding: 8px 10px;
+    font-size: 12px;
+    line-height: 1.5;
+  }
+  &__output {
+    background: rgba(0, 0, 0, 0.22);
+    color: rgba(255, 255, 255, 0.76);
+  }
+  &__editor {
+    width: 100%;
+    min-height: 0;
+    box-sizing: border-box;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.36);
+    padding: 10px;
+    font-size: 12px;
+    line-height: 1.45;
+    display: block;
+    position: relative;
+    input {
+      width: 100%;
+      height: 100%;
+      box-sizing: border-box;
+      padding-right: 92px;
+      outline: none;
+      resize: none;
+      background: transparent;
+      color: #f8f8f2;
+    }
+  }
+  &__ai-generate {
+    display: flex;
+    align-items: center;
+    top: 50%;
+    transform: translateY(-50%);
+    position: absolute;
+    right: 10px;
+    gap: 5px;
+    height: 28px;
+    padding: 0 4px;
+    border: 0;
+    background: transparent;
+    color: #f8f8f2;
+    font: inherit;
+    cursor: pointer;
+    user-select: none;
+    -webkit-user-select: none;
+
+    &:hover:not(:disabled) {
+      color: #d9e7ff;
+    }
+
+    &:disabled {
+      cursor: wait;
+      opacity: 0.55;
+    }
+
+    svg {
+      stroke: currentColor;
+      width: 14px;
+      height: 14px;
+    }
+  }
+  &__error {
+    background: rgba(255, 82, 82, 0.12);
+    color: #ffb3b3;
+  }
+  &__actions {
+    display: flex;
+    flex: 0 0 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+}
+
+@media (max-width: 560px) {
+  .ai-terminal-model-session-command__actions {
+    width: 100%;
+  }
+}
+
+.ai-terminal-model-session-command__button {
+  min-width: 56px;
+  height: 28px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.08);
+  color: rgba(255, 255, 255, 0.82);
+  cursor: pointer;
+  font-size: 12px;
+  user-select: none;
+  -webkit-user-select: none;
+
+  &:hover:not(:disabled) {
+    border-color: rgba(255, 255, 255, 0.32);
+    background: rgba(255, 255, 255, 0.13);
+  }
+
+  &:disabled {
+    cursor: not-allowed;
+    opacity: 0.45;
+  }
+}
+
+.ai-terminal-model-session-command__button--primary {
+  border-color: rgba(138, 180, 248, 0.42);
+  background: rgba(138, 180, 248, 0.18);
+  color: #d9e7ff;
+}
+
+.ai-terminal-model-session-command--executed {
+  border-color: rgba(111, 207, 151, 0.38);
+}
+
+.ai-terminal-model-session-command--rejected {
+  opacity: 0.72;
+}
+
+.ai-terminal-model-session-command--error {
+  border-color: rgba(255, 82, 82, 0.34);
+}
