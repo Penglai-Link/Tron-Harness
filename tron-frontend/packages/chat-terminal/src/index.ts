@@ -2,12 +2,14 @@ import "@xterm/xterm/css/xterm.css";
 import { Terminal, type CommandExplain } from "./terminal";
 import { formatePath, isShellCommand } from "./terminal/utils/common";
 import { ITerminalInitOnlyOptions, ITerminalOptions } from "@xterm/xterm";
+import type { TerminalThemeTokenOverrides } from "./terminal/types/themes";
 
 export type {
   CommandExplain,
   CommandExplainContext,
   CommandExplainPayload,
 } from "./terminal";
+export type { TerminalThemeTokenOverrides } from "./terminal";
 
 export interface IOptions {
   el: HTMLElement;
@@ -16,6 +18,7 @@ export interface IOptions {
       explainTitle?: string;
       agentTips?: string;
       agentTipsGapCells?: number;
+      themeTokens?: TerminalThemeTokenOverrides;
     };
   runCommand: (
     command: string,
@@ -51,6 +54,7 @@ export function initTerminal(options: IOptions) {
   }
 
   const termInstance: Terminal = new Terminal(normalizeOptions.el, {
+    cursorStyle: "bar",
     ...termOptions,
     localEcho: {
       enabled: true,
@@ -118,6 +122,15 @@ export function initTerminal(options: IOptions) {
       return (
         termInstance.modelSessionAddon?.complete(requestId) ?? Promise.resolve()
       );
+    },
+    setThemeTokens(tokens: TerminalThemeTokenOverrides) {
+      termInstance.setThemeTokens(tokens);
+    },
+    resetTheme() {
+      termInstance.resetTheme();
+    },
+    refreshTheme() {
+      termInstance.refreshTheme();
     },
   };
 }

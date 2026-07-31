@@ -5,6 +5,7 @@ import type {
 import type { AgentPromptAddonOptions } from "./agentPrompt";
 import type { LocalEchoAddonOptions } from "./localEcho";
 import type { ModelSessionAddonOptions } from "./modelSession";
+import type { TerminalThemeTokenOverrides } from "./themes";
 
 export interface TerminalOptions
   extends ITerminalOptions,
@@ -12,4 +13,5 @@ export interface TerminalOptions
   agentPrompt?: string | AgentPromptAddonOptions;
   localEcho?: boolean | LocalEchoAddonOptions;
   modelSession?: boolean | ModelSessionAddonOptions;
+  themeTokens?: TerminalThemeTokenOverrides;
 }

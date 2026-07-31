@@ -106,7 +106,7 @@ function renderCommandCard(
               ${state.status === "editing"
                 ? html`
                     <button
-                      class="ai-terminal-model-session-command__button"
+                      class="ai-terminal-model-session-command__button ai-terminal-model-session-command__button--info"
                       type="button"
                       ?disabled=${isBusy}
                       @click=${() => actions.onSaveCommandEdit(token)}
@@ -116,7 +116,7 @@ function renderCommandCard(
                   `
                 : html`
                     <button
-                      class="ai-terminal-model-session-command__button"
+                      class="ai-terminal-model-session-command__button ai-terminal-model-session-command__button--primary"
                       type="button"
                       ?disabled=${!canEdit}
                       @click=${(event: MouseEvent) => {
@@ -139,7 +139,7 @@ function renderCommandCard(
                     </button>
                   `}
               <button
-                class="ai-terminal-model-session-command__button"
+                class="ai-terminal-model-session-command__button ai-terminal-model-session-command__button--danger"
                 type="button"
                 ?disabled=${!canReject}
                 @click=${() => actions.onRejectCommand(token)}
@@ -148,10 +148,10 @@ function renderCommandCard(
               </button>
             </div>`
           : state.status === "executed" || state.status === "rejected"
-            ? html`<span class="ai-terminal-model-session-command__status">
-                ${renderCommandStatus(state.status)}
-              </span>`
-            : null}
+          ? html`<span class="ai-terminal-model-session-command__status">
+              ${renderCommandStatus(state.status)}
+            </span>`
+          : null}
       </div>
 
       ${html`
@@ -163,7 +163,11 @@ function renderCommandCard(
             >
               <input
                 .readOnly=${state.status !== "editing" || isGenerating}
-                .value=${state.status === "editing" ? state.draftCommand : state.command}
+                .value=${
+                  state.status === "editing"
+                    ? state.draftCommand
+                    : state.command
+                }
                 @input=${(event: Event) => {
                   const target = event.currentTarget as HTMLInputElement;
                   actions.onDraftCommandChange(token, target.value);

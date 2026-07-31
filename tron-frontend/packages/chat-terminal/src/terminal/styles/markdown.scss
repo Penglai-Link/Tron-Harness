@@ -16,7 +16,7 @@
   h5,
   h6 {
     margin: 10px 0 6px;
-    color: rgba(255, 255, 255, 0.92);
+    color: var(--ai-terminal-foreground);
     font-weight: 700;
     line-height: 1.35;
   }
@@ -50,9 +50,9 @@
   }
 
   blockquote {
-    border-left: 3px solid rgba(255, 255, 255, 0.24);
+    border-left: 3px solid var(--ai-terminal-border);
     padding-left: 10px;
-    color: rgba(255, 255, 255, 0.64);
+    color: var(--ai-terminal-muted);
   }
 
   pre,
@@ -65,9 +65,9 @@
   pre {
     overflow-x: auto;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.28);
+    background: var(--ai-terminal-code-background);
     padding: 8px 10px;
-    color: rgba(255, 255, 255, 0.86);
+    color: var(--ai-terminal-foreground);
     font-size: 0.92em;
     line-height: 1.5;
 
@@ -80,14 +80,14 @@
 
   :not(pre) > code {
     border-radius: 3px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--ai-terminal-hover-background);
     padding: 1px 4px;
-    color: #f8f8f2;
+    color: var(--ai-terminal-foreground);
     font-size: 0.92em;
   }
 
   a {
-    color: #8ab4f8;
+    color: var(--ai-terminal-accent);
     text-decoration: none;
 
     &:hover {
@@ -104,7 +104,7 @@
 
   th,
   td {
-    border: 1px solid rgba(255, 255, 255, 0.14);
+    border: 1px solid var(--ai-terminal-border);
     padding: 4px 7px;
     text-align: left;
     white-space: nowrap;

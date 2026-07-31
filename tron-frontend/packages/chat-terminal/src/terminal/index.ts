@@ -22,6 +22,12 @@ import type {
   ModelSessionToken,
 } from "./types/modelSession";
 import type { TerminalOptions } from "./types/terminal";
+import type { TerminalThemeTokenOverrides } from "./types/themes";
+import {
+  applyTerminalThemeTokens,
+  clearTerminalThemeTokens,
+  syncTerminalTheme,
+} from "./utils/themes";
 import type {
   ExplainButtonOptions,
   ExplainDialogOptions,
@@ -53,6 +59,7 @@ export {
   type ModelSessionRenderState,
   type ModelSessionToken,
   type TerminalOptions,
+  type TerminalThemeTokenOverrides,
 };
 
 export class Terminal {
@@ -61,21 +68,41 @@ export class Terminal {
   private readonly fitAddon: FitAddon;
   private localEchoAddon?: LocalEchoAddon;
   private readonly resizeObserver: ResizeObserver;
+  private readonly terminalContainer: HTMLElement;
+  private terminalThemeTokens: TerminalThemeTokenOverrides;
   private fitAnimationFrame?: number;
+  private themeRefreshAnimationFrame?: number;
 
   constructor(container: HTMLElement, params: TerminalOptions = {}) {
-    const { agentPrompt, localEcho, modelSession, ...terminalOptions } = params;
+    const {
+      agentPrompt,
+      localEcho,
+      modelSession,
+      themeTokens = {},
+      theme: initialTheme,
+      ...terminalOptions
+    } = params;
 
-    this.terminal = new XTerminal(terminalOptions);
+    this.terminal = new XTerminal({ ...terminalOptions, theme: initialTheme });
+    this.terminalThemeTokens = {
+      ...themeTokens,
+      ansi: {
+        ...(initialTheme ?? {}),
+        ...themeTokens.ansi,
+      },
+    };
 
-    const terminalContainer = this.createTerminalContainer(container);
+    this.terminalContainer = this.createTerminalContainer(container);
+    applyTerminalThemeTokens(this.terminalContainer, themeTokens);
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
-    this.terminal.open(terminalContainer);
+    this.terminal.open(this.terminalContainer);
     this.resizeObserver = new ResizeObserver(() => {
       this.scheduleFit();
     });
-    this.resizeObserver.observe(terminalContainer);
+    this.resizeObserver.observe(this.terminalContainer);
+    this.refreshTheme();
+    this.scheduleThemeRefresh();
     this.scheduleFit();
 
     const agentPromptAddon = agentPrompt
@@ -108,6 +135,10 @@ export class Terminal {
       window.cancelAnimationFrame(this.fitAnimationFrame);
       this.fitAnimationFrame = undefined;
     }
+    if (this.themeRefreshAnimationFrame !== undefined) {
+      window.cancelAnimationFrame(this.themeRefreshAnimationFrame);
+      this.themeRefreshAnimationFrame = undefined;
+    }
     this.terminal.dispose();
   }
 
@@ -117,6 +148,44 @@ export class Terminal {
     }
 
     return this.localEchoAddon.executeCommand(command);
+  }
+
+  setThemeTokens(tokens: TerminalThemeTokenOverrides) {
+    this.terminalThemeTokens = {
+      ...this.terminalThemeTokens,
+      ...tokens,
+      ansi: {
+        ...this.terminalThemeTokens.ansi,
+        ...tokens.ansi,
+      },
+    };
+    applyTerminalThemeTokens(this.terminalContainer, tokens);
+    this.refreshTheme();
+  }
+
+  resetTheme() {
+    this.terminalThemeTokens = {};
+    clearTerminalThemeTokens(this.terminalContainer);
+    this.refreshTheme();
+  }
+
+  refreshTheme() {
+    syncTerminalTheme(
+      this.terminal,
+      this.terminalContainer,
+      this.terminalThemeTokens.ansi,
+    );
+  }
+
+  private scheduleThemeRefresh() {
+    if (this.themeRefreshAnimationFrame !== undefined) {
+      return;
+    }
+
+    this.themeRefreshAnimationFrame = window.requestAnimationFrame(() => {
+      this.themeRefreshAnimationFrame = undefined;
+      this.refreshTheme();
+    });
   }
 
   private scheduleFit() {

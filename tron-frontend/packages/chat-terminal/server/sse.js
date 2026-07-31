@@ -53,7 +53,7 @@ export class ChatController {
       body.messageId ?? request.headers["x-message-id"],
     );
     const stream = body.stream !== false;
-    const upstreamBody = { ...body };
+    const upstreamBody = { ...body, model: "Qwen3-32B" };
     delete upstreamBody.messageId;
     upstreamBody.stream = stream;
 
@@ -221,7 +221,9 @@ async function readUpstreamSse(upstream, onDelta) {
   try {
     while (!completed) {
       const { done, value } = await reader.read();
-      buffer += done ? decoder.decode() : decoder.decode(value, { stream: true });
+      buffer += done
+        ? decoder.decode()
+        : decoder.decode(value, { stream: true });
 
       let boundary = findFrameBoundary(buffer);
       while (boundary) {

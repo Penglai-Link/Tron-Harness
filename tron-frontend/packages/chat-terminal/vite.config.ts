@@ -37,7 +37,13 @@ export default defineConfig(({ mode }) => {
         formats: ["es"],
       },
       rollupOptions: {
-        external: ["@tron/chat-core", "lucide-vue-next", "markdown-it", "vue"],
+        external: [
+          "@tron/chat-core",
+          "@xterm/xterm",
+          "@xterm/addon-fit",
+          "@xterm/addon-web-links",
+          "markdown-it",
+        ],
       },
     },
     server: {

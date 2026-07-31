@@ -128,6 +128,7 @@ import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { throttle } from "lodash-es";
+import TerminalCom from "../components/terminal"
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -5136,6 +5137,8 @@ export function ChatManagementPage() {
       resizeObserver.disconnect();
     };
   }, []);
+
+  return <TerminalCom />
 
   return (
     <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white" ref={mainRef}>

@@ -28,22 +28,20 @@
   flex-direction: column;
   box-sizing: border-box;
   border-radius: 6px;
-  background: rgba(31, 31, 31, 0.96);
-  box-shadow: 0 16px 44px rgba(0, 0, 0, 0.42);
-  color: #ededed;
-  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
-    "Segoe UI", sans-serif;
+  background: var(--ai-terminal-panel-background);
+  color: var(--ai-terminal-panel-foreground);
   overflow: hidden;
   user-select: text;
   -webkit-user-select: text;
+  border: 1px solid var(--ai-terminal-border);
 }
 
 .ai-terminal-model-session__body {
-  padding: 10px 12px 12px;
+  padding: 10px;
 }
 
 .ai-terminal-model-session__markdown {
-  color: rgba(255, 255, 255, 0.78);
+  color: var(--ai-terminal-muted);
   font-size: 13px;
   line-height: 1.55;
 }
@@ -52,7 +50,7 @@
 .ai-terminal-model-session-md__h2,
 .ai-terminal-model-session-md__h3 {
   margin: 10px 0 6px;
-  color: rgba(255, 255, 255, 0.92);
+  color: var(--ai-terminal-foreground);
   font-weight: 700;
   line-height: 1.35;
 }
@@ -84,9 +82,9 @@
 
 .ai-terminal-model-session-md__quote {
   margin: 0 0 8px;
-  border-left: 3px solid rgba(255, 255, 255, 0.24);
+  border-left: 3px solid var(--ai-terminal-border);
   padding-left: 10px;
-  color: rgba(255, 255, 255, 0.64);
+  color: var(--ai-terminal-muted);
 }
 
 .ai-terminal-model-session-md__code,
@@ -101,25 +99,25 @@
   margin: 0 0 8px;
   overflow-x: auto;
   border-radius: 4px;
-  background: rgba(0, 0, 0, 0.28);
+  background: var(--ai-terminal-code-background);
   padding: 8px 10px;
-  color: rgba(255, 255, 255, 0.86);
+  color: var(--ai-terminal-foreground);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .ai-terminal-model-session-md__inline-code {
   border-radius: 3px;
-  background: rgba(255, 255, 255, 0.1);
+  background: var(--ai-terminal-hover-background);
   padding: 1px 4px;
-  color: #f8f8f2;
+  color: var(--ai-terminal-foreground);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
   font-size: 0.92em;
 }
 
 .ai-terminal-model-session-md__link {
-  color: #8ab4f8;
+  color: var(--ai-terminal-accent);
   text-decoration: none;
 
   &:hover {
@@ -131,25 +129,25 @@
   position: relative;
   margin: 8px 0 10px;
   border-radius: 6px;
-  background: rgba(255, 255, 255, 0.05);
+  background: var(--ai-terminal-hover-background);
   padding: 10px;
   &__type {
-    color: rgba(255, 255, 255, 0.86);
+    color: var(--ai-terminal-foreground);
     font-size: 12px;
     font-weight: 700;
   }
   &__status {
     flex: 0 0 auto;
-    color: rgba(255, 255, 255, 0.48);
+    color: var(--ai-terminal-subtle);
     font-size: 12px;
   }
   &__code {
     margin: 0;
     overflow-x: auto;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.32);
+    background: var(--ai-terminal-code-background);
     padding: 10px;
-    color: #f8f8f2;
+    color: var(--ai-terminal-foreground);
     font-size: 12px;
     line-height: 1.45;
     white-space: pre-wrap;
@@ -176,15 +174,15 @@
     line-height: 1.5;
   }
   &__output {
-    background: rgba(0, 0, 0, 0.22);
-    color: rgba(255, 255, 255, 0.76);
+    background: var(--ai-terminal-code-background);
+    color: var(--ai-terminal-muted);
   }
   &__editor {
     width: 100%;
     min-height: 0;
     box-sizing: border-box;
     border-radius: 4px;
-    background: rgba(0, 0, 0, 0.36);
+    background: var(--ai-terminal-input-background);
     padding: 10px;
     font-size: 12px;
     line-height: 1.45;
@@ -198,7 +196,7 @@
       outline: none;
       resize: none;
       background: transparent;
-      color: #f8f8f2;
+      color: var(--ai-terminal-foreground);
     }
   }
   &__ai-generate {
@@ -213,14 +211,14 @@
     padding: 0 4px;
     border: 0;
     background: transparent;
-    color: #f8f8f2;
+    color: var(--ai-terminal-foreground);
     font: inherit;
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
 
     &:hover:not(:disabled) {
-      color: #d9e7ff;
+      color: var(--ai-terminal-accent);
     }
 
     &:disabled {
@@ -235,8 +233,8 @@
     }
   }
   &__error {
-    background: rgba(255, 82, 82, 0.12);
-    color: #ffb3b3;
+    background: color-mix(in srgb, var(--ai-terminal-error) 12%, transparent);
+    color: var(--ai-terminal-error);
   }
   &__actions {
     display: flex;
@@ -257,32 +255,37 @@
   min-width: 56px;
   height: 28px;
   border-radius: 4px;
-  background: rgba(255, 255, 255, 0.08);
-  color: rgba(255, 255, 255, 0.82);
+  background: var(--ai-terminal-hover-background);
+  color: var(--ai-terminal-foreground);
   cursor: pointer;
   font-size: 12px;
   user-select: none;
   -webkit-user-select: none;
 
   &:hover:not(:disabled) {
-    border-color: rgba(255, 255, 255, 0.32);
-    background: rgba(255, 255, 255, 0.13);
+    opacity: 0.8;
   }
 
   &:disabled {
     cursor: not-allowed;
     opacity: 0.45;
   }
-}
-
-.ai-terminal-model-session-command__button--primary {
-  border-color: rgba(138, 180, 248, 0.42);
-  background: rgba(138, 180, 248, 0.18);
-  color: #d9e7ff;
+  &--primary {
+    background: var(--ai-terminal-panel-background);
+    color: var(--ai-terminal-panel-foreground);
+  }
+  &--info {
+    background: var(--ai-terminal-success);
+    color: var(--ai-terminal-panel-foreground);
+  }
+  &--danger {
+    background: var(--ai-terminal-panel-foreground);
+    color: var(--ai-terminal-panel-background);
+  }
 }
 
 .ai-terminal-model-session-command--executed {
-  border-color: rgba(111, 207, 151, 0.38);
+  border-color: var(--ai-terminal-success);
 }
 
 .ai-terminal-model-session-command--rejected {
@@ -290,5 +293,5 @@
 }
 
 .ai-terminal-model-session-command--error {
-  border-color: rgba(255, 82, 82, 0.34);
+  border-color: var(--ai-terminal-error);
 }

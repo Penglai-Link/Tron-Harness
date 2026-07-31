@@ -85,7 +85,11 @@ export function renderExplainDialog(
             renderAsMarkdown ? "ai-terminal-markdown" : ""
           }`}
         >
-          ${renderAsMarkdown ? renderMarkdown(state.content) : state.content}
+          ${state.status === "loading"
+            ? html`<span class="ai-terminal-explain-dialog__loading-text">${state.content}</span>`
+            : renderAsMarkdown
+              ? renderMarkdown(state.content)
+              : state.content}
         </div>
       </section>
     `,
