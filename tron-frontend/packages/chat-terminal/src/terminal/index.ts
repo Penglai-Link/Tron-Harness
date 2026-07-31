@@ -59,6 +59,7 @@ export class Terminal {
   terminal: XTerminal;
   modelSessionAddon?: ModelSessionAddon;
   private readonly fitAddon: FitAddon;
+  private localEchoAddon?: LocalEchoAddon;
   private readonly resizeObserver: ResizeObserver;
   private fitAnimationFrame?: number;
 
@@ -86,12 +87,11 @@ export class Terminal {
     }
 
     if (localEcho) {
-      this.terminal.loadAddon(
-        new LocalEchoAddon(
-          this.normalizeLocalEchoOptions(localEcho),
-          agentPromptAddon?.setInputState.bind(agentPromptAddon),
-        ),
+      this.localEchoAddon = new LocalEchoAddon(
+        this.normalizeLocalEchoOptions(localEcho),
+        agentPromptAddon?.setInputState.bind(agentPromptAddon),
       );
+      this.terminal.loadAddon(this.localEchoAddon);
     }
 
     if (modelSession) {
@@ -109,6 +109,14 @@ export class Terminal {
       this.fitAnimationFrame = undefined;
     }
     this.terminal.dispose();
+  }
+
+  executeCommand(command: string) {
+    if (!this.localEchoAddon) {
+      return Promise.reject(new Error("终端未启用本地命令执行"));
+    }
+
+    return this.localEchoAddon.executeCommand(command);
   }
 
   private scheduleFit() {

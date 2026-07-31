@@ -388,13 +388,15 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.sessions.forEach((session) => {
         const requiredRows = Math.max(
           1,
-          Math.ceil(session.host.scrollHeight / cell.height),
+          Math.ceil(this.getSessionContentHeight(session) / cell.height),
         );
 
         if (requiredRows > session.reservedRows) {
           rowsAdded += requiredRows - session.reservedRows;
           session.reservedRows = requiredRows;
         }
+
+        this.syncSessionHostHeight(session, cell.height);
       });
     }
 
@@ -417,7 +419,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     const cell = getTerminalCellMetrics(this.terminal);
     const requiredRows = Math.max(
       1,
-      Math.ceil(session.host.scrollHeight / cell.height),
+      Math.ceil(this.getSessionContentHeight(session) / cell.height),
     );
     const rowsToAdd = requiredRows - session.reservedRows;
 
@@ -426,8 +428,17 @@ export class ModelSessionAddon implements ITerminalAddon {
     }
 
     session.reservedRows = requiredRows;
+    this.syncSessionHostHeight(session, cell.height);
     await writeTerminalAsync(this.terminal, "\r\n".repeat(rowsToAdd));
     this.scheduleInlineLayoutUpdate();
+  }
+
+  private getSessionContentHeight(session: ModelSessionInstance) {
+    return session.host.firstElementChild?.scrollHeight ?? session.host.scrollHeight;
+  }
+
+  private syncSessionHostHeight(session: ModelSessionInstance, cellHeight: number) {
+    session.host.style.height = `${session.reservedRows * cellHeight}px`;
   }
 
   private parseTokens(

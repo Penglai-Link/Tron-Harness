@@ -68,7 +68,6 @@ async function chatSSE(command: string) {
       handlers: {
         onFrame: (_eventName, payload) => {
           const message = parseTerminalMessage(payload);
-          console.log(message);
           if (
             message?.messageId === messageId &&
             message.type === "TEXT_MESSAGE_CONTENT" &&

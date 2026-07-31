@@ -133,6 +133,27 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.currentDialog = undefined;
   }
 
+  async executeCommand(command: string) {
+    const terminal = this.terminal;
+
+    if (!terminal) {
+      throw new Error("终端尚未初始化");
+    }
+
+    if (this.isExecuting) {
+      throw new Error("已有命令正在执行");
+    }
+
+    if (this.currentInput) {
+      throw new Error("请先清空当前输入");
+    }
+
+    await this.runCommand(terminal, command, {
+      checkBeforeCommand: false,
+      echoCommand: true,
+    });
+  }
+
   private async echo(terminal: XTerminal, data: string) {
     if (this.isExecuting) {
       return;
@@ -175,13 +196,33 @@ export class LocalEchoAddon implements ITerminalAddon {
   private async submitCommand(terminal: XTerminal) {
     const command = this.currentInput;
 
+    await this.runCommand(terminal, command, {
+      checkBeforeCommand: true,
+      echoCommand: false,
+    });
+  }
+
+  private async runCommand(
+    terminal: XTerminal,
+    command: string,
+    options: { checkBeforeCommand: boolean; echoCommand: boolean },
+  ) {
+    const { checkBeforeCommand, echoCommand } = options;
+
     this.currentInput = "";
     this.isExecuting = true;
     this.notifyInputState();
-    await writeTerminalAsync(terminal, "\r\n\x1b[?25l");
 
     try {
-      const isHandled = await this.options.onBeforeCommand?.(command);
+      if (echoCommand) {
+        await writeTerminalAsync(terminal, command);
+      }
+
+      await writeTerminalAsync(terminal, "\r\n\x1b[?25l");
+
+      const isHandled = checkBeforeCommand
+        ? await this.options.onBeforeCommand?.(command)
+        : false;
 
       if (isHandled) {
         return;
@@ -191,6 +232,8 @@ export class LocalEchoAddon implements ITerminalAddon {
         return;
       }
 
+      const firstOutputRow =
+        terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
       let output = "";
       let pendingOutputWrite = Promise.resolve();
       const onOutput = (chunk: string) => {
@@ -212,8 +255,10 @@ export class LocalEchoAddon implements ITerminalAddon {
       await pendingOutputWrite;
 
       if (hasVisibleTerminalOutput(output)) {
-        this.createExplainButton(command, output);
-        await writeTerminalAsync(terminal, "\r\n");
+        this.createExplainButton(command, output, firstOutputRow);
+        if (terminal.buffer.active.cursorX !== 0) {
+          await writeTerminalAsync(terminal, "\r\n");
+        }
       }
     } finally {
       try {
@@ -250,16 +295,16 @@ export class LocalEchoAddon implements ITerminalAddon {
     return this.options.prompt ?? "";
   }
 
-  private createExplainButton(command: string, output: string) {
+  private createExplainButton(
+    command: string,
+    output: string,
+    firstOutputRow: number,
+  ) {
     if (!this.options.onExplain || !this.terminal?.element) {
       return;
     }
 
-    const buffer = this.terminal.buffer.active;
-    const anchor = {
-      column: buffer.cursorX + 1,
-      row: buffer.baseY + buffer.cursorY,
-    };
+    const anchor = this.getExplainButtonAnchor(firstOutputRow);
     const viewportAnchor = this.getExplainButtonViewportAnchor(anchor);
     const isVisible = this.isExplainButtonVisible(anchor);
 
@@ -289,6 +334,40 @@ export class LocalEchoAddon implements ITerminalAddon {
       top: viewportAnchor.top,
     };
     this.explainButtons.push(buttonInstance);
+  }
+
+  private getExplainButtonAnchor(firstOutputRow: number): ExplainButtonAnchor {
+    if (!this.terminal) {
+      return { column: 0, row: firstOutputRow };
+    }
+
+    const buffer = this.terminal.buffer.active;
+    const cursorRow = buffer.baseY + buffer.cursorY;
+
+    if (buffer.cursorX > 0) {
+      return { column: buffer.cursorX + 1, row: cursorRow };
+    }
+
+    for (let row = cursorRow - 1; row >= firstOutputRow; row -= 1) {
+      const line = buffer.getLine(row);
+      if (!line) {
+        continue;
+      }
+
+      for (let column = line.length - 1; column >= 0; column -= 1) {
+        const cell = line.getCell(column);
+        if (!cell?.getChars()) {
+          continue;
+        }
+
+        return {
+          column: column + Math.max(1, cell.getWidth()) + 1,
+          row,
+        };
+      }
+    }
+
+    return { column: 1, row: cursorRow };
   }
 
   private scheduleExplainButtonPositionUpdate() {

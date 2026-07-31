@@ -50,7 +50,7 @@ export function initTerminal(options: IOptions) {
     }
   }
 
-  const termInstance = new Terminal(normalizeOptions.el, {
+  const termInstance: Terminal = new Terminal(normalizeOptions.el, {
     ...termOptions,
     localEcho: {
       enabled: true,
@@ -59,8 +59,11 @@ export function initTerminal(options: IOptions) {
       },
       // 执行命令前判断，系统命令直接执行，非系统命令调用大模型
       onBeforeCommand: async (command) => {
+        if (!command.trim()) {
+          return false;
+        }
         // 系统命令
-        if (isShellCommand(command)) {
+        if (isShellCommand(command.toLocaleLowerCase())) {
           return false;
         }
         await normalizeOptions.commandChat(command);
@@ -82,7 +85,7 @@ export function initTerminal(options: IOptions) {
     modelSession: {
       // 点击直接命令
       onExecuteCommand: ({ command }) => {
-        runCommandByIo(command);
+        return termInstance.executeCommand(command);
       },
       // 编辑命令成功回调
       onModifyCommand: async ({ command }) => command.trim(),
