@@ -9,6 +9,7 @@
 - `@tron/chat-core`
 - `@tron/chat-openapi-adapter`
 - `@tron/chat-react`
+- `@tron/chat-terminal`
 - `@tron/chat-theme`
 - `@tron/chat-vue`
 
