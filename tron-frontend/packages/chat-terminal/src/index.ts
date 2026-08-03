@@ -3,8 +3,17 @@ import { Terminal, type CommandExplain } from "./terminal";
 import { formatePath, isShellCommand } from "./terminal/utils/common";
 import { ITerminalInitOnlyOptions, ITerminalOptions } from "@xterm/xterm";
 import type { TerminalThemeTokenOverrides } from "./terminal/types/themes";
+import {
+  createChatTerminalI18n,
+  type ChatTerminalLocale,
+  type ChatTerminalMessageOverrides,
+} from "./terminal/i18n";
 
 export type {
+  ChatTerminalLocale,
+  ChatTerminalMessageKey,
+  ChatTerminalMessageOverrides,
+  ChatTerminalMessages,
   CommandExplain,
   CommandExplainContext,
   CommandExplainPayload,
@@ -13,6 +22,8 @@ export type { TerminalThemeTokenOverrides } from "./terminal";
 
 export interface IOptions {
   el: HTMLElement;
+  locale?: ChatTerminalLocale;
+  messages?: ChatTerminalMessageOverrides;
   termOptions?: ITerminalInitOnlyOptions &
     ITerminalOptions & {
       explainTitle?: string;
@@ -39,6 +50,16 @@ const defaultOptions: Partial<IOptions> = {};
 export function initTerminal(options: IOptions) {
   const normalizeOptions = { ...defaultOptions, ...options };
   const { termOptions } = normalizeOptions;
+  const i18n = createChatTerminalI18n({
+    locale: normalizeOptions.locale,
+    messages: {
+      ...(termOptions?.agentTips ? { agentTips: termOptions.agentTips } : {}),
+      ...(termOptions?.explainTitle
+        ? { explainTitle: termOptions.explainTitle }
+        : {}),
+      ...normalizeOptions.messages,
+    },
+  });
   let currentDirectory = "/";
 
   async function runCommandByIo(
@@ -87,15 +108,15 @@ export function initTerminal(options: IOptions) {
       // 结果解释
       onExplain: (payload, context) =>
         normalizeOptions.commandExplain(payload, context),
-      explainTitle: termOptions?.explainTitle || "",
+      i18n,
     },
     agentPrompt: {
-      text:
-        termOptions?.agentTips ||
-        "Enter natural language or commands, AI will intelligently respond. Give it a try by saying hello",
+      i18n,
+      textKey: "agentTips",
       gapCells: termOptions?.agentTipsGapCells || 1,
     },
     modelSession: {
+      i18n,
       // 点击直接命令
       onExecuteCommand: ({ command }) => {
         return termInstance.executeCommand(command);
@@ -143,6 +164,20 @@ export function initTerminal(options: IOptions) {
     },
     refreshTheme() {
       termInstance.refreshTheme();
+    },
+    setLocale(
+      locale: ChatTerminalLocale,
+      messages?: ChatTerminalMessageOverrides,
+    ) {
+      i18n.setLocale(locale);
+      if (messages) {
+        i18n.setMessages(messages);
+      }
+      termInstance.refreshLocale();
+    },
+    setMessages(messages: ChatTerminalMessageOverrides) {
+      i18n.setMessages(messages);
+      termInstance.refreshLocale();
     },
   };
 }

@@ -22,6 +22,7 @@ import "@tron/chat-terminal/styles.css";
 ```ts
 const terminal = initTerminal({
   el: document.querySelector("#terminal") as HTMLElement,
+  locale: "zh-CN",
 
   termOptions: {
     themeTokens: {
@@ -79,6 +80,8 @@ const terminal = initTerminal({
 | 参数 | 类型 | 必填 | 说明 |
 | --- | --- | :--: | --- |
 | `el` | `HTMLElement` | 是 | 终端挂载元素 |
+| `locale` | `"zh-CN" \| "en-US"` | 否 | SDK 内置固定文案语言，默认 `zh-CN` |
+| `messages` | `Partial<ChatTerminalMessages>` | 否 | 覆盖 SDK 内置固定文案 |
 | `termOptions` | `ITerminalInitOnlyOptions & ITerminalOptions & { explainTitle?; agentTips?; agentTipsGapCells?; themeTokens? }` | 否 | xterm.js 配置和 SDK 扩展配置 |
 | `runCommand` | `(command, onOutput) => Promise<{ currentDirectory?: string } \| void>` | 是 | 执行 Shell 命令；收到输出时调用 `onOutput(chunk)` |
 | `cancelCommand` | `() => void` | 否 | 用户在命令执行中按 `Ctrl+C` 时触发 |
@@ -92,8 +95,8 @@ const terminal = initTerminal({
 
 | 参数 | 类型 | 默认值 | 说明 |
 | --- | --- | --- | --- |
-| `explainTitle` | `string` | `""` | 命令解释弹窗标题 |
-| `agentTips` | `string` | 内置英文提示 | 空闲输入提示 |
+| `explainTitle` | `string` | 内置语言文案 | 命令解释弹窗标题；兼容旧接入，新接入推荐使用 `messages.explainTitle` |
+| `agentTips` | `string` | 内置语言文案 | 空闲输入提示；兼容旧接入，新接入推荐使用 `messages.agentTips` |
 | `agentTipsGapCells` | `number` | `1` | 提示与光标之间的单元格数 |
 | `themeTokens` | `TerminalThemeTokenOverrides` | `{}` | 终端语义色和 xterm ANSI 主题覆盖 |
 
@@ -109,6 +112,61 @@ interface TerminalThemeTokenOverrides {
 }
 ```
 
+### 4.2 多语言
+
+SDK 内置 `zh-CN` 和 `en-US` 两套固定文案。初始化时可指定语言，也可覆盖部分文案：
+
+```ts
+const terminal = initTerminal({
+  el,
+  locale: "zh-CN",
+  messages: {
+    agentTips: "输入命令或者问题",
+    explainTitle: "命令解释",
+  },
+  // 其他必填回调略
+});
+```
+
+运行时调用 `setLocale` 切换语言：
+
+```ts
+terminal.setLocale("en-US");
+
+terminal.setLocale("zh-CN", {
+  explainLoading: "正在分析命令...",
+});
+```
+
+语言切换只刷新 SDK 固定 UI 文案，例如空闲提示、解释弹窗标题和 loading 文案、命令卡片按钮和状态、SDK 兜底错误文案。SDK 不会翻译终端历史、命令输出、模型回复和业务接口返回内容。
+
+可覆盖的文案 key：
+
+```ts
+type ChatTerminalMessageKey =
+  | "agentTips"
+  | "explainTitle"
+  | "explainLoading"
+  | "explainEmpty"
+  | "explainFailed"
+  | "explainInterrupted"
+  | "commandConfirm"
+  | "commandExecute"
+  | "commandEdit"
+  | "commandSave"
+  | "commandReject"
+  | "commandGenerate"
+  | "commandGenerating"
+  | "statusExecuted"
+  | "statusRejected"
+  | "modifyFailed"
+  | "emptyGenerateCommand"
+  | "modelReturnedEmptyCommand"
+  | "generateFailed"
+  | "executeFailed"
+  | "rejectFailed";
+```
+
 ## 5. 返回对象
 
 `initTerminal` 返回以下方法：
@@ -122,6 +180,8 @@ interface TerminalThemeTokenOverrides {
 | `setThemeTokens` | `tokens: TerminalThemeTokenOverrides` | `void` | 增量覆盖主题 token |
 | `resetTheme` | 无 | `void` | 清空主题 token 覆盖 |
 | `refreshTheme` | 无 | `void` | 重新同步 CSS 变量到 xterm 主题 |
+| `setLocale` | `locale: ChatTerminalLocale, messages?: ChatTerminalMessageOverrides` | `void` | 切换 SDK 固定文案语言，并可增量覆盖文案 |
+| `setMessages` | `messages: ChatTerminalMessageOverrides` | `void` | 增量覆盖 SDK 固定文案 |
 
 `appendChatChunk` 的第二个参数：
 
@@ -397,6 +457,10 @@ git status --short
 
 ```ts
 export type {
+  ChatTerminalLocale,
+  ChatTerminalMessageKey,
+  ChatTerminalMessageOverrides,
+  ChatTerminalMessages,
   CommandExplain,
   CommandExplainContext,
   CommandExplainPayload,

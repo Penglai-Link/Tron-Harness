@@ -12,6 +12,11 @@ import {
 } from "@preact/signals-core";
 import { createModelSessionHost, renderModelSession } from "../ui/modelSession";
 import { getTerminalCellMetrics, writeTerminalAsync } from "../utils";
+import {
+  createChatTerminalI18n,
+  type ChatTerminalI18n,
+  type ChatTerminalMessageKey,
+} from "../i18n";
 import type {
   ModelSessionAddonOptions,
   ModelSessionCommandActionPayload,
@@ -73,12 +78,14 @@ export class ModelSessionAddon implements ITerminalAddon {
   private readonly sessions = new Map<string, ModelSessionInstance>();
   private activeSessionKey?: string;
   private readonly isVisible: Signal<boolean>;
+  private readonly i18n: ChatTerminalI18n;
   private readonly handleViewportScroll = () => {
     this.scheduleInlineLayoutUpdate();
   };
 
   constructor(private readonly options: ModelSessionAddonOptions = {}) {
     this.isVisible = signal(options.visible ?? false);
+    this.i18n = options.i18n ?? createChatTerminalI18n();
   }
 
   activate(terminal: XTerminal) {
@@ -131,6 +138,13 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.sseBuffer = "";
     this.activeSessionKey = undefined;
     this.shouldMeasureSessions = false;
+  }
+
+  refreshLocale() {
+    this.sessions.forEach((session) => {
+      this.scheduleSessionRender(session);
+    });
+    this.scheduleInlineLayoutUpdate(true);
   }
 
   appendSseChunk(chunk: string) {
@@ -343,6 +357,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       {
         tokens: session.tokens.peek(),
         commandStates: session.commandStates.peek(),
+        i18n: this.i18n,
       },
       session.actions,
     );
@@ -520,6 +535,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       draftCommand: state.command,
       editorHeight,
       error: undefined,
+      errorMessageKey: undefined,
     });
   }
 
@@ -560,12 +576,13 @@ export class ModelSessionAddon implements ITerminalAddon {
         command,
         draftCommand: command,
         error: undefined,
+        errorMessageKey: undefined,
       });
     } catch (error) {
       this.setCommandState(session, token.blockId, {
         ...state,
         status: "error",
-        error: error instanceof Error ? error.message : "修改失败",
+        ...this.getErrorMessageState(error, "modifyFailed"),
       });
     }
   }
@@ -580,6 +597,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       status: "pending",
       draftCommand: state.command,
       error: undefined,
+      errorMessageKey: undefined,
     });
   }
 
@@ -595,7 +613,8 @@ export class ModelSessionAddon implements ITerminalAddon {
     if (!state.draftCommand.trim()) {
       this.setCommandState(session, token.blockId, {
         ...state,
-        error: "请输入需要重新生成的命令",
+        error: undefined,
+        errorMessageKey: "emptyGenerateCommand",
       });
       return;
     }
@@ -604,6 +623,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       ...state,
       isGenerating: true,
       error: undefined,
+      errorMessageKey: undefined,
     });
 
     try {
@@ -612,7 +632,13 @@ export class ModelSessionAddon implements ITerminalAddon {
       );
       const generatedCommand = nextCommand?.trim();
       if (!generatedCommand) {
-        throw new Error("大模型未返回命令");
+        this.setCommandState(session, token.blockId, {
+          ...this.getCommandState(session, token),
+          isGenerating: false,
+          error: undefined,
+          errorMessageKey: "modelReturnedEmptyCommand",
+        });
+        return;
       }
 
       const latestState = this.getCommandState(session, token);
@@ -625,6 +651,7 @@ export class ModelSessionAddon implements ITerminalAddon {
         draftCommand: generatedCommand,
         isGenerating: false,
         error: undefined,
+        errorMessageKey: undefined,
       });
     } catch (error) {
       const latestState = this.getCommandState(session, token);
@@ -635,7 +662,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.setCommandState(session, token.blockId, {
         ...latestState,
         isGenerating: false,
-        error: error instanceof Error ? error.message : "命令生成失败",
+        ...this.getErrorMessageState(error, "generateFailed"),
       });
     }
   }
@@ -661,6 +688,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       ...state,
       status: "executing",
       error: undefined,
+      errorMessageKey: undefined,
     });
 
     try {
@@ -674,12 +702,13 @@ export class ModelSessionAddon implements ITerminalAddon {
         draftCommand: command,
         output: undefined,
         error: undefined,
+        errorMessageKey: undefined,
       });
     } catch (error) {
       this.setCommandState(session, token.blockId, {
         ...state,
         status: "error",
-        error: error instanceof Error ? error.message : "执行失败",
+        ...this.getErrorMessageState(error, "executeFailed"),
       });
     }
   }
@@ -706,14 +735,24 @@ export class ModelSessionAddon implements ITerminalAddon {
         ...state,
         status: "rejected",
         error: undefined,
+        errorMessageKey: undefined,
       });
     } catch (error) {
       this.setCommandState(session, token.blockId, {
         ...state,
         status: "error",
-        error: error instanceof Error ? error.message : "拒绝失败",
+        ...this.getErrorMessageState(error, "rejectFailed"),
       });
     }
+  }
+
+  private getErrorMessageState(
+    error: unknown,
+    fallbackKey: ChatTerminalMessageKey,
+  ) {
+    return error instanceof Error
+      ? { error: error.message, errorMessageKey: undefined }
+      : { error: undefined, errorMessageKey: fallbackKey };
   }
 
   private createPayload(

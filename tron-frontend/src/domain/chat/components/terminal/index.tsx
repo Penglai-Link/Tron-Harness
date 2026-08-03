@@ -6,11 +6,14 @@ import { fetchEventSource } from '@microsoft/fetch-event-source';
 import "@xterm/xterm/css/xterm.css";
 import "@tron/chat-terminal/styles.css"
 import { useTheme } from '@/shared';
+import { useLocale } from '@/i18n';
 
 const Terminal = () => {
     const terminalRef = useRef<HTMLDivElement>(null);
     const terminalInstanceRef = useRef<ReturnType<typeof initTerminal> | null>(null);
     const { theme } = useTheme()
+    const { currentLocale } = useLocale()
+
     const terminalServerUrl =
         import.meta.env.VITE_TERMINAL_SERVER_URL ||
         `http://${window.location.hostname}:8787`;
@@ -99,6 +102,10 @@ const Terminal = () => {
     useEffect(() => {
         terminalInstanceRef.current?.refreshTheme()
     }, [theme])
+
+    useEffect(() => {
+        terminalInstanceRef.current?.setLocale(currentLocale)
+    }, [currentLocale])
 
 
 

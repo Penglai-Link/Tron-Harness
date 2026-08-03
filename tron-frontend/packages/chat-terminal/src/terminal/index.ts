@@ -4,6 +4,12 @@ import "./styles/index.scss";
 import { AgentPromptAddon } from "./addons/agentPrompt";
 import { LocalEchoAddon } from "./addons/localEcho";
 import { ModelSessionAddon } from "./addons/modelSession";
+import type {
+  ChatTerminalLocale,
+  ChatTerminalMessageKey,
+  ChatTerminalMessageOverrides,
+  ChatTerminalMessages,
+} from "./i18n";
 import type { AgentPromptAddonOptions } from "./types/agentPrompt";
 import type {
   CommandExplain,
@@ -41,6 +47,10 @@ export {
   LocalEchoAddon,
   ModelSessionAddon,
   type AgentPromptAddonOptions,
+  type ChatTerminalLocale,
+  type ChatTerminalMessageKey,
+  type ChatTerminalMessageOverrides,
+  type ChatTerminalMessages,
   type CommandExplain,
   type CommandExplainContext,
   type CommandExplainPayload,
@@ -66,12 +76,14 @@ export class Terminal {
   terminal: XTerminal;
   modelSessionAddon?: ModelSessionAddon;
   private readonly fitAddon: FitAddon;
+  private agentPromptAddon?: AgentPromptAddon;
   private localEchoAddon?: LocalEchoAddon;
   private readonly resizeObserver: ResizeObserver;
   private readonly terminalContainer: HTMLElement;
   private terminalThemeTokens: TerminalThemeTokenOverrides;
   private fitAnimationFrame?: number;
   private themeRefreshAnimationFrame?: number;
+  private disposed = false;
 
   constructor(container: HTMLElement, params: TerminalOptions = {}) {
     const {
@@ -97,6 +109,7 @@ export class Terminal {
     this.fitAddon = new FitAddon();
     this.terminal.loadAddon(this.fitAddon);
     this.terminal.open(this.terminalContainer);
+    this.guardViewportSyncScrollArea();
     this.resizeObserver = new ResizeObserver(() => {
       this.scheduleFit();
     });
@@ -105,18 +118,18 @@ export class Terminal {
     this.scheduleThemeRefresh();
     this.scheduleFit();
 
-    const agentPromptAddon = agentPrompt
+    this.agentPromptAddon = agentPrompt
       ? new AgentPromptAddon(this.normalizeAgentPromptOptions(agentPrompt))
       : undefined;
 
-    if (agentPromptAddon) {
-      this.terminal.loadAddon(agentPromptAddon);
+    if (this.agentPromptAddon) {
+      this.terminal.loadAddon(this.agentPromptAddon);
     }
 
     if (localEcho) {
       this.localEchoAddon = new LocalEchoAddon(
         this.normalizeLocalEchoOptions(localEcho),
-        agentPromptAddon?.setInputState.bind(agentPromptAddon),
+        this.agentPromptAddon?.setInputState.bind(this.agentPromptAddon),
       );
       this.terminal.loadAddon(this.localEchoAddon);
     }
@@ -130,6 +143,7 @@ export class Terminal {
   }
 
   dispose() {
+    this.disposed = true;
     this.resizeObserver.disconnect();
     if (this.fitAnimationFrame !== undefined) {
       window.cancelAnimationFrame(this.fitAnimationFrame);
@@ -178,26 +192,109 @@ export class Terminal {
     );
   }
 
+  refreshLocale() {
+    this.agentPromptAddon?.refreshLocale();
+    this.localEchoAddon?.refreshLocale();
+    this.modelSessionAddon?.refreshLocale();
+  }
+
   private scheduleThemeRefresh() {
+    if (this.disposed) {
+      return;
+    }
     if (this.themeRefreshAnimationFrame !== undefined) {
       return;
     }
 
     this.themeRefreshAnimationFrame = window.requestAnimationFrame(() => {
       this.themeRefreshAnimationFrame = undefined;
+      if (this.disposed) {
+        return;
+      }
       this.refreshTheme();
     });
   }
 
   private scheduleFit() {
+    if (this.disposed) {
+      return;
+    }
     if (this.fitAnimationFrame !== undefined) {
       return;
     }
 
     this.fitAnimationFrame = window.requestAnimationFrame(() => {
       this.fitAnimationFrame = undefined;
-      this.fitAddon.fit();
+      this.fitTerminalToContainer();
     });
+  }
+
+  private fitTerminalToContainer() {
+    if (this.disposed || !this.terminalContainer.isConnected) {
+      return;
+    }
+
+    const terminalElement = this.terminal.element;
+    if (!terminalElement?.isConnected) {
+      return;
+    }
+
+    const { width, height } = this.terminalContainer.getBoundingClientRect();
+    if (width <= 0 || height <= 0) {
+      return;
+    }
+
+    try {
+      this.fitAddon.fit();
+    } catch (error) {
+      if (!this.isMissingRenderDimensionsError(error)) {
+        throw error;
+      }
+    }
+  }
+
+  private isMissingRenderDimensionsError(error: unknown) {
+    return (
+      error instanceof TypeError &&
+      typeof error.message === "string" &&
+      error.message.includes("dimensions")
+    );
+  }
+
+  private guardViewportSyncScrollArea() {
+    const terminalWithViewport = (
+      this.terminal as XTerminal & {
+        viewport?: {
+          syncScrollArea: (immediate?: boolean, force?: boolean) => void;
+        };
+        _core?: {
+          viewport?: {
+            syncScrollArea: (immediate?: boolean, force?: boolean) => void;
+          };
+        };
+      }
+    );
+    const viewport =
+      terminalWithViewport.viewport ?? terminalWithViewport._core?.viewport;
+
+    if (!viewport) {
+      return;
+    }
+
+    const syncScrollArea = viewport.syncScrollArea.bind(viewport);
+    viewport.syncScrollArea = (immediate?: boolean, force?: boolean) => {
+      if (this.disposed || !this.terminalContainer.isConnected) {
+        return;
+      }
+
+      try {
+        syncScrollArea(immediate, force);
+      } catch (error) {
+        if (!this.isMissingRenderDimensionsError(error)) {
+          throw error;
+        }
+      }
+    };
   }
 
   private createTerminalContainer(container: HTMLElement) {

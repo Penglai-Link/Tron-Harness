@@ -7,19 +7,8 @@ import type {
   ModelSessionRenderState,
   ModelSessionToken,
 } from "../types/modelSession";
+import type { ChatTerminalI18n } from "../i18n";
 import { renderMarkdown as renderMarkdownContent } from "../utils/markdown";
-
-const COMMAND_STATUS_TEXT: Record<
-  ModelSessionCommandCardState["status"],
-  string
-> = {
-  pending: "待确认",
-  editing: "修改中",
-  executing: "执行中",
-  executed: "已执行",
-  rejected: "已拒绝",
-  error: "失败",
-};
 
 export function createModelSessionHost() {
   const host = document.createElement("div");
@@ -68,13 +57,14 @@ function renderModelSessionToken(
     draftCommand: token.command,
   };
 
-  return renderCommandCard(token, cardState, actions);
+  return renderCommandCard(token, cardState, actions, state.i18n);
 }
 
 function renderCommandCard(
   token: ModelSessionCommandToken,
   state: ModelSessionCommandCardState,
   actions: ModelSessionRenderActions,
+  i18n: ChatTerminalI18n,
 ) {
   const isGenerating = state.isGenerating === true;
   const isBusy = state.status === "executing" || isGenerating;
@@ -91,7 +81,7 @@ function renderCommandCard(
     >
       <div class="ai-terminal-model-session-command__meta">
         <span class="ai-terminal-model-session-command__type">
-          是否同意执行以下命令并查看输出？
+          ${i18n.t("commandConfirm")}
         </span>
         ${state.status === "pending" || state.status === "editing"
           ? html`<div class="ai-terminal-model-session-command__actions">
@@ -101,7 +91,7 @@ function renderCommandCard(
                 ?disabled=${!canExecute}
                 @click=${() => actions.onExecuteCommand(token)}
               >
-                执行
+                ${i18n.t("commandExecute")}
               </button>
               ${state.status === "editing"
                 ? html`
@@ -111,7 +101,7 @@ function renderCommandCard(
                       ?disabled=${isBusy}
                       @click=${() => actions.onSaveCommandEdit(token)}
                     >
-                      保存
+                      ${i18n.t("commandSave")}
                     </button>
                   `
                 : html`
@@ -135,7 +125,7 @@ function renderCommandCard(
                         );
                       }}
                     >
-                      修改
+                      ${i18n.t("commandEdit")}
                     </button>
                   `}
               <button
@@ -144,12 +134,12 @@ function renderCommandCard(
                 ?disabled=${!canReject}
                 @click=${() => actions.onRejectCommand(token)}
               >
-                拒绝
+                ${i18n.t("commandReject")}
               </button>
             </div>`
           : state.status === "executed" || state.status === "rejected"
           ? html`<span class="ai-terminal-model-session-command__status">
-              ${renderCommandStatus(state.status)}
+              ${renderCommandStatus(state.status, i18n)}
             </span>`
           : null}
       </div>
@@ -206,7 +196,9 @@ function renderCommandCard(
                           <path d="M6 7H2" />
                           <path d="M9 2v2" />
                         </svg>
-                        ${isGenerating ? "生成中" : "AI生成"}
+                        ${isGenerating
+                          ? i18n.t("commandGenerating")
+                          : i18n.t("commandGenerate")}
                       </button>
                     `
                   : ""
@@ -216,11 +208,23 @@ function renderCommandCard(
         ? html`<div class="ai-terminal-model-session-command__error">
             ${state.error}
           </div>`
+        : state.errorMessageKey
+        ? html`<div class="ai-terminal-model-session-command__error">
+            ${i18n.t(state.errorMessageKey)}
+          </div>`
         : null}
     </article>
   `;
 }
 
-function renderCommandStatus(status: ModelSessionCommandCardState["status"]) {
-  return COMMAND_STATUS_TEXT[status];
+function renderCommandStatus(
+  status: Extract<
+    ModelSessionCommandCardState["status"],
+    "executed" | "rejected"
+  >,
+  i18n: ChatTerminalI18n,
+) {
+  return status === "executed"
+    ? i18n.t("statusExecuted")
+    : i18n.t("statusRejected");
 }

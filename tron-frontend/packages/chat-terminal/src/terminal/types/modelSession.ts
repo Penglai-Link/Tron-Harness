@@ -1,4 +1,5 @@
 import type { MaybePromise } from "./common";
+import type { ChatTerminalI18n, ChatTerminalMessageKey } from "../i18n";
 
 export type ModelSessionCommandStatus =
   | "pending"
@@ -46,11 +47,13 @@ export interface ModelSessionCommandCardState {
   editorHeight?: number;
   output?: string;
   error?: string;
+  errorMessageKey?: ChatTerminalMessageKey;
 }
 
 export interface ModelSessionAddonOptions {
   enabled?: boolean;
   visible?: boolean;
+  i18n?: ChatTerminalI18n;
   onExecuteCommand?: (
     payload: ModelSessionCommandActionPayload,
   ) => MaybePromise<string | void>;
@@ -68,6 +71,7 @@ export interface ModelSessionAddonOptions {
 export interface ModelSessionRenderState {
   tokens: ModelSessionToken[];
   commandStates: ReadonlyMap<string, ModelSessionCommandCardState>;
+  i18n: ChatTerminalI18n;
 }
 
 export interface ModelSessionRenderActions {

@@ -65,6 +65,15 @@ export class AgentPromptAddon implements ITerminalAddon {
     this.promptElement.style.display = visible ? "block" : "none";
   }
 
+  refreshLocale() {
+    if (!this.promptElement) {
+      return;
+    }
+
+    this.promptElement.textContent = this.getPromptText();
+    this.schedulePositionUpdate();
+  }
+
   setInputState(enabled: boolean, input: string) {
     this.isInputStateManaged = true;
     this.inputEnabled = enabled;
@@ -79,7 +88,7 @@ export class AgentPromptAddon implements ITerminalAddon {
   private createPromptElement(terminal: XTerminal) {
     const promptElement = document.createElement("div");
 
-    promptElement.textContent = this.options.text;
+    promptElement.textContent = this.getPromptText();
     promptElement.className = "ai-terminal-agent-prompt";
     promptElement.style.setProperty(
       "--ai-terminal-agent-prompt-color",
@@ -91,6 +100,14 @@ export class AgentPromptAddon implements ITerminalAddon {
     );
 
     return promptElement;
+  }
+
+  private getPromptText() {
+    return (
+      this.options.text ??
+      this.options.i18n?.t(this.options.textKey ?? "agentTips") ??
+      ""
+    );
   }
 
   private bindTracking(terminal: XTerminal) {

@@ -7,6 +7,11 @@ import type { LocalEchoAddonOptions } from "../types/localEcho";
 import { createExplainButton } from "../ui/explainButton";
 import { createExplainDialog, renderExplainDialog } from "../ui/explainDialog";
 import {
+  createChatTerminalI18n,
+  type ChatTerminalI18n,
+  type ChatTerminalMessageKey,
+} from "../i18n";
+import {
   getTerminalCellMetrics,
   hasVisibleTerminalOutput,
   isControlCharacter,
@@ -14,6 +19,7 @@ import {
   writeTerminalAsync,
 } from "../utils";
 import type { ExplainDialogPosition } from "../types/ui";
+import type { ExplainDialogOptions, ExplainDialogState } from "../types/ui";
 
 interface ExplainButtonAnchor {
   column: number;
@@ -41,6 +47,13 @@ interface ActiveCommand {
   pendingOutputWrite: Promise<void>;
 }
 
+interface ActiveExplainDialog {
+  contentKey?: ChatTerminalMessageKey;
+  element: HTMLElement;
+  options: ExplainDialogOptions;
+  state: ExplainDialogState;
+}
+
 const EXPLAIN_DIALOG_WIDTH = 400;
 const EXPLAIN_DIALOG_MAX_HEIGHT = 180;
 const EXPLAIN_DIALOG_MARGIN = 12;
@@ -66,6 +79,8 @@ export class LocalEchoAddon implements ITerminalAddon {
   private explainElements: HTMLElement[] = [];
   private explainButtons: ExplainButtonInstance[] = [];
   private currentDialog?: HTMLElement;
+  private activeExplainDialog?: ActiveExplainDialog;
+  private readonly i18n: ChatTerminalI18n;
   private readonly handleDocumentPointerDown = (event: PointerEvent) => {
     const target = event.target;
     if (
@@ -83,7 +98,9 @@ export class LocalEchoAddon implements ITerminalAddon {
       enabled: boolean,
       input: string,
     ) => void,
-  ) {}
+  ) {
+    this.i18n = options.i18n ?? createChatTerminalI18n();
+  }
 
   activate(terminal: XTerminal) {
     if (this.options.enabled === false) {
@@ -137,6 +154,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.explanationRequestVersion += 1;
     document.removeEventListener("pointerdown", this.handleDocumentPointerDown);
     this.currentDialog = undefined;
+    this.activeExplainDialog = undefined;
   }
 
   async executeCommand(command: string) {
@@ -158,6 +176,14 @@ export class LocalEchoAddon implements ITerminalAddon {
       checkBeforeCommand: false,
       echoCommand: true,
     });
+  }
+
+  refreshLocale() {
+    if (!this.activeExplainDialog) {
+      return;
+    }
+
+    this.renderActiveExplainDialog(this.activeExplainDialog);
   }
 
   private async echo(terminal: XTerminal, data: string) {
@@ -498,28 +524,35 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     this.closeExplainDialog();
 
-    const title = this.options.explainTitle ?? "命令解释";
     const position = this.getExplainDialogPosition(anchor);
+    const dialogState: ExplainDialogState = {
+      status: "loading",
+      title: "",
+      content: "",
+    };
+    const dialogOptions: ExplainDialogOptions = {
+      onClose: () => {
+        this.closeExplainDialog();
+      },
+      onRefresh: () => {
+        void this.renderExplanation(dialog, command, output, position);
+      },
+      position,
+    };
     const dialog = createExplainDialog(
-      {
-        status: "loading",
-        title,
-        content: "正在生成解释...",
-      },
-      {
-        onClose: () => {
-          this.closeExplainDialog();
-        },
-        onRefresh: () => {
-          void this.renderExplanation(dialog, command, output, position);
-        },
-        position,
-      },
+      this.localizeExplainState(dialogState, "explainLoading"),
+      dialogOptions,
     );
 
     this.terminal.element.appendChild(dialog);
     this.explainElements.push(dialog);
     this.currentDialog = dialog;
+    this.activeExplainDialog = {
+      contentKey: "explainLoading",
+      element: dialog,
+      options: dialogOptions,
+      state: dialogState,
+    };
     document.addEventListener("pointerdown", this.handleDocumentPointerDown);
 
     await this.renderExplanation(dialog, command, output, position);
@@ -537,6 +570,7 @@ export class LocalEchoAddon implements ITerminalAddon {
       (element) => element !== this.currentDialog,
     );
     this.currentDialog = undefined;
+    this.activeExplainDialog = undefined;
     document.removeEventListener("pointerdown", this.handleDocumentPointerDown);
   }
 
@@ -555,7 +589,6 @@ export class LocalEchoAddon implements ITerminalAddon {
     const abortController = new AbortController();
     this.explanationAbortController = abortController;
 
-    const title = this.options.explainTitle ?? "命令解释";
     const actions = {
       onClose: () => {
         this.closeExplainDialog();
@@ -565,16 +598,19 @@ export class LocalEchoAddon implements ITerminalAddon {
       },
       position,
     };
+    const loadingState: ExplainDialogState = {
+      status: "loading",
+      title: "",
+      content: "",
+    };
+    this.activeExplainDialog = {
+      contentKey: "explainLoading",
+      element: dialog,
+      options: actions,
+      state: loadingState,
+    };
 
-    renderExplainDialog(
-      dialog,
-      {
-        status: "loading",
-        title,
-        content: "正在生成解释...",
-      },
-      actions,
-    );
+    this.renderActiveExplainDialog(this.activeExplainDialog);
 
     let content = "";
     let lastRenderAt = 0;
@@ -585,16 +621,17 @@ export class LocalEchoAddon implements ITerminalAddon {
       }
 
       lastRenderAt = Date.now();
-      renderExplainDialog(
-        dialog,
-        {
+      this.activeExplainDialog = {
+        element: dialog,
+        options: actions,
+        state: {
           status: "streaming",
-          title,
+          title: "",
           content,
           markdown: true,
         },
-        actions,
-      );
+      };
+      this.renderActiveExplainDialog(this.activeExplainDialog);
     };
 
     try {
@@ -608,16 +645,18 @@ export class LocalEchoAddon implements ITerminalAddon {
         return;
       }
 
-      renderExplainDialog(
-        dialog,
-        {
+      this.activeExplainDialog = {
+        contentKey: content ? undefined : "explainEmpty",
+        element: dialog,
+        options: actions,
+        state: {
           status: "success",
-          title,
-          content: content || "未生成解释内容",
+          title: "",
+          content,
           markdown: content.length > 0,
         },
-        actions,
-      );
+      };
+      this.renderActiveExplainDialog(this.activeExplainDialog);
     } catch (error) {
       this.clearExplanationRenderTimer();
       if (abortController.signal.aborted || isAbortError(error)) {
@@ -627,24 +666,47 @@ export class LocalEchoAddon implements ITerminalAddon {
         return;
       }
 
-      const message = error instanceof Error ? error.message : "解释生成失败";
-      renderExplainDialog(
-        dialog,
-        {
+      const message = error instanceof Error ? error.message : undefined;
+      this.activeExplainDialog = {
+        contentKey: message || content ? undefined : "explainFailed",
+        element: dialog,
+        options: actions,
+        state: {
           status: "error",
-          title,
+          title: "",
           content: content
-            ? `${content}\n\n> 解释生成中断：${message}`
-            : message,
+            ? `${content}\n\n> ${this.i18n.t("explainInterrupted")}：${
+                message ?? this.i18n.t("explainFailed")
+              }`
+            : (message ?? ""),
           markdown: content.length > 0,
         },
-        actions,
-      );
+      };
+      this.renderActiveExplainDialog(this.activeExplainDialog);
     } finally {
       if (this.explanationAbortController === abortController) {
         this.explanationAbortController = undefined;
       }
     }
+  }
+
+  private renderActiveExplainDialog(dialog: ActiveExplainDialog) {
+    renderExplainDialog(
+      dialog.element,
+      this.localizeExplainState(dialog.state, dialog.contentKey),
+      dialog.options,
+    );
+  }
+
+  private localizeExplainState(
+    state: ExplainDialogState,
+    contentKey?: ChatTerminalMessageKey,
+  ): ExplainDialogState {
+    return {
+      ...state,
+      title: this.options.explainTitle ?? this.i18n.t("explainTitle"),
+      content: contentKey ? this.i18n.t(contentKey) : state.content,
+    };
   }
 
   private cancelExplanationRequest() {

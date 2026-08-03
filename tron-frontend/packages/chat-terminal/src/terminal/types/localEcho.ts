@@ -1,4 +1,5 @@
 import type { MaybePromise } from "./common";
+import type { ChatTerminalI18n } from "../i18n";
 
 export interface CommandExplainPayload {
   command: string;
@@ -25,4 +26,5 @@ export interface LocalEchoAddonOptions {
   ) => MaybePromise<string | void>;
   onExplain?: CommandExplain;
   explainTitle?: string;
+  i18n?: ChatTerminalI18n;
 }
