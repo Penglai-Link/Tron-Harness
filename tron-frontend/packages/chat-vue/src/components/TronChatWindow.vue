@@ -50,7 +50,7 @@ const emit = defineEmits<{
   "state-change": [state: ChatFloatingState];
 }>();
 
-const forwardedSlotNames = Object.keys(useSlots());
+const forwardedSlotNames: string[] = Object.keys(useSlots());
 
 const localState = ref(
   readFloatingState(props.storageKey, defaultFloatingState),

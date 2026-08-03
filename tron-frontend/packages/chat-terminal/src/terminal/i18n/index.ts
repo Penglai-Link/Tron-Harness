@@ -3,12 +3,16 @@ import enUS from "./locales/en-US";
 
 export type ChatTerminalLocale = "zh-CN" | "en-US";
 
+export type ChatTerminalMessageKey = string;
+
 export type ChatTerminalMessages = Record<string, string>;
+
+export type ChatTerminalMessageOverrides = Partial<ChatTerminalMessages>;
 
 export interface ChatTerminalI18n {
   readonly locale: ChatTerminalLocale;
   setLocale(locale: ChatTerminalLocale): void;
-  setMessages(messages: ChatTerminalMessages): void;
+  setMessages(messages: ChatTerminalMessageOverrides): void;
   t(key: string): string;
 }
 
@@ -21,7 +25,7 @@ const DEFAULT_MESSAGES: Record<ChatTerminalLocale, ChatTerminalMessages> = {
 
 export function createChatTerminalI18n(options?: {
   locale?: ChatTerminalLocale;
-  messages?: ChatTerminalMessages;
+  messages?: ChatTerminalMessageOverrides;
 }): ChatTerminalI18n {
   let currentLocale = options?.locale ?? DEFAULT_LOCALE;
   let overrides = options?.messages ?? {};

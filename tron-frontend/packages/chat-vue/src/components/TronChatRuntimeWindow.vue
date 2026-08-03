@@ -44,7 +44,7 @@ const emit = defineEmits<{
   "window-state-change": [state: ChatFloatingState];
 }>();
 
-const forwardedSlotNames = Object.keys(useSlots());
+const forwardedSlotNames: string[] = Object.keys(useSlots());
 
 const activeAdapter = computed(() => props.adapter ?? createMockChatAdapter());
 const normalizedInitialSession = computed(() =>
