@@ -12,11 +12,7 @@ import {
 } from "@preact/signals-core";
 import { createModelSessionHost, renderModelSession } from "../ui/modelSession";
 import { getTerminalCellMetrics, writeTerminalAsync } from "../utils";
-import {
-  createChatTerminalI18n,
-  type ChatTerminalI18n,
-  type ChatTerminalMessageKey,
-} from "../i18n";
+import { createChatTerminalI18n, type ChatTerminalI18n } from "../i18n";
 import type {
   ModelSessionAddonOptions,
   ModelSessionCommandActionPayload,
@@ -449,10 +445,15 @@ export class ModelSessionAddon implements ITerminalAddon {
   }
 
   private getSessionContentHeight(session: ModelSessionInstance) {
-    return session.host.firstElementChild?.scrollHeight ?? session.host.scrollHeight;
+    return (
+      session.host.firstElementChild?.scrollHeight ?? session.host.scrollHeight
+    );
   }
 
-  private syncSessionHostHeight(session: ModelSessionInstance, cellHeight: number) {
+  private syncSessionHostHeight(
+    session: ModelSessionInstance,
+    cellHeight: number,
+  ) {
     session.host.style.height = `${session.reservedRows * cellHeight}px`;
   }
 
@@ -746,10 +747,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     }
   }
 
-  private getErrorMessageState(
-    error: unknown,
-    fallbackKey: ChatTerminalMessageKey,
-  ) {
+  private getErrorMessageState(error: unknown, fallbackKey: string) {
     return error instanceof Error
       ? { error: error.message, errorMessageKey: undefined }
       : { error: undefined, errorMessageKey: fallbackKey };
@@ -795,7 +793,9 @@ export class ModelSessionAddon implements ITerminalAddon {
 }
 
 function createSessionKey(requestId: string, conversationId: string) {
-  return `${encodeURIComponent(conversationId)}:${encodeURIComponent(requestId)}`;
+  return `${encodeURIComponent(conversationId)}:${encodeURIComponent(
+    requestId,
+  )}`;
 }
 
 function normalizeSsePayload(payload: unknown): ParsedSsePayload | null {
