@@ -171,7 +171,7 @@ function hasToolParameterPayload(value: unknown): boolean {
               </span>
             </button>
             <CopyValueButton
-              aria-label="Copy parameters"
+              ariaLabel="Copy parameters"
               title="Copy parameters"
               :value="parametersText"
             />
@@ -186,7 +186,7 @@ function hasToolParameterPayload(value: unknown): boolean {
           >
             <h3 class="tron-chat__tool-section-title">Result</h3>
             <CopyValueButton
-              aria-label="Copy result"
+              ariaLabel="Copy result"
               title="Copy result"
               :value="resultText"
             />

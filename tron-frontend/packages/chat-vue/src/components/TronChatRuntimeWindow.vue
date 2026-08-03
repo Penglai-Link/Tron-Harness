@@ -13,7 +13,7 @@ import {
   isRecentPendingUserTurn,
   openAguiProtocolRunCodes,
 } from "@tron/chat-core";
-import { computed, ref, watch } from "vue";
+import { computed, ref, useSlots, watch } from "vue";
 import {
   defaultErrorReporter,
   dedupeMessages,
@@ -43,6 +43,8 @@ const emit = defineEmits<{
   "session-change": [session: ChatSession | null];
   "window-state-change": [state: ChatFloatingState];
 }>();
+
+const forwardedSlotNames = Object.keys(useSlots());
 
 const activeAdapter = computed(() => props.adapter ?? createMockChatAdapter());
 const normalizedInitialSession = computed(() =>
@@ -464,12 +466,12 @@ function handleWindowStateChange(state: ChatFloatingState) {
     :title-subtitle="floatingSubtitle"
     @state-change="handleWindowStateChange"
   >
-    <template v-for="(_, name) in $slots" #[name]="slotProps">
+    <template v-for="name in forwardedSlotNames" #[name]="slotProps">
       <slot :name="name" v-bind="slotProps || {}" />
     </template>
   </TronChatWindow>
   <TronChatPanel v-else v-bind="panelCommonProps" :show-header="true">
-    <template v-for="(_, name) in $slots" #[name]="slotProps">
+    <template v-for="name in forwardedSlotNames" #[name]="slotProps">
       <slot :name="name" v-bind="slotProps || {}" />
     </template>
   </TronChatPanel>

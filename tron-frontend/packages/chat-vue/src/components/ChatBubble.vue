@@ -34,7 +34,7 @@ const actorName = computed(() =>
       </div>
       <div class="tron-chat__message-actions">
         <CopyValueButton
-          aria-label="Copy raw markdown"
+          ariaLabel="Copy raw markdown"
           title="Copy raw markdown"
           :value="props.message.content"
         />

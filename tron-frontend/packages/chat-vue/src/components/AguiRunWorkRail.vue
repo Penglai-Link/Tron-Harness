@@ -3,7 +3,7 @@ import { ChevronDown, ChevronRight } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
 import {
   buildAguiUserWorkCards,
-  type ChatAguiStreamEvent,
+  type TranscriptAguiEvent,
 } from "@tron/chat-core";
 import ReasoningCard from "./ReasoningCard.vue";
 import ToolGroupCard from "./ToolGroupCard.vue";
@@ -11,7 +11,7 @@ import ToolCard from "./ToolCard.vue";
 
 const props = withDefaults(defineProps<{
   debugEvents?: string[];
-  events?: ChatAguiStreamEvent[];
+  events?: TranscriptAguiEvent[];
 }>(), {
   debugEvents: () => [],
   events: () => [],
@@ -29,7 +29,7 @@ function formatAguiDuration(milliseconds: number) {
   return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
-function aguiWorkDuration(events: ChatAguiStreamEvent[]) {
+function aguiWorkDuration(events: TranscriptAguiEvent[]) {
   const times = events
     .map((ev) => ("timestamp" in ev && typeof ev.timestamp === "number" ? ev.timestamp : null))
     .filter((v): v is number => typeof v === "number");
@@ -37,7 +37,7 @@ function aguiWorkDuration(events: ChatAguiStreamEvent[]) {
   return formatAguiDuration(Math.max(...times) - Math.min(...times));
 }
 
-function terminalAguiEvent(events: ChatAguiStreamEvent[]) {
+function terminalAguiEvent(events: TranscriptAguiEvent[]) {
   for (let i = events.length - 1; i >= 0; i -= 1) {
     const normalized = String(events[i]?.type ?? "").toUpperCase();
     if (normalized.includes("RUN_FINISHED") || normalized.includes("RUN_ERROR")) return events[i];

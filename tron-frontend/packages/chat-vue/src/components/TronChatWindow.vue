@@ -10,7 +10,7 @@ import {
   writeFloatingState,
   type ChatFloatingState,
 } from "@tron/chat-core";
-import { computed, onBeforeUnmount, ref, watch } from "vue";
+import { computed, onBeforeUnmount, ref, useSlots, watch } from "vue";
 import { cx } from "../utils";
 import TronChatPanel from "./TronChatPanel.vue";
 import { TronChatWindowProps } from "../types";
@@ -49,6 +49,8 @@ const emit = defineEmits<{
   stop: [];
   "state-change": [state: ChatFloatingState];
 }>();
+
+const forwardedSlotNames = Object.keys(useSlots());
 
 const localState = ref(
   readFloatingState(props.storageKey, defaultFloatingState),
@@ -361,7 +363,7 @@ function endResize(event: PointerEvent) {
           @send="emit('send')"
           @stop="emit('stop')"
         >
-          <template v-for="(_, name) in $slots" #[name]="slotProps">
+          <template v-for="name in forwardedSlotNames" #[name]="slotProps">
             <slot :name="name" v-bind="slotProps || {}" />
           </template>
         </TronChatPanel>
