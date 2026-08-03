@@ -7,7 +7,7 @@
   position: absolute;
   top: 0;
   left: 0px;
-  width: 100%;
+  width: stretch;
   box-sizing: border-box;
   display: flex;
   align-items: center;
@@ -15,6 +15,7 @@
   pointer-events: auto;
   transform: translate3d(0, 0, 0);
   will-change: transform;
+  margin-right: 10px;
 }
 
 .ai-terminal-model-session-host[hidden] {
@@ -28,8 +29,8 @@
   flex-direction: column;
   box-sizing: border-box;
   border-radius: 6px;
-  background: var(--ai-terminal-panel-background);
-  color: var(--ai-terminal-panel-foreground);
+  background: var(--ai-terminal-card-background);
+  color: var(--ai-terminal-primary);
   overflow: hidden;
   user-select: text;
   -webkit-user-select: text;
@@ -41,8 +42,8 @@
 }
 
 .ai-terminal-model-session__markdown {
-  color: var(--ai-terminal-muted);
-  font-size: 13px;
+  color: var(--ai-terminal-primary);
+  font-size: 14px;
   line-height: 1.55;
 }
 
@@ -50,7 +51,7 @@
 .ai-terminal-model-session-md__h2,
 .ai-terminal-model-session-md__h3 {
   margin: 10px 0 6px;
-  color: var(--ai-terminal-foreground);
+  color: var(--ai-terminal-primary);
   font-weight: 700;
   line-height: 1.35;
 }
@@ -84,7 +85,7 @@
   margin: 0 0 8px;
   border-left: 3px solid var(--ai-terminal-border);
   padding-left: 10px;
-  color: var(--ai-terminal-muted);
+  color: color-mix(in srgb, var(--ai-terminal-primary) 64%, transparent);
 }
 
 .ai-terminal-model-session-md__code,
@@ -99,25 +100,33 @@
   margin: 0 0 8px;
   overflow-x: auto;
   border-radius: 4px;
-  background: var(--ai-terminal-code-background);
+  background: color-mix(
+    in srgb,
+    var(--ai-terminal-primary) 8%,
+    var(--ai-terminal-secondary)
+  );
   padding: 8px 10px;
-  color: var(--ai-terminal-foreground);
+  color: var(--ai-terminal-primary);
   font-size: 12px;
   line-height: 1.5;
 }
 
 .ai-terminal-model-session-md__inline-code {
   border-radius: 3px;
-  background: var(--ai-terminal-hover-background);
+  background: color-mix(
+    in srgb,
+    var(--ai-terminal-primary) 13%,
+    var(--ai-terminal-secondary)
+  );
   padding: 1px 4px;
-  color: var(--ai-terminal-foreground);
+  color: var(--ai-terminal-primary);
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
   font-size: 0.92em;
 }
 
 .ai-terminal-model-session-md__link {
-  color: var(--ai-terminal-accent);
+  color: var(--ai-terminal-primary);
   text-decoration: none;
 
   &:hover {
@@ -127,27 +136,31 @@
 
 .ai-terminal-model-session-command {
   position: relative;
-  margin: 8px 0 10px;
   border-radius: 6px;
-  background: var(--ai-terminal-hover-background);
+  border: 1px solid var(--ai-terminal-border);
+  background: var(--ai-terminal-card-background);
   padding: 10px;
   &__type {
-    color: var(--ai-terminal-foreground);
+    color: var(--ai-terminal-primary);
     font-size: 12px;
     font-weight: 700;
   }
   &__status {
     flex: 0 0 auto;
-    color: var(--ai-terminal-subtle);
+    color: color-mix(in srgb, var(--ai-terminal-primary) 48%, transparent);
     font-size: 12px;
   }
   &__code {
     margin: 0;
     overflow-x: auto;
     border-radius: 4px;
-    background: var(--ai-terminal-code-background);
+    background: color-mix(
+      in srgb,
+      var(--ai-terminal-primary) 8%,
+      var(--ai-terminal-secondary)
+    );
     padding: 10px;
-    color: var(--ai-terminal-foreground);
+    color: var(--ai-terminal-primary);
     font-size: 12px;
     line-height: 1.45;
     white-space: pre-wrap;
@@ -174,15 +187,23 @@
     line-height: 1.5;
   }
   &__output {
-    background: var(--ai-terminal-code-background);
-    color: var(--ai-terminal-muted);
+    background: color-mix(
+      in srgb,
+      var(--ai-terminal-primary) 8%,
+      var(--ai-terminal-secondary)
+    );
+    color: color-mix(in srgb, var(--ai-terminal-primary) 64%, transparent);
   }
   &__editor {
     width: 100%;
     min-height: 0;
     box-sizing: border-box;
     border-radius: 4px;
-    background: var(--ai-terminal-input-background);
+    background: color-mix(
+      in srgb,
+      var(--ai-terminal-border) 42%,
+      var(--ai-terminal-secondary)
+    );
     padding: 10px;
     font-size: 12px;
     line-height: 1.45;
@@ -196,7 +217,7 @@
       outline: none;
       resize: none;
       background: transparent;
-      color: var(--ai-terminal-foreground);
+      color: var(--ai-terminal-primary);
     }
   }
   &__ai-generate {
@@ -211,14 +232,14 @@
     padding: 0 4px;
     border: 0;
     background: transparent;
-    color: var(--ai-terminal-foreground);
+    color: var(--ai-terminal-primary);
     font: inherit;
     cursor: pointer;
     user-select: none;
     -webkit-user-select: none;
 
     &:hover:not(:disabled) {
-      color: var(--ai-terminal-accent);
+      color: var(--ai-terminal-primary);
     }
 
     &:disabled {
@@ -233,8 +254,8 @@
     }
   }
   &__error {
-    background: color-mix(in srgb, var(--ai-terminal-error) 12%, transparent);
-    color: var(--ai-terminal-error);
+    background: color-mix(in srgb, var(--ai-terminal-border) 12%, transparent);
+    color: var(--ai-terminal-primary);
   }
   &__actions {
     display: flex;
@@ -255,8 +276,12 @@
   min-width: 56px;
   height: 28px;
   border-radius: 4px;
-  background: var(--ai-terminal-hover-background);
-  color: var(--ai-terminal-foreground);
+  background: color-mix(
+    in srgb,
+    var(--ai-terminal-primary) 13%,
+    var(--ai-terminal-secondary)
+  );
+  color: var(--ai-terminal-primary);
   cursor: pointer;
   font-size: 12px;
   user-select: none;
@@ -271,21 +296,25 @@
     opacity: 0.45;
   }
   &--primary {
-    background: var(--ai-terminal-panel-background);
-    color: var(--ai-terminal-panel-foreground);
+    background: var(--ai-terminal-card-background);
+    color: var(--ai-terminal-primary);
   }
   &--info {
-    background: var(--ai-terminal-success);
-    color: var(--ai-terminal-panel-foreground);
+    background: color-mix(
+      in srgb,
+      var(--ai-terminal-primary) 16%,
+      var(--ai-terminal-secondary)
+    );
+    color: var(--ai-terminal-primary);
   }
   &--danger {
-    background: var(--ai-terminal-panel-foreground);
-    color: var(--ai-terminal-panel-background);
+    background: var(--ai-terminal-primary);
+    color: var(--ai-terminal-secondary);
   }
 }
 
 .ai-terminal-model-session-command--executed {
-  border-color: var(--ai-terminal-success);
+  border-color: var(--ai-terminal-border);
 }
 
 .ai-terminal-model-session-command--rejected {
@@ -293,5 +322,5 @@
 }
 
 .ai-terminal-model-session-command--error {
-  border-color: var(--ai-terminal-error);
+  border-color: var(--ai-terminal-border);
 }

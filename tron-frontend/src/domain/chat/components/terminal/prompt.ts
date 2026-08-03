@@ -1,6 +1,6 @@
 const MODEL_SYSTEM_PROMPT = `你是一个终端助手。请遵守以下规则：
 1. 仅在需要建议用户执行终端命令时输出命令块。
-2. 命令块必须严格使用以下格式，并保证所有标签完整闭合：
+2. 存在需要执行的命令块时，必须先给出命令的解释，再给出要执行的命令块。
 <execute_command>
 <command>一条可直接执行的 Shell 命令</command>
 </execute_command>

@@ -23,10 +23,15 @@ export interface IOptions {
   runCommand: (
     command: string,
     onOutput: (output: string) => void,
-  ) => Promise<void>;
+  ) => Promise<CommandExecutionResult | void>;
+  cancelCommand?: () => void;
   commandChat: (command: string) => Promise<void>;
   commandExplain: CommandExplain;
   commandGenerate: (content: string) => Promise<string>;
+}
+
+export interface CommandExecutionResult {
+  currentDirectory?: string;
 }
 
 const defaultOptions: Partial<IOptions> = {};
@@ -47,20 +52,24 @@ export function initTerminal(options: IOptions) {
       return;
     }
     try {
-      await normalizeOptions.runCommand(input, onOutput);
+      const result = await normalizeOptions.runCommand(input, onOutput);
+      if (result?.currentDirectory) {
+        currentDirectory = result.currentDirectory;
+      }
     } catch (error) {
       onOutput(`${error}\r\n`);
     }
   }
 
   const termInstance: Terminal = new Terminal(normalizeOptions.el, {
-    cursorStyle: "bar",
+    cursorBlink: true,
     ...termOptions,
     localEcho: {
       enabled: true,
       prompt: () => {
         return formatePath(currentDirectory);
       },
+      onCancelCommand: normalizeOptions.cancelCommand,
       // 执行命令前判断，系统命令直接执行，非系统命令调用大模型
       onBeforeCommand: async (command) => {
         if (!command.trim()) {
@@ -102,6 +111,9 @@ export function initTerminal(options: IOptions) {
   termInstance.terminal.write(formatePath(currentDirectory));
 
   return {
+    dispose() {
+      termInstance.dispose();
+    },
     setCurrentDirectory(nextDirectory: string) {
       currentDirectory = nextDirectory;
       termInstance.terminal.write(`\r\x1b[2K${formatePath(currentDirectory)}`);

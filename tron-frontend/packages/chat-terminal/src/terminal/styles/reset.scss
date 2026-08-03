@@ -10,21 +10,11 @@ button {
 }
 
 .ai-terminal-container {
-  --ai-terminal-background: var(--color-background, #1f1f1f);
-  --ai-terminal-foreground: var(--color-on-background, #ededed);
-  --ai-terminal-cursor: var(--color-on-background, #ededed);
-  --ai-terminal-selection-background: rgba(138, 180, 248, 0.32);
-  --ai-terminal-panel-background: rgba(31, 31, 31, 0.96);
-  --ai-terminal-panel-foreground: #ededed;
-  --ai-terminal-muted: rgba(255, 255, 255, 0.64);
-  --ai-terminal-subtle: rgba(255, 255, 255, 0.48);
+  --ai-terminal-primary: var(--color-on-background, #ededed);
+  --ai-terminal-secondary: var(--color-background, #1f1f1f);
+  --ai-terminal-card-background: var(
+    --color-elevated-surface,
+    rgba(31, 31, 31, 0.96)
+  );
   --ai-terminal-border: rgba(255, 255, 255, 0.14);
-  --ai-terminal-accent: #8ab4f8;
-  --ai-terminal-code-background: rgba(0, 0, 0, 0.28);
-  --ai-terminal-input-background: rgba(0, 0, 0, 0.36);
-  --ai-terminal-hover-background: rgba(255, 255, 255, 0.13);
-  --ai-terminal-error: #ff9aa2;
-  --ai-terminal-warning: #ffb3b3;
-  --ai-terminal-success: #6fcf97;
-  --ai-terminal-icon: rgba(255, 255, 255, 0.5);
 }

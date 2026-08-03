@@ -140,6 +140,7 @@ export class Terminal {
       this.themeRefreshAnimationFrame = undefined;
     }
     this.terminal.dispose();
+    this.terminalContainer.remove();
   }
 
   executeCommand(command: string) {

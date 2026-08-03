@@ -7,7 +7,7 @@
     "dev": "node --watch index.js",
     "postinstall": "node fix-node-pty-permissions.js",
     "start": "node index.js",
-    "test": "node --test message.node-test.mjs scoket.node-test.mjs sse.node-test.mjs"
+    "test": "node --test *.node-test.mjs"
   },
   "dependencies": {
     "@nestjs/common": "^11.1.28",

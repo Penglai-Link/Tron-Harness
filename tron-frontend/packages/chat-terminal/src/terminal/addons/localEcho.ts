@@ -36,6 +36,11 @@ interface ExplainButtonInstance {
   top: number;
 }
 
+interface ActiveCommand {
+  cancelled: boolean;
+  pendingOutputWrite: Promise<void>;
+}
+
 const EXPLAIN_DIALOG_WIDTH = 400;
 const EXPLAIN_DIALOG_MAX_HEIGHT = 180;
 const EXPLAIN_DIALOG_MARGIN = 12;
@@ -56,6 +61,7 @@ export class LocalEchoAddon implements ITerminalAddon {
   };
   private currentInput = "";
   private isExecuting = false;
+  private activeCommand?: ActiveCommand;
   private terminal?: XTerminal;
   private explainElements: HTMLElement[] = [];
   private explainButtons: ExplainButtonInstance[] = [];
@@ -156,6 +162,9 @@ export class LocalEchoAddon implements ITerminalAddon {
 
   private async echo(terminal: XTerminal, data: string) {
     if (this.isExecuting) {
+      if (data === "\u0003") {
+        this.cancelCurrentCommand();
+      }
       return;
     }
 
@@ -211,6 +220,11 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     this.currentInput = "";
     this.isExecuting = true;
+    const activeCommand: ActiveCommand = {
+      cancelled: false,
+      pendingOutputWrite: Promise.resolve(),
+    };
+    this.activeCommand = activeCommand;
     this.notifyInputState();
 
     try {
@@ -235,24 +249,29 @@ export class LocalEchoAddon implements ITerminalAddon {
       const firstOutputRow =
         terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
       let output = "";
-      let pendingOutputWrite = Promise.resolve();
       const onOutput = (chunk: string) => {
-        if (!chunk) {
+        if (!chunk || activeCommand.cancelled) {
           return;
         }
 
         output += chunk;
-        pendingOutputWrite = pendingOutputWrite.then(() =>
-          writeTerminalAsync(terminal, normalizeTerminalOutput(chunk)),
-        );
+        activeCommand.pendingOutputWrite =
+          activeCommand.pendingOutputWrite.then(() =>
+            writeTerminalAsync(terminal, normalizeTerminalOutput(chunk)),
+          );
       };
       const returnedOutput = await this.options.onCommand(command, onOutput);
 
-      if (returnedOutput) {
+      if (returnedOutput && !activeCommand.cancelled) {
         onOutput(returnedOutput);
       }
 
-      await pendingOutputWrite;
+      await activeCommand.pendingOutputWrite;
+
+      if (activeCommand.cancelled) {
+        await writeTerminalAsync(terminal, "^C\r\n");
+        return;
+      }
 
       if (hasVisibleTerminalOutput(output)) {
         this.createExplainButton(command, output, firstOutputRow);
@@ -264,10 +283,24 @@ export class LocalEchoAddon implements ITerminalAddon {
       try {
         await this.writePrompt(true);
       } finally {
+        if (this.activeCommand === activeCommand) {
+          this.activeCommand = undefined;
+        }
         this.isExecuting = false;
         this.notifyInputState();
       }
     }
+  }
+
+  private cancelCurrentCommand() {
+    const activeCommand = this.activeCommand;
+
+    if (!activeCommand || activeCommand.cancelled) {
+      return;
+    }
+
+    activeCommand.cancelled = true;
+    this.options.onCancelCommand?.();
   }
 
   private notifyInputState() {

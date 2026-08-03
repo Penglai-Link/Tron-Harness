@@ -22,7 +22,7 @@
     width: 100%;
     height: 100%;
     path {
-      stroke: var(--ai-terminal-accent);
+      stroke: var(--ai-terminal-primary);
     }
   }
 }
@@ -41,9 +41,8 @@
   flex-direction: column;
   box-sizing: border-box;
   border-radius: 6px;
-  background: var(--ai-terminal-panel-background);
-  color: var(--ai-terminal-panel-foreground);
-  gap: 10px;
+  background: var(--ai-terminal-card-background);
+  color: var(--ai-terminal-primary);
   z-index: 10;
   padding-bottom: 10px;
   user-select: text;
@@ -84,19 +83,19 @@
     -webkit-user-select: none;
     svg {
       width: 50%;
-      stroke: var(--ai-terminal-icon);
+      stroke: color-mix(in srgb, var(--ai-terminal-primary) 50%, transparent);
     }
     &:hover {
       svg {
-        stroke: var(--ai-terminal-foreground);
+        stroke: var(--ai-terminal-primary);
       }
     }
   }
 
   &__content {
-    font-size: 12px;
+    font-size: 14px;
     white-space: normal;
-    color: var(--ai-terminal-subtle);
+    color: var(--ai-terminal-primary);
     overflow-y: auto;
     height: 50%;
     flex: 1 0 auto;
@@ -105,7 +104,7 @@
   }
 
   &__footer {
-    color: var(--ai-terminal-subtle);
+    color: color-mix(in srgb, var(--ai-terminal-primary) 48%, transparent);
     font-size: 12px;
     flex: 0 0 auto;
     padding: 0 10px 5px 10px;
@@ -113,20 +112,20 @@
 
   &--loading {
     .ai-terminal-explain-dialog__content {
-      color: var(--ai-terminal-muted);
+      color: var(--ai-terminal-primary);
     }
 
     .ai-terminal-explain-dialog__loading-text {
+      font-size: 14px;
       display: inline-block;
-      font-weight: 600;
       color: transparent;
       background: linear-gradient(
         90deg,
-        var(--ai-terminal-muted) 0%,
-        var(--ai-terminal-muted) 38%,
-        var(--ai-terminal-foreground) 50%,
-        var(--ai-terminal-muted) 62%,
-        var(--ai-terminal-muted) 100%
+        color-mix(in srgb, var(--ai-terminal-primary) 64%, transparent) 0%,
+        color-mix(in srgb, var(--ai-terminal-primary) 64%, transparent) 38%,
+        var(--ai-terminal-primary) 50%,
+        color-mix(in srgb, var(--ai-terminal-primary) 64%, transparent) 62%,
+        color-mix(in srgb, var(--ai-terminal-primary) 64%, transparent) 100%
       );
       background-size: 240% 100%;
       background-position: 100% 0;
@@ -139,7 +138,7 @@
 
   &--error {
     .ai-terminal-explain-dialog__content {
-      color: var(--ai-terminal-error);
+      color: var(--ai-terminal-primary);
     }
   }
 }
@@ -153,7 +152,7 @@
 @media (prefers-reduced-motion: reduce) {
   .ai-terminal-explain-dialog--loading
     .ai-terminal-explain-dialog__loading-text {
-    color: var(--ai-terminal-muted);
+    color: color-mix(in srgb, var(--ai-terminal-primary) 64%, transparent);
     background: none;
     -webkit-text-fill-color: currentColor;
     animation: none;

@@ -17,6 +17,7 @@ export type CommandExplain = (
 export interface LocalEchoAddonOptions {
   enabled?: boolean;
   prompt?: string | (() => string);
+  onCancelCommand?: () => void;
   onBeforeCommand?: (command: string) => MaybePromise<boolean | void>;
   onCommand?: (
     command: string,

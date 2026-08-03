@@ -1,0 +1,287 @@
+import assert from "node:assert/strict";
+import path from "node:path";
+import test from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
+
+import { MessageType } from "./message.js";
+import { TerminalGateway } from "./scoket.js";
+
+const RECORD_SEPARATOR = "\x1e";
+const UNIT_SEPARATOR = "\x1f";
+
+test("one socket reuses one PTY and reports the resulting directory", () => {
+  const harness = createGatewayHarness();
+  const client = createClient("client-a");
+
+  harness.gateway.handleConnection(client);
+  assert.equal(harness.terminals.length, 1);
+
+  const terminal = harness.terminals[0];
+  terminal.emitData(sessionReady("/workspace"));
+  assert.deepEqual(client.events[0], [
+    "terminal:session",
+    {
+      code: "0",
+      data: { currentDirectory: "/workspace" },
+      message: "",
+    },
+  ]);
+
+  harness.gateway.executeCommand(client, {
+    command: "cd packages",
+    messageId: "message-1",
+  });
+  const firstToken = readCommandToken(terminal.writes.at(-1));
+  terminal.emitData(commandEnd(firstToken, 0, "/workspace/packages"));
+
+  harness.gateway.executeCommand(client, {
+    command: "pwd",
+    messageId: "message-2",
+  });
+  const secondToken = readCommandToken(terminal.writes.at(-1));
+  terminal.emitData(`/workspace/packages\r\n${commandEnd(
+    secondToken,
+    0,
+    "/workspace/packages",
+  )}`);
+
+  assert.equal(harness.terminals.length, 1);
+  assert.deepEqual(commandMessages(client), [
+    message(MessageType.START, "message-1"),
+    message(MessageType.END, "message-1", "", "/workspace/packages"),
+    message(MessageType.START, "message-2"),
+    message(
+      MessageType.CONTENT,
+      "message-2",
+      "/workspace/packages\r\n",
+    ),
+    message(MessageType.END, "message-2", "", "/workspace/packages"),
+  ]);
+});
+
+test("socket sessions are isolated and disconnect cleans only its own PTY", () => {
+  const harness = createGatewayHarness();
+  const firstClient = createClient("client-a");
+  const secondClient = createClient("client-b");
+
+  harness.gateway.handleConnection(firstClient);
+  harness.gateway.handleConnection(secondClient);
+  assert.equal(harness.terminals.length, 2);
+
+  const [firstTerminal, secondTerminal] = harness.terminals;
+  firstTerminal.emitData(sessionReady("/workspace/a"));
+  secondTerminal.emitData(sessionReady("/workspace/b"));
+
+  harness.gateway.handleDisconnect(firstClient);
+
+  assert.equal(firstTerminal.killCalls, 1);
+  assert.equal(secondTerminal.killCalls, 0);
+  assert.equal(harness.gateway.sessionsByClient.has("client-a"), false);
+  assert.equal(harness.gateway.sessionsByClient.has("client-b"), true);
+});
+
+test("a session rejects concurrent commands and Ctrl+C keeps the PTY alive", () => {
+  const harness = createGatewayHarness();
+  const client = createClient("client-a");
+
+  harness.gateway.handleConnection(client);
+  const terminal = harness.terminals[0];
+  terminal.emitData(sessionReady("/workspace"));
+
+  harness.gateway.executeCommand(client, {
+    command: "sleep 10",
+    messageId: "message-1",
+  });
+  harness.gateway.executeCommand(client, {
+    command: "pwd",
+    messageId: "message-2",
+  });
+  harness.gateway.cancelCommand(client, { messageId: "message-1" });
+
+  assert.equal(terminal.writes.at(-1), "\x03");
+  assert.equal(terminal.killCalls, 0);
+  assert.deepEqual(commandMessages(client).at(-1),
+    message(MessageType.ERROR, "message-2", "已有命令正在执行"),
+  );
+});
+
+test("a marker split across PTY chunks never leaks into command output", () => {
+  const harness = createGatewayHarness();
+  const client = createClient("client-a");
+
+  harness.gateway.handleConnection(client);
+  const terminal = harness.terminals[0];
+  terminal.emitData(sessionReady("/workspace"));
+  harness.gateway.executeCommand(client, {
+    command: "printf result",
+    messageId: "message-1",
+  });
+
+  const token = readCommandToken(terminal.writes.at(-1));
+  terminal.emitData(`result${RECORD_SEPARATOR}TRON_COMMAND_`);
+  terminal.emitData(`END:${token}:0:/workspace${UNIT_SEPARATOR}\r\n`);
+
+  assert.deepEqual(commandMessages(client), [
+    message(MessageType.START, "message-1"),
+    message(MessageType.CONTENT, "message-1", "result"),
+    message(MessageType.END, "message-1", "", "/workspace"),
+  ]);
+});
+
+test(
+  "a real PTY preserves its directory across commands",
+  { skip: process.platform === "win32" },
+  async () => {
+    const initialDirectory = process.cwd();
+    const expectedDirectory = path.join(initialDirectory, "node_modules");
+    const gateway = new TerminalGateway({ cwd: initialDirectory });
+    const client = createClient("real-client");
+
+    try {
+      gateway.handleConnection(client);
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "terminal:session" && payload.code === "0",
+      );
+
+      gateway.executeCommand(client, {
+        command: "cd node_modules",
+        messageId: "real-message-1",
+      });
+      const firstEnd = await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "command:message" &&
+          payload.messageId === "real-message-1" &&
+          payload.type === MessageType.END,
+      );
+      assert.equal(firstEnd[1].currentDirectory, expectedDirectory);
+
+      gateway.executeCommand(client, {
+        command: "pwd",
+        messageId: "real-message-2",
+      });
+      const secondEnd = await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "command:message" &&
+          payload.messageId === "real-message-2" &&
+          payload.type === MessageType.END,
+      );
+      assert.equal(secondEnd[1].currentDirectory, expectedDirectory);
+
+      const output = commandMessages(client)
+        .filter(
+          (payload) =>
+            payload.messageId === "real-message-2" &&
+            payload.type === MessageType.CONTENT,
+        )
+        .map((payload) => payload.delta)
+        .join("");
+      assert.equal(output, `${expectedDirectory}\r\n`);
+    } finally {
+      gateway.handleDisconnect(client);
+    }
+
+    assert.equal(gateway.sessionsByClient.has(client.id), false);
+  },
+);
+
+function createGatewayHarness() {
+  const terminals = [];
+  const gateway = new TerminalGateway({
+    now: () => 1,
+    spawn: () => {
+      const terminal = new FakeTerminal();
+      terminals.push(terminal);
+      return terminal;
+    },
+  });
+
+  return { gateway, terminals };
+}
+
+function createClient(id) {
+  return {
+    events: [],
+    id,
+    emit(event, payload) {
+      this.events.push([event, payload]);
+    },
+  };
+}
+
+function commandMessages(client) {
+  return client.events
+    .filter(([event]) => event === "command:message")
+    .map(([, payload]) => payload);
+}
+
+function message(type, messageId, delta = "", currentDirectory) {
+  return {
+    delta,
+    messageId,
+    timestamp: 1,
+    type,
+    ...(currentDirectory ? { currentDirectory } : {}),
+  };
+}
+
+function sessionReady(currentDirectory) {
+  return `${RECORD_SEPARATOR}TRON_SESSION_READY:${currentDirectory}${UNIT_SEPARATOR}\r\n`;
+}
+
+function commandEnd(token, exitCode, currentDirectory) {
+  return `${RECORD_SEPARATOR}TRON_COMMAND_END:${token}:${exitCode}:${currentDirectory}${UNIT_SEPARATOR}\r\n`;
+}
+
+function readCommandToken(command) {
+  const token = command?.match(/TRON_COMMAND_END:([^:]+):/)?.[1];
+  assert.ok(token, "command frame contains an end marker token");
+  return token;
+}
+
+async function waitForEvent(client, predicate) {
+  const deadline = Date.now() + 3_000;
+  while (Date.now() < deadline) {
+    const event = client.events.find(predicate);
+    if (event) return event;
+    await delay(10);
+  }
+
+  assert.fail("timed out waiting for terminal event");
+}
+
+class FakeTerminal {
+  killCalls = 0;
+  writes = [];
+  #dataHandlers = [];
+  #exitHandlers = [];
+
+  emitData(data) {
+    for (const handler of this.#dataHandlers) handler(data);
+  }
+
+  emitExit(exitCode = 0) {
+    for (const handler of this.#exitHandlers) handler({ exitCode });
+  }
+
+  kill() {
+    this.killCalls += 1;
+  }
+
+  onData(handler) {
+    this.#dataHandlers.push(handler);
+    return { dispose() {} };
+  }
+
+  onExit(handler) {
+    this.#exitHandlers.push(handler);
+    return { dispose() {} };
+  }
+
+  write(data) {
+    this.writes.push(data);
+  }
+}

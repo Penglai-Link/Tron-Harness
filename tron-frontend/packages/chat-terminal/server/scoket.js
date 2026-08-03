@@ -1,5 +1,7 @@
 import "reflect-metadata";
 
+import { randomUUID } from "node:crypto";
+import path from "node:path";
 import * as pty from "node-pty";
 import {
   SubscribeMessage,
@@ -10,76 +12,132 @@ import {
 import { MessageType, createMessage, resolveMessageId } from "./message.js";
 
 export const TERMINAL_MESSAGE_EVENT = "command:message";
+export const TERMINAL_SESSION_EVENT = "terminal:session";
+
+const RECORD_SEPARATOR = "\x1e";
+const UNIT_SEPARATOR = "\x1f";
+const SESSION_READY_PREFIX = `${RECORD_SEPARATOR}TRON_SESSION_READY:`;
+const COMMAND_END_PREFIX = `${RECORD_SEPARATOR}TRON_COMMAND_END:`;
+const MAX_BOOTSTRAP_BUFFER_LENGTH = 64 * 1024;
 
 export class TerminalGateway {
   constructor(options = {}) {
+    this.createToken = options.createToken ?? randomUUID;
+    this.cwd = options.cwd ?? process.cwd();
+    this.env = options.env ?? process.env;
     this.now = options.now ?? Date.now;
+    this.platform = options.platform ?? process.platform;
+    this.shell = options.shell;
     this.spawn = options.spawn ?? pty.spawn;
-    this.terminalsByClient = new Map();
+    this.sessionsByClient = new Map();
   }
 
   handleConnection(client) {
-    this.terminalsByClient.set(client.id, new Map());
+    this.cleanupSession(client.id, { kill: true });
+
+    const shell = getShellConfiguration({
+      env: this.env,
+      platform: this.platform,
+      shell: this.shell,
+    });
+    let terminal;
+
+    try {
+      terminal = this.spawn(shell.command, shell.args, {
+        cols: 80,
+        cwd: this.cwd,
+        env: shell.env,
+        name: "xterm-256color",
+        rows: 24,
+      });
+    } catch (error) {
+      this.emitSessionError(
+        client,
+        getErrorMessage(error, "终端会话无法启动"),
+      );
+      return;
+    }
+
+    const session = {
+      activeCommand: undefined,
+      bootstrapBuffer: "",
+      client,
+      currentDirectory: this.cwd,
+      dataDisposable: undefined,
+      disposed: false,
+      exitDisposable: undefined,
+      ready: false,
+      shell,
+      terminal,
+    };
+
+    this.sessionsByClient.set(client.id, session);
+    session.dataDisposable = terminal.onData((data) => {
+      this.handleTerminalData(session, data);
+    });
+    session.exitDisposable = terminal.onExit(() => {
+      this.handleTerminalExit(session);
+    });
+
+    try {
+      terminal.write(shell.bootstrapCommand);
+    } catch (error) {
+      this.emitSessionError(
+        client,
+        getErrorMessage(error, "终端会话无法初始化"),
+      );
+      this.cleanupSession(client.id, { kill: true });
+    }
   }
 
   handleDisconnect(client) {
-    const terminals = this.terminalsByClient.get(client.id);
-
-    if (terminals) {
-      for (const terminal of terminals.values()) {
-        killTerminal(terminal);
-      }
-    }
-
-    this.terminalsByClient.delete(client.id);
+    this.cleanupSession(client.id, { kill: true });
   }
 
   executeCommand(client, payload) {
     const messageId = resolveMessageId(payload?.messageId);
-    const command = typeof payload?.command === "string" ? payload.command.trim() : "";
+    const command =
+      typeof payload?.command === "string" ? payload.command.trim() : "";
 
     if (!command) {
       this.emit(client, MessageType.ERROR, "命令不能为空", messageId);
       return;
     }
 
-    const terminals = this.getClientTerminals(client);
-    if (terminals.has(messageId)) {
-      this.emit(client, MessageType.ERROR, "消息ID对应的命令正在执行", messageId);
+    const session = this.sessionsByClient.get(client.id);
+    if (!session || session.disposed) {
+      this.emit(client, MessageType.ERROR, "终端会话不存在", messageId);
+      return;
+    }
+    if (!session.ready) {
+      this.emit(client, MessageType.ERROR, "终端会话尚未就绪", messageId);
+      return;
+    }
+    if (session.activeCommand) {
+      this.emit(client, MessageType.ERROR, "已有命令正在执行", messageId);
       return;
     }
 
-    const [shell, args] = getShellCommand(command);
-    let terminal;
+    const token = this.createToken();
+    session.activeCommand = {
+      cancelling: false,
+      markerPrefix: `${COMMAND_END_PREFIX}${token}:`,
+      messageId,
+      outputBuffer: "",
+    };
+    this.emit(client, MessageType.START, "", messageId);
 
     try {
-      terminal = this.spawn(shell, args, {
-        cols: 80,
-        cwd: process.cwd(),
-        env: process.env,
-        name: "xterm-256color",
-        rows: 24,
-      });
+      session.terminal.write(session.shell.frameCommand(command, token));
     } catch (error) {
+      session.activeCommand = undefined;
       this.emit(
         client,
         MessageType.ERROR,
-        getErrorMessage(error, "命令无法启动"),
+        getErrorMessage(error, "命令无法执行"),
         messageId,
       );
-      return;
     }
-
-    terminals.set(messageId, terminal);
-    this.emit(client, MessageType.START, "", messageId);
-
-    terminal.onData((delta) => {
-      this.emit(client, MessageType.CONTENT, delta, messageId);
-    });
-    terminal.onExit(() => {
-      terminals.delete(messageId);
-      this.emit(client, MessageType.END, "", messageId);
-    });
   }
 
   cancelCommand(client, payload) {
@@ -89,48 +147,262 @@ export class TerminalGateway {
     }
 
     const messageId = payload.messageId.trim();
-    const terminal = this.terminalsByClient.get(client.id)?.get(messageId);
+    const session = this.sessionsByClient.get(client.id);
+    const activeCommand = session?.activeCommand;
 
-    if (!terminal) {
+    if (!session || !activeCommand || activeCommand.messageId !== messageId) {
       this.emit(client, MessageType.ERROR, "未找到正在执行的命令", messageId);
       return;
     }
+    if (activeCommand.cancelling) {
+      return;
+    }
 
-    killTerminal(terminal);
+    activeCommand.cancelling = true;
+    try {
+      session.terminal.write(session.shell.interruptInput);
+    } catch (error) {
+      this.emit(
+        client,
+        MessageType.ERROR,
+        getErrorMessage(error, "命令无法中断"),
+        messageId,
+      );
+    }
   }
 
-  emit(client, type, delta, messageId) {
+  emit(client, type, delta, messageId, currentDirectory) {
     client.emit(
       TERMINAL_MESSAGE_EVENT,
-      createMessage({ delta, messageId, now: this.now, type }),
+      createMessage({
+        currentDirectory,
+        delta,
+        messageId,
+        now: this.now,
+        type,
+      }),
     );
   }
 
-  getClientTerminals(client) {
-    let terminals = this.terminalsByClient.get(client.id);
+  emitSessionReady(session) {
+    session.client.emit(TERMINAL_SESSION_EVENT, {
+      code: "0",
+      data: { currentDirectory: session.currentDirectory },
+      message: "",
+    });
+  }
 
-    if (!terminals) {
-      terminals = new Map();
-      this.terminalsByClient.set(client.id, terminals);
+  emitSessionError(client, message) {
+    client.emit(TERMINAL_SESSION_EVENT, {
+      code: "-1",
+      data: {},
+      message,
+    });
+  }
+
+  handleTerminalData(session, data) {
+    if (session.disposed) {
+      return;
     }
 
-    return terminals;
+    if (!session.ready) {
+      this.handleBootstrapData(session, data);
+      return;
+    }
+
+    const activeCommand = session.activeCommand;
+    if (!activeCommand) {
+      return;
+    }
+
+    activeCommand.outputBuffer += data;
+    this.flushCommandOutput(session, activeCommand);
+  }
+
+  handleBootstrapData(session, data) {
+    session.bootstrapBuffer += data;
+    const marker = readDelimitedMarker(
+      session.bootstrapBuffer,
+      SESSION_READY_PREFIX,
+    );
+
+    if (!marker) {
+      if (session.bootstrapBuffer.length > MAX_BOOTSTRAP_BUFFER_LENGTH) {
+        session.bootstrapBuffer = session.bootstrapBuffer.slice(
+          -MAX_BOOTSTRAP_BUFFER_LENGTH,
+        );
+      }
+      return;
+    }
+
+    session.bootstrapBuffer = "";
+    session.currentDirectory = marker.payload || this.cwd;
+    session.ready = true;
+    this.emitSessionReady(session);
+  }
+
+  flushCommandOutput(session, activeCommand) {
+    const buffer = activeCommand.outputBuffer;
+    const markerStart = buffer.indexOf(activeCommand.markerPrefix);
+
+    if (markerStart >= 0) {
+      const markerEnd = buffer.indexOf(UNIT_SEPARATOR, markerStart);
+      const content = buffer.slice(0, markerStart);
+      if (content) {
+        this.emit(
+          session.client,
+          MessageType.CONTENT,
+          content,
+          activeCommand.messageId,
+        );
+      }
+
+      if (markerEnd < 0) {
+        activeCommand.outputBuffer = buffer.slice(markerStart);
+        return;
+      }
+
+      const payload = buffer.slice(
+        markerStart + activeCommand.markerPrefix.length,
+        markerEnd,
+      );
+      const separatorIndex = payload.indexOf(":");
+      const currentDirectory =
+        separatorIndex >= 0 ? payload.slice(separatorIndex + 1) : "";
+
+      if (currentDirectory) {
+        session.currentDirectory = currentDirectory;
+      }
+      session.activeCommand = undefined;
+      this.emit(
+        session.client,
+        MessageType.END,
+        "",
+        activeCommand.messageId,
+        session.currentDirectory,
+      );
+      return;
+    }
+
+    const retainedLength = longestSuffixPrefixLength(
+      buffer,
+      activeCommand.markerPrefix,
+    );
+    const contentEnd = buffer.length - retainedLength;
+    const content = buffer.slice(0, contentEnd);
+    activeCommand.outputBuffer = buffer.slice(contentEnd);
+
+    if (content) {
+      this.emit(
+        session.client,
+        MessageType.CONTENT,
+        content,
+        activeCommand.messageId,
+      );
+    }
+  }
+
+  handleTerminalExit(session) {
+    if (session.disposed) {
+      return;
+    }
+
+    const activeMessageId = session.activeCommand?.messageId;
+    if (activeMessageId) {
+      this.emit(
+        session.client,
+        MessageType.ERROR,
+        "终端会话已结束",
+        activeMessageId,
+      );
+    }
+    this.emitSessionError(session.client, "终端会话已结束");
+    this.cleanupSession(session.client.id, { kill: false });
+  }
+
+  cleanupSession(clientId, { kill }) {
+    const session = this.sessionsByClient.get(clientId);
+    if (!session || session.disposed) {
+      return;
+    }
+
+    session.disposed = true;
+    session.activeCommand = undefined;
+    this.sessionsByClient.delete(clientId);
+    session.dataDisposable?.dispose?.();
+    session.exitDisposable?.dispose?.();
+    if (kill) {
+      killTerminal(session.terminal);
+    }
   }
 }
 
-function getShellCommand(command) {
-  if (process.platform === "win32") {
-    return [process.env.ComSpec ?? "cmd.exe", ["/d", "/s", "/c", command]];
+function getShellConfiguration({ env, platform, shell }) {
+  if (platform === "win32") {
+    return {
+      args: ["/d", "/q"],
+      bootstrapCommand: `@echo off\r\n@echo ${SESSION_READY_PREFIX}%CD%${UNIT_SEPARATOR}\r\n`,
+      command: shell ?? env.ComSpec ?? "cmd.exe",
+      env: { ...env, PROMPT: "$S" },
+      frameCommand: (command, token) =>
+        `${command}\r\n@echo ${COMMAND_END_PREFIX}${token}:%ERRORLEVEL%:%CD%${UNIT_SEPARATOR}\r\n`,
+      interruptInput: "\x03",
+    };
   }
 
-  return [process.env.SHELL ?? "/bin/sh", ["-lc", command]];
+  const command = shell ?? env.SHELL ?? "/bin/sh";
+  return {
+    args: getPosixShellArgs(command),
+    bootstrapCommand:
+      `stty -echo; printf '\\036TRON_SESSION_READY:%s\\037\\n' "$PWD"\n`,
+    command,
+    env,
+    frameCommand: (input, token) =>
+      `${input}\nprintf '\\036TRON_COMMAND_END:${token}:%s:%s\\037\\n' "$?" "$PWD"\n`,
+    interruptInput: "\x03",
+  };
+}
+
+function getPosixShellArgs(shell) {
+  const name = path.basename(shell);
+  if (name === "bash") {
+    return ["--noprofile", "--norc", "+i"];
+  }
+  if (name === "zsh") {
+    return ["-f", "+i"];
+  }
+  return ["+i"];
+}
+
+function readDelimitedMarker(buffer, prefix) {
+  const start = buffer.indexOf(prefix);
+  if (start < 0) {
+    return undefined;
+  }
+  const end = buffer.indexOf(UNIT_SEPARATOR, start + prefix.length);
+  if (end < 0) {
+    return undefined;
+  }
+  return {
+    payload: buffer.slice(start + prefix.length, end),
+  };
+}
+
+function longestSuffixPrefixLength(value, prefix) {
+  const maxLength = Math.min(value.length, prefix.length - 1);
+  for (let length = maxLength; length > 0; length -= 1) {
+    if (value.endsWith(prefix.slice(0, length))) {
+      return length;
+    }
+  }
+  return 0;
 }
 
 function killTerminal(terminal) {
   try {
     terminal.kill();
   } catch {
-    // The process may already have exited between lookup and cancellation.
+    // The process may already have exited during disconnect cleanup.
   }
 }
 

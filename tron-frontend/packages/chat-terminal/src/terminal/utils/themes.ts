@@ -8,23 +8,10 @@ const TOKEN_VARIABLES: Record<
   Exclude<keyof TerminalThemeTokens, "ansi">,
   string
 > = {
-  background: "--ai-terminal-background",
-  foreground: "--ai-terminal-foreground",
-  cursor: "--ai-terminal-cursor",
-  selectionBackground: "--ai-terminal-selection-background",
-  panelBackground: "--ai-terminal-panel-background",
-  panelForeground: "--ai-terminal-panel-foreground",
-  muted: "--ai-terminal-muted",
-  subtle: "--ai-terminal-subtle",
+  primary: "--ai-terminal-primary",
+  secondary: "--ai-terminal-secondary",
+  cardBackground: "--ai-terminal-card-background",
   border: "--ai-terminal-border",
-  accent: "--ai-terminal-accent",
-  codeBackground: "--ai-terminal-code-background",
-  inputBackground: "--ai-terminal-input-background",
-  hoverBackground: "--ai-terminal-hover-background",
-  error: "--ai-terminal-error",
-  warning: "--ai-terminal-warning",
-  success: "--ai-terminal-success",
-  icon: "--ai-terminal-icon",
 };
 
 const SEMANTIC_KEYS = Object.keys(TOKEN_VARIABLES) as Array<
@@ -78,10 +65,10 @@ export function syncTerminalTheme(
 ) {
   const tokens = resolveTerminalThemeTokens(container);
   terminal.options.theme = {
-    background: tokens.background,
-    foreground: tokens.foreground,
-    cursor: tokens.cursor,
-    selectionBackground: tokens.selectionBackground,
+    background: tokens.secondary,
+    foreground: tokens.primary,
+    cursor: tokens.primary,
+    selectionBackground: tokens.border,
     ...ansi,
   };
 }

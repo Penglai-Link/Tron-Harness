@@ -10,17 +10,33 @@ export const MessageType = Object.freeze({
 
 const MESSAGE_TYPES = new Set(Object.values(MessageType));
 
-export function createMessage({ delta = "", messageId, now = Date.now, type }) {
+export function createMessage({
+  currentDirectory,
+  delta = "",
+  messageId,
+  now = Date.now,
+  type,
+}) {
   if (!MESSAGE_TYPES.has(type)) {
     throw new TypeError(`不支持的消息类型：${type}`);
   }
 
-  return {
+  const message = {
     delta: String(delta),
     messageId: resolveMessageId(messageId),
     timestamp: now(),
     type,
   };
+
+  if (
+    type === MessageType.END &&
+    typeof currentDirectory === "string" &&
+    currentDirectory
+  ) {
+    message.currentDirectory = currentDirectory;
+  }
+
+  return message;
 }
 
 export function resolveMessageId(value, createId = randomUUID) {
