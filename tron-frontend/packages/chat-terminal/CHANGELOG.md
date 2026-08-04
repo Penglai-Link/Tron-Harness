@@ -1,5 +1,11 @@
 # @tron/chat-terminal
 
+## 0.1.2
+
+### Patch Changes
+
+- 交互样式优化
+
 ## Unreleased
 
 ### Minor Changes
