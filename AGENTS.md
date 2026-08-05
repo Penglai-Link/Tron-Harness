@@ -52,7 +52,7 @@ Pagable response body format:
 <!-- The `/chats` transcript is rendered by `packages/chat-react/src/TronChatPanel.tsx`; the local `ChatBubble` in `ChatManagementPage.tsx` is not used by that route. -->
 <!-- A chat SSE disconnect is only an observer detach, not a Stop; aborting the runtime on disconnect can leave `agent_session_run_leases` stale when the async future never records a terminal event. -->
 <!-- Live steer only applies to an active runtime that declares `supports_steer`; never emulate steer for CodexExec or OpenCodeRun by starting a concurrent run. -->
-<!-- The current `make be-test` baseline has unrelated contract drift: four literal Makefile checks and the `application/system_config.rs` facade-size check fail without touching those files. -->
+<!-- The current `make be-test` baseline passes `makefile_contract` but still fails three `rust_coding_spec_architecture` checks for `resources/mod.rs`, the `application/system_config.rs` facade size, and oversized resource/tool implementation files. -->
 <!-- Construct the chat SSE lifecycle guard before the lazy response body so dropping an unpolled body still deactivates its observer without stopping the run. -->
 <!-- Vue `ref` proxies a plain observer record, so identity-based SSE cleanup guards must store that record in `shallowRef`; otherwise `ref.value === originalRecord` is false and `sending` can remain stuck. -->
 <!-- Chat reserves the shared active-run slot before persisting its USER message; the reservation must remain steer-ineligible until RunExecutor atomically activates it. -->
