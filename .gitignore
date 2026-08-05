@@ -4,9 +4,11 @@ tron-backend/resources/frontend/
 .intentforge-dreaming/
 **/.intentforge-dreaming/
 .tron/
+.turbo
 
 # AI Tools
 .codex/
+.codex-run/
 .codex-artifacts/
 .gemini/
 .qwen/
