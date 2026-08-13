@@ -19,8 +19,6 @@ import {
   Bell,
   Bot,
   ChevronDown,
-  ChevronLeft,
-  ChevronRight,
   CircleUserRound,
   MousePointerClick,
   MoreHorizontal,
@@ -791,11 +789,11 @@ export function TronShell({
 
     return (
       <>
-        <nav className={cn("space-y-4", compact ? "space-y-2" : "")} aria-label={t("shell:aria.primaryNavigation")}>
+        <nav className={cn("space-y-4 flex-1", compact ? "space-y-2" : "")} aria-label={t("shell:aria.primaryNavigation")}>
           {visibleNavigation.map((section) => {
             const open = openSections[section.label];
             return (
-              <section key={section.label}>
+              <section key={section.label} className="flex-1">
                 {compact ? null : (
                   <button
                     className="flex h-8 w-full items-center justify-between rounded-lg px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
@@ -1079,10 +1077,10 @@ export function TronShell({
             )}
             data-collapsed={sidebarCollapsed}
           >
-            <div className={cn("h-full overflow-y-auto py-4", sidebarCollapsed ? "px-2" : "px-3")}>
+            <div className={cn("h-full overflow-y-auto px-2 pt-2")}>
               {renderSidebarContent()}
             </div>
-            {/* <DraggleLine onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className="absolute right-0 top-0 h-full z-10 " /> */}
+            <div onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className={cn('w-full h-10 flex-none px-5 cursor-pointer flex items-center shadow-[0px_-10px_28px_rgba(15,23,42,0.04)]')}>{sidebarCollapsed ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</div>
           </aside>
 
           {sidebarTooltip && sidebarCollapsed ? (
