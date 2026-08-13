@@ -5,6 +5,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 use serde::Serialize;
+use utoipa::ToSchema;
 
 use crate::{
     app::{AppReadiness, AppReadinessStatus},
@@ -12,29 +13,35 @@ use crate::{
     response::ApiResponse,
 };
 
-#[derive(Debug, Serialize)]
-pub(crate) struct HealthData {
+#[derive(Debug, Serialize, ToSchema)]
+pub struct HealthData {
     status: &'static str,
     service: &'static str,
     version: &'static str,
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct ReadinessComponents {
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReadinessComponents {
     storage: &'static str,
     graph: &'static str,
     rag: &'static str,
 }
 
-#[derive(Debug, Serialize)]
-pub(crate) struct ReadinessData {
+#[derive(Debug, Serialize, ToSchema)]
+pub struct ReadinessData {
     status: &'static str,
     service: &'static str,
     version: &'static str,
     components: ReadinessComponents,
 }
 
-pub(crate) async fn health(State(_config): State<AppConfig>) -> Json<ApiResponse<HealthData>> {
+#[utoipa::path(
+    get,
+    path = "/api/v1/health",
+    responses((status = 200, description = "Service is healthy", body = ApiResponse<HealthData>)),
+    tag = "System"
+)]
+pub async fn health(State(_config): State<AppConfig>) -> Json<ApiResponse<HealthData>> {
     Json(ApiResponse::success(HealthData {
         status: "ok",
         service: "tron-backend",
@@ -42,7 +49,16 @@ pub(crate) async fn health(State(_config): State<AppConfig>) -> Json<ApiResponse
     }))
 }
 
-pub(crate) async fn readiness(State(readiness): State<AppReadiness>) -> Response {
+#[utoipa::path(
+    get,
+    path = "/api/v1/readiness",
+    responses(
+        (status = 200, description = "All dependencies are ready", body = ApiResponse<ReadinessData>),
+        (status = 503, description = "A dependency is unavailable", body = ApiResponse<ReadinessData>)
+    ),
+    tag = "System"
+)]
+pub async fn readiness(State(readiness): State<AppReadiness>) -> Response {
     let readiness = readiness_payload(readiness.check());
     if readiness.status == "ready" {
         Json(ApiResponse::success(readiness)).into_response()

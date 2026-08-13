@@ -60,6 +60,7 @@ use crate::{
     config::AppConfig,
     domain::agent::ToolRegistry,
     health::{health, readiness},
+    openapi::routes as openapi_routes,
     shared::{
         crypto::Aes256SecretBox,
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
@@ -492,6 +493,7 @@ where
     Ok(Router::new()
         .route("/api/v1/health", get(health))
         .route("/api/v1/readiness", get(readiness))
+        .merge(openapi_routes())
         .merge(auth_routes())
         .merge(mcp_transport_routes())
         .merge(protected_routes)

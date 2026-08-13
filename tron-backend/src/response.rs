@@ -1,6 +1,7 @@
 use serde::Serialize;
+use utoipa::ToSchema;
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct ApiResponse<T> {
     pub code: &'static str,
     pub message: String,
@@ -17,7 +18,7 @@ impl<T> ApiResponse<T> {
     }
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Serialize, ToSchema)]
 pub struct EmptyData {}
 
 impl ApiResponse<EmptyData> {

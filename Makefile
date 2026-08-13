@@ -200,6 +200,7 @@ help:
 	@echo "                    Sources $(BACKEND_ENV_FILE) when present"
 	@echo "                    Example: make be-dev PORT=8081"
 	@echo "                    Example: make be-dev PORT=8081 GRAPH_STORAGE_PATH=/tmp/tron-8081.graph.grafeo"
+	@echo "  make openapi      Generate OpenAPI YAML at openapi.yaml"
 	@echo ""
 	@echo "Integrated web commands:"
 	@echo "  make dev-api      Start backend and frontend dev servers in API mode"
@@ -292,6 +293,10 @@ endif
 .PHONY: be-dev
 be-dev:
 	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE)) $(COMMAND_SEPARATOR) $(call RUN_WITH_ENV,$(BE_RUN_ENV),$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)")
+
+.PHONY: openapi
+openapi:
+	$(CARGO) run --quiet --manifest-path "$(BACKEND_MANIFEST)" --bin export_openapi > openapi.yaml
 
 .PHONY: dev-api
 dev-api: install
