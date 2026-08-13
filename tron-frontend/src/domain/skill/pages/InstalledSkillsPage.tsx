@@ -18,7 +18,7 @@ import {
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   DetailField,
@@ -287,16 +287,15 @@ export function InstalledSkillsPage() {
         actions={(
           <>
             <Button
-              variant="secondary"
+              size='lg'
+              variant="outline"
               disabled={syncing !== null}
               aria-busy={syncing === "update"}
               onClick={() => void handleRegistrySync("update")}
             >
-              <RefreshCw size={16} aria-hidden="true" />
               {syncing === "update" ? pageT("actions.updating", "Updating...") : pageT("actions.update", "Update")}
             </Button>
-            <Button onClick={() => navigate("/settings/skills/sync")}>
-              <Plus size={16} aria-hidden="true" />
+            <Button size='lg' onClick={() => navigate("/settings/skills/sync")}>
               {pageT("actions.sync", "Sync")}
             </Button>
           </>
@@ -317,14 +316,11 @@ export function InstalledSkillsPage() {
             </div>
             <div className="flex items-center gap-2">
               <Button
-                size="sm"
-                type="button"
-                variant="secondary"
+                size="lg"
                 disabled={syncing !== null}
                 aria-busy={syncing === "refresh"}
                 onClick={() => void handleRegistrySync("refresh")}
               >
-                <RefreshCcw size={16} aria-hidden="true" />
                 {syncing === "refresh" ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
               </Button>
               {loading ? <Badge tone="info">{pageT("loading.badge", "Loading")}</Badge> : null}

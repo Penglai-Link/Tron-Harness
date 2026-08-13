@@ -1,6 +1,5 @@
 import {
   useEffect,
-  useId,
   useMemo,
   useRef,
   useState,
@@ -9,10 +8,7 @@ import { createPortal } from "react-dom";
 import {
   Boxes,
   MoreHorizontal,
-  Plus,
-  RefreshCcw,
   Save,
-  X,
 } from "lucide-react";
 
 import {
@@ -31,14 +27,12 @@ import {
   updateMemoryWorkDomainRecord,
 } from "@/domain/memory/mock";
 import {
-  Button,
+  SelectInput,
   ConfirmDialog,
   DataTable,
-  DetailField,
   Field,
   PageHeader,
   SearchField,
-  SelectInput,
   SurfaceCard,
   TablePagination,
   TextArea,
@@ -48,7 +42,16 @@ import {
   useToast,
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { SelectItem } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface RowMenuState {
   domainCode: string;
@@ -180,32 +183,18 @@ function DomainStatusBadge({ status }: { status: MemoryWorkDomainRecord["status"
 function DomainEditorDialog({
   form,
   mode,
-  record,
   onChange,
   onClose,
   onSubmit,
-  onSwitchMode,
   submitting,
 }: {
   form: MemoryDomainFormState;
   mode: EditorState["mode"];
-  record: MemoryWorkDomainRecord | null;
   onChange: (nextForm: MemoryDomainFormState) => void;
   onClose: () => void;
   onSubmit: () => void;
-  onSwitchMode: (nextMode: EditorState["mode"]) => void;
   submitting: boolean;
 }) {
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleId = useId();
-
-  useDismissibleLayer({
-    dismissOnViewportChange: false,
-    onDismiss: onClose,
-    open: true,
-    popupRef: dialogRef,
-  });
-
   const title = mode === "create"
     ? "New Memory Domain"
     : mode === "preview"
@@ -213,142 +202,68 @@ function DomainEditorDialog({
       : "Edit Memory Domain";
   const readOnly = mode === "preview";
 
-  return createPortal(
-    <div className="fixed inset-0 z-[90] bg-[rgba(15,23,42,0.42)] px-4 py-8">
-      <div className="flex min-h-full items-center justify-center">
-        <div
-          ref={dialogRef}
-          aria-modal="true"
-          aria-labelledby={titleId}
-          className="w-full max-w-2xl rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] shadow-[0_28px_70px_rgba(15,23,42,0.24)]"
-          role="dialog"
-        >
-          <div className="flex items-start justify-between gap-4 border-b border-[var(--color-outline-variant)] px-6 py-5">
-            <div className="min-w-0">
-              <h2 id={titleId} className="text-lg font-semibold text-[var(--color-on-surface)]">{title}</h2>
-            </div>
-            <div className="flex items-center gap-2">
-              {record ? (
-                <div className="inline-flex rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-1">
-                  <button
-                    className={`rounded-md px-3 py-1.5 text-sm ${mode === "preview" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)]"}`}
-                    type="button"
-                    onClick={() => onSwitchMode("preview")}
-                  >
-                    Preview
-                  </button>
-                  <button
-                    className={`rounded-md px-3 py-1.5 text-sm ${mode === "edit" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)]"}`}
-                    type="button"
-                    onClick={() => onSwitchMode("edit")}
-                  >
-                    Edit
-                  </button>
-                </div>
-              ) : null}
-              <Button size="icon" variant="ghost" aria-label="Close memory domain dialog" onClick={onClose}>
-                <X size={16} aria-hidden="true" />
-              </Button>
-            </div>
+  return (
+    <Dialog open onOpenChange={(open) => !open && onClose()}>
+      <DialogContent
+        showCloseButton
+      >
+        <DialogHeader>
+          <DialogTitle>{title}</DialogTitle>
+        </DialogHeader>
+
+        <div className="grid gap-5">
+
+          <div className="grid gap-5 md:grid-cols-2">
+            <Field label="Domain Code">
+              <TextInput
+                readOnly={readOnly}
+                value={form.domainCode}
+                placeholder="frontend"
+                onChange={(event) => onChange({ ...form, domainCode: event.target.value })}
+              />
+            </Field>
+            <Field label="Status">
+              <SelectInput
+                readOnly={readOnly}
+                value={form.status}
+                onValueChange={(event) => onChange({ ...form, status: event as MemoryWorkDomainRecord["status"] })}
+              >
+                <SelectItem value="ACTIVE">ACTIVE</SelectItem>
+                <SelectItem value="DISABLED">DISABLED</SelectItem>
+              </SelectInput>
+            </Field>
           </div>
 
-          <div className="grid gap-5 px-6 py-6">
-            {readOnly ? (
-              <>
-                <div className="grid gap-5 md:grid-cols-2">
-                  <DetailField
-                    label="Domain Code"
-                    value={(
-                      <code className="inline-flex rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 font-mono text-[13px] text-[var(--color-on-surface-variant)]">
-                        {form.domainCode}
-                      </code>
-                    )}
-                  />
-                  <DetailField
-                    label="Status"
-                    value={<DomainStatusBadge status={form.status} />}
-                    valueClassName="mt-2"
-                  />
-                </div>
+          <Field label="Name">
+            <TextInput
+              readOnly={readOnly}
+              value={form.name}
+              placeholder="Frontend Engineering"
+              onChange={(event) => onChange({ ...form, name: event.target.value })}
+            />
+          </Field>
 
-                <DetailField
-                  label="Name"
-                  value={(
-                    <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3">
-                      {form.name || "None"}
-                    </div>
-                  )}
-                  valueClassName="mt-2 font-normal"
-                />
-
-                <DetailField
-                  label="Description"
-                  value={(
-                    <div className="min-h-28 whitespace-pre-wrap rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 leading-6 text-[var(--color-on-surface)]">
-                      {form.description || "No description"}
-                    </div>
-                  )}
-                  valueClassName="mt-2 font-normal"
-                />
-              </>
-            ) : (
-              <>
-                <div className="grid gap-5 md:grid-cols-2">
-                  <Field label="Domain Code">
-                    <TextInput
-                      readOnly={mode !== "create"}
-                      value={form.domainCode}
-                      placeholder="frontend"
-                      onChange={(event) => onChange({ ...form, domainCode: event.target.value })}
-                    />
-                  </Field>
-                  <Field label="Status">
-                    <SelectInput
-                      value={form.status}
-                      onValueChange={(event) => onChange({ ...form, status: event as MemoryWorkDomainRecord["status"] })}
-                    >
-                      <SelectItem value="ACTIVE">ACTIVE</SelectItem>
-                      <SelectItem value="DISABLED">DISABLED</SelectItem>
-                    </SelectInput>
-                  </Field>
-                </div>
-
-                <Field label="Name">
-                  <TextInput
-                    value={form.name}
-                    placeholder="Frontend Engineering"
-                    onChange={(event) => onChange({ ...form, name: event.target.value })}
-                  />
-                </Field>
-
-                <Field label="Description">
-                  <TextArea
-                    value={form.description}
-                    placeholder="Explain what this domain is used for."
-                    onChange={(event) => onChange({ ...form, description: event.target.value })}
-                  />
-                </Field>
-              </>
-            )}
-          </div>
-
-          <div className="flex justify-end gap-2 border-t border-[var(--color-outline-variant)] px-6 py-4">
-            <Button variant="secondary" onClick={onClose}>Cancel</Button>
-            {readOnly ? (
-              <Button onClick={() => onSwitchMode("edit")}>
-                Edit
-              </Button>
-            ) : (
-              <Button disabled={submitting} aria-busy={submitting} onClick={onSubmit}>
-                <Save size={16} aria-hidden="true" />
-                {submitting ? "Saving..." : "Save"}
-              </Button>
-            )}
-          </div>
+          <Field label="Description">
+            <TextArea
+              readOnly={readOnly}
+              value={form.description}
+              placeholder="Explain what this domain is used for."
+              onChange={(event) => onChange({ ...form, description: event.target.value })}
+            />
+          </Field>
         </div>
-      </div>
-    </div>,
-    document.body,
+
+        {!readOnly && (
+          <DialogFooter className="m-0 shrink-0 flex-row justify-end gap-2 rounded-none border-0 bg-transparent p-0">
+            <Button type="button" size="lg" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="button" size="lg" disabled={submitting} aria-busy={submitting} onClick={onSubmit}>
+              <Save size={16} aria-hidden="true" />
+              {submitting ? "Saving..." : "Save"}
+            </Button>
+          </DialogFooter>
+        )}
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -444,17 +359,6 @@ export function PlatformMemoryDomainsPage() {
     if (submitting) return;
     setEditor(null);
     setEditorForm(emptyDomainForm());
-  }
-
-  function switchEditorMode(nextMode: EditorState["mode"]) {
-    setEditor((current) => {
-      if (!current) return current;
-      if (!current.record && nextMode !== "create") return current;
-      return {
-        ...current,
-        mode: nextMode,
-      };
-    });
   }
 
   function toggleRowMenu(record: MemoryWorkDomainRecord, trigger: HTMLButtonElement) {
@@ -584,12 +488,10 @@ export function PlatformMemoryDomainsPage() {
         title="Memory Domains"
         actions={(
           <>
-            <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={refreshDomains}>
-              <RefreshCcw size={16} aria-hidden="true" />
+            <Button size="lg" variant="outline" disabled={loading} aria-busy={loading} onClick={refreshDomains}>
               {loading ? "Refreshing..." : "Refresh"}
             </Button>
-            <Button onClick={openCreateDialog}>
-              <Plus size={16} aria-hidden="true" />
+            <Button size="lg" onClick={openCreateDialog}>
               New Domain
             </Button>
           </>
@@ -612,7 +514,6 @@ export function PlatformMemoryDomainsPage() {
             <Field label="Status">
               <SelectInput
                 aria-label="Filter memory domains by status"
-                className="w-full"
                 disabled={loading}
                 value={statusFilter}
                 onValueChange={(event) => setStatusFilter(event as DomainStatusFilter)}
@@ -625,7 +526,6 @@ export function PlatformMemoryDomainsPage() {
             <Field label="Sort">
               <SelectInput
                 aria-label="Sort memory domains"
-                className="w-full"
                 disabled={loading}
                 value={sortMode}
                 onValueChange={(event) => setSortMode(event as DomainSortMode)}
@@ -679,7 +579,7 @@ export function PlatformMemoryDomainsPage() {
               id: "status",
               header: "Status",
               width: "140px",
-              render: (row) => <DomainStatusBadge status={row.status} />,
+              render: (row) => <Badge variant={row.status === 'ACTIVE' ? 'success' : 'error'} >{row.status}</Badge>,
             },
             {
               id: "updatedAt",
@@ -780,12 +680,10 @@ export function PlatformMemoryDomainsPage() {
         <DomainEditorDialog
           form={editorForm}
           mode={editor.mode}
-          record={editor.record}
           submitting={submitting}
           onChange={setEditorForm}
           onClose={closeEditor}
           onSubmit={() => void saveDomain()}
-          onSwitchMode={switchEditorMode}
         />
       ) : null}
 

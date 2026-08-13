@@ -1,26 +1,16 @@
-import {
-  useEffect,
-  useMemo,
-  useState,
-} from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
-import {
-  ExternalLink,
-  Search,
-  Sparkles,
-} from "lucide-react";
+import { ExternalLink } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
-import {
-  AnchorButton,
-  Button,
-} from "@/shared/ui/Button";
+import { AnchorButton } from "@/shared/ui/Button";
 import {
   DetailField,
   Field,
   PageHeader,
   SearchField,
+  SelectInput,
   SurfaceCard,
   useToast,
 } from "@/shared";
@@ -36,6 +26,8 @@ import type {
   SkillSearchMode,
 } from "@/domain/skill/model";
 import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
+import { SelectItem } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 
 type InstallCandidateState = "pending" | "installing" | "success" | "error";
 
@@ -61,7 +53,8 @@ const searchModeOptions: Array<{
       label: "Find",
       fieldLabel: "Marketplace Query",
       placeholder: "Search skills with npx skills find...",
-      emptyHint: "Enter keywords like `typescript`, `rag`, or `review` to query the skills marketplace.",
+      emptyHint:
+        "Enter keywords like `typescript`, `rag`, or `review` to query the skills marketplace.",
       buttonLabel: "Search",
     },
     {
@@ -69,7 +62,8 @@ const searchModeOptions: Array<{
       label: "Repo",
       fieldLabel: "Repository",
       placeholder: "owner/repo or git URL",
-      emptyHint: "Enter a repository like `cloudsen/eliteforge-skills` to list its available skills.",
+      emptyHint:
+        "Enter a repository like `cloudsen/eliteforge-skills` to list its available skills.",
       buttonLabel: "List Skills",
     },
   ];
@@ -91,33 +85,31 @@ function SearchInput({
   disabled?: boolean;
   loading: boolean;
 }) {
-  const activeOption = searchModeOptions.find((option) => option.mode === mode) ?? searchModeOptions[0];
+  const activeOption =
+    searchModeOptions.find((option) => option.mode === mode) ??
+    searchModeOptions[0];
 
   return (
-    <div className="space-y-3">
-      <div className="flex flex-wrap gap-2">
-        {searchModeOptions.map((option) => (
-          <Button
-            key={option.mode}
-            size="sm"
-            type="button"
-            variant="ghost"
-            className={cn(
-              "border transition-colors",
-              mode === option.mode
-                ? "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface)] hover:border-[var(--color-outline-variant)] hover:bg-[var(--color-surface-container-high)] hover:text-[var(--color-on-surface)]"
-                : "border-transparent bg-transparent text-[var(--color-on-surface-variant)] hover:border-transparent hover:bg-transparent hover:text-[var(--color-on-surface)]",
-            )}
-            disabled={disabled}
-            onClick={() => onModeChange(option.mode)}
-          >
-            {option.label}
-          </Button>
-        ))}
-      </div>
-      <div className="flex flex-col gap-3 sm:flex-row">
+    <div className="flex gap-2">
+      <Field label>
+        <SelectInput
+          aria-label="Runtime role"
+          disabled={disabled}
+          value={mode}
+          onValueChange={(event) => onModeChange(event as SkillSearchMode)}
+        >
+          {searchModeOptions.map((option) => (
+            <SelectItem key={option.mode} value={option.mode}>
+              {option.label}
+            </SelectItem>
+          ))}
+        </SelectInput>
+      </Field>
+      <Field label>
         <SearchField
-          ariaLabel={mode === "repo" ? "Repository source" : "Search skills marketplace"}
+          ariaLabel={
+            mode === "repo" ? "Repository source" : "Search skills marketplace"
+          }
           className="flex-1"
           disabled={disabled}
           placeholder={activeOption.placeholder}
@@ -130,11 +122,17 @@ function SearchInput({
             }
           }}
         />
-        <Button variant="secondary" disabled={disabled || loading || !value.trim()} aria-busy={loading} onClick={onSubmit}>
-          <Search size={16} aria-hidden="true" />
+      </Field>
+      <Field label>
+        <Button
+          size='lg'
+          disabled={disabled || loading || !value.trim()}
+          aria-busy={loading}
+          onClick={onSubmit}
+        >
           {loading ? "Searching..." : activeOption.buttonLabel}
         </Button>
-      </div>
+      </Field>
     </div>
   );
 }
@@ -181,9 +179,7 @@ function CandidateCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="info">{candidate.skillName}</Badge>
-            {installed ? (
-              <Badge tone="success">Installed</Badge>
-            ) : null}
+            {installed ? <Badge tone="success">Installed</Badge> : null}
             {installState?.state === "installing" ? (
               <Badge tone="warning">Installing</Badge>
             ) : null}
@@ -226,9 +222,14 @@ export function CreateSkillPage() {
   const [searched, setSearched] = useState(false);
   const [candidates, setCandidates] = useState<SkillSearchCandidate[]>([]);
   const [selectedPackageRefs, setSelectedPackageRefs] = useState<string[]>([]);
-  const [installedSkills, setInstalledSkills] = useState<RegistrySkillRecord[]>([]);
-  const [installProgress, setInstallProgress] = useState<InstallProgressState | null>(null);
-  const [lastInstallPlan, setLastInstallPlan] = useState<SkillSearchCandidate[]>([]);
+  const [installedSkills, setInstalledSkills] = useState<RegistrySkillRecord[]>(
+    [],
+  );
+  const [installProgress, setInstallProgress] =
+    useState<InstallProgressState | null>(null);
+  const [lastInstallPlan, setLastInstallPlan] = useState<
+    SkillSearchCandidate[]
+  >([]);
 
   async function readInstalledSkills() {
     try {
@@ -258,9 +259,14 @@ export function CreateSkillPage() {
     };
   }, []);
 
-  const activeSearchMode = searchModeOptions.find((option) => option.mode === searchMode) ?? searchModeOptions[0];
+  const activeSearchMode =
+    searchModeOptions.find((option) => option.mode === searchMode) ??
+    searchModeOptions[0];
   const installedPackageRefs = useMemo(
-    () => new Set(installedSkills.map((skill) => `${skill.sourceRef}@${skill.skillName}`)),
+    () =>
+      new Set(
+        installedSkills.map((skill) => `${skill.sourceRef}@${skill.skillName}`),
+      ),
     [installedSkills],
   );
   const installedSkillNames = useMemo(
@@ -268,19 +274,23 @@ export function CreateSkillPage() {
     [installedSkills],
   );
 
-  const selectedCandidates = useMemo(
-    () => {
-      const selectedSet = new Set(selectedPackageRefs);
-      return candidates.filter((candidate) => selectedSet.has(candidate.packageRef));
-    },
-    [candidates, selectedPackageRefs],
-  );
+  const selectedCandidates = useMemo(() => {
+    const selectedSet = new Set(selectedPackageRefs);
+    return candidates.filter((candidate) =>
+      selectedSet.has(candidate.packageRef),
+    );
+  }, [candidates, selectedPackageRefs]);
 
   const selectedCount = selectedCandidates.length;
-  const planCandidates = selectedCandidates.length ? selectedCandidates : lastInstallPlan;
+  const planCandidates = selectedCandidates.length
+    ? selectedCandidates
+    : lastInstallPlan;
 
   function isInstalledCandidate(candidate: SkillSearchCandidate) {
-    return installedPackageRefs.has(candidate.packageRef) || installedSkillNames.has(candidate.skillName);
+    return (
+      installedPackageRefs.has(candidate.packageRef) ||
+      installedSkillNames.has(candidate.skillName)
+    );
   }
 
   function toggleCandidate(packageRef: string) {
@@ -336,7 +346,10 @@ export function CreateSkillPage() {
     if (!selectedCandidates.length || installing) return;
     const installQueue = [...selectedCandidates];
     const initialResults = Object.fromEntries(
-      installQueue.map((candidate) => [candidate.packageRef, { state: "pending" as InstallCandidateState }]),
+      installQueue.map((candidate) => [
+        candidate.packageRef,
+        { state: "pending" as InstallCandidateState },
+      ]),
     );
     setInstalling(true);
     setLastInstallPlan(installQueue);
@@ -349,7 +362,11 @@ export function CreateSkillPage() {
       totalCount: installQueue.length,
     });
     try {
-      const failures: Array<{ message: string; packageRef: string; skillName: string }> = [];
+      const failures: Array<{
+        message: string;
+        packageRef: string;
+        skillName: string;
+      }> = [];
       const warnings: Array<{ message: string; skillName: string }> = [];
       const failedPackageRefs: string[] = [];
       let successCount = 0;
@@ -380,9 +397,10 @@ export function CreateSkillPage() {
           successCount += 1;
           setInstallProgress((current) => ({
             completedCount: index + 1,
-            currentSkillName: index + 1 < installQueue.length
-              ? installQueue[index + 1]?.skillName
-              : undefined,
+            currentSkillName:
+              index + 1 < installQueue.length
+                ? installQueue[index + 1]?.skillName
+                : undefined,
             failureCount,
             results: {
               ...(current?.results ?? {}),
@@ -393,15 +411,22 @@ export function CreateSkillPage() {
           }));
         } catch (error) {
           const message =
-            error instanceof Error ? error.message : "Skill installation failed";
-          failures.push({ message, packageRef: candidate.packageRef, skillName: candidate.skillName });
+            error instanceof Error
+              ? error.message
+              : "Skill installation failed";
+          failures.push({
+            message,
+            packageRef: candidate.packageRef,
+            skillName: candidate.skillName,
+          });
           failedPackageRefs.push(candidate.packageRef);
           failureCount += 1;
           setInstallProgress((current) => ({
             completedCount: index + 1,
-            currentSkillName: index + 1 < installQueue.length
-              ? installQueue[index + 1]?.skillName
-              : undefined,
+            currentSkillName:
+              index + 1 < installQueue.length
+                ? installQueue[index + 1]?.skillName
+                : undefined,
             failureCount,
             results: {
               ...(current?.results ?? {}),
@@ -420,7 +445,9 @@ export function CreateSkillPage() {
         if (warnings.length) {
           toast.warning(`${warnings[0]?.skillName}: ${warnings[0]?.message}`);
         } else {
-          toast.success(`${installedCount} skill${installedCount > 1 ? "s" : ""} installed`);
+          toast.success(
+            `${installedCount} skill${installedCount > 1 ? "s" : ""} installed`,
+          );
         }
         setSelectedPackageRefs([]);
         return;
@@ -428,57 +455,72 @@ export function CreateSkillPage() {
 
       if (installedCount > 0) {
         setSelectedPackageRefs(failedPackageRefs);
-        toast.warning(`Installed ${installedCount} of ${installQueue.length} skills. ${failures[0]?.skillName}: ${failures[0]?.message}`);
+        toast.warning(
+          `Installed ${installedCount} of ${installQueue.length} skills. ${failures[0]?.skillName}: ${failures[0]?.message}`,
+        );
         return;
       }
 
       setSelectedPackageRefs(failedPackageRefs);
       const firstFailure = failures[0];
-      toast.error(firstFailure ? `${firstFailure.skillName}: ${firstFailure.message}` : "Skill installation failed");
+      toast.error(
+        firstFailure
+          ? `${firstFailure.skillName}: ${firstFailure.message}`
+          : "Skill installation failed",
+      );
     } catch (error) {
       const message =
         error instanceof Error ? error.message : "Skill installation failed";
       toast.error(message);
     } finally {
       setInstalling(false);
-      setInstallProgress((current) => current
-        ? {
-          ...current,
-          currentSkillName: undefined,
-        }
-        : null);
+      setInstallProgress((current) =>
+        current
+          ? {
+            ...current,
+            currentSkillName: undefined,
+          }
+          : null,
+      );
     }
   }
 
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Skill Center", href: "/settings/skills" }, { label: "Sync" }]}
+        breadcrumbs={[
+          { label: "Skill Center", href: "/settings/skills" },
+          { label: "Sync" },
+        ]}
         title="Sync Skills"
-        actions={(
+        actions={
           <>
-            <Button variant="secondary" disabled={installing} onClick={() => navigate("/settings/skills")}>
+            <Button
+              size='lg'
+              variant="outline"
+              disabled={installing}
+              onClick={() => navigate("/settings/skills")}
+            >
               Cancel
             </Button>
             <Button
+              size='lg'
               disabled={!selectedCount || installing}
               aria-busy={installing}
               onClick={() => void handleInstall()}
             >
-              <Sparkles size={16} aria-hidden="true" />
               {installing
-                ? `Syncing ${installProgress?.completedCount ?? 0}/${installProgress?.totalCount ?? selectedCount}...`
+                ? `Syncing ${installProgress?.completedCount ?? 0}/${installProgress?.totalCount ?? selectedCount
+                }...`
                 : `Sync Selected${selectedCount ? ` (${selectedCount})` : ""}`}
             </Button>
           </>
-        )}
+        }
       />
 
       <div className="space-y-6">
-        <SurfaceCard className="space-y-4">
-          <Field
-            label={activeSearchMode.fieldLabel}
-          >
+        <SurfaceCard>
+          <Field label="Sync Type">
             <SearchInput
               mode={searchMode}
               value={query}
@@ -521,8 +563,12 @@ export function CreateSkillPage() {
                     candidate={candidate}
                     disabled={installing}
                     installed={isInstalledCandidate(candidate)}
-                    installState={installProgress?.results[candidate.packageRef]}
-                    selected={selectedPackageRefs.includes(candidate.packageRef)}
+                    installState={
+                      installProgress?.results[candidate.packageRef]
+                    }
+                    selected={selectedPackageRefs.includes(
+                      candidate.packageRef,
+                    )}
                     onToggle={() => toggleCandidate(candidate.packageRef)}
                   />
                 ))}
@@ -542,15 +588,25 @@ export function CreateSkillPage() {
             ) : (
               <>
                 <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
-                  <DetailField label="Selected" value={`${planCandidates.length} skill${planCandidates.length > 1 ? "s" : ""}`} />
+                  <DetailField
+                    label="Selected"
+                    value={`${planCandidates.length} skill${planCandidates.length > 1 ? "s" : ""
+                      }`}
+                  />
                   {installProgress ? (
                     <>
                       <DetailField
                         label="Progress"
                         value={`${installProgress.completedCount}/${installProgress.totalCount}`}
                       />
-                      <DetailField label="Succeeded" value={`${installProgress.successCount}`} />
-                      <DetailField label="Failed" value={`${installProgress.failureCount}`} />
+                      <DetailField
+                        label="Succeeded"
+                        value={`${installProgress.successCount}`}
+                      />
+                      <DetailField
+                        label="Failed"
+                        value={`${installProgress.failureCount}`}
+                      />
                       <DetailField
                         label="Current"
                         value={installProgress.currentSkillName ?? "Completed"}
@@ -562,7 +618,10 @@ export function CreateSkillPage() {
                 {installProgress ? (
                   <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-4 py-3 text-sm text-[var(--color-on-surface-variant)]">
                     {installing
-                      ? `Syncing ${installProgress.completedCount}/${installProgress.totalCount}. ${installProgress.currentSkillName ?? "Waiting for next skill..."}`
+                      ? `Syncing ${installProgress.completedCount}/${installProgress.totalCount
+                      }. ${installProgress.currentSkillName ??
+                      "Waiting for next skill..."
+                      }`
                       : installProgress.failureCount > 0
                         ? `Sync finished with ${installProgress.failureCount} failure(s). Failed skills remain selected so you can retry them.`
                         : "Sync finished successfully."}
@@ -582,14 +641,18 @@ export function CreateSkillPage() {
                             {isInstalledCandidate(candidate) ? (
                               <Badge tone="success">Installed</Badge>
                             ) : null}
-                            {installProgress?.results[candidate.packageRef]?.state === "installing" ? (
+                            {installProgress?.results[candidate.packageRef]
+                              ?.state === "installing" ? (
                               <Badge tone="warning">Installing</Badge>
                             ) : null}
-                            {installProgress?.results[candidate.packageRef]?.state === "error" ? (
+                            {installProgress?.results[candidate.packageRef]
+                              ?.state === "error" ? (
                               <Badge tone="error">Failed</Badge>
                             ) : null}
                             {candidate.installsLabel ? (
-                              <Badge tone="info">{candidate.installsLabel}</Badge>
+                              <Badge tone="info">
+                                {candidate.installsLabel}
+                              </Badge>
                             ) : null}
                           </div>
                           <p className="mt-3 break-words text-sm font-medium text-[var(--color-on-surface)]">
@@ -603,16 +666,27 @@ export function CreateSkillPage() {
                               {candidate.description}
                             </p>
                           ) : null}
-                          {installProgress?.results[candidate.packageRef]?.state === "error"
-                            && installProgress.results[candidate.packageRef]?.message ? (
+                          {installProgress?.results[candidate.packageRef]
+                            ?.state === "error" &&
+                            installProgress.results[candidate.packageRef]
+                              ?.message ? (
                             <p className="mt-2 text-sm text-[var(--color-error)]">
-                              {installProgress.results[candidate.packageRef]?.message}
+                              {
+                                installProgress.results[candidate.packageRef]
+                                  ?.message
+                              }
                             </p>
                           ) : null}
                         </div>
 
                         {candidate.detailUrl ? (
-                          <AnchorButton href={candidate.detailUrl} rel="noreferrer" size="sm" target="_blank" variant="secondary">
+                          <AnchorButton
+                            href={candidate.detailUrl}
+                            rel="noreferrer"
+                            size="sm"
+                            target="_blank"
+                            variant="secondary"
+                          >
                             <ExternalLink size={15} aria-hidden="true" />
                             Open
                           </AnchorButton>
