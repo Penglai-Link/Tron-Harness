@@ -18,6 +18,12 @@ function messagePreview(content: string, maxLength = 96) {
   return truncateLabel(content.replace(/\s+/g, " ").trim(), maxLength);
 }
 
+function markdownPreview(content: string, maxLength = 240) {
+  const normalized = content.replace(/\r\n?/g, "\n").trim();
+  if (normalized.length <= maxLength) return normalized;
+  return `${normalized.slice(0, Math.max(0, maxLength - 3)).trimEnd()}...`;
+}
+
 export function buildChatHistoryTurns(
   messages: ChatMessage[],
   presentation: TranscriptPresentation,
@@ -52,7 +58,7 @@ export function buildChatHistoryTurns(
 
     if (!currentTurn.hasAssistantReply && message.content.trim()) {
       currentTurn.hasAssistantReply = true;
-      currentTurn.assistantPreview = messagePreview(message.content, 120);
+      currentTurn.assistantPreview = markdownPreview(message.content);
     }
   });
 

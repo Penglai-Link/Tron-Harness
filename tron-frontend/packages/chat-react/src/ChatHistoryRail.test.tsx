@@ -59,6 +59,36 @@ describe("ChatHistoryRail", () => {
     expect(within(tooltip).getByText((content) => content.includes("Codex 的这类左侧历史轨道"))).toBeTruthy();
   });
 
+  it("renders markdown tables in the assistant preview", () => {
+    const transcriptRef = createRef<HTMLElement>();
+    const transcript = document.createElement("section");
+    transcript.innerHTML = '<section data-chat-turn-id="turn-user-1"></section>';
+    transcriptRef.current = transcript;
+
+    render(
+      <ChatHistoryRail
+        messages={[
+          createMessage({ messageCode: "user-1", role: "USER", content: "直接在会话中显示表格" }),
+          createMessage({
+            messageCode: "assistant-1",
+            role: "ASSISTANT",
+            content: "| 姓名 | 成绩 |\n|------|------|\n| 张三 | 90 |\n| 李四 | 85 |",
+          }),
+        ]}
+        presentation={createPresentation()}
+        transcriptRef={transcriptRef}
+      />,
+    );
+
+    const marker = screen.getByRole("button", { name: "直接在会话中显示表格" });
+    fireEvent.mouseEnter(marker);
+
+    const tooltip = screen.getByRole("tooltip");
+    expect(within(tooltip).getByRole("table")).toBeTruthy();
+    expect(within(tooltip).getByRole("columnheader", { name: "姓名" })).toBeTruthy();
+    expect(within(tooltip).getByRole("cell", { name: "张三" })).toBeTruthy();
+  });
+
   it("renders a single-line preview when the turn has work activity but no assistant reply", () => {
     const transcriptRef = createRef<HTMLElement>();
     const transcript = document.createElement("section");

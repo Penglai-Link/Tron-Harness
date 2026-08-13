@@ -7,6 +7,9 @@ import {
   useState,
   type RefObject,
 } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
+
 
 import { buildChatHistoryTurns } from "./chatHistory";
 
@@ -235,8 +238,10 @@ export function ChatHistoryRail({
             {hoveredTurn.userPreview}
           </span>
           {hoveredTurn.hasAssistantReply ? (
-            <span className="tron-chat-history-rail__preview-assistant">
-              {hoveredTurn.assistantPreview}
+            <span className="tron-chat-history-rail__preview-assistant markdown-body">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} >
+                {hoveredTurn.assistantPreview}
+              </ReactMarkdown>
             </span>
           ) : null}
         </span>

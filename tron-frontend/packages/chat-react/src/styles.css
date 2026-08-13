@@ -199,8 +199,7 @@
 
 .tron-chat-history-rail__marker[data-hovered="true"] {
   background: var(--color-on-surface);
-  box-shadow:
-    inset 0 0 0 1px rgba(15, 23, 42, 0.06),
+  box-shadow: inset 0 0 0 1px rgba(15, 23, 42, 0.06),
     0 0 0 1px rgba(15, 23, 42, 0.05);
 }
 
@@ -243,8 +242,34 @@
 
 .tron-chat-history-rail__preview-assistant {
   color: var(--tron-chat-text-muted);
-  font-size: 13px;
+  font-size: 12px;
   line-height: 1.5;
+}
+
+.tron-chat-history-rail__preview-assistant.markdown-body {
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.tron-chat-history-rail__preview-assistant.markdown-body p,
+.tron-chat-history-rail__preview-assistant.markdown-body table,
+.tron-chat-history-rail__preview-assistant.markdown-body pre,
+.tron-chat-history-rail__preview-assistant.markdown-body ul,
+.tron-chat-history-rail__preview-assistant.markdown-body ol {
+  margin-bottom: 6px;
+}
+
+.tron-chat-history-rail__preview-assistant.markdown-body p:last-child,
+.tron-chat-history-rail__preview-assistant.markdown-body table:last-child,
+.tron-chat-history-rail__preview-assistant.markdown-body pre:last-child,
+.tron-chat-history-rail__preview-assistant.markdown-body ul:last-child,
+.tron-chat-history-rail__preview-assistant.markdown-body ol:last-child {
+  margin-bottom: 0;
+}
+
+.tron-chat-history-rail__preview-assistant.markdown-body code,
+.tron-chat-history-rail__preview-assistant.markdown-body tt {
+  font-size: 0.92em;
 }
 
 .tron-chat__transcript__bot {
@@ -424,10 +449,7 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 600;
-  transition:
-    transform 120ms ease,
-    background 120ms ease,
-    opacity 120ms ease;
+  transition: transform 120ms ease, background 120ms ease, opacity 120ms ease;
 }
 
 .tron-chat__button:hover,
@@ -493,8 +515,7 @@
   color: var(--tron-chat-text);
   padding: 0;
   transform: translate(-50%, -50%);
-  box-shadow:
-    0 10px 26px rgba(15, 23, 42, 0.18),
+  box-shadow: 0 10px 26px rgba(15, 23, 42, 0.18),
     inset 0 0 0 1px var(--tron-chat-border);
 }
 
@@ -640,9 +661,7 @@
   cursor: pointer;
   padding: 4px 0;
   text-align: left;
-  transition:
-    color 120ms ease,
-    background 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 
 .tron-chat__rail-toggle:hover {
@@ -705,9 +724,7 @@
   cursor: pointer;
   padding: 6px 0;
   text-align: left;
-  transition:
-    color 120ms ease,
-    background 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 
 .tron-chat__rail-summary:hover {
@@ -752,9 +769,7 @@
   cursor: pointer;
   padding: 4px 0;
   text-align: left;
-  transition:
-    color 120ms ease,
-    background 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 
 .tron-chat__rail-entry-toggle:hover {
@@ -851,9 +866,7 @@
   cursor: pointer;
   padding: 4px 0;
   text-align: left;
-  transition:
-    color 120ms ease,
-    background 120ms ease;
+  transition: color 120ms ease, background 120ms ease;
 }
 
 .tron-chat__tool-toggle:hover,
@@ -1150,8 +1163,10 @@
   border-top-left-radius: 24px;
   border: 1px solid transparent;
   z-index: 1;
-  background:
-    linear-gradient(var(--tron-chat-surface), var(--tron-chat-surface))
+  background: linear-gradient(
+        var(--tron-chat-surface),
+        var(--tron-chat-surface)
+      )
       padding-box,
     linear-gradient(
         135deg,
