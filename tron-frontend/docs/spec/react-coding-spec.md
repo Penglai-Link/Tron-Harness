@@ -31,6 +31,7 @@
 - Global app-shell state that is not owned by one domain belongs in `src/store/`
 - Strong typing with TypeScript
 - UI primitives based on shadcn/ui, Radix UI, and Tailwind CSS
+- Shared page controls must prefer the primitives in `src/components/ui`; consult `docs/spec/ui-components.md` before creating a new control.
 - All data-dependent components use mock data during frontend development
 - Hooks are reserved as the boundary for future backend API integration
 - Routing uses React Router as the browser routing runtime; route metadata may remain in domain-specific typed registries when navigation labels, active menu state, and page archetypes need to stay colocated
@@ -205,3 +206,21 @@ Action labels must use concise verbs that describe the user action directly.
   - `Detail` = `详情`
   - `Refresh` = `刷新`
   - `Search` = `搜索`
+
+## Shared UI Component Usage
+
+`src/components/ui` is the first-choice library for reusable page controls. Use these primitives directly or compose them into domain components. Keep domain-specific behavior, data loading, validation, and business rules in the domain layer; keep generic interaction and visual behavior in the shared primitives.
+
+### Component selection
+
+1. Check `docs/spec/ui-components.md` and the corresponding source file before implementing a control.
+2. Reuse an existing primitive when it provides the required interaction and accessibility behavior.
+3. Extend an existing primitive through its public props, `className`, composition, or a domain wrapper when the difference is contextual.
+4. Create a domain component when the behavior is specific to one domain or workflow.
+5. Add a new primitive under `src/components/ui` only when no existing primitive is suitable. The new primitive must be generic, typed, keyboard-accessible, compatible with the project internationalization approach, and covered by focused tests.
+
+Do not duplicate buttons, inputs, selects, dialogs, tables, tabs, menus, tooltips, toasts, or other controls in a page folder when an equivalent primitive exists. Do not import implementation details from a primitive; use its documented public exports.
+
+### Documentation maintenance
+
+Every new or materially changed primitive must update `docs/spec/ui-components.md` in the same change. The entry must include the component file, purpose, primary exports, common usage, accessibility notes, internationalization considerations, and test coverage. Remove or revise the entry when a primitive is renamed, deprecated, or removed.
