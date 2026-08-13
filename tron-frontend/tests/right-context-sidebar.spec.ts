@@ -449,6 +449,26 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
   await expect(sidebar.getByText("seq 1-8", { exact: true })).toHaveCount(0);
 });
 
+test("AC-CHAT-SESSION-SIDEBAR-01: manual history collapse survives opening the right sidebar", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await seedWorkspaceSelection(page);
+  await routeAuthApi(page);
+  await signIn(page, "/chats/8842-alpha");
+  await expect(page).toHaveURL(/\/chats\/8842-alpha$/);
+  await selectTaskSessions(page);
+  await page.getByText("Primary investigation", { exact: true }).first().click();
+
+  const sessionSidebar = page.getByTestId("chat-session-sidebar");
+  await expect(sessionSidebar.getByRole("heading", { name: "Sessions" })).toBeVisible();
+  await sessionSidebar.getByRole("button", { name: "Collapse session history" }).click();
+  await expect(sessionSidebar.getByRole("heading", { name: "Sessions" })).toHaveCount(0);
+
+  await openRightSidebar(page);
+
+  await expect(sessionSidebar.getByRole("heading", { name: "Sessions" })).toHaveCount(0);
+  await expect(sessionSidebar.getByRole("button", { name: "Expand session history" })).toBeVisible();
+});
+
 test("AC-RCS-04: graph inspector stays inline and memory inspectors preserve selected context", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await seedWorkspaceSelection(page);

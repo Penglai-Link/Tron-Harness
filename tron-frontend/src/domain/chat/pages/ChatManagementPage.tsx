@@ -3246,6 +3246,7 @@ function SessionSidebar({
   return (
     <aside
       ref={sidebarRef}
+      data-testid="chat-session-sidebar"
       className={cn(
         "relative h-full shrink-0 overflow-visible bg-[var(--color-surface-container-lowest)] shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200",
         collapsed ? "w-[64px]" : "w-[286px]",
@@ -3390,7 +3391,11 @@ function SessionSidebar({
           </div>
         </>
       )}
-      <DraggleLine onClick={onCollapseToggle} className="absolute right-0 top-0 h-full z-10 " />
+      <DraggleLine
+        ariaLabel={collapsed ? "Expand session history" : "Collapse session history"}
+        onClick={onCollapseToggle}
+        className="absolute right-0 top-0 z-10 h-full"
+      />
     </aside>
   );
 }
@@ -3946,7 +3951,9 @@ export function ChatManagementPage() {
   const [activeSourceTab, setActiveSourceTab] = useState<ChatSessionSourceTab>(() => (
     requestedSourceTab ?? defaultChatSessionSourceTab
   ));
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [userSidebarCollapsed, setUserSidebarCollapsed] = useState(false);
+  const [autoSidebarCollapsed, setAutoSidebarCollapsed] = useState(false);
+  const sidebarCollapsed = userSidebarCollapsed || autoSidebarCollapsed;
   const mainRef = useRef<HTMLDivElement>(null);
   const [composer, setComposer] = useState("");
   const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
@@ -5857,7 +5864,7 @@ export function ChatManagementPage() {
     }
   }
 
-  // Monitor main width and auto-collapse sidebar when width < 500
+  // Keep automatic width-based collapse separate from the user's manual choice.
   useEffect(() => {
     const mainElement = mainRef.current;
     if (!mainElement) return;
@@ -5866,13 +5873,7 @@ export function ChatManagementPage() {
         for (const entry of entries) {
           if (entry.contentBoxSize) {
             const width = entry.contentBoxSize[0].inlineSize;
-            setSidebarCollapsed((current) => {
-              const shouldCollapse = width < 600;
-              if (current !== shouldCollapse) {
-                return shouldCollapse;
-              }
-              return current;
-            });
+            setAutoSidebarCollapsed(width < 600);
           }
         }
       }, 10)
@@ -5897,7 +5898,7 @@ export function ChatManagementPage() {
         sessionActionPendingCode={sessionActionPendingCode}
         unseenSessionCodes={unseenSessionCodes}
         onArchiveSession={(session) => void handleArchiveSession(session)}
-        onCollapseToggle={() => setSidebarCollapsed((value) => !value)}
+        onCollapseToggle={() => setUserSidebarCollapsed((value) => !value)}
         onCreateSession={() => void handleCreateSession()}
         onDeleteSession={setDeleteTargetSession}
         onRenameSession={handleSidebarRenameSession}
