@@ -1080,7 +1080,11 @@ export function TronShell({
             <div className={cn("h-full overflow-y-auto px-2 pt-2")}>
               {renderSidebarContent()}
             </div>
-            <div onClick={() => setSidebarCollapsed(!sidebarCollapsed)} className={cn('w-full h-10 flex-none px-5 cursor-pointer flex items-center shadow-[0px_-10px_28px_rgba(15,23,42,0.04)]')}>{sidebarCollapsed ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}</div>
+            <div className={cn('w-full h-10 flex-none px-5 flex items-center shadow-[0px_-10px_28px_rgba(15,23,42,0.04)]')}>
+              <div className="cursor-pointer" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
+                {sidebarCollapsed ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
+              </div>
+            </div>
           </aside>
 
           {sidebarTooltip && sidebarCollapsed ? (
