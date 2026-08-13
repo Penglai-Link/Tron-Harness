@@ -1701,7 +1701,7 @@ function stoppedAguiEvents(sessionCode: string, runCodes: Iterable<string>): Cha
 
 function iconButtonClass(active = false) {
   return cn(
-    "inline-flex size-8 items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
+    "inline-flex flex-none size-8 items-center justify-center rounded-md border border-transparent text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50",
     active && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
   );
 }
@@ -3253,7 +3253,7 @@ function SessionSidebar({
       )}
     >
       {collapsed ? (
-        <div className="flex h-full flex-col overflow-y-auto px-2 py-3">
+        <div className="flex h-full flex-col overflow-y-auto py-3">
           <div className="flex items-center justify-center">
             <button
               className={iconButtonClass()}
