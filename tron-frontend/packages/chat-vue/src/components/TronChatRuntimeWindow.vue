@@ -152,7 +152,7 @@ const effectiveSupportsSteer = computed(() => {
 });
 const canSteer = computed(() =>
   Boolean(
-      activeAdapter.value.capabilities.supportsSteer &&
+    activeAdapter.value.capabilities.supportsSteer &&
       activeAdapter.value.steerMessage &&
       effectiveActiveRunCode.value &&
       effectiveRunState.value === "RUNNING" &&
@@ -373,12 +373,7 @@ function releasePendingProtocolTerminal(
   protocolSnapshot: ChatAguiStreamEvent[],
 ) {
   if (!pendingProtocolTerminalRun.value) return false;
-  return acceptActiveRunSnapshot(
-    null,
-    sessionCode,
-    protocolSnapshot,
-    true,
-  );
+  return acceptActiveRunSnapshot(null, sessionCode, protocolSnapshot, true);
 }
 
 async function refreshActiveRun(
@@ -402,10 +397,7 @@ function restoreSourceSubmission(
   sourceSubmission: ChatQueuedSubmission | undefined,
   queueGeneration: number,
 ) {
-  if (
-    !sourceSubmission ||
-    queueGeneration !== queueGenerationRef.value
-  ) {
+  if (!sourceSubmission || queueGeneration !== queueGenerationRef.value) {
     return;
   }
   prependQueuedSubmission(sourceSubmission);
@@ -519,12 +511,12 @@ watch(
 const shouldPollData = computed(() =>
   Boolean(
     session.value?.sessionCode &&
-    (isRecentPendingUserTurn(messages.value) ||
-      (protocolReplayEnabled.value &&
-        openAguiProtocolRunCodes(
-          protocolEvents.value,
-          session.value.sessionCode,
-        ).size > 0)),
+      (isRecentPendingUserTurn(messages.value) ||
+        (protocolReplayEnabled.value &&
+          openAguiProtocolRunCodes(
+            protocolEvents.value,
+            session.value.sessionCode,
+          ).size > 0)),
   ),
 );
 const shouldPollRuntime = computed(() =>
@@ -788,9 +780,7 @@ async function runMessage(
     ) {
       const [nextMessages, nextAguiEvents, nextProtocolEvents] =
         await Promise.all([
-          adapter
-            .loadMessages(result.session.sessionCode)
-            .catch(() => null),
+          adapter.loadMessages(result.session.sessionCode).catch(() => null),
           isAguiEnabled
             ? adapter
                 .loadAguiEvents(result.session.sessionCode)
@@ -814,7 +804,10 @@ async function runMessage(
       ) {
         completedRunCode = result.run.runCode;
         terminalHandledRunCodesRef.add(result.run.runCode);
-        if (remoteActiveRun.value?.runCode === result.run.runCode) {
+        if (
+          (remoteActiveRun.value as unknown as ChatActiveRun)?.runCode ===
+          result.run.runCode
+        ) {
           remoteActiveRun.value = null;
         }
         pendingProtocolTerminalRun.value = null;
@@ -927,7 +920,10 @@ async function runMessage(
     completedSession &&
     activeSessionCodeRef.value === activeSession.sessionCode
   ) {
-    if (remoteActiveRun.value?.runCode === completedRunCode) {
+    if (
+      (remoteActiveRun.value as unknown as ChatActiveRun)?.runCode ===
+      completedRunCode
+    ) {
       remoteActiveRun.value = null;
     }
     const nextSubmission = takeNextQueuedSubmission(activeSession.sessionCode);
@@ -1005,24 +1001,20 @@ async function handleSteer() {
       return;
     }
     if (activeSessionCodeRef.value === result.sessionCode) {
-      messages.value = mergeChatMessagesChronologically(
-        messages.value,
-        [result.message],
-      );
+      messages.value = mergeChatMessagesChronologically(messages.value, [
+        result.message,
+      ]);
     }
   } catch (error) {
     const observerDetached = steerAbortRef.value !== abortController;
     const queueIsCurrent = queueGeneration === queueGenerationRef.value;
-    const safeQueueFallback = error instanceof FetchTransportError &&
+    const safeQueueFallback =
+      error instanceof FetchTransportError &&
       isSteerQueueFallbackCode(error.code);
     if (safeQueueFallback && queueIsCurrent) {
       enqueueSubmission(activeSession, sendInput, "front");
       try {
-        await refreshActiveRun(
-          activeSession.sessionCode,
-          undefined,
-          true,
-        );
+        await refreshActiveRun(activeSession.sessionCode, undefined, true);
       } catch {
         markActiveRunStatusPending(activeSession.sessionCode);
         // Keep the queued fallback until the next authoritative refresh.
@@ -1088,7 +1080,11 @@ async function handleStop() {
 
   const adapter = activeAdapter.value;
   let expectedRunCode = effectiveActiveRunCode.value;
-  if (!expectedRunCode && adapter.capabilities.supportsStop && adapter.stopRun) {
+  if (
+    !expectedRunCode &&
+    adapter.capabilities.supportsStop &&
+    adapter.stopRun
+  ) {
     try {
       expectedRunCode =
         (await refreshActiveRun(activeSession.sessionCode, undefined, false))
@@ -1098,11 +1094,7 @@ async function handleStop() {
       // Fall back only when this adapter explicitly supports local abort.
     }
   }
-  if (
-    expectedRunCode &&
-    adapter.capabilities.supportsStop &&
-    adapter.stopRun
-  ) {
+  if (expectedRunCode && adapter.capabilities.supportsStop && adapter.stopRun) {
     const abortController = new AbortController();
     stopAbortRef.value = abortController;
     stopping.value = true;
@@ -1132,11 +1124,7 @@ async function handleStop() {
         error instanceof Error ? error.message : "Chat stop failed";
       reportError(message, "Chat stop failed");
       try {
-        await refreshActiveRun(
-          activeSession.sessionCode,
-          undefined,
-          true,
-        );
+        await refreshActiveRun(activeSession.sessionCode, undefined, true);
       } catch {
         markActiveRunStatusPending(activeSession.sessionCode);
         // Keep the queue paused until the next successful status refresh.
