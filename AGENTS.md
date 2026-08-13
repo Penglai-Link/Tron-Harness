@@ -62,4 +62,4 @@ Pagable response body format:
 <!-- Domain discovery controls model-facing schema exposure only; execution authorization must use the complete resolved effective-tool set, not the progressively exposed `context.tools`. -->
 <!-- A missing or unauthorized model tool call must remain blocked but recover as a failed tool observation; it must not terminate the whole agent run. -->
 <!-- While a run is active, Enter must queue by default; explicit steer may redirect work but must not silently discard unresolved earlier requests. Completion merges must retain chronological message order even when a steer ACK arrived before the original run result. -->
-<!-- While chat is running, keep the original single Stop control: Enter queues, Command/Ctrl+Enter (and Command/Ctrl+End compatibility) steers, and neither React nor Vue renders Queue or Steer buttons. -->
+<!-- While chat is running, keep the original single Stop control: Enter queues, Command/Ctrl+Enter steers, and neither React nor Vue renders Queue or Steer buttons. The composer placeholder must explain these running shortcuts. -->

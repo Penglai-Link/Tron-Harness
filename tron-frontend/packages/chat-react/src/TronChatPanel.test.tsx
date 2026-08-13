@@ -115,8 +115,11 @@ describe("TronChatPanel submit controls", () => {
 
     expect(screen.queryByRole("button", { name: "Queue" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Steer" })).toBeNull();
+    expect(composer.getAttribute("placeholder")).toBe(
+      "Enter 加入队列 · ⌘/Ctrl+Enter 立即调整当前回复 · Shift+Enter 换行",
+    );
     expect(composer.getAttribute("aria-keyshortcuts")).toBe(
-      "Meta+Enter Control+Enter Meta+End Control+End",
+      "Meta+Enter Control+Enter",
     );
     fireEvent.keyDown(composer, { key: "Enter" });
     fireEvent.keyDown(composer, { key: "Enter", metaKey: true });
@@ -127,7 +130,7 @@ describe("TronChatPanel submit controls", () => {
     expect(onSend).toHaveBeenNthCalledWith(1, "queue");
     expect(onSend).toHaveBeenNthCalledWith(2, "steer");
     expect(onSend).toHaveBeenNthCalledWith(3, "steer");
-    expect(onSend).toHaveBeenNthCalledWith(4, "steer");
+    expect(onSend).toHaveBeenCalledTimes(3);
     expect(onStop).toHaveBeenCalledTimes(1);
     expect(stopButton.title).toBe("Stop response");
   });
@@ -166,6 +169,9 @@ describe("TronChatPanel submit controls", () => {
     fireEvent.keyDown(composer, { key: "Enter", metaKey: true });
     expect(onSend).toHaveBeenCalledWith("queue");
     expect(onSend).toHaveBeenCalledTimes(1);
+    expect(composer.getAttribute("placeholder")).toBe(
+      "Enter 加入队列 · Shift+Enter 换行",
+    );
     expect(screen.queryByRole("button", { name: "Queue" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Steer" })).toBeNull();
 

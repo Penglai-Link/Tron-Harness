@@ -781,6 +781,11 @@ export function TronChatPanel({
   const autoStickToBottomRef = useRef(true);
   const canQueueWhileRunning = runningSubmitModes.includes("queue");
   const canSteerWhileRunning = runningSubmitModes.includes("steer");
+  const composerPlaceholder = sending && canQueueWhileRunning
+    ? canSteerWhileRunning
+      ? "Enter 加入队列 · ⌘/Ctrl+Enter 立即调整当前回复 · Shift+Enter 换行"
+      : "Enter 加入队列 · Shift+Enter 换行"
+    : inputPlaceholder;
   const primarySubmitMode: ChatSubmitMode | null = !sending
     ? "send"
     : canQueueWhileRunning
@@ -1067,7 +1072,7 @@ export function TronChatPanel({
                 ref={setComposerNode}
                 className="tron-chat__textarea"
                 disabled={disabledInput}
-                placeholder={inputPlaceholder}
+                placeholder={composerPlaceholder}
                 value={draft}
                 onChange={(event) => onDraftChange(event.target.value)}
                 onKeyDown={(event) => {
@@ -1081,7 +1086,7 @@ export function TronChatPanel({
                   if (
                     sending
                     && commandShortcut
-                    && (event.key === "Enter" || event.key === "End")
+                    && event.key === "Enter"
                   ) {
                     event.preventDefault();
                     if (
@@ -1100,7 +1105,7 @@ export function TronChatPanel({
                   }
                 }}
                 aria-keyshortcuts={sending && canSteerWhileRunning
-                  ? "Meta+Enter Control+Enter Meta+End Control+End"
+                  ? "Meta+Enter Control+Enter"
                   : undefined}
               />
               <div className="tron-chat__composer-row">

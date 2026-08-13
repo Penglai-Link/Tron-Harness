@@ -64,8 +64,11 @@ describe("Vue TronChatPanel submit controls", () => {
       container.querySelectorAll(".tron-chat__composer-actions button"),
     ).toHaveLength(1);
     expect(container.querySelector('button[aria-label="Stop"]')).not.toBeNull();
+    expect(textarea?.placeholder).toBe(
+      "Enter 加入队列 · ⌘/Ctrl+Enter 立即调整当前回复 · Shift+Enter 换行",
+    );
     expect(textarea?.getAttribute("aria-keyshortcuts")).toBe(
-      "Meta+Enter Control+Enter Meta+End Control+End",
+      "Meta+Enter Control+Enter",
     );
 
     textarea?.dispatchEvent(new KeyboardEvent("keydown", {
@@ -86,7 +89,7 @@ describe("Vue TronChatPanel submit controls", () => {
 
     expect(onSend).toHaveBeenNthCalledWith(1, "queue");
     expect(onSend).toHaveBeenNthCalledWith(2, "steer");
-    expect(onSend).toHaveBeenNthCalledWith(3, "steer");
+    expect(onSend).toHaveBeenCalledTimes(2);
   });
 
   it("renders editable and withdrawable queued messages above the composer", async () => {

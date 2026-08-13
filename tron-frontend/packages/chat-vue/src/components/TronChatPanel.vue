@@ -68,6 +68,14 @@ const canQueueWhileRunning = computed(() =>
 const canSteerWhileRunning = computed(() =>
   props.runningSubmitModes.includes("steer"),
 );
+const composerPlaceholder = computed(() => {
+  if (!props.sending || !canQueueWhileRunning.value) {
+    return props.inputPlaceholder;
+  }
+  return canSteerWhileRunning.value
+    ? "Enter 加入队列 · ⌘/Ctrl+Enter 立即调整当前回复 · Shift+Enter 换行"
+    : "Enter 加入队列 · Shift+Enter 换行";
+});
 const primarySubmitMode = computed<ChatSubmitMode | null>(() => {
   if (!props.sending) return "send";
   if (canQueueWhileRunning.value) return "queue";
@@ -122,7 +130,7 @@ function handleKeydown(event: KeyboardEvent) {
   if (
     props.sending &&
     commandShortcut &&
-    (event.key === "Enter" || event.key === "End")
+    event.key === "Enter"
   ) {
     event.preventDefault();
     if (
@@ -317,11 +325,11 @@ onMounted(() => {
           <textarea
             class="tron-chat__textarea"
             :disabled="disabledInput"
-            :placeholder="inputPlaceholder"
+            :placeholder="composerPlaceholder"
             :value="draft"
             :aria-keyshortcuts="
               sending && canSteerWhileRunning
-                ? 'Meta+Enter Control+Enter Meta+End Control+End'
+                ? 'Meta+Enter Control+Enter'
                 : undefined
             "
             @input="
