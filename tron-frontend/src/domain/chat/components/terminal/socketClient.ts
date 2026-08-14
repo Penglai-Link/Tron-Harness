@@ -206,17 +206,8 @@ export class TerminalSocketClient {
   private handleSession(response: unknown) {
     const session = parseTerminalSession(response);
     if (!session) return;
-
-    if (session.code !== "0" || !session.data.currentDirectory) {
-      this.sessionReady = false;
-      const error = new Error(session.message || "终端会话不可用");
-      this.settleConnection(error);
-      this.rejectAll(error);
-      return;
-    }
-
     this.sessionReady = true;
-    this.onSessionChange?.(session.data.currentDirectory);
+    this.onSessionChange?.(session?.currentDirectory || '~');
     this.settleConnection();
   }
 
@@ -290,24 +281,12 @@ export function parseTerminalMessage(
 }
 
 interface TerminalSessionResponse {
-  code: string;
-  data: { currentDirectory?: string };
-  message: string;
+  currentDirectory?: string;
 }
 
-function parseTerminalSession(value: unknown): TerminalSessionResponse | undefined {
-  if (
-    !isRecord(value) ||
-    typeof value.code !== "string" ||
-    typeof value.message !== "string" ||
-    !isRecord(value.data) ||
-    (value.data.currentDirectory !== undefined &&
-      (typeof value.data.currentDirectory !== "string" ||
-        !value.data.currentDirectory))
-  ) {
-    return undefined;
-  }
-
+function parseTerminalSession(
+  value: unknown,
+): TerminalSessionResponse | undefined {
   return value as unknown as TerminalSessionResponse;
 }
 

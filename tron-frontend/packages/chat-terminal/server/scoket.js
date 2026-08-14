@@ -51,10 +51,7 @@ export class TerminalGateway {
         rows: 24,
       });
     } catch (error) {
-      this.emitSessionError(
-        client,
-        getErrorMessage(error, "终端会话无法启动"),
-      );
+      this.emitSessionError(client, getErrorMessage(error, "终端会话无法启动"));
       return;
     }
 
@@ -186,18 +183,12 @@ export class TerminalGateway {
 
   emitSessionReady(session) {
     session.client.emit(TERMINAL_SESSION_EVENT, {
-      code: "0",
-      data: { currentDirectory: session.currentDirectory },
-      message: "",
+      currentDirectory: session.currentDirectory,
     });
   }
 
   emitSessionError(client, message) {
-    client.emit(TERMINAL_SESSION_EVENT, {
-      code: "-1",
-      data: {},
-      message,
-    });
+    client.emit(TERMINAL_SESSION_EVENT, {});
   }
 
   handleTerminalData(session, data) {
@@ -353,8 +344,7 @@ function getShellConfiguration({ env, platform, shell }) {
   const command = shell ?? env.SHELL ?? "/bin/sh";
   return {
     args: getPosixShellArgs(command),
-    bootstrapCommand:
-      `stty -echo; printf '\\036TRON_SESSION_READY:%s\\037\\n' "$PWD"\n`,
+    bootstrapCommand: `stty -echo; printf '\\036TRON_SESSION_READY:%s\\037\\n' "$PWD"\n`,
     command,
     env,
     frameCommand: (input, token) =>
