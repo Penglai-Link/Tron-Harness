@@ -154,6 +154,10 @@ fn make_be_dev_port_override_is_wired_into_backend_config() {
         makefile.contains("TRON_BACKEND_GRAPH_STORAGE_PATH=$(GRAPH_STORAGE_PATH)"),
         "make be-dev must export TRON_BACKEND_GRAPH_STORAGE_PATH when GRAPH_STORAGE_PATH is provided"
     );
+    assert!(
+        makefile.contains("--bin tron-backend"),
+        "make be-dev must explicitly select the server binary",
+    );
 
     let config_source = fs::read_to_string(repo_root.join("tron-backend/src/config/parsing.rs"))
         .expect("backend config parsing source should be readable");
