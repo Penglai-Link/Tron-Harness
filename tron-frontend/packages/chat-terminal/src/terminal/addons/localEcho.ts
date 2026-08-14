@@ -54,6 +54,16 @@ interface ActiveExplainDialog {
   state: ExplainDialogState;
 }
 
+interface TerminalCursorPosition {
+  column: number;
+  row: number;
+}
+
+interface InputCellSpan {
+  end: TerminalCursorPosition;
+  start: TerminalCursorPosition;
+}
+
 const EXPLAIN_DIALOG_WIDTH = 400;
 const EXPLAIN_DIALOG_MAX_HEIGHT = 180;
 const EXPLAIN_DIALOG_MARGIN = 12;
@@ -73,6 +83,8 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.scheduleExplainButtonPositionUpdate();
   };
   private currentInput = "";
+  private inputCellSpans: InputCellSpan[] = [];
+  private inputQueue = Promise.resolve();
   private isExecuting = false;
   private activeCommand?: ActiveCommand;
   private terminal?: XTerminal;
@@ -109,9 +121,26 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     this.terminal = terminal;
     this.disposable = terminal.onData((data) => {
-      void this.echo(terminal, data).catch((error) => {
-        console.error("Local terminal input handler failed", error);
-      });
+      if (this.isExecuting && data !== "\u0003") {
+        return;
+      }
+
+      if (this.isExecuting && data === "\u0003") {
+        this.cancelCurrentCommand();
+        return;
+      }
+
+      this.inputQueue = this.inputQueue
+        .then(async () => {
+          if (this.isExecuting && data !== "\u0003") {
+            return;
+          }
+
+          await this.echo(terminal, data);
+        })
+        .catch((error) => {
+          console.error("Local terminal input handler failed", error);
+        });
     });
     this.scrollDisposable = terminal.onScroll(() => {
       this.scheduleExplainButtonPositionUpdate();
@@ -148,6 +177,8 @@ export class LocalEchoAddon implements ITerminalAddon {
     }
     this.cancelExplanationRequest();
     this.terminal = undefined;
+    this.inputCellSpans = [];
+    this.inputQueue = Promise.resolve();
     this.explainElements.forEach((element) => element.remove());
     this.explainElements = [];
     this.explainButtons = [];
@@ -202,6 +233,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     if (data === "\u0003") {
       await writeTerminalAsync(terminal, "^C\r\n");
       this.currentInput = "";
+      this.inputCellSpans = [];
       await this.writePrompt();
       this.notifyInputState();
       return;
@@ -214,7 +246,12 @@ export class LocalEchoAddon implements ITerminalAddon {
 
       const { input, width } = removeLastGrapheme(this.currentInput);
       this.currentInput = input;
-      terminal.write(eraseTerminalCells(width));
+      const span = this.inputCellSpans.pop();
+      if (span) {
+        await writeTerminalAsync(terminal, eraseTerminalSpan(terminal, span));
+      } else {
+        await writeTerminalAsync(terminal, eraseTerminalCells(width));
+      }
       this.notifyInputState();
       return;
     }
@@ -223,9 +260,18 @@ export class LocalEchoAddon implements ITerminalAddon {
       return;
     }
 
-    this.currentInput += data;
-    terminal.write(data);
+    const graphemes = segmentGraphemes(data);
+    const start = getTerminalCursorPosition(terminal);
+    let cursor = start;
+    for (const grapheme of graphemes) {
+      const end = advanceTerminalCursor(cursor, grapheme, terminal.cols);
+
+      this.inputCellSpans.push({ start: cursor, end });
+      this.currentInput += grapheme;
+      cursor = end;
+    }
     this.notifyInputState();
+    await writeTerminalAsync(terminal, data);
   }
 
   private async submitCommand(terminal: XTerminal) {
@@ -245,6 +291,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     const { checkBeforeCommand, echoCommand } = options;
 
     this.currentInput = "";
+    this.inputCellSpans = [];
     this.isExecuting = true;
     const activeCommand: ActiveCommand = {
       cancelled: false,
@@ -781,6 +828,16 @@ function isAbortError(error: unknown) {
 }
 
 function removeLastGrapheme(input: string) {
+  const segments = segmentGraphemes(input).map((segment) => ({ segment }));
+  const last = segments[segments.length - 1]?.segment ?? "";
+
+  return {
+    input: input.slice(0, -last.length),
+    width: getGraphemeCellWidth(last),
+  };
+}
+
+function segmentGraphemes(input: string) {
   const Segmenter = (
     Intl as unknown as {
       Segmenter?: new (
@@ -789,17 +846,13 @@ function removeLastGrapheme(input: string) {
       ) => { segment(value: string): Iterable<{ segment: string }> };
     }
   ).Segmenter;
-  const segments = Segmenter
+
+  return Segmenter
     ? Array.from(
         new Segmenter(undefined, { granularity: "grapheme" }).segment(input),
+        ({ segment }) => segment,
       )
-    : Array.from(input, (segment) => ({ segment }));
-  const last = segments[segments.length - 1]?.segment ?? "";
-
-  return {
-    input: input.slice(0, -last.length),
-    width: getGraphemeCellWidth(last),
-  };
+    : Array.from(input);
 }
 
 function getGraphemeCellWidth(grapheme: string) {
@@ -841,4 +894,123 @@ function isWideCodePoint(codePoint: number) {
 function eraseTerminalCells(width: number) {
   const backspaces = "\b".repeat(width);
   return `${backspaces}${" ".repeat(width)}${backspaces}`;
+}
+
+function getTerminalCursorPosition(terminal: XTerminal): TerminalCursorPosition {
+  const buffer = terminal.buffer.active;
+
+  return {
+    column: buffer.cursorX,
+    row: buffer.baseY + buffer.cursorY,
+  };
+}
+
+function advanceTerminalCursor(
+  position: TerminalCursorPosition,
+  grapheme: string,
+  columns: number,
+) {
+  if (grapheme === "\t") {
+    if (position.column >= columns) {
+      return position;
+    }
+
+    return {
+      column: Math.min(
+        columns - 1,
+        position.column + (8 - (position.column % 8)),
+      ),
+      row: position.row,
+    };
+  }
+
+  let row = position.row;
+  let column = position.column;
+  const width = getGraphemeCellWidth(grapheme);
+
+  if (column >= columns || (width > 1 && column === columns - 1)) {
+    row += 1;
+    column = 0;
+  }
+
+  return {
+    column: column + width,
+    row,
+  };
+}
+
+function eraseTerminalSpan(terminal: XTerminal, span: InputCellSpan) {
+  const columns = terminal.cols;
+  const start = normalizeRenderedStart(span.start, columns);
+  const width = getTerminalSpanWidth(start, span.end, columns);
+
+  if (width <= 0) {
+    return "";
+  }
+
+  const current = getTerminalCursorPosition(terminal);
+  let sequence = moveTerminalCursor(current, start);
+  let remaining = width;
+  let cursor = start;
+
+  while (remaining > 0) {
+    const cellsOnLine = Math.max(1, columns - cursor.column);
+    const cellsToErase = Math.min(remaining, cellsOnLine);
+
+    sequence += `\x1b[${cellsToErase}X`;
+    remaining -= cellsToErase;
+
+    if (remaining > 0) {
+      sequence += "\x1b[1B\r";
+      cursor = { column: 0, row: cursor.row + 1 };
+    }
+  }
+
+  return sequence + moveTerminalCursor(cursor, start);
+}
+
+function normalizeRenderedStart(
+  position: TerminalCursorPosition,
+  columns: number,
+) {
+  if (position.column < columns) {
+    return position;
+  }
+
+  return {
+    column: 0,
+    row: position.row + 1,
+  };
+}
+
+function getTerminalSpanWidth(
+  start: TerminalCursorPosition,
+  end: TerminalCursorPosition,
+  columns: number,
+) {
+  const endColumn = Math.min(end.column, columns);
+  return (end.row - start.row) * columns + endColumn - start.column;
+}
+
+function moveTerminalCursor(
+  from: TerminalCursorPosition,
+  to: TerminalCursorPosition,
+) {
+  const rowDelta = to.row - from.row;
+  const columnDelta = to.column - from.column;
+  let sequence = "";
+
+  if (rowDelta < 0) {
+    sequence += `\x1b[${-rowDelta}A`;
+  } else if (rowDelta > 0) {
+    sequence += `\x1b[${rowDelta}B`;
+  }
+
+  if (columnDelta < 0) {
+    sequence += `\x1b[${-columnDelta}D`;
+  } else if (columnDelta > 0) {
+    sequence += `\x1b[${columnDelta}C`;
+  }
+
+  return sequence;
 }
