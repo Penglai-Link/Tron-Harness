@@ -1,24 +1,28 @@
-import { io, type Socket } from "socket.io-client";
+import {
+  io,
+  type ManagerOptions,
+  type Socket,
+  type SocketOptions,
+} from "socket.io-client";
 
-export type TerminalMessageType =
-  | "TEXT_MESSAGE_START"
-  | "TEXT_MESSAGE_CONTENT"
-  | "TEXT_MESSAGE_END"
-  | "TEXT_MESSAGE_ERROR"
-  | "TEXT_MESSAGE_SUGGESTION";
-
-export interface TerminalMessage {
-  currentDirectory?: string;
-  delta: string;
-  messageId: string;
-  timestamp: number;
-  type: TerminalMessageType;
-}
+import {
+  createMessageId,
+  parseTerminalMessage,
+  parseTerminalSession,
+} from "./protocol";
+import type {
+  TerminalCommandOptions,
+  TerminalCommandResult,
+  TerminalSession,
+  TerminalSize,
+  TerminalTransport,
+  TransportDisposable,
+} from "./types";
 
 interface CommandExecutePayload {
-  messageId: string;
   command: string;
   interactive?: true;
+  messageId: string;
 }
 
 interface ServerToClientEvents {
@@ -27,8 +31,8 @@ interface ServerToClientEvents {
 }
 
 interface ClientToServerEvents {
-  "command:execute": (payload: CommandExecutePayload) => void;
   "command:cancel": (payload: { messageId: string }) => void;
+  "command:execute": (payload: CommandExecutePayload) => void;
   "command:input": (payload: { data: string; messageId: string }) => void;
   "terminal:resize": (payload: TerminalSize) => void;
 }
@@ -42,56 +46,37 @@ interface PendingCommand {
   timeoutId?: number;
 }
 
-export interface TerminalSocketClientOptions {
+export interface SocketIoTerminalTransportOptions {
   commandTimeoutMs?: number;
-  onSessionChange?: (currentDirectory: string) => void;
-}
-
-export interface TerminalCommandResult {
-  currentDirectory?: string;
-}
-
-export interface TerminalCommandOptions {
-  interactive?: boolean;
-  timeoutMs?: number;
-}
-
-export interface TerminalSize {
-  cols: number;
-  rows: number;
+  socketOptions?: Partial<ManagerOptions & SocketOptions>;
 }
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
-const TERMINAL_MESSAGE_TYPES = new Set<TerminalMessageType>([
-  "TEXT_MESSAGE_START",
-  "TEXT_MESSAGE_CONTENT",
-  "TEXT_MESSAGE_END",
-  "TEXT_MESSAGE_ERROR",
-  "TEXT_MESSAGE_SUGGESTION",
-]);
 
-export class TerminalSocketClient {
+export class SocketIoTerminalTransport implements TerminalTransport {
   private readonly commandTimeoutMs: number;
-  private readonly onSessionChange?: (currentDirectory: string) => void;
   private readonly pendingCommands = new Map<string, PendingCommand>();
+  private readonly sessionListeners = new Set<
+    (session: TerminalSession) => void
+  >();
   private readonly socket: Socket<ServerToClientEvents, ClientToServerEvents>;
-  private connecting?: Promise<void>;
+  private connecting?: Promise<TerminalSession>;
   private rejectConnecting?: (reason: Error) => void;
-  private resolveConnecting?: () => void;
+  private resolveConnecting?: (session: TerminalSession) => void;
   private activeMessageId?: string;
+  private currentSession?: TerminalSession;
   private latestSize?: TerminalSize;
   private destroyed = false;
-  private sessionReady = false;
 
-  constructor(url: string, options: TerminalSocketClientOptions = {}) {
+  constructor(url: string, options: SocketIoTerminalTransportOptions = {}) {
     this.commandTimeoutMs =
       options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
-    this.onSessionChange = options.onSessionChange;
     this.socket = io(url, {
-      autoConnect: false,
       reconnection: true,
       timeout: 10_000,
       transports: ["websocket"],
+      ...options.socketOptions,
+      autoConnect: false,
     });
 
     this.socket.on("command:message", (response) =>
@@ -101,14 +86,39 @@ export class TerminalSocketClient {
       this.handleSession(response),
     );
     this.socket.on("disconnect", () => {
-      this.sessionReady = false;
+      this.currentSession = undefined;
       const error = new Error("终端连接已断开");
-      this.settleConnection(error);
+      this.settleConnection(undefined, error);
       this.rejectAll(error);
     });
     this.socket.on("connect_error", () => {
-      this.settleConnection(new Error("无法连接终端服务"));
+      this.settleConnection(undefined, new Error("无法连接终端服务"));
     });
+  }
+
+  connect(): Promise<TerminalSession> {
+    if (this.destroyed) {
+      return Promise.reject(new Error("终端已销毁"));
+    }
+
+    if (this.socket.connected && this.currentSession) {
+      return Promise.resolve(this.currentSession);
+    }
+
+    if (this.connecting) {
+      return this.connecting;
+    }
+
+    this.connecting = new Promise<TerminalSession>((resolve, reject) => {
+      this.resolveConnecting = resolve;
+      this.rejectConnecting = reject;
+    });
+
+    if (!this.socket.connected) {
+      this.socket.connect();
+    }
+
+    return this.connecting;
   }
 
   async execute(
@@ -151,21 +161,21 @@ export class TerminalSocketClient {
     });
   }
 
-  cancelCurrent() {
+  cancel() {
     const messageId = this.activeMessageId;
+    const pending = messageId
+      ? this.pendingCommands.get(messageId)
+      : undefined;
 
-    if (!messageId || !this.pendingCommands.has(messageId)) {
+    if (!messageId || !pending || pending.cancelled) {
       return;
     }
-
-    const pending = this.pendingCommands.get(messageId);
-    if (!pending || pending.cancelled) return;
 
     pending.cancelled = true;
     this.socket.emit("command:cancel", { messageId });
   }
 
-  sendInput(data: string) {
+  write(data: string) {
     const messageId = this.activeMessageId;
     const pending = messageId
       ? this.pendingCommands.get(messageId)
@@ -187,38 +197,29 @@ export class TerminalSocketClient {
     this.emitTerminalSize();
   }
 
-  destroy() {
-    this.destroyed = true;
-    this.sessionReady = false;
-    const error = new Error("终端连接已关闭");
-    this.settleConnection(error);
-    this.rejectAll(error);
-    this.socket.disconnect();
+  onSessionChange(
+    listener: (session: TerminalSession) => void,
+  ): TransportDisposable {
+    this.sessionListeners.add(listener);
+    if (this.currentSession) {
+      listener(this.currentSession);
+    }
+
+    return {
+      dispose: () => {
+        this.sessionListeners.delete(listener);
+      },
+    };
   }
 
-  connect(): Promise<void> {
-    if (this.destroyed) {
-      return Promise.reject(new Error("终端已销毁"));
-    }
-
-    if (this.socket.connected && this.sessionReady) {
-      return Promise.resolve();
-    }
-
-    if (this.connecting) {
-      return this.connecting;
-    }
-
-    this.connecting = new Promise<void>((resolve, reject) => {
-      this.resolveConnecting = resolve;
-      this.rejectConnecting = reject;
-    });
-
-    if (!this.socket.connected) {
-      this.socket.connect();
-    }
-
-    return this.connecting;
+  dispose() {
+    this.destroyed = true;
+    this.currentSession = undefined;
+    const error = new Error("终端连接已关闭");
+    this.settleConnection(undefined, error);
+    this.rejectAll(error);
+    this.sessionListeners.clear();
+    this.socket.disconnect();
   }
 
   private handleMessage(response: unknown) {
@@ -257,28 +258,30 @@ export class TerminalSocketClient {
     const session = parseTerminalSession(response);
     if (!session) return;
     if ("error" in session) {
-      this.sessionReady = false;
+      this.currentSession = undefined;
       const error = new Error(session.error);
-      this.settleConnection(error);
+      this.settleConnection(undefined, error);
       this.rejectAll(error);
       return;
     }
 
-    this.sessionReady = true;
-    this.onSessionChange?.(session.currentDirectory);
+    this.currentSession = { currentDirectory: session.currentDirectory };
+    for (const listener of this.sessionListeners) {
+      listener(this.currentSession);
+    }
     this.emitTerminalSize();
-    this.settleConnection();
+    this.settleConnection(this.currentSession);
   }
 
   private emitTerminalSize() {
-    if (!this.latestSize || !this.socket.connected || !this.sessionReady) {
+    if (!this.latestSize || !this.socket.connected || !this.currentSession) {
       return;
     }
 
     this.socket.emit("terminal:resize", this.latestSize);
   }
 
-  private settleConnection(error?: Error) {
+  private settleConnection(session?: TerminalSession, error?: Error) {
     const resolve = this.resolveConnecting;
     const reject = this.rejectConnecting;
     this.connecting = undefined;
@@ -287,8 +290,8 @@ export class TerminalSocketClient {
 
     if (error) {
       reject?.(error);
-    } else {
-      resolve?.();
+    } else if (session) {
+      resolve?.(session);
     }
   }
 
@@ -330,55 +333,11 @@ export class TerminalSocketClient {
   }
 }
 
-export function parseTerminalMessage(
-  value: unknown,
-): TerminalMessage | undefined {
-  if (
-    !isRecord(value) ||
-    typeof value.delta !== "string" ||
-    typeof value.messageId !== "string" ||
-    !value.messageId ||
-    typeof value.timestamp !== "number" ||
-    !Number.isFinite(value.timestamp) ||
-    typeof value.type !== "string" ||
-    !TERMINAL_MESSAGE_TYPES.has(value.type as TerminalMessageType) ||
-    (value.currentDirectory !== undefined &&
-      (typeof value.currentDirectory !== "string" || !value.currentDirectory))
-  ) {
-    return undefined;
-  }
-
-  return value as unknown as TerminalMessage;
-}
-
-type TerminalSessionResponse =
-  | { currentDirectory: string; error?: never }
-  | { currentDirectory?: never; error: string };
-
-function parseTerminalSession(
-  value: unknown,
-): TerminalSessionResponse | undefined {
-  if (
-    !isRecord(value) ||
-    typeof value.code !== "string" ||
-    typeof value.message !== "string" ||
-    !isRecord(value.data)
-  ) {
-    return undefined;
-  }
-
-  if (value.code !== "0") {
-    return value.message ? { error: value.message } : undefined;
-  }
-
-  if (
-    typeof value.data.currentDirectory !== "string" ||
-    !value.data.currentDirectory
-  ) {
-    return undefined;
-  }
-
-  return { currentDirectory: value.data.currentDirectory };
+export function createSocketIoTerminalTransport(
+  url: string,
+  options?: SocketIoTerminalTransportOptions,
+) {
+  return new SocketIoTerminalTransport(url, options);
 }
 
 function isTerminalSize(value: TerminalSize) {
@@ -388,12 +347,4 @@ function isTerminalSize(value: TerminalSize) {
     Number.isInteger(value.rows) &&
     value.rows > 0
   );
-}
-
-function createMessageId() {
-  return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null;
 }

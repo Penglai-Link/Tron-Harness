@@ -38,11 +38,13 @@ export default defineConfig(({ mode }) => {
       },
       rollupOptions: {
         external: [
+          "@microsoft/fetch-event-source",
           "@tron/chat-core",
           "@xterm/xterm",
           "@xterm/addon-fit",
           "@xterm/addon-web-links",
           "markdown-it",
+          "socket.io-client",
         ],
       },
     },
