@@ -49,6 +49,10 @@ const SHELL_COMMANDS = new Set([
   "which",
 ]);
 
+const NATURAL_LANGUAGE_PREFIX =
+  /^(?:can|could|create|describe|explain|how|list|please|show|tell|what|when|where|who|why|would)\b/i;
+const SHELL_EXECUTABLE_TOKEN = /^[A-Za-z0-9_][A-Za-z0-9_.:@%+,-]*$/;
+
 // 判断是否是shell命令
 export function isShellCommand(command: string): boolean {
   const input = command.trim();
@@ -65,7 +69,19 @@ export function isShellCommand(command: string): boolean {
     return true;
   }
 
+  if (/(?:&&|\|\||[|;<>])/.test(input)) {
+    return true;
+  }
+
   const firstToken = input.split(/\s+/)[0];
 
-  return SHELL_COMMANDS.has(firstToken);
+  if (SHELL_COMMANDS.has(firstToken)) {
+    return true;
+  }
+
+  if (NATURAL_LANGUAGE_PREFIX.test(input)) {
+    return false;
+  }
+
+  return SHELL_EXECUTABLE_TOKEN.test(firstToken);
 }

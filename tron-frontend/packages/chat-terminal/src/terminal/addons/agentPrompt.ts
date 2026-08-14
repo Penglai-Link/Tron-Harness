@@ -74,13 +74,17 @@ export class AgentPromptAddon implements ITerminalAddon {
     this.schedulePositionUpdate();
   }
 
-  setInputState(enabled: boolean, input: string) {
+  setInputState(
+    enabled: boolean,
+    input: string,
+    options: { hideCursor?: boolean } = {},
+  ) {
     this.isInputStateManaged = true;
     this.inputEnabled = enabled;
     this.hasInput = input.length > 0;
     this.terminal?.element?.classList.toggle(
       "ai-terminal-input-disabled",
-      !enabled,
+      options.hideCursor ?? !enabled,
     );
     this.syncVisibility();
   }

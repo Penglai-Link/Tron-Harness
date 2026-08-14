@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
+import fs from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
@@ -105,6 +108,33 @@ test("a session rejects concurrent commands and Ctrl+C keeps the PTY alive", () 
   );
 });
 
+test("interactive input and resize target only the active PTY command", () => {
+  const harness = createGatewayHarness();
+  const client = createClient("client-a");
+
+  harness.gateway.handleConnection(client);
+  const terminal = harness.terminals[0];
+  terminal.emitData(sessionReady("/workspace"));
+  harness.gateway.executeCommand(client, {
+    command: "vim edit.txt",
+    interactive: true,
+    messageId: "message-1",
+  });
+
+  harness.gateway.writeCommandInput(client, {
+    data: "i",
+    messageId: "message-1",
+  });
+  harness.gateway.writeCommandInput(client, {
+    data: "ignored",
+    messageId: "message-2",
+  });
+  harness.gateway.resizeTerminal(client, { cols: 120, rows: 50 });
+
+  assert.equal(terminal.writes.at(-1), "i");
+  assert.deepEqual(terminal.resizeCalls, [[120, 50]]);
+});
+
 test("a marker split across PTY chunks never leaks into command output", () => {
   const harness = createGatewayHarness();
   const client = createClient("client-a");
@@ -188,6 +218,130 @@ test(
   },
 );
 
+test(
+  "a real zsh session loads user aliases",
+  {
+    skip:
+      process.platform === "win32" ||
+      spawnSync("zsh", ["--version"], { stdio: "ignore" }).status !== 0,
+    timeout: 10_000,
+  },
+  async () => {
+    const initialDirectory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "tron-zsh-test-"),
+    );
+    const homeDirectory = path.join(initialDirectory, "home");
+    await fs.mkdir(homeDirectory);
+    await fs.writeFile(
+      path.join(homeDirectory, ".zshrc"),
+      "alias tron_test_alias='printf alias-loaded'\n",
+    );
+    const gateway = new TerminalGateway({
+      cwd: initialDirectory,
+      env: { ...process.env, HOME: homeDirectory, SHELL: "/bin/zsh" },
+      shell: "/bin/zsh",
+    });
+    const client = createClient("zsh-alias-client");
+
+    try {
+      gateway.handleConnection(client);
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "terminal:session" && payload.code === "0",
+      );
+
+      gateway.executeCommand(client, {
+        command: "tron_test_alias",
+        messageId: "zsh-alias-message",
+      });
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "command:message" &&
+          payload.messageId === "zsh-alias-message" &&
+          payload.type === MessageType.END,
+      );
+
+      const output = commandMessages(client)
+        .filter(
+          (payload) =>
+            payload.messageId === "zsh-alias-message" &&
+            payload.type === MessageType.CONTENT,
+        )
+        .map((payload) => payload.delta)
+        .join("");
+      assert.equal(output, "alias-loaded");
+    } finally {
+      gateway.handleDisconnect(client);
+      await fs.rm(initialDirectory, { force: true, recursive: true });
+    }
+  },
+);
+
+test(
+  "a real PTY accepts Vim input without consuming the command marker",
+  {
+    skip:
+      process.platform === "win32" ||
+      spawnSync("vim", ["--version"], { stdio: "ignore" }).status !== 0,
+    timeout: 10_000,
+  },
+  async () => {
+    const initialDirectory = await fs.mkdtemp(
+      path.join(os.tmpdir(), "tron-vim-test-"),
+    );
+    const gateway = new TerminalGateway({ cwd: initialDirectory });
+    const client = createClient("vim-client");
+
+    try {
+      gateway.handleConnection(client);
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "terminal:session" && payload.code === "0",
+      );
+
+      gateway.executeCommand(client, {
+        command: "vim -Nu NONE -n edit.txt",
+        interactive: true,
+        messageId: "vim-message",
+      });
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "command:message" &&
+          payload.messageId === "vim-message" &&
+          payload.type === MessageType.CONTENT,
+      );
+
+      gateway.writeCommandInput(client, {
+        data: "ihello from tron",
+        messageId: "vim-message",
+      });
+      gateway.writeCommandInput(client, {
+        data: "\x1b:wq\r",
+        messageId: "vim-message",
+      });
+
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "command:message" &&
+          payload.messageId === "vim-message" &&
+          payload.type === MessageType.END,
+      );
+      assert.equal(
+        await fs.readFile(path.join(initialDirectory, "edit.txt"), "utf8"),
+        "hello from tron\n",
+      );
+    } finally {
+      gateway.handleDisconnect(client);
+      await fs.rm(initialDirectory, { force: true, recursive: true });
+    }
+  },
+);
+
 function createGatewayHarness() {
   const terminals = [];
   const gateway = new TerminalGateway({
@@ -255,6 +409,7 @@ async function waitForEvent(client, predicate) {
 
 class FakeTerminal {
   killCalls = 0;
+  resizeCalls = [];
   writes = [];
   #dataHandlers = [];
   #exitHandlers = [];
@@ -279,6 +434,10 @@ class FakeTerminal {
   onExit(handler) {
     this.#exitHandlers.push(handler);
     return { dispose() {} };
+  }
+
+  resize(cols, rows) {
+    this.resizeCalls.push([cols, rows]);
   }
 
   write(data) {

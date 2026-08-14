@@ -2,7 +2,10 @@ import { FitAddon } from "@xterm/addon-fit";
 import { Terminal as XTerminal } from "@xterm/xterm";
 import "./styles/index.scss";
 import { AgentPromptAddon } from "./addons/agentPrompt";
-import { LocalEchoAddon } from "./addons/localEcho";
+import {
+  isInteractiveShellCommand,
+  LocalEchoAddon,
+} from "./addons/localEcho";
 import { ModelSessionAddon } from "./addons/modelSession";
 import type {
   ChatTerminalLocale,
@@ -12,6 +15,7 @@ import type {
 } from "./i18n";
 import type { AgentPromptAddonOptions } from "./types/agentPrompt";
 import type {
+  CommandExecutionContext,
   CommandExplain,
   CommandExplainContext,
   CommandExplainPayload,
@@ -51,6 +55,7 @@ export {
   type ChatTerminalMessageKey,
   type ChatTerminalMessageOverrides,
   type ChatTerminalMessages,
+  type CommandExecutionContext,
   type CommandExplain,
   type CommandExplainContext,
   type CommandExplainPayload,
@@ -70,6 +75,7 @@ export {
   type ModelSessionToken,
   type TerminalOptions,
   type TerminalThemeTokenOverrides,
+  isInteractiveShellCommand,
 };
 
 export class Terminal {
@@ -129,7 +135,10 @@ export class Terminal {
     if (localEcho) {
       this.localEchoAddon = new LocalEchoAddon(
         this.normalizeLocalEchoOptions(localEcho),
-        this.agentPromptAddon?.setInputState.bind(this.agentPromptAddon),
+        (enabled, input, interactive) =>
+          this.agentPromptAddon?.setInputState(enabled, input, {
+            hideCursor: !enabled && !interactive,
+          }),
       );
       this.terminal.loadAddon(this.localEchoAddon);
     }

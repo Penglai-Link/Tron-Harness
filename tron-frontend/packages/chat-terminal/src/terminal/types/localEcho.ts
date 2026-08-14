@@ -15,15 +15,22 @@ export type CommandExplain = (
   context: CommandExplainContext,
 ) => Promise<string>;
 
+export interface CommandExecutionContext {
+  interactive: boolean;
+}
+
 export interface LocalEchoAddonOptions {
   enabled?: boolean;
   prompt?: string | (() => string);
+  isInteractiveCommand?: (command: string) => boolean;
   onCancelCommand?: () => void;
   onBeforeCommand?: (command: string) => MaybePromise<boolean | void>;
   onCommand?: (
     command: string,
     onOutput: (output: string) => void,
+    context: CommandExecutionContext,
   ) => MaybePromise<string | void>;
+  onCommandInput?: (data: string) => MaybePromise<void>;
   onExplain?: CommandExplain;
   explainTitle?: string;
   i18n?: ChatTerminalI18n;

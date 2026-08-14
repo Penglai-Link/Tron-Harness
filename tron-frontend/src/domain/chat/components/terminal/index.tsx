@@ -56,9 +56,11 @@ const Terminal = () => {
                     border: "var(--color-card-border, gray)",
                 },
             },
-            runCommand: (command, onOutput) =>
-                socketClient.execute(command, onOutput),
+            runCommand: (command, onOutput, { interactive }) =>
+                socketClient.execute(command, onOutput, { interactive }),
             cancelCommand: () => socketClient.cancelCurrent(),
+            resizeTerminal: (size) => socketClient.resize(size),
+            writeCommandInput: (data) => socketClient.sendInput(data),
             commandChat: (command) => fetchEventSource(`${terminalServerUrl}/api/llm/v1/chat/completions`, {
                 method: "POST",
                 body: JSON.stringify({

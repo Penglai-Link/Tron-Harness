@@ -1,5 +1,10 @@
 import "@xterm/xterm/css/xterm.css";
-import { Terminal, type CommandExplain } from "./terminal";
+import {
+  isInteractiveShellCommand,
+  Terminal,
+  type CommandExecutionContext,
+  type CommandExplain,
+} from "./terminal";
 import { formatePath, isShellCommand } from "./terminal/utils/common";
 import { ITerminalInitOnlyOptions, ITerminalOptions } from "@xterm/xterm";
 import type { TerminalThemeTokenOverrides } from "./terminal/types/themes";
@@ -14,6 +19,7 @@ export type {
   ChatTerminalMessageKey,
   ChatTerminalMessageOverrides,
   ChatTerminalMessages,
+  CommandExecutionContext,
   CommandExplain,
   CommandExplainContext,
   CommandExplainPayload,
@@ -34,8 +40,12 @@ export interface IOptions {
   runCommand: (
     command: string,
     onOutput: (output: string) => void,
+    context: CommandExecutionContext,
   ) => Promise<CommandExecutionResult | void>;
   cancelCommand?: () => void;
+  isInteractiveCommand?: (command: string) => boolean;
+  resizeTerminal?: (size: TerminalSize) => Promise<void> | void;
+  writeCommandInput?: (data: string) => Promise<void> | void;
   commandChat: (command: string) => Promise<void>;
   commandExplain: CommandExplain;
   commandGenerate: (content: string) => Promise<string>;
@@ -43,6 +53,11 @@ export interface IOptions {
 
 export interface CommandExecutionResult {
   currentDirectory?: string;
+}
+
+export interface TerminalSize {
+  cols: number;
+  rows: number;
 }
 
 const defaultOptions: Partial<IOptions> = {};
@@ -67,13 +82,14 @@ export function initTerminal(options: IOptions) {
     onOutput: (output: string) => void = (output) => {
       termInstance.terminal.write(output);
     },
+    context: CommandExecutionContext = { interactive: false },
   ) {
     const input = command.trim();
     if (!input) {
       return;
     }
     try {
-      const result = await normalizeOptions.runCommand(input, onOutput);
+      const result = await normalizeOptions.runCommand(input, onOutput, context);
       if (result?.currentDirectory) {
         currentDirectory = result.currentDirectory;
       }
@@ -90,7 +106,11 @@ export function initTerminal(options: IOptions) {
       prompt: () => {
         return formatePath(currentDirectory);
       },
+      isInteractiveCommand: normalizeOptions.writeCommandInput
+        ? (normalizeOptions.isInteractiveCommand ?? isInteractiveShellCommand)
+        : undefined,
       onCancelCommand: normalizeOptions.cancelCommand,
+      onCommandInput: normalizeOptions.writeCommandInput,
       // 执行命令前判断，系统命令直接执行，非系统命令调用大模型
       onBeforeCommand: async (command) => {
         if (!command.trim()) {
@@ -129,10 +149,16 @@ export function initTerminal(options: IOptions) {
       },
     },
   });
+  const resizeDisposable = normalizeOptions.resizeTerminal
+    ? termInstance.terminal.onResize((size) => {
+        void normalizeOptions.resizeTerminal?.(size);
+      })
+    : undefined;
   termInstance.terminal.write(formatePath(currentDirectory));
 
   return {
     dispose() {
+      resizeDisposable?.dispose();
       termInstance.dispose();
     },
     setCurrentDirectory(nextDirectory: string) {

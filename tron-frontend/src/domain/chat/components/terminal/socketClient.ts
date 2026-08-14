@@ -18,6 +18,7 @@ export interface TerminalMessage {
 interface CommandExecutePayload {
   messageId: string;
   command: string;
+  interactive?: true;
 }
 
 interface ServerToClientEvents {
@@ -28,14 +29,17 @@ interface ServerToClientEvents {
 interface ClientToServerEvents {
   "command:execute": (payload: CommandExecutePayload) => void;
   "command:cancel": (payload: { messageId: string }) => void;
+  "command:input": (payload: { data: string; messageId: string }) => void;
+  "terminal:resize": (payload: TerminalSize) => void;
 }
 
 interface PendingCommand {
   cancelled: boolean;
+  interactive: boolean;
   onOutput: (output: string) => void;
   reject: (reason: Error) => void;
   resolve: (result: TerminalCommandResult) => void;
-  timeoutId: number;
+  timeoutId?: number;
 }
 
 export interface TerminalSocketClientOptions {
@@ -45,6 +49,16 @@ export interface TerminalSocketClientOptions {
 
 export interface TerminalCommandResult {
   currentDirectory?: string;
+}
+
+export interface TerminalCommandOptions {
+  interactive?: boolean;
+  timeoutMs?: number;
+}
+
+export interface TerminalSize {
+  cols: number;
+  rows: number;
 }
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
@@ -65,6 +79,7 @@ export class TerminalSocketClient {
   private rejectConnecting?: (reason: Error) => void;
   private resolveConnecting?: () => void;
   private activeMessageId?: string;
+  private latestSize?: TerminalSize;
   private destroyed = false;
   private sessionReady = false;
 
@@ -99,27 +114,40 @@ export class TerminalSocketClient {
   async execute(
     command: string,
     onOutput: (output: string) => void,
+    options: TerminalCommandOptions = {},
   ): Promise<TerminalCommandResult> {
     if (!command.trim()) return {};
 
     await this.connect();
     const messageId = createMessageId();
+    const interactive = options.interactive === true;
 
     return new Promise((resolve, reject) => {
-      const timeoutId = window.setTimeout(() => {
-        this.socket.emit("command:cancel", { messageId });
-        this.rejectCommand(messageId, new Error("命令执行超时，请重试"));
-      }, this.commandTimeoutMs);
+      const timeoutMs = interactive
+        ? 0
+        : (options.timeoutMs ?? this.commandTimeoutMs);
+      const timeoutId =
+        timeoutMs > 0
+          ? window.setTimeout(() => {
+              this.socket.emit("command:cancel", { messageId });
+              this.rejectCommand(messageId, new Error("命令执行超时，请重试"));
+            }, timeoutMs)
+          : undefined;
 
       this.pendingCommands.set(messageId, {
         cancelled: false,
+        interactive,
         onOutput,
         reject,
         resolve,
         timeoutId,
       });
       this.activeMessageId = messageId;
-      this.socket.emit("command:execute", { command, messageId });
+      this.socket.emit("command:execute", {
+        command,
+        messageId,
+        ...(interactive ? { interactive: true as const } : {}),
+      });
     });
   }
 
@@ -135,6 +163,28 @@ export class TerminalSocketClient {
 
     pending.cancelled = true;
     this.socket.emit("command:cancel", { messageId });
+  }
+
+  sendInput(data: string) {
+    const messageId = this.activeMessageId;
+    const pending = messageId
+      ? this.pendingCommands.get(messageId)
+      : undefined;
+
+    if (!data || !messageId || !pending?.interactive || pending.cancelled) {
+      return;
+    }
+
+    this.socket.emit("command:input", { data, messageId });
+  }
+
+  resize(size: TerminalSize) {
+    if (!isTerminalSize(size)) {
+      return;
+    }
+
+    this.latestSize = size;
+    this.emitTerminalSize();
   }
 
   destroy() {
@@ -206,9 +256,26 @@ export class TerminalSocketClient {
   private handleSession(response: unknown) {
     const session = parseTerminalSession(response);
     if (!session) return;
+    if ("error" in session) {
+      this.sessionReady = false;
+      const error = new Error(session.error);
+      this.settleConnection(error);
+      this.rejectAll(error);
+      return;
+    }
+
     this.sessionReady = true;
-    this.onSessionChange?.(session?.currentDirectory || '~');
+    this.onSessionChange?.(session.currentDirectory);
+    this.emitTerminalSize();
     this.settleConnection();
+  }
+
+  private emitTerminalSize() {
+    if (!this.latestSize || !this.socket.connected || !this.sessionReady) {
+      return;
+    }
+
+    this.socket.emit("terminal:resize", this.latestSize);
   }
 
   private settleConnection(error?: Error) {
@@ -232,7 +299,9 @@ export class TerminalSocketClient {
     const pending = this.pendingCommands.get(messageId);
     if (!pending) return;
 
-    window.clearTimeout(pending.timeoutId);
+    if (pending.timeoutId !== undefined) {
+      window.clearTimeout(pending.timeoutId);
+    }
     this.pendingCommands.delete(messageId);
     if (this.activeMessageId === messageId) {
       this.activeMessageId = undefined;
@@ -244,7 +313,9 @@ export class TerminalSocketClient {
     const pending = this.pendingCommands.get(messageId);
     if (!pending) return;
 
-    window.clearTimeout(pending.timeoutId);
+    if (pending.timeoutId !== undefined) {
+      window.clearTimeout(pending.timeoutId);
+    }
     this.pendingCommands.delete(messageId);
     if (this.activeMessageId === messageId) {
       this.activeMessageId = undefined;
@@ -280,14 +351,43 @@ export function parseTerminalMessage(
   return value as unknown as TerminalMessage;
 }
 
-interface TerminalSessionResponse {
-  currentDirectory?: string;
-}
+type TerminalSessionResponse =
+  | { currentDirectory: string; error?: never }
+  | { currentDirectory?: never; error: string };
 
 function parseTerminalSession(
   value: unknown,
 ): TerminalSessionResponse | undefined {
-  return value as unknown as TerminalSessionResponse;
+  if (
+    !isRecord(value) ||
+    typeof value.code !== "string" ||
+    typeof value.message !== "string" ||
+    !isRecord(value.data)
+  ) {
+    return undefined;
+  }
+
+  if (value.code !== "0") {
+    return value.message ? { error: value.message } : undefined;
+  }
+
+  if (
+    typeof value.data.currentDirectory !== "string" ||
+    !value.data.currentDirectory
+  ) {
+    return undefined;
+  }
+
+  return { currentDirectory: value.data.currentDirectory };
+}
+
+function isTerminalSize(value: TerminalSize) {
+  return (
+    Number.isInteger(value.cols) &&
+    value.cols > 0 &&
+    Number.isInteger(value.rows) &&
+    value.rows > 0
+  );
 }
 
 function createMessageId() {

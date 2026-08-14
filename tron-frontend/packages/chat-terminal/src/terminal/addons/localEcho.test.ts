@@ -150,6 +150,52 @@ describe("LocalEchoAddon command cancellation", () => {
     expect(terminal.writes.at(-1)).toBe("$ \x1b[?25h");
     expect(inputStates.at(-1)).toBe(true);
   });
+
+  it("forwards interactive input and preserves raw PTY output", async () => {
+    const terminal = new TerminalStub();
+    const onCommandInput = vi.fn();
+    let onOutput: ((output: string) => void) | undefined;
+    let finishCommand: (() => void) | undefined;
+    const addon = new LocalEchoAddon({
+      enabled: true,
+      isInteractiveCommand: (command) => command === "vim edit.txt",
+      onCommand: (_command, nextOutput, context) => {
+        expect(context).toEqual({ interactive: true });
+        onOutput = nextOutput;
+        return new Promise<void>((resolve) => {
+          finishCommand = resolve;
+        });
+      },
+      onCommandInput,
+      prompt: "$ ",
+    });
+    addon.activate(terminal as unknown as XTerminal);
+
+    terminal.emitData("vim edit.txt");
+    terminal.emitData("\r");
+    await flushTasks();
+
+    onOutput?.("\x1b[?1049hfirst\nsecond");
+    terminal.emitData("i");
+    terminal.emitData("hello");
+    terminal.emitData("\x1b");
+    terminal.emitData(":wq\r");
+    await flushTasks();
+
+    expect(onCommandInput.mock.calls.map(([data]) => data)).toEqual([
+      "i",
+      "hello",
+      "\x1b",
+      ":wq\r",
+    ]);
+    expect(terminal.writes).toContain("\x1b[?1049hfirst\nsecond");
+    expect(terminal.writes).not.toContain("\x1b[?1049hfirst\r\nsecond");
+
+    finishCommand?.();
+    await flushTasks();
+
+    expect(terminal.writes.at(-1)).toBe("$ \x1b[?25h");
+  });
 });
 
 describe("LocalEchoAddon input cursor tracking", () => {

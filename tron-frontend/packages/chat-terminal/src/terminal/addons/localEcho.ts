@@ -44,6 +44,7 @@ interface ExplainButtonInstance {
 
 interface ActiveCommand {
   cancelled: boolean;
+  interactive: boolean;
   pendingOutputWrite: Promise<void>;
 }
 
@@ -85,6 +86,7 @@ export class LocalEchoAddon implements ITerminalAddon {
   private currentInput = "";
   private inputCellSpans: InputCellSpan[] = [];
   private inputQueue = Promise.resolve();
+  private commandInputQueue = Promise.resolve();
   private isExecuting = false;
   private activeCommand?: ActiveCommand;
   private terminal?: XTerminal;
@@ -109,6 +111,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     private readonly onInputStateChange?: (
       enabled: boolean,
       input: string,
+      interactive: boolean,
     ) => void,
   ) {
     this.i18n = options.i18n ?? createChatTerminalI18n();
@@ -121,26 +124,16 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     this.terminal = terminal;
     this.disposable = terminal.onData((data) => {
-      if (this.isExecuting && data !== "\u0003") {
+      if (this.isExecuting) {
+        if (this.activeCommand?.interactive) {
+          this.enqueueCommandInput(data);
+        } else if (data === "\u0003") {
+          this.cancelCurrentCommand();
+        }
         return;
       }
 
-      if (this.isExecuting && data === "\u0003") {
-        this.cancelCurrentCommand();
-        return;
-      }
-
-      this.inputQueue = this.inputQueue
-        .then(async () => {
-          if (this.isExecuting && data !== "\u0003") {
-            return;
-          }
-
-          await this.echo(terminal, data);
-        })
-        .catch((error) => {
-          console.error("Local terminal input handler failed", error);
-        });
+      this.enqueueInput(() => this.echo(terminal, data));
     });
     this.scrollDisposable = terminal.onScroll(() => {
       this.scheduleExplainButtonPositionUpdate();
@@ -179,6 +172,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.terminal = undefined;
     this.inputCellSpans = [];
     this.inputQueue = Promise.resolve();
+    this.commandInputQueue = Promise.resolve();
     this.explainElements.forEach((element) => element.remove());
     this.explainElements = [];
     this.explainButtons = [];
@@ -289,15 +283,24 @@ export class LocalEchoAddon implements ITerminalAddon {
     options: { checkBeforeCommand: boolean; echoCommand: boolean },
   ) {
     const { checkBeforeCommand, echoCommand } = options;
+    const interactive = Boolean(
+      this.options.onCommandInput &&
+        this.options.isInteractiveCommand?.(command),
+    );
 
     this.currentInput = "";
     this.inputCellSpans = [];
     this.isExecuting = true;
     const activeCommand: ActiveCommand = {
       cancelled: false,
+      interactive,
       pendingOutputWrite: Promise.resolve(),
     };
     this.activeCommand = activeCommand;
+    terminal.element?.classList.toggle(
+      "ai-terminal-interactive-mode",
+      interactive,
+    );
     this.notifyInputState();
 
     try {
@@ -305,7 +308,10 @@ export class LocalEchoAddon implements ITerminalAddon {
         await writeTerminalAsync(terminal, command);
       }
 
-      await writeTerminalAsync(terminal, "\r\n\x1b[?25l");
+      await writeTerminalAsync(
+        terminal,
+        interactive ? "\r\n" : "\r\n\x1b[?25l",
+      );
 
       const isHandled = checkBeforeCommand
         ? await this.options.onBeforeCommand?.(command)
@@ -330,10 +336,15 @@ export class LocalEchoAddon implements ITerminalAddon {
         output += chunk;
         activeCommand.pendingOutputWrite =
           activeCommand.pendingOutputWrite.then(() =>
-            writeTerminalAsync(terminal, normalizeTerminalOutput(chunk)),
+            writeTerminalAsync(
+              terminal,
+              interactive ? chunk : normalizeTerminalOutput(chunk),
+            ),
           );
       };
-      const returnedOutput = await this.options.onCommand(command, onOutput);
+      const returnedOutput = await this.options.onCommand(command, onOutput, {
+        interactive,
+      });
 
       if (returnedOutput && !activeCommand.cancelled) {
         onOutput(returnedOutput);
@@ -346,7 +357,7 @@ export class LocalEchoAddon implements ITerminalAddon {
         return;
       }
 
-      if (hasVisibleTerminalOutput(output)) {
+      if (!interactive && hasVisibleTerminalOutput(output)) {
         this.createExplainButton(command, output, firstOutputRow);
         if (terminal.buffer.active.cursorX !== 0) {
           await writeTerminalAsync(terminal, "\r\n");
@@ -356,6 +367,7 @@ export class LocalEchoAddon implements ITerminalAddon {
       try {
         await this.writePrompt(true);
       } finally {
+        terminal.element?.classList.remove("ai-terminal-interactive-mode");
         if (this.activeCommand === activeCommand) {
           this.activeCommand = undefined;
         }
@@ -376,8 +388,26 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.options.onCancelCommand?.();
   }
 
+  private enqueueInput(task: () => Promise<void> | void | undefined) {
+    this.inputQueue = this.inputQueue.then(task).catch((error) => {
+      console.error("Local terminal input handler failed", error);
+    });
+  }
+
+  private enqueueCommandInput(data: string) {
+    this.commandInputQueue = this.commandInputQueue
+      .then(() => this.options.onCommandInput?.(data))
+      .catch((error) => {
+        console.error("Interactive terminal input handler failed", error);
+      });
+  }
+
   private notifyInputState() {
-    this.onInputStateChange?.(!this.isExecuting, this.currentInput);
+    this.onInputStateChange?.(
+      !this.isExecuting,
+      this.currentInput,
+      this.activeCommand?.interactive ?? false,
+    );
   }
 
   private async writePrompt(showCursor = false) {
@@ -816,6 +846,14 @@ export class LocalEchoAddon implements ITerminalAddon {
   private clamp(value: number, min: number, max: number) {
     return Math.min(Math.max(value, min), max);
   }
+}
+
+export function isInteractiveShellCommand(command: string) {
+  const normalized = command.trim().replace(/^(?:command|env|sudo)\s+/, "");
+
+  return /^(?:\S*\/)?(?:vim|vi|nvim|nano|emacs|top|htop|less|more|man|watch|tmux|screen)(?:\s|$)/.test(
+    normalized,
+  );
 }
 
 function isAbortError(error: unknown) {

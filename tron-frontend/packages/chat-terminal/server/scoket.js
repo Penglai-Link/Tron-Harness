@@ -13,6 +13,8 @@ import { MessageType, createMessage, resolveMessageId } from "./message.js";
 
 export const TERMINAL_MESSAGE_EVENT = "command:message";
 export const TERMINAL_SESSION_EVENT = "terminal:session";
+export const TERMINAL_INPUT_EVENT = "command:input";
+export const TERMINAL_RESIZE_EVENT = "terminal:resize";
 
 const RECORD_SEPARATOR = "\x1e";
 const UNIT_SEPARATOR = "\x1f";
@@ -95,6 +97,7 @@ export class TerminalGateway {
     const messageId = resolveMessageId(payload?.messageId);
     const command =
       typeof payload?.command === "string" ? payload.command.trim() : "";
+    const interactive = payload?.interactive === true;
 
     if (!command) {
       this.emit(client, MessageType.ERROR, "命令不能为空", messageId);
@@ -118,6 +121,7 @@ export class TerminalGateway {
     const token = this.createToken();
     session.activeCommand = {
       cancelling: false,
+      interactive,
       markerPrefix: `${COMMAND_END_PREFIX}${token}:`,
       messageId,
       outputBuffer: "",
@@ -168,6 +172,60 @@ export class TerminalGateway {
     }
   }
 
+  writeCommandInput(client, payload) {
+    const messageId =
+      typeof payload?.messageId === "string" ? payload.messageId.trim() : "";
+    const data = typeof payload?.data === "string" ? payload.data : "";
+    const session = this.sessionsByClient.get(client.id);
+    const activeCommand = session?.activeCommand;
+
+    if (
+      !session ||
+      session.disposed ||
+      !activeCommand?.interactive ||
+      activeCommand.messageId !== messageId ||
+      !data
+    ) {
+      return;
+    }
+
+    try {
+      session.terminal.write(data);
+    } catch (error) {
+      this.emit(
+        client,
+        MessageType.ERROR,
+        getErrorMessage(error, "命令输入无法发送"),
+        messageId,
+      );
+    }
+  }
+
+  resizeTerminal(client, payload) {
+    const cols = Number(payload?.cols);
+    const rows = Number(payload?.rows);
+    const session = this.sessionsByClient.get(client.id);
+
+    if (
+      !session ||
+      session.disposed ||
+      !session.ready ||
+      !isTerminalDimension(cols) ||
+      !isTerminalDimension(rows)
+    ) {
+      return;
+    }
+
+    try {
+      session.terminal.resize(cols, rows);
+    } catch (error) {
+      this.emitSessionError(
+        client,
+        getErrorMessage(error, "终端窗口大小无法调整"),
+      );
+    }
+  }
+
   emit(client, type, delta, messageId, currentDirectory) {
     client.emit(
       TERMINAL_MESSAGE_EVENT,
@@ -183,12 +241,18 @@ export class TerminalGateway {
 
   emitSessionReady(session) {
     session.client.emit(TERMINAL_SESSION_EVENT, {
-      currentDirectory: session.currentDirectory,
+      code: "0",
+      data: { currentDirectory: session.currentDirectory },
+      message: "",
     });
   }
 
   emitSessionError(client, message) {
-    client.emit(TERMINAL_SESSION_EVENT, {});
+    client.emit(TERMINAL_SESSION_EVENT, {
+      code: "TERMINAL_SESSION_ERROR",
+      data: {},
+      message,
+    });
   }
 
   handleTerminalData(session, data) {
@@ -331,12 +395,12 @@ export class TerminalGateway {
 function getShellConfiguration({ env, platform, shell }) {
   if (platform === "win32") {
     return {
-      args: ["/d", "/q"],
+      args: ["/d", "/q", "/v:on"],
       bootstrapCommand: `@echo off\r\n@echo ${SESSION_READY_PREFIX}%CD%${UNIT_SEPARATOR}\r\n`,
       command: shell ?? env.ComSpec ?? "cmd.exe",
       env: { ...env, PROMPT: "$S" },
       frameCommand: (command, token) =>
-        `${command}\r\n@echo ${COMMAND_END_PREFIX}${token}:%ERRORLEVEL%:%CD%${UNIT_SEPARATOR}\r\n`,
+        `${command} & @echo ${COMMAND_END_PREFIX}${token}:!ERRORLEVEL!:!CD!${UNIT_SEPARATOR}\r\n`,
       interruptInput: "\x03",
     };
   }
@@ -344,24 +408,46 @@ function getShellConfiguration({ env, platform, shell }) {
   const command = shell ?? env.SHELL ?? "/bin/sh";
   return {
     args: getPosixShellArgs(command),
-    bootstrapCommand: `stty -echo; printf '\\036TRON_SESSION_READY:%s\\037\\n' "$PWD"\n`,
+    bootstrapCommand: getPosixBootstrapCommand(command),
     command,
     env,
     frameCommand: (input, token) =>
-      `${input}\nprintf '\\036TRON_COMMAND_END:${token}:%s:%s\\037\\n' "$?" "$PWD"\n`,
+      `eval ${quotePosixShell(input)}; printf '\\036TRON_COMMAND_END:${token}:%s:%s\\037\\n' "$?" "$PWD"\n`,
     interruptInput: "\x03",
   };
+}
+
+function quotePosixShell(value) {
+  return `'${value.replaceAll("'", `'\\''`)}'`;
+}
+
+function getPosixBootstrapCommand(shell) {
+  const name = path.basename(shell);
+  const setup = ["stty -echo", "PROMPT=''", "RPROMPT=''", "PS1=''", "PS2=''"];
+
+  if (name === "zsh") {
+    setup.push(
+      "unsetopt zle prompt_cr prompt_sp",
+      "precmd_functions=()",
+      "preexec_functions=()",
+      "unfunction precmd preexec 2>/dev/null || true",
+    );
+  } else if (name === "bash") {
+    setup.push("set +o emacs", "set +o vi");
+  }
+
+  return `${setup.join("; ")}; printf '\\036TRON_SESSION_READY:%s\\037\\n' "$PWD"\n`;
 }
 
 function getPosixShellArgs(shell) {
   const name = path.basename(shell);
   if (name === "bash") {
-    return ["--noprofile", "--norc", "+i"];
+    return ["--login", "-i"];
   }
   if (name === "zsh") {
-    return ["-f", "+i"];
+    return ["-l", "-i"];
   }
-  return ["+i"];
+  return ["-i"];
 }
 
 function readDelimitedMarker(buffer, prefix) {
@@ -400,6 +486,10 @@ function getErrorMessage(error, fallback) {
   return error instanceof Error && error.message ? error.message : fallback;
 }
 
+function isTerminalDimension(value) {
+  return Number.isInteger(value) && value > 0 && value <= 1_000;
+}
+
 WebSocketGateway({
   cors: { origin: process.env.TERMINAL_DEMO_ORIGIN ?? "*" },
   transports: ["websocket"],
@@ -415,4 +505,20 @@ SubscribeMessage("command:cancel")(
   TerminalGateway.prototype,
   "cancelCommand",
   Object.getOwnPropertyDescriptor(TerminalGateway.prototype, "cancelCommand"),
+);
+SubscribeMessage(TERMINAL_INPUT_EVENT)(
+  TerminalGateway.prototype,
+  "writeCommandInput",
+  Object.getOwnPropertyDescriptor(
+    TerminalGateway.prototype,
+    "writeCommandInput",
+  ),
+);
+SubscribeMessage(TERMINAL_RESIZE_EVENT)(
+  TerminalGateway.prototype,
+  "resizeTerminal",
+  Object.getOwnPropertyDescriptor(
+    TerminalGateway.prototype,
+    "resizeTerminal",
+  ),
 );

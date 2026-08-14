@@ -108,6 +108,19 @@ describe("TerminalSocketClient cancellation", () => {
     expect(onSessionChange).toHaveBeenCalledWith("/workspace/project");
   });
 
+  it("rejects connection when the PTY session reports an envelope error", async () => {
+    const client = new TerminalSocketClient("http://terminal.test");
+    const connection = client.connect();
+
+    socketHarness.handlers.get("terminal:session")?.({
+      code: "TERMINAL_SESSION_ERROR",
+      data: {},
+      message: "终端会话无法启动",
+    });
+
+    await expect(connection).rejects.toThrow("终端会话无法启动");
+  });
+
   it("waits for the PTY session before sending the first command", async () => {
     const client = new TerminalSocketClient("http://terminal.test");
     const execution = client.execute("pwd", vi.fn());
@@ -134,6 +147,61 @@ describe("TerminalSocketClient cancellation", () => {
       type: "TEXT_MESSAGE_END",
     });
     await execution;
+  });
+
+  it("forwards interactive input without a command timeout", async () => {
+    const timeoutSpy = vi.spyOn(window, "setTimeout");
+    const client = new TerminalSocketClient("http://terminal.test");
+    readySession();
+
+    const execution = client.execute("vim edit.txt", vi.fn(), {
+      interactive: true,
+    });
+    await Promise.resolve();
+
+    expect(socketHarness.socket.emit).toHaveBeenCalledWith("command:execute", {
+      command: "vim edit.txt",
+      interactive: true,
+      messageId: "message-1",
+    });
+    expect(timeoutSpy).not.toHaveBeenCalled();
+
+    client.sendInput("i");
+    expect(socketHarness.socket.emit).toHaveBeenCalledWith("command:input", {
+      data: "i",
+      messageId: "message-1",
+    });
+
+    socketHarness.handlers.get("command:message")?.({
+      currentDirectory: "/workspace",
+      delta: "",
+      messageId: "message-1",
+      timestamp: 1,
+      type: "TEXT_MESSAGE_END",
+    });
+    await execution;
+  });
+
+  it("buffers the latest terminal size until the PTY session is ready", () => {
+    const client = new TerminalSocketClient("http://terminal.test");
+
+    client.resize({ cols: 100, rows: 40 });
+    expect(socketHarness.socket.emit).not.toHaveBeenCalledWith(
+      "terminal:resize",
+      expect.anything(),
+    );
+
+    readySession();
+    expect(socketHarness.socket.emit).toHaveBeenCalledWith("terminal:resize", {
+      cols: 100,
+      rows: 40,
+    });
+
+    client.resize({ cols: 120, rows: 50 });
+    expect(socketHarness.socket.emit).toHaveBeenLastCalledWith(
+      "terminal:resize",
+      { cols: 120, rows: 50 },
+    );
   });
 });
 
