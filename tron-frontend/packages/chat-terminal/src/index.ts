@@ -5,7 +5,8 @@ import {
   type CommandExecutionContext,
   type CommandExplainContext,
 } from "./terminal";
-import { formatePath, isShellCommand } from "./terminal/utils/common";
+import { formatePath } from "./terminal/utils/common";
+import { TerminalCommandDetector } from "./terminal/utils/terminalCommandDetector";
 import { ITerminalInitOnlyOptions, ITerminalOptions } from "@xterm/xterm";
 import type { TerminalThemeTokenOverrides } from "./terminal/types/themes";
 import {
@@ -53,6 +54,15 @@ export interface ChatTerminalOptions {
       agentTipsGapCells?: number;
       themeTokens?: TerminalThemeTokenOverrides;
     };
+  /**
+   * Controls whether a shell command may receive keyboard input while it runs.
+   * Commands are input-enabled by default.
+   */
+  isCommandInputEnabled?: (command: string) => boolean;
+  /**
+   * Marks full-screen terminal programs whose output must keep all ANSI control
+   * sequences and hide auxiliary terminal UI.
+   */
   isInteractiveCommand?: (command: string) => boolean;
   onError?: (error: Error) => void;
 }
@@ -168,6 +178,12 @@ export function initTerminal(options: ChatTerminalOptions) {
       },
       isInteractiveCommand:
         normalizeOptions.isInteractiveCommand ?? isInteractiveShellCommand,
+      isCommandInputEnabled:
+        normalizeOptions.isCommandInputEnabled ?? ((command) =>
+          !TerminalCommandDetector.shouldTriggerAgentMode(
+            getTerminalBufferContent(termInstance.terminal, currentDirectory),
+            command,
+          )),
       onCancelCommand: () => terminalTransport.cancel(),
       onCommandInput: (data) => terminalTransport.write(data),
       // 执行命令前判断，系统命令直接执行，非系统命令调用大模型
@@ -175,8 +191,12 @@ export function initTerminal(options: ChatTerminalOptions) {
         if (!command.trim()) {
           return false;
         }
-        // 系统命令
-        if (isShellCommand(command.toLocaleLowerCase())) {
+        if (
+          !TerminalCommandDetector.shouldTriggerAgentMode(
+            getTerminalBufferContent(termInstance.terminal, currentDirectory),
+            command,
+          )
+        ) {
           return false;
         }
         if (!commandChat) {
@@ -294,6 +314,38 @@ export function initTerminal(options: ChatTerminalOptions) {
       termInstance.refreshLocale();
     },
   };
+}
+
+function getTerminalBufferContent(
+  terminal: Terminal["terminal"],
+  currentDirectory: string,
+) {
+  const buffer = terminal.buffer.active;
+  const end = buffer.baseY + buffer.cursorY;
+  let start = Math.max(0, end - 200);
+  const prompt = formatePath(currentDirectory).trim();
+
+  for (let row = end; row >= 0; row -= 1) {
+    const line = buffer.getLine(row)?.translateToString(true) ?? "";
+    if (line.startsWith(prompt)) {
+      start = row;
+      break;
+    }
+  }
+
+  const lines: string[] = [];
+  for (let row = start; row <= end; row += 1) {
+    const line = buffer.getLine(row);
+    if (!line) continue;
+    const content = line.translateToString(true).replace(/\s+$/, "");
+    if (line.isWrapped && lines.length > 0) {
+      lines[lines.length - 1] += content;
+    } else {
+      lines.push(content);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function toError(error: unknown) {

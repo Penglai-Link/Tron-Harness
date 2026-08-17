@@ -24,6 +24,7 @@ export interface LocalEchoAddonOptions {
   enabled?: boolean;
   prompt?: string | (() => string);
   isInteractiveCommand?: (command: string) => boolean;
+  isCommandInputEnabled?: (command: string) => boolean;
   onCancelCommand?: () => void;
   onBeforeCommand?: (command: string) => MaybePromise<boolean | void>;
   onCommand?: (

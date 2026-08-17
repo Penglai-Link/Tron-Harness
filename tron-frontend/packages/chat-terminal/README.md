@@ -46,14 +46,14 @@ const terminal = initTerminal({
   locale: "zh-CN",
 });
 
-// 页面销毁时调用 
-terminal.dispose()
+// 页面销毁时调用
+terminal.dispose();
 
 // 多语言发生变更的时候调用
-terminal.setLocale(currentLocale)
+terminal.setLocale(currentLocale);
 
 // 主题发生变更的时候调用
-terminal.refreshTheme()
+terminal.refreshTheme();
 
 ```
 
@@ -67,7 +67,8 @@ terminal.refreshTheme()
 | `transport.ai` | `AITransport` | 可选。未配置时不启用 AI 能力。 |
 | `prompts` | `TerminalPrompts` | 配置聊天、解释和命令生成请求。 |
 | `terminalOptions` | xterm.js 选项及 SDK 扩展 | 主题、字体、`agentTips` 等。 |
-| `isInteractiveCommand` | `(command: string) => boolean` | 覆盖交互式命令判断(解析输入的内容是否是内置命令)。 |
+| `isCommandInputEnabled` | `(command: string) => boolean` | 控制已路由到 shell 的命令是否接收键盘输入；默认由内置检测器决定。 |
+| `isInteractiveCommand` | `(command: string) => boolean` | 标记全屏终端程序，保留原始 ANSI 输出并隐藏终端辅助 UI。 |
 | `locale` | `"zh-CN" \| "en-US"` | 默认 `"zh-CN"`。 |
 | `messages` | `ChatTerminalMessageOverrides` | 覆盖内置文案。 |
 | `onError` | `(error: Error) => void` | 连接失败等 transport 错误回调。 |
@@ -382,31 +383,29 @@ initTerminal({
 - `cancel()`、`write()` 和 `resize()` 映射到业务 socket 协议。
 - `dispose()` 关闭 socket，并 reject 所有未完成命令。
 
-## 交互式命令
-
-内置 transport 默认将以下命令视为交互式命令：
-
-```text
-vim vi nvim nano emacs top htop less more man watch tmux screen
-```
-
-也可以覆盖判断：
-
-```ts
-initTerminal({
-  el,
-  transport: { terminal: createTerminalTransport({ url: serverUrl }) },
-  isInteractiveCommand(command) {
-    return /^(?:vim|nvim|fzf)(?:\s|$)/.test(command.trim());
-  },
-});
-```
-
-交互命令通过 `command:input` 发送原始键盘输入，通过 `terminal:resize` 同步 PTY 尺寸。
-
 ## Socket.IO 协议
 
-会话事件 `terminal:session` 使用统一响应体：
+### 响应数据结构
+
+会话接口使用统一响应体：
+
+```ts
+interface ApiResponse<T> {
+  code: string;
+  message: string;
+  data: T;
+}
+
+interface TerminalSessionData {
+  currentDirectory: string;
+}
+
+type TerminalSessionResponse = ApiResponse<
+  TerminalSessionData | Record<string, never>
+>;
+```
+
+成功响应：
 
 ```json
 {
@@ -415,6 +414,43 @@ initTerminal({
   "data": { "currentDirectory": "/workspace" }
 }
 ```
+
+失败响应：
+
+```json
+{
+  "code": "TERMINAL_SESSION_ERROR",
+  "message": "终端会话创建失败",
+  "data": {}
+}
+```
+
+命令和 AI 接口返回消息帧，不再额外包裹 `data`：
+
+```ts
+type TerminalMessageType =
+  | "TEXT_MESSAGE_START"
+  | "TEXT_MESSAGE_CONTENT"
+  | "TEXT_MESSAGE_END"
+  | "TEXT_MESSAGE_ERROR"
+  | "TEXT_MESSAGE_SUGGESTION";
+
+interface TerminalMessage {
+  type: TerminalMessageType;
+  messageId: string;
+  delta: string;
+  timestamp: number;
+  currentDirectory?: string;
+}
+```
+
+字段约定：
+
+- `messageId` 标识一次命令或 AI 请求。一次流式响应中的所有消息帧使用同一个值。
+- `delta` 是终端输出、AI 文本或错误信息。`START` 和 `END` 通常为空字符串。
+- `currentDirectory` 只在命令执行结束后返回，用于更新终端提示符目录。
+- `TEXT_MESSAGE_SUGGESTION` 的 `delta` 保存 AI 生成的可执行命令。
+- `TEXT_MESSAGE_ERROR` 的 `delta` 保存错误信息。
 
 客户端事件：
 
@@ -425,22 +461,7 @@ initTerminal({
 | `command:cancel` | `{ messageId }` |
 | `terminal:resize` | `{ cols, rows }` |
 
-服务端通过 `command:message` 返回：
-
-```ts
-interface TerminalMessage {
-  type:
-    | "TEXT_MESSAGE_START"
-    | "TEXT_MESSAGE_CONTENT"
-    | "TEXT_MESSAGE_END"
-    | "TEXT_MESSAGE_ERROR"
-    | "TEXT_MESSAGE_SUGGESTION";
-  messageId: string;
-  delta: string;
-  timestamp: number;
-  currentDirectory?: string;
-}
-```
+服务端通过 `command:message` 返回 `TerminalMessage`：
 
 正常顺序为 `START`、零次或多次 `CONTENT`、`END`。错误使用 `TEXT_MESSAGE_ERROR`，错误文本放在 `delta`。
 

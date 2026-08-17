@@ -204,6 +204,65 @@ describe("LocalEchoAddon command cancellation", () => {
 
     expect(terminal.writes.at(-1)).toBe("$ \x1b[?25h");
   });
+
+  it("keeps a cursor and forwards input for prompt-driven shell commands", async () => {
+    const terminal = new TerminalStub();
+    const onCommandInput = vi.fn();
+    let finishCommand: (() => void) | undefined;
+    const addon = new LocalEchoAddon({
+      enabled: true,
+      onCommand: (_command, onOutput, context) => {
+        expect(context).toEqual({ interactive: true });
+        onOutput("package name: ");
+        return new Promise<void>((resolve) => {
+          finishCommand = resolve;
+        });
+      },
+      onCommandInput,
+      prompt: "$ ",
+    });
+    addon.activate(terminal as unknown as XTerminal);
+
+    terminal.emitData("npm init");
+    terminal.emitData("\r");
+    await flushTasks();
+
+    expect(terminal.writes).toContain("\r\n\x1b[?25h");
+    expect(terminal.writes).not.toContain("\r\n\x1b[?25l");
+    expect(terminal.writes).toContain("package name: ");
+
+    terminal.emitData("demo\r");
+    await flushTasks();
+
+    expect(onCommandInput.mock.calls.map(([data]) => data)).toEqual(["demo\r"]);
+
+    finishCommand?.();
+    await flushTasks();
+  });
+
+  it("allows callers to disable command input", async () => {
+    const terminal = new TerminalStub();
+    const onCommandInput = vi.fn();
+    const addon = new LocalEchoAddon({
+      enabled: true,
+      isCommandInputEnabled: () => false,
+      onCommand: (_command, _onOutput, context) => {
+        expect(context).toEqual({ interactive: false });
+      },
+      onCommandInput,
+      prompt: "$ ",
+    });
+    addon.activate(terminal as unknown as XTerminal);
+
+    terminal.emitData("npm install vue");
+    terminal.emitData("\r");
+    await flushTasks();
+    terminal.emitData("y");
+    await flushTasks();
+
+    expect(terminal.writes).toContain("\r\n\x1b[?25l");
+    expect(onCommandInput).not.toHaveBeenCalled();
+  });
 });
 
 describe("LocalEchoAddon input cursor tracking", () => {

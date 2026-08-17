@@ -37,6 +37,7 @@ interface ExplainButtonViewportAnchor {
 interface ActiveCommand {
   cancelled: boolean;
   interactive: boolean;
+  preserveRawOutput: boolean;
   pendingOutputWrite: Promise<void>;
 }
 
@@ -268,7 +269,10 @@ export class LocalEchoAddon implements ITerminalAddon {
     const { checkBeforeCommand, echoCommand } = options;
     const interactive = Boolean(
       this.options.onCommandInput &&
-        this.options.isInteractiveCommand?.(command),
+        (this.options.isCommandInputEnabled?.(command) ?? true),
+    );
+    const preserveRawOutput = Boolean(
+      this.options.isInteractiveCommand?.(command),
     );
 
     this.currentInput = "";
@@ -277,12 +281,13 @@ export class LocalEchoAddon implements ITerminalAddon {
     const activeCommand: ActiveCommand = {
       cancelled: false,
       interactive,
+      preserveRawOutput,
       pendingOutputWrite: Promise.resolve(),
     };
     this.activeCommand = activeCommand;
     terminal.element?.classList.toggle(
       "ai-terminal-interactive-mode",
-      interactive,
+      preserveRawOutput,
     );
     this.notifyInputState();
 
@@ -293,7 +298,7 @@ export class LocalEchoAddon implements ITerminalAddon {
 
       await writeTerminalAsync(
         terminal,
-        interactive ? "\r\n" : "\r\n\x1b[?25l",
+        interactive ? "\r\n\x1b[?25h" : "\r\n\x1b[?25l",
       );
 
       const isHandled = checkBeforeCommand
@@ -321,7 +326,9 @@ export class LocalEchoAddon implements ITerminalAddon {
           activeCommand.pendingOutputWrite.then(() =>
             writeTerminalAsync(
               terminal,
-              interactive ? chunk : normalizeTerminalOutput(chunk),
+              activeCommand.preserveRawOutput
+                ? chunk
+                : normalizeTerminalOutput(chunk),
             ),
           );
       };
@@ -340,7 +347,7 @@ export class LocalEchoAddon implements ITerminalAddon {
         return;
       }
 
-      if (!interactive && hasVisibleTerminalOutput(output)) {
+      if (!activeCommand.preserveRawOutput && hasVisibleTerminalOutput(output)) {
         this.createExplainButton(command, output, firstOutputRow);
         if (terminal.buffer.active.cursorX !== 0) {
           await writeTerminalAsync(terminal, "\r\n");

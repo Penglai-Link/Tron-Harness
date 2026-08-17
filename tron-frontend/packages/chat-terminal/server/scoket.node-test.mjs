@@ -159,6 +159,66 @@ test("a marker split across PTY chunks never leaks into command output", () => {
 });
 
 test(
+  "a real PTY echoes prompt input while a command runs",
+  {
+    skip: process.platform === "win32",
+    timeout: 10_000,
+  },
+  async () => {
+    const gateway = new TerminalGateway({ cwd: process.cwd() });
+    const client = createClient("prompt-input-client");
+
+    try {
+      gateway.handleConnection(client);
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "terminal:session" && payload.code === "0",
+      );
+
+      gateway.executeCommand(client, {
+        command:
+          "printf 'package name: '; read package_name; printf 'created:%s' \"$package_name\"",
+        interactive: true,
+        messageId: "prompt-input-message",
+      });
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "command:message" &&
+          payload.messageId === "prompt-input-message" &&
+          payload.type === MessageType.CONTENT &&
+          payload.delta.includes("package name: "),
+      );
+
+      gateway.writeCommandInput(client, {
+        data: "vue-demo\r",
+        messageId: "prompt-input-message",
+      });
+      await waitForEvent(
+        client,
+        ([event, payload]) =>
+          event === "command:message" &&
+          payload.messageId === "prompt-input-message" &&
+          payload.type === MessageType.END,
+      );
+
+      const output = commandMessages(client)
+        .filter(
+          (payload) =>
+            payload.messageId === "prompt-input-message" &&
+            payload.type === MessageType.CONTENT,
+        )
+        .map((payload) => payload.delta)
+        .join("");
+      assert.equal(output, "package name: vue-demo\r\ncreated:vue-demo");
+    } finally {
+      gateway.handleDisconnect(client);
+    }
+  },
+);
+
+test(
   "a real PTY preserves its directory across commands",
   { skip: process.platform === "win32" },
   async () => {

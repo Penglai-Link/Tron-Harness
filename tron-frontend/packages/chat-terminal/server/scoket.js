@@ -2,6 +2,8 @@ import "reflect-metadata";
 
 import { randomUUID } from "node:crypto";
 import path from "node:path";
+import { homedir } from 'os';
+
 import * as pty from "node-pty";
 import {
   SubscribeMessage,
@@ -25,7 +27,7 @@ const MAX_BOOTSTRAP_BUFFER_LENGTH = 64 * 1024;
 export class TerminalGateway {
   constructor(options = {}) {
     this.createToken = options.createToken ?? randomUUID;
-    this.cwd = options.cwd ?? process.cwd();
+    this.cwd = homedir();
     this.env = options.env ?? process.env;
     this.now = options.now ?? Date.now;
     this.platform = options.platform ?? process.platform;
@@ -412,7 +414,7 @@ function getShellConfiguration({ env, platform, shell }) {
     command,
     env,
     frameCommand: (input, token) =>
-      `eval ${quotePosixShell(input)}; printf '\\036TRON_COMMAND_END:${token}:%s:%s\\037\\n' "$?" "$PWD"\n`,
+      `stty echo; eval ${quotePosixShell(input)}; tron_command_status=$?; stty -echo; printf '\\036TRON_COMMAND_END:${token}:%s:%s\\037\\n' "$tron_command_status" "$PWD"\n`,
     interruptInput: "\x03",
   };
 }
