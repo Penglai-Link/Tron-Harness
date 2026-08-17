@@ -9,6 +9,7 @@ use crate::{
         ModelType, ModelVerifyStatus, PlatformDefaultModelAssignment,
         WorkspaceDefaultModelAssignment, default_model_capabilities_for_type,
     },
+    domain::reasoning::ReasoningEffort,
     shared::{
         id::SnowflakeId,
         time::{
@@ -20,8 +21,9 @@ use crate::{
 
 use super::migrations::{
     MODEL_CAPABILITIES_MIGRATION, MODEL_CONTEXT_WINDOW_TOKENS_MIGRATION,
-    MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION, MODEL_REMOVE_SEEDED_DATA_MIGRATION,
-    MODEL_RESPONSES_STATEFUL_ENABLED_MIGRATION, MODELS_MIGRATION,
+    MODEL_DEFAULT_REASONING_EFFORT_MIGRATION, MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION,
+    MODEL_REMOVE_SEEDED_DATA_MIGRATION, MODEL_RESPONSES_STATEFUL_ENABLED_MIGRATION,
+    MODEL_SUPPORTED_REASONING_EFFORTS_MIGRATION, MODELS_MIGRATION,
 };
 
 mod repository_impl;
@@ -74,6 +76,16 @@ impl SqliteModelRepository {
         if !column_exists(&self.connection, "models", "responses_stateful_enabled")? {
             self.connection
                 .execute_batch(MODEL_RESPONSES_STATEFUL_ENABLED_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        if !column_exists(&self.connection, "models", "supported_reasoning_efforts")? {
+            self.connection
+                .execute_batch(MODEL_SUPPORTED_REASONING_EFFORTS_MIGRATION)
+                .map_err(storage_error)?;
+        }
+        if !column_exists(&self.connection, "models", "default_reasoning_effort")? {
+            self.connection
+                .execute_batch(MODEL_DEFAULT_REASONING_EFFORT_MIGRATION)
                 .map_err(storage_error)?;
         }
         self.connection

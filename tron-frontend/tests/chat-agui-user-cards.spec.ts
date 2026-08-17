@@ -275,6 +275,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   await workspaceSelector.getByRole("button", { name: /Tron Core/ }).click();
   await expect(workspaceTrigger).toContainText("Enterprise/Platform/Tron Core");
   await page.getByRole("button", { name: "New session" }).first().click();
+  await chooseSelectOption(page, "Reasoning effort", "High");
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show grouped agui cards");
   await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
   const streamingRunWork = page.getByLabel("AG-UI run work");
@@ -298,6 +299,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
   const runSummary = runWork.getByRole("button", { name: /Worked for/ });
   await expect(runSummary).toBeVisible();
   await expect(runSummary).toHaveCount(1);
+  await expect(runSummary).toContainText("High");
   await expect(page.getByLabel("Waiting for model")).toHaveCount(0);
   const assistantMessageBubble = transcript.locator("article").filter({ hasText: "Assistant" }).last();
   const copyMarkdownButton = assistantMessageBubble.getByRole("button", { name: /Copy raw markdown/ });

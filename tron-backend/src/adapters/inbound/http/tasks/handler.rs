@@ -135,6 +135,7 @@ pub async fn execute_task(
         agent_code: Some(task.agent_code.clone()),
         model_code: task.model_code.clone(),
         system_model_id: task.model_code.clone(),
+        reasoning_effort: None,
         limits: None,
         tools: Vec::new(),
         attachments: Vec::new(),

@@ -26,6 +26,12 @@ pub(super) fn normalize_model_spec(
     if command.context_window_tokens == Some(0) {
         return Err(ModelError::InvalidContextWindowTokens);
     }
+    let (supported_reasoning_efforts, default_reasoning_effort) = normalize_reasoning_config(
+        command.thinking_enabled,
+        command.model_type,
+        command.supported_reasoning_efforts,
+        command.default_reasoning_effort,
+    )?;
 
     Ok(NormalizedModelSpec {
         display_name: command.display_name.trim().to_string(),
@@ -40,6 +46,8 @@ pub(super) fn normalize_model_spec(
         enabled: command.enabled,
         description: trim_optional(command.description),
         thinking_enabled: command.thinking_enabled,
+        supported_reasoning_efforts,
+        default_reasoning_effort,
         structured_output_enabled: command.structured_output_enabled,
         responses_stateful_enabled: command.responses_stateful_enabled,
         temperature: command.temperature,
@@ -70,6 +78,8 @@ pub(super) fn update_model_from_spec(
     model.enabled = spec.enabled;
     model.description = spec.description;
     model.thinking_enabled = spec.thinking_enabled;
+    model.supported_reasoning_efforts = spec.supported_reasoning_efforts;
+    model.default_reasoning_effort = spec.default_reasoning_effort;
     model.structured_output_enabled = spec.structured_output_enabled;
     model.responses_stateful_enabled = spec.responses_stateful_enabled;
     model.temperature = spec.temperature;
@@ -80,6 +90,25 @@ pub(super) fn update_model_from_spec(
     model.allow_inheritance = allow_inheritance;
     model.updated_at = current_timestamp();
     model
+}
+
+fn normalize_reasoning_config(
+    thinking_enabled: bool,
+    model_type: ModelType,
+    values: Vec<ReasoningEffort>,
+    default_value: Option<ReasoningEffort>,
+) -> Result<(Vec<ReasoningEffort>, Option<ReasoningEffort>), ModelError> {
+    if !thinking_enabled || model_type != ModelType::Text {
+        return Ok((Vec::new(), None));
+    }
+    let normalized = ReasoningEffort::ALL
+        .into_iter()
+        .filter(|effort| values.contains(effort))
+        .collect::<Vec<_>>();
+    if default_value.is_some_and(|value| !normalized.contains(&value)) {
+        return Err(ModelError::DefaultReasoningEffortUnsupported);
+    }
+    Ok((normalized, default_value))
 }
 
 pub(super) fn normalize_model_capabilities(
@@ -219,6 +248,8 @@ pub(super) fn duplicate_workspace_source_model(
         enabled: source.enabled,
         description: source.description.clone(),
         thinking_enabled: source.thinking_enabled,
+        supported_reasoning_efforts: source.supported_reasoning_efforts.clone(),
+        default_reasoning_effort: source.default_reasoning_effort,
         structured_output_enabled: source.structured_output_enabled,
         responses_stateful_enabled: source.responses_stateful_enabled,
         temperature: source.temperature,
@@ -265,6 +296,8 @@ pub(super) fn workspace_status_patch_model(
         enabled,
         description: source.description.clone(),
         thinking_enabled: source.thinking_enabled,
+        supported_reasoning_efforts: source.supported_reasoning_efforts.clone(),
+        default_reasoning_effort: source.default_reasoning_effort,
         structured_output_enabled: source.structured_output_enabled,
         responses_stateful_enabled: source.responses_stateful_enabled,
         temperature: source.temperature,
@@ -301,6 +334,8 @@ pub(super) fn update_workspace_status_patch_model(
     patch.enabled = enabled;
     patch.description = source.description.clone();
     patch.thinking_enabled = source.thinking_enabled;
+    patch.supported_reasoning_efforts = source.supported_reasoning_efforts.clone();
+    patch.default_reasoning_effort = source.default_reasoning_effort;
     patch.structured_output_enabled = source.structured_output_enabled;
     patch.responses_stateful_enabled = source.responses_stateful_enabled;
     patch.temperature = source.temperature;
@@ -346,6 +381,8 @@ pub(super) fn workspace_override_model(
         enabled: spec.enabled,
         description: spec.description,
         thinking_enabled: spec.thinking_enabled,
+        supported_reasoning_efforts: spec.supported_reasoning_efforts,
+        default_reasoning_effort: spec.default_reasoning_effort,
         structured_output_enabled: spec.structured_output_enabled,
         responses_stateful_enabled: spec.responses_stateful_enabled,
         temperature: spec.temperature,
@@ -387,6 +424,8 @@ pub(super) fn update_workspace_override_model(
     existing.enabled = spec.enabled;
     existing.description = spec.description;
     existing.thinking_enabled = spec.thinking_enabled;
+    existing.supported_reasoning_efforts = spec.supported_reasoning_efforts;
+    existing.default_reasoning_effort = spec.default_reasoning_effort;
     existing.structured_output_enabled = spec.structured_output_enabled;
     existing.responses_stateful_enabled = spec.responses_stateful_enabled;
     existing.temperature = spec.temperature;
@@ -448,6 +487,8 @@ pub(super) fn build_platform_model_from_spec(
         enabled: spec.enabled,
         description: spec.description,
         thinking_enabled: spec.thinking_enabled,
+        supported_reasoning_efforts: spec.supported_reasoning_efforts,
+        default_reasoning_effort: spec.default_reasoning_effort,
         structured_output_enabled: spec.structured_output_enabled,
         responses_stateful_enabled: spec.responses_stateful_enabled,
         temperature: spec.temperature,
@@ -489,6 +530,8 @@ pub(super) fn build_workspace_local_model_from_spec(
         enabled: spec.enabled,
         description: spec.description,
         thinking_enabled: spec.thinking_enabled,
+        supported_reasoning_efforts: spec.supported_reasoning_efforts,
+        default_reasoning_effort: spec.default_reasoning_effort,
         structured_output_enabled: spec.structured_output_enabled,
         responses_stateful_enabled: spec.responses_stateful_enabled,
         temperature: spec.temperature,

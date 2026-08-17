@@ -270,6 +270,14 @@ pub(super) const ZH_CN: &[(&str, &str)] = &[
         "是否启用 thinking 模式。",
     ),
     (
+        "agent.toolCatalog.tools.model.common.params.supportedReasoningEfforts",
+        "当前具体模型支持的智力程度取值。",
+    ),
+    (
+        "agent.toolCatalog.tools.model.common.params.defaultReasoningEffort",
+        "默认智力程度，必须包含在 supportedReasoningEfforts 中。",
+    ),
+    (
         "agent.toolCatalog.tools.model.common.params.structuredOutputEnabled",
         "是否启用结构化输出。",
     ),

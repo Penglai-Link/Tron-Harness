@@ -146,6 +146,7 @@ impl ShortTermMemoryService {
                 "messageHashes": facts.message_hashes,
                 "toolSchemaTokenEstimate": facts.tool_schema_token_estimate,
                 "protocol": facts.protocol,
+                "reasoningEffort": context.model.reasoning_effort,
                 "previousResponseIdPresent": facts.previous_response_id_present,
                 "contextWindowEstimate": facts.context_window_estimate,
                 "checkpointCode": facts.checkpoint_code,

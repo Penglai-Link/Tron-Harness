@@ -21,9 +21,16 @@ import {
   getPrimaryModelTypeFromCapabilities,
   getValidModelTypesForProtocol,
   normalizeModelCapabilities,
+  normalizeReasoningEfforts,
+  reasoningEffortOptions,
 } from "@/domain/model/constants/modelPageOptions";
 import type { ModelMutationPayload } from "@/domain/model/api";
-import type { ModelCapability, ModelRecord, ModelType } from "@/domain/model/model";
+import type {
+  ModelCapability,
+  ModelRecord,
+  ModelType,
+  ReasoningEffort,
+} from "@/domain/model/model";
 import { SelectGroup, SelectGroupLabel, SelectItem } from "@/components/ui/select";
 
 const MASKED_API_KEY_VALUE = "*****";
@@ -45,6 +52,8 @@ export interface ModelFormState {
   modelCapabilities: ModelCapability[];
   modelType: ModelType;
   protocol: ModelMutationPayload["protocol"];
+  supportedReasoningEfforts: ReasoningEffort[];
+  defaultReasoningEffort: ReasoningEffort | null;
   structuredOutputEnabled: boolean;
   responsesStatefulEnabled: boolean;
   temperature: string;
@@ -69,6 +78,8 @@ export function emptyModelFormState(): ModelFormState {
     modelCapabilities: getDefaultModelCapabilitiesForType(modelType),
     modelType,
     protocol,
+    supportedReasoningEfforts: ["Low", "Medium", "High"],
+    defaultReasoningEffort: "Medium",
     structuredOutputEnabled: true,
     responsesStatefulEnabled: false,
     temperature: DEFAULT_TEMPERATURE,
@@ -98,6 +109,8 @@ export function modelFormFromRecord(record: ModelRecord): ModelFormState {
     modelCapabilities: normalizeModelCapabilities(record.modelCapabilities, record.modelType),
     modelType: record.modelType,
     protocol: record.protocol,
+    supportedReasoningEfforts: normalizeReasoningEfforts(record.supportedReasoningEfforts),
+    defaultReasoningEffort: record.defaultReasoningEffort,
     structuredOutputEnabled: record.structuredOutputEnabled,
     responsesStatefulEnabled: record.responsesStatefulEnabled,
     temperature: record.temperature === null ? DEFAULT_TEMPERATURE : String(record.temperature),
@@ -132,6 +145,13 @@ export function modelFormToPayload(
     modelCapabilities,
     state.modelType,
   );
+  const supportedReasoningEfforts = state.thinkingEnabled && modelType === "TEXT"
+    ? normalizeReasoningEfforts(state.supportedReasoningEfforts)
+    : [];
+  const defaultReasoningEffort = state.defaultReasoningEffort
+    && supportedReasoningEfforts.includes(state.defaultReasoningEffort)
+    ? state.defaultReasoningEffort
+    : null;
   return {
     displayName: state.displayName.trim(),
     vendor: state.vendor.trim(),
@@ -145,6 +165,8 @@ export function modelFormToPayload(
     enabled: options.enabled,
     description: state.description.trim() ? state.description.trim() : null,
     thinkingEnabled: state.thinkingEnabled,
+    supportedReasoningEfforts,
+    defaultReasoningEffort,
     structuredOutputEnabled: state.structuredOutputEnabled,
     responsesStatefulEnabled: state.protocol === "RESPONSES" ? state.responsesStatefulEnabled : false,
     temperature: parseOptionalNumber(state.temperature),
@@ -213,6 +235,9 @@ export function ModelFormFields({
   const protocolOptions = getModelProtocolOptions(state.modelType);
   const modelCapabilityGroups = getModelCapabilityGroups(state.protocol);
   const maxTokensDisabled = Boolean(readOnly || state.structuredOutputEnabled);
+  const reasoningFieldsDisabled = Boolean(
+    readOnly || !state.thinkingEnabled || state.modelType !== "TEXT",
+  );
 
   return (
     <div className="grid gap-4">
@@ -420,6 +445,68 @@ export function ModelFormFields({
           </SelectInput>
         </Field>
       ) : null}
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field
+          label={t("common:reasoningEffort.supportedLabel", "Supported reasoning efforts")}
+          hint={t(
+            "common:reasoningEffort.supportedHint",
+            "Configure this per model; providers and model versions support different values.",
+          )}
+        >
+          <SelectInput
+            value={state.supportedReasoningEfforts}
+            multiple
+            onValueChange={(event) => {
+              const nextSupported = normalizeReasoningEfforts(
+                Array.from(event, (option) => option as ReasoningEffort),
+              );
+              onChange({
+                ...state,
+                supportedReasoningEfforts: nextSupported,
+                defaultReasoningEffort: state.defaultReasoningEffort
+                  && nextSupported.includes(state.defaultReasoningEffort)
+                  ? state.defaultReasoningEffort
+                  : null,
+              });
+            }}
+            disabled={reasoningFieldsDisabled}
+          >
+            {reasoningEffortOptions.map((item) => (
+              <SelectItem key={item.value} value={item.value}>
+                {item.label}
+              </SelectItem>
+            ))}
+          </SelectInput>
+        </Field>
+        <Field
+          label={t("common:reasoningEffort.defaultLabel", "Default reasoning effort")}
+          hint={t(
+            "common:reasoningEffort.defaultHint",
+            "Public chats use this value unless the user chooses an override.",
+          )}
+        >
+          <SelectInput
+            value={state.defaultReasoningEffort ?? "__provider_default__"}
+            onValueChange={(event) => patch(
+              "defaultReasoningEffort",
+              event === "__provider_default__" ? null : event as ReasoningEffort,
+            )}
+            disabled={reasoningFieldsDisabled || state.supportedReasoningEfforts.length === 0}
+          >
+            <SelectItem value="__provider_default__">
+              {t("common:reasoningEffort.providerDefault", "Provider default")}
+            </SelectItem>
+            {reasoningEffortOptions
+              .filter((item) => state.supportedReasoningEfforts.includes(item.value))
+              .map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+          </SelectInput>
+        </Field>
+      </div>
 
       <div className="grid gap-3 md:grid-cols-2">
         <ToggleSwitch

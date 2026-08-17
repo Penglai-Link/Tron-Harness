@@ -76,6 +76,8 @@ impl ModelService {
             enabled: source.enabled,
             description: source.description,
             thinking_enabled: source.thinking_enabled,
+            supported_reasoning_efforts: source.supported_reasoning_efforts,
+            default_reasoning_effort: source.default_reasoning_effort,
             structured_output_enabled: source.structured_output_enabled,
             responses_stateful_enabled: source.responses_stateful_enabled,
             temperature: source.temperature,

@@ -507,6 +507,7 @@ fn map_send_request(
         agent_code: request.agent_code,
         model_code: request.model_code,
         system_model_id: request.system_model_id,
+        reasoning_effort: request.reasoning_effort,
         limits: request.limits,
         tools: request.tools,
         attachments: request.attachments,

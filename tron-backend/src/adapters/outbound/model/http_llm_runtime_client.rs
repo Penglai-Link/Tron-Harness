@@ -294,6 +294,7 @@ fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> Result<AgentMod
         api_key: config.api_key.clone(),
         model_name: config.model_name.clone(),
         thinking_enabled: config.thinking_enabled,
+        reasoning_effort: config.reasoning_effort,
         responses_stateful_enabled: config.responses_stateful_enabled,
         temperature: config.temperature,
         max_tokens: config.max_tokens,

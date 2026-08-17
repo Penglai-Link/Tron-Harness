@@ -10,6 +10,7 @@ use crate::{
             ModelCapability, ModelProtocol, ModelType, ModelView,
             default_model_capabilities_for_type,
         },
+        reasoning::ReasoningEffort,
     },
 };
 
@@ -267,6 +268,8 @@ struct ModelSpecInput {
     enabled: Option<bool>,
     description: Option<String>,
     thinking_enabled: Option<bool>,
+    supported_reasoning_efforts: Option<Vec<String>>,
+    default_reasoning_effort: Option<String>,
     structured_output_enabled: Option<bool>,
     responses_stateful_enabled: Option<bool>,
     temperature: Option<f64>,
@@ -281,6 +284,10 @@ impl ModelSpecInput {
     fn create_command(self) -> Result<ModelCommand, ToolError> {
         let model_type = parse_required_model_type(self.model_type.as_deref(), "modelType")?;
         let capabilities = parse_model_capabilities(self.model_capabilities, model_type)?;
+        let supported_reasoning_efforts =
+            parse_reasoning_efforts(self.supported_reasoning_efforts)?;
+        let default_reasoning_effort =
+            parse_reasoning_effort(self.default_reasoning_effort.as_deref())?;
         Ok(ModelCommand {
             display_name: required_string(self.display_name, "displayName")?,
             vendor: required_string(self.vendor, "vendor")?,
@@ -294,6 +301,8 @@ impl ModelSpecInput {
             enabled: self.enabled.unwrap_or(true),
             description: self.description,
             thinking_enabled: self.thinking_enabled.unwrap_or(false),
+            supported_reasoning_efforts,
+            default_reasoning_effort,
             structured_output_enabled: self.structured_output_enabled.unwrap_or(false),
             responses_stateful_enabled: self.responses_stateful_enabled.unwrap_or(false),
             temperature: self.temperature,
@@ -311,6 +320,14 @@ impl ModelSpecInput {
         let capabilities = match self.model_capabilities {
             Some(values) => parse_model_capabilities(Some(values), model_type)?,
             None => current.model_capabilities.clone(),
+        };
+        let supported_reasoning_efforts = match self.supported_reasoning_efforts {
+            Some(values) => parse_reasoning_efforts(Some(values))?,
+            None => current.supported_reasoning_efforts.clone(),
+        };
+        let default_reasoning_effort = match self.default_reasoning_effort {
+            Some(value) => parse_reasoning_effort(Some(value.as_str()))?,
+            None => current.default_reasoning_effort,
         };
         Ok(ModelCommand {
             display_name: self
@@ -331,6 +348,8 @@ impl ModelSpecInput {
             enabled: self.enabled.unwrap_or(current.enabled),
             description: self.description.or_else(|| current.description.clone()),
             thinking_enabled: self.thinking_enabled.unwrap_or(current.thinking_enabled),
+            supported_reasoning_efforts,
+            default_reasoning_effort,
             structured_output_enabled: self
                 .structured_output_enabled
                 .unwrap_or(current.structured_output_enabled),
@@ -344,6 +363,30 @@ impl ModelSpecInput {
             max_retries: self.max_retries.or(current.max_retries),
             allow_inheritance: self.allow_inheritance.or(current.allow_inheritance),
         })
+    }
+}
+
+fn parse_reasoning_efforts(values: Option<Vec<String>>) -> Result<Vec<ReasoningEffort>, ToolError> {
+    values
+        .unwrap_or_default()
+        .into_iter()
+        .map(|value| parse_reasoning_effort(Some(value.as_str())))
+        .collect::<Result<Vec<_>, _>>()
+        .map(|values| values.into_iter().flatten().collect())
+}
+
+fn parse_reasoning_effort(value: Option<&str>) -> Result<Option<ReasoningEffort>, ToolError> {
+    match normalize_optional_token(value).as_deref() {
+        None => Ok(None),
+        Some("none") => Ok(Some(ReasoningEffort::None)),
+        Some("minimal") => Ok(Some(ReasoningEffort::Minimal)),
+        Some("low") => Ok(Some(ReasoningEffort::Low)),
+        Some("medium") => Ok(Some(ReasoningEffort::Medium)),
+        Some("high") => Ok(Some(ReasoningEffort::High)),
+        Some("xhigh") | Some("x_high") => Ok(Some(ReasoningEffort::XHigh)),
+        Some("max") => Ok(Some(ReasoningEffort::Max)),
+        Some("ultra") => Ok(Some(ReasoningEffort::Ultra)),
+        Some(other) => Err(enum_tool_error("reasoningEffort", other)),
     }
 }
 

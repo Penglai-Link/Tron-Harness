@@ -310,6 +310,7 @@ export async function streamChatMessage(
         threadId: session.sessionCode,
         runId,
         supportsSteer: input.agentCode === "main-agent",
+        reasoningEffort: input.reasoningEffort ?? result.run.reasoningEffort ?? null,
         timestamp: startedAt,
       },
       { type: "REASONING_START", threadId: session.sessionCode, runId, messageId: `${runId}-reasoning`, timestamp: startedAt + 1 },

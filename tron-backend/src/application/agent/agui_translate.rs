@@ -34,6 +34,10 @@ pub fn translate_agui_event(stream_key: &str, event: &BusEvent) -> Option<AgentA
         metadata.insert(attr.key.clone(), attr.value.clone());
     }
     for field in &event.payload_fields {
+        if field.key == "reasoning_effort" {
+            metadata.insert("reasoningEffort".into(), field.value.clone());
+            continue;
+        }
         if matches!(
             field.key.as_str(),
             "budgetBreakdown"
@@ -87,6 +91,7 @@ pub fn translate_protocol_events(
                 "type": "RUN_STARTED",
                 "threadId": stream_key,
                 "runId": run_code,
+                "reasoningEffort": payload_value(event, "reasoning_effort"),
                 "timestamp": timestamp,
             }),
         )],
@@ -342,7 +347,7 @@ mod tests {
         id::FixedSnowflakeIdProvider,
     };
 
-    use super::translate_agui_event;
+    use super::{translate_agui_event, translate_protocol_events};
 
     #[test]
     fn translate_agui_event_exposes_short_term_memory_usage_payload() {
@@ -393,6 +398,31 @@ mod tests {
             Some("too_many_tokens"),
         );
         assert_eq!(translated.metadata.get("internal_only"), None);
+    }
+
+    #[test]
+    fn run_started_exposes_effective_reasoning_effort_in_both_agui_shapes() {
+        let event = BusEvent::from_draft(
+            BusEventDraft::agui("agent.run.started", "agent_runtime")
+                .outcome(BusOutcome::Started)
+                .subject("agent_run", "RUN-1")
+                .payload_field("reasoning_effort", "High"),
+            &FixedSnowflakeIdProvider::new(1),
+            &EventBusConfig::default(),
+        )
+        .expect("event should validate");
+
+        let translated = translate_agui_event("SESSION-1", &event).expect("event should translate");
+        assert_eq!(
+            translated
+                .metadata
+                .get("reasoningEffort")
+                .map(String::as_str),
+            Some("High")
+        );
+
+        let protocol_events = translate_protocol_events("SESSION-1", &event);
+        assert_eq!(protocol_events[0].data["reasoningEffort"], "High");
     }
 }
 

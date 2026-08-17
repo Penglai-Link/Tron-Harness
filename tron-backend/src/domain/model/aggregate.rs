@@ -1,3 +1,4 @@
+use crate::domain::reasoning::ReasoningEffort;
 use crate::shared::id::SnowflakeId;
 
 use super::{
@@ -22,6 +23,8 @@ pub struct Model {
     pub enabled: bool,
     pub description: Option<String>,
     pub thinking_enabled: bool,
+    pub supported_reasoning_efforts: Vec<ReasoningEffort>,
+    pub default_reasoning_effort: Option<ReasoningEffort>,
     pub structured_output_enabled: bool,
     pub responses_stateful_enabled: bool,
     pub temperature: Option<f64>,

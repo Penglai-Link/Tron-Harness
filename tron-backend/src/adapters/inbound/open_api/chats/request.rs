@@ -3,6 +3,7 @@ use serde::Deserialize;
 use crate::domain::{
     agent::{AgentRunLimits, EffectiveTool},
     chat::ChatMessageAttachment,
+    reasoning::ReasoningEffort,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -39,6 +40,7 @@ pub struct OpenApiSendChatMessageRequest {
     pub agent_code: Option<String>,
     pub model_code: Option<String>,
     pub system_model_id: Option<String>,
+    pub reasoning_effort: Option<ReasoningEffort>,
     pub limits: Option<AgentRunLimits>,
     #[serde(default)]
     pub tools: Vec<EffectiveTool>,

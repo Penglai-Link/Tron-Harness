@@ -8,10 +8,11 @@ impl ModelRepository for SqliteModelRepository {
             .prepare(
                 "SELECT id, scope_kind, workspace_code, model_code, display_name, vendor, protocol, model_type,
                         model_capabilities, base_url, api_path, api_key_ref, model_name, enabled, description,
-                        thinking_enabled, structured_output_enabled, responses_stateful_enabled, temperature,
-                        max_tokens, context_window_tokens, top_p, max_retries, last_verified_at,
-                        last_verify_status, last_verify_message, source_kind, source_model_code,
-                        allow_inheritance, created_at, updated_at
+                        thinking_enabled, supported_reasoning_efforts, default_reasoning_effort,
+                        structured_output_enabled, responses_stateful_enabled, temperature, max_tokens,
+                        context_window_tokens, top_p, max_retries, last_verified_at, last_verify_status,
+                        last_verify_message, source_kind, source_model_code, allow_inheritance, created_at,
+                        updated_at
                  FROM models
                  ORDER BY scope_kind ASC, workspace_code ASC, display_name ASC, model_code ASC",
             )
@@ -43,26 +44,34 @@ impl ModelRepository for SqliteModelRepository {
                     enabled: row.get::<_, i64>(13)? != 0,
                     description: row.get(14)?,
                     thinking_enabled: row.get::<_, i64>(15)? != 0,
-                    structured_output_enabled: row.get::<_, i64>(16)? != 0,
-                    responses_stateful_enabled: row.get::<_, i64>(17)? != 0,
-                    temperature: row.get(18)?,
-                    max_tokens: row.get::<_, Option<u32>>(19)?,
-                    context_window_tokens: row.get::<_, Option<u32>>(20)?,
-                    top_p: row.get(21)?,
-                    max_retries: row.get::<_, Option<u32>>(22)?,
-                    last_verified_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(23)?),
+                    supported_reasoning_efforts: supported_reasoning_efforts_from_storage(
+                        row.get::<_, Option<String>>(16)?.as_deref(),
+                    )
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                    default_reasoning_effort: reasoning_effort_from_storage(
+                        row.get::<_, Option<String>>(17)?.as_deref(),
+                    )
+                    .map_err(|_| rusqlite::Error::InvalidQuery)?,
+                    structured_output_enabled: row.get::<_, i64>(18)? != 0,
+                    responses_stateful_enabled: row.get::<_, i64>(19)? != 0,
+                    temperature: row.get(20)?,
+                    max_tokens: row.get::<_, Option<u32>>(21)?,
+                    context_window_tokens: row.get::<_, Option<u32>>(22)?,
+                    top_p: row.get(23)?,
+                    max_retries: row.get::<_, Option<u32>>(24)?,
+                    last_verified_at: option_timestamp_from_millis(row.get::<_, Option<i64>>(25)?),
                     last_verify_status: row
-                        .get::<_, Option<String>>(24)?
+                        .get::<_, Option<String>>(26)?
                         .map(|value| verify_status_from_storage(value.as_str()))
                         .transpose()
                         .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    last_verify_message: row.get(25)?,
-                    source_kind: source_kind_from_storage(row.get::<_, String>(26)?.as_str())
+                    last_verify_message: row.get(27)?,
+                    source_kind: source_kind_from_storage(row.get::<_, String>(28)?.as_str())
                         .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    source_model_code: row.get(27)?,
-                    allow_inheritance: row.get::<_, Option<i64>>(28)?.map(|value| value != 0),
-                    created_at: timestamp_from_millis(row.get(29)?),
-                    updated_at: timestamp_from_millis(row.get(30)?),
+                    source_model_code: row.get(29)?,
+                    allow_inheritance: row.get::<_, Option<i64>>(30)?.map(|value| value != 0),
+                    created_at: timestamp_from_millis(row.get(31)?),
+                    updated_at: timestamp_from_millis(row.get(32)?),
                 })
             })
             .map_err(storage_error)?
@@ -87,13 +96,15 @@ impl ModelRepository for SqliteModelRepository {
                 "INSERT INTO models (
                     id, scope_kind, workspace_code, model_code, display_name, vendor, protocol,
                     model_type, model_capabilities, base_url, api_path, api_key_ref, model_name, enabled,
-                    description, thinking_enabled, structured_output_enabled, responses_stateful_enabled,
-                    temperature, max_tokens, context_window_tokens, top_p, max_retries, last_verified_at,
-                    last_verify_status, last_verify_message, source_kind, source_model_code,
-                    allow_inheritance, created_at, updated_at
+                    description, thinking_enabled, supported_reasoning_efforts, default_reasoning_effort,
+                    structured_output_enabled, responses_stateful_enabled, temperature, max_tokens,
+                    context_window_tokens, top_p, max_retries, last_verified_at, last_verify_status,
+                    last_verify_message, source_kind, source_model_code, allow_inheritance, created_at,
+                    updated_at
                 ) VALUES (
                     ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-                    ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31
+                    ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, ?25, ?26, ?27, ?28, ?29, ?30, ?31,
+                    ?32, ?33
                 )",
                 params![
                     model.id.value(),
@@ -112,6 +123,8 @@ impl ModelRepository for SqliteModelRepository {
                     bool_to_int(model.enabled),
                     model.description,
                     bool_to_int(model.thinking_enabled),
+                    supported_reasoning_efforts_to_storage(&model.supported_reasoning_efforts)?,
+                    model.default_reasoning_effort.map(ReasoningEffort::storage_value),
                     bool_to_int(model.structured_output_enabled),
                     bool_to_int(model.responses_stateful_enabled),
                     model.temperature,
@@ -152,20 +165,22 @@ impl ModelRepository for SqliteModelRepository {
                      enabled = ?13,
                      description = ?14,
                      thinking_enabled = ?15,
-                     structured_output_enabled = ?16,
-                     responses_stateful_enabled = ?17,
-                     temperature = ?18,
-                     max_tokens = ?19,
-                     context_window_tokens = ?20,
-                     top_p = ?21,
-                     max_retries = ?22,
-                     last_verified_at = ?23,
-                     last_verify_status = ?24,
-                     last_verify_message = ?25,
-                     source_kind = ?26,
-                     source_model_code = ?27,
-                     allow_inheritance = ?28,
-                     updated_at = ?29
+                     supported_reasoning_efforts = ?16,
+                     default_reasoning_effort = ?17,
+                     structured_output_enabled = ?18,
+                     responses_stateful_enabled = ?19,
+                     temperature = ?20,
+                     max_tokens = ?21,
+                     context_window_tokens = ?22,
+                     top_p = ?23,
+                     max_retries = ?24,
+                     last_verified_at = ?25,
+                     last_verify_status = ?26,
+                     last_verify_message = ?27,
+                     source_kind = ?28,
+                     source_model_code = ?29,
+                     allow_inheritance = ?30,
+                     updated_at = ?31
                  WHERE model_code = ?1",
                 params![
                     model.model_code,
@@ -183,6 +198,10 @@ impl ModelRepository for SqliteModelRepository {
                     bool_to_int(model.enabled),
                     model.description,
                     bool_to_int(model.thinking_enabled),
+                    supported_reasoning_efforts_to_storage(&model.supported_reasoning_efforts)?,
+                    model
+                        .default_reasoning_effort
+                        .map(ReasoningEffort::storage_value),
                     bool_to_int(model.structured_output_enabled),
                     bool_to_int(model.responses_stateful_enabled),
                     model.temperature,

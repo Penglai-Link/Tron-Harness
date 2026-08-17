@@ -3,6 +3,15 @@ export type ChatMessageRole = "USER" | "ASSISTANT";
 export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
 export type ChatRunningSubmitMode = "steer" | "queue";
 export type ChatSubmitMode = "send" | ChatRunningSubmitMode;
+export type ReasoningEffort =
+  | "None"
+  | "Minimal"
+  | "Low"
+  | "Medium"
+  | "High"
+  | "XHigh"
+  | "Max"
+  | "Ultra";
 
 export interface ChatSession {
   id: number;
@@ -73,6 +82,7 @@ export interface ChatRunSummary {
   runCode: string;
   conversationCode?: string | null;
   workspaceCode: string;
+  reasoningEffort?: ReasoningEffort | null;
   status: "COMPLETED";
   finalOutput: string;
   stepCount: number;
@@ -94,6 +104,7 @@ export interface SendChatMessageInput {
   agentCode?: string | null;
   modelCode?: string | null;
   systemModelId?: string | null;
+  reasoningEffort?: ReasoningEffort | null;
   attachments?: ChatMessageAttachment[];
 }
 
@@ -172,6 +183,7 @@ export interface ChatAguiStreamEvent {
   threadId?: string;
   runId?: string;
   supportsSteer?: boolean;
+  reasoningEffort?: ReasoningEffort | null;
   messageId?: string;
   role?: string;
   delta?: string | unknown[];

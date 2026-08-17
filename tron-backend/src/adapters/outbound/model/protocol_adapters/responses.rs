@@ -72,7 +72,11 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
         payload["max_output_tokens"] = json!(max_tokens);
     }
     if config.thinking_enabled {
-        payload["reasoning"] = json!({ "effort": "medium", "summary": "concise" });
+        let mut reasoning = json!({ "summary": "concise" });
+        if let Some(reasoning_effort) = config.reasoning_effort {
+            reasoning["effort"] = json!(reasoning_effort.provider_value());
+        }
+        payload["reasoning"] = reasoning;
     }
     if !request.tools.is_empty() {
         payload["tools"] = json!(

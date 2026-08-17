@@ -4,11 +4,17 @@ use rusqlite::{Connection, OptionalExtension, Row, params};
 
 use crate::{
     application::agent::AgentRunHistoryRepository,
-    domain::agent::{AgentRunHistoryError, AgentRunHistoryRecord, AgentRunStatus},
+    domain::{
+        agent::{AgentRunHistoryError, AgentRunHistoryRecord, AgentRunStatus},
+        reasoning::ReasoningEffort,
+    },
     shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
 
-use super::migrations::{AGENT_RUN_HISTORY_MIGRATION, AGENT_RUN_TOKEN_USAGE_MIGRATION};
+use super::migrations::{
+    AGENT_RUN_HISTORY_MIGRATION, AGENT_RUN_REASONING_EFFORT_MIGRATION,
+    AGENT_RUN_TOKEN_USAGE_MIGRATION,
+};
 
 pub struct SqliteAgentRunRepository {
     connection: Connection,
@@ -39,6 +45,12 @@ impl SqliteAgentRunRepository {
                 .execute_batch(AGENT_RUN_TOKEN_USAGE_MIGRATION)
                 .map_err(storage_error)?;
         }
+        if !column_exists(&repository.connection, "agent_runs", "reasoning_effort")? {
+            repository
+                .connection
+                .execute_batch(AGENT_RUN_REASONING_EFFORT_MIGRATION)
+                .map_err(storage_error)?;
+        }
         Ok(repository)
     }
 }
@@ -48,7 +60,7 @@ impl AgentRunHistoryRepository for SqliteAgentRunRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, run_code, conversation_code, workspace_code, user_code, app_code, task_code, model_code, status, outcome, step_count, observation_count, input_tokens, output_tokens, total_tokens, output_preview, error_code, error_message, started_at, finished_at, created_at
+                "SELECT id, run_code, conversation_code, workspace_code, user_code, app_code, task_code, model_code, reasoning_effort, status, outcome, step_count, observation_count, input_tokens, output_tokens, total_tokens, output_preview, error_code, error_message, started_at, finished_at, created_at
                  FROM agent_runs
                  ORDER BY created_at DESC, id DESC",
             )
@@ -63,7 +75,7 @@ impl AgentRunHistoryRepository for SqliteAgentRunRepository {
     fn get_run(&mut self, run_code: &str) -> Result<AgentRunHistoryRecord, AgentRunHistoryError> {
         self.connection
             .query_row(
-                "SELECT id, run_code, conversation_code, workspace_code, user_code, app_code, task_code, model_code, status, outcome, step_count, observation_count, input_tokens, output_tokens, total_tokens, output_preview, error_code, error_message, started_at, finished_at, created_at
+                "SELECT id, run_code, conversation_code, workspace_code, user_code, app_code, task_code, model_code, reasoning_effort, status, outcome, step_count, observation_count, input_tokens, output_tokens, total_tokens, output_preview, error_code, error_message, started_at, finished_at, created_at
                  FROM agent_runs
                  WHERE run_code = ?1",
                 [run_code],
@@ -88,8 +100,8 @@ impl AgentRunHistoryRepository for SqliteAgentRunRepository {
     fn create_run(&mut self, record: &AgentRunHistoryRecord) -> Result<(), AgentRunHistoryError> {
         self.connection
             .execute(
-                "INSERT INTO agent_runs (id, run_code, conversation_code, workspace_code, user_code, app_code, task_code, model_code, status, outcome, step_count, observation_count, input_tokens, output_tokens, total_tokens, output_preview, error_code, error_message, started_at, finished_at, created_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21)",
+                "INSERT INTO agent_runs (id, run_code, conversation_code, workspace_code, user_code, app_code, task_code, model_code, reasoning_effort, status, outcome, step_count, observation_count, input_tokens, output_tokens, total_tokens, output_preview, error_code, error_message, started_at, finished_at, created_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18, ?19, ?20, ?21, ?22)",
                 params![
                     record.id,
                     record.run_code,
@@ -99,6 +111,7 @@ impl AgentRunHistoryRepository for SqliteAgentRunRepository {
                     record.app_code,
                     record.task_code,
                     record.model_code,
+                    record.reasoning_effort.map(ReasoningEffort::storage_value),
                     agent_run_status_to_storage(record.status),
                     record.outcome,
                     record.step_count,
@@ -120,7 +133,15 @@ impl AgentRunHistoryRepository for SqliteAgentRunRepository {
 }
 
 fn row_to_agent_run(row: &Row<'_>) -> rusqlite::Result<AgentRunHistoryRecord> {
-    let status: String = row.get(8)?;
+    let reasoning_effort = row
+        .get::<_, Option<String>>(8)?
+        .map(|value| {
+            ReasoningEffort::from_storage_value(&value)
+                .ok_or(AgentRunHistoryError::StorageFailure)
+                .map_err(agent_run_mapping_error)
+        })
+        .transpose()?;
+    let status: String = row.get(9)?;
     Ok(AgentRunHistoryRecord {
         id: row.get(0)?,
         run_code: row.get(1)?,
@@ -130,19 +151,20 @@ fn row_to_agent_run(row: &Row<'_>) -> rusqlite::Result<AgentRunHistoryRecord> {
         app_code: row.get(5)?,
         task_code: row.get(6)?,
         model_code: row.get(7)?,
+        reasoning_effort,
         status: agent_run_status_from_storage(&status).map_err(agent_run_mapping_error)?,
-        outcome: row.get(9)?,
-        step_count: row.get::<_, u32>(10)?,
-        observation_count: row.get::<_, u32>(11)?,
-        input_tokens: row.get(12)?,
-        output_tokens: row.get(13)?,
-        total_tokens: row.get(14)?,
-        output_preview: row.get(15)?,
-        error_code: row.get(16)?,
-        error_message: row.get(17)?,
-        started_at: timestamp_from_millis(row.get(18)?),
-        finished_at: timestamp_from_millis(row.get(19)?),
-        created_at: timestamp_from_millis(row.get(20)?),
+        outcome: row.get(10)?,
+        step_count: row.get::<_, u32>(11)?,
+        observation_count: row.get::<_, u32>(12)?,
+        input_tokens: row.get(13)?,
+        output_tokens: row.get(14)?,
+        total_tokens: row.get(15)?,
+        output_preview: row.get(16)?,
+        error_code: row.get(17)?,
+        error_message: row.get(18)?,
+        started_at: timestamp_from_millis(row.get(19)?),
+        finished_at: timestamp_from_millis(row.get(20)?),
+        created_at: timestamp_from_millis(row.get(21)?),
     })
 }
 

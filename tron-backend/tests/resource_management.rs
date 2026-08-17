@@ -977,6 +977,7 @@ fn resource_tool_context(
             api_key: "test".to_string(),
             model_name: "test".to_string(),
             thinking_enabled: false,
+            reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,
             max_tokens: Some(128),

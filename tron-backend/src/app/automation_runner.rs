@@ -207,6 +207,7 @@ async fn run_automation_with_main_agent(
                 agent_code: Some(resolved_runtime.agent_code.clone()),
                 model_code,
                 system_model_id,
+                reasoning_effort: None,
                 limits: None,
                 tools: Vec::new(),
                 attachments: Vec::new(),

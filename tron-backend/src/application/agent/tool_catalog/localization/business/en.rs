@@ -276,6 +276,14 @@ pub(super) const EN_US: &[(&str, &str)] = &[
         "Whether thinking mode is enabled.",
     ),
     (
+        "agent.toolCatalog.tools.model.common.params.supportedReasoningEfforts",
+        "Reasoning effort values supported by this specific model.",
+    ),
+    (
+        "agent.toolCatalog.tools.model.common.params.defaultReasoningEffort",
+        "Default reasoning effort; it must be included in supportedReasoningEfforts.",
+    ),
+    (
         "agent.toolCatalog.tools.model.common.params.structuredOutputEnabled",
         "Whether structured output is enabled.",
     ),

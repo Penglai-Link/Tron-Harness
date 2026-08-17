@@ -1,5 +1,33 @@
 use super::*;
 
+pub(super) fn supported_reasoning_efforts_to_storage(
+    value: &[ReasoningEffort],
+) -> Result<String, ModelError> {
+    serde_json::to_string(value).map_err(|_| ModelError::StorageFailure)
+}
+
+pub(super) fn supported_reasoning_efforts_from_storage(
+    value: Option<&str>,
+) -> Result<Vec<ReasoningEffort>, ModelError> {
+    let parsed = match value {
+        Some(raw) if !raw.trim().is_empty() => serde_json::from_str::<Vec<ReasoningEffort>>(raw)
+            .map_err(|_| ModelError::StorageFailure)?,
+        _ => Vec::new(),
+    };
+    Ok(ReasoningEffort::ALL
+        .into_iter()
+        .filter(|effort| parsed.contains(effort))
+        .collect())
+}
+
+pub(super) fn reasoning_effort_from_storage(
+    value: Option<&str>,
+) -> Result<Option<ReasoningEffort>, ModelError> {
+    value
+        .map(|raw| ReasoningEffort::from_storage_value(raw).ok_or(ModelError::StorageFailure))
+        .transpose()
+}
+
 pub(super) fn model_capabilities_to_storage(
     value: &[ModelCapability],
 ) -> Result<String, ModelError> {

@@ -165,6 +165,7 @@ fn context() -> AgentRunContext {
             api_key: "sk-test".into(),
             model_name: "test-model".into(),
             thinking_enabled: false,
+            reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: None,
             max_tokens: None,

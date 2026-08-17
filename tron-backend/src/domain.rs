@@ -9,6 +9,7 @@ pub mod model;
 pub mod open_app;
 pub mod prompt;
 pub mod rag;
+pub mod reasoning;
 pub mod resource;
 pub mod role;
 pub mod short_term_memory;

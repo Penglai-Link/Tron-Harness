@@ -2,6 +2,7 @@
 import { ChevronDown, ChevronRight } from "lucide-vue-next";
 import { computed, ref, watch } from "vue";
 import {
+  aguiReasoningEffort,
   buildAguiUserWorkCards,
   type TranscriptAguiEvent,
 } from "@tron/chat-core";
@@ -46,6 +47,7 @@ function terminalAguiEvent(events: TranscriptAguiEvent[]) {
 }
 
 const userCards = computed(() => buildAguiUserWorkCards(props.events));
+const reasoningEffort = computed(() => aguiReasoningEffort(props.events));
 const terminalEvent = computed(() => terminalAguiEvent(props.events));
 const expanded = ref(false);
 </script>
@@ -65,6 +67,7 @@ const expanded = ref(false);
     >
       <span class="tron-chat__rail-summary-label">
         Worked for {{ aguiWorkDuration(props.events) }}
+        <span v-if="reasoningEffort"> · {{ reasoningEffort }}</span>
       </span>
       <ChevronDown v-if="expanded" :size="14" />
       <ChevronRight v-else :size="14" />

@@ -12,6 +12,8 @@ pub enum ModelError {
     ApiKeyRefRequired,
     ModelNameRequired,
     InvalidContextWindowTokens,
+    DefaultReasoningEffortUnsupported,
+    ReasoningEffortUnsupported,
     DuplicatePlatformDisplayName,
     DuplicateWorkspaceDisplayName { workspace_code: String },
     InvalidProtocolModelType,
@@ -44,6 +46,11 @@ impl fmt::Display for ModelError {
             Self::ModelNameRequired => formatter.write_str("modelName is required"),
             Self::InvalidContextWindowTokens => {
                 formatter.write_str("contextWindowTokens must be greater than zero")
+            }
+            Self::DefaultReasoningEffortUnsupported => formatter
+                .write_str("defaultReasoningEffort must be included in supportedReasoningEfforts"),
+            Self::ReasoningEffortUnsupported => {
+                formatter.write_str("reasoningEffort is not supported by the selected model")
             }
             Self::DuplicatePlatformDisplayName => {
                 formatter.write_str("displayName already exists in platform models")

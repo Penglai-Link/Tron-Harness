@@ -1058,6 +1058,7 @@ fn automation_tool_context(tools: Vec<EffectiveTool>) -> AgentRunContext {
             api_key: "sk-test".into(),
             model_name: "gpt-test".into(),
             thinking_enabled: false,
+            reasoning_effort: None,
             responses_stateful_enabled: false,
             temperature: Some(0.2),
             max_tokens: Some(128),

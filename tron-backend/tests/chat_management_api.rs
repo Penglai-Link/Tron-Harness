@@ -2083,6 +2083,127 @@ async fn chat_send_resolves_model_code_through_model_management() {
 }
 
 #[tokio::test]
+async fn chat_send_uses_model_default_and_validates_reasoning_effort_override() {
+    let database_url = temp_database_url("chat-reasoning-effort-observability");
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let (server, model_state) = delayed_steer_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Reasoning effort chat"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let mut stream_bodies = Vec::new();
+    for (content, reasoning_effort) in [
+        ("use the model default", None),
+        ("use a high override", Some("High")),
+    ] {
+        let mut body = json!({
+            "content": content,
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        });
+        if let Some(reasoning_effort) = reasoning_effort {
+            body["reasoningEffort"] = json!(reasoning_effort);
+        }
+        let response = request_with_headers(
+            &app,
+            Method::POST,
+            &format!("/api/v1/chats/sessions/{session_code}/messages/stream"),
+            Some(body),
+            None,
+            Some(&authorization),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let stream_body = to_bytes(response.into_body(), usize::MAX)
+            .await
+            .expect("reasoning effort stream should be readable");
+        stream_bodies.push(String::from_utf8(stream_body.to_vec()).expect("stream should be utf8"));
+    }
+
+    assert!(stream_bodies[0].contains("\"reasoningEffort\":\"Medium\""));
+    assert!(stream_bodies[1].contains("\"reasoningEffort\":\"High\""));
+
+    let requests = model_state
+        .requests
+        .lock()
+        .expect("model requests mutex should lock")
+        .clone();
+    assert_eq!(requests[0]["reasoning_effort"], json!("medium"));
+    assert_eq!(requests[1]["reasoning_effort"], json!("high"));
+
+    let connection = Connection::open(&database_url).expect("reasoning effort db should reopen");
+    let persisted_efforts = connection
+        .prepare("SELECT reasoning_effort FROM agent_runs WHERE conversation_code = ?1 ORDER BY id")
+        .expect("agent run reasoning effort query should prepare")
+        .query_map([session_code.as_str()], |row| {
+            row.get::<_, Option<String>>(0)
+        })
+        .expect("agent run reasoning efforts should query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("agent run reasoning efforts should collect");
+    assert_eq!(
+        persisted_efforts,
+        vec![Some("Medium".into()), Some("High".into())]
+    );
+
+    let started_payloads = connection
+        .prepare(
+            "SELECT payload_json FROM agent_transcript_events WHERE session_code = ?1 AND event_type = 'agent.run.started' ORDER BY id",
+        )
+        .expect("run started payload query should prepare")
+        .query_map([session_code.as_str()], |row| row.get::<_, String>(0))
+        .expect("run started payloads should query")
+        .collect::<Result<Vec<_>, _>>()
+        .expect("run started payloads should collect");
+    assert!(started_payloads[0].contains("\"reasoningEffort\":\"Medium\""));
+    assert!(started_payloads[1].contains("\"reasoningEffort\":\"High\""));
+
+    let invalid_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "reject an unsupported override",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code,
+            "reasoningEffort": "Ultra"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(invalid_response.status(), StatusCode::BAD_REQUEST);
+    let invalid_payload = response_json(invalid_response).await;
+    assert_eq!(invalid_payload["code"], json!("AGENT_RUNTIME_FAILED"));
+    assert_eq!(
+        invalid_payload["message"],
+        json!("reasoningEffort is not supported by the selected model"),
+    );
+}
+
+#[tokio::test]
 async fn chat_session_creation_persists_selected_agent_code() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
@@ -3018,6 +3139,8 @@ async fn create_platform_text_model(app: &Router, authorization: &str, base_url:
             "enabled": true,
             "description": "Chat model",
             "thinkingEnabled": true,
+            "supportedReasoningEfforts": ["Low", "Medium", "High"],
+            "defaultReasoningEffort": "Medium",
             "structuredOutputEnabled": false,
             "temperature": 0.2,
             "maxTokens": 1024,

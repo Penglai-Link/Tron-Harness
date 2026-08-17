@@ -3,6 +3,7 @@ import type {
   ChatAguiStreamEvent,
   ChatDebugOptions,
   ChatMessage,
+  ReasoningEffort,
   TranscriptAguiEvent,
 } from "./types";
 
@@ -97,6 +98,33 @@ export function aguiEventMillis(event: TranscriptAguiEvent) {
   if ("timestamp" in event && typeof event.timestamp === "number") return event.timestamp;
   const parsed = Date.parse(aguiEventTime(event));
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+const reasoningEffortValues = new Set<ReasoningEffort>([
+  "None",
+  "Minimal",
+  "Low",
+  "Medium",
+  "High",
+  "XHigh",
+  "Max",
+  "Ultra",
+]);
+
+export function aguiReasoningEffort(events: TranscriptAguiEvent[]) {
+  for (const event of events) {
+    const directValue = "reasoningEffort" in event ? event.reasoningEffort : undefined;
+    if (typeof directValue === "string" && reasoningEffortValues.has(directValue as ReasoningEffort)) {
+      return directValue as ReasoningEffort;
+    }
+    if ("metadata" in event && event.metadata && typeof event.metadata === "object") {
+      const metadataValue = (event.metadata as Record<string, unknown>).reasoningEffort;
+      if (typeof metadataValue === "string" && reasoningEffortValues.has(metadataValue as ReasoningEffort)) {
+        return metadataValue as ReasoningEffort;
+      }
+    }
+  }
+  return null;
 }
 
 export function aguiEventToolCallId(event: TranscriptAguiEvent) {

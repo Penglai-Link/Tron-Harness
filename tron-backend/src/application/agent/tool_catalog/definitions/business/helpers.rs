@@ -456,6 +456,8 @@ pub(super) fn model_mutation_schema(create: bool) -> Value {
             "enabled": { "type": "boolean", "default": true, "x-i18n-description-key": "agent.toolCatalog.common.params.enabled" },
             "description": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.description" },
             "thinkingEnabled": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.thinkingEnabled" },
+            "supportedReasoningEfforts": { "type": "array", "items": { "type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"] }, "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.supportedReasoningEfforts" },
+            "defaultReasoningEffort": { "type": "string", "enum": ["none", "minimal", "low", "medium", "high", "xhigh", "max", "ultra"], "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.defaultReasoningEffort" },
             "structuredOutputEnabled": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.structuredOutputEnabled" },
             "responsesStatefulEnabled": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.responsesStatefulEnabled" },
             "temperature": { "type": "number", "x-i18n-description-key": "agent.toolCatalog.tools.model.common.params.temperature" },

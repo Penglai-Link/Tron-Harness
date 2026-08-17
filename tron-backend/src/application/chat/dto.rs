@@ -5,6 +5,7 @@ use crate::{
     domain::{
         agent::{AgentRunLimits, EffectiveTool},
         chat::{ChatMessage, ChatMessageAttachment, ChatSession, ChatSessionSourceType},
+        reasoning::ReasoningEffort,
     },
 };
 
@@ -44,6 +45,7 @@ pub struct SendChatMessageCommand {
     pub agent_code: Option<String>,
     pub model_code: Option<String>,
     pub system_model_id: Option<String>,
+    pub reasoning_effort: Option<ReasoningEffort>,
     pub limits: Option<AgentRunLimits>,
     #[serde(default)]
     pub tools: Vec<EffectiveTool>,

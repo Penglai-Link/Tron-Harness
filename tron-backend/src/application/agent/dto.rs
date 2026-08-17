@@ -7,6 +7,7 @@ use crate::domain::{
         TokenUsageAuditSnapshot,
     },
     chat::ChatMessageAttachment,
+    reasoning::ReasoningEffort,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -42,6 +43,7 @@ pub struct AgentInvocationResult {
     pub conversation_code: Option<String>,
     pub workspace_code: String,
     pub runtime_adapter_key: String,
+    pub reasoning_effort: Option<ReasoningEffort>,
     pub status: &'static str,
     pub final_output: String,
     pub step_count: u32,

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  aguiReasoningEffort,
   aguiWorkRailsByMessageCode,
   buildAguiUserWorkCards,
   isRecentPendingUserTurn,
@@ -96,6 +97,28 @@ describe("buildAguiUserWorkCards", () => {
     expect(cards[0]?.kind).toBe("reasoning");
     if (cards[0]?.kind !== "reasoning") throw new Error("expected reasoning card");
     expect(cards[0].value.content).toBe("fallback reasoning");
+  });
+});
+
+describe("aguiReasoningEffort", () => {
+  it("reads the effective effort from protocol and canonical replay events", () => {
+    expect(aguiReasoningEffort([
+      event({ type: "RUN_STARTED", reasoningEffort: "High" }),
+    ])).toBe("High");
+    expect(aguiReasoningEffort([{
+      eventName: "agent.run.started",
+      id: "1",
+      metadata: { reasoningEffort: "Medium" },
+      occurredAt: "2026-06-10T00:00:00.000Z",
+      outcome: "STARTED",
+      runCode: "RUN-1",
+      streamKey: "SESSION-1",
+      type: "agent.run.started",
+    }])).toBe("Medium");
+  });
+
+  it("does not invent an effort for legacy runs", () => {
+    expect(aguiReasoningEffort([event({ type: "RUN_STARTED" })])).toBeNull();
   });
 });
 

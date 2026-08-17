@@ -61,6 +61,11 @@ pub(super) const MODEL_CONTEXT_WINDOW_TOKENS_MIGRATION: &str =
 pub(super) const MODEL_RESPONSES_STATEFUL_ENABLED_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260604_0020_add_model_responses_stateful_enabled.sql"
 );
+pub(super) const MODEL_SUPPORTED_REASONING_EFFORTS_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260817_0001_add_model_supported_reasoning_efforts.sql"
+);
+pub(super) const MODEL_DEFAULT_REASONING_EFFORT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260817_0002_add_model_default_reasoning_effort.sql");
 pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");
 pub(super) const BOOTSTRAP_PLATFORM_ADMIN_MIGRATION: &str =
@@ -69,6 +74,8 @@ pub(super) const AGENT_RUN_HISTORY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0017_create_agent_run_history.sql");
 pub(super) const AGENT_RUN_TOKEN_USAGE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260528_0020_add_agent_run_token_usage.sql");
+pub(super) const AGENT_RUN_REASONING_EFFORT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260817_0003_add_agent_run_reasoning_effort.sql");
 pub(super) const CHAT_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0018_create_chat_management.sql");
 pub(super) const CHAT_SESSION_AGENT_CODE_MIGRATION: &str =

@@ -293,6 +293,99 @@ async fn model_capabilities_round_trip_as_multi_value_field() {
 }
 
 #[tokio::test]
+async fn reasoning_efforts_round_trip_per_model_and_reject_an_invalid_default() {
+    let database_url = temp_database_url("model-reasoning-effort-round-trip");
+    let config = AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config);
+
+    let create_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/models",
+        Some(json!({
+            "displayName": "Gateway Ultra Model",
+            "vendor": "Custom Gateway",
+            "protocol": "RESPONSES",
+            "modelType": "TEXT",
+            "modelCapabilities": ["TEXT_GENERATION", "DEEP_THINKING"],
+            "baseUrl": "https://gateway.example.com/v1",
+            "apiKeyRef": "sk-test-model",
+            "modelName": "gateway-ultra",
+            "enabled": true,
+            "thinkingEnabled": true,
+            "supportedReasoningEfforts": ["Ultra", "Low", "None", "High", "Low"],
+            "defaultReasoningEffort": "Ultra",
+            "structuredOutputEnabled": true,
+            "maxRetries": 0
+        })),
+    )
+    .await;
+    assert_eq!(create_response.status(), StatusCode::CREATED);
+    let create_payload = response_json(create_response).await;
+    assert_eq!(
+        create_payload["data"]["supportedReasoningEfforts"],
+        json!(["None", "Low", "High", "Ultra"]),
+    );
+    assert_eq!(
+        create_payload["data"]["defaultReasoningEffort"],
+        json!("Ultra"),
+    );
+
+    let model_code = create_payload["data"]["modelCode"]
+        .as_str()
+        .expect("created model should return modelCode");
+    let get_response = authenticated_request(
+        &router,
+        Method::GET,
+        &format!("/api/v1/admin/platform/models/{model_code}"),
+        None,
+    )
+    .await;
+    assert_eq!(get_response.status(), StatusCode::OK);
+    let get_payload = response_json(get_response).await;
+    assert_eq!(
+        get_payload["data"]["supportedReasoningEfforts"],
+        json!(["None", "Low", "High", "Ultra"]),
+    );
+    assert_eq!(
+        get_payload["data"]["defaultReasoningEffort"],
+        json!("Ultra")
+    );
+
+    let invalid_response = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/admin/platform/models",
+        Some(json!({
+            "displayName": "Invalid Reasoning Default",
+            "vendor": "OpenAI",
+            "protocol": "RESPONSES",
+            "modelType": "TEXT",
+            "modelCapabilities": ["TEXT_GENERATION"],
+            "baseUrl": "https://api.example.com/v1",
+            "apiKeyRef": "sk-test-model",
+            "modelName": "gpt-test",
+            "enabled": true,
+            "thinkingEnabled": true,
+            "supportedReasoningEfforts": ["Low", "Medium"],
+            "defaultReasoningEffort": "High",
+            "structuredOutputEnabled": true,
+            "maxRetries": 0
+        })),
+    )
+    .await;
+    assert_eq!(invalid_response.status(), StatusCode::BAD_REQUEST);
+    let invalid_payload = response_json(invalid_response).await;
+    assert_eq!(
+        invalid_payload["code"],
+        json!("MODEL_DEFAULT_REASONING_EFFORT_UNSUPPORTED"),
+    );
+}
+
+#[tokio::test]
 async fn context_window_tokens_round_trip_for_platform_and_workspace_models() {
     let database_url = temp_database_url("model-context-window-round-trip");
     let config = AppConfig {

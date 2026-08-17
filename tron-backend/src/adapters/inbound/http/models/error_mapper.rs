@@ -58,6 +58,16 @@ pub fn model_error_response(error: ModelError) -> Response {
             "MODEL_CONTEXT_WINDOW_INVALID",
             "contextWindowTokens must be greater than zero".to_string(),
         ),
+        ModelError::DefaultReasoningEffortUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "MODEL_DEFAULT_REASONING_EFFORT_UNSUPPORTED",
+            "defaultReasoningEffort must be included in supportedReasoningEfforts".to_string(),
+        ),
+        ModelError::ReasoningEffortUnsupported => (
+            StatusCode::BAD_REQUEST,
+            "MODEL_REASONING_EFFORT_UNSUPPORTED",
+            "reasoningEffort is not supported by the selected model".to_string(),
+        ),
         ModelError::DuplicatePlatformDisplayName => (
             StatusCode::CONFLICT,
             "MODEL_DISPLAY_NAME_DUPLICATE",

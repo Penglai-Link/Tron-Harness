@@ -180,8 +180,17 @@ pub(crate) fn prepare_send_model(
     if matches!(runtime.runtime_type, AgentRuntimeType::React) {
         return state
             .models
-            .text_agent_model_config(&session.workspace_code, request.model_code.as_deref())
-            .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
+            .text_agent_model_config_with_reasoning_effort(
+                &session.workspace_code,
+                request.model_code.as_deref(),
+                request.reasoning_effort,
+            )
+            .map_err(|error| match error {
+                crate::domain::model::ModelError::ReasoningEffortUnsupported => {
+                    ChatSendError::Agent(AgentInvocationError::RuntimeFailed(error.to_string()))
+                }
+                _ => ChatSendError::Chat(ChatError::StorageFailure),
+            })?
             .ok_or(ChatSendError::Agent(AgentInvocationError::ModelRequired));
     }
 

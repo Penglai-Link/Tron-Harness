@@ -4,11 +4,15 @@ import type {
   ModelCapability,
   ModelProtocol,
   ModelRecord,
+  ReasoningEffort,
   ModelSelectOption,
   ModelType,
   WorkspaceModelCatalog,
 } from "@/domain/model/model";
-import { normalizeModelCapabilities } from "@/domain/model/constants/modelPageOptions";
+import {
+  normalizeModelCapabilities,
+  normalizeReasoningEfforts,
+} from "@/domain/model/constants/modelPageOptions";
 
 export const modelApiEndpoints = {
   listPlatformModels: "GET /api/v1/admin/platform/models",
@@ -50,6 +54,8 @@ export interface ModelMutationPayload {
   enabled: boolean;
   description?: string | null;
   thinkingEnabled: boolean;
+  supportedReasoningEfforts: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort | null;
   structuredOutputEnabled: boolean;
   responsesStatefulEnabled: boolean;
   temperature?: number | null;
@@ -79,9 +85,15 @@ export interface ModelMutationResult {
 const MASKED_API_KEY_VALUE = "*****";
 
 function sanitizeModelRecord(record: ModelRecord): ModelRecord {
+  const supportedReasoningEfforts = normalizeReasoningEfforts(record.supportedReasoningEfforts);
   return {
     ...record,
     modelCapabilities: normalizeModelCapabilities(record.modelCapabilities, record.modelType),
+    supportedReasoningEfforts,
+    defaultReasoningEffort: record.defaultReasoningEffort
+      && supportedReasoningEfforts.includes(record.defaultReasoningEffort)
+      ? record.defaultReasoningEffort
+      : null,
     apiKeyRef: record.apiKeyRef.trim() ? MASKED_API_KEY_VALUE : "",
   };
 }

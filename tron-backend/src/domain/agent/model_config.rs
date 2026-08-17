@@ -1,5 +1,7 @@
 use serde::{Deserialize, Serialize};
 
+use crate::domain::reasoning::ReasoningEffort;
+
 use super::AgentModelProtocol;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -13,6 +15,7 @@ pub struct AgentModelConfig {
     pub model_name: String,
     #[serde(default)]
     pub thinking_enabled: bool,
+    pub reasoning_effort: Option<ReasoningEffort>,
     #[serde(default)]
     pub responses_stateful_enabled: bool,
     pub temperature: Option<f64>,

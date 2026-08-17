@@ -19,6 +19,7 @@ import {
   aguiEventMillis,
   aguiEventRunCode,
   aguiEventType,
+  aguiReasoningEffort,
   buildAguiUserWorkCards,
   buildTranscriptPresentation,
   describeDebugEvent,
@@ -591,6 +592,7 @@ function AguiRunWorkRail({
   events: ChatAguiStreamEvent[];
 }) {
   const userCards = useMemo(() => buildAguiUserWorkCards(events), [events]);
+  const reasoningEffort = useMemo(() => aguiReasoningEffort(events), [events]);
   const terminalEvent = useMemo(() => terminalAguiEvent(events), [events]);
   const terminalSummary = useMemo<TerminalWorkSummary | null>(() => {
     if (!terminalEvent) return null;
@@ -621,6 +623,7 @@ function AguiRunWorkRail({
         >
           <span className="tron-chat__rail-summary-label">
             <span>{`Worked for ${aguiWorkDuration(events)}`}</span>
+            {reasoningEffort ? <span>{` · ${reasoningEffort}`}</span> : null}
           </span>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>

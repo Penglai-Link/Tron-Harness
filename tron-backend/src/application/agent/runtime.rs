@@ -489,6 +489,12 @@ impl ReactAgent {
             .attr("runtime_kind", "in_process")
             .attr("model_code", context.model.model_code.clone())
             .payload_field("model_name", context.model.model_name.clone());
+        if let Some(reasoning_effort) = context.model.reasoning_effort {
+            draft = draft.payload_field(
+                "reasoning_effort",
+                reasoning_effort.storage_value().to_string(),
+            );
+        }
         if let Some(context_window_tokens) = context.model.context_window_tokens {
             draft = draft.payload_field("context_window_limit", context_window_tokens.to_string());
         }

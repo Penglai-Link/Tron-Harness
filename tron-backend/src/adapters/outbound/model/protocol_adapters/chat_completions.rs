@@ -68,6 +68,9 @@ pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelReques
     if config.thinking_enabled {
         payload["enable_thinking"] = json!(true);
         payload["thinking"] = json!({ "type": "enabled" });
+        if let Some(reasoning_effort) = config.reasoning_effort {
+            payload["reasoning_effort"] = json!(reasoning_effort.provider_value());
+        }
     }
     if !request.tools.is_empty() {
         payload["tools"] = json!(

@@ -7,6 +7,7 @@ import type {
   ModelCapability,
   ModelProtocol,
   ModelRecord,
+  ReasoningEffort,
   ModelSelectOption,
   ModelSourceKind,
   ModelType,
@@ -18,6 +19,7 @@ import {
   getDefaultModelCapabilitiesForType,
   getPrimaryModelTypeFromCapabilities,
   normalizeModelCapabilities,
+  normalizeReasoningEfforts,
 } from "@/domain/model/constants/modelPageOptions";
 
 const now = "2026-05-20T12:00:00Z";
@@ -53,6 +55,8 @@ type BaseModel = {
   responsesStatefulEnabled: boolean;
   temperature: number | null;
   thinkingEnabled: boolean;
+  supportedReasoningEfforts: ReasoningEffort[];
+  defaultReasoningEffort: ReasoningEffort | null;
   topP: number | null;
   updatedAt: string;
   vendor: string;
@@ -166,6 +170,12 @@ function createSeedBaseModel(
     responsesStatefulEnabled: false,
     temperature: modelType === "TEXT" ? 0.2 : null,
     thinkingEnabled: modelType === "TEXT",
+    supportedReasoningEfforts: protocol === "RESPONSES" && modelType === "TEXT"
+      ? ["Low", "Medium", "High"]
+      : [],
+    defaultReasoningEffort: protocol === "RESPONSES" && modelType === "TEXT"
+      ? "Medium"
+      : null,
     topP: modelType === "TEXT" ? 1 : null,
     updatedAt: now,
     vendor,
@@ -233,6 +243,7 @@ function cloneBaseModel<T extends BaseModel>(model: T): T {
   return {
     ...model,
     modelCapabilities: [...model.modelCapabilities],
+    supportedReasoningEfforts: [...model.supportedReasoningEfforts],
   };
 }
 
@@ -267,6 +278,8 @@ function buildPlatformView(model: PlatformModel): ModelRecord {
     enabled: model.enabled,
     description: model.description,
     thinkingEnabled: model.thinkingEnabled,
+    supportedReasoningEfforts: [...model.supportedReasoningEfforts],
+    defaultReasoningEffort: model.defaultReasoningEffort,
     structuredOutputEnabled: model.structuredOutputEnabled,
     responsesStatefulEnabled: model.responsesStatefulEnabled,
     temperature: model.temperature,
@@ -316,6 +329,8 @@ function buildWorkspaceView(
     enabled,
     description: configModel.description,
     thinkingEnabled: configModel.thinkingEnabled,
+    supportedReasoningEfforts: [...configModel.supportedReasoningEfforts],
+    defaultReasoningEffort: configModel.defaultReasoningEffort,
     structuredOutputEnabled: configModel.structuredOutputEnabled,
     responsesStatefulEnabled: configModel.responsesStatefulEnabled,
     temperature: configModel.temperature,
@@ -714,6 +729,13 @@ function updateBaseModelFromPayload(
   model.enabled = payload.enabled;
   model.description = payload.description?.trim() ? payload.description.trim() : null;
   model.thinkingEnabled = payload.thinkingEnabled;
+  model.supportedReasoningEfforts = payload.thinkingEnabled && model.modelType === "TEXT"
+    ? normalizeReasoningEfforts(payload.supportedReasoningEfforts)
+    : [];
+  model.defaultReasoningEffort = payload.defaultReasoningEffort
+    && model.supportedReasoningEfforts.includes(payload.defaultReasoningEffort)
+    ? payload.defaultReasoningEffort
+    : null;
   model.structuredOutputEnabled = payload.structuredOutputEnabled;
   model.responsesStatefulEnabled = payload.protocol === "RESPONSES" ? payload.responsesStatefulEnabled : false;
   model.temperature = payload.temperature ?? null;
@@ -1180,6 +1202,8 @@ export function verifyWorkspaceModelDraftRecord(
     modelName: preview.modelName,
     modelType: preview.modelType,
     protocol: preview.protocol,
+    supportedReasoningEfforts: [...preview.supportedReasoningEfforts],
+    defaultReasoningEffort: preview.defaultReasoningEffort,
     structuredOutputEnabled: preview.structuredOutputEnabled,
     responsesStatefulEnabled: preview.responsesStatefulEnabled,
     temperature: preview.temperature,

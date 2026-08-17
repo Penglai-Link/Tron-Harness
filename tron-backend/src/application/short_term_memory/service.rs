@@ -84,7 +84,11 @@ impl ShortTermMemoryService {
             None,
             "agent.run.started",
             "RUNTIME",
-            json!({"runCode": context.run_code, "modelCode": context.model.model_code}),
+            json!({
+                "runCode": context.run_code,
+                "modelCode": context.model.model_code,
+                "reasoningEffort": context.model.reasoning_effort,
+            }),
             None,
         )
     }

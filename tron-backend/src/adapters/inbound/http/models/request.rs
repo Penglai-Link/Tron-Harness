@@ -2,7 +2,10 @@ use serde::Deserialize;
 
 use crate::{
     application::model::{ModelCommand, SetAllowInheritanceCommand},
-    domain::model::{ModelCapability, ModelProtocol, ModelType},
+    domain::{
+        model::{ModelCapability, ModelProtocol, ModelType},
+        reasoning::ReasoningEffort,
+    },
 };
 
 #[derive(Debug, Deserialize)]
@@ -20,6 +23,8 @@ pub struct ModelRequest {
     pub enabled: Option<bool>,
     pub description: Option<String>,
     pub thinking_enabled: Option<bool>,
+    pub supported_reasoning_efforts: Option<Vec<ReasoningEffort>>,
+    pub default_reasoning_effort: Option<ReasoningEffort>,
     pub structured_output_enabled: Option<bool>,
     pub responses_stateful_enabled: Option<bool>,
     pub temperature: Option<f64>,
@@ -45,6 +50,8 @@ impl From<ModelRequest> for ModelCommand {
             enabled: request.enabled.unwrap_or(true),
             description: request.description,
             thinking_enabled: request.thinking_enabled.unwrap_or(false),
+            supported_reasoning_efforts: request.supported_reasoning_efforts.unwrap_or_default(),
+            default_reasoning_effort: request.default_reasoning_effort,
             structured_output_enabled: request.structured_output_enabled.unwrap_or(false),
             responses_stateful_enabled: request.responses_stateful_enabled.unwrap_or(false),
             temperature: request.temperature,

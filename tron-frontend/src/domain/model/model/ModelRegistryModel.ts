@@ -3,6 +3,15 @@ export type ModelSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
 export type ModelProtocol = "OPENAI_COMPATIBLE" | "RESPONSES" | "RERANK";
 export type ModelType = "TEXT" | "EMBEDDING" | "RERANK" | "IMAGE";
 export type ModelVerifyStatus = "SUCCEEDED" | "FAILED";
+export type ReasoningEffort =
+  | "None"
+  | "Minimal"
+  | "Low"
+  | "Medium"
+  | "High"
+  | "XHigh"
+  | "Max"
+  | "Ultra";
 export type ModelCapability =
   | "MULTIMODAL_ALL"
   | "TEXT_GENERATION"
@@ -42,6 +51,8 @@ export interface ModelRecord {
   enabled: boolean;
   description: string | null;
   thinkingEnabled: boolean;
+  supportedReasoningEfforts: ReasoningEffort[];
+  defaultReasoningEffort: ReasoningEffort | null;
   structuredOutputEnabled: boolean;
   responsesStatefulEnabled: boolean;
   temperature: number | null;

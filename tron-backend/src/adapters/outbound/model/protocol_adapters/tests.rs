@@ -4,6 +4,7 @@ use crate::domain::agent::{
     AgentMessage, AgentMessagePart, AgentModelConfig, AgentModelProtocol, ModelFinish,
     ModelRequest, ModelResponse, ModelStreamEvent, ToolCall,
 };
+use crate::domain::reasoning::ReasoningEffort;
 
 use super::*;
 
@@ -105,6 +106,7 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
+        reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
@@ -152,6 +154,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: false,
+        reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
@@ -192,6 +195,7 @@ fn responses_request_uses_string_input_for_single_user_prompt() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
@@ -227,6 +231,7 @@ fn responses_request_uses_stateful_response_items_and_previous_response_id() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: false,
+        reasoning_effort: None,
         responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
@@ -307,6 +312,7 @@ fn responses_request_enables_reasoning_for_thinking_models() {
         api_key: "sk-test".into(),
         model_name: "qwen-test".into(),
         thinking_enabled: true,
+        reasoning_effort: Some(ReasoningEffort::Medium),
         responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,

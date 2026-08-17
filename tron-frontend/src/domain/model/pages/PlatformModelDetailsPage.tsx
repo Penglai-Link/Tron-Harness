@@ -49,6 +49,7 @@ import {
 import {
   formatModelCapabilities,
   formatModelProtocol,
+  formatReasoningEffort,
 } from "@/domain/model/constants/modelPageOptions";
 import {
   deletePlatformModelRecord,
@@ -441,6 +442,18 @@ export function PlatformModelDetailsPage() {
               </Field>
               <Field label="Thinking Enabled">
                 <ReadValue>{selectedRecord.thinkingEnabled ? "Enabled" : "Disabled"}</ReadValue>
+              </Field>
+              <Field label={t("common:reasoningEffort.supportedLabel", "Supported reasoning efforts")}>
+                <ReadValue>
+                  {selectedRecord.supportedReasoningEfforts.map(formatReasoningEffort).join(", ")}
+                </ReadValue>
+              </Field>
+              <Field label={t("common:reasoningEffort.defaultLabel", "Default reasoning effort")}>
+                <ReadValue>
+                  {selectedRecord.defaultReasoningEffort
+                    ? formatReasoningEffort(selectedRecord.defaultReasoningEffort)
+                    : t("common:reasoningEffort.providerDefault", "Provider default")}
+                </ReadValue>
               </Field>
               <Field label="Structured Output Enabled">
                 <ReadValue>{selectedRecord.structuredOutputEnabled ? "Enabled" : "Disabled"}</ReadValue>

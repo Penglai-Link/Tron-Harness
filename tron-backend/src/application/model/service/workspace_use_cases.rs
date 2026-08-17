@@ -35,7 +35,7 @@ impl ModelService {
         &self,
         workspace_code: &str,
     ) -> Result<Option<AgentModelConfig>, ModelError> {
-        self.resolve_text_agent_model_config(workspace_code, None)
+        self.resolve_text_agent_model_config(workspace_code, None, None)
     }
 
     pub fn text_agent_model_config(
@@ -43,7 +43,16 @@ impl ModelService {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<Option<AgentModelConfig>, ModelError> {
-        self.resolve_text_agent_model_config(workspace_code, model_code)
+        self.resolve_text_agent_model_config(workspace_code, model_code, None)
+    }
+
+    pub fn text_agent_model_config_with_reasoning_effort(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+        reasoning_effort: Option<ReasoningEffort>,
+    ) -> Result<Option<AgentModelConfig>, ModelError> {
+        self.resolve_text_agent_model_config(workspace_code, model_code, reasoning_effort)
     }
 
     pub fn text_runtime_model_config(
@@ -74,6 +83,7 @@ impl ModelService {
         &self,
         workspace_code: &str,
         model_code: Option<&str>,
+        reasoning_effort: Option<ReasoningEffort>,
     ) -> Result<Option<AgentModelConfig>, ModelError> {
         let workspace = self.active_workspace_detail(workspace_code)?;
         let catalog_state = self.resolve_workspace_catalog_state(&workspace)?;
@@ -100,10 +110,17 @@ impl ModelService {
             return Ok(None);
         };
 
-        Ok(agent_model_config_from_view(
-            &record.view,
-            &record.definition_model.api_key_ref,
-        ))
+        if reasoning_effort
+            .is_some_and(|effort| !record.view.supported_reasoning_efforts.contains(&effort))
+        {
+            return Err(ModelError::ReasoningEffortUnsupported);
+        }
+        let mut config =
+            agent_model_config_from_view(&record.view, &record.definition_model.api_key_ref);
+        if let (Some(config), Some(reasoning_effort)) = (&mut config, reasoning_effort) {
+            config.reasoning_effort = Some(reasoning_effort);
+        }
+        Ok(config)
     }
 
     fn resolve_runtime_model_config(

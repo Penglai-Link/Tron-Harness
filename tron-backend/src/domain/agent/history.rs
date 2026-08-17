@@ -5,6 +5,8 @@ use std::{
 
 use serde::{Deserialize, Serialize};
 
+use crate::domain::reasoning::ReasoningEffort;
+
 use super::AgentRunStatus;
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
@@ -18,6 +20,7 @@ pub struct AgentRunHistoryRecord {
     pub app_code: Option<String>,
     pub task_code: Option<String>,
     pub model_code: String,
+    pub reasoning_effort: Option<ReasoningEffort>,
     pub status: AgentRunStatus,
     pub outcome: String,
     pub step_count: u32,

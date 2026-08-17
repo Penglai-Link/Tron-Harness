@@ -381,6 +381,7 @@ fn model_config() -> AgentModelConfig {
         api_key: "test".into(),
         model_name: "test-model".into(),
         thinking_enabled: true,
+        reasoning_effort: None,
         responses_stateful_enabled: true,
         temperature: Some(0.7),
         max_tokens: Some(8192),

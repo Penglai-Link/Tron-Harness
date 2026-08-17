@@ -45,6 +45,7 @@ import { Badge } from "@/shared/ui/Badge";
 import {
   ConfirmDialog,
   MarkdownContent,
+  SelectInput,
   useWorkspaceSpaces,
   useConsoleShellConfig,
   useDismissibleLayer,
@@ -86,7 +87,11 @@ import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import type { SystemAgentModelRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
 import { fetchWorkspaceModelCatalog } from "@/domain/model/api";
 import { getWorkspaceModelCatalog } from "@/domain/model/mock";
-import type { ModelRecord } from "@/domain/model/model";
+import type { ModelRecord, ReasoningEffort } from "@/domain/model/model";
+import {
+  formatReasoningEffort,
+  reasoningEffortOptions,
+} from "@/domain/model/constants/modelPageOptions";
 import { isApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
@@ -146,6 +151,7 @@ import { useInspection } from "../hooks/useInspection";
 import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
+import { SelectItem } from "@/components/ui/select";
 import { throttle } from "lodash-es";
 import TerminalCom from "../components/terminal"
 
@@ -167,6 +173,7 @@ function useStableCallback<TArgs extends unknown[], TResult>(
 }
 
 const chatSessionModelSelectionStorageKey = "tron.chat.session.model.selection";
+const modelDefaultReasoningEffortValue = "__model_default__";
 
 function readChatSessionModelSelections() {
   if (typeof window === "undefined") return {} as Record<string, string>;
@@ -4012,6 +4019,7 @@ export function ChatManagementPage() {
   const [creatingSession, setCreatingSession] = useState(false);
   const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
   const [selectedModelCode, setSelectedModelCode] = useState("");
+  const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<ReasoningEffort | null>(null);
   const [sessionModelSelections, setSessionModelSelections] = useState<Record<string, string>>(() => readChatSessionModelSelections());
   const [modelsLoading, setModelsLoading] = useState(false);
   const [chatAgents, setChatAgents] = useState<ChatAgentOption[]>(() => [mainChatAgentOption]);
@@ -4067,6 +4075,29 @@ export function ChatManagementPage() {
   const selectedMainAgentModel = selectedModel?.modelCode
     ? chatModels.find((model) => model.modelCode === selectedModel.modelCode) ?? null
     : null;
+  const selectedReasoningEffortOptions = useMemo(() => {
+    const supported = new Set(selectedMainAgentModel?.supportedReasoningEfforts ?? []);
+    return reasoningEffortOptions
+      .filter((option) => supported.has(option.value))
+      .map((option) => ({
+        ...option,
+        label: t(`common:reasoningEffort.values.${option.value}`, option.label),
+      }));
+  }, [selectedMainAgentModel?.supportedReasoningEfforts, t]);
+  const selectedModelDefaultReasoningEffort = selectedMainAgentModel?.defaultReasoningEffort ?? null;
+  const selectedReasoningEffortDefaultLabel = selectedModelDefaultReasoningEffort
+    ? t(
+      `common:reasoningEffort.values.${selectedModelDefaultReasoningEffort}`,
+      formatReasoningEffort(selectedModelDefaultReasoningEffort),
+    )
+    : t("common:reasoningEffort.chatAutomatic", "Auto");
+  const selectedReasoningEffortLabel = selectedReasoningEffort
+    ? selectedReasoningEffortOptions.find((option) => option.value === selectedReasoningEffort)?.label
+      ?? formatReasoningEffort(selectedReasoningEffort)
+    : selectedReasoningEffortDefaultLabel;
+  const selectedReasoningEffortControlValue = selectedReasoningEffort
+    ?? selectedModelDefaultReasoningEffort
+    ?? modelDefaultReasoningEffortValue;
   const hasActiveSession = Boolean(activeSession);
   const sessionStarted = Boolean(activeSession?.lastRunCode || visibleMessages.length > 0);
   const agentSelectionLocked = Boolean(activeSession && sessionStarted);
@@ -4148,6 +4179,7 @@ export function ChatManagementPage() {
       input.systemModelId = selectedModel.modelName;
     } else {
       input.modelCode = selectedModel.modelCode;
+      input.reasoningEffort = selectedReasoningEffort;
     }
     return input;
   }
@@ -4411,6 +4443,10 @@ export function ChatManagementPage() {
   useEffect(() => {
     writeChatSessionModelSelections(sessionModelSelections);
   }, [sessionModelSelections]);
+
+  useEffect(() => {
+    setSelectedReasoningEffort(null);
+  }, [activeSession?.sessionCode, selectedModel?.optionCode, selectedMainAgentModel?.updatedAt]);
 
   useEffect(() => {
     if (requestedSessionCode || requestedSourceTab || activeSessionCode) return;
@@ -4731,7 +4767,7 @@ export function ChatManagementPage() {
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
   }), [aguiDebugPreferences, aguiWorkReplayPreferences.recentTurnLimit]);
   const transcriptFooterAddon = useMemo(() => (
-    <div className="flex min-w-0 max-w-full flex-col items-start gap-2">
+    <div className="flex w-full min-w-0 max-w-full flex-col items-start gap-2">
       {inspectionAttachments.length ? (
         <div className="flex max-w-full flex-wrap gap-2">
           {inspectionAttachments.map((attachment) => (
@@ -4745,7 +4781,7 @@ export function ChatManagementPage() {
           ))}
         </div>
       ) : null}
-      <div className="flex min-w-0 max-w-full items-center gap-1">
+      <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1">
         {agentSelectionLocked ? null : (
           <div className="min-w-0 max-w-[9.5rem] shrink">
             <ChatAgentSelector
@@ -4771,6 +4807,39 @@ export function ChatManagementPage() {
             onSelect={handleModelSelect}
           />
         </div>
+        {selectedReasoningEffortOptions.length ? (
+          <SelectInput
+            aria-label={t("common:reasoningEffort.chatLabel", "Reasoning effort")}
+            className="h-8 min-h-8 w-36 min-w-36 flex-none gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none before:shadow-none hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:border-transparent focus-visible:ring-0"
+            displayValue={(
+              <span className="flex min-w-0 items-center gap-2">
+                <BrainCircuit className="size-3.5 shrink-0" />
+                <span className="truncate">{selectedReasoningEffortLabel}</span>
+              </span>
+            )}
+            size="sm"
+            value={selectedReasoningEffortControlValue}
+            onValueChange={(value) => {
+              setSelectedReasoningEffort(
+                value === modelDefaultReasoningEffortValue
+                  || value === selectedModelDefaultReasoningEffort
+                  ? null
+                  : value as ReasoningEffort,
+              );
+            }}
+          >
+            {selectedModelDefaultReasoningEffort ? null : (
+              <SelectItem value={modelDefaultReasoningEffortValue}>
+                {selectedReasoningEffortDefaultLabel}
+              </SelectItem>
+            )}
+            {selectedReasoningEffortOptions.map((option) => (
+              <SelectItem key={option.value} value={option.value}>
+                {option.label}
+              </SelectItem>
+            ))}
+          </SelectInput>
+        ) : null}
       </div>
     </div>
   ), [
@@ -4783,6 +4852,13 @@ export function ChatManagementPage() {
     modelsLoading,
     selectedAgentCode,
     selectedModelCode,
+    selectedModelDefaultReasoningEffort,
+    selectedReasoningEffort,
+    selectedReasoningEffortControlValue,
+    selectedReasoningEffortDefaultLabel,
+    selectedReasoningEffortLabel,
+    selectedReasoningEffortOptions,
+    t,
   ]);
   const formatAnnotationCount = useCallback(
     (count: number) => t("chat.attachments.annotationCount", { count }),

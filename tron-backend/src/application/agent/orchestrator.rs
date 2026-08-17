@@ -5,6 +5,7 @@ use super::{
 
 use crate::{
     domain::agent::{AgentExecutionMode, AgentRunPlanStep, CollaborationRun},
+    domain::reasoning::ReasoningEffort,
     shared::time::current_timestamp,
 };
 
@@ -17,6 +18,7 @@ pub(crate) struct AgentRunExecutionMetadata {
     pub app_code: Option<String>,
     pub task_code: Option<String>,
     pub model_code: String,
+    pub reasoning_effort: Option<ReasoningEffort>,
     pub started_at: String,
 }
 
@@ -101,6 +103,7 @@ impl AgentOrchestrator {
             app_code,
             task_code,
             model_code,
+            reasoning_effort: context.model.reasoning_effort,
             started_at: context.started_at.clone(),
         };
         let mut collaboration = CollaborationRun::single_agent(

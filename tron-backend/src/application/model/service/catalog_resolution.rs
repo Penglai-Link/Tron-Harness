@@ -40,6 +40,8 @@ pub(super) fn build_platform_view(
         enabled: model.enabled,
         description: model.description,
         thinking_enabled: model.thinking_enabled,
+        supported_reasoning_efforts: model.supported_reasoning_efforts,
+        default_reasoning_effort: model.default_reasoning_effort,
         structured_output_enabled: model.structured_output_enabled,
         responses_stateful_enabled: model.responses_stateful_enabled,
         temperature: model.temperature,
@@ -89,6 +91,7 @@ pub(super) fn agent_model_config_from_view(
         api_key: api_key.to_string(),
         model_name: view.model_name.clone(),
         thinking_enabled: view.thinking_enabled,
+        reasoning_effort: view.default_reasoning_effort,
         responses_stateful_enabled: view.responses_stateful_enabled,
         temperature: view.temperature,
         max_tokens: view.max_tokens,
@@ -116,6 +119,7 @@ pub(super) fn runtime_model_config_from_view(
             api_key: api_key.to_string(),
             model_name: view.model_name.clone(),
             thinking_enabled: view.thinking_enabled,
+            reasoning_effort: view.default_reasoning_effort,
             responses_stateful_enabled: view.responses_stateful_enabled,
             temperature: view.temperature,
             max_tokens: view.max_tokens,
@@ -176,6 +180,8 @@ pub(super) fn build_workspace_effective_view(
         enabled,
         description: config_model.description.clone(),
         thinking_enabled: config_model.thinking_enabled,
+        supported_reasoning_efforts: config_model.supported_reasoning_efforts.clone(),
+        default_reasoning_effort: config_model.default_reasoning_effort,
         structured_output_enabled: config_model.structured_output_enabled,
         responses_stateful_enabled: config_model.responses_stateful_enabled,
         temperature: config_model.temperature,
@@ -221,6 +227,8 @@ pub(super) fn build_workspace_preview_view(
     view.enabled = enabled;
     view.description = preview_model.description.clone();
     view.thinking_enabled = preview_model.thinking_enabled;
+    view.supported_reasoning_efforts = preview_model.supported_reasoning_efforts.clone();
+    view.default_reasoning_effort = preview_model.default_reasoning_effort;
     view.structured_output_enabled = preview_model.structured_output_enabled;
     view.responses_stateful_enabled = preview_model.responses_stateful_enabled;
     view.temperature = preview_model.temperature;

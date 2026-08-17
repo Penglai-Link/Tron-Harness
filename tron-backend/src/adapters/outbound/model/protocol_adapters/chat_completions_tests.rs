@@ -3,6 +3,7 @@ use serde_json::json;
 use crate::domain::agent::{
     AgentMessage, AgentModelConfig, AgentModelProtocol, ModelRequest, ModelStreamEvent,
 };
+use crate::domain::reasoning::ReasoningEffort;
 
 use super::{ChatCompletionsAdapter, ModelProtocolAdapter};
 
@@ -16,6 +17,7 @@ fn chat_stream_request_asks_for_usage_chunk_and_thinking() {
         api_key: "sk-test".into(),
         model_name: "gpt-test".into(),
         thinking_enabled: true,
+        reasoning_effort: Some(ReasoningEffort::High),
         responses_stateful_enabled: false,
         temperature: None,
         max_tokens: None,
@@ -40,6 +42,7 @@ fn chat_stream_request_asks_for_usage_chunk_and_thinking() {
     assert_eq!(body["stream_options"]["include_usage"], json!(true));
     assert_eq!(body["enable_thinking"], json!(true));
     assert_eq!(body["thinking"]["type"], json!("enabled"));
+    assert_eq!(body["reasoning_effort"], json!("high"));
 }
 
 #[test]
