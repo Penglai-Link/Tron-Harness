@@ -20,7 +20,10 @@ vi.mock("socket.io-client", () => ({
   io: vi.fn(() => socketHarness.socket),
 }));
 
-import { SocketIoTerminalTransport } from "./socketIo";
+import {
+  SocketIoTerminalTransport,
+  createTerminalTransport,
+} from "./socketIo";
 
 describe("SocketIoTerminalTransport", () => {
   beforeEach(() => {
@@ -46,6 +49,18 @@ describe("SocketIoTerminalTransport", () => {
     expect(onSessionChange).toHaveBeenCalledWith({
       currentDirectory: "/workspace/project",
     });
+  });
+
+  it("creates a terminal transport from an options object", () => {
+    const transport = createTerminalTransport({
+      url: "http://terminal.test",
+      commandTimeoutMs: 30_000,
+      socketOptions: {
+        auth: { token: "token" },
+      },
+    });
+
+    expect(transport).toBeInstanceOf(SocketIoTerminalTransport);
   });
 
   it("rejects connection when the session envelope contains an error", async () => {

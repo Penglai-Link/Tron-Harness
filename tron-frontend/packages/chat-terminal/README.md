@@ -1,8 +1,8 @@
 # @tron/chat-terminal
 
-`@tron/chat-terminal` 基于 xterm.js 提供可嵌入的 AI 终端。SDK 负责终端渲染、命令输入分流、交互式 PTY 输入、终端尺寸同步、AI 消息展示、命令卡片和输出解释。
+基于 xterm.js 的可嵌入 AI 终端。SDK 提供命令执行、交互式 PTY 输入、终端尺寸同步、AI 流式消息、命令卡片和输出解释。
 
-命令执行默认通过 Socket.IO transport 接入，AI 请求默认通过 SSE transport 接入。也可以使用自定义 transport 或逐项提供回调。
+默认使用 Socket.IO 传输终端命令，使用 SSE 传输 AI 消息。终端和 AI 传输都可以替换。
 
 ## 安装
 
@@ -10,57 +10,92 @@
 npm install @tron/chat-terminal
 ```
 
+## 快速接入
+
+终端容器必须有明确的宽高。
+
 ```ts
 import {
-  createSseAITransport,
+  createAITransport,
+  createTerminalTransport,
   initTerminal,
 } from "@tron/chat-terminal";
 import "@tron/chat-terminal/styles.css";
-```
 
-挂载元素必须有明确的宽高。SDK 会根据容器尺寸调整 xterm.js 的行列数，并在使用 Socket.IO transport 时同步 PTY 尺寸。
-
-## 快速接入
-
-下面的配置使用内置 transport。业务代码不需要直接创建 Socket.IO 客户端，也不需要手动处理命令消息或 SSE 帧。
-
-```ts
-const terminalServerUrl = "http://127.0.0.1:8787";
-const terminalElement = document.querySelector("#terminal");
-
-if (!(terminalElement instanceof HTMLElement)) {
+const el = document.querySelector("#terminal");
+if (!(el instanceof HTMLElement)) {
   throw new Error("终端容器不存在");
 }
 
-const aiTransport = createSseAITransport({
-  url: terminalServerUrl + "/api/llm/v1/chat/completions",
-  headers: () => ({
-    Authorization: "Bearer <token>",
-  }),
-});
-
+const serverUrl = "http://127.0.0.1:8787";
 const terminal = initTerminal({
-  el: terminalElement,
-  connection: {
-    url: terminalServerUrl,
+  el,
+  transport: {
+    terminal: createTerminalTransport({ url: serverUrl }),
+    ai: createAITransport({
+      url: `${serverUrl}/api/llm/v1/chat/completions`,
+      headers: () => ({ Authorization: "Bearer <token>" }),
+    }),
   },
-  ai: {
-    transport: aiTransport,
-    prompts: {
-      chat: (content) => content,
-      explain: ({ command, output }) =>
-        "解释命令：" + command + "\n\n命令输出：\n" + output,
-      generate: (content) => content,
-    },
+  prompts: {
+    chat: (content) => content,
+    explain: ({ command, output }) =>
+      `解释命令：${command}\n\n命令输出：\n${output}`,
+    generate: (content) => content,
   },
   locale: "zh-CN",
 });
 
-// 页面销毁时释放终端、Socket.IO 和 AI 请求。
-terminal.dispose();
+// 页面销毁时调用 
+terminal.dispose()
+
+// 多语言发生变更的时候调用
+terminal.setLocale(currentLocale)
+
+// 主题发生变更的时候调用
+terminal.refreshTheme()
+
 ```
 
-`connection.url` 会创建 `SocketIoTerminalTransport`。`ai.transport` 会创建 SSE 请求。默认请求体为：
+
+### `initTerminal` 选项
+
+| 选项 | 类型 | 说明 |
+| --- | --- | --- |
+| `el` | `HTMLElement` | 终端挂载元素。 |
+| `transport.terminal` | `TerminalTransport` | 必填。命令执行传输。 |
+| `transport.ai` | `AITransport` | 可选。未配置时不启用 AI 能力。 |
+| `prompts` | `TerminalPrompts` | 配置聊天、解释和命令生成请求。 |
+| `terminalOptions` | xterm.js 选项及 SDK 扩展 | 主题、字体、`agentTips` 等。 |
+| `isInteractiveCommand` | `(command: string) => boolean` | 覆盖交互式命令判断(解析输入的内容是否是内置命令)。 |
+| `locale` | `"zh-CN" \| "en-US"` | 默认 `"zh-CN"`。 |
+| `messages` | `ChatTerminalMessageOverrides` | 覆盖内置文案。 |
+| `onError` | `(error: Error) => void` | 连接失败等 transport 错误回调。 |
+
+## 内置 transport
+
+### 终端 Socket.IO
+
+`createTerminalTransport` 创建并管理 Socket.IO 客户端：
+
+```ts
+const terminalTransport = createTerminalTransport({
+  url: "https://terminal.example.com",
+  commandTimeoutMs: 60_000,
+  socketOptions: {
+    auth: { token: accessToken },
+    path: "/custom/socket.io",
+    query: { tenantId: "tenant-1" },
+    transports: ["websocket"],
+  },
+});
+```
+
+`socketOptions` 会传给 `socket.io-client`。如果只是需要认证、path、query 或连接参数，使用这个配置即可。
+
+### AI SSE
+
+`createAITransport` 使用 `fetch` 发起 POST 请求并解析 SSE。默认请求体为：
 
 ```json
 {
@@ -69,167 +104,41 @@ terminal.dispose();
 }
 ```
 
-可以通过 `SseAITransportOptions.buildBody` 修改请求体，通过 `headers` 或异步 headers 工厂提供认证信息。
-
-## 配置
-
-`initTerminal` 接收 `ChatTerminalOptions`：
-
-| 参数 | 类型 | 必填 | 说明 |
-| --- | --- | :---: | --- |
-| `el` | `HTMLElement` | 是 | 终端挂载元素。 |
-| `connection` | `TerminalConnectionOptions` | 与 `runCommand` 二选一 | 使用内置或自定义终端 transport。 |
-| `ai` | `TerminalAIOptions` | 否 | 使用内置 AI transport 和提示词。 |
-| `runCommand` | `(command, onOutput, context) => Promise<Result \| void>` | 与 `connection` 二选一 | 自定义命令执行逻辑。 |
-| `cancelCommand` | `() => void` | 否 | 自定义取消当前命令。未配置时由终端 transport 处理。 |
-| `isInteractiveCommand` | `(command) => boolean` | 否 | 覆盖交互式命令判断。 |
-| `writeCommandInput` | `(data) => void \| Promise<void>` | 否 | 自定义 PTY stdin 写入。 |
-| `resizeTerminal` | `(size) => void \| Promise<void>` | 否 | 自定义终端尺寸同步。 |
-| `commandChat` | `(content) => Promise<void>` | 否 | 自定义自然语言处理。 |
-| `commandExplain` | `({ command, output }, context) => Promise<string>` | 否 | 自定义命令输出解释。 |
-| `commandGenerate` | `(content) => Promise<string>` | 否 | 自定义命令生成。 |
-| `locale` | `"zh-CN" \| "en-US"` | 否 | SDK 固定文案语言，默认 `zh-CN`。 |
-| `messages` | `ChatTerminalMessageOverrides` | 否 | 覆盖 SDK 固定文案。 |
-| `termOptions` | xterm.js 配置和 SDK 扩展字段 | 否 | 终端主题、光标、字体等配置。 |
-| `onError` | `(error: Error) => void` | 否 | 连接失败等 transport 错误回调。 |
-
-未配置 `connection` 时，必须提供 `runCommand`。`ai` 和三个 AI 回调可以分别配置；未配置的能力不会启用对应 UI。
-
-### 命令执行上下文
+使用 `body` 可以替换请求体，`headers` 支持静态值或异步工厂：
 
 ```ts
-interface CommandExecutionContext {
-  interactive: boolean;
-}
-
-interface CommandExecutionResult {
-  currentDirectory?: string;
-}
-```
-
-`interactive` 为 `true` 时，命令需要持续接收原始键盘输入。`runCommand` 应保持 Promise 直到进程退出，并通过 `onOutput` 传递输出。
-
-### 终端 transport
-
-```ts
-interface TerminalConnectionOptions {
-  url?: string;
-  transport?: TerminalTransport;
-  commandTimeoutMs?: number;
-  socketOptions?: Record<string, unknown>;
-}
-
-interface TerminalTransport {
-  connect(): Promise<{ currentDirectory: string }>;
-  execute(
-    command: string,
-    onOutput: (output: string) => void,
-    options?: { interactive?: boolean; timeoutMs?: number },
-  ): Promise<{ currentDirectory?: string }>;
-  cancel(): void;
-  write(data: string): void;
-  resize(size: { cols: number; rows: number }): void;
-  onSessionChange(listener: (session: { currentDirectory: string }) => void): {
-    dispose(): void;
-  };
-  dispose(): void;
-}
-```
-
-`url` 和 `transport` 二选一。`url` 使用 Socket.IO；`transport` 适用于已有 WebSocket、PTY 或测试实现。
-
-### 自定义 transport 示例
-
-使用自定义 `transport` 时，不要同时配置 `connection.url`。`initTerminal` 会自动调用 `transport.connect()`，销毁终端时会调用 `transport.dispose()`。
-
-如果自定义 transport 内部使用 Socket.IO 或 WebSocket，应在 transport 内部创建和管理 socket。不能把 socket 客户端直接传给 `connection.transport`，传入对象必须实现完整的 `TerminalTransport` 接口。
-
-如果 `connection.transport` 需要对接 Socket.IO，可以直接使用 SDK 导出的
-`createSocketIoTerminalTransport`。它会创建并管理 Socket.IO 客户端，同时实现
-`TerminalTransport` 接口：
-
-```ts
-import {
-  createSocketIoTerminalTransport,
-  initTerminal,
-} from "@tron/chat-terminal";
-
-const terminalTransport = createSocketIoTerminalTransport(
-  "http://127.0.0.1:8787",
-  {
-    commandTimeoutMs: 60_000,
-    socketOptions: {
-      auth: { token: "<token>" },
-      transports: ["websocket"],
-    },
-  },
-);
-
-const terminal = initTerminal({
-  el: terminalElement,
-  connection: {
-    transport: terminalTransport,
-  },
+const aiTransport = createAITransport({
+  url: "/api/llm/v1/chat/completions",
+  headers: { Authorization: "Bearer <token>" },
+  body: ({ content, stream }) => ({
+    messages: [{ content, role: "user" }],
+    model: "your-model",
+    stream,
+  }),
 });
 ```
 
-此时不要再配置 `connection.url`。如果需要完全自定义 Socket.IO 事件或协议，创建一个内部持有 Socket.IO 客户端的适配器，并让它实现完整的 `TerminalTransport` 接口；不要把 Socket.IO 客户端实例直接传给 `connection.transport`。
-
-配合内置 SSE AI transport 使用：
-
-```ts
-import {
-  createSseAITransport,
-  createSocketIoTerminalTransport,
-  initTerminal,
-} from "@tron/chat-terminal";
-
-const terminal = initTerminal({
-  el: terminalElement,
-  connection: {
-    transport: createSocketIoTerminalTransport(terminalServerUrl),
-  },
-  ai: {
-    transport: createSseAITransport({
-      url: "/api/llm/v1/chat/completions",
-      headers: { Authorization: "Bearer <token>" },
-      buildBody(content, stream) {
-        return {
-          messages: [{ content, role: "user" }],
-          model: "your-model",
-          stream,
-        };
-      },
-    }),
-  },
-});
-```
-
-`createSseAITransport` 使用 `fetch` 发起 POST 请求，并解析服务端返回的 SSE 帧。服务端需要在流式响应中返回 OpenAI 兼容的 `data: {...}` 数据，并以 `data: [DONE]` 结束。
-
-如果业务接口不是 SSE，也可以直接实现 `AITransport`。例如，普通 JSON 接口可以把完整响应作为一个 chunk：
+非 SSE 接口可以直接实现 `AITransport`。`stream` 至少调用一次 `onChunk`，并返回本次请求的 `requestId`；`request` 返回完整文本。
 
 ```ts
 import type { AITransport } from "@tron/chat-terminal";
 
-const fetchAITransport: AITransport = {
+const aiTransport: AITransport = {
   async stream(content, { onChunk, signal }) {
     const requestId = crypto.randomUUID();
     const response = await fetch("/api/llm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      signal,
       body: JSON.stringify({ content }),
+      signal,
     });
     if (!response.ok) throw new Error("AI 请求失败");
-
     const body = (await response.json()) as {
       code: string;
       message: string;
       data: { content: string };
     };
     if (body.code !== "0") throw new Error(body.message || "AI 请求失败");
-
     onChunk({ delta: body.data.content, requestId });
     return { requestId };
   },
@@ -238,11 +147,10 @@ const fetchAITransport: AITransport = {
     const response = await fetch("/api/llm", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      signal,
       body: JSON.stringify({ content }),
+      signal,
     });
     if (!response.ok) throw new Error("AI 请求失败");
-
     const body = (await response.json()) as {
       code: string;
       message: string;
@@ -252,195 +160,281 @@ const fetchAITransport: AITransport = {
     return body.data.content;
   },
 };
+```
+
+## 自定义 TerminalTransport
+
+自定义 WebSocket、Socket.IO 协议或已有 PTY 时，在业务侧实现 `TerminalTransport`，再传给 `transport.terminal`。不要把裸 socket 实例直接传入。
+
+```ts
+import type {
+  TerminalCommandOptions,
+  TerminalCommandResult,
+  TerminalSession,
+  TerminalSize,
+  TerminalTransport,
+  TransportDisposable,
+} from "@tron/chat-terminal";
+
+type Socket = {
+  connect(): void;
+  close(): void;
+  send(event: string, payload: unknown): void;
+  on(event: string, listener: (payload: any) => void): () => void;
+};
+
+// 由业务侧创建 WebSocket、Socket.IO 或其他 socket 实现。
+declare function createSocket(): Socket;
+
+type PendingCommand = {
+  interactive: boolean;
+  onOutput: (output: string) => void;
+  resolve: (result: TerminalCommandResult) => void;
+  reject: (error: Error) => void;
+  timeout?: number;
+};
+
+export class CustomTerminalTransport implements TerminalTransport {
+  private readonly pending = new Map<string, PendingCommand>();
+  private readonly sessionListeners = new Set<
+    (session: TerminalSession) => void
+  >();
+  private activeMessageId?: string;
+  private session?: TerminalSession;
+  private latestSize?: TerminalSize;
+  private disposed = false;
+  private connecting?: Promise<TerminalSession>;
+  private resolveConnect?: (session: TerminalSession) => void;
+  private rejectConnect?: (error: Error) => void;
+
+  constructor(private readonly socket: Socket) {
+    socket.on("terminal:session", (payload) => this.handleSession(payload));
+    socket.on("command:message", (payload) => this.handleMessage(payload));
+    socket.on("disconnect", () => this.handleDisconnect());
+  }
+
+  connect(): Promise<TerminalSession> {
+    if (this.disposed) return Promise.reject(new Error("终端已销毁"));
+    if (this.session) return Promise.resolve(this.session);
+    if (this.connecting) return this.connecting;
+
+    this.connecting = new Promise<TerminalSession>((resolve, reject) => {
+      this.resolveConnect = resolve;
+      this.rejectConnect = reject;
+    });
+    this.socket.connect();
+    return this.connecting;
+  }
+
+  async execute(
+    command: string,
+    onOutput: (output: string) => void,
+    options: TerminalCommandOptions = {},
+  ): Promise<TerminalCommandResult> {
+    await this.connect();
+    const messageId = crypto.randomUUID();
+    const interactive = options.interactive === true;
+
+    return new Promise((resolve, reject) => {
+      const timeoutMs = options.timeoutMs ?? 60_000;
+      const timeout = !interactive && timeoutMs > 0
+        ? window.setTimeout(() => {
+            this.socket.send("command:cancel", { messageId });
+            this.rejectCommand(messageId, new Error("命令执行超时"));
+          }, timeoutMs)
+        : undefined;
+
+      this.pending.set(messageId, {
+        interactive,
+        onOutput,
+        resolve,
+        reject,
+        timeout,
+      });
+      this.activeMessageId = messageId;
+      this.socket.send("command:execute", {
+        command,
+        messageId,
+        ...(interactive ? { interactive: true } : {}),
+      });
+    });
+  }
+
+  cancel() {
+    const messageId = this.activeMessageId;
+    if (messageId && this.pending.has(messageId)) {
+      this.socket.send("command:cancel", { messageId });
+    }
+  }
+
+  write(data: string) {
+    const messageId = this.activeMessageId;
+    const command = messageId ? this.pending.get(messageId) : undefined;
+    if (data && messageId && command?.interactive) {
+      this.socket.send("command:input", { data, messageId });
+    }
+  }
+
+  resize(size: TerminalSize) {
+    this.latestSize = size;
+    if (this.session) this.socket.send("terminal:resize", size);
+  }
+
+  onSessionChange(listener: (session: TerminalSession) => void): TransportDisposable {
+    this.sessionListeners.add(listener);
+    if (this.session) listener(this.session);
+    return { dispose: () => this.sessionListeners.delete(listener) };
+  }
+
+  dispose() {
+    if (this.disposed) return;
+    this.disposed = true;
+    const error = new Error("终端连接已关闭");
+    this.rejectConnect?.(error);
+    for (const messageId of this.pending.keys()) {
+      this.rejectCommand(messageId, error);
+    }
+    this.sessionListeners.clear();
+    this.socket.close();
+  }
+
+  private handleSession(payload: {
+    code: string;
+    message: string;
+    data?: { currentDirectory?: string };
+  }) {
+    if (payload.code !== "0" || !payload.data?.currentDirectory) {
+      this.rejectConnect?.(new Error(payload.message || "终端会话失败"));
+      this.connecting = undefined;
+      this.rejectPending(new Error(payload.message || "终端会话失败"));
+      return;
+    }
+    this.session = { currentDirectory: payload.data.currentDirectory };
+    this.connecting = undefined;
+    this.resolveConnect?.(this.session);
+    for (const listener of this.sessionListeners) listener(this.session);
+    if (this.latestSize) this.socket.send("terminal:resize", this.latestSize);
+  }
+
+  private handleDisconnect() {
+    const error = new Error("终端连接已断开");
+    this.session = undefined;
+    this.connecting = undefined;
+    this.rejectConnect?.(error);
+    this.rejectPending(error);
+  }
+
+  private handleMessage(message: {
+    type: string;
+    messageId: string;
+    delta: string;
+    currentDirectory?: string;
+  }) {
+    const command = this.pending.get(message.messageId);
+    if (!command) return;
+    if (message.type === "TEXT_MESSAGE_CONTENT") command.onOutput(message.delta);
+    if (message.type === "TEXT_MESSAGE_END") {
+      this.resolveCommand(message.messageId, {
+        currentDirectory: message.currentDirectory,
+      });
+    }
+    if (message.type === "TEXT_MESSAGE_ERROR") {
+      this.rejectCommand(message.messageId, new Error(message.delta || "命令执行失败"));
+    }
+  }
+
+  private resolveCommand(messageId: string, result: TerminalCommandResult) {
+    const command = this.pending.get(messageId);
+    if (!command) return;
+    if (command.timeout !== undefined) window.clearTimeout(command.timeout);
+    this.pending.delete(messageId);
+    if (this.activeMessageId === messageId) this.activeMessageId = undefined;
+    command.resolve(result);
+  }
+
+  private rejectCommand(messageId: string, error: Error) {
+    const command = this.pending.get(messageId);
+    if (!command) return;
+    if (command.timeout !== undefined) window.clearTimeout(command.timeout);
+    this.pending.delete(messageId);
+    if (this.activeMessageId === messageId) this.activeMessageId = undefined;
+    command.reject(error);
+  }
+
+  private rejectPending(error: Error) {
+    for (const messageId of this.pending.keys()) {
+      this.rejectCommand(messageId, error);
+    }
+  }
+}
 
 initTerminal({
-  el: terminalElement,
-  connection: {
-    transport: createSocketIoTerminalTransport(terminalServerUrl),
-  },
-  ai: { transport: fetchAITransport },
+  el,
+  transport: { terminal: new CustomTerminalTransport(createSocket()) },
 });
 ```
 
-上面的 fetch AI 示例是非流式实现，`stream` 只回调一次。需要逐字输出时，应在 `response.body` 上读取流，或者使用 `createSseAITransport`。
+自定义实现需要保证：
 
-### AI transport
+- `connect()` 在收到初始 session 后 resolve，并返回 `currentDirectory`。
+- `execute()` 持有 `messageId`，在内容消息中调用 `onOutput`，在结束消息中 resolve。
+- 交互命令的 `options.interactive` 为 `true` 时，不设置普通命令超时。
+- `cancel()`、`write()` 和 `resize()` 映射到业务 socket 协议。
+- `dispose()` 关闭 socket，并 reject 所有未完成命令。
 
-```ts
-interface AITransport {
-  stream(
-    content: string,
-    options: {
-      onChunk: (chunk: { delta: string; requestId: string }) => void;
-      signal?: AbortSignal;
-    },
-  ): Promise<{ requestId: string }>;
-  request(content: string, options?: { signal?: AbortSignal }): Promise<string>;
-  dispose?(): void;
-}
-```
+## 交互式命令
 
-可直接使用 `createSseAITransport`：
-
-```ts
-const aiTransport = createSseAITransport({
-  url: "/api/llm/v1/chat/completions",
-  headers: { Authorization: "Bearer <token>" },
-  buildBody(content, stream) {
-    return {
-      messages: [{ content, role: "user" }],
-      model: "your-model",
-      stream,
-    };
-  },
-});
-```
-
-## Vim 和交互式命令
-
-使用内置 Socket.IO transport 时，以下命令默认进入交互模式：
-
-`vim`、`vi`、`nvim`、`nano`、`emacs`、`top`、`htop`、`less`、`more`、`man`、`watch`、`tmux`、`screen`。
-
-交互模式会：
-
-1. 在命令请求中携带 `interactive: true`。
-2. 将 `i`、`Esc`、方向键、功能键和 `Ctrl+C` 等输入通过 `command:input` 原样写入 PTY。
-3. 禁用交互命令的命令超时。
-4. 通过 `terminal:resize` 同步 PTY 尺寸。
-
-可以直接执行：
+内置 transport 默认将以下命令视为交互式命令：
 
 ```text
-vim workspace.json
+vim vi nvim nano emacs top htop less more man watch tmux screen
 ```
 
-点击 `i` 后编辑文件，使用 `Esc`、`:wq` 保存并退出。
-
-需要支持其他交互式程序时，覆盖判断函数：
+也可以覆盖判断：
 
 ```ts
-const terminal = initTerminal({
+initTerminal({
   el,
-  connection: { url: terminalServerUrl },
+  transport: { terminal: createTerminalTransport({ url: serverUrl }) },
   isInteractiveCommand(command) {
     return /^(?:vim|nvim|fzf)(?:\s|$)/.test(command.trim());
   },
 });
 ```
 
-使用自定义 `runCommand` 时，同时提供 `writeCommandInput` 和 `resizeTerminal`，或者实现完整的 `TerminalTransport`。
-
-## 返回对象
-
-`initTerminal` 返回：
-
-| 方法 | 说明 |
-| --- | --- |
-| `dispose()` | 销毁终端、事件监听器和 transport。 |
-| `setCurrentDirectory(path)` | 更新终端提示符目录。 |
-| `appendChatChunk(response, ids?)` | 追加 AI 流式响应。 |
-| `completeChat(requestId?)` | 完成当前 AI 会话。 |
-| `setThemeTokens(tokens)` | 增量覆盖主题 token。 |
-| `resetTheme()` | 清空主题覆盖。 |
-| `refreshTheme()` | 重新同步 CSS 变量和 xterm 主题。 |
-| `setLocale(locale, messages?)` | 切换语言并覆盖文案。 |
-| `setMessages(messages)` | 增量覆盖文案。 |
-
-### 主题 token
-
-```ts
-interface TerminalThemeTokenOverrides {
-  primary?: string;
-  secondary?: string;
-  cardBackground?: string;
-  border?: string;
-  ansi?: Partial<ITheme>;
-}
-```
-
-### 文案和语言
-
-SDK 内置 `zh-CN` 和 `en-US`。可覆盖 `agentTips`、`explainTitle`、命令卡片按钮、状态和错误文案：
-
-```ts
-terminal.setLocale("en-US", {
-  agentTips: "Enter a command or ask a question",
-});
-```
-
-SDK 只翻译固定 UI 文案，不翻译命令、终端输出、模型回复或业务接口内容。
+交互命令通过 `command:input` 发送原始键盘输入，通过 `terminal:resize` 同步 PTY 尺寸。
 
 ## Socket.IO 协议
 
-### 会话
-
-服务端发送 `terminal:session`：
+会话事件 `terminal:session` 使用统一响应体：
 
 ```json
 {
   "code": "0",
   "message": "",
-  "data": {
-    "currentDirectory": "/workspace"
-  }
+  "data": { "currentDirectory": "/workspace" }
 }
 ```
 
-失败时 `code` 非 `"0"`，`message` 为可展示错误，`data` 为空对象。
+客户端事件：
 
-### 命令执行
-
-客户端发送 `command:execute`：
-
-```json
-{
-  "command": "vim workspace.json",
-  "messageId": "command-1",
-  "interactive": true
-}
-```
-
-普通命令可以省略 `interactive`。交互命令执行期间，客户端发送 `command:input`：
-
-```json
-{
-  "messageId": "command-1",
-  "data": "i"
-}
-```
-
-取消命令发送 `command:cancel`：
-
-```json
-{
-  "messageId": "command-1"
-}
-```
-
-终端尺寸变化发送 `terminal:resize`：
-
-```json
-{
-  "cols": 120,
-  "rows": 40
-}
-```
-
-### 命令消息
+| 事件 | payload |
+| --- | --- |
+| `command:execute` | `{ command, messageId, interactive? }` |
+| `command:input` | `{ data, messageId }` |
+| `command:cancel` | `{ messageId }` |
+| `terminal:resize` | `{ cols, rows }` |
 
 服务端通过 `command:message` 返回：
 
 ```ts
-type TerminalMessageType =
-  | "TEXT_MESSAGE_START"
-  | "TEXT_MESSAGE_CONTENT"
-  | "TEXT_MESSAGE_END"
-  | "TEXT_MESSAGE_ERROR"
-  | "TEXT_MESSAGE_SUGGESTION";
-
 interface TerminalMessage {
-  type: TerminalMessageType;
+  type:
+    | "TEXT_MESSAGE_START"
+    | "TEXT_MESSAGE_CONTENT"
+    | "TEXT_MESSAGE_END"
+    | "TEXT_MESSAGE_ERROR"
+    | "TEXT_MESSAGE_SUGGESTION";
   messageId: string;
   delta: string;
   timestamp: number;
@@ -448,19 +442,29 @@ interface TerminalMessage {
 }
 ```
 
-正常顺序为：
+正常顺序为 `START`、零次或多次 `CONTENT`、`END`。错误使用 `TEXT_MESSAGE_ERROR`，错误文本放在 `delta`。
 
-```text
-TEXT_MESSAGE_START
-TEXT_MESSAGE_CONTENT  // 0 到多次
-TEXT_MESSAGE_END
-```
+AI SSE 的每个 `data:` 帧也使用 `TerminalMessage` 格式，并以 `data: [DONE]` 结束。
 
-命令错误使用 `TEXT_MESSAGE_ERROR`，错误文本放在 `delta`。AI SSE transport 复用同一消息格式；流式内容通过 `TEXT_MESSAGE_CONTENT` 传递，非流式建议使用 `TEXT_MESSAGE_SUGGESTION`。
+## 返回实例
 
-## AI 命令块
+`initTerminal` 返回的实例支持：
 
-AI 回复中的命令块会渲染为可编辑、可重新生成、可执行和可拒绝的命令卡片。推荐使用：
+| 方法 | 说明 |
+| --- | --- |
+| `dispose()` | 销毁终端、事件监听器和 transport。 |
+| `setCurrentDirectory(path)` | 更新终端提示符目录。 |
+| `appendChatChunk(response, ids?)` | 追加 AI 流式响应。 |
+| `completeChat(requestId?)` | 完成 AI 会话。 |
+| `setThemeTokens(tokens)` | 增量覆盖主题 token。 |
+| `resetTheme()` | 清除主题覆盖。 |
+| `refreshTheme()` | 重新同步主题。 |
+| `setLocale(locale, messages?)` | 切换语言并覆盖文案。 |
+| `setMessages(messages)` | 增量覆盖文案。 |
+
+主题覆盖字段为 `primary`、`secondary`、`cardBackground`、`border` 和可选的 xterm `ansi` 调色板。
+
+AI 回复中的命令块支持以下格式：
 
 ```xml
 <execute_command>
@@ -468,12 +472,4 @@ AI 回复中的命令块会渲染为可编辑、可重新生成、可执行和�
 </execute_command>
 ```
 
-也兼容：
-
-````markdown
-```execute_command
-git status --short
-```
-````
-
-每个命令块只放一条命令。用户点击执行后，SDK 才会调用命令执行 transport，不会自动执行模型返回的命令。
+用户点击执行后，SDK 才会调用命令 transport，不会自动执行模型返回的命令。

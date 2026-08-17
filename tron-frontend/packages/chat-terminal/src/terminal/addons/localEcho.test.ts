@@ -3,6 +3,7 @@ import type { IDisposable, Terminal as XTerminal } from "@xterm/xterm";
 import { describe, expect, it, vi } from "vitest";
 
 import { LocalEchoAddon } from "./localEcho";
+import type { ExplainDialogPosition } from "../types/ui";
 
 class TerminalStub {
   readonly buffer = {
@@ -15,10 +16,11 @@ class TerminalStub {
   };
   readonly element = document.createElement("div");
   readonly writes: string[] = [];
-  readonly cols: number;
+  cols: number;
   private readonly deferWrites: boolean;
   private pendingWriteCallbacks: Array<() => void> = [];
   private dataHandler?: (data: string) => void;
+  private resizeHandler?: () => void;
 
   constructor(cols = 80, cursorX = 0, deferWrites = false) {
     this.cols = cols;
@@ -30,12 +32,18 @@ class TerminalStub {
     this.dataHandler?.(data);
   }
 
+  emitResize(cols: number) {
+    this.cols = cols;
+    this.resizeHandler?.();
+  }
+
   onData(handler: (data: string) => void): IDisposable {
     this.dataHandler = handler;
     return { dispose: vi.fn() };
   }
 
-  onResize(): IDisposable {
+  onResize(handler: () => void): IDisposable {
+    this.resizeHandler = handler;
     return { dispose: vi.fn() };
   }
 
@@ -62,7 +70,7 @@ class TerminalStub {
     let remaining = data;
 
     while (remaining) {
-      const controlSequence = remaining.match(/^\u001b\[(\d*)([ABCDX])/);
+      const controlSequence = remaining.match(/^\u001b\[(\d*)([ABCDKX])/);
       if (controlSequence) {
         const amount = Number(controlSequence[1] || 1);
         const command = controlSequence[2];
@@ -282,8 +290,151 @@ describe("LocalEchoAddon input cursor tracking", () => {
     expect(terminal.buffer.active.cursorY).toBe(0);
     expect(terminal.buffer.active.cursorX).toBe(8);
   });
+
+  it("redraws the complete prompt and input after shrinking and expanding", async () => {
+    const terminal = new TerminalStub(20);
+    const inputs: string[] = [];
+    const addon = new LocalEchoAddon(
+      { enabled: true, prompt: "/workspace " },
+      (_enabled, input) => inputs.push(input),
+    );
+    addon.activate(terminal as unknown as XTerminal);
+
+    terminal.write("/workspace ");
+    addon.markPromptRendered();
+    terminal.emitData("echo");
+    await flushTasks();
+
+    terminal.emitResize(8);
+    await flushResize();
+
+    expect(terminal.writes.at(-1)).toBe("\r\x1b[2K/workspace echo");
+    expect(terminal.buffer.active.cursorY).toBe(1);
+
+    terminal.emitResize(20);
+    await flushResize();
+
+    expect(terminal.writes.at(-1)).toBe(
+      "\r\x1b[2K\x1b[1A\r\x1b[2K/workspace echo",
+    );
+    expect(terminal.buffer.active.cursorY).toBe(0);
+    expect(terminal.buffer.active.cursorX).toBe(15);
+
+    terminal.emitData("\u007f");
+    await flushTasks();
+
+    expect(inputs.at(-1)).toBe("ech");
+    expect(terminal.buffer.active.cursorX).toBe(14);
+  });
 });
+
+describe("LocalEchoAddon explanation streaming", () => {
+  it("renders received chunks before the explanation request completes", async () => {
+    let finishRequest: (() => void) | undefined;
+    const addon = new LocalEchoAddon({
+      onExplain: async (_payload, { onChunk }) => {
+        onChunk?.("first");
+        await new Promise<void>((resolve) => {
+          finishRequest = resolve;
+        });
+        onChunk?.(" second");
+        return "first second";
+      },
+    });
+    const { dialog, request } = startExplanation(addon, "printf first");
+
+    await Promise.resolve();
+
+    expect(dialog.textContent).toContain("first");
+    expect(dialog.querySelector(".ai-terminal-explain-dialog--streaming")).not.toBeNull();
+
+    finishRequest?.();
+    await request;
+
+    expect(dialog.textContent).toContain("first second");
+    expect(dialog.querySelector(".ai-terminal-explain-dialog--success")).not.toBeNull();
+  });
+
+  it("ignores chunks from an explanation superseded by refresh", async () => {
+    let firstSignal: AbortSignal | undefined;
+    let emitFirstChunk: ((delta: string) => void) | undefined;
+    let finishFirstRequest: ((content: string) => void) | undefined;
+    const addon = new LocalEchoAddon({
+      onExplain: (payload, context) => {
+        if (payload.command === "first") {
+          firstSignal = context.signal;
+          emitFirstChunk = context.onChunk;
+          return new Promise<string>((resolve) => {
+            finishFirstRequest = resolve;
+          });
+        }
+
+        context.onChunk?.("new content");
+        return Promise.resolve("new content");
+      },
+    });
+    const first = startExplanation(addon, "first");
+    const second = startExplanation(addon, "second", first.dialog);
+
+    emitFirstChunk?.("stale content");
+    finishFirstRequest?.("stale content");
+    await Promise.all([first.request, second.request]);
+
+    expect(firstSignal?.aborted).toBe(true);
+    expect(first.dialog.textContent).toContain("new content");
+    expect(first.dialog.textContent).not.toContain("stale content");
+  });
+
+  it("keeps partial streamed content when the explanation fails", async () => {
+    const addon = new LocalEchoAddon({
+      onExplain: async (_payload, { onChunk }) => {
+        onChunk?.("partial content");
+        throw new Error("model failed");
+      },
+    });
+    const { dialog, request } = startExplanation(addon, "failing command");
+
+    await request;
+
+    expect(dialog.textContent).toContain("partial content");
+    expect(dialog.textContent).toContain("model failed");
+    expect(dialog.querySelector(".ai-terminal-explain-dialog--error")).not.toBeNull();
+  });
+});
+
+function startExplanation(
+  addon: LocalEchoAddon,
+  command: string,
+  existingDialog?: HTMLElement,
+) {
+  const dialog = existingDialog ?? document.createElement("div");
+  if (!dialog.isConnected) {
+    document.body.appendChild(dialog);
+  }
+  const internals = addon as unknown as {
+    currentDialog?: HTMLElement;
+    renderExplanation: (
+      dialog: HTMLElement,
+      command: string,
+      output: string,
+      position: ExplainDialogPosition,
+    ) => Promise<void>;
+  };
+  internals.currentDialog = dialog;
+
+  return {
+    dialog,
+    request: internals.renderExplanation(dialog, command, "output", {
+      left: 0,
+      top: 0,
+    }),
+  };
+}
 
 function flushTasks() {
   return new Promise<void>((resolve) => window.setTimeout(resolve, 0));
+}
+
+function flushResize() {
+  return new Promise<void>((resolve) => window.setTimeout(resolve, 120));
 }

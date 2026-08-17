@@ -3,7 +3,7 @@ import {
   isInteractiveShellCommand,
   Terminal,
   type CommandExecutionContext,
-  type CommandExplain,
+  type CommandExplainContext,
 } from "./terminal";
 import { formatePath, isShellCommand } from "./terminal/utils/common";
 import { ITerminalInitOnlyOptions, ITerminalOptions } from "@xterm/xterm";
@@ -14,10 +14,7 @@ import {
   type ChatTerminalMessageOverrides,
 } from "./terminal/i18n";
 import {
-  createSocketIoTerminalTransport,
   type AITransport,
-  type SocketIoTerminalTransportOptions,
-  type TerminalSize,
   type TerminalTransport,
 } from "./transport";
 
@@ -34,72 +31,49 @@ export type {
 export type { TerminalThemeTokenOverrides } from "./terminal";
 export * from "./transport";
 
-export interface TerminalConnectionOptions
-  extends SocketIoTerminalTransportOptions {
-  transport?: TerminalTransport;
-  url?: string;
-}
-
-export interface TerminalAIPrompts {
+export interface TerminalPrompts {
   chat?: (content: string) => string;
   explain?: (payload: { command: string; output: string }) => string;
   generate?: (content: string) => string;
 }
 
-export interface TerminalAIOptions {
-  prompts?: TerminalAIPrompts;
-  transport: AITransport;
-}
-
 export interface ChatTerminalOptions {
-  ai?: TerminalAIOptions;
-  connection?: TerminalConnectionOptions;
   el: HTMLElement;
+  transport: {
+    ai?: AITransport;
+    terminal: TerminalTransport;
+  };
+  prompts?: TerminalPrompts;
   locale?: ChatTerminalLocale;
   messages?: ChatTerminalMessageOverrides;
-  termOptions?: ITerminalInitOnlyOptions &
+  terminalOptions?: ITerminalInitOnlyOptions &
     ITerminalOptions & {
       explainTitle?: string;
       agentTips?: string;
       agentTipsGapCells?: number;
       themeTokens?: TerminalThemeTokenOverrides;
     };
-  runCommand?: (
-    command: string,
-    onOutput: (output: string) => void,
-    context: CommandExecutionContext,
-  ) => Promise<CommandExecutionResult | void>;
-  cancelCommand?: () => void;
   isInteractiveCommand?: (command: string) => boolean;
-  resizeTerminal?: (size: TerminalSize) => Promise<void> | void;
-  writeCommandInput?: (data: string) => Promise<void> | void;
-  commandChat?: (command: string) => Promise<void>;
-  commandExplain?: CommandExplain;
-  commandGenerate?: (content: string) => Promise<string>;
   onError?: (error: Error) => void;
 }
 
 export type IOptions = ChatTerminalOptions;
 
-export interface CommandExecutionResult {
-  currentDirectory?: string;
-}
-
 const defaultOptions: Partial<ChatTerminalOptions> = {};
 
 export function initTerminal(options: ChatTerminalOptions) {
   const normalizeOptions = { ...defaultOptions, ...options };
-  const { termOptions } = normalizeOptions;
-  const terminalTransport = createTerminalTransport(
-    normalizeOptions.connection,
-  );
-  const aiTransport = normalizeOptions.ai?.transport;
+  const { terminalOptions } = normalizeOptions;
+  const terminalTransport = normalizeOptions.transport.terminal;
+  const aiTransport = normalizeOptions.transport.ai;
   const i18n = createChatTerminalI18n({
     locale: normalizeOptions.locale,
     messages: {
-      ...(termOptions?.agentTips ? { agentTips: termOptions.agentTips } : {}),
-      ...(termOptions?.explainTitle
-        ? { explainTitle: termOptions.explainTitle }
+      ...(terminalOptions?.agentTips
+        ? { agentTips: terminalOptions.agentTips }
+        : {}),
+      ...(terminalOptions?.explainTitle
+        ? { explainTitle: terminalOptions.explainTitle }
         : {}),
       ...normalizeOptions.messages,
     },
@@ -107,72 +81,61 @@ export function initTerminal(options: ChatTerminalOptions) {
   let currentDirectory = "/";
   let disposed = false;
 
-  const runCommand = normalizeOptions.runCommand
-    ? normalizeOptions.runCommand
-    : terminalTransport
-      ? (
-          command: string,
-          onOutput: (output: string) => void,
-          context: CommandExecutionContext,
-        ) => terminalTransport.execute(command, onOutput, context)
-      : undefined;
-
-  if (!runCommand) {
-    throw new Error("终端必须配置 connection 或 runCommand");
-  }
-
-  const commandChat =
-    normalizeOptions.commandChat ??
-    (aiTransport
-      ? async (command: string) => {
-          let requestId = "default";
-          try {
-            const result = await aiTransport.stream(
-              normalizeOptions.ai?.prompts?.chat?.(command) ?? command,
-              {
-                onChunk: ({ delta, requestId: chunkRequestId }) => {
-                  requestId = chunkRequestId;
-                  if (disposed) return;
-                  termInstance.modelSessionAddon?.appendMessageChunk({
-                    conversationId: "default",
-                    requestId,
-                    response: delta,
-                  });
-                },
+  const commandChat = aiTransport
+    ? async (command: string) => {
+        let requestId = "default";
+        try {
+          const result = await aiTransport.stream(
+            normalizeOptions.prompts?.chat?.(command) ?? command,
+            {
+              onChunk: ({ delta, requestId: chunkRequestId }) => {
+                requestId = chunkRequestId;
+                if (disposed) return;
+                termInstance.modelSessionAddon?.appendMessageChunk({
+                  conversationId: "default",
+                  requestId,
+                  response: delta,
+                });
               },
+            },
+          );
+          requestId = result.requestId;
+        } finally {
+          if (!disposed) {
+            await (
+              termInstance.modelSessionAddon?.complete(requestId) ??
+              Promise.resolve()
             );
-            requestId = result.requestId;
-          } finally {
-            if (!disposed) {
-              await (
-                termInstance.modelSessionAddon?.complete(requestId) ??
-                Promise.resolve()
-              );
-            }
           }
         }
-      : undefined);
-  const commandExplain =
-    normalizeOptions.commandExplain ??
-    (aiTransport
-      ? (
-          payload: { command: string; output: string },
-          { signal }: { signal: AbortSignal },
-        ) =>
-          aiTransport.request(
-            normalizeOptions.ai?.prompts?.explain?.(payload) ??
-              `Command:\n${payload.command}\n\nOutput:\n${payload.output}`,
-            { signal },
-          )
-      : undefined);
-  const commandGenerate =
-    normalizeOptions.commandGenerate ??
-    (aiTransport
-      ? (content: string) =>
-          aiTransport.request(
-            normalizeOptions.ai?.prompts?.generate?.(content) ?? content,
-          )
-      : undefined);
+      }
+      : undefined;
+  const commandExplain = aiTransport
+    ? async (
+        payload: { command: string; output: string },
+        { onChunk, signal }: CommandExplainContext,
+      ) => {
+        let content = "";
+        await aiTransport.stream(
+          normalizeOptions.prompts?.explain?.(payload) ??
+            `Command:\n${payload.command}\n\nOutput:\n${payload.output}`,
+          {
+            onChunk: ({ delta }) => {
+              content += delta;
+              onChunk?.(delta);
+            },
+            signal,
+          },
+        );
+        return content;
+      }
+      : undefined;
+  const commandGenerate = aiTransport
+    ? (content: string) =>
+        aiTransport.request(
+          normalizeOptions.prompts?.generate?.(content) ?? content,
+        )
+      : undefined;
 
   async function runCommandByIo(
     command: string,
@@ -186,7 +149,7 @@ export function initTerminal(options: ChatTerminalOptions) {
       return;
     }
     try {
-      const result = await runCommand?.(input, onOutput, context);
+      const result = await terminalTransport.execute(input, onOutput, context);
       if (result?.currentDirectory) {
         currentDirectory = result.currentDirectory;
       }
@@ -197,21 +160,16 @@ export function initTerminal(options: ChatTerminalOptions) {
 
   const termInstance: Terminal = new Terminal(normalizeOptions.el, {
     cursorBlink: true,
-    ...termOptions,
+    ...terminalOptions,
     localEcho: {
       enabled: true,
       prompt: () => {
         return formatePath(currentDirectory);
       },
       isInteractiveCommand:
-        terminalTransport || normalizeOptions.writeCommandInput
-          ? (normalizeOptions.isInteractiveCommand ?? isInteractiveShellCommand)
-          : undefined,
-      onCancelCommand:
-        normalizeOptions.cancelCommand ?? (() => terminalTransport?.cancel()),
-      onCommandInput:
-        normalizeOptions.writeCommandInput ??
-        ((data) => terminalTransport?.write(data)),
+        normalizeOptions.isInteractiveCommand ?? isInteractiveShellCommand,
+      onCancelCommand: () => terminalTransport.cancel(),
+      onCommandInput: (data) => terminalTransport.write(data),
       // 执行命令前判断，系统命令直接执行，非系统命令调用大模型
       onBeforeCommand: async (command) => {
         if (!command.trim()) {
@@ -237,7 +195,7 @@ export function initTerminal(options: ChatTerminalOptions) {
       ? {
           i18n,
           textKey: "agentTips",
-          gapCells: termOptions?.agentTipsGapCells || 1,
+          gapCells: terminalOptions?.agentTipsGapCells || 1,
         }
       : undefined,
     modelSession:
@@ -260,21 +218,15 @@ export function initTerminal(options: ChatTerminalOptions) {
           }
         : undefined,
   });
-  const resizeTerminal =
-    normalizeOptions.resizeTerminal ??
-    (terminalTransport
-      ? (size: TerminalSize) => terminalTransport.resize(size)
-      : undefined);
-  const resizeDisposable = resizeTerminal
-    ? termInstance.terminal.onResize((size) => {
-        void resizeTerminal(size);
-      })
-    : undefined;
-  const sessionDisposable = terminalTransport?.onSessionChange((session) => {
+  const resizeDisposable = termInstance.terminal.onResize((size) => {
+    terminalTransport.resize(size);
+  });
+  const sessionDisposable = terminalTransport.onSessionChange((session) => {
     setCurrentDirectory(session.currentDirectory);
   });
   termInstance.terminal.write(formatePath(currentDirectory));
-  void terminalTransport?.connect().catch((error) => {
+  termInstance.markPromptRendered();
+  void terminalTransport.connect().catch((error) => {
     const normalizedError = toError(error);
     if (normalizeOptions.onError) {
       normalizeOptions.onError(normalizedError);
@@ -286,6 +238,7 @@ export function initTerminal(options: ChatTerminalOptions) {
   function setCurrentDirectory(nextDirectory: string) {
     currentDirectory = nextDirectory;
     termInstance.terminal.write(`\r\x1b[2K${formatePath(currentDirectory)}`);
+    termInstance.markPromptRendered();
   }
 
   return {
@@ -293,7 +246,7 @@ export function initTerminal(options: ChatTerminalOptions) {
       disposed = true;
       sessionDisposable?.dispose();
       resizeDisposable?.dispose();
-      terminalTransport?.dispose();
+      terminalTransport.dispose();
       aiTransport?.dispose?.();
       termInstance.dispose();
     },
@@ -341,23 +294,6 @@ export function initTerminal(options: ChatTerminalOptions) {
       termInstance.refreshLocale();
     },
   };
-}
-
-function createTerminalTransport(connection?: TerminalConnectionOptions) {
-  if (!connection) {
-    return undefined;
-  }
-  if (connection.transport) {
-    return connection.transport;
-  }
-  if (!connection.url) {
-    throw new Error("connection 必须提供 url 或 transport");
-  }
-
-  return createSocketIoTerminalTransport(connection.url, {
-    commandTimeoutMs: connection.commandTimeoutMs,
-    socketOptions: connection.socketOptions,
-  });
 }
 
 function toError(error: unknown) {

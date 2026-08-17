@@ -7,6 +7,8 @@ import { MessageType, createMessage, resolveMessageId } from "./message.js";
 export const CHAT_COMPLETIONS_PATH = "/api/llm/v1/chat/completions";
 export const UPSTREAM_CHAT_COMPLETIONS_URL =
   "https://qa-gewu.cisdigital.cn/api/llm/v1/chat/completions";
+const UPSTREAM_AUTHORIZATION =
+  "Bearer sk-42f0b5eb8a0043509c6c48270314c90d";
 
 const MAX_REQUEST_BODY_BYTES = 1024 * 1024;
 
@@ -68,9 +70,7 @@ export class ChatController {
         body: JSON.stringify(upstreamBody),
         headers: {
           "Content-Type": request.headers["content-type"] ?? "application/json",
-          ...(request.headers.authorization
-            ? { Authorization: request.headers.authorization }
-            : {}),
+          Authorization: UPSTREAM_AUTHORIZATION,
           Accept: stream ? "text/event-stream" : "application/json",
         },
         method: "POST",

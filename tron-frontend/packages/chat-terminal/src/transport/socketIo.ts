@@ -46,10 +46,13 @@ interface PendingCommand {
   timeoutId?: number;
 }
 
-export interface SocketIoTerminalTransportOptions {
+export interface TerminalTransportOptions {
+  url: string;
   commandTimeoutMs?: number;
   socketOptions?: Partial<ManagerOptions & SocketOptions>;
 }
+
+type TerminalTransportRuntimeOptions = Omit<TerminalTransportOptions, "url">;
 
 const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
 
@@ -68,7 +71,7 @@ export class SocketIoTerminalTransport implements TerminalTransport {
   private latestSize?: TerminalSize;
   private destroyed = false;
 
-  constructor(url: string, options: SocketIoTerminalTransportOptions = {}) {
+  constructor(url: string, options: TerminalTransportRuntimeOptions = {}) {
     this.commandTimeoutMs =
       options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
     this.socket = io(url, {
@@ -333,11 +336,11 @@ export class SocketIoTerminalTransport implements TerminalTransport {
   }
 }
 
-export function createSocketIoTerminalTransport(
-  url: string,
-  options?: SocketIoTerminalTransportOptions,
-) {
-  return new SocketIoTerminalTransport(url, options);
+export function createTerminalTransport(options: TerminalTransportOptions) {
+  return new SocketIoTerminalTransport(options.url, {
+    commandTimeoutMs: options.commandTimeoutMs,
+    socketOptions: options.socketOptions,
+  });
 }
 
 function isTerminalSize(value: TerminalSize) {

@@ -10,8 +10,8 @@ import type {
 
 type MaybePromise<T> = T | Promise<T>;
 
-export interface SseAITransportOptions {
-  buildBody?: (content: string, stream: boolean) => unknown;
+export interface AITransportOptions {
+  body?: (context: { content: string; stream: boolean }) => unknown;
   fetch?: typeof globalThis.fetch;
   headers?: HeadersInit | (() => MaybePromise<HeadersInit>);
   openWhenHidden?: boolean;
@@ -23,7 +23,7 @@ export class SseAITransport implements AITransport {
   private readonly fetchImplementation: typeof globalThis.fetch;
   private disposed = false;
 
-  constructor(private readonly options: SseAITransportOptions) {
+  constructor(private readonly options: AITransportOptions) {
     this.fetchImplementation =
       options.fetch ?? globalThis.fetch.bind(globalThis);
   }
@@ -52,9 +52,9 @@ export class SseAITransport implements AITransport {
         };
 
         void fetchEventSource(this.options.url, {
-          body: JSON.stringify(this.buildBody(content, true)),
+          body: JSON.stringify(this.createBody(content, true)),
           fetch: this.fetchImplementation,
-          headers,
+          headers: Object.fromEntries([...headers]),
           method: "POST",
           onclose: resolveOnce,
           onerror: (error) => {
@@ -103,7 +103,7 @@ export class SseAITransport implements AITransport {
 
     try {
       const response = await this.fetchImplementation(this.options.url, {
-        body: JSON.stringify(this.buildBody(content, false)),
+        body: JSON.stringify(this.createBody(content, false)),
         headers: await this.createHeaders(false),
         method: "POST",
         signal: request.controller.signal,
@@ -132,9 +132,10 @@ export class SseAITransport implements AITransport {
     this.activeRequests.clear();
   }
 
-  private buildBody(content: string, stream: boolean) {
+  private createBody(content: string, stream: boolean) {
     return (
-      this.options.buildBody?.(content, stream) ?? {
+      this.options.body?.({ content, stream }) ??
+      {
         messages: [{ content, role: "user" }],
         stream,
       }
@@ -185,7 +186,7 @@ export class SseAITransport implements AITransport {
   }
 }
 
-export function createSseAITransport(options: SseAITransportOptions) {
+export function createAITransport(options: AITransportOptions) {
   return new SseAITransport(options);
 }
 

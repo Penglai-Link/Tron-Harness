@@ -1,5 +1,10 @@
 .ai-terminal-explain-button-host {
-  display: contents;
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  pointer-events: auto;
 }
 
 .ai-terminal-explain-button {
@@ -36,7 +41,6 @@
   left: var(--ai-terminal-explain-dialog-left);
   top: var(--ai-terminal-explain-dialog-top);
   width: 400px;
-  max-height: 180px;
   display: flex;
   flex-direction: column;
   box-sizing: border-box;
@@ -99,7 +103,7 @@
     overflow-y: auto;
     height: 50%;
     flex: 1 0 auto;
-    max-height: 100px;
+    max-height: 200px;
     padding: 0 10px;
   }
 

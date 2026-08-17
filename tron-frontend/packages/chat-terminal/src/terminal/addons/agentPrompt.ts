@@ -1,24 +1,27 @@
 import {
   Terminal as XTerminal,
+  type IDecoration,
   type IDisposable,
+  type IMarker,
   type ITerminalAddon,
 } from "@xterm/xterm";
 import type { AgentPromptAddonOptions } from "../types/agentPrompt";
-import { getTerminalCellMetrics } from "../utils";
+
+const PROMPT_RESIZE_DEBOUNCE_MS = 100;
 
 export class AgentPromptAddon implements ITerminalAddon {
   private disposables: IDisposable[] = [];
-  private promptElement?: HTMLDivElement;
+  private decoration?: IDecoration;
+  private marker?: IMarker;
   private terminal?: XTerminal;
-  private viewportElement?: HTMLElement;
   private positionAnimationFrame?: number;
+  private resizeDebounceTimer?: number;
+  private resizeSuppressed = false;
   private inputEnabled = true;
   private hasInput = false;
   private isInputStateManaged = false;
   private standaloneInput = "";
-  private readonly handleViewportScroll = () => {
-    this.schedulePositionUpdate();
-  };
+  private visible = true;
 
   constructor(private readonly options: AgentPromptAddonOptions) {}
 
@@ -28,12 +31,9 @@ export class AgentPromptAddon implements ITerminalAddon {
     }
 
     this.terminal = terminal;
-    this.promptElement = this.createPromptElement(terminal);
-    terminal.element.appendChild(this.promptElement);
-
     this.bindTracking(terminal);
     this.syncVisibility();
-    this.updatePosition();
+    this.updateDecoration();
   }
 
   dispose() {
@@ -42,36 +42,27 @@ export class AgentPromptAddon implements ITerminalAddon {
     }
 
     this.disposables = [];
-    this.viewportElement?.removeEventListener(
-      "scroll",
-      this.handleViewportScroll,
-    );
-    this.viewportElement = undefined;
     if (this.positionAnimationFrame !== undefined) {
       window.cancelAnimationFrame(this.positionAnimationFrame);
       this.positionAnimationFrame = undefined;
     }
-    this.promptElement?.remove();
-    this.promptElement = undefined;
+    if (this.resizeDebounceTimer !== undefined) {
+      window.clearTimeout(this.resizeDebounceTimer);
+      this.resizeDebounceTimer = undefined;
+    }
+    this.resizeSuppressed = false;
+    this.disposeDecoration();
     this.terminal?.element?.classList.remove("ai-terminal-input-disabled");
     this.terminal = undefined;
   }
 
   setVisible(visible: boolean) {
-    if (!this.promptElement) {
-      return;
-    }
-
-    this.promptElement.style.display = visible ? "block" : "none";
+    this.visible = visible;
+    this.schedulePositionUpdate();
   }
 
   refreshLocale() {
-    if (!this.promptElement) {
-      return;
-    }
-
-    this.promptElement.textContent = this.getPromptText();
-    this.schedulePositionUpdate();
+    this.mountPrompt(this.decoration?.element);
   }
 
   setInputState(
@@ -87,23 +78,6 @@ export class AgentPromptAddon implements ITerminalAddon {
       options.hideCursor ?? !enabled,
     );
     this.syncVisibility();
-  }
-
-  private createPromptElement(terminal: XTerminal) {
-    const promptElement = document.createElement("div");
-
-    promptElement.textContent = this.getPromptText();
-    promptElement.className = "ai-terminal-agent-prompt";
-    promptElement.style.setProperty(
-      "--ai-terminal-agent-prompt-color",
-      this.options.color ?? "rgba(255, 255, 255, 0.48)",
-    );
-    promptElement.style.setProperty(
-      "--ai-terminal-agent-prompt-font-size",
-      `${terminal.options.fontSize ?? 14}px`,
-    );
-
-    return promptElement;
   }
 
   private getPromptText() {
@@ -123,25 +97,12 @@ export class AgentPromptAddon implements ITerminalAddon {
         this.schedulePositionUpdate();
       }),
       terminal.onResize(() => {
-        this.schedulePositionUpdate();
-      }),
-      terminal.onScroll(() => {
-        this.schedulePositionUpdate();
+        this.suppressDuringResize();
       }),
       terminal.onData((data) => {
         this.handleStandaloneInput(data);
       }),
     );
-
-    const viewport =
-      terminal.element?.querySelector<HTMLElement>(".xterm-viewport");
-
-    if (viewport) {
-      viewport.addEventListener("scroll", this.handleViewportScroll, {
-        passive: true,
-      });
-      this.viewportElement = viewport;
-    }
   }
 
   private handleStandaloneInput(data: string) {
@@ -175,27 +136,89 @@ export class AgentPromptAddon implements ITerminalAddon {
 
     this.positionAnimationFrame = window.requestAnimationFrame(() => {
       this.positionAnimationFrame = undefined;
-      this.updatePosition();
+      this.updateDecoration();
     });
   }
 
-  private updatePosition() {
-    if (!this.promptElement || !this.terminal) {
+  private updateDecoration() {
+    if (!this.terminal || !this.visible || this.resizeSuppressed) {
+      this.disposeDecoration();
       return;
     }
 
-    const cell = getTerminalCellMetrics(this.terminal);
     const buffer = this.terminal.buffer.active;
     const gapCells = this.options.gapCells ?? 1;
-    const viewportRow = buffer.baseY + buffer.cursorY - buffer.viewportY;
+    const absoluteColumn = buffer.cursorX + gapCells;
+    const rowOffset = Math.floor(absoluteColumn / this.terminal.cols);
+    const column = absoluteColumn % this.terminal.cols;
+    this.disposeDecoration();
+    const marker = this.terminal.registerMarker(rowOffset);
+    const decoration = this.terminal.registerDecoration({
+      marker,
+      anchor: "left",
+      x: column,
+      width: Math.max(1, this.terminal.cols - column),
+      height: 1,
+      layer: "top",
+    });
 
-    this.promptElement.style.left = `${
-      (buffer.cursorX + gapCells) * cell.width
-    }px`;
-    this.promptElement.style.top = `${viewportRow * cell.height}px`;
-    this.promptElement.style.setProperty(
-      "--ai-terminal-agent-prompt-line-height",
-      `${cell.height}px`,
+    if (!decoration) {
+      marker.dispose();
+      return;
+    }
+
+    this.marker = marker;
+    this.decoration = decoration;
+    decoration.onRender((element) => {
+      if (this.decoration === decoration) {
+        this.mountPrompt(element);
+      }
+    });
+    if (decoration.element) {
+      this.mountPrompt(decoration.element);
+    }
+  }
+
+  private mountPrompt(element?: HTMLElement) {
+    if (!element || !this.terminal) {
+      return;
+    }
+
+    element.classList.add("ai-terminal-agent-prompt");
+    element.textContent = this.getPromptText();
+    element.style.overflow = "visible";
+    element.style.setProperty(
+      "--ai-terminal-agent-prompt-color",
+      this.options.color ?? "rgba(255, 255, 255, 0.48)",
     );
+    element.style.setProperty(
+      "--ai-terminal-agent-prompt-font-size",
+      `${this.terminal.options.fontSize ?? 14}px`,
+    );
+  }
+
+  private disposeDecoration() {
+    const decoration = this.decoration;
+    const marker = this.marker;
+
+    this.decoration = undefined;
+    this.marker = undefined;
+    decoration?.dispose();
+    marker?.dispose();
+  }
+
+  private suppressDuringResize() {
+    this.resizeSuppressed = true;
+    this.disposeDecoration();
+
+    if (this.resizeDebounceTimer !== undefined) {
+      window.clearTimeout(this.resizeDebounceTimer);
+    }
+
+    this.resizeDebounceTimer = window.setTimeout(() => {
+      this.resizeDebounceTimer = undefined;
+      this.resizeSuppressed = false;
+      this.schedulePositionUpdate();
+    }, PROMPT_RESIZE_DEBOUNCE_MS);
   }
 }

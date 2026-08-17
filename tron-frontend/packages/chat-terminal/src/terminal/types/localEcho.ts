@@ -7,6 +7,7 @@ export interface CommandExplainPayload {
 }
 
 export interface CommandExplainContext {
+  onChunk?: (delta: string) => void;
   signal: AbortSignal;
 }
 

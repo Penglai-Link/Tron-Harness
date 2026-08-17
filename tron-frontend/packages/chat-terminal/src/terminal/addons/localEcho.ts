@@ -1,5 +1,6 @@
 import {
   Terminal as XTerminal,
+  type IDecoration,
   type IDisposable,
   type ITerminalAddon,
 } from "@xterm/xterm";
@@ -33,15 +34,6 @@ interface ExplainButtonViewportAnchor {
   size: number;
 }
 
-interface ExplainButtonInstance {
-  anchor: ExplainButtonAnchor;
-  element: HTMLElement;
-  isVisible: boolean;
-  left: number;
-  size: number;
-  top: number;
-}
-
 interface ActiveCommand {
   cancelled: boolean;
   interactive: boolean;
@@ -70,19 +62,15 @@ const EXPLAIN_DIALOG_MAX_HEIGHT = 180;
 const EXPLAIN_DIALOG_MARGIN = 12;
 const EXPLAIN_DIALOG_ANCHOR_OFFSET_Y = 8;
 const EXPLAIN_RENDER_INTERVAL_MS = 50;
+const EDITABLE_LINE_RESIZE_DEBOUNCE_MS = 100;
 
 export class LocalEchoAddon implements ITerminalAddon {
   private disposable?: IDisposable;
-  private scrollDisposable?: IDisposable;
   private resizeDisposable?: IDisposable;
-  private viewportElement?: HTMLElement;
-  private scrollAnimationFrame?: number;
+  private resizeRedrawTimer?: number;
   private explanationRequestVersion = 0;
   private explanationAbortController?: AbortController;
   private explanationRenderTimer?: number;
-  private readonly handleViewportScroll = () => {
-    this.scheduleExplainButtonPositionUpdate();
-  };
   private currentInput = "";
   private inputCellSpans: InputCellSpan[] = [];
   private inputQueue = Promise.resolve();
@@ -90,8 +78,10 @@ export class LocalEchoAddon implements ITerminalAddon {
   private isExecuting = false;
   private activeCommand?: ActiveCommand;
   private terminal?: XTerminal;
+  private renderedColumns = 80;
+  private hasRenderedEditableLine = false;
   private explainElements: HTMLElement[] = [];
-  private explainButtons: ExplainButtonInstance[] = [];
+  private explainDecorations: IDecoration[] = [];
   private currentDialog?: HTMLElement;
   private activeExplainDialog?: ActiveExplainDialog;
   private readonly i18n: ChatTerminalI18n;
@@ -123,6 +113,8 @@ export class LocalEchoAddon implements ITerminalAddon {
     }
 
     this.terminal = terminal;
+    this.renderedColumns = terminal.cols;
+    this.hasRenderedEditableLine = false;
     this.disposable = terminal.onData((data) => {
       if (this.isExecuting) {
         if (this.activeCommand?.interactive) {
@@ -135,51 +127,45 @@ export class LocalEchoAddon implements ITerminalAddon {
 
       this.enqueueInput(() => this.echo(terminal, data));
     });
-    this.scrollDisposable = terminal.onScroll(() => {
-      this.scheduleExplainButtonPositionUpdate();
-    });
     this.resizeDisposable = terminal.onResize(() => {
-      this.scheduleExplainButtonPositionUpdate();
+      this.scheduleEditableLineRedraw(terminal);
     });
-    this.viewportElement =
-      terminal.element?.querySelector<HTMLElement>(".xterm-viewport") ??
-      undefined;
-    this.viewportElement?.addEventListener(
-      "scroll",
-      this.handleViewportScroll,
-      { passive: true },
-    );
     this.notifyInputState();
   }
 
   dispose() {
     this.disposable?.dispose();
     this.disposable = undefined;
-    this.scrollDisposable?.dispose();
-    this.scrollDisposable = undefined;
     this.resizeDisposable?.dispose();
     this.resizeDisposable = undefined;
-    this.viewportElement?.removeEventListener(
-      "scroll",
-      this.handleViewportScroll,
-    );
-    this.viewportElement = undefined;
-    if (this.scrollAnimationFrame !== undefined) {
-      window.cancelAnimationFrame(this.scrollAnimationFrame);
-      this.scrollAnimationFrame = undefined;
+    if (this.resizeRedrawTimer !== undefined) {
+      window.clearTimeout(this.resizeRedrawTimer);
+      this.resizeRedrawTimer = undefined;
     }
     this.cancelExplanationRequest();
     this.terminal = undefined;
+    this.hasRenderedEditableLine = false;
     this.inputCellSpans = [];
     this.inputQueue = Promise.resolve();
     this.commandInputQueue = Promise.resolve();
     this.explainElements.forEach((element) => element.remove());
     this.explainElements = [];
-    this.explainButtons = [];
+    this.explainDecorations.forEach((decoration) => decoration.dispose());
+    this.explainDecorations = [];
     this.explanationRequestVersion += 1;
     document.removeEventListener("pointerdown", this.handleDocumentPointerDown);
     this.currentDialog = undefined;
     this.activeExplainDialog = undefined;
+  }
+
+  markPromptRendered() {
+    if (!this.terminal) {
+      return;
+    }
+
+    this.hasRenderedEditableLine = true;
+    this.renderedColumns = this.terminal.cols;
+    this.inputCellSpans = [];
   }
 
   async executeCommand(command: string) {
@@ -256,16 +242,13 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     const graphemes = segmentGraphemes(data);
     const start = getTerminalCursorPosition(terminal);
-    let cursor = start;
-    for (const grapheme of graphemes) {
-      const end = advanceTerminalCursor(cursor, grapheme, terminal.cols);
-
-      this.inputCellSpans.push({ start: cursor, end });
-      this.currentInput += grapheme;
-      cursor = end;
-    }
+    this.inputCellSpans.push(
+      ...createInputCellSpans(start, graphemes, terminal.cols),
+    );
+    this.currentInput += graphemes.join("");
     this.notifyInputState();
     await writeTerminalAsync(terminal, data);
+    this.renderedColumns = terminal.cols;
   }
 
   private async submitCommand(terminal: XTerminal) {
@@ -421,6 +404,57 @@ export class LocalEchoAddon implements ITerminalAddon {
       this.terminal,
       `${prompt}${showCursor ? "\x1b[?25h" : ""}`,
     );
+    this.hasRenderedEditableLine = true;
+    this.renderedColumns = this.terminal.cols;
+  }
+
+  private async redrawEditableLine(terminal: XTerminal) {
+    if (
+      this.isExecuting ||
+      !this.hasRenderedEditableLine ||
+      this.terminal !== terminal
+    ) {
+      return;
+    }
+
+    const prompt = this.getPrompt();
+    const rowsToClear = getRenderedRowCount(
+      `${prompt}${this.currentInput}`,
+      this.renderedColumns,
+    );
+    const current = getTerminalCursorPosition(terminal);
+    const inputStart = advanceTextCursor(
+      {
+        column: 0,
+        row: current.row - rowsToClear + 1,
+      },
+      prompt,
+      terminal.cols,
+    );
+    this.inputCellSpans = createInputCellSpans(
+      inputStart,
+      segmentGraphemes(this.currentInput),
+      terminal.cols,
+    );
+
+    await writeTerminalAsync(
+      terminal,
+      `${eraseTerminalRows(rowsToClear)}${prompt}${this.currentInput}`,
+    );
+    this.renderedColumns = terminal.cols;
+  }
+
+  private scheduleEditableLineRedraw(terminal: XTerminal) {
+    if (this.resizeRedrawTimer !== undefined) {
+      window.clearTimeout(this.resizeRedrawTimer);
+    }
+
+    this.resizeRedrawTimer = window.setTimeout(() => {
+      this.resizeRedrawTimer = undefined;
+      if (!this.isExecuting) {
+        this.enqueueInput(() => this.redrawEditableLine(terminal));
+      }
+    }, EDITABLE_LINE_RESIZE_DEBOUNCE_MS);
   }
 
   private getPrompt() {
@@ -441,35 +475,60 @@ export class LocalEchoAddon implements ITerminalAddon {
     }
 
     const anchor = this.getExplainButtonAnchor(firstOutputRow);
-    const viewportAnchor = this.getExplainButtonViewportAnchor(anchor);
-    const isVisible = this.isExplainButtonVisible(anchor);
+    const terminal = this.terminal;
+    const currentRow =
+      terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
+    const marker = terminal.registerMarker(anchor.row - currentRow);
+    const decoration = terminal.registerDecoration({
+      marker,
+      anchor: "left",
+      x: anchor.column,
+      width: 1,
+      height: 1,
+      layer: "top",
+    });
 
-    let buttonInstance: ExplainButtonInstance;
+    if (!decoration) {
+      marker.dispose();
+      return;
+    }
+
     const host = createExplainButton({
-      ...viewportAnchor,
+      left: 0,
+      top: 1,
+      size: Math.max(14, getTerminalCellMetrics(terminal).height - 2),
       onClick: () => {
         void this.openExplainDialog(
           command,
           output,
-          this.getExplainButtonViewportAnchor(buttonInstance.anchor),
+          this.getExplainButtonViewportAnchor({
+            column: anchor.column,
+            row: decoration.marker.line,
+          }),
         );
       },
     });
-    const button =
-      host.querySelector<HTMLElement>(".ai-terminal-explain-button") ?? host;
 
-    this.terminal.element.appendChild(host);
-    button.hidden = !isVisible;
-    this.explainElements.push(host);
-    buttonInstance = {
-      anchor,
-      element: button,
-      isVisible,
-      left: viewportAnchor.left,
-      size: viewportAnchor.size,
-      top: viewportAnchor.top,
+    const mountExplainButton = (element: HTMLElement) => {
+      element.style.pointerEvents = "auto";
+      element.style.overflow = "visible";
+      if (host.parentElement !== element) {
+        element.appendChild(host);
+      }
+
+      host
+        .querySelector<HTMLElement>(".ai-terminal-explain-button")
+        ?.style.setProperty(
+          "--ai-terminal-explain-button-size",
+          `${Math.max(14, getTerminalCellMetrics(terminal).height - 2)}px`,
+        );
     };
-    this.explainButtons.push(buttonInstance);
+    decoration.onRender(mountExplainButton);
+    if (decoration.element) {
+      mountExplainButton(decoration.element);
+    }
+    decoration.onDispose(() => host.remove());
+    this.explainDecorations.push(decoration);
   }
 
   private getExplainButtonAnchor(firstOutputRow: number): ExplainButtonAnchor {
@@ -506,57 +565,6 @@ export class LocalEchoAddon implements ITerminalAddon {
     return { column: 1, row: cursorRow };
   }
 
-  private scheduleExplainButtonPositionUpdate() {
-    if (this.scrollAnimationFrame !== undefined) {
-      return;
-    }
-
-    this.scrollAnimationFrame = window.requestAnimationFrame(() => {
-      this.scrollAnimationFrame = undefined;
-      this.updateExplainButtonPositions();
-    });
-  }
-
-  private updateExplainButtonPositions() {
-    if (!this.terminal) {
-      return;
-    }
-
-    this.explainButtons.forEach((button) => {
-      const viewportAnchor = this.getExplainButtonViewportAnchor(button.anchor);
-      const isVisible = this.isExplainButtonVisible(button.anchor);
-
-      if (button.isVisible !== isVisible) {
-        button.element.hidden = !isVisible;
-        button.isVisible = isVisible;
-      }
-
-      if (isVisible && button.left !== viewportAnchor.left) {
-        button.element.style.setProperty(
-          "--ai-terminal-explain-button-left",
-          `${viewportAnchor.left}px`,
-        );
-        button.left = viewportAnchor.left;
-      }
-
-      if (isVisible && button.top !== viewportAnchor.top) {
-        button.element.style.setProperty(
-          "--ai-terminal-explain-button-top",
-          `${viewportAnchor.top}px`,
-        );
-        button.top = viewportAnchor.top;
-      }
-
-      if (isVisible && button.size !== viewportAnchor.size) {
-        button.element.style.setProperty(
-          "--ai-terminal-explain-button-size",
-          `${viewportAnchor.size}px`,
-        );
-        button.size = viewportAnchor.size;
-      }
-    });
-  }
-
   private getExplainButtonViewportAnchor(
     anchor: ExplainButtonAnchor,
   ): ExplainButtonViewportAnchor {
@@ -579,15 +587,6 @@ export class LocalEchoAddon implements ITerminalAddon {
       top,
       size: Math.max(14, cell.height - 2),
     };
-  }
-
-  private isExplainButtonVisible(anchor: ExplainButtonAnchor) {
-    if (!this.terminal) {
-      return false;
-    }
-
-    const viewportRow = anchor.row - this.terminal.buffer.active.viewportY;
-    return viewportRow >= 0 && viewportRow < this.terminal.rows;
   }
 
   private async openExplainDialog(
@@ -712,10 +711,36 @@ export class LocalEchoAddon implements ITerminalAddon {
     };
 
     try {
-      content = await this.options.onExplain(
+      const finalContent = await this.options.onExplain(
         { command, output },
-        { signal: abortController.signal },
+        {
+          onChunk: (delta) => {
+            if (
+              !delta ||
+              abortController.signal.aborted ||
+              !this.isCurrentExplanation(dialog, requestVersion)
+            ) {
+              return;
+            }
+
+            content += delta;
+            const renderDelay = Math.max(
+              0,
+              EXPLAIN_RENDER_INTERVAL_MS - (Date.now() - lastRenderAt),
+            );
+            if (renderDelay === 0) {
+              renderStreamingContent();
+            } else if (this.explanationRenderTimer === undefined) {
+              this.explanationRenderTimer = window.setTimeout(
+                renderStreamingContent,
+                renderDelay,
+              );
+            }
+          },
+          signal: abortController.signal,
+        },
       );
+      content = finalContent || content;
 
       this.clearExplanationRenderTimer();
       if (!this.isCurrentExplanation(dialog, requestVersion)) {
@@ -975,6 +1000,55 @@ function advanceTerminalCursor(
     column: column + width,
     row,
   };
+}
+
+function createInputCellSpans(
+  start: TerminalCursorPosition,
+  graphemes: string[],
+  columns: number,
+) {
+  const spans: InputCellSpan[] = [];
+  let cursor = start;
+
+  for (const grapheme of graphemes) {
+    const end = advanceTerminalCursor(cursor, grapheme, columns);
+    spans.push({ start: cursor, end });
+    cursor = end;
+  }
+
+  return spans;
+}
+
+function getRenderedRowCount(text: string, columns: number) {
+  return advanceTextCursor(
+    { column: 0, row: 0 },
+    text,
+    columns,
+  ).row + 1;
+}
+
+function advanceTextCursor(
+  start: TerminalCursorPosition,
+  text: string,
+  columns: number,
+) {
+  let cursor = start;
+
+  for (const grapheme of segmentGraphemes(text)) {
+    cursor = advanceTerminalCursor(cursor, grapheme, columns);
+  }
+
+  return cursor;
+}
+
+function eraseTerminalRows(rowCount: number) {
+  let sequence = "\r\x1b[2K";
+
+  for (let row = 1; row < rowCount; row += 1) {
+    sequence += "\x1b[1A\r\x1b[2K";
+  }
+
+  return sequence;
 }
 
 function eraseTerminalSpan(terminal: XTerminal, span: InputCellSpan) {

@@ -1,4 +1,4 @@
-import { createSseAITransport, initTerminal } from '@tron/chat-terminal';
+import { createAITransport, createTerminalTransport, initTerminal } from '@tron/chat-terminal';
 import { useEffect, useRef } from 'react'
 import { explainResultMessage, generateAiChatMessage, generateCommandMessage } from './prompt';
 import "@xterm/xterm/css/xterm.css";
@@ -22,26 +22,25 @@ const Terminal = () => {
             return;
         }
 
-        const aiTransport = createSseAITransport({
-            url: `${terminalServerUrl}/api/llm/v1/chat/completions`,
-            headers: {
-                Authorization: "Bearer sk-42f0b5eb8a0043509c6c48270314c90d",
-            },
+        const terminalTransport = createTerminalTransport({
+            url: terminalServerUrl,
         });
+        const aiTransport = createAITransport({
+            url: `${terminalServerUrl}/api/llm/v1/chat/completions`,
+        });
+
         const terminalInstance = initTerminal({
             el: container,
-            connection: {
-                url: terminalServerUrl,
+            transport: {
+                terminal: terminalTransport,
+                ai: aiTransport,
             },
-            ai: {
-                transport: aiTransport,
-                prompts: {
-                    chat: generateAiChatMessage,
-                    explain: ({ command, output }) => explainResultMessage(command, output),
-                    generate: generateCommandMessage,
-                },
+            prompts: {
+                chat: generateAiChatMessage,
+                explain: ({ command, output }) => explainResultMessage(command, output),
+                generate: generateCommandMessage,
             },
-            termOptions: {
+            terminalOptions: {
                 themeTokens: {
                     primary: "var(--color-on-surface, black)",
                     secondary: "var(--color-header-backdrop, white)",

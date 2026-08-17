@@ -9,7 +9,7 @@ vi.mock("@microsoft/fetch-event-source", () => ({
   fetchEventSource: sseHarness.fetchEventSource,
 }));
 
-import { SseAITransport } from "./sse";
+import { SseAITransport, createAITransport } from "./sse";
 
 describe("SseAITransport", () => {
   beforeEach(() => {
@@ -50,9 +50,33 @@ describe("SseAITransport", () => {
       messages: [{ content: "question", role: "user" }],
       stream: true,
     });
-    expect((options.headers as Headers).get("Accept")).toBe(
+    expect(new Headers(options.headers as HeadersInit).get("Accept")).toBe(
       "text/event-stream",
     );
+  });
+
+  it("uses body to create the request payload", async () => {
+    sseHarness.fetchEventSource.mockImplementation(
+      async (_url: string, options: Record<string, unknown>) => {
+        const onmessage = options.onmessage as (event: { data: string }) => void;
+        onmessage({ data: JSON.stringify(message("TEXT_MESSAGE_END", "")) });
+      },
+    );
+    const transport = createAITransport({
+      url: "http://terminal.test/chat",
+      body: ({ content, stream }) => ({
+        input: content,
+        streaming: stream,
+      }),
+    });
+
+    await transport.stream("question", { onChunk: vi.fn() });
+
+    const [, options] = sseHarness.fetchEventSource.mock.calls[0];
+    expect(JSON.parse(options.body as string)).toEqual({
+      input: "question",
+      streaming: true,
+    });
   });
 
   it("parses non-streaming gateway responses", async () => {

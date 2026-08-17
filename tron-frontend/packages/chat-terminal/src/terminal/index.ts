@@ -101,7 +101,11 @@ export class Terminal {
       ...terminalOptions
     } = params;
 
-    this.terminal = new XTerminal({ ...terminalOptions, theme: initialTheme });
+    this.terminal = new XTerminal({
+      ...terminalOptions,
+      allowProposedApi: true,
+      theme: initialTheme,
+    });
     this.terminalThemeTokens = {
       ...themeTokens,
       ansi: {
@@ -119,6 +123,10 @@ export class Terminal {
     this.resizeObserver = new ResizeObserver(() => {
       this.scheduleFit();
     });
+    // The terminal's parent is the element FitAddon measures. Observe both
+    // layout boundaries so flex/sidebar changes cannot leave xterm at stale
+    // columns while the inner viewport keeps its percentage size.
+    this.resizeObserver.observe(container);
     this.resizeObserver.observe(this.terminalContainer);
     this.refreshTheme();
     this.scheduleThemeRefresh();
@@ -172,6 +180,10 @@ export class Terminal {
     }
 
     return this.localEchoAddon.executeCommand(command);
+  }
+
+  markPromptRendered() {
+    this.localEchoAddon?.markPromptRendered();
   }
 
   setThemeTokens(tokens: TerminalThemeTokenOverrides) {
