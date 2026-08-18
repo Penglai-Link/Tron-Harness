@@ -1,6 +1,12 @@
 mod authorization;
+mod connection_attributes;
+mod connection_schema;
+mod connection_secret_schema;
+mod connection_seeds;
+mod connections;
 mod definitions;
 mod http;
+mod legacy_connection_definition;
 mod projection;
 mod resources;
 mod seeds;
@@ -22,7 +28,7 @@ use crate::{
     shared::event_bus::EventBusHandle,
 };
 
-use super::{ObjectStorage, ResourceRepository};
+use super::{ObjectStorage, ResourceConnectionVerifier, ResourceRepository};
 
 pub use storage::StorageRouter;
 
@@ -36,6 +42,7 @@ pub struct ResourceService {
     config: ResourceConfig,
     storage: Arc<StorageRouter>,
     event_bus: EventBusHandle,
+    connection_verifier: Arc<dyn ResourceConnectionVerifier>,
 }
 
 impl ResourceService {
@@ -47,6 +54,7 @@ impl ResourceService {
         variables: VariableService,
         config: ResourceConfig,
         storage_profiles: std::collections::BTreeMap<String, Arc<dyn ObjectStorage>>,
+        connection_verifier: Arc<dyn ResourceConnectionVerifier>,
     ) -> Result<Self, ResourceError> {
         let storage = StorageRouter::new(&config.storage, storage_profiles)?;
         Ok(Self {
@@ -58,6 +66,7 @@ impl ResourceService {
             config,
             storage: Arc::new(storage),
             event_bus: EventBusHandle::disabled(),
+            connection_verifier,
         })
     }
 
@@ -70,6 +79,7 @@ impl ResourceService {
         config: ResourceConfig,
         storage_profiles: std::collections::BTreeMap<String, Arc<dyn ObjectStorage>>,
         event_bus: EventBusHandle,
+        connection_verifier: Arc<dyn ResourceConnectionVerifier>,
     ) -> Result<Self, ResourceError> {
         let mut service = Self::new(
             repository,
@@ -79,9 +89,18 @@ impl ResourceService {
             variables,
             config,
             storage_profiles,
+            connection_verifier,
         )?;
         service.event_bus = event_bus;
         Ok(service)
+    }
+
+    pub fn with_connection_verifier(
+        mut self,
+        connection_verifier: Arc<dyn ResourceConnectionVerifier>,
+    ) -> Self {
+        self.connection_verifier = connection_verifier;
+        self
     }
 
     pub fn storage_roots(&self) -> Vec<PathBuf> {

@@ -16,7 +16,10 @@ use crate::{
     },
 };
 
-use super::migrations::RESOURCE_MANAGEMENT_MIGRATION;
+use super::{
+    migrations::RESOURCE_MANAGEMENT_MIGRATION,
+    resource_connection_repository::insert_active_resource_bundle,
+};
 
 pub struct SqliteResourceRepository {
     connection: Connection,
@@ -496,6 +499,13 @@ impl ResourceRepository for SqliteResourceRepository {
         tx.commit().map_err(storage_error)
     }
 
+    fn insert_active_resource_bundle(
+        &mut self,
+        resources: &[Resource],
+    ) -> Result<(), ResourceError> {
+        insert_active_resource_bundle(&mut self.connection, resources)
+    }
+
     fn update_resource_draft(
         &mut self,
         resource: &Resource,
@@ -763,7 +773,7 @@ impl ResourceRepository for SqliteResourceRepository {
     }
 }
 
-fn ensure_resource_definition_code(
+pub(super) fn ensure_resource_definition_code(
     tx: &Transaction<'_>,
     resource: &Resource,
 ) -> Result<(), ResourceError> {
@@ -790,7 +800,7 @@ fn ensure_resource_definition_code(
     Ok(())
 }
 
-fn ensure_resource_definition_exists(
+pub(super) fn ensure_resource_definition_exists(
     tx: &Transaction<'_>,
     resource: &Resource,
 ) -> Result<(), ResourceError> {
@@ -853,7 +863,10 @@ fn insert_definition(
     Ok(())
 }
 
-fn insert_resource(tx: &Transaction<'_>, resource: &Resource) -> Result<(), ResourceError> {
+pub(super) fn insert_resource(
+    tx: &Transaction<'_>,
+    resource: &Resource,
+) -> Result<(), ResourceError> {
     tx.execute(
         "INSERT INTO resources (
             scope_kind, scope_code, resource_code, resource_version,
@@ -993,7 +1006,7 @@ fn ensure_definition_remains_active(
     Ok(())
 }
 
-fn ensure_definition_remains_active_and_enabled(
+pub(super) fn ensure_definition_remains_active_and_enabled(
     tx: &Transaction<'_>,
     expected_key: &ResourceDefinitionKey,
 ) -> Result<(), ResourceError> {
@@ -1078,7 +1091,7 @@ fn resource_lifecycle_optional(
     .transpose()
 }
 
-fn active_resource_version(
+pub(super) fn active_resource_version(
     tx: &Transaction<'_>,
     key: &ResourceKey,
 ) -> Result<Option<String>, ResourceError> {
@@ -1104,7 +1117,10 @@ fn ensure_resource_remains_active(
     Ok(())
 }
 
-fn resource_draft_exists(tx: &Transaction<'_>, key: &ResourceKey) -> Result<bool, ResourceError> {
+pub(super) fn resource_draft_exists(
+    tx: &Transaction<'_>,
+    key: &ResourceKey,
+) -> Result<bool, ResourceError> {
     let count: i64 = tx
         .query_row(
             "SELECT count(*) FROM resources
@@ -1299,7 +1315,7 @@ fn ensure_database_parent(database_url: &str) -> Result<(), ResourceError> {
     Ok(())
 }
 
-fn storage_error(error: SqliteError) -> ResourceError {
+pub(super) fn storage_error(error: SqliteError) -> ResourceError {
     match error {
         SqliteError::SqliteFailure(code, _)
             if code.code == rusqlite::ErrorCode::ConstraintViolation =>

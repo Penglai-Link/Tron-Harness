@@ -929,6 +929,9 @@ impl ResourceService {
                     .definition_code
                     .as_deref()
                     .ok_or(ResourceError::InvalidInput)?;
+                if crate::domain::resource::is_connection_managed_definition_code(definition_code) {
+                    return Err(ResourceError::ConnectionEndpointRequired);
+                }
                 self.ensure_resource_create_is_available_for_scope(
                     command.scope_kind,
                     &scope_code,
@@ -1194,6 +1197,24 @@ impl ResourceService {
         command: &ResourceCommitCommand,
         create: bool,
     ) -> Result<(), ResourceError> {
+        self.preflight_resource_commit_internal(actor_user_code, command, create, false)
+    }
+
+    pub(super) fn preflight_verified_connection_commit(
+        &self,
+        actor_user_code: &str,
+        command: &ResourceCommitCommand,
+    ) -> Result<(), ResourceError> {
+        self.preflight_resource_commit_internal(actor_user_code, command, true, true)
+    }
+
+    fn preflight_resource_commit_internal(
+        &self,
+        actor_user_code: &str,
+        command: &ResourceCommitCommand,
+        create: bool,
+        allow_managed_connection: bool,
+    ) -> Result<(), ResourceError> {
         validate_resource_code(&command.resource_code)?;
         require_non_blank(&command.name)?;
         let scope_code = self.management_scope(
@@ -1208,6 +1229,11 @@ impl ResourceService {
                 .as_deref()
                 .ok_or(ResourceError::InvalidInput)?;
             validate_definition_code(definition_code)?;
+            if !allow_managed_connection
+                && crate::domain::resource::is_connection_managed_definition_code(definition_code)
+            {
+                return Err(ResourceError::ConnectionEndpointRequired);
+            }
             if command.expected_active_resource_version.is_some() {
                 return Err(ResourceError::InvalidInput);
             }
@@ -1280,6 +1306,13 @@ impl ResourceService {
         if !locally_owned {
             return Err(ResourceError::LifecycleDenied);
         }
+        if command.expected_active_resource_version.is_some() {
+            self.ensure_server_has_no_accounts(
+                command.scope_kind,
+                &scope_code,
+                &command.resource_code,
+            )?;
+        }
         let (deleted, locators) = self.repository(|repository| {
             repository.delete_resource_group(
                 command.scope_kind,
@@ -1304,7 +1337,7 @@ impl ResourceService {
         binaries: Vec<ResourceCommitBinary>,
         create: bool,
     ) -> Result<ResourceActivationOutput, ResourceError> {
-        self.preflight_resource_commit(actor_user_code, &command, create)?;
+        self.preflight_resource_commit_internal(actor_user_code, &command, create, false)?;
         let scope_code = self.management_scope(
             actor_user_code,
             command.scope_kind,
@@ -1495,7 +1528,7 @@ impl ResourceService {
         ))
     }
 
-    fn effective_active_resource_for_http(
+    pub(super) fn effective_active_resource_for_http(
         &self,
         scope_kind: ResourceScopeKind,
         scope_code: &str,
@@ -1826,7 +1859,7 @@ impl ResourceService {
             .ok_or(ResourceError::NotFound)
     }
 
-    fn ensure_resource_publishable(
+    pub(super) fn ensure_resource_publishable(
         &self,
         resource: &Resource,
         definition: &ResourceDefinition,

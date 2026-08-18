@@ -96,8 +96,8 @@ interface ConsoleShellConfigController {
 
 type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["secondarySpaces"][number]>;
 
-const TRON_DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS = "w-[240px]";
-const TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS = "lg:pl-[240px]";
+const TRON_DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS = "w-[280px]";
+const TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS = "lg:pl-[280px]";
 const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 
 export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
@@ -348,11 +348,13 @@ export function TronShell({
     }
 
     setOpenNavigationItems((current) => {
-      if (activeParentKeys.every((key) => current[key])) {
+      if (activeParentKeys.every((key) => Object.prototype.hasOwnProperty.call(current, key))) {
         return current;
       }
 
-      return activeParentKeys.reduce((next, key) => ({ ...next, [key]: true }), current);
+      return activeParentKeys.reduce((next, key) => (
+        Object.prototype.hasOwnProperty.call(next, key) ? next : { ...next, [key]: true }
+      ), current);
     });
   }, [activeItem, ensureSectionOpen, visibleNavigation]);
 
@@ -662,35 +664,10 @@ export function TronShell({
 
       return (
         <div className="space-y-1" key={itemKey}>
-          <div className="flex min-w-0 items-center gap-1" style={{ paddingLeft: `${childOffset}px` }}>
-            <Link
-              className={cn(
-                "flex h-9 min-w-0 flex-1 items-center rounded-lg text-sm transition-colors",
-                compact ? "justify-center px-0" : "gap-2 px-3",
-                active
-                  ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
-                  : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
-              )}
-              aria-label={compact ? itemLabel : undefined}
-              aria-current={active ? "page" : undefined}
-              data-active={active}
-              onBlur={compact ? hideCollapsedNavTooltip : undefined}
-              onFocus={(event) => {
-                if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
-              }}
-              onMouseEnter={(event) => {
-                if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
-              }}
-              onMouseLeave={compact ? hideCollapsedNavTooltip : undefined}
-              onClick={mobile ? handleSidebarNavigationClick : undefined}
-              to={item.href}
-            >
-              <Icon size={17} aria-hidden="true" />
-              <span className={cn("truncate", compact ? "sr-only" : "")}>{itemLabel}</span>
-            </Link>
+          <div className="flex min-w-0 items-center" style={{ paddingLeft: `${childOffset}px` }}>
             {hasChildren && !compact ? (
               <button
-                className="flex size-9 shrink-0 items-center justify-center rounded-lg text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+                className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-sm text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
                 type="button"
                 aria-expanded={open}
                 aria-label={t(open ? "shell:aria.collapseNavigationItem" : "shell:aria.expandNavigationItem", { item: itemLabel })}
@@ -698,9 +675,37 @@ export function TronShell({
                   setOpenNavigationItems((current) => ({ ...current, [itemKey]: !current[itemKey] }));
                 }}
               >
-                <ChevronDown className={cn("transition-transform", open ? "rotate-180" : "")} size={14} aria-hidden="true" />
+                <Icon className="shrink-0" size={17} aria-hidden="true" />
+                <span className="min-w-0 flex-1 truncate text-left">{itemLabel}</span>
+                <ChevronDown className={cn("shrink-0 transition-transform", open ? "rotate-180" : "")} size={14} aria-hidden="true" />
               </button>
-            ) : null}
+            ) : (
+              <Link
+                className={cn(
+                  "flex h-9 min-w-0 flex-1 items-center rounded-lg text-sm transition-colors",
+                  compact ? "justify-center px-0" : "gap-2 px-3",
+                  active
+                    ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
+                    : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
+                )}
+                aria-label={compact ? itemLabel : undefined}
+                aria-current={active ? "page" : undefined}
+                data-active={active}
+                onBlur={compact ? hideCollapsedNavTooltip : undefined}
+                onFocus={(event) => {
+                  if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
+                }}
+                onMouseEnter={(event) => {
+                  if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
+                }}
+                onMouseLeave={compact ? hideCollapsedNavTooltip : undefined}
+                onClick={mobile ? handleSidebarNavigationClick : undefined}
+                to={item.href}
+              >
+                <Icon size={17} aria-hidden="true" />
+                <span className={cn("truncate", compact ? "sr-only" : "")}>{itemLabel}</span>
+              </Link>
+            )}
           </div>
           {open ? (
             <div className="space-y-1">
@@ -720,7 +725,7 @@ export function TronShell({
               <section key={section.label} className="flex-1">
                 {compact ? null : (
                   <button
-                    className="flex h-8 w-full items-center justify-between rounded-lg px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
+                    className="flex h-8 w-full items-center justify-between rounded-lg px-2 text-[15px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
                     type="button"
                     aria-expanded={open}
                     onClick={() => toggleSection(section.label)}

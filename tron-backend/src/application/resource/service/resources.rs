@@ -138,6 +138,9 @@ impl ResourceService {
                     .as_deref()
                     .ok_or(ResourceError::InvalidInput)?;
                 validate_definition_code(definition_code)?;
+                if crate::domain::resource::is_connection_managed_definition_code(definition_code) {
+                    return Err(ResourceError::ConnectionEndpointRequired);
+                }
                 require_non_blank_resource_name(command.name.as_deref())?;
                 let definition =
                     self.effective_definition_for_resource(&workspace_code, definition_code)?;

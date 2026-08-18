@@ -2,13 +2,16 @@ use axum::{Router, routing::post};
 
 use crate::{app::AppState, application::resource::ResourceService};
 
-use super::handler::{
-    activate_definition_version, activate_resource_version, commit_body_limit,
-    create_definition_draft, create_resource, create_resource_draft, delete_definition,
-    delete_resource, discard_definition_draft, discard_resource_draft, download_binary,
-    get_definition, get_resource, page_definitions, page_resources, publish_definition_draft,
-    publish_resource_draft, remove_binary, set_definition_enabled, update_definition_draft,
-    update_resource, update_resource_draft, upload_binary, upload_body_limit,
+use super::{
+    connection_handler::{create_data_source, create_server, create_server_account},
+    handler::{
+        activate_definition_version, activate_resource_version, commit_body_limit,
+        create_definition_draft, create_resource, create_resource_draft, delete_definition,
+        delete_resource, discard_definition_draft, discard_resource_draft, download_binary,
+        get_definition, get_resource, page_definitions, page_resources, publish_definition_draft,
+        publish_resource_draft, remove_binary, set_definition_enabled, update_definition_draft,
+        update_resource, update_resource_draft, upload_binary, upload_body_limit,
+    },
 };
 
 pub fn routes(resources: &ResourceService) -> Router<AppState> {
@@ -44,6 +47,15 @@ pub fn routes(resources: &ResourceService) -> Router<AppState> {
             post(delete_definition),
         )
         .route("/api/v1/resources/page", post(page_resources))
+        .route(
+            "/api/v1/resource-connections/data-sources",
+            post(create_data_source),
+        )
+        .route("/api/v1/resource-connections/servers", post(create_server))
+        .route(
+            "/api/v1/resource-connections/server-accounts",
+            post(create_server_account),
+        )
         .route("/api/v1/resources/get", post(get_resource))
         .route(
             "/api/v1/resources/create",

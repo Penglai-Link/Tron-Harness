@@ -26,6 +26,9 @@ pub enum ResourceError {
     PathDenied,
     StorageProfileNotFound,
     StorageLocatorInvalid,
+    ConnectionEndpointRequired,
+    ConnectionVerificationFailed(String),
+    ServerHasAccounts,
 }
 
 impl fmt::Display for ResourceError {
@@ -55,6 +58,11 @@ impl fmt::Display for ResourceError {
             Self::PathDenied => "resource binary path is not allowed",
             Self::StorageProfileNotFound => "resource storage profile was not found",
             Self::StorageLocatorInvalid => "resource storage locator is invalid",
+            Self::ConnectionEndpointRequired => {
+                "managed connection resources require their dedicated creation endpoint"
+            }
+            Self::ConnectionVerificationFailed(message) => message,
+            Self::ServerHasAccounts => "server still has accounts",
         };
         formatter.write_str(message)
     }

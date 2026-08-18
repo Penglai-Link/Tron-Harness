@@ -35,7 +35,6 @@ import { SelectItem } from "@/components/ui/select";
 import {
   ResourceBinaryEditor,
   ResourceVersionHistory,
-  ResourceVersionSource,
 } from "@/domain/resource/components";
 import type { ResourceVersionHistoryAction } from "@/domain/resource/components";
 import { adaptResourceVersionDetail } from "@/domain/resource/adapters";
@@ -74,7 +73,6 @@ import {
   type QuickResourceUploadHandoff,
 } from "@/domain/resource/model";
 import {
-  Badge,
   ConfirmDialog,
   SelectInput,
   TextArea,
@@ -243,7 +241,9 @@ export function ResourceEditorPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const isPlatform = location.pathname.startsWith("/settings/");
-  const basePath = isPlatform ? "/settings/resources" : "/resources";
+  const resourceManagementBasePath = location.pathname.match(/^\/resource-management\/[^/]+/)?.[0];
+  const basePath = isPlatform ? "/settings/resources" : resourceManagementBasePath ?? "/resources";
+  const isFileManagement = basePath === "/resource-management/files";
   const scopeCode = isPlatform ? "PLATFORM" : activeWorkspace?.workspaceCode ?? "";
   const scopeName = isPlatform ? "Platform" : activeWorkspace?.name ?? "";
   const scopeReady = isPlatform || Boolean(activeWorkspace);
@@ -267,7 +267,8 @@ export function ResourceEditorPage() {
     scopeName,
   );
   const platformActiveDefinitions = useActivePlatformResourceDefinitions();
-  const activeDefinitions = isPlatform ? platformActiveDefinitions : workspaceActiveDefinitions;
+  const activeDefinitions = (isPlatform ? platformActiveDefinitions : workspaceActiveDefinitions)
+    .filter((definition) => !isFileManagement || ["FILE", "IMAGE", "PDF"].includes(definition.definitionCode));
   const [versions, setVersions] = useState<ResourceVersionDetail[]>([]);
   const [resource, setResource] = useState<ResourceVersionDetail | null>(null);
   const [section, setSection] = useState<EditorSection>("data");
@@ -1129,10 +1130,6 @@ export function ResourceEditorPage() {
   const isPersistedDraft = !isNew && resource.lifecycleStatus === "DRAFT";
   const readOnly = (!isPersistedDraft && editMode === "VIEW") || committingActive;
   const blockingDraft = versions.find((record) => record.lifecycleStatus === "DRAFT");
-  const lifecycleTone = resource.lifecycleStatus === "ACTIVE" ? "success" : resource.lifecycleStatus === "DRAFT" ? "warning" : "info";
-  const lifecycleLabel = isNew && editMode === "COMMIT_ACTIVE"
-    ? editorT("status.new", "NEW")
-    : resource.lifecycleStatus;
   const locallyOwned = resource.scopeKind === scopeKind;
   const tabItems: Array<{ count?: number; label: string; value: EditorSection }> = [
     { label: editorT("tabs.data", "Resource information"), value: "data" },
@@ -1149,11 +1146,11 @@ export function ResourceEditorPage() {
       </nav>
 
       <header className="mb-4 border-b border-[var(--color-outline-variant)] pb-4">
-        <div className="flex flex-col gap-4 xl:flex-row xl:items-start xl:justify-between">
+        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
           <div className="min-w-0 flex-1">
-            <div className="flex min-w-0 flex-wrap items-center gap-2">
+            <div className="min-w-0 max-w-3xl">
               {isNew || editingField === "name" ? (
-                <div className="flex min-w-[260px] max-w-xl flex-1 items-center gap-2">
+                <div className="flex min-w-[260px] items-center gap-2">
                   <TextInput
                     aria-label={editorT("fields.name", "Resource name")}
                     autoFocus={editingField === "name"}
@@ -1182,9 +1179,6 @@ export function ResourceEditorPage() {
                   ) : null}
                 </div>
               )}
-              <Badge tone={lifecycleTone}>{lifecycleLabel}</Badge>
-              <Badge tone={validationStatus === "VALID" ? "success" : "error"}>{validationStatus}</Badge>
-              <ResourceVersionSource inline record={resource} />
             </div>
 
             <div className="mt-2 max-w-3xl">
@@ -1242,7 +1236,7 @@ export function ResourceEditorPage() {
                 >
                   {activeDefinitions.map((definition) => (
                     <SelectItem key={definition.definitionCode} value={definition.definitionCode}>
-                      {definition.name} · {definition.definitionVersion}
+                      {definition.name}
                     </SelectItem>
                   ))}
                 </SelectInput>
@@ -1259,37 +1253,31 @@ export function ResourceEditorPage() {
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center gap-2">
-            <DropdownMenu>
-              <DropdownMenuTrigger aria-label={editorT("actions.more", "More resource actions")} className={buttonVariants({ size: "icon", variant: "ghost" })} disabled={committingActive}>
-                <MoreHorizontal aria-hidden="true" size={17} />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end" className="w-44">
-                <DropdownMenuItem onClick={() => setSection("history")}>{editorT("actions.viewHistory", "View version history")}</DropdownMenuItem>
-                {isPersistedDraft ? (
-                  <>
-                    <DropdownMenuSeparator />
+            {!isNew ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger aria-label={editorT("actions.more", "More resource actions")} className={buttonVariants({ size: "icon", variant: "ghost" })} disabled={committingActive}>
+                  <MoreHorizontal aria-hidden="true" size={17} />
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-44">
+                  {isPersistedDraft ? (
                     <DropdownMenuItem variant="destructive" onClick={() => discardDraft()}>{editorT("actions.discard", "Discard draft")}</DropdownMenuItem>
-                  </>
-                ) : null}
-                {!isPersistedDraft ? (
-                  <>
-                    <DropdownMenuSeparator />
+                  ) : (
                     <DropdownMenuItem onClick={() => { void openOrCreateDraft(resource); }}>
                       {editorT("actions.saveIncomplete", "Save unfinished content")}
                     </DropdownMenuItem>
-                  </>
-                ) : null}
-                {locallyOwned && !isNew ? (
-                  <>
-                    <DropdownMenuSeparator />
-                    <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
-                      <Trash2 aria-hidden="true" size={14} />
-                      {editorT("actions.delete", "Delete resource")}
-                    </DropdownMenuItem>
-                  </>
-                ) : null}
-              </DropdownMenuContent>
-            </DropdownMenu>
+                  )}
+                  {locallyOwned ? (
+                    <>
+                      <DropdownMenuSeparator />
+                      <DropdownMenuItem variant="destructive" onClick={() => setDeleteOpen(true)}>
+                        <Trash2 aria-hidden="true" size={14} />
+                        {editorT("actions.delete", "Delete resource")}
+                      </DropdownMenuItem>
+                    </>
+                  ) : null}
+                </DropdownMenuContent>
+              </DropdownMenu>
+            ) : null}
             {editMode === "COMMIT_ACTIVE" ? (
               <>
                 {!isNew ? (

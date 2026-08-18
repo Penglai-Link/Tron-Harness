@@ -37,6 +37,7 @@ import {
   ConsoleShellConfigContext,
   TronShell,
   tronNavigation,
+  type TronNavItem,
   useToast,
 } from "@/shared";
 import { AUTH_CALLBACK_PATH } from "@/domain/auth/constants";
@@ -78,12 +79,22 @@ const appRoutePaths = Array.from(
   ),
 );
 
+function flattenNavigationItems(items: TronNavItem[]): TronNavItem[] {
+  return items.flatMap((item) => [
+    item,
+    ...flattenNavigationItems(item.children ?? []),
+  ]);
+}
+
+const consoleNavigationItems = tronNavigation.flatMap((section) => flattenNavigationItems(section.items));
+
 function resolveActiveItem(pathname: string) {
-  return tronNavigation.flatMap((section) => section.items).find((item) => item.href === pathname);
+  const matches = consoleNavigationItems.filter((item) => item.href === pathname);
+  return matches.find((item) => !item.children?.length) ?? matches[0];
 }
 
 function resolveActiveItemByLabel(label: string) {
-  return tronNavigation.flatMap((section) => section.items).find((item) => item.label === label);
+  return consoleNavigationItems.find((item) => item.label === label);
 }
 
 function isAdministrationRoute(pathname: string) {
@@ -523,6 +534,14 @@ function RoutedApp() {
         element={(
           <ProtectedRoute>
             <Navigate replace to="/settings/skills/sync" />
+          </ProtectedRoute>
+        )}
+      />
+      <Route
+        path="/resource-management/files/new"
+        element={(
+          <ProtectedRoute>
+            <Navigate replace to="/resource-management/files" />
           </ProtectedRoute>
         )}
       />

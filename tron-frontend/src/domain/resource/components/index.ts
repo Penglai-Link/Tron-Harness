@@ -3,5 +3,8 @@ export * from "./ResourceDefinitionBinaryEditor";
 export * from "./ResourceDefinitionSchemaEditor";
 export * from "./ResourceDefinitionVersionHistory";
 export * from "./ResourceVersionSource";
+export * from "./DataSourceCreateDialog";
+export * from "./ServerAccountCreateDialog";
+export * from "./ServerCreateDialog";
 export * from "./ResourceBinaryEditor";
 export * from "./ResourceVersionHistory";

@@ -577,7 +577,10 @@ pub async fn download_binary(
     response
 }
 
-fn json_body<T>(request: Result<Json<T>, JsonRejection>, locale: &str) -> Result<T, Response> {
+pub(super) fn json_body<T>(
+    request: Result<Json<T>, JsonRejection>,
+    locale: &str,
+) -> Result<T, Response> {
     request
         .map(|Json(value)| value)
         .map_err(|error| malformed_request_response(error.status(), locale))

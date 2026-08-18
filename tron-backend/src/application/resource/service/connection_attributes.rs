@@ -1,0 +1,545 @@
+use std::collections::{BTreeMap, BTreeSet};
+
+use serde::Deserialize;
+use serde_json::{Value, json};
+
+use crate::{
+    application::resource::{
+        ConnectionEndpoint, ConnectionTlsMaterial, KafkaConnectionTarget, KafkaSaslTarget,
+        MysqlConnectionTarget, PostgresqlConnectionTarget, RedisConnectionTarget,
+        RedisSentinelTarget, RedisTopology, ResourceConnectionTarget, ServerAccountCreateInput,
+        SshAuthenticationTarget, SshConnectionTarget,
+    },
+    domain::{
+        resource::{
+            KAFKA_CONNECTION_DEFINITION_CODE, MYSQL_CONNECTION_DEFINITION_CODE,
+            POSTGRESQL_CONNECTION_DEFINITION_CODE, REDIS_CONNECTION_DEFINITION_CODE, ResourceError,
+            ResourceScopeKind, ServerAuthenticationType,
+        },
+        variable::VariableError,
+    },
+};
+
+use super::ResourceService;
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct EndpointAttributes {
+    host: String,
+    port: u16,
+    #[serde(default)]
+    role: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct CredentialsAttributes {
+    #[serde(default)]
+    username: Option<String>,
+    password: SecretReferenceAttributes,
+}
+
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum SecretReferenceAttributes {
+    LegacyVariable(String),
+    Reference(SecretReference),
+}
+
+#[derive(Deserialize)]
+#[serde(tag = "source", deny_unknown_fields)]
+enum SecretReference {
+    #[serde(rename = "DIRECT")]
+    Direct { value: String },
+    #[serde(rename = "VARIABLE")]
+    Variable {
+        #[serde(rename = "variableKey")]
+        variable_key: String,
+    },
+}
+
+#[derive(Default, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct TlsAttributes {
+    mode: String,
+    #[serde(default)]
+    ca_certificate: Option<String>,
+    #[serde(default)]
+    client_certificate: Option<String>,
+    #[serde(default)]
+    client_key: Option<String>,
+    #[serde(default)]
+    client_key_password: Option<String>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct MysqlAttributes {
+    connection_mode: String,
+    endpoints: Vec<EndpointAttributes>,
+    database: String,
+    credentials: CredentialsAttributes,
+    tls: TlsAttributes,
+    #[serde(default)]
+    properties: BTreeMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct PostgresqlAttributes {
+    endpoints: Vec<EndpointAttributes>,
+    database: String,
+    credentials: CredentialsAttributes,
+    target_session: String,
+    load_balance: String,
+    tls: TlsAttributes,
+    #[serde(default)]
+    properties: BTreeMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RedisSentinelAttributes {
+    master_name: String,
+    #[serde(default)]
+    credentials: Option<CredentialsAttributes>,
+    tls: TlsAttributes,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct RedisAttributes {
+    topology: String,
+    endpoints: Vec<EndpointAttributes>,
+    database: i64,
+    #[serde(default)]
+    credentials: Option<CredentialsAttributes>,
+    tls: TlsAttributes,
+    #[serde(default)]
+    sentinel: Option<RedisSentinelAttributes>,
+    #[serde(default)]
+    properties: BTreeMap<String, Value>,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KafkaSaslAttributes {
+    mechanism: String,
+    username: String,
+    password: SecretReferenceAttributes,
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct KafkaAttributes {
+    brokers: Vec<EndpointAttributes>,
+    security_protocol: String,
+    #[serde(default)]
+    sasl: Option<KafkaSaslAttributes>,
+    #[serde(default)]
+    tls: Option<TlsAttributes>,
+    #[serde(default)]
+    properties: BTreeMap<String, Value>,
+}
+
+impl ResourceService {
+    pub(super) fn data_source_connection_target(
+        &self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        definition_code: &str,
+        attributes: &Value,
+    ) -> Result<ResourceConnectionTarget, ResourceError> {
+        match definition_code {
+            MYSQL_CONNECTION_DEFINITION_CODE => {
+                let attributes: MysqlAttributes = parse(attributes)?;
+                let _ = &attributes.connection_mode;
+                let values = self.resolve_connection_variables(
+                    scope_kind,
+                    scope_code,
+                    mysql_variable_keys(&attributes),
+                )?;
+                Ok(ResourceConnectionTarget::Mysql(MysqlConnectionTarget {
+                    endpoints: endpoints(attributes.endpoints),
+                    database: attributes.database,
+                    username: direct_text_required(attributes.credentials.username.as_deref())?,
+                    password: resolve_secret_reference(&values, &attributes.credentials.password)?,
+                    tls: tls_material(attributes.tls, &values)?,
+                    properties: scalar_properties(attributes.properties)?,
+                }))
+            }
+            POSTGRESQL_CONNECTION_DEFINITION_CODE => {
+                let attributes: PostgresqlAttributes = parse(attributes)?;
+                let _ = (&attributes.target_session, &attributes.load_balance);
+                let values = self.resolve_connection_variables(
+                    scope_kind,
+                    scope_code,
+                    postgresql_variable_keys(&attributes),
+                )?;
+                Ok(ResourceConnectionTarget::Postgresql(
+                    PostgresqlConnectionTarget {
+                        endpoints: endpoints(attributes.endpoints),
+                        database: attributes.database,
+                        username: direct_text_required(attributes.credentials.username.as_deref())?,
+                        password: resolve_secret_reference(
+                            &values,
+                            &attributes.credentials.password,
+                        )?,
+                        tls: tls_material(attributes.tls, &values)?,
+                        properties: scalar_properties(attributes.properties)?,
+                    },
+                ))
+            }
+            REDIS_CONNECTION_DEFINITION_CODE => {
+                let attributes: RedisAttributes = parse(attributes)?;
+                let _ = &attributes.properties;
+                let values = self.resolve_connection_variables(
+                    scope_kind,
+                    scope_code,
+                    redis_variable_keys(&attributes),
+                )?;
+                let credentials = attributes.credentials;
+                let sentinel = attributes
+                    .sentinel
+                    .map(|sentinel| {
+                        let credentials = sentinel.credentials;
+                        Ok(RedisSentinelTarget {
+                            master_name: sentinel.master_name,
+                            username: optional_direct_text(
+                                credentials
+                                    .as_ref()
+                                    .and_then(|value| value.username.as_deref()),
+                            ),
+                            password: optional_secret_reference(
+                                &values,
+                                credentials.as_ref().map(|value| &value.password),
+                            )?,
+                            tls: tls_material(sentinel.tls, &values)?,
+                        })
+                    })
+                    .transpose()?;
+                Ok(ResourceConnectionTarget::Redis(RedisConnectionTarget {
+                    topology: redis_topology(&attributes.topology)?,
+                    endpoints: endpoints(attributes.endpoints),
+                    database: attributes.database,
+                    username: optional_direct_text(
+                        credentials
+                            .as_ref()
+                            .and_then(|value| value.username.as_deref()),
+                    ),
+                    password: optional_secret_reference(
+                        &values,
+                        credentials.as_ref().map(|value| &value.password),
+                    )?,
+                    tls: tls_material(attributes.tls, &values)?,
+                    sentinel,
+                }))
+            }
+            KAFKA_CONNECTION_DEFINITION_CODE => {
+                let attributes: KafkaAttributes = parse(attributes)?;
+                let values = self.resolve_connection_variables(
+                    scope_kind,
+                    scope_code,
+                    kafka_variable_keys(&attributes),
+                )?;
+                let sasl = attributes
+                    .sasl
+                    .map(|sasl| {
+                        Ok(KafkaSaslTarget {
+                            mechanism: sasl.mechanism,
+                            username: direct_text_required(Some(&sasl.username))?,
+                            password: resolve_secret_reference(&values, &sasl.password)?,
+                        })
+                    })
+                    .transpose()?;
+                let tls = attributes
+                    .tls
+                    .map(|tls| tls_material(tls, &values))
+                    .transpose()?;
+                Ok(ResourceConnectionTarget::Kafka(KafkaConnectionTarget {
+                    brokers: endpoints(attributes.brokers),
+                    security_protocol: attributes.security_protocol,
+                    sasl,
+                    tls,
+                    properties: scalar_properties(attributes.properties)?,
+                }))
+            }
+            _ => Err(ResourceError::InvalidInput),
+        }
+    }
+
+    pub(super) fn ssh_connection_target(
+        &self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        host: String,
+        port: u16,
+        account: &ServerAccountCreateInput,
+    ) -> Result<ResourceConnectionTarget, ResourceError> {
+        let mut keys = BTreeSet::new();
+        extend_key(&mut keys, account.password_variable_key.as_deref());
+        extend_key(&mut keys, account.private_key_variable_key.as_deref());
+        extend_key(
+            &mut keys,
+            account.private_key_passphrase_variable_key.as_deref(),
+        );
+        let values = self.resolve_connection_variables(scope_kind, scope_code, keys)?;
+        let authentication = match account.authentication_type {
+            ServerAuthenticationType::Password => SshAuthenticationTarget::Password {
+                password: secret_required(&values, account.password_variable_key.as_deref())?,
+            },
+            ServerAuthenticationType::PrivateKey => SshAuthenticationTarget::PrivateKey {
+                private_key: secret_required(&values, account.private_key_variable_key.as_deref())?,
+                passphrase: optional_secret(
+                    &values,
+                    account.private_key_passphrase_variable_key.as_deref(),
+                )?,
+            },
+        };
+        Ok(ResourceConnectionTarget::Ssh(SshConnectionTarget {
+            endpoint: ConnectionEndpoint { host, port },
+            username: account.username.trim().to_string(),
+            authentication,
+        }))
+    }
+}
+
+pub(super) fn server_attributes(host: &str, port: u16) -> Value {
+    json!({ "host": host.trim(), "port": port, "protocol": "Ssh" })
+}
+
+pub(super) fn server_account_attributes(
+    server_code: &str,
+    account: &ServerAccountCreateInput,
+) -> Value {
+    let mut value = json!({
+        "serverCode": server_code,
+        "username": account.username.trim(),
+        "authenticationType": account.authentication_type,
+    });
+    let object = value
+        .as_object_mut()
+        .expect("account attributes are an object");
+    if let Some(key) = &account.password_variable_key {
+        object.insert("passwordVariableKey".to_string(), json!(key));
+    }
+    if let Some(key) = &account.private_key_variable_key {
+        object.insert("privateKeyVariableKey".to_string(), json!(key));
+    }
+    if let Some(key) = &account.private_key_passphrase_variable_key {
+        object.insert("privateKeyPassphraseVariableKey".to_string(), json!(key));
+    }
+    value
+}
+
+fn parse<T: for<'de> Deserialize<'de>>(value: &Value) -> Result<T, ResourceError> {
+    serde_json::from_value(value.clone()).map_err(|_| ResourceError::InvalidInput)
+}
+
+fn endpoints(values: Vec<EndpointAttributes>) -> Vec<ConnectionEndpoint> {
+    values
+        .into_iter()
+        .map(|value| {
+            let _ = value.role;
+            ConnectionEndpoint {
+                host: value.host,
+                port: value.port,
+            }
+        })
+        .collect()
+}
+
+fn mysql_variable_keys(attributes: &MysqlAttributes) -> BTreeSet<String> {
+    let mut keys = credentials_variable_keys(Some(&attributes.credentials));
+    extend_tls_keys(&mut keys, &attributes.tls);
+    keys
+}
+
+fn postgresql_variable_keys(attributes: &PostgresqlAttributes) -> BTreeSet<String> {
+    let mut keys = credentials_variable_keys(Some(&attributes.credentials));
+    extend_tls_keys(&mut keys, &attributes.tls);
+    keys
+}
+
+fn redis_variable_keys(attributes: &RedisAttributes) -> BTreeSet<String> {
+    let mut keys = credentials_variable_keys(attributes.credentials.as_ref());
+    extend_tls_keys(&mut keys, &attributes.tls);
+    if let Some(sentinel) = &attributes.sentinel {
+        keys.extend(credentials_variable_keys(sentinel.credentials.as_ref()));
+        extend_tls_keys(&mut keys, &sentinel.tls);
+    }
+    keys
+}
+
+fn kafka_variable_keys(attributes: &KafkaAttributes) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    if let Some(sasl) = &attributes.sasl {
+        extend_secret_reference_key(&mut keys, &sasl.password);
+    }
+    if let Some(tls) = &attributes.tls {
+        extend_tls_keys(&mut keys, tls);
+    }
+    keys
+}
+
+fn credentials_variable_keys(value: Option<&CredentialsAttributes>) -> BTreeSet<String> {
+    let mut keys = BTreeSet::new();
+    if let Some(value) = value {
+        extend_secret_reference_key(&mut keys, &value.password);
+    }
+    keys
+}
+
+fn extend_tls_keys(keys: &mut BTreeSet<String>, tls: &TlsAttributes) {
+    extend_key(keys, tls.ca_certificate.as_deref());
+    extend_key(keys, tls.client_certificate.as_deref());
+    extend_key(keys, tls.client_key.as_deref());
+    extend_key(keys, tls.client_key_password.as_deref());
+}
+
+fn extend_key(keys: &mut BTreeSet<String>, key: Option<&str>) {
+    if let Some(key) = key {
+        keys.insert(key.trim().to_string());
+    }
+}
+
+fn extend_secret_reference_key(keys: &mut BTreeSet<String>, secret: &SecretReferenceAttributes) {
+    match secret {
+        SecretReferenceAttributes::LegacyVariable(key) => extend_key(keys, Some(key)),
+        SecretReferenceAttributes::Reference(SecretReference::Variable { variable_key }) => {
+            extend_key(keys, Some(variable_key));
+        }
+        SecretReferenceAttributes::Reference(SecretReference::Direct { .. }) => {}
+    }
+}
+
+impl ResourceService {
+    fn resolve_connection_variables(
+        &self,
+        scope_kind: ResourceScopeKind,
+        scope_code: &str,
+        keys: BTreeSet<String>,
+    ) -> Result<BTreeMap<String, String>, ResourceError> {
+        let result = match scope_kind {
+            ResourceScopeKind::Platform => self
+                .variables
+                .resolve_platform_runtime_variable_values(&keys),
+            ResourceScopeKind::Workspace => self
+                .variables
+                .resolve_runtime_variable_values(scope_code, &keys),
+        };
+        result.map_err(map_variable_error)
+    }
+}
+
+fn secret(values: &BTreeMap<String, String>, key: &str) -> Result<String, ResourceError> {
+    values
+        .get(key.trim())
+        .cloned()
+        .ok_or(ResourceError::InvalidVariableReference)
+}
+
+fn resolve_secret_reference(
+    values: &BTreeMap<String, String>,
+    reference: &SecretReferenceAttributes,
+) -> Result<String, ResourceError> {
+    match reference {
+        SecretReferenceAttributes::LegacyVariable(key) => secret(values, key),
+        SecretReferenceAttributes::Reference(SecretReference::Direct { value }) => {
+            direct_text_required(Some(value))
+        }
+        SecretReferenceAttributes::Reference(SecretReference::Variable { variable_key }) => {
+            secret(values, variable_key)
+        }
+    }
+}
+
+fn secret_required(
+    values: &BTreeMap<String, String>,
+    key: Option<&str>,
+) -> Result<String, ResourceError> {
+    secret(values, key.ok_or(ResourceError::InvalidVariableReference)?)
+}
+
+fn optional_secret(
+    values: &BTreeMap<String, String>,
+    key: Option<&str>,
+) -> Result<Option<String>, ResourceError> {
+    key.map(|key| secret(values, key)).transpose()
+}
+
+fn optional_secret_reference(
+    values: &BTreeMap<String, String>,
+    secret: Option<&SecretReferenceAttributes>,
+) -> Result<Option<String>, ResourceError> {
+    secret
+        .map(|value| resolve_secret_reference(values, value))
+        .transpose()
+}
+
+fn direct_text_required(value: Option<&str>) -> Result<String, ResourceError> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+        .ok_or(ResourceError::InvalidInput)
+}
+
+fn optional_direct_text(value: Option<&str>) -> Option<String> {
+    value
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map(str::to_string)
+}
+
+fn tls_material(
+    tls: TlsAttributes,
+    values: &BTreeMap<String, String>,
+) -> Result<ConnectionTlsMaterial, ResourceError> {
+    Ok(ConnectionTlsMaterial {
+        mode: tls.mode,
+        ca_certificate: optional_secret(values, tls.ca_certificate.as_deref())?,
+        client_certificate: optional_secret(values, tls.client_certificate.as_deref())?,
+        client_key: optional_secret(values, tls.client_key.as_deref())?,
+        client_key_password: optional_secret(values, tls.client_key_password.as_deref())?,
+    })
+}
+
+fn scalar_properties(
+    values: BTreeMap<String, Value>,
+) -> Result<BTreeMap<String, String>, ResourceError> {
+    values
+        .into_iter()
+        .map(|(key, value)| {
+            let value = match value {
+                Value::String(value) => value,
+                Value::Number(value) => value.to_string(),
+                Value::Bool(value) => value.to_string(),
+                _ => return Err(ResourceError::InvalidInput),
+            };
+            Ok((key, value))
+        })
+        .collect()
+}
+
+fn redis_topology(value: &str) -> Result<RedisTopology, ResourceError> {
+    match value {
+        "STANDALONE" => Ok(RedisTopology::Standalone),
+        "SENTINEL" => Ok(RedisTopology::Sentinel),
+        "CLUSTER" => Ok(RedisTopology::Cluster),
+        _ => Err(ResourceError::InvalidInput),
+    }
+}
+
+fn map_variable_error(error: VariableError) -> ResourceError {
+    match error {
+        VariableError::NotFound | VariableError::InvalidKey => {
+            ResourceError::InvalidVariableReference
+        }
+        VariableError::InvalidWorkspace | VariableError::WorkspaceRequired => {
+            ResourceError::InvalidWorkspace
+        }
+        VariableError::StorageFailure => ResourceError::StorageFailure,
+        _ => ResourceError::ValidationFailed,
+    }
+}

@@ -73,6 +73,8 @@ fn resource_startup_seeds_definitions_backfills_permissions_and_catalog() {
         "POSTGRESQL_CONNECTION",
         "REDIS_CONNECTION",
         "KAFKA_CONNECTION",
+        "SERVER_CONNECTION",
+        "SERVER_ACCOUNT",
     ] {
         assert!(codes.contains(&code), "seed {code} should be present");
     }

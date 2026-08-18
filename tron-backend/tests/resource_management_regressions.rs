@@ -120,7 +120,7 @@ fn definition_query_reads_exact_draft_and_historical_versions() {
             && record.definition_version == draft_only.definition_version
             && record.lifecycle_status == ResourceLifecycleStatus::Draft
     }));
-    assert_eq!(page.total, 9, "pages count logical definition codes");
+    assert_eq!(page.total, 11, "pages count logical definition codes");
 }
 
 #[test]
@@ -571,6 +571,26 @@ fn builtin_schemas_accept_documented_samples_and_reject_invalid_fields() {
                     "username": "KAFKA_USERNAME",
                     "password": "KAFKA_PASSWORD"
                 }
+            }),
+        ),
+        (
+            "SERVER_CONNECTION",
+            json!({ "host": "server.internal", "port": 22, "protocol": "Ssh" }),
+            json!({ "host": "server.internal", "port": 22, "protocol": "Telnet" }),
+        ),
+        (
+            "SERVER_ACCOUNT",
+            json!({
+                "serverCode": "SERVER_001",
+                "username": "deploy",
+                "authenticationType": "Password",
+                "passwordVariableKey": "SERVER_PASSWORD"
+            }),
+            json!({
+                "serverCode": "SERVER_001",
+                "username": "deploy",
+                "authenticationType": "Password",
+                "privateKeyVariableKey": "SERVER_PRIVATE_KEY"
             }),
         ),
     ];

@@ -1,6 +1,7 @@
 use std::{
     collections::BTreeMap,
     sync::{Arc, Mutex, OnceLock},
+    time::Duration,
 };
 
 mod automation_runner;
@@ -30,6 +31,7 @@ use crate::{
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository, bootstrap_platform_admin,
             },
+            resource_connectivity::ProtocolResourceConnectionVerifier,
             resource_storage::LocalObjectStorage,
         },
     },

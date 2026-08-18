@@ -10,7 +10,12 @@ use crate::{
 };
 
 use super::{
-    ResourceService, definitions::next_definition_version, validation::validate_definition_content,
+    ResourceService,
+    connection_schema::{endpoint_schema, host_schema, port_schema},
+    connection_secret_schema::{previous_variable_password_seed, secret_reference_schema},
+    definitions::next_definition_version,
+    legacy_connection_definition::{legacy_connection_definition, legacy_file_schema},
+    validation::validate_definition_content,
 };
 
 const DRAFT_7: &str = "http://json-schema.org/draft-07/schema#";
@@ -25,6 +30,8 @@ pub(super) fn is_builtin_definition_code(code: &str) -> bool {
             | "POSTGRESQL_CONNECTION"
             | "REDIS_CONNECTION"
             | "KAFKA_CONNECTION"
+            | "SERVER_CONNECTION"
+            | "SERVER_ACCOUNT"
     )
 }
 
@@ -79,12 +86,12 @@ impl ResourceService {
 }
 
 #[derive(Clone)]
-struct BuiltinDefinition {
-    code: &'static str,
-    name: &'static str,
-    description: &'static str,
-    attributes_schema: Value,
-    binary_schema: Value,
+pub(super) struct BuiltinDefinition {
+    pub(super) code: &'static str,
+    pub(super) name: &'static str,
+    pub(super) description: &'static str,
+    pub(super) attributes_schema: Value,
+    pub(super) binary_schema: Value,
 }
 
 fn seed_definition(
@@ -128,19 +135,27 @@ fn validate_seed_definition(
 }
 
 fn is_known_legacy_seed(definition: &ResourceDefinition, seed: &BuiltinDefinition) -> bool {
-    let Some(legacy) = legacy_builtin_definition(seed.code) else {
-        return false;
-    };
+    legacy_builtin_definition(seed.code)
+        .is_some_and(|legacy| is_generated_seed(definition, &legacy, &["v1-000"]))
+        || previous_variable_password_seed(seed)
+            .is_some_and(|previous| is_generated_seed(definition, &previous, &["v1-000", "v1-001"]))
+}
+
+fn is_generated_seed(
+    definition: &ResourceDefinition,
+    seed: &BuiltinDefinition,
+    versions: &[&str],
+) -> bool {
     definition.key.scope_kind == ResourceScopeKind::Platform
         && definition.key.scope_code == PLATFORM_SCOPE_CODE
         && definition.key.definition_code == seed.code
-        && definition.key.definition_version == "v1-000"
-        && definition.name == legacy.name
-        && definition.description == legacy.description
+        && versions.contains(&definition.key.definition_version.as_str())
+        && definition.name == seed.name
+        && definition.description == seed.description
         && definition.definition_status == ResourceDefinitionStatus::Enabled
         && definition.allow_inheritance
-        && definition.attributes_schema == legacy.attributes_schema
-        && definition.binary_schema == legacy.binary_schema
+        && definition.attributes_schema == seed.attributes_schema
+        && definition.binary_schema == seed.binary_schema
         && definition.binary_storage_profile == DEFAULT_BINARY_STORAGE_PROFILE
         && definition.draft_revision == 0
         && definition.validation_status == ResourceValidationStatus::Valid
@@ -148,7 +163,7 @@ fn is_known_legacy_seed(definition: &ResourceDefinition, seed: &BuiltinDefinitio
 }
 
 fn builtin_definitions() -> Vec<BuiltinDefinition> {
-    vec![
+    let mut definitions = vec![
         BuiltinDefinition {
             code: "FILE",
             name: "File",
@@ -198,7 +213,9 @@ fn builtin_definitions() -> Vec<BuiltinDefinition> {
             attributes_schema: kafka_schema(),
             binary_schema: no_binary_schema(),
         },
-    ]
+    ];
+    definitions.extend(super::connection_seeds::server_builtin_definitions());
+    definitions
 }
 
 fn legacy_builtin_definition(code: &str) -> Option<BuiltinDefinition> {
@@ -232,44 +249,6 @@ fn legacy_builtin_definition(code: &str) -> Option<BuiltinDefinition> {
         "KAFKA_CONNECTION" => legacy_connection_definition("KAFKA_CONNECTION", "Kafka connection"),
         _ => None,
     }
-}
-
-fn legacy_file_schema() -> Value {
-    json!({
-        "$schema": DRAFT_7,
-        "type": "object",
-        "properties": {
-            "fileName": { "type": "string", "maxLength": 255 },
-            "sizeBytes": { "type": "integer", "minimum": 0 }
-        },
-        "required": ["fileName", "sizeBytes"],
-        "additionalProperties": false
-    })
-}
-
-fn legacy_connection_definition(
-    code: &'static str,
-    name: &'static str,
-) -> Option<BuiltinDefinition> {
-    Some(BuiltinDefinition {
-        code,
-        name,
-        description: "A managed connection configuration.",
-        attributes_schema: json!({
-            "$schema": DRAFT_7,
-            "type": "object",
-            "properties": {
-                "host": { "type": "string", "minLength": 1 },
-                "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
-                "username": variable_reference_schema(),
-                "password": variable_reference_schema(),
-                "database": { "type": "string" }
-            },
-            "required": ["host", "port"],
-            "additionalProperties": false
-        }),
-        binary_schema: no_binary_schema(),
-    })
 }
 
 fn no_binary_schema() -> Value {
@@ -519,8 +498,8 @@ fn kafka_schema() -> Value {
                     "mechanism": {
                         "type": "string", "enum": ["PLAIN", "SCRAM_SHA_256", "SCRAM_SHA_512"]
                     },
-                    "username": variable_reference_schema(),
-                    "password": variable_reference_schema()
+                    "username": { "type": "string", "minLength": 1, "maxLength": 128 },
+                    "password": secret_reference_schema()
                 },
                 "additionalProperties": false
             },
@@ -545,23 +524,6 @@ fn kafka_schema() -> Value {
             }
         ]
     })
-}
-
-fn endpoint_schema() -> Value {
-    json!({
-        "type": "object",
-        "required": ["host", "port"],
-        "properties": { "host": host_schema(), "port": port_schema() },
-        "additionalProperties": false
-    })
-}
-
-fn host_schema() -> Value {
-    json!({ "type": "string", "minLength": 1, "maxLength": 255 })
-}
-
-fn port_schema() -> Value {
-    json!({ "type": "integer", "minimum": 1, "maximum": 65535 })
 }
 
 fn file_name_schema() -> Value {
@@ -591,8 +553,8 @@ fn credentials_schema(username_required: bool) -> Value {
         "type": "object",
         "required": required,
         "properties": {
-            "username": variable_reference_schema(),
-            "password": variable_reference_schema()
+            "username": { "type": "string", "minLength": 1, "maxLength": 128 },
+            "password": secret_reference_schema()
         },
         "additionalProperties": false
     })

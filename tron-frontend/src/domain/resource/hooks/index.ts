@@ -10,3 +10,4 @@ export * from "./useResourceDefinitionDetail";
 export * from "./useResourceDefinitionPage";
 export * from "./useResourceDetail";
 export * from "./useResourcePage";
+export * from "./useManagedResourceRecords";

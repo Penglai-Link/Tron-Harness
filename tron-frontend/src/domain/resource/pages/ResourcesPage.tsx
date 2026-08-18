@@ -88,14 +88,15 @@ export function ResourcesPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const isPlatform = location.pathname.startsWith("/settings/");
-  const basePath = isPlatform ? "/settings/resources" : "/resources";
+  const isFileManagement = location.pathname.startsWith("/resource-management/files");
+  const basePath = isPlatform ? "/settings/resources" : isFileManagement ? "/resource-management/files" : "/resources";
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
   const activeWorkspaceName = activeWorkspace?.name ?? "";
   const scopeKind = isPlatform ? "PLATFORM" as const : "WORKSPACE" as const;
   const isApi = getServiceDataSource("resource") === "api";
   const [query, setQuery] = useState("");
   const [lifecycleFilter, setLifecycleFilter] = useState<ResourceLifecycleFilter>("ACTIVE");
-  const [definitionFilter, setDefinitionFilter] = useState("ALL");
+  const [definitionFilter, setDefinitionFilter] = useState(isFileManagement ? "FILE" : "ALL");
   const [contextFilter, setContextFilter] = useState<ResourceContextFilter>("ALL");
   const [validationFilter, setValidationFilter] = useState<ResourceValidationFilter>("ALL");
   const [current, setCurrent] = useState(1);
@@ -126,8 +127,11 @@ export function ResourcesPage() {
   const platformQuickUploadDefinitions = useActivePlatformResourceDefinitions();
   const records = resourcePage.data.records;
   const definitionQuery = isPlatform ? platformDefinitionRecords : workspaceDefinitionRecords;
-  const definitionRecords = definitionQuery.data;
-  const quickUploadDefinitions = isPlatform ? platformQuickUploadDefinitions : workspaceQuickUploadDefinitions;
+  const definitionRecords = definitionQuery.data.filter((record) => (
+    !isFileManagement || ["FILE", "IMAGE", "PDF"].includes(record.definitionCode)
+  ));
+  const quickUploadDefinitions = (isPlatform ? platformQuickUploadDefinitions : workspaceQuickUploadDefinitions)
+    .filter((record) => !isFileManagement || ["FILE", "IMAGE", "PDF"].includes(record.definitionCode));
 
   const pageT = (key: string, options?: Record<string, unknown>) => (
     t(`pages:resources.${key}`, options)
@@ -387,7 +391,7 @@ export function ResourcesPage() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
       <PageHeader
-        title={pageT(isPlatform ? "title.platform" : "title.workspace")}
+        title={isFileManagement ? t("pages:resourceConnections.file.title", { defaultValue: "File Management" }) : pageT(isPlatform ? "title.platform" : "title.workspace")}
         actions={(
           <>
             <Button variant="outline" onClick={() => {
@@ -400,16 +404,18 @@ export function ResourcesPage() {
             </Button>
             <Button
               disabled={!isPlatform && !activeWorkspace}
-              variant="outline"
+              variant={isFileManagement ? "default" : "outline"}
               onClick={() => setQuickUploadOpen(true)}
             >
               <Upload aria-hidden="true" size={15} />
               {pageT("actions.quickUpload")}
             </Button>
-            <Button disabled={!isPlatform && !activeWorkspace} onClick={() => navigate(`${basePath}/new`)}>
-              <Plus aria-hidden="true" size={15} />
-              {pageT("actions.new")}
-            </Button>
+            {!isFileManagement ? (
+              <Button disabled={!isPlatform && !activeWorkspace} onClick={() => navigate(`${basePath}/new`)}>
+                <Plus aria-hidden="true" size={15} />
+                {pageT("actions.new")}
+              </Button>
+            ) : null}
           </>
         )}
       />
@@ -458,7 +464,7 @@ export function ResourcesPage() {
                     setCurrent(1);
                   }}
                 >
-                  <SelectItem value="ALL">{pageT("filters.allDefinitions")}</SelectItem>
+                  {!isFileManagement ? <SelectItem value="ALL">{pageT("filters.allDefinitions")}</SelectItem> : null}
                   {definitionOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
                   ))}
@@ -637,7 +643,7 @@ export function ResourcesPage() {
         scopeCode={isPlatform ? "PLATFORM" : activeWorkspaceCode}
         scopeKind={scopeKind}
         onClose={() => setQuickUploadOpen(false)}
-        onContinueInEditor={continueQuickResourceInEditor}
+        onContinueInEditor={isFileManagement ? undefined : continueQuickResourceInEditor}
         onCreate={createQuickResource}
         onCreated={openQuickResource}
       />

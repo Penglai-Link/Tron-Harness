@@ -69,7 +69,7 @@ interface QuickResourceUploadDialogProps {
   scopeKind: ResourceScopeKind;
   onClose: () => void;
   onCreated: (result: QuickResourceCreatedResult) => void;
-  onContinueInEditor: (payload: QuickResourceUploadHandoffPayload) => void;
+  onContinueInEditor?: (payload: QuickResourceUploadHandoffPayload) => void;
   onCreate: (command: QuickResourceCreateCommand) => Promise<QuickResourceCreatedResult>;
 }
 
@@ -140,6 +140,7 @@ export function QuickResourceUploadDialog({
     ? quickT(`blocked.${decision.reason.toLowerCase()}`)
     : "";
   const requiresEditor = decision?.kind === "EDITOR";
+  const editorRequiredWithoutHandoff = requiresEditor && !onContinueInEditor;
   // When a PDF is first selected its state is still IDLE until the reader
   // effect starts. Treat that first render as pending too; otherwise the
   // automatic editor handoff could win the race with a successful read.
@@ -205,7 +206,7 @@ export function QuickResourceUploadDialog({
   }, [file, type]);
 
   function continueInEditor(nextDecision: Extract<QuickResourceUploadDecision, { kind: "EDITOR" }>) {
-    if (!file || editorHandoffStartedRef.current) return;
+    if (!file || !onContinueInEditor || editorHandoffStartedRef.current) return;
     editorHandoffStartedRef.current = true;
     onContinueInEditor({
       allowInheritance: isPlatform ? true : allowInheritance,
@@ -222,7 +223,7 @@ export function QuickResourceUploadDialog({
   }
 
   useEffect(() => {
-    if (!open || !decision || decision.kind !== "EDITOR" || waitingForPdf) return;
+    if (!open || !decision || decision.kind !== "EDITOR" || waitingForPdf || !onContinueInEditor) return;
     continueInEditor(decision);
   // A repairable preflight result is intentionally terminal for quick upload:
   // the full editor is the only surface where the missing information can be
@@ -275,7 +276,7 @@ export function QuickResourceUploadDialog({
       return;
     }
     if (decision.kind === "EDITOR") {
-      continueInEditor(decision);
+      if (onContinueInEditor) continueInEditor(decision);
       return;
     }
 
@@ -308,7 +309,6 @@ export function QuickResourceUploadDialog({
   return createPortal(
     <div className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
       <section
-        aria-describedby="quick-resource-upload-description"
         aria-label={quickT("aria")}
         aria-modal="true"
         className="flex max-h-[min(46rem,calc(100vh-2rem))] w-[min(94vw,38rem)] flex-col overflow-hidden rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
@@ -317,9 +317,6 @@ export function QuickResourceUploadDialog({
         <header className="flex items-start gap-4 border-b border-[var(--color-outline-variant)] px-5 py-4">
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{quickT("title")}</h2>
-            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]" id="quick-resource-upload-description">
-              {quickT("description")}
-            </p>
           </div>
           <Button aria-label={quickT("actions.close")} disabled={submitting} size="icon-sm" type="button" variant="ghost" onClick={close}>
             <X aria-hidden="true" size={16} />
@@ -359,27 +356,6 @@ export function QuickResourceUploadDialog({
                 <span className="shrink-0 font-mono text-[12px] text-[var(--color-on-surface-variant)]">{formatFileSize(file.size, i18n.language)}</span>
               </div>
 
-              <fieldset>
-                <legend className="mb-2 text-sm font-medium text-[var(--color-on-surface)]">{quickT("type.label")}</legend>
-                <div aria-label={quickT("type.aria")} className="flex flex-wrap gap-2" role="group">
-                  {quickResourceTypes.map((item) => (
-                    <Button
-                      aria-pressed={type === item}
-                      key={item}
-                      size="sm"
-                      type="button"
-                      variant={type === item ? "default" : "outline"}
-                      onClick={() => {
-                        setError("");
-                        setType(item);
-                      }}
-                    >
-                      {quickT(`type.${item.toLowerCase()}`)}
-                    </Button>
-                  ))}
-                </div>
-              </fieldset>
-
               <div className="grid gap-3 sm:grid-cols-2">
                 <label className="grid gap-1.5 text-sm font-medium text-[var(--color-on-surface)]">
                   {quickT("fields.name")}
@@ -396,6 +372,7 @@ export function QuickResourceUploadDialog({
                   <SelectInput
                     aria-label={quickT("fields.definition")}
                     disabled={submitting}
+                    popupPositionerClassName="z-[120]"
                     value={type}
                     onValueChange={(value) => {
                       setError("");
@@ -435,8 +412,9 @@ export function QuickResourceUploadDialog({
                     {quickT("fields.description")}
                     <TextArea
                       aria-label={quickT("fields.description")}
-                      className="min-h-20"
+                      className="min-h-20 bg-background"
                       disabled={submitting}
+                      placeholder={quickT("fields.descriptionPlaceholder")}
                       value={description}
                       onChange={(event) => setDescription(event.target.value)}
                     />
@@ -462,7 +440,15 @@ export function QuickResourceUploadDialog({
                 </div>
               ) : null}
               {requiresEditor ? (
-                <p className="text-[12px] text-[var(--color-on-surface-variant)]">{quickT("editorRequired")}</p>
+                <p
+                  className={cn(
+                    "text-[12px]",
+                    editorRequiredWithoutHandoff ? "text-[var(--color-error)]" : "text-[var(--color-on-surface-variant)]",
+                  )}
+                  role={editorRequiredWithoutHandoff ? "alert" : undefined}
+                >
+                  {editorRequiredWithoutHandoff ? quickT("errors.editorRequired") : quickT("editorRequired")}
+                </p>
               ) : null}
             </div>
           ) : null}
@@ -478,12 +464,12 @@ export function QuickResourceUploadDialog({
           <Button disabled={submitting} type="button" variant="ghost" onClick={close}>{quickT("actions.cancel")}</Button>
           <Button
             aria-busy={submitting}
-            disabled={!file || submitting || waitingForPdf || decision?.kind === "BLOCKED" || !name.trim() || !resourceCode.trim()}
+            disabled={!file || submitting || waitingForPdf || decision?.kind === "BLOCKED" || editorRequiredWithoutHandoff || !name.trim() || !resourceCode.trim()}
             type="button"
             onClick={() => { void submit(); }}
           >
-            {submitting ? <LoaderCircle aria-hidden="true" className="animate-spin" size={15} /> : requiresEditor ? null : <Upload aria-hidden="true" size={15} />}
-            {submitting ? quickT("actions.creating") : requiresEditor ? quickT("actions.continue") : quickT("actions.create")}
+            {submitting ? <LoaderCircle aria-hidden="true" className="animate-spin" size={15} /> : requiresEditor && onContinueInEditor ? null : <Upload aria-hidden="true" size={15} />}
+            {submitting ? quickT("actions.creating") : requiresEditor && onContinueInEditor ? quickT("actions.continue") : quickT("actions.create")}
           </Button>
         </footer>
       </section>

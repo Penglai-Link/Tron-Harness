@@ -84,6 +84,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   displayValue,
   id,
   placeholder,
+  popupPositionerClassName,
   size,
   ...props
 }: SelectPrimitive.Root.Props<Value, Multiple> & {
@@ -94,6 +95,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
   displayValue?: SelectPrimitive.Value.Props["children"];
   id?: string;
   placeholder?: ReactNode;
+  popupPositionerClassName?: string;
   size?: 'sm' | 'lg';
 }) {
   const items = useMemo(() => {
@@ -129,7 +131,7 @@ export function SelectInput<Value, Multiple extends boolean | undefined = false>
             {displayValue}
           </SelectValue>
         </SelectTrigger>
-        <SelectPopup alignItemWithTrigger={false}>
+        <SelectPopup alignItemWithTrigger={false} positionerClassName={popupPositionerClassName}>
           {children}
         </SelectPopup>
       </Select>

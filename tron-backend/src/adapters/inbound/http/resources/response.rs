@@ -7,6 +7,7 @@ use crate::{
         ResourceDefinitionDeleteResult, ResourceDefinitionDraftResult,
         ResourceDefinitionVersionPage, ResourceDefinitionVersionView, ResourceDeleteResult,
         ResourceDraftResult, ResourceValidationIssue, ResourceVersionPage, ResourceVersionView,
+        ServerCreateResult,
     },
     domain::resource::{
         ResourceActivationResult, ResourceDefinitionStatus, ResourceLifecycleStatus,
@@ -403,6 +404,24 @@ impl From<ResourceActivationOutput> for ResourceActivationResponse {
             lifecycle_status: lifecycle_code(value.lifecycle_status),
             activation_result: activation_code(value.activation_result),
             previous_active_resource_version: value.previous_active_resource_version,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ServerCreateResponse {
+    pub server: ResourceActivationResponse,
+    pub initial_account: ResourceActivationResponse,
+    pub connectivity_verified: bool,
+}
+
+impl From<ServerCreateResult> for ServerCreateResponse {
+    fn from(value: ServerCreateResult) -> Self {
+        Self {
+            server: value.server.into(),
+            initial_account: value.initial_account.into(),
+            connectivity_verified: value.connectivity_verified,
         }
     }
 }

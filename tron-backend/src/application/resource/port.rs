@@ -60,6 +60,10 @@ pub trait ResourceRepository: Send {
         resource: &Resource,
         mappings: &[ResourceBinaryMapping],
     ) -> Result<(), ResourceError>;
+    fn insert_active_resource_bundle(
+        &mut self,
+        resources: &[Resource],
+    ) -> Result<(), ResourceError>;
     fn update_resource_draft(
         &mut self,
         resource: &Resource,

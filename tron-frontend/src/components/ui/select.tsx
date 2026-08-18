@@ -114,6 +114,7 @@ export function SelectPopup({
   alignItemWithTrigger = true,
   anchor,
   portalProps,
+  positionerClassName,
   ...props
 }: SelectPrimitive.Popup.Props & {
   portalProps?: SelectPrimitive.Portal.Props;
@@ -123,6 +124,7 @@ export function SelectPopup({
   alignOffset?: SelectPrimitive.Positioner.Props["alignOffset"];
   alignItemWithTrigger?: SelectPrimitive.Positioner.Props["alignItemWithTrigger"];
   anchor?: SelectPrimitive.Positioner.Props["anchor"];
+  positionerClassName?: string;
 }): React.ReactElement {
   return (
     <SelectPrimitive.Portal {...portalProps}>
@@ -131,7 +133,7 @@ export function SelectPopup({
         alignItemWithTrigger={alignItemWithTrigger}
         alignOffset={alignOffset}
         anchor={anchor}
-        className="z-50 select-none"
+        className={cn("z-50 select-none", positionerClassName)}
         data-slot="select-positioner"
         side={side}
         sideOffset={sideOffset}

@@ -134,6 +134,9 @@ fn build_resource_service(
         config.resource.clone(),
         storage_profiles,
         event_bus,
+        Arc::new(ProtocolResourceConnectionVerifier::new(Duration::from_millis(
+            config.resource.connection_verification_timeout_ms,
+        ))),
     )
     .expect("resource service should initialize");
     service

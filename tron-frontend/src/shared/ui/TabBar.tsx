@@ -22,7 +22,17 @@ export function TabBar({ className }: TabBarProps) {
 
   const handleTabClose = (e: React.MouseEvent, tabId: string) => {
     e.stopPropagation();
+    const closingActiveTab = tabId === activeTabId;
+    const closingIndex = tabs.findIndex((tab) => tab.id === tabId);
+    const remainingTabs = tabs.filter((tab) => tab.id !== tabId);
+    const nextTab = closingActiveTab
+      ? remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)]
+      : undefined;
+
     removeTab(tabId);
+    if (closingActiveTab) {
+      navigate(nextTab?.path ?? "/dashboard");
+    }
   };
 
   if (tabs.length === 0) {

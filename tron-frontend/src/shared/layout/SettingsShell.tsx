@@ -88,6 +88,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
     () => visibleItems.find((group) => group.items.some((item) => item.label === activeItem))?.groupKey ?? null,
     [activeItem, visibleItems],
   );
+  const previousActiveGroupKeyRef = useRef(activeGroupKey);
 
   useEffect(() => {
     if (typeof window !== "undefined" && returnTo !== "/dashboard") {
@@ -96,6 +97,8 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
   }, [returnTo]);
 
   useEffect(() => {
+    if (previousActiveGroupKeyRef.current === activeGroupKey) return;
+    previousActiveGroupKeyRef.current = activeGroupKey;
     if (!activeGroupKey) return;
     setCollapsedGroups((current) => (
       current[activeGroupKey] ? { ...current, [activeGroupKey]: false } : current
@@ -114,10 +117,6 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
   }, [activeItem]);
 
   function toggleGroup(groupKey: string) {
-    if (groupKey === activeGroupKey) {
-      return;
-    }
-
     setCollapsedGroups((current) => ({ ...current, [groupKey]: !current[groupKey] }));
   }
 

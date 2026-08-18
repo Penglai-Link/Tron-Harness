@@ -4,6 +4,7 @@ frontendDistDir: tron-backend/resources/frontend
 projectDocRoot: .
 
 resource:
+  connectionVerificationTimeoutMs: 5000
   storage:
     defaultProfile: local-default
     profiles:

@@ -365,8 +365,30 @@ const schemaByDefinitionCode: Record<string, ResourceDefinitionAttributesSchema>
       credentials: {
         additionalProperties: false,
         properties: {
-          username: { format: "tron-variable-ref", title: "Username variable", type: "string" },
-          password: { format: "tron-variable-ref", title: "Password variable", type: "string" },
+          username: { maxLength: 128, minLength: 1, title: "Username", type: "string" },
+          password: {
+            oneOf: [
+              { format: "tron-variable-ref", type: "string" },
+              {
+                additionalProperties: false,
+                oneOf: [
+                  {
+                    not: { required: ["variableKey"] },
+                    properties: { source: { const: "DIRECT" }, value: { minLength: 1, type: "string" } },
+                    required: ["source", "value"],
+                  },
+                  {
+                    not: { required: ["value"] },
+                    properties: { source: { const: "VARIABLE" }, variableKey: { format: "tron-variable-ref", type: "string" } },
+                    required: ["source", "variableKey"],
+                  },
+                ],
+                properties: { source: { enum: ["DIRECT", "VARIABLE"], type: "string" }, value: { type: "string" }, variableKey: { type: "string" } },
+                type: "object",
+              },
+            ],
+            title: "Password",
+          },
         },
         required: ["username", "password"],
         title: "Credentials",

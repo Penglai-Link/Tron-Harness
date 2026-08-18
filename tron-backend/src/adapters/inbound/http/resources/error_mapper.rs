@@ -24,7 +24,9 @@ pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
         | ResourceError::ActiveVersionConflict
         | ResourceError::DefinitionDisabled
         | ResourceError::DefinitionInUse
-        | ResourceError::BuiltinDefinition => StatusCode::CONFLICT,
+        | ResourceError::BuiltinDefinition
+        | ResourceError::ServerHasAccounts => StatusCode::CONFLICT,
+        ResourceError::ConnectionVerificationFailed(_) => StatusCode::BAD_GATEWAY,
         ResourceError::StorageFailure => StatusCode::INTERNAL_SERVER_ERROR,
         ResourceError::WorkspaceRequired
         | ResourceError::InvalidWorkspace
@@ -39,7 +41,8 @@ pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
         | ResourceError::LifecycleDenied
         | ResourceError::PathDenied
         | ResourceError::StorageProfileNotFound
-        | ResourceError::StorageLocatorInvalid => StatusCode::BAD_REQUEST,
+        | ResourceError::StorageLocatorInvalid
+        | ResourceError::ConnectionEndpointRequired => StatusCode::BAD_REQUEST,
     };
     (
         status,
@@ -159,6 +162,18 @@ fn localized_resource_error(error: ResourceError, locale: &str) -> String {
         ResourceError::StorageLocatorInvalid => (
             "资源存储位置不正确",
             "The resource storage locator is invalid",
+        ),
+        ResourceError::ConnectionEndpointRequired => (
+            "连接类资源必须使用专用创建接口",
+            "Connection resources must be created through their dedicated endpoint",
+        ),
+        ResourceError::ConnectionVerificationFailed(_) => (
+            "连接信息未通过连通性检测",
+            "The connection information did not pass connectivity verification",
+        ),
+        ResourceError::ServerHasAccounts => (
+            "服务器仍关联账号，不能删除",
+            "The server still has accounts and cannot be deleted",
         ),
     };
     localized_message(locale, zh, en)
