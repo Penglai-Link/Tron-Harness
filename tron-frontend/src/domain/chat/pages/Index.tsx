@@ -1,6 +1,7 @@
-import Chat from "../components/terminal";
+import { ChatManagementPage } from "./ChatManagementPage";
 
 export default function Index() {
-  return <Chat />;
+  return <ChatManagementPage />
 }
+
 
