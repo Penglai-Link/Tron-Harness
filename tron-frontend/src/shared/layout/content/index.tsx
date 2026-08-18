@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { Dispatch, memo, SetStateAction, type ReactNode } from "react";
 
 import { ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
 
@@ -11,6 +11,7 @@ interface ContentProps {
   onRightPanelOpenChange?: (open: boolean) => void;
   rightPanel?: ReactNode;
   showBottomPanel?: boolean;
+  changeBottomPanel?: Dispatch<SetStateAction<boolean>>;
 }
 
 export const Content = memo(function Content({
@@ -19,6 +20,7 @@ export const Content = memo(function Content({
   onRightPanelOpenChange,
   rightPanel,
   showBottomPanel,
+  changeBottomPanel
 }: ContentProps) {
   return (
     <ResizablePanelGroup orientation="vertical" className="h-full w-full">
@@ -31,7 +33,9 @@ export const Content = memo(function Content({
           {children}
         </Panel>
       </ResizablePanel>
-      {showBottomPanel ? <BottomPanel /> : null}
+      {showBottomPanel ? (
+        <BottomPanel changeBottomPanel={changeBottomPanel} />
+      ) : null}
     </ResizablePanelGroup>
   );
 });

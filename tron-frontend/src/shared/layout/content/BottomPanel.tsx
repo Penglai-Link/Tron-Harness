@@ -1,12 +1,27 @@
 import { EditableTab, EditableTabs } from "@/components/editable-tabs";
 import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
 import { usePanel } from "@/shared/hooks/usePanel";
-import { memo, useCallback, useMemo, useRef } from "react";
+import {
+  Dispatch,
+  memo,
+  SetStateAction,
+  useCallback,
+  useMemo,
+  useRef,
+} from "react";
 import Terminal from "@/components/terminal";
+import {
+  EditableTabEditInfo,
+  OperateType,
+} from "@/components/editable-tabs/types";
 
 const BOTTOM_PANEL_COLLAPSE_THRESHOLD = 120;
 
-export default memo(function BottomPanel() {
+interface IPanelProps {
+  changeBottomPanel?: Dispatch<SetStateAction<boolean>>;
+}
+
+export default memo(function BottomPanel({ changeBottomPanel }: IPanelProps) {
   const nextTabIdRef = useRef(1);
   const createTab = useCallback((): EditableTab => {
     const tabId = nextTabIdRef.current++;
@@ -26,6 +41,12 @@ export default memo(function BottomPanel() {
     toggleEventName: null,
   });
 
+  function onEdit(action: OperateType, { remainingTabs }: EditableTabEditInfo) {
+    if (action === OperateType.Remove && remainingTabs?.length === 0) {
+      changeBottomPanel?.(false);
+    }
+  }
+
   return (
     <>
       <ResizableHandle className="w-full" />
@@ -43,6 +64,7 @@ export default memo(function BottomPanel() {
           defaultActiveKey={items[0]?.key}
           items={items}
           keepMounted
+          onEdit={onEdit}
         />
       </ResizablePanel>
     </>

@@ -1031,6 +1031,7 @@ export function TronShell({
               onRightPanelOpenChange={setRightDragglePanelOpen}
               rightPanel={rightPanel}
               showBottomPanel={showBottomPanel}
+              changeBottomPanel={setBottomPanel}
             >
               {children}
             </Content>

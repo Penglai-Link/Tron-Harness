@@ -4,9 +4,12 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { EditableTabList } from "./EditableTabList";
-import type { EditableTab, EditableTabsProps } from "./types";
+import { OperateType, type EditableTab, type EditableTabsProps } from "./types";
 
-function getInitialActiveKey(items: readonly EditableTab[], defaultActiveKey?: string) {
+function getInitialActiveKey(
+  items: readonly EditableTab[],
+  defaultActiveKey?: string,
+) {
   if (defaultActiveKey && items.some((item) => item.key === defaultActiveKey)) {
     return defaultActiveKey;
   }
@@ -22,10 +25,12 @@ export function EditableTabs({
   onChange,
   onEdit,
   className,
-  keepMounted
+  keepMounted,
 }: EditableTabsProps) {
   const [tabs, setTabs] = useState<EditableTab[]>(() => [...items]);
-  const [activeKey, setActiveKey] = useState<string | undefined>(() => getInitialActiveKey(items, defaultActiveKey));
+  const [activeKey, setActiveKey] = useState<string | undefined>(() =>
+    getInitialActiveKey(items, defaultActiveKey),
+  );
 
   const handleValueChange = useCallback(
     (value: string) => {
@@ -43,7 +48,7 @@ export function EditableTabs({
 
     setTabs((currentTabs) => [...currentTabs, tab]);
     setActiveKey(tab.key);
-    onEdit?.("add", { key: tab.key });
+    onEdit?.(OperateType.Add, { key: tab.key });
     onChange?.(tab.key);
   }, [createTab, onChange, onEdit, tabs]);
 
@@ -57,19 +62,24 @@ export function EditableTabs({
 
       const nextTabs = tabs.filter((item) => item.key !== key);
       const nextActiveKey =
-        activeKey !== key ? activeKey : nextTabs[tabIndex]?.key ?? nextTabs[tabIndex - 1]?.key;
+        activeKey !== key
+          ? activeKey
+          : nextTabs[tabIndex]?.key ?? nextTabs[tabIndex - 1]?.key;
 
       setTabs(nextTabs);
       if (activeKey === key) {
         setActiveKey(nextActiveKey);
         onChange?.(nextActiveKey);
       }
-      onEdit?.("remove", { key });
+      onEdit?.(OperateType.Remove, { key, remainingTabs: nextTabs });
     },
     [activeKey, onChange, onEdit, tabs],
   );
 
-  const panels = useMemo(() => tabs.map((tab) => ({ key: tab.key, children: tab.children })), [tabs]);
+  const panels = useMemo(
+    () => tabs.map((tab) => ({ key: tab.key, children: tab.children })),
+    [tabs],
+  );
 
   return (
     <Tabs

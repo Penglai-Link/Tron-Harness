@@ -13,7 +13,7 @@ import { cn } from "@/shared/lib/utils";
 import { TabBar } from "@/shared/ui/TabBar";
 import { useTabStore } from "@/store/tabStore";
 
-interface PanelProps {
+interface IPanelProps {
   children: ReactNode;
   contentClassName?: string;
   onRightPanelOpenChange?: (open: boolean) => void;
@@ -93,7 +93,7 @@ export function Panel({
   contentClassName,
   onRightPanelOpenChange,
   rightPanel,
-}: PanelProps) {
+}: IPanelProps) {
   const { pathname, search } = useLocation();
   const hasOpenTabs = useTabStore((state) => state.tabs.length > 0);
   const hasRightPanel = Boolean(rightPanel);

@@ -7,10 +7,9 @@ export interface EditableTab {
   closable?: boolean;
 }
 
-export type EditableTabAction = "add" | "remove";
-
 export interface EditableTabEditInfo {
   key?: string;
+  remainingTabs?: EditableTab[];
 }
 
 export interface EditableTabAddTriggerProps {
@@ -24,7 +23,12 @@ export interface EditableTabsProps {
   hideAdd?: boolean;
   renderAddTrigger?: (props: EditableTabAddTriggerProps) => ReactNode;
   onChange?: (activeKey: string | undefined) => void;
-  onEdit?: (action: EditableTabAction, info: EditableTabEditInfo) => void;
+  onEdit?: (action: OperateType, info: EditableTabEditInfo) => void;
   className?: string;
   keepMounted?: boolean;
+}
+
+export enum OperateType {
+  Remove,
+  Add,
 }
