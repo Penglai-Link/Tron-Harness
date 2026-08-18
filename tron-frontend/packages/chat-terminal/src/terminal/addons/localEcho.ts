@@ -64,6 +64,7 @@ const EXPLAIN_DIALOG_MARGIN = 12;
 const EXPLAIN_DIALOG_ANCHOR_OFFSET_Y = 8;
 const EXPLAIN_RENDER_INTERVAL_MS = 50;
 const EDITABLE_LINE_RESIZE_DEBOUNCE_MS = 100;
+const COMMAND_HISTORY_LIMIT = 100;
 
 export class LocalEchoAddon implements ITerminalAddon {
   private disposable?: IDisposable;
@@ -72,7 +73,11 @@ export class LocalEchoAddon implements ITerminalAddon {
   private explanationRequestVersion = 0;
   private explanationAbortController?: AbortController;
   private explanationRenderTimer?: number;
+  private keyEventHandler?: (event: KeyboardEvent) => boolean;
   private currentInput = "";
+  private commandHistory: string[] = [];
+  private historyDraft = "";
+  private historyIndex?: number;
   private inputCellSpans: InputCellSpan[] = [];
   private inputQueue = Promise.resolve();
   private commandInputQueue = Promise.resolve();
@@ -128,6 +133,22 @@ export class LocalEchoAddon implements ITerminalAddon {
 
       this.enqueueInput(() => this.echo(terminal, data));
     });
+    this.keyEventHandler = (event) => {
+      const isClearShortcut =
+        event.type === "keydown" &&
+        event.metaKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        event.key.toLowerCase() === "k";
+
+      if (!isClearShortcut || !this.clear()) {
+        return true;
+      }
+
+      event.preventDefault();
+      return false;
+    };
+    terminal.attachCustomKeyEventHandler(this.keyEventHandler);
     this.resizeDisposable = terminal.onResize(() => {
       this.scheduleEditableLineRedraw(terminal);
     });
@@ -137,6 +158,7 @@ export class LocalEchoAddon implements ITerminalAddon {
   dispose() {
     this.disposable?.dispose();
     this.disposable = undefined;
+    this.keyEventHandler = undefined;
     this.resizeDisposable?.dispose();
     this.resizeDisposable = undefined;
     if (this.resizeRedrawTimer !== undefined) {
@@ -198,6 +220,17 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.renderActiveExplainDialog(this.activeExplainDialog);
   }
 
+  clear() {
+    const terminal = this.terminal;
+
+    if (!terminal || this.isExecuting) {
+      return false;
+    }
+
+    this.enqueueInput(() => this.clearTerminal(terminal));
+    return true;
+  }
+
   private async echo(terminal: XTerminal, data: string) {
     if (this.isExecuting) {
       if (data === "\u0003") {
@@ -211,10 +244,21 @@ export class LocalEchoAddon implements ITerminalAddon {
       return;
     }
 
+    if (data === "\x1b[A" || data === "\x1bOA") {
+      await this.navigateCommandHistory(terminal, -1);
+      return;
+    }
+
+    if (data === "\x1b[B" || data === "\x1bOB") {
+      await this.navigateCommandHistory(terminal, 1);
+      return;
+    }
+
     if (data === "\u0003") {
       await writeTerminalAsync(terminal, "^C\r\n");
       this.currentInput = "";
       this.inputCellSpans = [];
+      this.clearHistoryNavigation();
       await this.writePrompt();
       this.notifyInputState();
       return;
@@ -225,6 +269,7 @@ export class LocalEchoAddon implements ITerminalAddon {
         return;
       }
 
+      this.clearHistoryNavigation();
       const { input, width } = removeLastGrapheme(this.currentInput);
       this.currentInput = input;
       const span = this.inputCellSpans.pop();
@@ -242,6 +287,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     }
 
     const graphemes = segmentGraphemes(data);
+    this.clearHistoryNavigation();
     const start = getTerminalCursorPosition(terminal);
     this.inputCellSpans.push(
       ...createInputCellSpans(start, graphemes, terminal.cols),
@@ -277,6 +323,7 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     this.currentInput = "";
     this.inputCellSpans = [];
+    this.clearHistoryNavigation();
     this.isExecuting = true;
     const activeCommand: ActiveCommand = {
       cancelled: false,
@@ -312,6 +359,8 @@ export class LocalEchoAddon implements ITerminalAddon {
       if (!this.options.onCommand) {
         return;
       }
+
+      this.recordCommand(command);
 
       const firstOutputRow =
         terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
@@ -376,6 +425,77 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     activeCommand.cancelled = true;
     this.options.onCancelCommand?.();
+  }
+
+  private async navigateCommandHistory(terminal: XTerminal, direction: -1 | 1) {
+    if (this.commandHistory.length === 0) {
+      return;
+    }
+
+    if (direction === -1) {
+      if (this.historyIndex === undefined) {
+        this.historyDraft = this.currentInput;
+        this.historyIndex = this.commandHistory.length - 1;
+      } else {
+        this.historyIndex = Math.max(0, this.historyIndex - 1);
+      }
+    } else if (this.historyIndex === undefined) {
+      return;
+    } else if (this.historyIndex < this.commandHistory.length - 1) {
+      this.historyIndex += 1;
+    } else {
+      const draft = this.historyDraft;
+      this.clearHistoryNavigation();
+      await this.replaceCurrentInput(terminal, draft);
+      return;
+    }
+
+    await this.replaceCurrentInput(
+      terminal,
+      this.commandHistory[this.historyIndex] ?? "",
+    );
+  }
+
+  private recordCommand(command: string) {
+    if (!command.trim()) {
+      return;
+    }
+
+    this.commandHistory.push(command);
+    if (this.commandHistory.length > COMMAND_HISTORY_LIMIT) {
+      this.commandHistory.shift();
+    }
+  }
+
+  private clearHistoryNavigation() {
+    this.historyDraft = "";
+    this.historyIndex = undefined;
+  }
+
+  private async replaceCurrentInput(terminal: XTerminal, input: string) {
+    this.currentInput = input;
+    await this.redrawEditableLine(terminal);
+    this.notifyInputState();
+  }
+
+  private async clearTerminal(terminal: XTerminal) {
+    terminal.clear();
+
+    const prompt = this.getPrompt();
+    const inputStart = advanceTextCursor(
+      { column: 0, row: 0 },
+      prompt,
+      terminal.cols,
+    );
+    this.inputCellSpans = createInputCellSpans(
+      inputStart,
+      segmentGraphemes(this.currentInput),
+      terminal.cols,
+    );
+    await writeTerminalAsync(terminal, `\r\x1b[2K${prompt}${this.currentInput}`);
+    this.hasRenderedEditableLine = true;
+    this.renderedColumns = terminal.cols;
+    this.notifyInputState();
   }
 
   private enqueueInput(task: () => Promise<void> | void | undefined) {

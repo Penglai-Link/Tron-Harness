@@ -16,10 +16,12 @@ class TerminalStub {
   };
   readonly element = document.createElement("div");
   readonly writes: string[] = [];
+  clearCount = 0;
   cols: number;
   private readonly deferWrites: boolean;
   private pendingWriteCallbacks: Array<() => void> = [];
   private dataHandler?: (data: string) => void;
+  private keyEventHandler?: (event: KeyboardEvent) => boolean;
   private resizeHandler?: () => void;
 
   constructor(cols = 80, cursorX = 0, deferWrites = false) {
@@ -37,6 +39,10 @@ class TerminalStub {
     this.resizeHandler?.();
   }
 
+  emitKeyEvent(event: KeyboardEvent) {
+    return this.keyEventHandler?.(event);
+  }
+
   onData(handler: (data: string) => void): IDisposable {
     this.dataHandler = handler;
     return { dispose: vi.fn() };
@@ -47,8 +53,18 @@ class TerminalStub {
     return { dispose: vi.fn() };
   }
 
+  attachCustomKeyEventHandler(handler: (event: KeyboardEvent) => boolean) {
+    this.keyEventHandler = handler;
+  }
+
   onScroll(): IDisposable {
     return { dispose: vi.fn() };
+  }
+
+  clear() {
+    this.clearCount += 1;
+    this.buffer.active.baseY = 0;
+    this.buffer.active.cursorY = 0;
   }
 
   write(data: string, callback?: () => void) {
@@ -232,9 +248,13 @@ describe("LocalEchoAddon command cancellation", () => {
     expect(terminal.writes).toContain("package name: ");
 
     terminal.emitData("demo\r");
+    terminal.emitData("\u000b");
     await flushTasks();
 
-    expect(onCommandInput.mock.calls.map(([data]) => data)).toEqual(["demo\r"]);
+    expect(onCommandInput.mock.calls.map(([data]) => data)).toEqual([
+      "demo\r",
+      "\u000b",
+    ]);
 
     finishCommand?.();
     await flushTasks();
@@ -266,6 +286,125 @@ describe("LocalEchoAddon command cancellation", () => {
 });
 
 describe("LocalEchoAddon input cursor tracking", () => {
+  it("clears the terminal with Command+K while preserving the current input", async () => {
+    const terminal = new TerminalStub();
+    const inputStates: string[] = [];
+    const addon = new LocalEchoAddon(
+      { enabled: true, prompt: "$ " },
+      (_enabled, input) => inputStates.push(input),
+    );
+    addon.activate(terminal as unknown as XTerminal);
+    terminal.write("$ ");
+    addon.markPromptRendered();
+    terminal.emitData("git status");
+    await flushTasks();
+
+    const commandK = new KeyboardEvent("keydown", {
+      cancelable: true,
+      key: "k",
+      metaKey: true,
+    });
+    expect(terminal.emitKeyEvent(commandK)).toBe(false);
+    await flushTasks();
+
+    expect(terminal.clearCount).toBe(1);
+    expect(commandK.defaultPrevented).toBe(true);
+    expect(terminal.writes.at(-1)).toBe("\r\x1b[2K$ git status");
+    expect(inputStates.at(-1)).toBe("git status");
+
+    terminal.emitData("\u007f");
+    await flushTasks();
+    expect(inputStates.at(-1)).toBe("git statu");
+  });
+
+  it("does not clear the terminal with Control+K", async () => {
+    const terminal = new TerminalStub();
+    const addon = new LocalEchoAddon({ enabled: true, prompt: "$ " });
+    addon.activate(terminal as unknown as XTerminal);
+
+    const controlK = new KeyboardEvent("keydown", {
+      cancelable: true,
+      ctrlKey: true,
+      key: "k",
+    });
+
+    expect(terminal.emitKeyEvent(controlK)).toBe(true);
+    expect(controlK.defaultPrevented).toBe(false);
+    expect(terminal.clearCount).toBe(0);
+  });
+
+  it("navigates executed shell commands with the arrow keys", async () => {
+    const terminal = new TerminalStub();
+    const inputStates: string[] = [];
+    const submittedCommands: string[] = [];
+    const addon = new LocalEchoAddon(
+      {
+        enabled: true,
+        onCommand: (command) => {
+          submittedCommands.push(command);
+        },
+        prompt: "$ ",
+      },
+      (_enabled, input) => inputStates.push(input),
+    );
+    addon.activate(terminal as unknown as XTerminal);
+    terminal.write("$ ");
+    addon.markPromptRendered();
+
+    terminal.emitData("pwd");
+    terminal.emitData("\r");
+    await flushTasks();
+    terminal.emitData("ls -la");
+    terminal.emitData("\r");
+    await flushTasks();
+
+    terminal.emitData("draft");
+    await flushTasks();
+    terminal.emitData("\x1b[A");
+    await flushTasks();
+    expect(inputStates.at(-1)).toBe("ls -la");
+
+    terminal.emitData("\x1b[A");
+    await flushTasks();
+    expect(inputStates.at(-1)).toBe("pwd");
+
+    terminal.emitData("\x1b[B");
+    await flushTasks();
+    expect(inputStates.at(-1)).toBe("ls -la");
+
+    terminal.emitData("\x1b[B");
+    await flushTasks();
+    expect(inputStates.at(-1)).toBe("draft");
+    expect(submittedCommands).toEqual(["pwd", "ls -la"]);
+  });
+
+  it("does not add agent-handled input to shell command history", async () => {
+    const terminal = new TerminalStub();
+    const inputStates: string[] = [];
+    const onCommand = vi.fn();
+    const addon = new LocalEchoAddon(
+      {
+        enabled: true,
+        onBeforeCommand: () => true,
+        onCommand,
+        prompt: "$ ",
+      },
+      (_enabled, input) => inputStates.push(input),
+    );
+    addon.activate(terminal as unknown as XTerminal);
+    terminal.write("$ ");
+    addon.markPromptRendered();
+
+    terminal.emitData("summarize the logs");
+    terminal.emitData("\r");
+    await flushTasks();
+    terminal.emitData("\x1b[A");
+    await flushTasks();
+
+    expect(onCommand).not.toHaveBeenCalled();
+    expect(inputStates.at(-1)).toBe("");
+  });
+
   it("writes pasted text in one terminal operation", async () => {
     const terminal = new TerminalStub();
     const addon = new LocalEchoAddon({ enabled: true });
