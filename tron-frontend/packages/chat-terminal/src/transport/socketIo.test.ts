@@ -13,11 +13,13 @@ const socketHarness = vi.hoisted(() => {
     }),
   };
 
-  return { handlers, socket };
+  const io = vi.fn(() => socket);
+
+  return { handlers, io, socket };
 });
 
 vi.mock("socket.io-client", () => ({
-  io: vi.fn(() => socketHarness.socket),
+  io: socketHarness.io,
 }));
 
 import {
@@ -28,6 +30,7 @@ import {
 describe("SocketIoTerminalTransport", () => {
   beforeEach(() => {
     socketHarness.handlers.clear();
+    socketHarness.io.mockClear();
     socketHarness.socket.emit.mockClear();
     socketHarness.socket.on.mockClear();
     vi.stubGlobal("crypto", {
@@ -61,6 +64,21 @@ describe("SocketIoTerminalTransport", () => {
     });
 
     expect(transport).toBeInstanceOf(SocketIoTerminalTransport);
+  });
+
+  it("creates an isolated socket connection for every terminal transport", () => {
+    new SocketIoTerminalTransport("http://terminal.test", {
+      socketOptions: { auth: { token: "token" } },
+    });
+
+    expect(socketHarness.io).toHaveBeenCalledWith(
+      "http://terminal.test",
+      expect.objectContaining({
+        autoConnect: false,
+        forceNew: true,
+        multiplex: false,
+      }),
+    );
   });
 
   it("rejects connection when the session envelope contains an error", async () => {

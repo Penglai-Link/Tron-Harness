@@ -1,4 +1,4 @@
-import { Plus, X } from "lucide-react";
+import { Plus } from "lucide-react";
 import type { ReactNode } from "react";
 
 import { Button } from "@/components/ui/button";
@@ -11,8 +11,6 @@ import type { EditableTab, EditableTabAddTriggerProps } from "./types";
 interface EditableTabListProps {
   tabs: readonly EditableTab[];
   hideAdd: boolean;
-  removeIcon?: ReactNode;
-  addAriaLabel: string;
   renderAddTrigger?: (props: EditableTabAddTriggerProps) => ReactNode;
   onAdd: () => void;
   onClose: (key: string) => void;
@@ -22,7 +20,6 @@ interface EditableTabListProps {
 export function EditableTabList({
   tabs,
   hideAdd,
-  addAriaLabel,
   renderAddTrigger,
   onAdd,
   onClose,
@@ -41,9 +38,7 @@ export function EditableTabList({
         ) : null}
       </TabsList>
       {renderAddTrigger ? (
-        <div className={cn("shrink-0 pb-1")}>
-          {renderAddTrigger({ "aria-label": addAriaLabel, onAdd })}
-        </div>
+        <div className={cn("shrink-0 pb-1")}>{renderAddTrigger({ onAdd })}</div>
       ) : null}
     </div>
   );

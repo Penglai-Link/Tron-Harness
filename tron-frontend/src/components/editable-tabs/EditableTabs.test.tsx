@@ -69,4 +69,30 @@ describe("EditableTabs", () => {
     expect(screen.getByText("Two content")).toBeTruthy();
     expect(screen.getAllByRole("button", { name: "Close tab" })).toHaveLength(1);
   });
+
+  it("keeps each tab content mounted while switching tabs", () => {
+    render(
+      <EditableTabs
+        items={[
+          {
+            key: "one",
+            label: "One",
+            children: <input aria-label="One input" defaultValue="" />,
+          },
+          {
+            key: "two",
+            label: "Two",
+            children: <p>Two content</p>,
+          },
+        ]}
+      />,
+    );
+
+    const input = screen.getByRole("textbox", { name: "One input" });
+    fireEvent.change(input, { target: { value: "draft command" } });
+    fireEvent.click(screen.getByRole("tab", { name: "Two" }));
+    fireEvent.click(screen.getByRole("tab", { name: "One" }));
+
+    expect((input as HTMLInputElement).value).toBe("draft command");
+  });
 });

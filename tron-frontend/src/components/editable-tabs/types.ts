@@ -15,7 +15,6 @@ export interface EditableTabEditInfo {
 
 export interface EditableTabAddTriggerProps {
   onAdd: () => void;
-  "aria-label": string;
 }
 
 export interface EditableTabsProps {
@@ -23,12 +22,9 @@ export interface EditableTabsProps {
   defaultActiveKey?: string;
   createTab?: () => EditableTab | undefined;
   hideAdd?: boolean;
-  addIcon?: ReactNode;
-  removeIcon?: ReactNode;
-  addAriaLabel?: string;
-  getRemoveAriaLabel?: (tab: EditableTab) => string;
   renderAddTrigger?: (props: EditableTabAddTriggerProps) => ReactNode;
   onChange?: (activeKey: string | undefined) => void;
   onEdit?: (action: EditableTabAction, info: EditableTabEditInfo) => void;
   className?: string;
+  keepMounted?: boolean;
 }

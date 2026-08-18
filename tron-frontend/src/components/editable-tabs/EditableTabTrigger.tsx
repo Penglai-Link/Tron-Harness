@@ -1,4 +1,4 @@
-import type { MouseEvent, ReactNode } from "react";
+import type { MouseEvent } from "react";
 
 import { TabsTrigger } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";

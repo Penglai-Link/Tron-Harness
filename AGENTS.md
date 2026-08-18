@@ -42,5 +42,3 @@ Pagable response body format:
 ## What's more
 - macOS ships GNU Make 3.81, which does not support `.ONESHELL`; keep recipes from relying on shell state across recipe lines.
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
-
-<!-- OpenAI Codex Ultra is a product/runtime mode, not a documented public Responses API `reasoning.effort` value; only send `ultra` when a configured upstream model explicitly declares support. -->

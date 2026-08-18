@@ -1,14 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
-import { X } from "lucide-react";
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { EditableTabList } from "./EditableTabList";
 import type { EditableTab, EditableTabsProps } from "./types";
-
-const DEFAULT_ADD_ARIA_LABEL = "Add tab";
-const DEFAULT_REMOVE_ARIA_LABEL = "Close tab";
 
 function getInitialActiveKey(items: readonly EditableTab[], defaultActiveKey?: string) {
   if (defaultActiveKey && items.some((item) => item.key === defaultActiveKey)) {
@@ -22,13 +18,11 @@ export function EditableTabs({
   defaultActiveKey,
   createTab,
   hideAdd = false,
-  addIcon,
-  removeIcon = <X aria-hidden="true" />,
-  addAriaLabel = DEFAULT_ADD_ARIA_LABEL,
   renderAddTrigger,
   onChange,
   onEdit,
   className,
+  keepMounted
 }: EditableTabsProps) {
   const [tabs, setTabs] = useState<EditableTab[]>(() => [...items]);
   const [activeKey, setActiveKey] = useState<string | undefined>(() => getInitialActiveKey(items, defaultActiveKey));
@@ -88,17 +82,20 @@ export function EditableTabs({
       value={activeKey ?? null}
     >
       <EditableTabList
-        addAriaLabel={addAriaLabel}
         hideAdd={hideAdd}
         onAdd={handleAdd}
         onClose={handleClose}
-        removeIcon={removeIcon}
         renderAddTrigger={renderAddTrigger}
         tabs={tabs}
         className="flex-none"
       />
       {panels.map((panel) => (
-        <TabsContent className="w-full flex-1 h-1/2" key={panel.key} value={panel.key}>
+        <TabsContent
+          className="w-full flex-1 h-1/2"
+          key={panel.key}
+          keepMounted={keepMounted}
+          value={panel.key}
+        >
           {panel.children}
         </TabsContent>
       ))}

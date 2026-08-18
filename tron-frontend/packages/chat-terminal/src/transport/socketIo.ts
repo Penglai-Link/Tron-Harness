@@ -79,6 +79,10 @@ export class SocketIoTerminalTransport implements TerminalTransport {
       timeout: 10_000,
       transports: ["websocket"],
       ...options.socketOptions,
+      // Every terminal owns an independent PTY session. Prevent socket.io from
+      // reusing a Manager (and therefore a client connection) for another tab.
+      forceNew: true,
+      multiplex: false,
       autoConnect: false,
     });
 

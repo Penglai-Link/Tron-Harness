@@ -1,36 +1,30 @@
 import { EditableTab, EditableTabs } from "@/components/editable-tabs";
 import { ResizableHandle, ResizablePanel } from "@/components/ui/resizable";
 import { usePanel } from "@/shared/hooks/usePanel";
-import { memo } from "react";
+import { memo, useCallback, useMemo, useRef } from "react";
 import Terminal from "@/components/terminal";
 
 const BOTTOM_PANEL_COLLAPSE_THRESHOLD = 120;
 
 export default memo(function BottomPanel() {
+  const nextTabIdRef = useRef(1);
+  const createTab = useCallback((): EditableTab => {
+    const tabId = nextTabIdRef.current++;
+
+    return {
+      key: `terminal-${tabId}`,
+      label: "tron",
+      children: <Terminal />,
+      closable: true,
+    };
+  }, []);
+  const items = useMemo(() => [createTab()], [createTab]);
   const { panelRef, panelResize } = usePanel({
     collapseThreshold: BOTTOM_PANEL_COLLAPSE_THRESHOLD,
     initiallyOpen: true,
     openEventName: null,
     toggleEventName: null,
   });
-
-  const items: EditableTab[] = [
-    {
-      key: `${new Date()}`,
-      label: "tron",
-      children: <Terminal />,
-      closable: true,
-    },
-  ];
-
-  function createTab() {
-    return {
-      key: `${new Date()}`,
-      label: "tron",
-      children: <Terminal />,
-      closable: true,
-    };
-  }
 
   return (
     <>
@@ -46,8 +40,9 @@ export default memo(function BottomPanel() {
       >
         <EditableTabs
           createTab={createTab}
-          defaultActiveKey="1"
+          defaultActiveKey={items[0]?.key}
           items={items}
+          keepMounted
         />
       </ResizablePanel>
     </>
