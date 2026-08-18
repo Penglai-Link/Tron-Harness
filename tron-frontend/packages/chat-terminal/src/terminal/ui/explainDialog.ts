@@ -8,9 +8,12 @@ export function createExplainDialog(
 ) {
   const host = document.createElement("div");
   host.className = "ai-terminal-explain-dialog-host";
-  host.addEventListener("mousedown", (event) => {
+  const stopTerminalScroll = (event: Event) => {
     event.stopPropagation();
-  });
+  };
+  host.addEventListener("mousedown", stopTerminalScroll);
+  host.addEventListener("wheel", stopTerminalScroll);
+  host.addEventListener("touchmove", stopTerminalScroll);
   renderExplainDialog(host, state, options);
 
   return host;

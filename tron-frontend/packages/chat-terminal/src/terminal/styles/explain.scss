@@ -101,6 +101,7 @@
     white-space: normal;
     color: var(--ai-terminal-primary);
     overflow-y: auto;
+    overscroll-behavior: contain;
     height: 50%;
     flex: 1 0 auto;
     max-height: 200px;
