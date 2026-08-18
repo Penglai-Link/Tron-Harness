@@ -1,76 +1,112 @@
 import { useCallback, useEffect, useRef, useState } from "react"
-import { PanelImperativeHandle, PanelSize } from "react-resizable-panels"
-import { useLocation } from 'react-router';
+import type { PanelImperativeHandle, PanelSize } from "react-resizable-panels"
 
 const RIGHT_PANEL_COLLAPSE_THRESHOLD = 300
+const RIGHT_PANEL_OPEN_EVENT = "tron:open-right-sidebar"
+const RIGHT_PANEL_TOGGLE_EVENT = "tron:toggle-right-sidebar"
 
-export function usePanel() {
-    // 侧边栏展开或者折叠
-    const [rightDragglePanelOpen, setRightDragglePanelOpen] = useState(false);
+interface UsePanelOptions {
+    collapseThreshold?: number
+    initiallyOpen?: boolean
+    onOpenChange?: (open: boolean) => void
+    openEventName?: string | null
+    resetKey?: string | number | null
+    toggleEventName?: string | null
+}
+
+export function usePanel({
+    collapseThreshold = RIGHT_PANEL_COLLAPSE_THRESHOLD,
+    initiallyOpen = false,
+    onOpenChange,
+    openEventName = RIGHT_PANEL_OPEN_EVENT,
+    resetKey = null,
+    toggleEventName = RIGHT_PANEL_TOGGLE_EVENT,
+}: UsePanelOptions = {}) {
+    const [panelOpen, setPanelOpen] = useState(initiallyOpen)
     const panelRef = useRef<PanelImperativeHandle>(null)
-    const rightPanelDraggingRef = useRef(false)
-    const rightPanelCollapseRequestedRef = useRef(false)
-    const rightPanelHandleRef = useRef<HTMLDivElement | null>(null)
-
-    const location = useLocation();
+    const panelDraggingRef = useRef(false)
+    const panelCollapseRequestedRef = useRef(false)
+    const panelHandleRef = useRef<HTMLDivElement | null>(null)
 
     const expandPanel = useCallback(() => {
-        const panelElement = document.getElementById("resize-panel");
-        const groupWidth = panelElement?.parentElement?.getBoundingClientRect().width || window.innerWidth;
-        const targetPixels = Math.min(680, Math.max(520, groupWidth * 0.42));
+        const panelElement = document.getElementById("resize-panel")
+        const groupWidth = panelElement?.parentElement?.getBoundingClientRect().width || window.innerWidth
+        const targetPixels = Math.min(680, Math.max(520, groupWidth * 0.42))
 
-        setRightDragglePanelOpen(true)
+        setPanelOpen(true)
         panelRef.current?.expand()
         panelRef.current?.resize(`${targetPixels}px`)
-    }, []);
+    }, [])
 
     useEffect(() => {
-        panelRef.current?.collapse()
-        setRightDragglePanelOpen(false)
-        rightPanelDraggingRef.current = false
-        rightPanelCollapseRequestedRef.current = false
-        rightPanelHandleRef.current = null
-    }, [location]);
+        const frame = window.requestAnimationFrame(() => {
+            // Initial sizes come from ResizablePanel; imperative APIs are only
+            // needed for explicit resets after the group has registered panels.
+            if (resetKey !== null) {
+                if (initiallyOpen) {
+                    panelRef.current?.expand()
+                } else {
+                    panelRef.current?.collapse()
+                }
+            }
+
+            setPanelOpen(initiallyOpen)
+            panelDraggingRef.current = false
+            panelCollapseRequestedRef.current = false
+            panelHandleRef.current = null
+        })
+
+        return () => window.cancelAnimationFrame(frame)
+    }, [initiallyOpen, resetKey])
 
     useEffect(() => {
-        const handleOpenRightSidebar = () => {
+        if (!openEventName) {
+            return
+        }
+
+        const handleOpenPanel = () => {
             window.requestAnimationFrame(expandPanel)
-        };
+        }
 
-        window.addEventListener("tron:open-right-sidebar", handleOpenRightSidebar);
-        return () => window.removeEventListener("tron:open-right-sidebar", handleOpenRightSidebar);
-    }, [expandPanel]);
+        window.addEventListener(openEventName, handleOpenPanel)
+        return () => window.removeEventListener(openEventName, handleOpenPanel)
+    }, [expandPanel, openEventName])
 
     const panelResize = useCallback((panelSize: PanelSize) => {
         if (panelRef.current?.isCollapsed()) {
-            setRightDragglePanelOpen(false)
+            setPanelOpen(false)
+            return
         }
-    }, []);
+
+        if (panelSize.inPixels < collapseThreshold) {
+            panelCollapseRequestedRef.current = true
+        }
+    }, [collapseThreshold])
 
     const handleRightPanelPointerDown = useCallback(() => {
-        rightPanelDraggingRef.current = true
-        rightPanelCollapseRequestedRef.current = false
-    }, []);
+        panelDraggingRef.current = true
+        panelCollapseRequestedRef.current = false
+    }, [])
 
     const bindRightPanelHandleRef = useCallback((element: HTMLDivElement | null) => {
-        rightPanelHandleRef.current = element
-    }, []);
+        panelHandleRef.current = element
+    }, [])
 
     const handleRightPanelPointerMove = useCallback((event: React.PointerEvent<HTMLDivElement>) => {
-        if (!rightPanelDraggingRef.current || rightPanelCollapseRequestedRef.current) {
+        if (!panelDraggingRef.current || panelCollapseRequestedRef.current) {
             return
         }
 
         const currentSize = panelRef.current?.getSize().inPixels ?? 0
-        if (currentSize > RIGHT_PANEL_COLLAPSE_THRESHOLD) {
+        if (currentSize > collapseThreshold) {
             return
         }
 
-        rightPanelCollapseRequestedRef.current = true
+        panelCollapseRequestedRef.current = true
         event.preventDefault()
         event.stopPropagation()
 
-        const target = (rightPanelHandleRef.current ?? event.currentTarget) as HTMLDivElement & {
+        const target = (panelHandleRef.current ?? event.currentTarget) as HTMLDivElement & {
             releasePointerCapture?: (pointerId: number) => void
             hasPointerCapture?: (pointerId: number) => boolean
         }
@@ -80,8 +116,8 @@ export function usePanel() {
         }
 
         panelRef.current?.collapse()
-        setRightDragglePanelOpen(false)
-        rightPanelDraggingRef.current = false
+        setPanelOpen(false)
+        panelDraggingRef.current = false
 
         const pointerUpEvent = new PointerEvent("pointerup", {
             bubbles: true,
@@ -96,39 +132,75 @@ export function usePanel() {
             pressure: 0,
         })
         target.dispatchEvent(pointerUpEvent)
-    }, []);
+    }, [collapseThreshold])
+
+    const flushPanelCollapse = useCallback(() => {
+        if (panelCollapseRequestedRef.current && !panelRef.current?.isCollapsed()) {
+            panelRef.current?.collapse()
+            setPanelOpen(false)
+        }
+
+        panelCollapseRequestedRef.current = false
+    }, [])
+
+    useEffect(() => {
+        window.addEventListener("pointerup", flushPanelCollapse)
+        window.addEventListener("pointercancel", flushPanelCollapse)
+        return () => {
+            window.removeEventListener("pointerup", flushPanelCollapse)
+            window.removeEventListener("pointercancel", flushPanelCollapse)
+        }
+    }, [flushPanelCollapse])
 
     const handleRightPanelPointerEnd = useCallback(() => {
-        rightPanelDraggingRef.current = false
-        rightPanelCollapseRequestedRef.current = false
+        flushPanelCollapse()
+        panelDraggingRef.current = false
         if (panelRef.current?.isCollapsed()) {
-            setRightDragglePanelOpen(false)
+            setPanelOpen(false)
         }
-    }, []);
+    }, [flushPanelCollapse])
 
+    const changePanel = useCallback(() => {
+        setPanelOpen((currentOpen) => {
+            const nextOpen = !currentOpen
 
-    function changeDragglePane() {
-        const nextOpen = !rightDragglePanelOpen
-        setRightDragglePanelOpen(nextOpen)
+            if (nextOpen) {
+                panelRef.current?.resize(400)
+                panelRef.current?.expand()
+            } else {
+                panelRef.current?.collapse()
+            }
 
-        if (nextOpen) {
-            panelRef.current?.resize(400)
-            panelRef.current?.expand()
-        } else {
-            panelRef.current?.collapse()
+            return nextOpen
+        })
+    }, [])
+
+    useEffect(() => {
+        if (!toggleEventName) {
+            return
         }
-    }
+
+        window.addEventListener(toggleEventName, changePanel)
+        return () => window.removeEventListener(toggleEventName, changePanel)
+    }, [changePanel, toggleEventName])
+
+    useEffect(() => {
+        onOpenChange?.(panelOpen)
+    }, [onOpenChange, panelOpen])
 
     return {
-        expandPanel,
-        panelRef,
-        rightDragglePanelOpen,
-        setRightDragglePanelOpen,
-        panelResize,
-        changeDragglePane,
-        handleRightPanelPointerDown,
         bindRightPanelHandleRef,
-        handleRightPanelPointerMove,
+        changePanel,
+        changeDragglePane: changePanel,
+        expandPanel,
+        handleRightPanelPointerDown,
         handleRightPanelPointerEnd,
+        handleRightPanelPointerMove,
+        panelOpen,
+        panelRef,
+        panelResize,
+        rightDragglePanelOpen: panelOpen,
+        setPanelOpen,
+        setRightDragglePanelOpen: setPanelOpen,
     }
 }
