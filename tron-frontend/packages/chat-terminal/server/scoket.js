@@ -26,6 +26,7 @@ const MAX_BOOTSTRAP_BUFFER_LENGTH = 64 * 1024;
 
 export class TerminalGateway {
   constructor(options = {}) {
+    this.createMessageId = options.createMessageId ?? randomUUID;
     this.createToken = options.createToken ?? randomUUID;
     this.cwd = homedir();
     this.env = options.env ?? process.env;
@@ -243,17 +244,24 @@ export class TerminalGateway {
 
   emitSessionReady(session) {
     session.client.emit(TERMINAL_SESSION_EVENT, {
-      code: "0",
-      data: { currentDirectory: session.currentDirectory },
-      message: "",
+      ...createMessage({
+        currentDirectory: session.currentDirectory,
+        delta: "",
+        messageId: this.createMessageId(),
+        now: this.now,
+        type: MessageType.CONTENT,
+      }),
     });
   }
 
   emitSessionError(client, message) {
     client.emit(TERMINAL_SESSION_EVENT, {
-      code: "TERMINAL_SESSION_ERROR",
-      data: {},
-      message,
+      ...createMessage({
+        delta: message,
+        messageId: this.createMessageId(),
+        now: this.now,
+        type: MessageType.ERROR,
+      }),
     });
   }
 

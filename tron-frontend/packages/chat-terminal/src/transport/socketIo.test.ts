@@ -86,9 +86,10 @@ describe("SocketIoTerminalTransport", () => {
     const connection = transport.connect();
 
     socketHarness.handlers.get("terminal:session")?.({
-      code: "TERMINAL_SESSION_ERROR",
-      data: {},
-      message: "终端会话无法启动",
+      delta: "终端会话无法启动",
+      messageId: "session-1",
+      timestamp: 1,
+      type: "TEXT_MESSAGE_ERROR",
     });
 
     await expect(connection).rejects.toThrow("终端会话无法启动");
@@ -154,9 +155,11 @@ describe("SocketIoTerminalTransport", () => {
 
 function readySession(currentDirectory = "/workspace") {
   socketHarness.handlers.get("terminal:session")?.({
-    code: "0",
-    data: { currentDirectory },
-    message: "",
+    currentDirectory,
+    delta: "",
+    messageId: "session-1",
+    timestamp: 1,
+    type: "TEXT_MESSAGE_CONTENT",
   });
 }
 

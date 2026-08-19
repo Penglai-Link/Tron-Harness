@@ -33,28 +33,30 @@ const terminal = initTerminal({
   transport: {
     terminal: createTerminalTransport({ url: serverUrl }),
     ai: createAITransport({
-      url: `${serverUrl}/api/llm/v1/chat/completions`,
+      url: `${serverUrl}/api/llm/v1/chat/completions`, // sse和非sse共用一个端点，后端需要通过stream参数进行区分
       headers: () => ({ Authorization: "Bearer <token>" }),
     }),
   },
   prompts: {
-    chat: (content) => content,
+    chat: (content) => content, // 生成ai会话的提示词参数
     explain: ({ command, output }) =>
-      `解释命令：${command}\n\n命令输出：\n${output}`,
-    generate: (content) => content,
+      `解释命令：${command}\n\n命令输出：\n${output}`, // 生成命令解释的提示词参数
+    generate: (content) => content, // 生成命令的提示词参数
   },
-  locale: "zh-CN",
+  terminalOptions: {
+    // 终端主题色
+    themeTokens: {
+        primary: "var(--color-on-surface, black)", // 主色
+        secondary: "var(--color-header-backdrop, white)", // 次要色
+        cardBackground: "var(--color-elevated-surface, white)", // 卡片背景色
+        border: "var(--color-card-border, gray)",// 边框
+    },
+  },
+  locale: "zh-CN", // 设置终端多语言环境
 });
 
 // 页面销毁时调用
 terminal.dispose();
-
-// 多语言发生变更的时候调用
-terminal.setLocale(currentLocale);
-
-// 主题发生变更的时候调用
-terminal.refreshTheme();
-
 ```
 
 
@@ -73,7 +75,7 @@ terminal.refreshTheme();
 | `messages` | `ChatTerminalMessageOverrides` | 覆盖内置文案。 |
 | `onError` | `(error: Error) => void` | 连接失败等 transport 错误回调。 |
 
-## 内置 transport
+## 使用内置 transport
 
 ### 终端 Socket.IO
 
@@ -96,7 +98,7 @@ const terminalTransport = createTerminalTransport({
 
 ### AI SSE
 
-`createAITransport` 使用 `fetch` 发起 POST 请求并解析 SSE。默认请求体为：
+使用`createAITransport` 进行创建的话，同一个后端接口需要区分流式和非流式请求(流式接口用于终端流式输出，非流式用于代码生成)，请求参数如下：
 
 ```json
 {
@@ -105,7 +107,7 @@ const terminalTransport = createTerminalTransport({
 }
 ```
 
-使用 `body` 可以替换请求体，`headers` 支持静态值或异步工厂：
+可使用 `body` 替换请求体，`headers` 添加请求头：
 
 ```ts
 const aiTransport = createAITransport({
@@ -119,11 +121,13 @@ const aiTransport = createAITransport({
 });
 ```
 
-非 SSE 接口可以直接实现 `AITransport`。`stream` 至少调用一次 `onChunk`，并返回本次请求的 `requestId`；`request` 返回完整文本。
+## 自定义transport
 
+### 自定义AITransport
 ```ts
 import type { AITransport } from "@tron/chat-terminal";
 
+// 实现AITransport接口
 const aiTransport: AITransport = {
   async stream(content, { onChunk, signal }) {
     const requestId = crypto.randomUUID();
@@ -134,13 +138,11 @@ const aiTransport: AITransport = {
       signal,
     });
     if (!response.ok) throw new Error("AI 请求失败");
-    const body = (await response.json()) as {
-      code: string;
-      message: string;
-      data: { content: string };
-    };
-    if (body.code !== "0") throw new Error(body.message || "AI 请求失败");
-    onChunk({ delta: body.data.content, requestId });
+    const body = (await response.json()) as TerminalMessage;
+    if (body.type === "TEXT_MESSAGE_ERROR") {
+      throw new Error(body.delta || "AI 请求失败");
+    }
+    onChunk({ delta: body.delta, requestId });
     return { requestId };
   },
 
@@ -152,20 +154,16 @@ const aiTransport: AITransport = {
       signal,
     });
     if (!response.ok) throw new Error("AI 请求失败");
-    const body = (await response.json()) as {
-      code: string;
-      message: string;
-      data: { content: string };
-    };
-    if (body.code !== "0") throw new Error(body.message || "AI 请求失败");
-    return body.data.content;
+    const body = (await response.json()) as TerminalMessage;
+    if (body.type === "TEXT_MESSAGE_ERROR") {
+      throw new Error(body.delta || "AI 请求失败");
+    }
+    return body.delta;
   },
 };
 ```
 
-## 自定义 TerminalTransport
-
-自定义 WebSocket、Socket.IO 协议或已有 PTY 时，在业务侧实现 `TerminalTransport`，再传给 `transport.terminal`。不要把裸 socket 实例直接传入。
+### 自定义 TerminalTransport
 
 ```ts
 import type {
@@ -173,6 +171,7 @@ import type {
   TerminalCommandResult,
   TerminalSession,
   TerminalSize,
+  TerminalMessage,
   TerminalTransport,
   TransportDisposable,
 } from "@tron/chat-terminal";
@@ -195,6 +194,7 @@ type PendingCommand = {
   timeout?: number;
 };
 
+// 实现TerminalTransport类型
 export class CustomTerminalTransport implements TerminalTransport {
   private readonly pending = new Map<string, PendingCommand>();
   private readonly sessionListeners = new Set<
@@ -299,18 +299,25 @@ export class CustomTerminalTransport implements TerminalTransport {
     this.socket.close();
   }
 
-  private handleSession(payload: {
-    code: string;
-    message: string;
-    data?: { currentDirectory?: string };
-  }) {
-    if (payload.code !== "0" || !payload.data?.currentDirectory) {
-      this.rejectConnect?.(new Error(payload.message || "终端会话失败"));
+  private handleSession(payload: TerminalMessage) {
+    if (
+      payload.type === "TEXT_MESSAGE_ERROR" &&
+      payload.delta
+    ) {
+      const error = new Error(payload.delta);
+      this.rejectConnect?.(error);
       this.connecting = undefined;
-      this.rejectPending(new Error(payload.message || "终端会话失败"));
+      this.rejectPending(error);
       return;
     }
-    this.session = { currentDirectory: payload.data.currentDirectory };
+    if (
+      payload.type !== "TEXT_MESSAGE_CONTENT" ||
+      payload.delta !== "" ||
+      !payload.currentDirectory
+    ) {
+      return;
+    }
+    this.session = { currentDirectory: payload.currentDirectory };
     this.connecting = undefined;
     this.resolveConnect?.(this.session);
     for (const listener of this.sessionListeners) listener(this.session);
@@ -386,47 +393,27 @@ initTerminal({
 ## Socket.IO 协议
 
 ### 响应数据结构
-
-会话接口使用统一响应体：
-
-```ts
-interface ApiResponse<T> {
-  code: string;
-  message: string;
-  data: T;
-}
-
-interface TerminalSessionData {
-  currentDirectory: string;
-}
-
-type TerminalSessionResponse = ApiResponse<
-  TerminalSessionData | Record<string, never>
->;
-```
-
 成功响应：
 
 ```json
 {
-  "code": "0",
-  "message": "",
-  "data": { "currentDirectory": "/workspace" }
+  "type": "TEXT_MESSAGE_CONTENT",
+  "messageId": "session-1",
+  "delta": "",
+  "timestamp": 1710000000000,
+  "currentDirectory": "/workspace" // 可选
 }
 ```
-
 失败响应：
 
 ```json
 {
-  "code": "TERMINAL_SESSION_ERROR",
-  "message": "终端会话创建失败",
-  "data": {}
+  "type": "TEXT_MESSAGE_ERROR",
+  "messageId": "session-1",
+  "delta": "终端会话创建失败",
+  "timestamp": 1710000000000
 }
 ```
-
-命令和 AI 接口返回消息帧，不再额外包裹 `data`：
-
 ```ts
 type TerminalMessageType =
   | "TEXT_MESSAGE_START"
@@ -448,7 +435,7 @@ interface TerminalMessage {
 
 - `messageId` 标识一次命令或 AI 请求。一次流式响应中的所有消息帧使用同一个值。
 - `delta` 是终端输出、AI 文本或错误信息。`START` 和 `END` 通常为空字符串。
-- `currentDirectory` 只在命令执行结束后返回，用于更新终端提示符目录。
+- `currentDirectory` 在会话成功消息和命令执行结束消息中返回，用于更新终端提示符目录。
 - `TEXT_MESSAGE_SUGGESTION` 的 `delta` 保存 AI 生成的可执行命令。
 - `TEXT_MESSAGE_ERROR` 的 `delta` 保存错误信息。
 
@@ -494,3 +481,15 @@ AI 回复中的命令块支持以下格式：
 ```
 
 用户点击执行后，SDK 才会调用命令 transport，不会自动执行模型返回的命令。
+
+## 主题设置
+```ts
+// 主题发生变更的时候调用,更新终端主题色
+terminal.refreshTheme();
+```
+
+## 多语言设置
+```ts
+// 多语言发生变更的时候调用,更新终端多语言
+terminal.setLocale(currentLocale);
+```

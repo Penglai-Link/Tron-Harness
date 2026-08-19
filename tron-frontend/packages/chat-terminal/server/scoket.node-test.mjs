@@ -23,11 +23,7 @@ test("one socket reuses one PTY and reports the resulting directory", () => {
   terminal.emitData(sessionReady("/workspace"));
   assert.deepEqual(client.events[0], [
     "terminal:session",
-    {
-      code: "0",
-      data: { currentDirectory: "/workspace" },
-      message: "",
-    },
+    message("TEXT_MESSAGE_CONTENT", "session-1", "", "/workspace"),
   ]);
 
   harness.gateway.executeCommand(client, {
@@ -59,6 +55,31 @@ test("one socket reuses one PTY and reports the resulting directory", () => {
       "/workspace/packages\r\n",
     ),
     message(MessageType.END, "message-2", "", "/workspace/packages"),
+  ]);
+});
+
+test("session startup failures use the content error message format", () => {
+  const gateway = new TerminalGateway({
+    createMessageId: () => "session-error-1",
+    now: () => 1,
+    spawn: () => {
+      throw new Error("终端会话无法启动");
+    },
+  });
+  const client = createClient("client-a");
+
+  gateway.handleConnection(client);
+
+  assert.deepEqual(client.events, [
+    [
+      "terminal:session",
+      {
+        delta: "终端会话无法启动",
+        messageId: "session-error-1",
+        timestamp: 1,
+        type: "TEXT_MESSAGE_ERROR",
+      },
+    ],
   ]);
 });
 
@@ -173,7 +194,9 @@ test(
       await waitForEvent(
         client,
         ([event, payload]) =>
-          event === "terminal:session" && payload.code === "0",
+          event === "terminal:session" &&
+          payload.type === "TEXT_MESSAGE_CONTENT" &&
+          payload.delta === "",
       );
 
       gateway.executeCommand(client, {
@@ -232,7 +255,9 @@ test(
       await waitForEvent(
         client,
         ([event, payload]) =>
-          event === "terminal:session" && payload.code === "0",
+          event === "terminal:session" &&
+          payload.type === "TEXT_MESSAGE_CONTENT" &&
+          payload.delta === "",
       );
 
       gateway.executeCommand(client, {
@@ -308,7 +333,9 @@ test(
       await waitForEvent(
         client,
         ([event, payload]) =>
-          event === "terminal:session" && payload.code === "0",
+          event === "terminal:session" &&
+          payload.type === "TEXT_MESSAGE_CONTENT" &&
+          payload.delta === "",
       );
 
       gateway.executeCommand(client, {
@@ -359,7 +386,9 @@ test(
       await waitForEvent(
         client,
         ([event, payload]) =>
-          event === "terminal:session" && payload.code === "0",
+          event === "terminal:session" &&
+          payload.type === "TEXT_MESSAGE_CONTENT" &&
+          payload.delta === "",
       );
 
       gateway.executeCommand(client, {
@@ -405,6 +434,7 @@ test(
 function createGatewayHarness() {
   const terminals = [];
   const gateway = new TerminalGateway({
+    createMessageId: () => "session-1",
     now: () => 1,
     spawn: () => {
       const terminal = new FakeTerminal();

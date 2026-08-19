@@ -28,11 +28,7 @@ export function createMessage({
     type,
   };
 
-  if (
-    type === MessageType.END &&
-    typeof currentDirectory === "string" &&
-    currentDirectory
-  ) {
+  if (typeof currentDirectory === "string" && currentDirectory) {
     message.currentDirectory = currentDirectory;
   }
 

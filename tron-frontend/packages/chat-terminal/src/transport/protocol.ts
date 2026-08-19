@@ -49,27 +49,24 @@ export type TerminalSessionResponse =
 export function parseTerminalSession(
   value: unknown,
 ): TerminalSessionResponse | undefined {
+  const message = parseTerminalMessage(value);
+  if (!message) {
+    return undefined;
+  }
+
+  if (message.type === "TEXT_MESSAGE_ERROR") {
+    return message.delta ? { error: message.delta } : undefined;
+  }
+
   if (
-    !isRecord(value) ||
-    typeof value.code !== "string" ||
-    typeof value.message !== "string" ||
-    !isRecord(value.data)
+    message.type !== "TEXT_MESSAGE_CONTENT" ||
+    message.delta !== "" ||
+    !message.currentDirectory
   ) {
     return undefined;
   }
 
-  if (value.code !== "0") {
-    return value.message ? { error: value.message } : undefined;
-  }
-
-  if (
-    typeof value.data.currentDirectory !== "string" ||
-    !value.data.currentDirectory
-  ) {
-    return undefined;
-  }
-
-  return { currentDirectory: value.data.currentDirectory };
+  return { currentDirectory: message.currentDirectory };
 }
 
 export function createMessageId() {
