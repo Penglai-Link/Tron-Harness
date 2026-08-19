@@ -2,6 +2,7 @@ import { X } from "lucide-react";
 import { useNavigate } from "react-router";
 import { cn } from "@/shared/lib/utils";
 import { useTabStore, type TabItem } from "@/store/tabStore";
+import { Button } from "@/components/ui/button";
 
 interface TabBarProps {
   className?: string;
@@ -32,7 +33,7 @@ export function TabBar({ className }: TabBarProps) {
     <div
       className={cn(
         "inline-flex w-full items-center gap-1 overflow-x-auto bg-[var(--color-surface-container)] p-1 border-b-[1px] border-[var(--color-card-border)]",
-        className
+        className,
       )}
       role="tablist"
     >
@@ -42,30 +43,24 @@ export function TabBar({ className }: TabBarProps) {
           <div
             key={tab.id}
             className={cn(
-              "group relative text-[var(--color-on-surface-variant)] inline-flex h-8 max-w-[200px] shrink-0 items-center gap-1.5 rounded-md px-3 text-sm font-medium whitespace-nowrap transition-all cursor-pointer",
+              "group relative text-[var(--color-on-surface-variant)] inline-flex h-8 max-w-[200px] shrink-0 items-center rounded-md px-1 text-sm font-medium whitespace-nowrap transition-all cursor-pointer",
               isActive
                 ? "bg-[var(--color-elevated-surface)] text-foreground"
-                : "hover:text-foreground hover:bg-background/50"
+                : "hover:text-foreground hover:bg-background/50",
             )}
             role="tab"
             aria-selected={isActive}
             onClick={() => handleTabClick(tab)}
           >
-            <span className="truncate flex-1 text-left">{tab.title}</span>
+            <span className="truncate flex-1 text-left px-1.5">{tab.title}</span>
             {tab.closable && (
-              <button
-                className={cn(
-                  "inline-flex h-4 w-4 shrink-0 items-center justify-center rounded-sm transition-opacity",
-                  "hover:text-foreground",
-                  "opacity-0 group-hover:opacity-100",
-                  isActive && "opacity-60"
-                )}
-                type="button"
-                aria-label={`Close ${tab.title}`}
+              <Button
+                size="icon-sm"
+                variant="ghost"
                 onClick={(e) => handleTabClose(e, tab.id)}
               >
-                <X className="size-3" aria-hidden="true" />
-              </button>
+                <X size={12} aria-hidden="true" />
+              </Button>
             )}
           </div>
         );

@@ -22,7 +22,8 @@ export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
   return (
     <div
       className={cn(
-        "flex h-full max-w-[200px] items-center rounded-md p-1 has-data-active:bg-background has-data-active:text-foreground has-data-active:shadow-sm dark:has-data-active:bg-input/30 dark:has-data-active:text-foreground",
+        "flex h-full max-w-[200px] items-center rounded-md p-1 has-data-active:bg-background has-data-active:text-foreground has-data-active:shadow-sm dark:has-data-active:bg-input/30 dark:has-data-active:text-foreground shadow-none!",
+        "hover:text-foreground hover:bg-background/50"
       )}
     >
       <TabsTrigger

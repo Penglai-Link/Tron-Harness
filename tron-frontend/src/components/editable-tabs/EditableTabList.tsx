@@ -26,8 +26,8 @@ export function EditableTabList({
   className,
 }: EditableTabListProps) {
   return (
-    <div className={cn("w-full bg-muted", className)}>
-      <TabsList className="bg-transparent">
+    <div className={cn("w-full bg-muted overflow-x-auto overflow-y-hidden", className)}>
+      <TabsList className="bg-transparent gap-1">
         {tabs.map((tab) => (
           <EditableTabTrigger key={tab.key} onClose={onClose} tab={tab} />
         ))}

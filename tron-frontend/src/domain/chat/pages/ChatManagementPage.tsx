@@ -4730,7 +4730,7 @@ export function ChatManagementPage() {
         label: t("chat.shortTermMemory.page"),
         closable: false,
         children: (
-          <div className="min-h-0">
+          <div className="min-h-0 h-full">
             <PageView
               url="https://www.baidu.com"
               onInspectionConfirm={(result) => {
