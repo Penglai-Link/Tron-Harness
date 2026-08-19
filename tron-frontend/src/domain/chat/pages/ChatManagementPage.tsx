@@ -146,7 +146,7 @@ import type {
   SetChatSessionGoalInput,
   UpdateChatSessionGoalInput,
 } from "@/domain/chat/model";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { EditableTabs, type EditableTab } from "@/components/editable-tabs";
 import { useInspection } from "../hooks/useInspection";
 import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
@@ -4668,70 +4668,96 @@ export function ChatManagementPage() {
 
   const rightPanel = useMemo(() => {
     if (!hasActiveSession) return undefined;
-    return (
-      <Tabs key={activeSession?.sessionCode} defaultValue="workspace" className="h-full min-h-0 w-full">
-        <TabsList className="mx-4 my-2 w-[calc(100%-2rem)]">
-          <TabsTrigger value="workspace">
+    const tabs: EditableTab[] = [
+      {
+        key: "workspace",
+        label: (
+          <>
             <WorkspaceTabState goal={activeGoal} running={workspaceGoalRunning} />
             <span>{t("chat.shortTermMemory.workspace")}</span>
-          </TabsTrigger>
-          <TabsTrigger value="context">{t("chat.shortTermMemory.context")}</TabsTrigger>
-          <TabsTrigger value="page">{t("chat.shortTermMemory.page")}</TabsTrigger>
-        </TabsList>
-        <TabsContent value="workspace" className="min-h-0 overflow-y-auto">
-          <div className="m-4">
-            <RightWorkspaceSidebar
-              goal={activeGoal}
-              goalBusy={Boolean(activeSession?.sessionCode && goalActionSessionCode === activeSession.sessionCode)}
-              goalStatus={goalStatus}
-              onCancelGoal={handleCancelGoalForRightPanel}
-              onClearGoal={handleClearGoalForRightPanel}
-              onCreateGoal={handleCreateGoalForRightPanel}
-              onPauseGoal={handlePauseGoalForRightPanel}
-              onResumeGoal={handleResumeGoalForRightPanel}
-              onUpdateGoal={handleUpdateGoalForRightPanel}
-              sessionCode={activeSession?.sessionCode}
-              todos={shortTermMemoryTodos}
-              todosStatus={shortTermMemoryTodosStatus}
-            />
+          </>
+        ),
+        closable: false,
+        children: (
+          <div className="min-h-0 overflow-y-auto">
+            <div className="m-4">
+              <RightWorkspaceSidebar
+                goal={activeGoal}
+                goalBusy={Boolean(activeSession?.sessionCode && goalActionSessionCode === activeSession.sessionCode)}
+                goalStatus={goalStatus}
+                onCancelGoal={handleCancelGoalForRightPanel}
+                onClearGoal={handleClearGoalForRightPanel}
+                onCreateGoal={handleCreateGoalForRightPanel}
+                onPauseGoal={handlePauseGoalForRightPanel}
+                onResumeGoal={handleResumeGoalForRightPanel}
+                onUpdateGoal={handleUpdateGoalForRightPanel}
+                sessionCode={activeSession?.sessionCode}
+                todos={shortTermMemoryTodos}
+                todosStatus={shortTermMemoryTodosStatus}
+              />
+            </div>
           </div>
-        </TabsContent>
-        <TabsContent value="context" className="min-h-0 overflow-y-auto">
-          <div className="m-4">
-            <RightContextSidebar
-              events={aguiEvents}
-              goal={activeGoal}
-              latestCompaction={latestCompaction}
-              latestCompactionStatus={latestCompactionStatus}
-              latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
-              latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
-              messages={visibleMessages}
-              model={selectedMainAgentModel}
-              compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
-              onCreateCompaction={handleCreateCompactionForRightPanel}
-              selectedModel={selectedModel}
-              session={activeSession}
-              todos={shortTermMemoryTodos}
-            />
+        ),
+      },
+      {
+        key: "context",
+        label: t("chat.shortTermMemory.context"),
+        closable: false,
+        children: (
+          <div className="min-h-0 overflow-y-auto">
+            <div className="m-4">
+              <RightContextSidebar
+                events={aguiEvents}
+                goal={activeGoal}
+                latestCompaction={latestCompaction}
+                latestCompactionStatus={latestCompactionStatus}
+                latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
+                latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
+                messages={visibleMessages}
+                model={selectedMainAgentModel}
+                compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
+                onCreateCompaction={handleCreateCompactionForRightPanel}
+                selectedModel={selectedModel}
+                session={activeSession}
+                todos={shortTermMemoryTodos}
+              />
+            </div>
           </div>
-        </TabsContent>
-        <TabsContent value="page" className="min-h-0">
-          <PageView
-            url="https://www.baidu.com"
-            onInspectionConfirm={(result) => {
-              if (inspectionSubmitMode(result) === "send") {
-                void handleSendForRightPanel(inspectionMessageContent(result), [createInspectionAttachment(result)]);
-                return;
-              }
+        ),
+      },
+      {
+        key: "page",
+        label: t("chat.shortTermMemory.page"),
+        closable: false,
+        children: (
+          <div className="min-h-0">
+            <PageView
+              url="https://www.baidu.com"
+              onInspectionConfirm={(result) => {
+                if (inspectionSubmitMode(result) === "send") {
+                  void handleSendForRightPanel(inspectionMessageContent(result), [createInspectionAttachment(result)]);
+                  return;
+                }
 
-              setInspectionAttachments((current) => [
-                ...current,
-                createInspectionAttachment(result),
-              ]);
-            }}
-          />
-        </TabsContent>
-      </Tabs>
+                setInspectionAttachments((current) => [
+                  ...current,
+                  createInspectionAttachment(result),
+                ]);
+              }}
+            />
+          </div>
+        ),
+      },
+    ];
+
+    return (
+      <EditableTabs
+        key={activeSession?.sessionCode}
+        className="h-full min-h-0"
+        defaultActiveKey="workspace"
+        hideAdd
+        items={tabs}
+      />
     );
   }, [
     activeSession,

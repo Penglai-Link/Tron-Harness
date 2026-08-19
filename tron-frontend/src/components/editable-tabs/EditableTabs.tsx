@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -31,6 +31,16 @@ export function EditableTabs({
   const [activeKey, setActiveKey] = useState<string | undefined>(() =>
     getInitialActiveKey(items, defaultActiveKey),
   );
+
+  useEffect(() => {
+    setTabs([...items]);
+    setActiveKey((currentActiveKey) => {
+      if (currentActiveKey && items.some((item) => item.key === currentActiveKey)) {
+        return currentActiveKey;
+      }
+      return getInitialActiveKey(items, defaultActiveKey);
+    });
+  }, [defaultActiveKey, items]);
 
   const handleValueChange = useCallback(
     (value: string) => {
