@@ -8,41 +8,23 @@ use crate::domain::resource::ResourceError;
 
 use super::ResourceHttpApiResponse;
 
-/// The Resource business-code range is registered outside this repository.  No
-/// provisional resource code is minted here: before that registration lands,
-/// all Resource failures deliberately use the platform's reserved internal
-/// error code.  The status and localized message remain precise, and this one
-/// seam is the only place that needs the assigned range later.
 const UNREGISTERED_RESOURCE_ERROR_CODE: &str = "-1";
 
 pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
     let status = match &error {
         ResourceError::NotFound | ResourceError::MissingBinaryObject => StatusCode::NOT_FOUND,
         ResourceError::Forbidden => StatusCode::FORBIDDEN,
-        ResourceError::Conflict
-        | ResourceError::DraftRevisionConflict
-        | ResourceError::ActiveVersionConflict
-        | ResourceError::DefinitionDisabled
-        | ResourceError::DefinitionInUse
-        | ResourceError::BuiltinDefinition
-        | ResourceError::ServerHasAccounts => StatusCode::CONFLICT,
+        ResourceError::Conflict | ResourceError::ServerHasAccounts => StatusCode::CONFLICT,
         ResourceError::ConnectionVerificationFailed(_) => StatusCode::BAD_GATEWAY,
         ResourceError::StorageFailure => StatusCode::INTERNAL_SERVER_ERROR,
         ResourceError::WorkspaceRequired
         | ResourceError::InvalidWorkspace
-        | ResourceError::InvalidScope
         | ResourceError::InvalidCode
-        | ResourceError::InvalidVersion
         | ResourceError::InvalidInput
-        | ResourceError::InvalidSchema
-        | ResourceError::InvalidBinarySchema
         | ResourceError::InvalidVariableReference
-        | ResourceError::ValidationFailed
-        | ResourceError::LifecycleDenied
         | ResourceError::PathDenied
         | ResourceError::StorageProfileNotFound
-        | ResourceError::StorageLocatorInvalid
-        | ResourceError::ConnectionEndpointRequired => StatusCode::BAD_REQUEST,
+        | ResourceError::StorageLocatorInvalid => StatusCode::BAD_REQUEST,
     };
     (
         status,
@@ -86,63 +68,25 @@ pub fn internal_error_response(locale: &str) -> Response {
 
 fn localized_resource_error(error: ResourceError, locale: &str) -> String {
     let (zh, en) = match error {
-        ResourceError::NotFound => (
-            "资源或资源定义不存在",
-            "The resource or definition was not found",
-        ),
+        ResourceError::NotFound => ("资源不存在", "The resource was not found"),
         ResourceError::Forbidden => (
             "无权执行资源操作",
             "You are not authorized to manage this resource",
         ),
         ResourceError::WorkspaceRequired => ("必须提供工作空间编码", "workspaceCode is required"),
         ResourceError::InvalidWorkspace => ("工作空间不可用", "The workspace is not active"),
-        ResourceError::InvalidScope => ("资源作用域不正确", "The resource scope is invalid"),
         ResourceError::InvalidCode => (
             "资源业务编码不正确",
             "The resource business code is invalid",
         ),
-        ResourceError::InvalidVersion => ("资源版本不正确", "The resource version is invalid"),
         ResourceError::InvalidInput => ("资源请求参数不正确", "The resource request is invalid"),
-        ResourceError::InvalidSchema => (
-            "资源结构化属性定义不正确",
-            "The resource attribute schema is invalid",
-        ),
-        ResourceError::InvalidBinarySchema => (
-            "资源二进制约束不正确",
-            "The resource binary constraints are invalid",
-        ),
         ResourceError::InvalidVariableReference => (
             "资源变量引用不正确",
             "The resource Variable reference is invalid",
         ),
-        ResourceError::ValidationFailed => {
-            ("资源未通过校验", "The resource did not pass validation")
-        }
         ResourceError::Conflict => (
             "资源状态发生冲突",
             "The resource state conflicts with this operation",
-        ),
-        ResourceError::DraftRevisionConflict => (
-            "草稿已被其他修改覆盖",
-            "The draft revision no longer matches",
-        ),
-        ResourceError::ActiveVersionConflict => {
-            ("当前生效版本已变化", "The active version no longer matches")
-        }
-        ResourceError::LifecycleDenied => (
-            "不允许此资源生命周期操作",
-            "This resource lifecycle operation is not allowed",
-        ),
-        ResourceError::DefinitionDisabled => {
-            ("资源定义已禁用", "The resource definition is disabled")
-        }
-        ResourceError::DefinitionInUse => (
-            "资源定义仍被资源版本引用",
-            "The resource definition is still referenced by resource versions",
-        ),
-        ResourceError::BuiltinDefinition => (
-            "内置资源定义不能删除",
-            "Built-in resource definitions cannot be deleted",
         ),
         ResourceError::StorageFailure => {
             ("资源存储操作失败", "The resource storage operation failed")
@@ -162,10 +106,6 @@ fn localized_resource_error(error: ResourceError, locale: &str) -> String {
         ResourceError::StorageLocatorInvalid => (
             "资源存储位置不正确",
             "The resource storage locator is invalid",
-        ),
-        ResourceError::ConnectionEndpointRequired => (
-            "连接类资源必须使用专用创建接口",
-            "Connection resources must be created through their dedicated endpoint",
         ),
         ResourceError::ConnectionVerificationFailed(_) => (
             "连接信息未通过连通性检测",

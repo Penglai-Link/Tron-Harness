@@ -1,9 +1,6 @@
-import type {
-  ResourceActivationApiResult,
-  ResourceScopeCode,
-} from "./resourceApiContract";
+import type { ResourceKindCode } from "./resourceApiContract";
 
-export type DataSourceDefinitionCode =
+export type DataSourceKindCode =
   | "MYSQL_CONNECTION"
   | "POSTGRESQL_CONNECTION"
   | "REDIS_CONNECTION"
@@ -11,15 +8,39 @@ export type DataSourceDefinitionCode =
 
 export type ServerAuthenticationType = "Password" | "PrivateKey";
 
-export interface DataSourceCreateApiRequest {
-  scopeKind: ResourceScopeCode;
-  workspaceCode: string | null;
+export interface ConnectionCommitApiResult {
+  workspaceCode: string;
   resourceCode: string;
-  definitionCode: DataSourceDefinitionCode;
+  kind: ResourceKindCode;
+}
+
+export interface ConnectionDeleteApiRequest {
+  workspaceCode: string;
+  resourceCode: string;
+}
+
+export interface ConnectionDeleteApiResult {
+  resourceCode: string;
+  deleted: boolean;
+}
+
+export interface DataSourceCreateApiRequest {
+  workspaceCode: string;
+  resourceCode: string;
+  kind: DataSourceKindCode;
   name: string;
   description: string | null;
   attributes: Record<string, unknown>;
   allowInheritance: boolean;
+}
+
+export interface DataSourceUpdateApiRequest {
+  workspaceCode: string;
+  resourceCode: string;
+  name?: string | null;
+  description?: string | null;
+  attributes?: Record<string, unknown> | null;
+  allowInheritance?: boolean | null;
 }
 
 export interface ServerAccountCreateInputApiRequest {
@@ -35,8 +56,7 @@ export interface ServerAccountCreateInputApiRequest {
 }
 
 export interface ServerCreateApiRequest {
-  scopeKind: ResourceScopeCode;
-  workspaceCode: string | null;
+  workspaceCode: string;
   serverCode: string;
   name: string;
   description: string | null;
@@ -47,14 +67,13 @@ export interface ServerCreateApiRequest {
 }
 
 export interface ServerAccountCreateApiRequest {
-  scopeKind: ResourceScopeCode;
-  workspaceCode: string | null;
+  workspaceCode: string;
   serverCode: string;
   account: ServerAccountCreateInputApiRequest;
 }
 
 export interface ServerCreateApiResult {
-  server: ResourceActivationApiResult;
-  initialAccount: ResourceActivationApiResult;
+  server: ConnectionCommitApiResult;
+  initialAccount: ConnectionCommitApiResult;
   connectivityVerified: boolean;
 }

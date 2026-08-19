@@ -1,709 +1,212 @@
-import type {
-  ResourceBinaryMapping,
-  ResourceVersionDetail,
-  ResourceVersionRecord,
-} from "@/domain/resource/model/ResourceModel";
-import type { ResourceDefinitionVersionDetail } from "@/domain/resource/model/ResourceDefinitionModel";
-import {
-  createWorkspaceResourceDefinitionDraft,
-  getWorkspaceResourceDefinitionVersionDetail,
-  listPlatformResourceDefinitionVersionDetails,
-  listWorkspaceResourceDefinitionVersionDetails,
-} from "./resourceDefinitionData";
-import { createJsonSchemaDraft7FormValue } from "@/shared/ui/json-schema-draft7";
-import {
-  readMockCreatedResourceRecords,
-  writeMockCreatedResourceRecords,
-  writeResourceVersionsToUiSession,
-} from "./uiSession";
-
-const workspaceResourceVersions: ResourceVersionRecord[] = [
-  {
-    definitionCode: "PRODUCT_IMAGES",
-    definitionName: "Product Images",
-    definitionVersion: "v2-P4d",
-    description: "Product gallery assets used by the storefront.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Storefront Product Gallery",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "storefront-product-gallery",
-    resourceVersion: "v4-M7q",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-17T03:18:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "MYSQL_CONNECTION",
-    definitionName: "MySQL Connection",
-    definitionVersion: "v4-a7K",
-    description: "Primary application database connection.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Production MySQL",
-    ownerWorkspaceCode: null,
-    ownerWorkspaceName: null,
-    resourceCode: "production-mysql",
-    resourceVersion: "v3-A8n",
-    scopeKind: "PLATFORM",
-    sourceKind: "PLATFORM",
-    updatedAt: "2026-07-16T09:34:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "FILE",
-    definitionName: "File",
-    definitionVersion: "v1-F8s",
-    description: "Shared customer import templates inherited from Platform.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Customer Import Templates",
-    ownerWorkspaceCode: "PLATFORM",
-    ownerWorkspaceName: "Platform",
-    resourceCode: "customer-import-templates",
-    resourceVersion: "v2-P9x",
-    scopeKind: "WORKSPACE",
-    sourceKind: "INHERITED",
-    updatedAt: "2026-07-16T07:12:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "PDF",
-    definitionName: "PDF Document",
-    definitionVersion: "v2-L6q",
-    description: "Workspace-specific policy documents overriding the upstream set.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Knowledge Policy PDFs",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "knowledge-policy-pdfs",
-    resourceVersion: "v5-R2c",
-    scopeKind: "WORKSPACE",
-    sourceKind: "OVERRIDE",
-    updatedAt: "2026-07-15T11:28:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "POSTGRESQL_CONNECTION",
-    definitionName: "PostgreSQL Connection",
-    definitionVersion: "v3-N8x",
-    description: "Analytics warehouse inherited from the Platform workspace.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Analytics Warehouse",
-    ownerWorkspaceCode: "PLATFORM",
-    ownerWorkspaceName: "Platform",
-    resourceCode: "analytics-warehouse",
-    resourceVersion: "v2-N6v",
-    scopeKind: "WORKSPACE",
-    sourceKind: "INHERITED",
-    updatedAt: "2026-07-14T15:06:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "IMAGE",
-    definitionName: "Image Collection",
-    definitionVersion: "v2-M3p",
-    description: "Platform brand marks and product identity images.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Brand Logo Library",
-    ownerWorkspaceCode: null,
-    ownerWorkspaceName: null,
-    resourceCode: "brand-logo-library",
-    resourceVersion: "v2-K4p",
-    scopeKind: "PLATFORM",
-    sourceKind: "PLATFORM",
-    updatedAt: "2026-07-13T08:46:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "REDIS_CONNECTION",
-    definitionName: "Redis Connection",
-    definitionVersion: "v2-D9n",
-    description: "Session cache maintained by this Workspace.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Session Cache",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "session-cache",
-    resourceVersion: "v1-D3s",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-12T04:22:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "KAFKA_CONNECTION",
-    definitionName: "Kafka Connection",
-    definitionVersion: "v1-K8p",
-    description: "Event stream connection for workspace automations.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Workspace Event Stream",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "workspace-kafka",
-    resourceVersion: "v1-K2m",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-12T02:10:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "SERVER_CONNECTION",
-    definitionName: "Server Connection",
-    definitionVersion: "v1-S8p",
-    description: "Production application server managed by this workspace.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Production Server",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "production-server",
-    resourceVersion: "v1-S2m",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-11T09:16:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "SERVER_CONNECTION",
-    definitionName: "Server Connection",
-    definitionVersion: "v1-S8p",
-    description: "Build worker server managed by this workspace.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Build Server",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "build-server",
-    resourceVersion: "v1-B7q",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-10T08:05:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "SERVER_ACCOUNT",
-    definitionName: "Server Account",
-    definitionVersion: "v1-A8p",
-    description: "Operations password account.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Operations Account",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "production-ops-account",
-    resourceVersion: "v1-A2m",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-11T09:15:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "SERVER_ACCOUNT",
-    definitionName: "Server Account",
-    definitionVersion: "v1-A8p",
-    description: "Deployment private-key account.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Deployment Account",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "build-deploy-account",
-    resourceVersion: "v1-D7q",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-10T08:04:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "PRODUCT_IMAGES",
-    definitionName: "Product Images",
-    definitionVersion: "v2-P4d",
-    description: "Draft refresh of storefront product assets.",
-    draftRevision: 6,
-    lifecycleStatus: "DRAFT",
-    name: "Storefront Product Gallery",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "storefront-product-gallery",
-    resourceVersion: "v5-X7b",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-17T05:06:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "FILE",
-    definitionName: "File",
-    definitionVersion: "v1-F8s",
-    description: "New archive for raw customer uploads.",
-    draftRevision: 2,
-    lifecycleStatus: "DRAFT",
-    name: "Customer Upload Archive",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "customer-upload-archive",
-    resourceVersion: "v1-Q2m",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-17T04:41:00Z",
-    validationIssueCount: 2,
-    validationStatus: "INVALID",
-  },
-  {
-    definitionCode: "MYSQL_CONNECTION",
-    definitionName: "MySQL Connection",
-    definitionVersion: "v4-a7K",
-    description: "Read-only reporting database under preparation.",
-    draftRevision: 1,
-    lifecycleStatus: "DRAFT",
-    name: "Reporting MySQL",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "reporting-mysql",
-    resourceVersion: "v1-H8k",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-07-16T12:32:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "PDF",
-    definitionName: "PDF Document",
-    definitionVersion: "v2-L6q",
-    description: "Draft update with incomplete policy metadata.",
-    draftRevision: 3,
-    lifecycleStatus: "DRAFT",
-    name: "Knowledge Policy PDFs",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "knowledge-policy-pdfs",
-    resourceVersion: "v6-C4t",
-    scopeKind: "WORKSPACE",
-    sourceKind: "OVERRIDE",
-    updatedAt: "2026-07-16T10:18:00Z",
-    validationIssueCount: 1,
-    validationStatus: "INVALID",
-  },
-  {
-    definitionCode: "PRODUCT_IMAGES",
-    definitionName: "Product Images",
-    definitionVersion: "v2-P4d",
-    description: "Previous storefront product gallery snapshot.",
-    draftRevision: null,
-    lifecycleStatus: "HISTORICAL",
-    name: "Storefront Product Gallery",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "storefront-product-gallery",
-    resourceVersion: "v3-V5d",
-    scopeKind: "WORKSPACE",
-    sourceKind: "LOCAL",
-    updatedAt: "2026-06-23T07:26:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "IMAGE",
-    definitionName: "Image Collection",
-    definitionVersion: "v1-J8r",
-    description: "Original platform brand logo collection.",
-    draftRevision: null,
-    lifecycleStatus: "HISTORICAL",
-    name: "Brand Logo Library",
-    ownerWorkspaceCode: null,
-    ownerWorkspaceName: null,
-    resourceCode: "brand-logo-library",
-    resourceVersion: "v1-B8q",
-    scopeKind: "PLATFORM",
-    sourceKind: "PLATFORM",
-    updatedAt: "2026-06-18T03:44:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "PDF",
-    definitionName: "PDF Document",
-    definitionVersion: "v2-L6q",
-    description: "Previous Workspace policy document snapshot.",
-    draftRevision: null,
-    lifecycleStatus: "HISTORICAL",
-    name: "Knowledge Policy PDFs",
-    ownerWorkspaceCode: "TRON_CORE",
-    ownerWorkspaceName: "Tron Core",
-    resourceCode: "knowledge-policy-pdfs",
-    resourceVersion: "v4-L6p",
-    scopeKind: "WORKSPACE",
-    sourceKind: "OVERRIDE",
-    updatedAt: "2026-06-11T09:08:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "MYSQL_CONNECTION",
-    definitionName: "MySQL Connection",
-    definitionVersion: "v3-Q8m",
-    description: "Previous production database connection snapshot.",
-    draftRevision: null,
-    lifecycleStatus: "HISTORICAL",
-    name: "Production MySQL",
-    ownerWorkspaceCode: null,
-    ownerWorkspaceName: null,
-    resourceCode: "production-mysql",
-    resourceVersion: "v2-G7r",
-    scopeKind: "PLATFORM",
-    sourceKind: "PLATFORM",
-    updatedAt: "2026-05-28T02:16:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-];
-
-const platformResourceVersions: ResourceVersionRecord[] = [
-  ...workspaceResourceVersions.filter((record) => record.scopeKind === "PLATFORM"),
-  {
-    definitionCode: "FILE",
-    definitionName: "File",
-    definitionVersion: "v1-F8s",
-    description: "Shared customer import templates published by Platform.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Customer Import Templates",
-    ownerWorkspaceCode: null,
-    ownerWorkspaceName: null,
-    resourceCode: "customer-import-templates",
-    resourceVersion: "v2-P9x",
-    scopeKind: "PLATFORM",
-    sourceKind: "PLATFORM",
-    updatedAt: "2026-07-16T07:12:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "POSTGRESQL_CONNECTION",
-    definitionName: "PostgreSQL Connection",
-    definitionVersion: "v3-N8x",
-    description: "Platform analytics warehouse connection inherited by workspaces.",
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: "Analytics Warehouse",
-    ownerWorkspaceCode: null,
-    ownerWorkspaceName: null,
-    resourceCode: "analytics-warehouse",
-    resourceVersion: "v2-N6v",
-    scopeKind: "PLATFORM",
-    sourceKind: "PLATFORM",
-    updatedAt: "2026-07-14T15:06:00Z",
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  },
-  {
-    definitionCode: "FILE",
-    definitionName: "File",
-    definitionVersion: "v1-F8s",
-    description: "Platform support bundle under preparation.",
-    draftRevision: 2,
-    lifecycleStatus: "DRAFT",
-    name: "Support Bundle",
-    ownerWorkspaceCode: null,
-    ownerWorkspaceName: null,
-    resourceCode: "support-bundle",
-    resourceVersion: "v1-T4m",
-    scopeKind: "PLATFORM",
-    sourceKind: "PLATFORM",
-    updatedAt: "2026-07-17T05:38:00Z",
-    validationIssueCount: 1,
-    validationStatus: "INVALID",
-  },
-];
-
-export function listWorkspaceResourceVersions(workspaceCode: string, workspaceName: string) {
-  if (!workspaceCode) return [];
-
-  const baseRecords = workspaceResourceVersions.map((record) => {
-    if (record.ownerWorkspaceCode !== "TRON_CORE") return { ...record };
-    return {
-      ...record,
-      ownerWorkspaceCode: workspaceCode,
-      ownerWorkspaceName: workspaceName || record.ownerWorkspaceName,
-    };
-  });
-  return [...readMockCreatedResourceRecords(workspaceCode), ...baseRecords];
-}
-
-export function listPlatformResourceVersions() {
-  return [...readMockCreatedResourceRecords("PLATFORM"), ...platformResourceVersions.map(clone)];
-}
-
-function mockVersionSuffix() {
-  return Math.random().toString(36).slice(2, 5).padEnd(3, "0");
-}
-
-export interface MockQuickResourceCreateInput {
-  allowInheritance: boolean;
-  attributes: Record<string, unknown>;
-  binaryName: string;
-  definition: ResourceDefinitionVersionDetail;
-  description: string;
-  name: string;
-  resourceCode: string;
-  scopeCode: string;
-  scopeKind: "PLATFORM" | "WORKSPACE";
-  byteSize: number;
-}
-
-/**
- * Mirrors the direct ACTIVE creation path for frontend-only UI regression.
- * The bytes themselves remain in the browser and are intentionally not put in
- * sessionStorage; only the resource projection and byte size are persisted.
- */
-export function createMockQuickResource(input: MockQuickResourceCreateInput): ResourceVersionDetail {
-  const now = new Date().toISOString();
-  const resourceVersion = `v1-${mockVersionSuffix()}`;
-  const isPlatform = input.scopeKind === "PLATFORM";
-  const record: ResourceVersionRecord = {
-    definitionCode: input.definition.definitionCode,
-    definitionName: input.definition.name,
-    definitionVersion: input.definition.definitionVersion,
-    description: input.description,
-    draftRevision: null,
-    lifecycleStatus: "ACTIVE",
-    name: input.name,
-    ownerWorkspaceCode: isPlatform ? null : input.scopeCode,
-    ownerWorkspaceName: isPlatform ? null : input.scopeCode,
-    resourceCode: input.resourceCode,
-    resourceVersion,
-    scopeKind: input.scopeKind,
-    sourceKind: isPlatform ? "PLATFORM" : "LOCAL",
-    updatedAt: now,
-    validationIssueCount: 0,
-    validationStatus: "VALID",
-  };
-  const detail: ResourceVersionDetail = {
-    ...record,
-    allowInheritance: input.allowInheritance,
-    attributes: clone(input.attributes),
-    attributesSchema: clone(input.definition.attributesSchema),
-    binaries: [{ binaryName: input.binaryName, byteSize: input.byteSize }],
-    binarySchema: clone(input.definition.binarySchema),
-    createdAt: now,
-    publishedAt: now,
-  };
-  const records = readMockCreatedResourceRecords(input.scopeCode)
-    .filter((item) => item.resourceCode !== record.resourceCode);
-  writeMockCreatedResourceRecords(input.scopeCode, [record, ...records]);
-  writeResourceVersionsToUiSession(input.scopeCode, input.resourceCode, [detail]);
-  return detail;
-}
+import type { ResourceRecord } from "@/domain/resource/model/ResourceModel";
 
 function clone<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function attributesForRecord(record: ResourceVersionRecord) {
-  if (record.definitionCode === "PRODUCT_IMAGES") {
-    return {
-      altText: record.lifecycleStatus === "DRAFT" ? "Storefront product gallery" : "Product gallery image",
-      imageType: "GALLERY",
-      locale: "zh-CN",
-      productCode: "TRON-STOREFRONT",
-      tags: record.lifecycleStatus === "HISTORICAL" ? ["storefront"] : ["storefront", "product"],
-    };
-  }
-  if (record.definitionCode === "MYSQL_CONNECTION") {
-    return {
-      connectionMode: "REPLICATION",
-      credentials: {
-        password: "DATABASE_PASSWORD",
-        username: "DATABASE_USERNAME",
-      },
-      database: record.resourceCode === "reporting-mysql" ? "reporting" : "tron_production",
-      endpoints: [
-        { host: "mysql-primary.internal", port: 3306, role: "PRIMARY" },
-        { host: "mysql-replica.internal", port: 3306, role: "REPLICA" },
-      ],
-      properties: {
-        connectTimeout: 5000,
-        rewriteBatchedStatements: true,
-        useUnicode: "true",
-      },
-      tls: {
-        caCertificate: "MYSQL_CA_CERTIFICATE",
-        clientCertificate: "MYSQL_CLIENT_CERTIFICATE",
-        clientKey: "MYSQL_CLIENT_KEY",
-        mode: "VERIFY_IDENTITY",
-      },
-    };
-  }
-  if (record.definitionCode === "PDF") {
-    return {
-      fileName: record.lifecycleStatus === "DRAFT" ? "" : "workspace-policy.pdf",
-      pageCount: record.lifecycleStatus === "DRAFT" ? 0 : 18,
-      sizeBytes: 184_320,
-    };
-  }
-  if (record.definitionCode === "FILE") {
-    const incompleteDraft = record.resourceCode === "customer-upload-archive" || record.resourceCode === "support-bundle";
-    return {
-      fileExtension: record.resourceCode === "support-bundle" ? "zip" : "xlsx",
-      fileName: incompleteDraft ? "" : "customer-import-template.xlsx",
-      sizeBytes: 63_488,
-    };
-  }
-  if (record.definitionCode === "IMAGE") {
-    return {
-      images: [{
-        binaryName: "tron-mark.svg",
-        fileExtension: "svg",
-        fileName: "tron-mark.svg",
-        imageFormat: "SVG",
-        sizeBytes: 12_288,
-      }],
-    };
-  }
-  return {};
-}
-
-function binariesForRecord(record: ResourceVersionRecord): ResourceBinaryMapping[] {
-  if (record.definitionCode === "PRODUCT_IMAGES") {
-    const names = record.lifecycleStatus === "HISTORICAL"
-      ? ["hero-front.png", "hero-side.png"]
-      : record.lifecycleStatus === "DRAFT"
-        ? ["hero-front.png", "hero-side.png", "hero-detail.png", "hero-mobile.png"]
-        : ["hero-front.png", "hero-side.png", "hero-detail.png"];
-    return names.map((binaryName) => ({ binaryName }));
-  }
-  if (record.definitionCode === "PDF") return [{ binaryName: "workspace-policy.pdf" }];
-  if (record.definitionCode === "FILE") {
-    const incompleteDraft = record.resourceCode === "customer-upload-archive" || record.resourceCode === "support-bundle";
-    return incompleteDraft ? [] : [{ binaryName: "customer-import-template.xlsx" }];
-  }
-  if (record.definitionCode === "IMAGE") {
-    return ["tron-mark.svg", "tron-wordmark.svg", "tron-avatar.png"].map((binaryName) => ({ binaryName }));
-  }
-  return [];
-}
-
-function definitionForRecord(
-  record: ResourceVersionRecord,
-  workspaceCode: string,
-  workspaceName: string,
-) {
-  return getWorkspaceResourceDefinitionVersionDetail(
-    workspaceCode,
-    workspaceName,
-    record.definitionCode,
-    record.definitionVersion,
-  ) ?? listWorkspaceResourceDefinitionVersionDetails(workspaceCode, workspaceName)
-    .find((definition) => definition.definitionCode === record.definitionCode && definition.lifecycleStatus === "ACTIVE")
-    ?? createWorkspaceResourceDefinitionDraft(workspaceCode, workspaceName);
-}
-
-function detailForRecord(
-  record: ResourceVersionRecord,
-  workspaceCode: string,
-  workspaceName: string,
-): ResourceVersionDetail {
-  const definition = definitionForRecord(record, workspaceCode, workspaceName);
-  return detailWithDefinition(record, definition);
-}
-
-function detailWithDefinition(
-  record: ResourceVersionRecord,
-  definition: ReturnType<typeof definitionForRecord>,
-): ResourceVersionDetail {
-  const createdAt = new Date(Date.parse(record.updatedAt) - 14 * 24 * 60 * 60 * 1000).toISOString();
-  const fixtureAttributes = attributesForRecord(record);
-  return {
-    ...clone(record),
+const workspaceResources: ResourceRecord[] = [
+  {
+    allowInheritance: false,
+    attributes: null,
+    createdAt: "2026-07-10T02:10:00Z",
+    description: "Product gallery assets used by the storefront.",
+    file: { byteSize: 482_304, fileExtension: "png", fileName: "hero-front.png" },
+    kind: "IMAGE",
+    name: "Storefront Product Gallery",
+    resourceCode: "storefront-product-gallery",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-17T03:18:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
     allowInheritance: true,
-    attributes: Object.keys(fixtureAttributes).length
-      ? fixtureAttributes
-      : createJsonSchemaDraft7FormValue(definition.attributesSchema),
-    attributesSchema: clone(definition.attributesSchema),
-    binaries: binariesForRecord(record),
-    binarySchema: clone(definition.binarySchema),
-    createdAt,
-    publishedAt: record.lifecycleStatus === "DRAFT" ? null : record.updatedAt,
-  };
+    attributes: { connectionMode: "SINGLE", database: "tron", endpoints: [{ host: "mysql.internal", port: 3306 }] },
+    createdAt: "2026-07-08T01:22:00Z",
+    description: "Primary application database connection.",
+    file: null,
+    kind: "MYSQL_CONNECTION",
+    name: "Production MySQL",
+    resourceCode: "production-mysql",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-16T09:34:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: true,
+    attributes: null,
+    createdAt: "2026-07-05T06:40:00Z",
+    description: "Shared customer import templates inherited from the parent workspace.",
+    file: { byteSize: 63_488, fileExtension: "xlsx", fileName: "customer-import-template.xlsx" },
+    kind: "FILE",
+    name: "Customer Import Templates",
+    resourceCode: "customer-import-templates",
+    sourceKind: "INHERITED",
+    updatedAt: "2026-07-16T07:12:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: false,
+    attributes: { fileName: "workspace-policy.pdf", pageCount: 18, sizeBytes: 184_320 },
+    createdAt: "2026-07-04T08:02:00Z",
+    description: "Workspace-specific policy documents overriding the upstream set.",
+    file: { byteSize: 184_320, fileExtension: "pdf", fileName: "workspace-policy.pdf" },
+    kind: "PDF",
+    name: "Knowledge Policy PDFs",
+    resourceCode: "knowledge-policy-pdfs",
+    sourceKind: "OVERRIDE",
+    updatedAt: "2026-07-15T11:28:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: true,
+    attributes: { database: "analytics", endpoints: [{ host: "postgres.internal", port: 5432 }] },
+    createdAt: "2026-07-03T04:30:00Z",
+    description: "Analytics warehouse inherited from the parent workspace.",
+    file: null,
+    kind: "POSTGRESQL_CONNECTION",
+    name: "Analytics Warehouse",
+    resourceCode: "analytics-warehouse",
+    sourceKind: "INHERITED",
+    updatedAt: "2026-07-14T15:06:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: false,
+    attributes: { database: 0, endpoints: [{ host: "redis.internal", port: 6379 }], topology: "STANDALONE" },
+    createdAt: "2026-07-02T03:18:00Z",
+    description: "Session cache maintained by this workspace.",
+    file: null,
+    kind: "REDIS_CONNECTION",
+    name: "Session Cache",
+    resourceCode: "session-cache",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-12T04:22:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: false,
+    attributes: { brokers: [{ host: "kafka.internal", port: 9092 }], securityProtocol: "SASL_SSL" },
+    createdAt: "2026-07-02T01:04:00Z",
+    description: "Event stream connection for workspace automations.",
+    file: null,
+    kind: "KAFKA_CONNECTION",
+    name: "Workspace Event Stream",
+    resourceCode: "workspace-kafka",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-12T02:10:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: false,
+    attributes: { host: "10.20.0.12", port: 22, protocol: "Ssh" },
+    createdAt: "2026-07-01T08:44:00Z",
+    description: "Production application server managed by this workspace.",
+    file: null,
+    kind: "SERVER_CONNECTION",
+    name: "Production Server",
+    resourceCode: "production-server",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-11T09:16:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: false,
+    attributes: { host: "10.20.0.18", port: 22, protocol: "Ssh" },
+    createdAt: "2026-06-30T07:52:00Z",
+    description: "Build worker server managed by this workspace.",
+    file: null,
+    kind: "SERVER_CONNECTION",
+    name: "Build Server",
+    resourceCode: "build-server",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-10T08:05:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: false,
+    attributes: { authenticationType: "Password", serverCode: "production-server", username: "ops" },
+    createdAt: "2026-07-01T08:42:00Z",
+    description: "Operations password account.",
+    file: null,
+    kind: "SERVER_ACCOUNT",
+    name: "Operations Account",
+    resourceCode: "production-ops-account",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-11T09:15:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+  {
+    allowInheritance: false,
+    attributes: { authenticationType: "PrivateKey", serverCode: "build-server", username: "deploy" },
+    createdAt: "2026-06-30T07:50:00Z",
+    description: "Deployment private-key account.",
+    file: null,
+    kind: "SERVER_ACCOUNT",
+    name: "Deployment Account",
+    resourceCode: "build-deploy-account",
+    sourceKind: "LOCAL",
+    updatedAt: "2026-07-10T08:04:00Z",
+    workspaceCode: "TRON_CORE",
+  },
+];
+
+export function listWorkspaceResources(workspaceCode: string, workspaceName: string) {
+  if (!workspaceCode) return [];
+  void workspaceName;
+  return workspaceResources.map((record) => ({
+    ...clone(record),
+    workspaceCode,
+  }));
 }
 
-function detailForPlatformRecord(record: ResourceVersionRecord) {
-  const definitions = listPlatformResourceDefinitionVersionDetails();
-  const definition = definitions.find((item) => (
-    item.definitionCode === record.definitionCode && item.definitionVersion === record.definitionVersion
-  )) ?? definitions.find((item) => (
-    item.definitionCode === record.definitionCode && item.lifecycleStatus === "ACTIVE"
-  )) ?? createWorkspaceResourceDefinitionDraft("PLATFORM", "Platform");
-  return detailWithDefinition(record, definition);
-}
-
-export function listWorkspaceResourceVersionDetails(workspaceCode: string, workspaceName: string) {
-  return listWorkspaceResourceVersions(workspaceCode, workspaceName)
-    .map((record) => detailForRecord(record, workspaceCode, workspaceName));
-}
-
-export function listPlatformResourceVersionDetails() {
-  return listPlatformResourceVersions().map(detailForPlatformRecord);
-}
-
-export function getWorkspaceResourceVersionDetail(
+export function getWorkspaceResourceDetail(
   workspaceCode: string,
   workspaceName: string,
   resourceCode: string,
-  resourceVersion: string,
 ) {
-  return listWorkspaceResourceVersionDetails(workspaceCode, workspaceName)
-    .find((record) => record.resourceCode === resourceCode && record.resourceVersion === resourceVersion) ?? null;
+  return listWorkspaceResources(workspaceCode, workspaceName)
+    .find((record) => record.resourceCode === resourceCode) ?? null;
 }
 
-export function createWorkspaceResourceDraft(workspaceCode: string, workspaceName: string): ResourceVersionDetail {
-  const now = "2026-07-17T06:00:00Z";
-  const emptyDefinition = createWorkspaceResourceDefinitionDraft(workspaceCode, workspaceName);
-  return {
-    allowInheritance: true,
-    attributes: createJsonSchemaDraft7FormValue(emptyDefinition.attributesSchema),
-    attributesSchema: clone(emptyDefinition.attributesSchema),
-    binaries: [],
-    binarySchema: clone(emptyDefinition.binarySchema),
+export interface MockQuickResourceCreateInput {
+  allowInheritance: boolean;
+  description: string;
+  file: File;
+  kind: "FILE" | "IMAGE" | "PDF";
+  name: string;
+  pageCount: number | null;
+  resourceCode: string;
+  workspaceCode: string;
+}
+
+const mockCreatedResources: ResourceRecord[] = [];
+
+export function createMockQuickResource(input: MockQuickResourceCreateInput): ResourceRecord {
+  const now = new Date().toISOString();
+  const attributes = input.kind === "PDF"
+    ? { fileName: input.file.name, pageCount: input.pageCount ?? 0, sizeBytes: input.file.size }
+    : null;
+  const record: ResourceRecord = {
+    allowInheritance: input.allowInheritance,
+    attributes,
     createdAt: now,
-    definitionCode: "",
-    definitionName: "",
-    definitionVersion: "",
-    description: "",
-    draftRevision: 1,
-    lifecycleStatus: "DRAFT",
-    name: "",
-    ownerWorkspaceCode: workspaceCode,
-    ownerWorkspaceName: workspaceName,
-    publishedAt: null,
-    resourceCode: "",
-    resourceVersion: "v1-B9q",
-    scopeKind: "WORKSPACE",
+    description: input.description,
+    file: {
+      byteSize: input.file.size,
+      fileExtension: input.file.name.includes(".") ? input.file.name.slice(input.file.name.lastIndexOf(".") + 1).toLowerCase() : "",
+      fileName: input.file.name,
+    },
+    kind: input.kind,
+    name: input.name,
+    resourceCode: input.resourceCode,
     sourceKind: "LOCAL",
     updatedAt: now,
-    validationIssueCount: 2,
-    validationStatus: "INVALID",
+    workspaceCode: input.workspaceCode,
   };
+  mockCreatedResources.unshift(record);
+  return clone(record);
+}
+
+export function listMockCreatedResources(workspaceCode: string) {
+  return mockCreatedResources.filter((record) => record.workspaceCode === workspaceCode).map(clone);
 }

@@ -104,9 +104,7 @@ function isAdministrationRoute(pathname: string) {
 function usesInPlaceSearch(pageId?: string) {
   return pageId === "chats.index"
     || pageId === "resources.detail"
-    || pageId === "resourceDefinitions.detail"
-    || pageId === "settings.resourcesDetail"
-    || pageId === "settings.resourceDefinitionsDetail";
+    || pageId === "settings.resourcesDetail";
 }
 
 function routeRenderKeyForLocation(pathname: string, search: string, pageId?: string) {

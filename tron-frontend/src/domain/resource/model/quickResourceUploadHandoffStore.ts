@@ -1,19 +1,15 @@
 import { create } from "zustand";
 
-import type { ResourceDefinitionVersionDetail } from "./ResourceDefinitionModel";
-import type { ResourceScopeKind } from "./ResourceModel";
-
 export interface QuickResourceUploadHandoffPayload {
   allowInheritance: boolean;
-  attributes: Record<string, unknown>;
   binaryName: string;
-  definition: ResourceDefinitionVersionDetail;
   description: string;
   file: File;
+  kind: "FILE" | "IMAGE" | "PDF";
   name: string;
+  pageCount: number | null;
   resourceCode: string;
-  scopeCode: string;
-  scopeKind: ResourceScopeKind;
+  workspaceCode: string;
 }
 
 export interface QuickResourceUploadHandoff extends QuickResourceUploadHandoffPayload {

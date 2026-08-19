@@ -77,7 +77,6 @@ export function ServerAccountCreateDialog({
                 }),
             username: account.username.trim(),
           },
-          scopeKind: "WORKSPACE",
           serverCode,
           workspaceCode,
         });

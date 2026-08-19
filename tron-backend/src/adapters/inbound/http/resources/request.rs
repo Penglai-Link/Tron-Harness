@@ -3,364 +3,36 @@ use serde_json::Value;
 
 use crate::{
     application::resource::{
-        ResourceActivateVersionCommand, ResourceCommitCommand, ResourceCreateDraftCommand,
-        ResourceDefinitionActivateVersionCommand, ResourceDefinitionCreateDraftCommand,
-        ResourceDefinitionDeleteCommand, ResourceDefinitionDiscardDraftCommand,
-        ResourceDefinitionPublishDraftCommand, ResourceDefinitionSetEnabledCommand,
-        ResourceDefinitionUpdateDraftCommand, ResourceDefinitionVersionGetQuery,
-        ResourceDefinitionVersionPageQuery, ResourceDeleteCommand, ResourceDiscardDraftCommand,
-        ResourceHttpBinaryDownloadCommand, ResourceHttpBinaryRemoveCommand,
-        ResourceHttpBinaryUploadCommand, ResourcePublishDraftCommand, ResourceUpdateDraftCommand,
-        ResourceVersionGetQuery, ResourceVersionPageQuery,
+        DataSourceCreateCommand, DataSourceUpdateCommand, ResourceBinaryDownloadCommand,
+        ResourceBinaryUploadCommand, ResourceCreateCommand, ResourceDeleteCommand,
+        ResourceGetQuery, ResourcePageQuery, ResourceUpdateCommand, ServerAccountCreateCommand,
+        ServerAccountCreateInput, ServerCreateCommand,
     },
-    domain::resource::{
-        ResourceDefinitionStatus, ResourceError, ResourceLifecycleStatus, ResourceScopeKind,
-        ResourceSourceKind, ResourceValidationStatus,
-    },
+    domain::resource::{ResourceError, ResourceKind, ServerAuthenticationType, is_data_source_kind},
 };
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ScopeCode {
-    Platform,
-    Workspace,
-}
-
-impl From<ScopeCode> for ResourceScopeKind {
-    fn from(value: ScopeCode) -> Self {
-        match value {
-            ScopeCode::Platform => Self::Platform,
-            ScopeCode::Workspace => Self::Workspace,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum LifecycleCode {
-    Draft,
-    Active,
-    Historical,
-}
-
-impl From<LifecycleCode> for ResourceLifecycleStatus {
-    fn from(value: LifecycleCode) -> Self {
-        match value {
-            LifecycleCode::Draft => Self::Draft,
-            LifecycleCode::Active => Self::Active,
-            LifecycleCode::Historical => Self::Historical,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ValidationCode {
-    Valid,
-    Invalid,
-}
-
-impl From<ValidationCode> for ResourceValidationStatus {
-    fn from(value: ValidationCode) -> Self {
-        match value {
-            ValidationCode::Valid => Self::Valid,
-            ValidationCode::Invalid => Self::Invalid,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum DefinitionStatusCode {
-    Enabled,
-    Disabled,
-}
-
-impl From<DefinitionStatusCode> for ResourceDefinitionStatus {
-    fn from(value: DefinitionStatusCode) -> Self {
-        match value {
-            DefinitionStatusCode::Enabled => Self::Enabled,
-            DefinitionStatusCode::Disabled => Self::Disabled,
-        }
-    }
-}
-
-#[derive(Debug, Clone, Copy, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum SourceCode {
-    Platform,
-    Local,
-    Inherited,
-    Override,
-}
-
-impl From<SourceCode> for ResourceSourceKind {
-    fn from(value: SourceCode) -> Self {
-        match value {
-            SourceCode::Platform => Self::Platform,
-            SourceCode::Local => Self::Local,
-            SourceCode::Inherited => Self::Inherited,
-            SourceCode::Override => Self::Override,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionPageRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub search: Option<String>,
-    pub definition_code: Option<String>,
-    pub definition_status: Option<DefinitionStatusCode>,
-    pub lifecycle_status: Option<LifecycleCode>,
-    pub validation_status: Option<ValidationCode>,
-    pub source_kind: Option<SourceCode>,
-    pub current: usize,
-    pub size: usize,
-}
-
-impl From<DefinitionPageRequest> for ResourceDefinitionVersionPageQuery {
-    fn from(value: DefinitionPageRequest) -> Self {
-        Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            search: value.search,
-            definition_code: value.definition_code,
-            definition_status: value.definition_status.map(Into::into),
-            lifecycle_status: value.lifecycle_status.map(Into::into),
-            validation_status: value.validation_status.map(Into::into),
-            source_kind: value.source_kind.map(Into::into),
-            current: value.current,
-            size: value.size,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionGetRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub definition_code: String,
-    pub definition_version: String,
-}
-
-impl From<DefinitionGetRequest> for ResourceDefinitionVersionGetQuery {
-    fn from(value: DefinitionGetRequest) -> Self {
-        Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            definition_version: value.definition_version,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionCreateDraftRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub definition_code: String,
-    pub source_definition_version: Option<String>,
-    pub name: String,
-    pub description: Option<String>,
-    pub definition_status: Option<DefinitionStatusCode>,
-    pub allow_inheritance: Option<bool>,
-    pub attributes_schema: Option<Value>,
-    pub binary_schema: Option<Value>,
-    pub binary_storage_profile: Option<String>,
-}
-
-impl From<DefinitionCreateDraftRequest> for ResourceDefinitionCreateDraftCommand {
-    fn from(value: DefinitionCreateDraftRequest) -> Self {
-        Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            source_definition_version: value.source_definition_version,
-            name: value.name,
-            description: value.description,
-            definition_status: value.definition_status.map(Into::into),
-            allow_inheritance: value.allow_inheritance,
-            attributes_schema: value.attributes_schema,
-            binary_schema: value.binary_schema,
-            binary_storage_profile: value.binary_storage_profile,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionUpdateDraftRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub definition_code: String,
-    pub definition_version: String,
-    pub expected_draft_revision: String,
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub definition_status: Option<DefinitionStatusCode>,
-    pub allow_inheritance: Option<bool>,
-    pub attributes_schema: Option<Value>,
-    pub binary_schema: Option<Value>,
-    pub binary_storage_profile: Option<String>,
-}
-
-impl TryFrom<DefinitionUpdateDraftRequest> for ResourceDefinitionUpdateDraftCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: DefinitionUpdateDraftRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            definition_version: value.definition_version,
-            expected_draft_revision: parse_draft_revision(&value.expected_draft_revision)?,
-            name: value.name,
-            description: value.description,
-            definition_status: value.definition_status.map(Into::into),
-            allow_inheritance: value.allow_inheritance,
-            attributes_schema: value.attributes_schema,
-            binary_schema: value.binary_schema,
-            binary_storage_profile: value.binary_storage_profile,
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionDraftTargetRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub definition_code: String,
-    pub definition_version: String,
-    pub expected_draft_revision: String,
-}
-
-impl TryFrom<DefinitionDraftTargetRequest> for ResourceDefinitionDiscardDraftCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: DefinitionDraftTargetRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            definition_version: value.definition_version,
-            expected_draft_revision: parse_draft_revision(&value.expected_draft_revision)?,
-        })
-    }
-}
-
-impl TryFrom<DefinitionDraftTargetRequest> for ResourceDefinitionPublishDraftCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: DefinitionDraftTargetRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            definition_version: value.definition_version,
-            expected_draft_revision: parse_draft_revision(&value.expected_draft_revision)?,
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionActivateVersionRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub definition_code: String,
-    pub definition_version: String,
-    pub expected_active_definition_version: Option<String>,
-}
-
-impl From<DefinitionActivateVersionRequest> for ResourceDefinitionActivateVersionCommand {
-    fn from(value: DefinitionActivateVersionRequest) -> Self {
-        Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            definition_version: value.definition_version,
-            expected_active_definition_version: value.expected_active_definition_version,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionSetEnabledRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub definition_code: String,
-    pub enabled: bool,
-    pub expected_active_definition_version: String,
-}
-
-impl From<DefinitionSetEnabledRequest> for ResourceDefinitionSetEnabledCommand {
-    fn from(value: DefinitionSetEnabledRequest) -> Self {
-        Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            enabled: value.enabled,
-            expected_active_definition_version: value.expected_active_definition_version,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct DefinitionDeleteRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub definition_code: String,
-    pub expected_active_definition_version: String,
-}
-
-impl From<DefinitionDeleteRequest> for ResourceDefinitionDeleteCommand {
-    fn from(value: DefinitionDeleteRequest) -> Self {
-        Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            definition_code: value.definition_code,
-            expected_active_definition_version: value.expected_active_definition_version,
-        }
-    }
-}
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourcePageRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
+    pub workspace_code: String,
+    #[serde(default)]
+    pub kind: Option<ResourceKind>,
+    #[serde(default)]
     pub search: Option<String>,
-    pub resource_code: Option<String>,
-    pub definition_code: Option<String>,
-    pub definition_status: Option<DefinitionStatusCode>,
-    pub lifecycle_status: Option<LifecycleCode>,
-    pub validation_status: Option<ValidationCode>,
-    pub source_kind: Option<SourceCode>,
-    pub current: usize,
-    pub size: usize,
+    #[serde(default)]
+    pub current: Option<usize>,
+    #[serde(default)]
+    pub size: Option<usize>,
 }
 
-impl From<ResourcePageRequest> for ResourceVersionPageQuery {
+impl From<ResourcePageRequest> for ResourcePageQuery {
     fn from(value: ResourcePageRequest) -> Self {
         Self {
-            scope_kind: value.scope_kind.into(),
             workspace_code: value.workspace_code,
+            kind: value.kind,
             search: value.search,
-            resource_code: value.resource_code,
-            definition_code: value.definition_code,
-            definition_status: value.definition_status.map(Into::into),
-            lifecycle_status: value.lifecycle_status.map(Into::into),
-            validation_status: value.validation_status.map(Into::into),
-            source_kind: value.source_kind.map(Into::into),
-            current: value.current,
-            size: value.size,
+            current: value.current.unwrap_or(1),
+            size: value.size.unwrap_or(20),
         }
     }
 }
@@ -368,52 +40,66 @@ impl From<ResourcePageRequest> for ResourceVersionPageQuery {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourceGetRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
+    pub workspace_code: String,
     pub resource_code: String,
-    pub resource_version: String,
 }
 
-impl From<ResourceGetRequest> for ResourceVersionGetQuery {
+impl From<ResourceGetRequest> for ResourceGetQuery {
     fn from(value: ResourceGetRequest) -> Self {
         Self {
-            scope_kind: value.scope_kind.into(),
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
-            resource_version: value.resource_version,
         }
     }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ResourceCommitRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
+pub struct ResourceCreateRequest {
+    pub workspace_code: String,
     pub resource_code: String,
-    pub definition_code: Option<String>,
-    pub expected_active_resource_version: Option<String>,
+    pub kind: ResourceKind,
     pub name: String,
-    pub description: String,
-    pub attributes: Value,
-    pub allow_inheritance: bool,
     #[serde(default)]
-    pub removed_binary_names: Vec<String>,
+    pub description: Option<String>,
+    #[serde(default = "default_true")]
+    pub allow_inheritance: bool,
 }
 
-impl From<ResourceCommitRequest> for ResourceCommitCommand {
-    fn from(value: ResourceCommitRequest) -> Self {
+impl From<ResourceCreateRequest> for ResourceCreateCommand {
+    fn from(value: ResourceCreateRequest) -> Self {
         Self {
-            scope_kind: value.scope_kind.into(),
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
-            definition_code: value.definition_code,
-            expected_active_resource_version: value.expected_active_resource_version,
+            kind: value.kind,
+            name: value.name,
+            description: value.description.unwrap_or_default(),
+            allow_inheritance: value.allow_inheritance,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ResourceUpdateRequest {
+    pub workspace_code: String,
+    pub resource_code: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub allow_inheritance: Option<bool>,
+}
+
+impl From<ResourceUpdateRequest> for ResourceUpdateCommand {
+    fn from(value: ResourceUpdateRequest) -> Self {
+        Self {
+            workspace_code: value.workspace_code,
+            resource_code: value.resource_code,
             name: value.name,
             description: value.description,
-            attributes: value.attributes,
             allow_inheritance: value.allow_inheritance,
-            removed_binary_names: value.removed_binary_names,
         }
     }
 }
@@ -421,234 +107,192 @@ impl From<ResourceCommitRequest> for ResourceCommitCommand {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourceDeleteRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
+    pub workspace_code: String,
     pub resource_code: String,
-    pub expected_active_resource_version: Option<String>,
-    pub expected_draft_resource_version: Option<String>,
-    pub expected_draft_revision: Option<String>,
 }
 
-impl TryFrom<ResourceDeleteRequest> for ResourceDeleteCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: ResourceDeleteRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            resource_code: value.resource_code,
-            expected_active_resource_version: value.expected_active_resource_version,
-            expected_draft_resource_version: value.expected_draft_resource_version,
-            expected_draft_revision: value
-                .expected_draft_revision
-                .as_deref()
-                .map(parse_draft_revision)
-                .transpose()?,
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ResourceCreateDraftRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub resource_code: String,
-    pub source_resource_version: Option<String>,
-    pub definition_code: Option<String>,
-    pub name: String,
-    pub description: Option<String>,
-    pub attributes: Option<Value>,
-    pub allow_inheritance: Option<bool>,
-}
-
-impl From<ResourceCreateDraftRequest> for ResourceCreateDraftCommand {
-    fn from(value: ResourceCreateDraftRequest) -> Self {
+impl From<ResourceDeleteRequest> for ResourceDeleteCommand {
+    fn from(value: ResourceDeleteRequest) -> Self {
         Self {
-            scope_kind: value.scope_kind.into(),
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
-            source_resource_version: value.source_resource_version,
-            definition_code: value.definition_code,
-            name: value.name,
-            description: value.description,
-            attributes: value.attributes,
-            allow_inheritance: value.allow_inheritance,
         }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ResourceUpdateDraftRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub resource_code: String,
-    pub resource_version: String,
-    pub expected_draft_revision: String,
-    pub name: Option<String>,
-    pub description: Option<String>,
-    pub attributes: Option<Value>,
-    pub allow_inheritance: Option<bool>,
-}
-
-impl TryFrom<ResourceUpdateDraftRequest> for ResourceUpdateDraftCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: ResourceUpdateDraftRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            resource_code: value.resource_code,
-            resource_version: value.resource_version,
-            expected_draft_revision: parse_draft_revision(&value.expected_draft_revision)?,
-            name: value.name,
-            description: value.description,
-            attributes: value.attributes,
-            allow_inheritance: value.allow_inheritance,
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ResourceDraftTargetRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub resource_code: String,
-    pub resource_version: String,
-    pub expected_draft_revision: String,
-}
-
-impl TryFrom<ResourceDraftTargetRequest> for ResourceDiscardDraftCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: ResourceDraftTargetRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            resource_code: value.resource_code,
-            resource_version: value.resource_version,
-            expected_draft_revision: parse_draft_revision(&value.expected_draft_revision)?,
-        })
-    }
-}
-
-impl TryFrom<ResourceDraftTargetRequest> for ResourcePublishDraftCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: ResourceDraftTargetRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            resource_code: value.resource_code,
-            resource_version: value.resource_version,
-            expected_draft_revision: parse_draft_revision(&value.expected_draft_revision)?,
-        })
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ResourceActivateVersionRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub resource_code: String,
-    pub resource_version: String,
-    pub expected_active_resource_version: Option<String>,
-}
-
-impl From<ResourceActivateVersionRequest> for ResourceActivateVersionCommand {
-    fn from(value: ResourceActivateVersionRequest) -> Self {
-        Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            resource_code: value.resource_code,
-            resource_version: value.resource_version,
-            expected_active_resource_version: value.expected_active_resource_version,
-        }
-    }
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct ResourceBinaryRemoveRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
-    pub resource_code: String,
-    pub resource_version: String,
-    pub expected_draft_revision: String,
-    pub binary_name: String,
-}
-
-impl TryFrom<ResourceBinaryRemoveRequest> for ResourceHttpBinaryRemoveCommand {
-    type Error = ResourceError;
-
-    fn try_from(value: ResourceBinaryRemoveRequest) -> Result<Self, Self::Error> {
-        Ok(Self {
-            scope_kind: value.scope_kind.into(),
-            workspace_code: value.workspace_code,
-            resource_code: value.resource_code,
-            resource_version: value.resource_version,
-            expected_draft_revision: parse_draft_revision(&value.expected_draft_revision)?,
-            binary_name: value.binary_name,
-        })
     }
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourceBinaryDownloadRequest {
-    pub scope_kind: ScopeCode,
-    pub workspace_code: Option<String>,
+    pub workspace_code: String,
     pub resource_code: String,
-    pub resource_version: String,
-    pub binary_name: String,
 }
 
-impl From<ResourceBinaryDownloadRequest> for ResourceHttpBinaryDownloadCommand {
+impl From<ResourceBinaryDownloadRequest> for ResourceBinaryDownloadCommand {
     fn from(value: ResourceBinaryDownloadRequest) -> Self {
         Self {
-            scope_kind: value.scope_kind.into(),
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
-            resource_version: value.resource_version,
-            binary_name: value.binary_name,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DataSourceCreateRequest {
+    pub workspace_code: String,
+    pub resource_code: String,
+    pub kind: ResourceKind,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub attributes: Value,
+    #[serde(default = "default_true")]
+    pub allow_inheritance: bool,
+}
+
+impl TryFrom<DataSourceCreateRequest> for DataSourceCreateCommand {
+    type Error = ResourceError;
+
+    fn try_from(value: DataSourceCreateRequest) -> Result<Self, ResourceError> {
+        if !is_data_source_kind(value.kind.as_str()) {
+            return Err(ResourceError::InvalidInput);
+        }
+        Ok(Self {
+            workspace_code: value.workspace_code,
+            resource_code: value.resource_code,
+            kind: value.kind,
+            name: value.name,
+            description: value.description.unwrap_or_default(),
+            attributes: value.attributes,
+            allow_inheritance: value.allow_inheritance,
+        })
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct DataSourceUpdateRequest {
+    pub workspace_code: String,
+    pub resource_code: String,
+    #[serde(default)]
+    pub name: Option<String>,
+    #[serde(default)]
+    pub description: Option<String>,
+    #[serde(default)]
+    pub attributes: Option<Value>,
+    #[serde(default)]
+    pub allow_inheritance: Option<bool>,
+}
+
+impl From<DataSourceUpdateRequest> for DataSourceUpdateCommand {
+    fn from(value: DataSourceUpdateRequest) -> Self {
+        Self {
+            workspace_code: value.workspace_code,
+            resource_code: value.resource_code,
+            name: value.name,
+            description: value.description,
+            attributes: value.attributes,
+            allow_inheritance: value.allow_inheritance,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ServerAccountCreateInputRequest {
+    pub account_code: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub username: String,
+    pub authentication_type: ServerAuthenticationType,
+    #[serde(default)]
+    pub password_variable_key: Option<String>,
+    #[serde(default)]
+    pub private_key_variable_key: Option<String>,
+    #[serde(default)]
+    pub private_key_passphrase_variable_key: Option<String>,
+    #[serde(default = "default_true")]
+    pub allow_inheritance: bool,
+}
+
+impl From<ServerAccountCreateInputRequest> for ServerAccountCreateInput {
+    fn from(value: ServerAccountCreateInputRequest) -> Self {
+        Self {
+            account_code: value.account_code,
+            name: value.name,
+            description: value.description.unwrap_or_default(),
+            username: value.username,
+            authentication_type: value.authentication_type,
+            password_variable_key: value.password_variable_key,
+            private_key_variable_key: value.private_key_variable_key,
+            private_key_passphrase_variable_key: value.private_key_passphrase_variable_key,
+            allow_inheritance: value.allow_inheritance,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ServerCreateRequest {
+    pub workspace_code: String,
+    pub server_code: String,
+    pub name: String,
+    #[serde(default)]
+    pub description: Option<String>,
+    pub host: String,
+    pub port: u16,
+    #[serde(default = "default_true")]
+    pub allow_inheritance: bool,
+    pub initial_account: ServerAccountCreateInputRequest,
+}
+
+impl From<ServerCreateRequest> for ServerCreateCommand {
+    fn from(value: ServerCreateRequest) -> Self {
+        Self {
+            workspace_code: value.workspace_code,
+            server_code: value.server_code,
+            name: value.name,
+            description: value.description.unwrap_or_default(),
+            host: value.host,
+            port: value.port,
+            allow_inheritance: value.allow_inheritance,
+            initial_account: value.initial_account.into(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ServerAccountCreateRequest {
+    pub workspace_code: String,
+    pub server_code: String,
+    pub account: ServerAccountCreateInputRequest,
+}
+
+impl From<ServerAccountCreateRequest> for ServerAccountCreateCommand {
+    fn from(value: ServerAccountCreateRequest) -> Self {
+        Self {
+            workspace_code: value.workspace_code,
+            server_code: value.server_code,
+            account: value.account.into(),
         }
     }
 }
 
 pub fn binary_upload_command(
-    scope_kind: &str,
-    workspace_code: Option<String>,
-    resource_code: String,
-    resource_version: String,
-    expected_draft_revision: &str,
-    binary_name: String,
-) -> Result<ResourceHttpBinaryUploadCommand, ResourceError> {
-    Ok(ResourceHttpBinaryUploadCommand {
-        scope_kind: parse_scope_kind(scope_kind)?,
-        workspace_code,
-        resource_code,
-        resource_version,
-        expected_draft_revision: parse_draft_revision(expected_draft_revision)?,
-        binary_name,
+    workspace_code: &str,
+    resource_code: &str,
+) -> Result<ResourceBinaryUploadCommand, ResourceError> {
+    if workspace_code.trim().is_empty() {
+        return Err(ResourceError::WorkspaceRequired);
+    }
+    Ok(ResourceBinaryUploadCommand {
+        workspace_code: workspace_code.to_string(),
+        resource_code: resource_code.to_string(),
     })
 }
 
-fn parse_scope_kind(value: &str) -> Result<ResourceScopeKind, ResourceError> {
-    match value.trim() {
-        "PLATFORM" => Ok(ResourceScopeKind::Platform),
-        "WORKSPACE" => Ok(ResourceScopeKind::Workspace),
-        _ => Err(ResourceError::InvalidScope),
-    }
-}
-
-fn parse_draft_revision(value: &str) -> Result<i64, ResourceError> {
-    value
-        .trim()
-        .parse::<i64>()
-        .ok()
-        .filter(|revision| *revision > 0)
-        .ok_or(ResourceError::InvalidInput)
+fn default_true() -> bool {
+    true
 }

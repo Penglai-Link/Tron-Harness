@@ -79,7 +79,6 @@ export function ServerCreateDialog({ onCreated, onOpenChange, open, workspaceCod
         },
         name: name.trim(),
         port: Number(port),
-        scopeKind: "WORKSPACE" as const,
         serverCode: serverCode.trim(),
         workspaceCode,
       };

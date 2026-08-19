@@ -1,105 +1,52 @@
 use crate::domain::resource::{
-    Resource, ResourceActivationResult, ResourceBinaryMapping, ResourceDefinition,
-    ResourceDefinitionKey, ResourceError, ResourceKey,
+    DataSourceConnectionRecord, ResourceError, ResourceFileRecord, ServerAccountRecord,
+    ServerRecord,
 };
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ResourceActivationOutcome {
-    pub activation_result: ResourceActivationResult,
-    pub previous_active_version: Option<String>,
-}
-
 pub trait ResourceRepository: Send {
-    fn list_definitions(&mut self) -> Result<Vec<ResourceDefinition>, ResourceError>;
-    fn list_resources(&mut self) -> Result<Vec<Resource>, ResourceError>;
-    fn list_binary_mappings(&mut self) -> Result<Vec<ResourceBinaryMapping>, ResourceError>;
-    fn insert_definition(&mut self, definition: &ResourceDefinition) -> Result<(), ResourceError>;
-    fn upgrade_builtin_definition(
+    fn list_files(&mut self) -> Result<Vec<ResourceFileRecord>, ResourceError>;
+    fn insert_file(&mut self, record: &ResourceFileRecord) -> Result<(), ResourceError>;
+    fn update_file(&mut self, record: &ResourceFileRecord) -> Result<bool, ResourceError>;
+    fn delete_file(
         &mut self,
-        expected_legacy: &ResourceDefinition,
-        replacement: &ResourceDefinition,
-    ) -> Result<bool, ResourceError>;
-    fn update_definition_draft(
-        &mut self,
-        definition: &ResourceDefinition,
-        expected_draft_revision: i64,
-    ) -> Result<(), ResourceError>;
-    fn activate_definition(
-        &mut self,
-        key: &ResourceDefinitionKey,
-        expected_draft_revision: Option<i64>,
-        expected_active_version: Option<&str>,
-        published_at: &str,
-    ) -> Result<ResourceActivationOutcome, ResourceError>;
-    fn discard_definition_draft(
-        &mut self,
-        key: &ResourceDefinitionKey,
-        expected_draft_revision: i64,
-    ) -> Result<bool, ResourceError>;
-    fn commit_active_definition(
-        &mut self,
-        definition: &ResourceDefinition,
-        expected_local_active_version: Option<&str>,
-        expected_effective_source: &ResourceDefinitionKey,
-    ) -> Result<ResourceActivationOutcome, ResourceError>;
-    fn delete_definition_group(
-        &mut self,
-        scope_kind: crate::domain::resource::ResourceScopeKind,
-        scope_code: &str,
-        definition_code: &str,
-        expected_active_version: &str,
-    ) -> Result<bool, ResourceError>;
-    fn definition_resource_reference_count(
-        &mut self,
-        scope_kind: crate::domain::resource::ResourceScopeKind,
-        scope_code: &str,
-        definition_code: &str,
-    ) -> Result<usize, ResourceError>;
-    fn insert_resource(
-        &mut self,
-        resource: &Resource,
-        mappings: &[ResourceBinaryMapping],
-    ) -> Result<(), ResourceError>;
-    fn insert_active_resource_bundle(
-        &mut self,
-        resources: &[Resource],
-    ) -> Result<(), ResourceError>;
-    fn update_resource_draft(
-        &mut self,
-        resource: &Resource,
-        mappings: &[ResourceBinaryMapping],
-        expected_draft_revision: i64,
-    ) -> Result<(), ResourceError>;
-    fn activate_resource(
-        &mut self,
-        key: &ResourceKey,
-        expected_draft_revision: Option<i64>,
-        expected_active_version: Option<&str>,
-        published_at: &str,
-    ) -> Result<ResourceActivationOutcome, ResourceError>;
-    fn discard_resource_draft(
-        &mut self,
-        key: &ResourceKey,
-        expected_draft_revision: i64,
-    ) -> Result<(bool, Vec<String>), ResourceError>;
-    fn commit_active_resource(
-        &mut self,
-        resource: &Resource,
-        mappings: &[ResourceBinaryMapping],
-        expected_local_active_version: Option<&str>,
-        expected_effective_source: Option<&ResourceKey>,
-        expected_enabled_definition: Option<&ResourceDefinitionKey>,
-    ) -> Result<ResourceActivationOutcome, ResourceError>;
-    fn delete_resource_group(
-        &mut self,
-        scope_kind: crate::domain::resource::ResourceScopeKind,
-        scope_code: &str,
+        workspace_code: &str,
         resource_code: &str,
-        expected_active_version: Option<&str>,
-        expected_draft_version: Option<&str>,
-        expected_draft_revision: Option<i64>,
-    ) -> Result<(bool, Vec<String>), ResourceError>;
-    fn locator_reference_count(&mut self, locator: &str) -> Result<usize, ResourceError>;
+    ) -> Result<Option<ResourceFileRecord>, ResourceError>;
+
+    fn list_data_source_connections(
+        &mut self,
+    ) -> Result<Vec<DataSourceConnectionRecord>, ResourceError>;
+    fn insert_data_source_connection(
+        &mut self,
+        record: &DataSourceConnectionRecord,
+    ) -> Result<(), ResourceError>;
+    fn update_data_source_connection(
+        &mut self,
+        record: &DataSourceConnectionRecord,
+    ) -> Result<bool, ResourceError>;
+    fn delete_data_source_connection(
+        &mut self,
+        workspace_code: &str,
+        resource_code: &str,
+    ) -> Result<Option<DataSourceConnectionRecord>, ResourceError>;
+
+    fn list_servers(&mut self) -> Result<Vec<ServerRecord>, ResourceError>;
+    fn insert_server(&mut self, record: &ServerRecord) -> Result<(), ResourceError>;
+    fn update_server(&mut self, record: &ServerRecord) -> Result<bool, ResourceError>;
+    fn delete_server(
+        &mut self,
+        workspace_code: &str,
+        resource_code: &str,
+    ) -> Result<Option<ServerRecord>, ResourceError>;
+
+    fn list_server_accounts(&mut self) -> Result<Vec<ServerAccountRecord>, ResourceError>;
+    fn insert_server_account(&mut self, record: &ServerAccountRecord) -> Result<(), ResourceError>;
+    fn update_server_account(&mut self, record: &ServerAccountRecord) -> Result<bool, ResourceError>;
+    fn delete_server_account(
+        &mut self,
+        workspace_code: &str,
+        resource_code: &str,
+    ) -> Result<Option<ServerAccountRecord>, ResourceError>;
 }
 
 pub trait ObjectStorage: Send + Sync {

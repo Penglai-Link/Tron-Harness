@@ -1,17 +1,10 @@
 mod authorization;
+mod binaries;
 mod connection_attributes;
-mod connection_schema;
-mod connection_secret_schema;
-mod connection_seeds;
 mod connections;
-mod definitions;
-mod http;
-mod legacy_connection_definition;
 mod projection;
 mod resources;
-mod seeds;
 mod storage;
-mod validation;
 
 use std::{
     path::PathBuf,
@@ -105,6 +98,18 @@ impl ResourceService {
 
     pub fn storage_roots(&self) -> Vec<PathBuf> {
         self.storage.storage_roots()
+    }
+
+    pub fn max_binary_bytes(&self) -> u64 {
+        self.config.limits.max_binary_bytes
+    }
+
+    pub fn max_commit_bytes(&self) -> u64 {
+        self.config.limits.max_commit_bytes
+    }
+
+    pub fn max_commit_control_bytes(&self) -> usize {
+        self.config.limits.attributes_max_bytes
     }
 
     fn repository<T>(

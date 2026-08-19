@@ -125,7 +125,7 @@ fn build_resource_service(
             (profile_code.clone(), storage)
         })
         .collect::<BTreeMap<_, _>>();
-    let service = ResourceService::with_event_bus(
+    ResourceService::with_event_bus(
         repository,
         workspaces,
         roles,
@@ -138,11 +138,7 @@ fn build_resource_service(
             config.resource.connection_verification_timeout_ms,
         ))),
     )
-    .expect("resource service should initialize");
-    service
-        .bootstrap_seed_definitions()
-        .expect("resource definition seeds should initialize");
-    service
+    .expect("resource service should initialize")
 }
 
 fn build_memory_work_domain_service(database_url: &str) -> MemoryWorkDomainService {

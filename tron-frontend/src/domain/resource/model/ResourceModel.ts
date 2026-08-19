@@ -1,50 +1,32 @@
-import type {
-  ResourceDefinitionAttributesSchema,
-  ResourceDefinitionBinarySchema,
-} from "./ResourceDefinitionModel";
+export type ResourceKind =
+  | "FILE"
+  | "IMAGE"
+  | "PDF"
+  | "MYSQL_CONNECTION"
+  | "POSTGRESQL_CONNECTION"
+  | "REDIS_CONNECTION"
+  | "KAFKA_CONNECTION"
+  | "SERVER_CONNECTION"
+  | "SERVER_ACCOUNT";
 
-export type ResourceLifecycleStatus = "ACTIVE" | "DRAFT" | "HISTORICAL";
+export type ResourceSourceKind = "LOCAL" | "INHERITED" | "OVERRIDE";
 
-export type ResourceValidationStatus = "VALID" | "INVALID";
+export interface ResourceFileRecord {
+  fileName: string;
+  fileExtension: string;
+  byteSize: number;
+}
 
-export type ResourceScopeKind = "PLATFORM" | "WORKSPACE";
-
-export type ResourceSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
-
-export interface ResourceVersionRecord {
-  definitionCode: string;
-  definitionName: string;
-  definitionVersion: string;
-  description: string;
-  draftRevision: number | null;
-  lifecycleStatus: ResourceLifecycleStatus;
-  name: string;
-  ownerWorkspaceCode: string | null;
-  ownerWorkspaceName: string | null;
+export interface ResourceRecord {
+  workspaceCode: string;
   resourceCode: string;
-  resourceVersion: string;
-  scopeKind: ResourceScopeKind;
+  kind: ResourceKind;
+  name: string;
+  description: string;
   sourceKind: ResourceSourceKind;
-  updatedAt: string;
-  validationIssueCount: number;
-  validationStatus: ResourceValidationStatus;
-}
-
-export interface ResourceBinaryMapping {
-  binaryName: string;
-  byteSize?: number;
-}
-
-export interface ResourceVersionDetail extends ResourceVersionRecord {
   allowInheritance: boolean;
-  attributes: Record<string, unknown>;
-  attributesSchema: ResourceDefinitionAttributesSchema;
-  binaries: ResourceBinaryMapping[];
-  binarySchema: ResourceDefinitionBinarySchema;
+  file: ResourceFileRecord | null;
+  attributes: Record<string, unknown> | null;
   createdAt: string;
-  publishedAt: string | null;
+  updatedAt: string;
 }
-
-export type ResourceLifecycleFilter = ResourceLifecycleStatus | "ALL";
-export type ResourceValidationFilter = ResourceValidationStatus | "ALL";
-export type ResourceContextFilter = ResourceScopeKind | ResourceSourceKind | "ALL";

@@ -20,8 +20,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import type {
-  ResourceDefinitionVersionDetail,
-  ResourceScopeKind,
+  ResourceKind,
   QuickResourceUploadHandoffPayload,
 } from "@/domain/resource/model";
 import {
@@ -45,28 +44,22 @@ import {
 
 export interface QuickResourceCreateCommand {
   allowInheritance: boolean;
-  attributes: Record<string, unknown>;
-  binaryName: string;
-  definitionCode: string;
   description: string;
   file: File;
+  kind: "FILE" | "IMAGE" | "PDF";
   name: string;
   resourceCode: string;
-  scopeKind: ResourceScopeKind;
-  workspaceCode: string | null;
+  workspaceCode: string;
 }
 
 export interface QuickResourceCreatedResult {
+  kind: ResourceKind;
   resourceCode: string;
-  resourceVersion: string;
 }
 
 interface QuickResourceUploadDialogProps {
-  definitions: ResourceDefinitionVersionDetail[];
-  isPlatform: boolean;
   open: boolean;
-  scopeCode: string;
-  scopeKind: ResourceScopeKind;
+  workspaceCode: string;
   onClose: () => void;
   onCreated: (result: QuickResourceCreatedResult) => void;
   onContinueInEditor?: (payload: QuickResourceUploadHandoffPayload) => void;
@@ -90,11 +83,8 @@ function formatFileSize(size: number, locale: string) {
 }
 
 export function QuickResourceUploadDialog({
-  definitions,
-  isPlatform,
   open,
-  scopeCode,
-  scopeKind,
+  workspaceCode,
   onClose,
   onCreated,
   onContinueInEditor,
@@ -122,20 +112,16 @@ export function QuickResourceUploadDialog({
     t(`resources.quickUpload.${key}`, options)
   );
 
-  const definition = useMemo(() => (
-    definitions.find((item) => item.definitionCode === type && item.lifecycleStatus === "ACTIVE" && item.enabled) ?? null
-  ), [definitions, type]);
   const pageCount = pdfReadState.status === "READY" ? pdfReadState.pageCount : type === "PDF" ? 0 : null;
   const decision = useMemo(() => {
     if (!file) return null;
     return evaluateQuickResourceUpload({
       binaryName: file.name,
-      definition,
       file,
       pageCount,
       type,
     });
-  }, [definition, file, pageCount, type]);
+  }, [file, pageCount, type]);
   const blockedMessage = decision?.kind === "BLOCKED"
     ? quickT(`blocked.${decision.reason.toLowerCase()}`)
     : "";
@@ -209,16 +195,15 @@ export function QuickResourceUploadDialog({
     if (!file || !onContinueInEditor || editorHandoffStartedRef.current) return;
     editorHandoffStartedRef.current = true;
     onContinueInEditor({
-      allowInheritance: isPlatform ? true : allowInheritance,
-      attributes: nextDecision.attributes,
+      allowInheritance,
       binaryName: nextDecision.binaryName,
-      definition: nextDecision.definition,
       description,
       file,
+      kind: nextDecision.type,
       name: name.trim(),
+      pageCount,
       resourceCode: resourceCode.trim(),
-      scopeCode,
-      scopeKind,
+      workspaceCode,
     });
   }
 
@@ -284,16 +269,13 @@ export function QuickResourceUploadDialog({
     setError("");
     try {
       const created = await onCreate({
-        allowInheritance: isPlatform ? true : allowInheritance,
-        attributes: decision.attributes,
-        binaryName: decision.binaryName,
-        definitionCode: decision.definition.definitionCode,
+        allowInheritance,
         description,
         file,
+        kind: type,
         name: name.trim(),
         resourceCode: resourceCode.trim(),
-        scopeKind,
-        workspaceCode: isPlatform ? null : scopeCode,
+        workspaceCode,
       });
       onCreated(created);
     } catch (cause) {
@@ -419,17 +401,13 @@ export function QuickResourceUploadDialog({
                       onChange={(event) => setDescription(event.target.value)}
                     />
                   </label>
-                  {!isPlatform ? (
-                    <ToggleSwitch
-                      ariaLabel={quickT("fields.inheritance")}
-                      checked={allowInheritance}
-                      disabled={submitting}
-                      label={quickT("fields.inheritance")}
-                      onCheckedChange={setAllowInheritance}
-                    />
-                  ) : (
-                    <p className="text-[12px] text-[var(--color-on-surface-variant)]">{quickT("platformInheritance")}</p>
-                  )}
+                  <ToggleSwitch
+                    ariaLabel={quickT("fields.inheritance")}
+                    checked={allowInheritance}
+                    disabled={submitting}
+                    label={quickT("fields.inheritance")}
+                    onCheckedChange={setAllowInheritance}
+                  />
                 </div>
               </details>
 

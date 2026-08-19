@@ -37,7 +37,8 @@ import {
   ServerAccountCreateDialog,
   ServerCreateDialog,
 } from "@/domain/resource/components";
-import { deleteResource } from "@/domain/resource/api";
+import { deleteConnection } from "@/domain/resource/api";
+import type { ResourceKindCode } from "@/domain/resource/api";
 import {
   useManagedResourceRecords,
   type ManagedResourceRecord,
@@ -55,11 +56,11 @@ const PAGE_SIZE = 15;
 
 const KIND_CONFIG: Record<ResourceConnectionKind, {
   basePath: string;
-  definitionCodes: readonly string[];
+  kinds: readonly ResourceKindCode[];
 }> = {
   dataSource: {
     basePath: "/resource-management/data-sources",
-    definitionCodes: [
+    kinds: [
       "MYSQL_CONNECTION",
       "POSTGRESQL_CONNECTION",
       "REDIS_CONNECTION",
@@ -68,12 +69,19 @@ const KIND_CONFIG: Record<ResourceConnectionKind, {
   },
   server: {
     basePath: "/resource-management/servers",
-    definitionCodes: ["SERVER_CONNECTION"],
+    kinds: ["SERVER_CONNECTION"],
   },
   serverAccount: {
     basePath: "/resource-management/server-accounts",
-    definitionCodes: ["SERVER_ACCOUNT"],
+    kinds: ["SERVER_ACCOUNT"],
   },
+};
+
+const DATA_SOURCE_KIND_LABELS: Record<string, string> = {
+  KAFKA_CONNECTION: "Kafka",
+  MYSQL_CONNECTION: "MySQL",
+  POSTGRESQL_CONNECTION: "PostgreSQL",
+  REDIS_CONNECTION: "Redis",
 };
 
 function firstEndpoint(attributes: Record<string, unknown>) {
@@ -107,13 +115,13 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
   const [deleteTarget, setDeleteTarget] = useState<ManagedResourceRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
   const recordsQuery = useManagedResourceRecords({
-    definitionCodes: config.definitionCodes,
+    kinds: config.kinds,
     search,
     workspaceCode: workspaceCode || null,
     workspaceName,
   });
   const serversQuery = useManagedResourceRecords({
-    definitionCodes: ["SERVER_CONNECTION"],
+    kinds: ["SERVER_CONNECTION"],
     search: "",
     workspaceCode: workspaceCode || null,
     workspaceName,
@@ -142,7 +150,7 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
       return pageT(`authentication.${stringAttribute(record, "authenticationType") === "PrivateKey" ? "privateKey" : "password"}`);
     }
     if (kind === "dataSource") {
-      return record.definitionName;
+      return DATA_SOURCE_KIND_LABELS[record.kind] ?? record.kind;
     }
     return "SSH";
   }
@@ -152,12 +160,8 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
     setDeleting(true);
     try {
       if (getServiceDataSource("resource") === "api") {
-        await deleteResource({
-          expectedActiveResourceVersion: deleteTarget.resourceVersion,
-          expectedDraftResourceVersion: null,
-          expectedDraftRevision: null,
+        await deleteConnection({
           resourceCode: deleteTarget.resourceCode,
-          scopeKind: "WORKSPACE",
           workspaceCode,
         });
       }
@@ -234,7 +238,7 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
                 <TableCell className="h-32 text-center" colSpan={6}><Spinner className="mx-auto" /></TableCell>
               </TableRow>
             ) : pageRecords.length ? pageRecords.map((record) => (
-              <TableRow key={`${record.resourceCode}:${record.resourceVersion}`}>
+              <TableRow key={record.resourceCode}>
                 <TableCell>
                   <div className="min-w-0">
                     <p className="truncate font-medium">{record.name}</p>
@@ -253,7 +257,7 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
                 </TableCell>
                 <TableCell>
                   <div className="flex justify-end gap-1">
-                    <Button aria-label={pageT("actions.edit")} size="icon-sm" variant="ghost" onClick={() => navigate(`${config.basePath}/detail?resourceCode=${encodeURIComponent(record.resourceCode)}&resourceVersion=${encodeURIComponent(record.resourceVersion)}`)}>
+                    <Button aria-label={pageT("actions.edit")} size="icon-sm" variant="ghost" onClick={() => navigate(`${config.basePath}/detail?resourceCode=${encodeURIComponent(record.resourceCode)}`)}>
                       <Pencil aria-hidden="true" />
                     </Button>
                     <Button aria-label={pageT("actions.delete")} size="icon-sm" variant="ghost" onClick={() => setDeleteTarget(record)}>

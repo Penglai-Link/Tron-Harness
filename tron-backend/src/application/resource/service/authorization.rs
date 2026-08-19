@@ -1,5 +1,5 @@
 use crate::domain::{
-    resource::{PLATFORM_SCOPE_CODE, ResourceError, ResourceScopeKind},
+    resource::ResourceError,
     user::UserStatus,
     workspace::WorkspaceStatus,
 };
@@ -7,20 +7,6 @@ use crate::domain::{
 use super::ResourceService;
 
 impl ResourceService {
-    pub(super) fn authorize_platform_read(
-        &self,
-        actor_user_code: &str,
-    ) -> Result<(), ResourceError> {
-        self.authorize_permission(actor_user_code, "R")
-    }
-
-    pub(super) fn authorize_platform_admin(
-        &self,
-        actor_user_code: &str,
-    ) -> Result<(), ResourceError> {
-        self.authorize_permission(actor_user_code, "A")
-    }
-
     pub(super) fn authorize_workspace_read(
         &self,
         actor_user_code: &str,
@@ -40,60 +26,21 @@ impl ResourceService {
     pub(super) fn workspace_scope(
         &self,
         actor_user_code: &str,
-        scope_kind: ResourceScopeKind,
-        workspace_code: Option<&str>,
+        workspace_code: &str,
         write: bool,
     ) -> Result<String, ResourceError> {
-        match scope_kind {
-            ResourceScopeKind::Platform => {
-                if workspace_code.is_some() {
-                    return Err(ResourceError::InvalidScope);
-                }
-                if write {
-                    self.authorize_platform_admin(actor_user_code)?;
-                } else {
-                    self.authorize_platform_read(actor_user_code)?;
-                }
-                Ok(PLATFORM_SCOPE_CODE.to_string())
-            }
-            ResourceScopeKind::Workspace => {
-                let workspace_code = workspace_code
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .ok_or(ResourceError::WorkspaceRequired)?;
-                if write {
-                    self.authorize_workspace_write(actor_user_code, workspace_code)?;
-                } else {
-                    self.authorize_workspace_read(actor_user_code, workspace_code)?;
-                }
-                Ok(workspace_code.to_string())
-            }
+        let workspace_code = workspace_code
+            .trim()
+            .to_string();
+        if workspace_code.is_empty() {
+            return Err(ResourceError::WorkspaceRequired);
         }
-    }
-
-    /// Resolves the scope for the browser management API.  Its Platform views
-    /// expose administrative assets, so both reads and mutations require
-    /// Resources/A.  Tool-facing flows keep their established Resources/R
-    /// metadata-read behaviour through `workspace_scope` above.
-    pub(super) fn management_scope(
-        &self,
-        actor_user_code: &str,
-        scope_kind: ResourceScopeKind,
-        workspace_code: Option<&str>,
-        write: bool,
-    ) -> Result<String, ResourceError> {
-        match scope_kind {
-            ResourceScopeKind::Platform => {
-                if workspace_code.is_some() {
-                    return Err(ResourceError::InvalidScope);
-                }
-                self.authorize_platform_admin(actor_user_code)?;
-                Ok(PLATFORM_SCOPE_CODE.to_string())
-            }
-            ResourceScopeKind::Workspace => {
-                self.workspace_scope(actor_user_code, scope_kind, workspace_code, write)
-            }
+        if write {
+            self.authorize_workspace_write(actor_user_code, &workspace_code)?;
+        } else {
+            self.authorize_workspace_read(actor_user_code, &workspace_code)?;
         }
+        Ok(workspace_code)
     }
 
     pub(super) fn active_workspace(&self, workspace_code: &str) -> Result<(), ResourceError> {
@@ -129,23 +76,6 @@ impl ResourceService {
             return Err(ResourceError::Forbidden);
         }
         self.active_workspace(workspace_code)
-    }
-
-    fn authorize_permission(
-        &self,
-        actor_user_code: &str,
-        permission_code: &str,
-    ) -> Result<(), ResourceError> {
-        let role_codes = self.active_actor_role_codes(actor_user_code)?;
-        if self
-            .roles
-            .has_permission(&role_codes, "Resources", permission_code)
-            .map_err(|_| ResourceError::StorageFailure)?
-        {
-            Ok(())
-        } else {
-            Err(ResourceError::Forbidden)
-        }
     }
 
     fn active_actor_role_codes(&self, actor_user_code: &str) -> Result<Vec<String>, ResourceError> {

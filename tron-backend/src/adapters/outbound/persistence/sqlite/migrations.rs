@@ -21,6 +21,8 @@ pub(super) const RESOURCE_ROLE_DEFAULTS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260716_0002_seed_resource_role_permissions.sql");
 pub(super) const RESOURCE_MANAGEMENT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260716_0003_create_resource_management.sql");
+pub(super) const RESOURCE_MANAGEMENT_SIMPLIFY_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260818_0001_simplify_resource_management.sql");
 pub(super) const WORKSPACES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260516_0006_create_workspace_management_workspaces.sql"
 );

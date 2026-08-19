@@ -9,8 +9,9 @@ use crate::{
 };
 
 use super::{
-    DataSourceCreateRequest, ResourceActivationResponse, ResourceHttpApiResponse,
-    ServerAccountCreateRequest, ServerCreateRequest, ServerCreateResponse,
+    DataSourceCreateRequest, DataSourceUpdateRequest, ResourceCommitOutcomeResponse,
+    ResourceDeleteRequest, ResourceDeleteResponse, ResourceHttpApiResponse, ResourcePageRequest,
+    ResourcePageResponse, ServerAccountCreateRequest, ServerCreateRequest, ServerCreateResponse,
     error_mapper::resource_error_response, handler::json_body,
 };
 
@@ -24,12 +25,38 @@ pub async fn create_data_source(
         Ok(request) => request,
         Err(response) => return response,
     };
+    let command = match request.try_into() {
+        Ok(command) => command,
+        Err(error) => return resource_error_response(error, &locale),
+    };
     match resources
-        .create_data_source_for_http(&auth.user().user_code, request.into())
+        .create_data_source_for_http(&auth.user().user_code, command)
         .await
     {
         Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceActivationResponse::from(result),
+            ResourceCommitOutcomeResponse::from(result),
+        ))
+        .into_response(),
+        Err(error) => resource_error_response(error, &locale),
+    }
+}
+
+pub async fn update_data_source(
+    State(resources): State<ResourceService>,
+    auth: RequestAuthContext,
+    request: Result<Json<DataSourceUpdateRequest>, JsonRejection>,
+) -> Response {
+    let locale = auth.locale.clone();
+    let request = match json_body(request, &locale) {
+        Ok(request) => request,
+        Err(response) => return response,
+    };
+    match resources
+        .update_data_source_for_http(&auth.user().user_code, request.into())
+        .await
+    {
+        Ok(result) => Json(ResourceHttpApiResponse::success(
+            ResourceCommitOutcomeResponse::from(result),
         ))
         .into_response(),
         Err(error) => resource_error_response(error, &locale),
@@ -50,9 +77,9 @@ pub async fn create_server(
         .create_server_for_http(&auth.user().user_code, request.into())
         .await
     {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ServerCreateResponse::from(result),
-        ))
+        Ok(result) => Json(ResourceHttpApiResponse::success(ServerCreateResponse::from(
+            result,
+        )))
         .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
@@ -70,9 +97,47 @@ pub async fn create_server_account(
     };
     match resources.create_server_account_for_http(&auth.user().user_code, request.into()) {
         Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceActivationResponse::from(result),
+            ResourceCommitOutcomeResponse::from(result),
         ))
         .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
 }
+
+pub async fn delete_connection(
+    State(resources): State<ResourceService>,
+    auth: RequestAuthContext,
+    request: Result<Json<ResourceDeleteRequest>, JsonRejection>,
+) -> Response {
+    let locale = auth.locale.clone();
+    let request = match json_body(request, &locale) {
+        Ok(request) => request,
+        Err(response) => return response,
+    };
+    let command: crate::application::resource::ResourceDeleteCommand = request.into();
+    match resources.delete_resource(&auth.user().user_code, command) {
+        Ok(result) => Json(ResourceHttpApiResponse::success(ResourceDeleteResponse::from(
+            result,
+        )))
+        .into_response(),
+        Err(error) => resource_error_response(error, &locale),
+    }
+}
+
+pub async fn page_connections(
+    State(resources): State<ResourceService>,
+    auth: RequestAuthContext,
+    request: Result<Json<ResourcePageRequest>, JsonRejection>,
+) -> Response {
+    let locale = auth.locale.clone();
+    let request = match json_body(request, &locale) {
+        Ok(request) => request,
+        Err(response) => return response,
+    };
+    match resources.query_resources(&auth.user().user_code, request.into()) {
+        Ok(page) => Json(ResourceHttpApiResponse::success(ResourcePageResponse::from(page)))
+            .into_response(),
+        Err(error) => resource_error_response(error, &locale),
+    }
+}
+

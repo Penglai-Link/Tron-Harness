@@ -1,75 +1,56 @@
-import { adaptResourceVersionRecord } from "@/domain/resource/adapters";
+import { adaptResourceRecord } from "@/domain/resource/adapters";
 import {
   pageResources,
   type ResourcePageApiRequest,
 } from "@/domain/resource/api";
 import {
-  listPlatformResourceVersions,
-  listWorkspaceResourceVersions,
+  listMockCreatedResources,
+  listWorkspaceResources,
 } from "@/domain/resource/mock";
 import type {
-  ResourceContextFilter,
-  ResourceLifecycleFilter,
+  ResourceKind,
+  ResourceRecord,
   ResourceSourceKind,
-  ResourceValidationFilter,
-  ResourceVersionRecord,
 } from "@/domain/resource/model";
 
 import { useResourceApiQuery } from "./useResourceApiQuery";
 
 export interface ResourcePageQuery {
-  context: ResourceContextFilter;
+  context: ResourceSourceKind | "ALL";
   current: number;
-  definitionCode?: string | null;
-  lifecycle: ResourceLifecycleFilter;
-  scopeKind: "PLATFORM" | "WORKSPACE";
+  kinds: readonly ResourceKind[];
   search: string;
   size: number;
-  validation: ResourceValidationFilter;
   workspaceCode: string | null;
   workspaceName: string;
 }
 
 export interface ResourcePageResult {
   current: number;
-  records: ResourceVersionRecord[];
+  records: ResourceRecord[];
   size: number;
   total: number;
 }
 
-function sourceFilter(value: ResourceContextFilter): ResourceSourceKind | null {
-  if (value === "WORKSPACE") return "LOCAL";
-  return value === "PLATFORM" || value === "LOCAL" || value === "INHERITED" || value === "OVERRIDE"
-    ? value
-    : null;
-}
-
-function toApiRequest(query: ResourcePageQuery): ResourcePageApiRequest {
+function toApiRequest(query: ResourcePageQuery, kind: ResourceKind | null): ResourcePageApiRequest {
   return {
     current: query.current,
-    definitionCode: query.definitionCode?.trim() || null,
-    definitionStatus: null,
-    lifecycleStatus: query.lifecycle === "ALL" ? null : query.lifecycle,
-    resourceCode: null,
-    scopeKind: query.scopeKind,
+    kind,
     search: query.search.trim() || null,
     size: query.size,
-    sourceKind: sourceFilter(query.context),
-    validationStatus: query.validation === "ALL" ? null : query.validation,
-    workspaceCode: query.scopeKind === "PLATFORM" ? null : query.workspaceCode,
+    workspaceCode: query.workspaceCode ?? "",
   };
 }
 
 function mockPage(query: ResourcePageQuery): ResourcePageResult {
-  const source = query.scopeKind === "PLATFORM"
-    ? listPlatformResourceVersions()
-    : listWorkspaceResourceVersions(query.workspaceCode ?? "", query.workspaceName);
+  const source = [
+    ...listMockCreatedResources(query.workspaceCode ?? ""),
+    ...listWorkspaceResources(query.workspaceCode ?? "", query.workspaceName),
+  ];
   const search = query.search.trim().toLowerCase();
   const records = source.filter((record) => {
-    if (query.lifecycle !== "ALL" && record.lifecycleStatus !== query.lifecycle) return false;
-    if (query.validation !== "ALL" && record.validationStatus !== query.validation) return false;
-    if (query.context !== "ALL" && record.sourceKind !== query.context && record.scopeKind !== query.context) return false;
-    if (query.definitionCode && record.definitionCode !== query.definitionCode) return false;
+    if (query.kinds.length && !query.kinds.includes(record.kind)) return false;
+    if (query.context !== "ALL" && record.sourceKind !== query.context) return false;
     return !search || [record.resourceCode, record.name, record.description]
       .some((value) => value.toLowerCase().includes(search));
   });
@@ -86,16 +67,29 @@ function mockPage(query: ResourcePageQuery): ResourcePageResult {
 export function useResourcePage(query: ResourcePageQuery) {
   return useResourceApiQuery<ResourcePageResult>({
     api: async () => {
-      const page = await pageResources(toApiRequest(query));
+      const kinds = query.kinds.length ? query.kinds : [null];
+      const pages = await Promise.all(kinds.map(async (kind) => {
+        const firstPage = await pageResources(toApiRequest(query, kind));
+        const remainingPageCount = Math.ceil(firstPage.total / firstPage.size) - 1;
+        const remainingPages = await Promise.all(Array.from({ length: remainingPageCount }, (_, index) => (
+          pageResources({ ...toApiRequest(query, kind), current: index + 2 })
+        )));
+        return [firstPage, ...remainingPages].flatMap((page) => page.records);
+      }));
+      const records = pages.flat()
+        .map(adaptResourceRecord)
+        .filter((record) => query.context === "ALL" || record.sourceKind === query.context)
+        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
+      const start = (query.current - 1) * query.size;
       return {
-        current: page.current,
-        records: page.records.map(adaptResourceVersionRecord),
-        size: page.size,
-        total: page.total,
+        current: query.current,
+        records: records.slice(start, start + query.size),
+        size: query.size,
+        total: records.length,
       };
     },
     deps: [query],
-    enabled: query.scopeKind === "PLATFORM" || Boolean(query.workspaceCode),
+    enabled: Boolean(query.workspaceCode),
     initialData: () => ({ current: query.current, records: [], size: query.size, total: 0 }),
     mock: () => mockPage(query),
   });

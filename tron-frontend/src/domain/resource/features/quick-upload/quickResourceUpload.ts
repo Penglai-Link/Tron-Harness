@@ -1,51 +1,31 @@
-import type {
-  ResourceDefinitionBinarySchema,
-  ResourceDefinitionEffectiveBinaryPolicy,
-  ResourceDefinitionVersionDetail,
-} from "@/domain/resource/model";
-import { validateJsonValue } from "@/shared/ui/json-schema-draft7";
-
 export const quickResourceTypes = ["FILE", "IMAGE", "PDF"] as const;
 
 export type QuickResourceType = typeof quickResourceTypes[number];
 
-export type QuickUploadBlockedReason =
-  | "BINARY_UNSUPPORTED"
-  | "DEFINITION_INVALID"
-  | "DEFINITION_UNAVAILABLE"
-  | "FILE_TOO_LARGE";
+export type QuickUploadBlockedReason = "FILE_TOO_LARGE";
 
-export type QuickUploadEditorReason =
-  | "BINARY_NAME"
-  | "PDF_PAGE_COUNT"
-  | "REQUIRES_MORE_FILES"
-  | "SCHEMA";
+export type QuickUploadEditorReason = "BINARY_NAME" | "PDF_PAGE_COUNT";
 
-export interface QuickResourceAttributesInput {
+export const quickResourceMaxFileSizeBytes = 1_073_741_824;
+
+export interface QuickResourceUploadInput {
   binaryName: string;
   file: Pick<File, "name" | "size">;
   pageCount?: number | null;
   type: QuickResourceType;
 }
 
-export interface QuickResourceUploadInput extends QuickResourceAttributesInput {
-  definition: ResourceDefinitionVersionDetail | null;
-}
-
 export type QuickResourceUploadDecision =
   | {
-    attributes: Record<string, unknown>;
     binaryName: string;
-    definition: ResourceDefinitionVersionDetail;
     kind: "READY";
+    type: QuickResourceType;
   }
   | {
-    attributes: Record<string, unknown>;
     binaryName: string;
-    definition: ResourceDefinitionVersionDetail;
     kind: "EDITOR";
     reasons: QuickUploadEditorReason[];
-    validationErrors: string[];
+    type: QuickResourceType;
   }
   | {
     kind: "BLOCKED";
@@ -99,108 +79,20 @@ export function generateQuickResourceCode(fileName: string, now = Date.now()) {
   return normalized || `FILE_${now}`;
 }
 
-export function buildQuickResourceAttributes({ binaryName, file, pageCount, type }: QuickResourceAttributesInput) {
-  const fileExtension = getFileExtension(file.name);
-  if (type === "IMAGE") {
-    return {
-      images: [{
-        binaryName,
-        fileExtension,
-        fileName: file.name,
-        imageFormat: imageFormatForFileName(file.name),
-        sizeBytes: file.size,
-      }],
-    };
-  }
-  if (type === "PDF") {
-    return {
-      fileName: file.name,
-      pageCount: pageCount ?? 0,
-      sizeBytes: file.size,
-    };
-  }
-  return {
-    fileExtension,
-    fileName: file.name,
-    sizeBytes: file.size,
-  };
-}
-
-type QuickBinaryPolicy = Omit<ResourceDefinitionEffectiveBinaryPolicy, "maxSizeBytes"> & {
-  maxSizeBytes: number | null;
-};
-
-function effectiveQuickBinaryPolicy(
-  definition: ResourceDefinitionVersionDetail,
-): QuickBinaryPolicy {
-  if (definition.effectiveBinaryPolicy) return definition.effectiveBinaryPolicy;
-
-  const schema: ResourceDefinitionBinarySchema = definition.binarySchema;
-  return {
-    maxCount: schema.maxCount,
-    maxNameLength: schema.maxNameLength,
-    // Older backends did not expose their resolved default. The adapter maps a
-    // missing raw value to zero, which cannot be distinguished from an
-    // explicit zero-byte cap here. Do not reject a real file on that ambiguous
-    // value; the server still performs the authoritative validation.
-    maxSizeBytes: schema.maxSizeBytes > 0 ? schema.maxSizeBytes : null,
-    minCount: schema.minCount,
-    namePattern: schema.namePattern || null,
-  };
-}
-
-function checkBinaryPolicy(
-  policy: QuickBinaryPolicy,
-  file: Pick<File, "size">,
-  binaryName: string,
-) {
-  if (policy.maxCount < 1) return { kind: "BLOCKED" as const, reason: "BINARY_UNSUPPORTED" as const };
-  if (policy.minCount > policy.maxCount || policy.maxNameLength < 1) {
-    return { kind: "BLOCKED" as const, reason: "DEFINITION_INVALID" as const };
-  }
-  if (policy.maxSizeBytes !== null && file.size > policy.maxSizeBytes) {
-    return { kind: "BLOCKED" as const, reason: "FILE_TOO_LARGE" as const };
-  }
-  if (policy.minCount > 1) return { kind: "EDITOR" as const, reason: "REQUIRES_MORE_FILES" as const };
-  if (!binaryName || binaryName.length > policy.maxNameLength) {
-    return { kind: "EDITOR" as const, reason: "BINARY_NAME" as const };
-  }
-  try {
-    if (policy.namePattern && !new RegExp(policy.namePattern).test(binaryName)) {
-      return { kind: "EDITOR" as const, reason: "BINARY_NAME" as const };
-    }
-  } catch {
-    return { kind: "BLOCKED" as const, reason: "DEFINITION_INVALID" as const };
-  }
-  return { kind: "READY" as const };
-}
-
-export function evaluateQuickResourceUpload({ binaryName, definition, file, pageCount, type }: QuickResourceUploadInput): QuickResourceUploadDecision {
-  if (!definition || !definition.enabled || definition.lifecycleStatus !== "ACTIVE") {
-    return { kind: "BLOCKED", reason: "DEFINITION_UNAVAILABLE" };
+export function evaluateQuickResourceUpload({ binaryName, file, pageCount, type }: QuickResourceUploadInput): QuickResourceUploadDecision {
+  if (file.size > quickResourceMaxFileSizeBytes) {
+    return { kind: "BLOCKED", reason: "FILE_TOO_LARGE" };
   }
 
-  const policy = checkBinaryPolicy(effectiveQuickBinaryPolicy(definition), file, binaryName);
-  if (policy.kind === "BLOCKED") return policy;
-
-  const attributes = buildQuickResourceAttributes({ binaryName, file, pageCount, type });
-  const editorReasons: QuickUploadEditorReason[] = policy.kind === "EDITOR" ? [policy.reason] : [];
+  const editorReasons: QuickUploadEditorReason[] = [];
+  if (!binaryName.trim()) editorReasons.push("BINARY_NAME");
   if (type === "PDF" && (!Number.isInteger(pageCount) || (pageCount ?? 0) < 1)) {
     editorReasons.push("PDF_PAGE_COUNT");
   }
-  const validationErrors = validateJsonValue(definition.attributesSchema, attributes);
-  if (validationErrors.length) editorReasons.push("SCHEMA");
 
   if (editorReasons.length) {
-    return {
-      attributes,
-      binaryName,
-      definition,
-      kind: "EDITOR",
-      reasons: Array.from(new Set(editorReasons)),
-      validationErrors,
-    };
+    return { binaryName, kind: "EDITOR", reasons: Array.from(new Set(editorReasons)), type };
   }
 
-  return { attributes, binaryName, definition, kind: "READY" };
+  return { binaryName, kind: "READY", type };
 }

@@ -375,39 +375,6 @@ impl VariableService {
             .collect()
     }
 
-    pub(crate) fn ensure_runtime_variable_keys(
-        &self,
-        workspace_code: &str,
-        keys: &BTreeSet<String>,
-    ) -> Result<(), VariableError> {
-        let workspace = self.active_workspace_detail(workspace_code)?;
-        let resolved = self.resolve_raw_variables(&workspace)?;
-        for key in keys {
-            let key = normalized_key(key.clone())?;
-            if !resolved.iter().any(|record| record.variable.key == key) {
-                return Err(VariableError::NotFound);
-            }
-        }
-        Ok(())
-    }
-
-    /// Validates references owned by a platform-scoped resource.  Platform
-    /// resources deliberately do not resolve a consumer Workspace's variables:
-    /// their references are bound to the Platform variable namespace.
-    pub(crate) fn ensure_platform_runtime_variable_keys(
-        &self,
-        keys: &BTreeSet<String>,
-    ) -> Result<(), VariableError> {
-        let variables = self.all_platform_variables()?;
-        for key in keys {
-            let key = normalized_key(key.clone())?;
-            if !variables.iter().any(|variable| variable.key == key) {
-                return Err(VariableError::NotFound);
-            }
-        }
-        Ok(())
-    }
-
     pub(crate) fn resolve_runtime_variable_values(
         &self,
         workspace_code: &str,
@@ -431,34 +398,6 @@ impl VariableService {
             values.insert(
                 key,
                 reveal_stored_value(self.cipher.as_ref(), &variable, aad.as_bytes())?,
-            );
-        }
-        Ok(values)
-    }
-
-    /// Resolves platform-owned references during publication.  Resolving the
-    /// value (rather than merely checking the key) also verifies that the stored
-    /// encrypted payload can be revealed with its Platform AAD.
-    pub(crate) fn resolve_platform_runtime_variable_values(
-        &self,
-        keys: &BTreeSet<String>,
-    ) -> Result<BTreeMap<String, String>, VariableError> {
-        let variables = self.all_platform_variables()?;
-        let mut values = BTreeMap::new();
-        for key in keys {
-            let key = normalized_key(key.clone())?;
-            let variable = variables
-                .iter()
-                .find(|variable| variable.key == key)
-                .ok_or(VariableError::NotFound)?;
-            let runtime_variable = platform_to_variable(variable.clone());
-            values.insert(
-                key.clone(),
-                reveal_stored_value(
-                    self.cipher.as_ref(),
-                    &runtime_variable,
-                    PlatformVariableIdentity::new(&key).aad().as_bytes(),
-                )?,
             );
         }
         Ok(values)

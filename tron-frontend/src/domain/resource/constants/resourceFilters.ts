@@ -1,13 +1,5 @@
-import type {
-  ResourceContextFilter,
-  ResourceLifecycleFilter,
-  ResourceValidationFilter,
-} from "@/domain/resource/model";
+import type { ResourceKind, ResourceSourceKind } from "@/domain/resource/model";
 
-export const resourceLifecycleFilters: ResourceLifecycleFilter[] = ["ACTIVE", "DRAFT", "HISTORICAL", "ALL"];
+export const resourceFileKinds: ResourceKind[] = ["FILE", "IMAGE", "PDF"];
 
-export const resourceSourceFilters: ResourceContextFilter[] = ["ALL", "PLATFORM", "LOCAL", "INHERITED", "OVERRIDE"];
-
-export const resourceScopeFilters: ResourceContextFilter[] = ["ALL", "PLATFORM", "WORKSPACE"];
-
-export const resourceValidationFilters: ResourceValidationFilter[] = ["ALL", "VALID", "INVALID"];
+export const resourceSourceFilters: (ResourceSourceKind | "ALL")[] = ["ALL", "LOCAL", "INHERITED", "OVERRIDE"];

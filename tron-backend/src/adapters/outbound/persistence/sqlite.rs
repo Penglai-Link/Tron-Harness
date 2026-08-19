@@ -14,7 +14,6 @@ mod model_repository;
 mod open_app_repository;
 mod prompt_repository;
 mod rag_repository;
-mod resource_connection_repository;
 mod resource_repository;
 mod role_repository;
 mod short_term_memory_repository;

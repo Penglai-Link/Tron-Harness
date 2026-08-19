@@ -59,12 +59,6 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.resources",
       },
       {
-        label: "Resource Definitions",
-        href: "/settings/resource-definitions",
-        icon: Boxes,
-        translationKey: "shell:settings.items.resourceDefinitions",
-      },
-      {
         label: "Agents",
         href: "/settings/agents",
         icon: Bot,

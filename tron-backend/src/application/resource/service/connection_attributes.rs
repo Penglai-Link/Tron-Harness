@@ -1,7 +1,7 @@
 use std::collections::{BTreeMap, BTreeSet};
 
 use serde::Deserialize;
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::{
     application::resource::{
@@ -11,11 +11,7 @@ use crate::{
         SshAuthenticationTarget, SshConnectionTarget,
     },
     domain::{
-        resource::{
-            KAFKA_CONNECTION_DEFINITION_CODE, MYSQL_CONNECTION_DEFINITION_CODE,
-            POSTGRESQL_CONNECTION_DEFINITION_CODE, REDIS_CONNECTION_DEFINITION_CODE, ResourceError,
-            ResourceScopeKind, ServerAuthenticationType,
-        },
+        resource::{ResourceError, ResourceKind, ServerAuthenticationType},
         variable::VariableError,
     },
 };
@@ -145,18 +141,16 @@ struct KafkaAttributes {
 impl ResourceService {
     pub(super) fn data_source_connection_target(
         &self,
-        scope_kind: ResourceScopeKind,
-        scope_code: &str,
-        definition_code: &str,
+        workspace_code: &str,
+        kind: ResourceKind,
         attributes: &Value,
     ) -> Result<ResourceConnectionTarget, ResourceError> {
-        match definition_code {
-            MYSQL_CONNECTION_DEFINITION_CODE => {
+        match kind {
+            ResourceKind::MysqlConnection => {
                 let attributes: MysqlAttributes = parse(attributes)?;
                 let _ = &attributes.connection_mode;
                 let values = self.resolve_connection_variables(
-                    scope_kind,
-                    scope_code,
+                    workspace_code,
                     mysql_variable_keys(&attributes),
                 )?;
                 Ok(ResourceConnectionTarget::Mysql(MysqlConnectionTarget {
@@ -168,12 +162,11 @@ impl ResourceService {
                     properties: scalar_properties(attributes.properties)?,
                 }))
             }
-            POSTGRESQL_CONNECTION_DEFINITION_CODE => {
+            ResourceKind::PostgresqlConnection => {
                 let attributes: PostgresqlAttributes = parse(attributes)?;
                 let _ = (&attributes.target_session, &attributes.load_balance);
                 let values = self.resolve_connection_variables(
-                    scope_kind,
-                    scope_code,
+                    workspace_code,
                     postgresql_variable_keys(&attributes),
                 )?;
                 Ok(ResourceConnectionTarget::Postgresql(
@@ -190,12 +183,11 @@ impl ResourceService {
                     },
                 ))
             }
-            REDIS_CONNECTION_DEFINITION_CODE => {
+            ResourceKind::RedisConnection => {
                 let attributes: RedisAttributes = parse(attributes)?;
                 let _ = &attributes.properties;
                 let values = self.resolve_connection_variables(
-                    scope_kind,
-                    scope_code,
+                    workspace_code,
                     redis_variable_keys(&attributes),
                 )?;
                 let credentials = attributes.credentials;
@@ -235,11 +227,10 @@ impl ResourceService {
                     sentinel,
                 }))
             }
-            KAFKA_CONNECTION_DEFINITION_CODE => {
+            ResourceKind::KafkaConnection => {
                 let attributes: KafkaAttributes = parse(attributes)?;
                 let values = self.resolve_connection_variables(
-                    scope_kind,
-                    scope_code,
+                    workspace_code,
                     kafka_variable_keys(&attributes),
                 )?;
                 let sasl = attributes
@@ -270,8 +261,7 @@ impl ResourceService {
 
     pub(super) fn ssh_connection_target(
         &self,
-        scope_kind: ResourceScopeKind,
-        scope_code: &str,
+        workspace_code: &str,
         host: String,
         port: u16,
         account: &ServerAccountCreateInput,
@@ -283,7 +273,7 @@ impl ResourceService {
             &mut keys,
             account.private_key_passphrase_variable_key.as_deref(),
         );
-        let values = self.resolve_connection_variables(scope_kind, scope_code, keys)?;
+        let values = self.resolve_connection_variables(workspace_code, keys)?;
         let authentication = match account.authentication_type {
             ServerAuthenticationType::Password => SshAuthenticationTarget::Password {
                 password: secret_required(&values, account.password_variable_key.as_deref())?,
@@ -302,34 +292,6 @@ impl ResourceService {
             authentication,
         }))
     }
-}
-
-pub(super) fn server_attributes(host: &str, port: u16) -> Value {
-    json!({ "host": host.trim(), "port": port, "protocol": "Ssh" })
-}
-
-pub(super) fn server_account_attributes(
-    server_code: &str,
-    account: &ServerAccountCreateInput,
-) -> Value {
-    let mut value = json!({
-        "serverCode": server_code,
-        "username": account.username.trim(),
-        "authenticationType": account.authentication_type,
-    });
-    let object = value
-        .as_object_mut()
-        .expect("account attributes are an object");
-    if let Some(key) = &account.password_variable_key {
-        object.insert("passwordVariableKey".to_string(), json!(key));
-    }
-    if let Some(key) = &account.private_key_variable_key {
-        object.insert("privateKeyVariableKey".to_string(), json!(key));
-    }
-    if let Some(key) = &account.private_key_passphrase_variable_key {
-        object.insert("privateKeyPassphraseVariableKey".to_string(), json!(key));
-    }
-    value
 }
 
 fn parse<T: for<'de> Deserialize<'de>>(value: &Value) -> Result<T, ResourceError> {
@@ -416,19 +378,12 @@ fn extend_secret_reference_key(keys: &mut BTreeSet<String>, secret: &SecretRefer
 impl ResourceService {
     fn resolve_connection_variables(
         &self,
-        scope_kind: ResourceScopeKind,
-        scope_code: &str,
+        workspace_code: &str,
         keys: BTreeSet<String>,
     ) -> Result<BTreeMap<String, String>, ResourceError> {
-        let result = match scope_kind {
-            ResourceScopeKind::Platform => self
-                .variables
-                .resolve_platform_runtime_variable_values(&keys),
-            ResourceScopeKind::Workspace => self
-                .variables
-                .resolve_runtime_variable_values(scope_code, &keys),
-        };
-        result.map_err(map_variable_error)
+        self.variables
+            .resolve_runtime_variable_values(workspace_code, &keys)
+            .map_err(map_variable_error)
     }
 }
 
@@ -540,6 +495,6 @@ fn map_variable_error(error: VariableError) -> ResourceError {
             ResourceError::InvalidWorkspace
         }
         VariableError::StorageFailure => ResourceError::StorageFailure,
-        _ => ResourceError::ValidationFailed,
+        _ => ResourceError::InvalidInput,
     }
 }

@@ -17,7 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toastManager } from "@/components/ui/toast";
 import {
   createDataSourceConnection,
-  type DataSourceDefinitionCode,
+  type DataSourceKindCode,
 } from "@/domain/resource/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
@@ -44,7 +44,7 @@ interface EndpointFormValue {
 
 type PasswordSource = "DIRECT" | "VARIABLE";
 
-const DEFAULT_PORTS: Record<DataSourceDefinitionCode, string> = {
+const DEFAULT_PORTS: Record<DataSourceKindCode, string> = {
   KAFKA_CONNECTION: "9092",
   MYSQL_CONNECTION: "3306",
   POSTGRESQL_CONNECTION: "5432",
@@ -69,7 +69,7 @@ export function DataSourceCreateDialog({
   workspaceCode,
 }: DataSourceCreateDialogProps) {
   const { t } = useTranslation("pages");
-  const [definitionCode, setDefinitionCode] = useState<DataSourceDefinitionCode>("MYSQL_CONNECTION");
+  const [kind, setKind] = useState<DataSourceKindCode>("MYSQL_CONNECTION");
   const [resourceCode, setResourceCode] = useState("");
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
@@ -90,26 +90,26 @@ export function DataSourceCreateDialog({
   const [submitting, setSubmitting] = useState(false);
 
   const pageT = (key: string) => t(`resourceConnections.${key}`);
-  const isKafka = definitionCode === "KAFKA_CONNECTION";
-  const isRedis = definitionCode === "REDIS_CONNECTION";
+  const isKafka = kind === "KAFKA_CONNECTION";
+  const isRedis = kind === "REDIS_CONNECTION";
   const usesSasl = isKafka && securityProtocol.startsWith("SASL_");
   const usesKafkaTls = isKafka && securityProtocol.endsWith("SSL");
-  const isMysqlReplication = definitionCode === "MYSQL_CONNECTION" && connectionMode === "REPLICATION";
+  const isMysqlReplication = kind === "MYSQL_CONNECTION" && connectionMode === "REPLICATION";
   const minimumEndpointCount = isMysqlReplication ? 2 : 1;
   const supportsMultipleEndpoints = isKafka
-    || definitionCode === "POSTGRESQL_CONNECTION"
-    || (definitionCode === "MYSQL_CONNECTION" && connectionMode !== "SINGLE")
+    || kind === "POSTGRESQL_CONNECTION"
+    || (kind === "MYSQL_CONNECTION" && connectionMode !== "SINGLE")
     || (isRedis && redisTopology !== "STANDALONE");
 
   useEffect(() => {
-    setEndpoints([endpointValue(DEFAULT_PORTS[definitionCode])]);
+    setEndpoints([endpointValue(DEFAULT_PORTS[kind])]);
     setConnectionMode("SINGLE");
     setPostgresqlLoadBalance("DISABLED");
     setPostgresqlTargetSession("ANY");
     setRedisTopology("STANDALONE");
     setSentinelMasterName("");
-    setTlsMode(definitionCode === "KAFKA_CONNECTION" ? "REQUIRED" : "DISABLED");
-  }, [definitionCode]);
+    setTlsMode(kind === "KAFKA_CONNECTION" ? "REQUIRED" : "DISABLED");
+  }, [kind]);
 
   useEffect(() => {
     if (open) setResourceCode(generateConnectionResourceCode("DATA_SOURCE"));
@@ -121,7 +121,7 @@ export function DataSourceCreateDialog({
       port: Number(port),
       ...(isMysqlReplication ? { role } : {}),
     }));
-    if (definitionCode === "MYSQL_CONNECTION") {
+    if (kind === "MYSQL_CONNECTION") {
       return {
         connectionMode,
         credentials: { username: username.trim(), password: passwordReference() },
@@ -130,7 +130,7 @@ export function DataSourceCreateDialog({
         tls: createTls(tlsMode, caCertificateVariableKey),
       };
     }
-    if (definitionCode === "POSTGRESQL_CONNECTION") {
+    if (kind === "POSTGRESQL_CONNECTION") {
       return {
         credentials: { username: username.trim(), password: passwordReference() },
         database: database.trim(),
@@ -140,7 +140,7 @@ export function DataSourceCreateDialog({
         tls: createTls(tlsMode, caCertificateVariableKey),
       };
     }
-    if (definitionCode === "REDIS_CONNECTION") {
+    if (kind === "REDIS_CONNECTION") {
       const credentials = password.trim()
         ? {
             password: passwordReference(),
@@ -212,7 +212,7 @@ export function DataSourceCreateDialog({
   }
 
   function addEndpoint() {
-    setEndpoints((current) => [...current, endpointValue(DEFAULT_PORTS[definitionCode])]);
+    setEndpoints((current) => [...current, endpointValue(DEFAULT_PORTS[kind])]);
   }
 
   function removeEndpoint(index: number) {
@@ -229,11 +229,10 @@ export function DataSourceCreateDialog({
         await createDataSourceConnection({
           allowInheritance: false,
           attributes: attributes(),
-          definitionCode,
+          kind,
           description: description.trim() || null,
           name: name.trim(),
           resourceCode: resourceCode.trim(),
-          scopeKind: "WORKSPACE",
           workspaceCode,
         });
       }
@@ -264,7 +263,7 @@ export function DataSourceCreateDialog({
           </DialogHeader>
 
           <div className="grid gap-4 py-5 sm:grid-cols-2">
-            <ConnectionSelectField id="data-source-type" label={pageT("fields.type")} onValueChange={(value) => setDefinitionCode(value as DataSourceDefinitionCode)} value={definitionCode}>
+            <ConnectionSelectField id="data-source-type" label={pageT("fields.type")} onValueChange={(value) => setKind(value as DataSourceKindCode)} value={kind}>
               <ConnectionSelectItem value="MYSQL_CONNECTION">MySQL</ConnectionSelectItem>
               <ConnectionSelectItem value="POSTGRESQL_CONNECTION">PostgreSQL</ConnectionSelectItem>
               <ConnectionSelectItem value="REDIS_CONNECTION">Redis</ConnectionSelectItem>
@@ -275,12 +274,12 @@ export function DataSourceCreateDialog({
             <div className="sm:col-span-2">
               <ConnectionTextareaField id="data-source-description" label={pageT("fields.description")} onChange={setDescription} value={description} />
             </div>
-            {definitionCode === "MYSQL_CONNECTION" ? (
+            {kind === "MYSQL_CONNECTION" ? (
               <ConnectionSelectField id="data-source-mysql-mode" label={pageT("fields.connectionMode")} onValueChange={updateConnectionMode} value={connectionMode}>
                 {['SINGLE', 'FAILOVER', 'LOAD_BALANCE', 'REPLICATION'].map((value) => <ConnectionSelectItem key={value} value={value}>{pageT(`connectionModes.${value}`)}</ConnectionSelectItem>)}
               </ConnectionSelectField>
             ) : null}
-            {definitionCode === "POSTGRESQL_CONNECTION" ? (
+            {kind === "POSTGRESQL_CONNECTION" ? (
               <>
                 <ConnectionSelectField id="data-source-postgresql-load-balance" label={pageT("fields.loadBalance")} onValueChange={setPostgresqlLoadBalance} value={postgresqlLoadBalance}>
                   {['DISABLED', 'RANDOM'].map((value) => <ConnectionSelectItem key={value} value={value}>{pageT(`loadBalances.${value}`)}</ConnectionSelectItem>)}
@@ -349,9 +348,9 @@ export function DataSourceCreateDialog({
             ) : null}
             {!isKafka ? (
               <ConnectionSelectField id="data-source-tls" label={pageT("fields.tlsMode")} onValueChange={setTlsMode} value={tlsMode}>
-                {(definitionCode === "MYSQL_CONNECTION"
+                {(kind === "MYSQL_CONNECTION"
                   ? ['DISABLED', 'PREFERRED', 'REQUIRED', 'VERIFY_CA', 'VERIFY_IDENTITY']
-                  : definitionCode === "POSTGRESQL_CONNECTION"
+                  : kind === "POSTGRESQL_CONNECTION"
                     ? ['DISABLED', 'ALLOW', 'PREFERRED', 'REQUIRED', 'VERIFY_CA', 'VERIFY_FULL']
                     : ['DISABLED', 'REQUIRED', 'VERIFY_CA', 'VERIFY_FULL'])
                   .map((value) => <ConnectionSelectItem key={value} value={value}>{value}</ConnectionSelectItem>)}

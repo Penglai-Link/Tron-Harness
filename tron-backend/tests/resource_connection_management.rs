@@ -12,16 +12,12 @@ use serde_json::json;
 use tron_backend::{
     app::AppState,
     application::resource::{
-        DataSourceCreateCommand, ResourceCommitCommand, ResourceConnectionTarget,
-        ResourceConnectionVerificationFuture, ResourceConnectionVerifier, ResourceDeleteCommand,
-        ResourceQuery, ServerAccountCreateCommand, ServerAccountCreateInput, ServerCreateCommand,
+        DataSourceCreateCommand, ResourceConnectionTarget, ResourceConnectionVerificationFuture,
+        ResourceConnectionVerifier, ResourceDeleteCommand, ResourcePageQuery,
+        ServerAccountCreateCommand, ServerAccountCreateInput, ServerCreateCommand,
     },
     config::{AppConfig, ResourceConfig},
-    domain::resource::{
-        MYSQL_CONNECTION_DEFINITION_CODE, ResourceError, ResourceScopeKind,
-        SERVER_ACCOUNT_DEFINITION_CODE, SERVER_CONNECTION_DEFINITION_CODE,
-        ServerAuthenticationType,
-    },
+    domain::resource::{ResourceError, ResourceKind, ServerAuthenticationType},
 };
 
 use common::prepared_config;
@@ -57,17 +53,16 @@ impl ResourceConnectionVerifier for FakeConnectionVerifier {
 }
 
 #[tokio::test]
-async fn data_source_create_verifies_before_persisting_and_generic_create_cannot_bypass_it() {
+async fn data_source_create_verifies_before_persisting() {
     let (state, calls) = resource_state("data-source", false);
     let created = state
         .resources
         .create_data_source_for_http(
             ACTOR,
             DataSourceCreateCommand {
-                scope_kind: ResourceScopeKind::Workspace,
-                workspace_code: Some(WORKSPACE.to_string()),
+                workspace_code: WORKSPACE.to_string(),
                 resource_code: "MYSQL_PRIMARY".to_string(),
-                definition_code: MYSQL_CONNECTION_DEFINITION_CODE.to_string(),
+                kind: ResourceKind::MysqlConnection,
                 name: "Primary MySQL".to_string(),
                 description: String::new(),
                 attributes: mysql_attributes(),
@@ -76,27 +71,31 @@ async fn data_source_create_verifies_before_persisting_and_generic_create_cannot
         )
         .await
         .expect("verified data source should be persisted");
-    assert_eq!(created.definition_code, MYSQL_CONNECTION_DEFINITION_CODE);
+    assert_eq!(created.kind, ResourceKind::MysqlConnection);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
     assert_eq!(resources(&state, Some("MYSQL_PRIMARY")).total, 1);
+}
 
-    let bypass = state.resources.create_resource_for_http(
-        ACTOR,
-        ResourceCommitCommand {
-            scope_kind: ResourceScopeKind::Workspace,
-            workspace_code: Some(WORKSPACE.to_string()),
-            resource_code: "MYSQL_BYPASS".to_string(),
-            definition_code: Some(MYSQL_CONNECTION_DEFINITION_CODE.to_string()),
-            expected_active_resource_version: None,
-            name: "Bypass".to_string(),
-            description: String::new(),
-            attributes: mysql_attributes(),
-            allow_inheritance: false,
-            removed_binary_names: Vec::new(),
-        },
-        Vec::new(),
-    );
-    assert_eq!(bypass, Err(ResourceError::ConnectionEndpointRequired));
+#[tokio::test]
+async fn non_data_source_kind_is_rejected_by_connection_endpoint() {
+    let (state, calls) = resource_state("data-source-kind-guard", false);
+    let result = state
+        .resources
+        .create_data_source_for_http(
+            ACTOR,
+            DataSourceCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "FILE_AS_CONNECTION".to_string(),
+                kind: ResourceKind::File,
+                name: "Not a connection".to_string(),
+                description: String::new(),
+                attributes: json!({}),
+                allow_inheritance: false,
+            },
+        )
+        .await;
+    assert_eq!(result, Err(ResourceError::InvalidInput));
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]
@@ -107,10 +106,9 @@ async fn failed_data_source_probe_does_not_persist_the_resource() {
         .create_data_source_for_http(
             ACTOR,
             DataSourceCreateCommand {
-                scope_kind: ResourceScopeKind::Workspace,
-                workspace_code: Some(WORKSPACE.to_string()),
+                workspace_code: WORKSPACE.to_string(),
                 resource_code: "MYSQL_UNREACHABLE".to_string(),
-                definition_code: MYSQL_CONNECTION_DEFINITION_CODE.to_string(),
+                kind: ResourceKind::MysqlConnection,
                 name: "Unreachable MySQL".to_string(),
                 description: String::new(),
                 attributes: mysql_attributes(),
@@ -142,10 +140,9 @@ async fn data_source_password_accepts_direct_input_or_a_variable_reference() {
             .create_data_source_for_http(
                 ACTOR,
                 DataSourceCreateCommand {
-                    scope_kind: ResourceScopeKind::Workspace,
-                    workspace_code: Some(WORKSPACE.to_string()),
+                    workspace_code: WORKSPACE.to_string(),
                     resource_code: resource_code.to_string(),
-                    definition_code: MYSQL_CONNECTION_DEFINITION_CODE.to_string(),
+                    kind: ResourceKind::MysqlConnection,
                     name: resource_code.to_string(),
                     description: String::new(),
                     attributes,
@@ -184,8 +181,7 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
         .create_server_for_http(
             ACTOR,
             ServerCreateCommand {
-                scope_kind: ResourceScopeKind::Workspace,
-                workspace_code: Some(WORKSPACE.to_string()),
+                workspace_code: WORKSPACE.to_string(),
                 server_code: "SERVER_PROD_1".to_string(),
                 name: "Production server".to_string(),
                 description: String::new(),
@@ -198,14 +194,8 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
         .await
         .expect("verified server and first account should persist atomically");
     assert!(created.connectivity_verified);
-    assert_eq!(
-        created.server.definition_code,
-        SERVER_CONNECTION_DEFINITION_CODE
-    );
-    assert_eq!(
-        created.initial_account.definition_code,
-        SERVER_ACCOUNT_DEFINITION_CODE
-    );
+    assert_eq!(created.server.kind, ResourceKind::ServerConnection);
+    assert_eq!(created.initial_account.kind, ResourceKind::ServerAccount);
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 
     let second = state
@@ -213,21 +203,19 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
         .create_server_account_for_http(
             ACTOR,
             ServerAccountCreateCommand {
-                scope_kind: ResourceScopeKind::Workspace,
-                workspace_code: Some(WORKSPACE.to_string()),
+                workspace_code: WORKSPACE.to_string(),
                 server_code: "SERVER_PROD_1".to_string(),
                 account: password_account("SERVER_PROD_1_DEPLOY", "deploy"),
             },
         )
         .expect("a server should accept an additional account");
-    assert_eq!(second.definition_code, SERVER_ACCOUNT_DEFINITION_CODE);
+    assert_eq!(second.kind, ResourceKind::ServerAccount);
     state
         .resources
         .create_server_account_for_http(
             ACTOR,
             ServerAccountCreateCommand {
-                scope_kind: ResourceScopeKind::Workspace,
-                workspace_code: Some(WORKSPACE.to_string()),
+                workspace_code: WORKSPACE.to_string(),
                 server_code: "SERVER_PROD_1".to_string(),
                 account: private_key_account("SERVER_PROD_1_AUTOMATION", "automation"),
             },
@@ -249,7 +237,7 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
             .into_iter()
             .next()
             .expect("account should be queryable");
-        assert_eq!(account.definition_code, SERVER_ACCOUNT_DEFINITION_CODE);
+        assert_eq!(account.kind, ResourceKind::ServerAccount);
         assert_eq!(
             account
                 .attributes
@@ -272,19 +260,44 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
             .and_then(serde_json::Value::as_str),
         Some("PrivateKey")
     );
+}
 
-    let delete = state.resources.delete_resource_for_http(
+#[tokio::test]
+async fn server_with_accounts_cannot_be_deleted() {
+    let (state, _) = resource_state("server-delete-guard", false);
+    state
+        .resources
+        .create_server_for_http(
+            ACTOR,
+            ServerCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                server_code: "SERVER_GUARDED".to_string(),
+                name: "Guarded server".to_string(),
+                description: String::new(),
+                host: "server.internal".to_string(),
+                port: 22,
+                allow_inheritance: false,
+                initial_account: password_account("SERVER_GUARDED_ROOT", "root"),
+            },
+        )
+        .await
+        .expect("server should be created");
+    let delete = state.resources.delete_resource(
         ACTOR,
         ResourceDeleteCommand {
-            scope_kind: ResourceScopeKind::Workspace,
-            workspace_code: Some(WORKSPACE.to_string()),
-            resource_code: "SERVER_PROD_1".to_string(),
-            expected_active_resource_version: Some(created.server.resource_version),
-            expected_draft_resource_version: None,
-            expected_draft_revision: None,
+            workspace_code: WORKSPACE.to_string(),
+            resource_code: "SERVER_GUARDED".to_string(),
         },
     );
     assert_eq!(delete, Err(ResourceError::ServerHasAccounts));
+    assert_eq!(
+        resources(&state, Some("SERVER_GUARDED"))
+            .records
+            .iter()
+            .filter(|record| record.resource_code == "SERVER_GUARDED")
+            .count(),
+        1
+    );
 }
 
 #[tokio::test]
@@ -295,8 +308,7 @@ async fn failed_ssh_probe_persists_neither_server_nor_initial_account() {
         .create_server_for_http(
             ACTOR,
             ServerCreateCommand {
-                scope_kind: ResourceScopeKind::Workspace,
-                workspace_code: Some(WORKSPACE.to_string()),
+                workspace_code: WORKSPACE.to_string(),
                 server_code: "SERVER_FAILED".to_string(),
                 name: "Failed server".to_string(),
                 description: String::new(),
@@ -396,13 +408,10 @@ fn resources(
         .resources
         .query_resources(
             ACTOR,
-            ResourceQuery {
-                workspace_code: Some(WORKSPACE.to_string()),
-                search: None,
-                definition_code: None,
-                resource_code: resource_code.map(str::to_string),
-                resource_version: None,
-                include_history: false,
+            ResourcePageQuery {
+                workspace_code: WORKSPACE.to_string(),
+                kind: None,
+                search: resource_code.map(str::to_string),
                 current: 1,
                 size: 50,
             },

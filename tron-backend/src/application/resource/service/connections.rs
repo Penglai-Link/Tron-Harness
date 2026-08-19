@@ -1,80 +1,109 @@
 use crate::{
     application::resource::{
-        DataSourceCreateCommand, ResourceActivationOutput, ResourceCommitCommand,
+        DataSourceCreateCommand, DataSourceUpdateCommand, ResourceCommitOutcome,
         ServerAccountCreateCommand, ServerCreateCommand, ServerCreateResult,
     },
     domain::resource::{
-        Resource, ResourceActivationResult, ResourceError, ResourceKey, ResourceLifecycleStatus,
-        ResourceScopeKind, ResourceValidationStatus, SERVER_ACCOUNT_DEFINITION_CODE,
-        SERVER_CONNECTION_DEFINITION_CODE, is_data_source_definition_code, validate_resource_code,
+        DataSourceConnectionRecord, ManagedResource, ResourceError, ServerAccountRecord,
+        ServerRecord, validate_resource_code,
     },
     shared::time::current_timestamp,
 };
 
-use super::{
-    ResourceService,
-    connection_attributes::{server_account_attributes, server_attributes},
-    resources::next_resource_version,
-};
-
-struct ConnectionResourceInput<'a> {
-    resource_code: &'a str,
-    definition_code: &'a str,
-    name: &'a str,
-    description: &'a str,
-    attributes: serde_json::Value,
-    allow_inheritance: bool,
-}
+use super::ResourceService;
 
 impl ResourceService {
     pub async fn create_data_source_for_http(
         &self,
         actor_user_code: &str,
         command: DataSourceCreateCommand,
-    ) -> Result<ResourceActivationOutput, ResourceError> {
-        if !is_data_source_definition_code(&command.definition_code) {
+    ) -> Result<ResourceCommitOutcome, ResourceError> {
+        if !command.kind.is_data_source() {
             return Err(ResourceError::InvalidInput);
         }
-        let commit = ResourceCommitCommand {
-            scope_kind: command.scope_kind,
-            workspace_code: command.workspace_code,
-            resource_code: command.resource_code,
-            definition_code: Some(command.definition_code.clone()),
-            expected_active_resource_version: None,
-            name: command.name,
-            description: command.description,
-            attributes: command.attributes,
-            allow_inheritance: command.allow_inheritance,
-            removed_binary_names: Vec::new(),
-        };
-        self.preflight_verified_connection_commit(actor_user_code, &commit)?;
-        let scope_code = self.management_scope(
-            actor_user_code,
-            commit.scope_kind,
-            commit.workspace_code.as_deref(),
-            true,
-        )?;
-        let resource = self.prepare_active_connection_resource(
-            commit.scope_kind,
-            &scope_code,
-            ConnectionResourceInput {
-                resource_code: &commit.resource_code,
-                definition_code: &command.definition_code,
-                name: &commit.name,
-                description: &commit.description,
-                attributes: commit.attributes.clone(),
-                allow_inheritance: commit.allow_inheritance,
-            },
-        )?;
+        if command.name.trim().is_empty() {
+            return Err(ResourceError::InvalidInput);
+        }
+        validate_resource_code(&command.resource_code)?;
+        let workspace_code =
+            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        self.ensure_resource_create_is_available(&workspace_code, &command.resource_code)?;
         let target = self.data_source_connection_target(
-            commit.scope_kind,
-            &scope_code,
-            &command.definition_code,
-            &commit.attributes,
+            &workspace_code,
+            command.kind,
+            &command.attributes,
         )?;
         self.connection_verifier.verify(target).await?;
-        self.persist_active_connection_resources(actor_user_code, &scope_code, &[resource])
-            .map(|mut values| values.remove(0))
+        let now = current_timestamp();
+        let record = DataSourceConnectionRecord {
+            workspace_code: workspace_code.clone(),
+            resource_code: command.resource_code.clone(),
+            kind: command.kind,
+            name: command.name.trim().to_string(),
+            description: command.description.trim().to_string(),
+            attributes: command.attributes,
+            allow_inheritance: command.allow_inheritance,
+            created_at: now.clone(),
+            updated_at: now,
+        };
+        self.repository(|repository| repository.insert_data_source_connection(&record))?;
+        self.publish_resource_audit(
+            actor_user_code,
+            &ManagedResource::DataSourceConnection(record.clone()),
+            "resource.created",
+        );
+        Ok(commit_outcome(
+            &workspace_code,
+            &record.resource_code,
+            record.kind,
+        ))
+    }
+
+    pub async fn update_data_source_for_http(
+        &self,
+        actor_user_code: &str,
+        command: DataSourceUpdateCommand,
+    ) -> Result<ResourceCommitOutcome, ResourceError> {
+        validate_resource_code(&command.resource_code)?;
+        let workspace_code =
+            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        let mut record = match self.repository(|repository| {
+            Ok(repository
+                .list_data_source_connections()?
+                .into_iter()
+                .find(|record| {
+                    record.workspace_code == workspace_code
+                        && record.resource_code == command.resource_code
+                }))
+        })? {
+            Some(record) => record,
+            None => return Err(ResourceError::NotFound),
+        };
+        if let Some(attributes) = &command.attributes {
+            let target = self.data_source_connection_target(
+                &workspace_code,
+                record.kind,
+                attributes,
+            )?;
+            self.connection_verifier.verify(target).await?;
+            record.attributes = attributes.clone();
+        }
+        if let Some(name) = &command.name {
+            let name = name.trim();
+            if name.is_empty() {
+                return Err(ResourceError::InvalidInput);
+            }
+            record.name = name.to_string();
+        }
+        if let Some(description) = &command.description {
+            record.description = description.trim().to_string();
+        }
+        if let Some(allow_inheritance) = command.allow_inheritance {
+            record.allow_inheritance = allow_inheritance;
+        }
+        record.updated_at = current_timestamp();
+        self.repository(|repository| repository.update_data_source_connection(&record))?;
+        Ok(commit_outcome(&workspace_code, &record.resource_code, record.kind))
     }
 
     pub async fn create_server_for_http(
@@ -87,55 +116,69 @@ impl ResourceService {
         if command.server_code == command.initial_account.account_code {
             return Err(ResourceError::InvalidInput);
         }
-        let scope_code = self.management_scope(
-            actor_user_code,
-            command.scope_kind,
-            command.workspace_code.as_deref(),
-            true,
+        if command.name.trim().is_empty() || command.initial_account.name.trim().is_empty() {
+            return Err(ResourceError::InvalidInput);
+        }
+        let workspace_code =
+            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        self.ensure_resource_create_is_available(&workspace_code, &command.server_code)?;
+        self.ensure_resource_create_is_available(
+            &workspace_code,
+            &command.initial_account.account_code,
         )?;
-        let server = self.prepare_active_connection_resource(
-            command.scope_kind,
-            &scope_code,
-            ConnectionResourceInput {
-                resource_code: &command.server_code,
-                definition_code: SERVER_CONNECTION_DEFINITION_CODE,
-                name: &command.name,
-                description: &command.description,
-                attributes: server_attributes(&command.host, command.port),
-                allow_inheritance: command.allow_inheritance,
-            },
-        )?;
-        let account = self.prepare_active_connection_resource(
-            command.scope_kind,
-            &scope_code,
-            ConnectionResourceInput {
-                resource_code: &command.initial_account.account_code,
-                definition_code: SERVER_ACCOUNT_DEFINITION_CODE,
-                name: &command.initial_account.name,
-                description: &command.initial_account.description,
-                attributes: server_account_attributes(
-                    &command.server_code,
-                    &command.initial_account,
-                ),
-                allow_inheritance: command.initial_account.allow_inheritance,
-            },
-        )?;
+        validate_account_credentials(&command.initial_account)?;
         let target = self.ssh_connection_target(
-            command.scope_kind,
-            &scope_code,
-            command.host,
+            &workspace_code,
+            command.host.clone(),
             command.port,
             &command.initial_account,
         )?;
         self.connection_verifier.verify(target).await?;
-        let mut created = self.persist_active_connection_resources(
-            actor_user_code,
-            &scope_code,
-            &[server, account],
+        let now = current_timestamp();
+        let server = ServerRecord {
+            workspace_code: workspace_code.clone(),
+            resource_code: command.server_code.clone(),
+            name: command.name.trim().to_string(),
+            description: command.description.trim().to_string(),
+            host: command.host.trim().to_string(),
+            port: command.port,
+            allow_inheritance: command.allow_inheritance,
+            created_at: now.clone(),
+            updated_at: now.clone(),
+        };
+        let account = server_account_record(
+            &workspace_code,
+            &command.server_code,
+            &command.initial_account,
+            &now,
         )?;
+        self.repository(|repository| repository.insert_server(&server))?;
+        if let Err(error) = self.repository(|repository| repository.insert_server_account(&account)) {
+            let _ = self
+                .repository(|repository| repository.delete_server(&workspace_code, &command.server_code));
+            return Err(error);
+        }
+        self.publish_resource_audit(
+            actor_user_code,
+            &ManagedResource::Server(server.clone()),
+            "resource.created",
+        );
+        self.publish_resource_audit(
+            actor_user_code,
+            &ManagedResource::ServerAccount(account.clone()),
+            "resource.created",
+        );
         Ok(ServerCreateResult {
-            server: created.remove(0),
-            initial_account: created.remove(0),
+            server: commit_outcome(
+                &workspace_code,
+                &server.resource_code,
+                crate::domain::resource::ResourceKind::ServerConnection,
+            ),
+            initial_account: commit_outcome(
+                &workspace_code,
+                &account.resource_code,
+                crate::domain::resource::ResourceKind::ServerAccount,
+            ),
             connectivity_verified: true,
         })
     }
@@ -144,134 +187,53 @@ impl ResourceService {
         &self,
         actor_user_code: &str,
         command: ServerAccountCreateCommand,
-    ) -> Result<ResourceActivationOutput, ResourceError> {
+    ) -> Result<ResourceCommitOutcome, ResourceError> {
         validate_resource_code(&command.server_code)?;
         validate_resource_code(&command.account.account_code)?;
-        let scope_code = self.management_scope(
-            actor_user_code,
-            command.scope_kind,
-            command.workspace_code.as_deref(),
-            true,
-        )?;
-        let server = self.effective_active_resource_for_http(
-            command.scope_kind,
-            &scope_code,
-            &command.server_code,
-        )?;
-        if server.definition_key.definition_code != SERVER_CONNECTION_DEFINITION_CODE {
-            return Err(ResourceError::NotFound);
-        }
-        let account = self.prepare_active_connection_resource(
-            command.scope_kind,
-            &scope_code,
-            ConnectionResourceInput {
-                resource_code: &command.account.account_code,
-                definition_code: SERVER_ACCOUNT_DEFINITION_CODE,
-                name: &command.account.name,
-                description: &command.account.description,
-                attributes: server_account_attributes(&command.server_code, &command.account),
-                allow_inheritance: command.account.allow_inheritance,
-            },
-        )?;
-        self.persist_active_connection_resources(actor_user_code, &scope_code, &[account])
-            .map(|mut values| values.remove(0))
-    }
-
-    fn prepare_active_connection_resource(
-        &self,
-        scope_kind: ResourceScopeKind,
-        scope_code: &str,
-        input: ConnectionResourceInput<'_>,
-    ) -> Result<Resource, ResourceError> {
-        validate_resource_code(input.resource_code)?;
-        if input.name.trim().is_empty() {
+        if command.account.name.trim().is_empty() {
             return Err(ResourceError::InvalidInput);
         }
-        self.ensure_resource_create_is_available_for_scope(
-            scope_kind,
-            scope_code,
-            input.resource_code,
-        )?;
-        let definition =
-            self.definition_for_resource_scope(scope_kind, scope_code, input.definition_code)?;
-        let all_resources = self.repository(|repository| repository.list_resources())?;
-        let now = current_timestamp();
-        let resource = Resource {
-            key: ResourceKey {
-                scope_kind,
-                scope_code: scope_code.to_string(),
-                resource_code: input.resource_code.to_string(),
-                resource_version: next_resource_version(
-                    &all_resources,
-                    scope_kind,
-                    scope_code,
-                    input.resource_code,
-                )?,
-            },
-            definition_key: definition.key.clone(),
-            based_on_resource_version: None,
-            name: input.name.trim().to_string(),
-            description: input.description.trim().to_string(),
-            attributes: input.attributes,
-            allow_inheritance: input.allow_inheritance,
-            draft_revision: 0,
-            validation_status: ResourceValidationStatus::Valid,
-            lifecycle_status: ResourceLifecycleStatus::Active,
-            created_at: now.clone(),
-            updated_at: now.clone(),
-            published_at: Some(now),
-        };
-        self.ensure_resource_publishable(&resource, &definition, &[])?;
-        Ok(resource)
-    }
-
-    fn persist_active_connection_resources(
-        &self,
-        actor_user_code: &str,
-        scope_code: &str,
-        resources: &[Resource],
-    ) -> Result<Vec<ResourceActivationOutput>, ResourceError> {
-        self.repository(|repository| repository.insert_active_resource_bundle(resources))?;
-        for resource in resources {
-            self.publish_resource_audit(
-                actor_user_code,
-                resource,
-                scope_code,
-                ResourceActivationResult::DirectCommitted,
-                None,
-            );
+        let workspace_code =
+            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        let server = self
+            .managed_resource(&workspace_code, &command.server_code)?
+            .ok_or(ResourceError::NotFound)?;
+        if !matches!(server, ManagedResource::Server(_)) {
+            return Err(ResourceError::NotFound);
         }
-        Ok(resources.iter().map(activation_output).collect())
+        self.ensure_resource_create_is_available(&workspace_code, &command.account.account_code)?;
+        validate_account_credentials(&command.account)?;
+        let now = current_timestamp();
+        let account = server_account_record(
+            &workspace_code,
+            &command.server_code,
+            &command.account,
+            &now,
+        )?;
+        self.repository(|repository| repository.insert_server_account(&account))?;
+        self.publish_resource_audit(
+            actor_user_code,
+            &ManagedResource::ServerAccount(account.clone()),
+            "resource.created",
+        );
+        Ok(commit_outcome(
+            &workspace_code,
+            &account.resource_code,
+            crate::domain::resource::ResourceKind::ServerAccount,
+        ))
     }
 
     pub(super) fn ensure_server_has_no_accounts(
         &self,
-        scope_kind: ResourceScopeKind,
-        scope_code: &str,
+        workspace_code: &str,
         server_code: &str,
     ) -> Result<(), ResourceError> {
-        let resources = self.repository(|repository| repository.list_resources())?;
-        let is_server = resources.iter().any(|resource| {
-            resource.key.scope_kind == scope_kind
-                && resource.key.scope_code == scope_code
-                && resource.key.resource_code == server_code
-                && resource.definition_key.definition_code == SERVER_CONNECTION_DEFINITION_CODE
-                && resource.lifecycle_status == ResourceLifecycleStatus::Active
-        });
-        if !is_server {
-            return Ok(());
-        }
-        let has_accounts = resources.iter().any(|resource| {
-            resource.key.scope_kind == scope_kind
-                && resource.key.scope_code == scope_code
-                && resource.definition_key.definition_code == SERVER_ACCOUNT_DEFINITION_CODE
-                && resource.lifecycle_status != ResourceLifecycleStatus::Historical
-                && resource
-                    .attributes
-                    .get("serverCode")
-                    .and_then(serde_json::Value::as_str)
-                    == Some(server_code)
-        });
+        let has_accounts = self
+            .repository(|repository| repository.list_server_accounts())?
+            .iter()
+            .any(|account| {
+                account.workspace_code == workspace_code && account.server_code == server_code
+            });
         if has_accounts {
             Err(ResourceError::ServerHasAccounts)
         } else {
@@ -280,16 +242,61 @@ impl ResourceService {
     }
 }
 
-fn activation_output(resource: &Resource) -> ResourceActivationOutput {
-    ResourceActivationOutput {
-        resource_code: resource.key.resource_code.clone(),
-        resource_version: resource.key.resource_version.clone(),
-        definition_scope_kind: resource.definition_key.scope_kind,
-        definition_scope_code: resource.definition_key.scope_code.clone(),
-        definition_code: resource.definition_key.definition_code.clone(),
-        definition_version: resource.definition_key.definition_version.clone(),
-        lifecycle_status: ResourceLifecycleStatus::Active,
-        activation_result: ResourceActivationResult::DirectCommitted,
-        previous_active_resource_version: None,
+fn server_account_record(
+    workspace_code: &str,
+    server_code: &str,
+    input: &crate::application::resource::ServerAccountCreateInput,
+    now: &str,
+) -> Result<ServerAccountRecord, ResourceError> {
+    Ok(ServerAccountRecord {
+        workspace_code: workspace_code.to_string(),
+        resource_code: input.account_code.clone(),
+        server_code: server_code.to_string(),
+        name: input.name.trim().to_string(),
+        description: input.description.trim().to_string(),
+        username: input.username.trim().to_string(),
+        authentication_type: input.authentication_type,
+        password_variable_key: input.password_variable_key.clone(),
+        private_key_variable_key: input.private_key_variable_key.clone(),
+        private_key_passphrase_variable_key: input.private_key_passphrase_variable_key.clone(),
+        allow_inheritance: input.allow_inheritance,
+        created_at: now.to_string(),
+        updated_at: now.to_string(),
+    })
+}
+
+fn validate_account_credentials(
+    input: &crate::application::resource::ServerAccountCreateInput,
+) -> Result<(), ResourceError> {
+    if input.username.trim().is_empty() {
+        return Err(ResourceError::InvalidInput);
+    }
+    match input.authentication_type {
+        crate::domain::resource::ServerAuthenticationType::Password => {
+            if input.password_variable_key.is_none()
+                || input.private_key_variable_key.is_some()
+                || input.private_key_passphrase_variable_key.is_some()
+            {
+                return Err(ResourceError::InvalidInput);
+            }
+        }
+        crate::domain::resource::ServerAuthenticationType::PrivateKey => {
+            if input.private_key_variable_key.is_none() || input.password_variable_key.is_some() {
+                return Err(ResourceError::InvalidInput);
+            }
+        }
+    }
+    Ok(())
+}
+
+fn commit_outcome(
+    workspace_code: &str,
+    resource_code: &str,
+    kind: crate::domain::resource::ResourceKind,
+) -> ResourceCommitOutcome {
+    ResourceCommitOutcome {
+        workspace_code: workspace_code.to_string(),
+        resource_code: resource_code.to_string(),
+        kind,
     }
 }

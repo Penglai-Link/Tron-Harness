@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, fs::File};
+use std::collections::BTreeSet;
 
 use axum::{
     Json,
@@ -18,211 +18,24 @@ use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     application::resource::{
-        ResourceCommitBinary, ResourceCommitCommand, ResourceDefinitionDiscardDraftCommand,
-        ResourceDefinitionPublishDraftCommand, ResourceDefinitionUpdateDraftCommand,
-        ResourceDiscardDraftCommand, ResourceHttpBinaryDownloadCommand,
-        ResourceHttpBinaryRemoveCommand, ResourcePublishDraftCommand, ResourceService,
-        ResourceUpdateDraftCommand,
+        ResourceBinaryDownloadCommand, ResourceCommitBinary, ResourceCreateCommand,
+        ResourceDeleteCommand, ResourceService,
     },
     domain::resource::ResourceError,
 };
 
+struct ResourceCommitForm {
+    command: crate::application::resource::ResourceCreateCommand,
+    binary: ResourceCommitBinary,
+}
+
 use super::{
-    DefinitionActivateVersionRequest, DefinitionActivationResponse, DefinitionCreateDraftRequest,
-    DefinitionDeleteRequest, DefinitionDeleteResponse, DefinitionDraftActionResponse,
-    DefinitionDraftTargetRequest, DefinitionGetRequest, DefinitionPageRequest,
-    DefinitionSetEnabledRequest, DefinitionUpdateDraftRequest, DefinitionVersionPageResponse,
-    DefinitionVersionResponse, ResourceActivateVersionRequest, ResourceActivationResponse,
-    ResourceBinaryActionResponse, ResourceBinaryDownloadRequest, ResourceBinaryRemoveRequest,
-    ResourceCommitRequest, ResourceCreateDraftRequest, ResourceDeleteRequest,
-    ResourceDeleteResponse, ResourceDraftActionResponse, ResourceDraftTargetRequest,
-    ResourceGetRequest, ResourceHttpApiResponse, ResourcePageRequest, ResourceUpdateDraftRequest,
-    ResourceVersionPageResponse, ResourceVersionResponse, binary_upload_command,
+    ResourceBinaryActionResponse, ResourceBinaryDownloadRequest, ResourceCommitResponse,
+    ResourceCreateRequest, ResourceDeleteRequest, ResourceDeleteResponse, ResourceGetRequest,
+    ResourceHttpApiResponse, ResourcePageRequest, ResourcePageResponse, ResourceResponse,
+    ResourceUpdateRequest, binary_upload_command,
     error_mapper::{internal_error_response, malformed_request_response, resource_error_response},
 };
-
-pub async fn page_definitions(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionPageRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.page_definition_versions(&auth.user().user_code, request.into()) {
-        Ok(page) => Json(ResourceHttpApiResponse::success(
-            DefinitionVersionPageResponse::from(page),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn get_definition(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionGetRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.get_definition_version(&auth.user().user_code, request.into()) {
-        Ok(record) => Json(ResourceHttpApiResponse::success(
-            DefinitionVersionResponse::from(record),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn create_definition_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionCreateDraftRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.create_definition_draft_for_http(&auth.user().user_code, request.into()) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            DefinitionDraftActionResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn update_definition_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionUpdateDraftRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let command: ResourceDefinitionUpdateDraftCommand = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.update_definition_draft_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            DefinitionDraftActionResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn discard_definition_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionDraftTargetRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let command: ResourceDefinitionDiscardDraftCommand = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.discard_definition_draft_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            DefinitionDraftActionResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn publish_definition_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionDraftTargetRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let command: ResourceDefinitionPublishDraftCommand = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.publish_definition_draft_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            DefinitionActivationResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn activate_definition_version(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionActivateVersionRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.activate_definition_version_for_http(&auth.user().user_code, request.into()) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            DefinitionActivationResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn set_definition_enabled(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionSetEnabledRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.set_definition_enabled_for_http(&auth.user().user_code, request.into()) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            DefinitionActivationResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn delete_definition(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<DefinitionDeleteRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.delete_definition_for_http(&auth.user().user_code, request.into()) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            DefinitionDeleteResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
 
 pub async fn page_resources(
     State(resources): State<ResourceService>,
@@ -234,11 +47,9 @@ pub async fn page_resources(
         Ok(request) => request,
         Err(response) => return response,
     };
-    match resources.page_resource_versions(&auth.user().user_code, request.into()) {
-        Ok(page) => Json(ResourceHttpApiResponse::success(
-            ResourceVersionPageResponse::from(page),
-        ))
-        .into_response(),
+    match resources.query_resources(&auth.user().user_code, request.into()) {
+        Ok(page) => Json(ResourceHttpApiResponse::success(ResourcePageResponse::from(page)))
+            .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
 }
@@ -253,11 +64,9 @@ pub async fn get_resource(
         Ok(request) => request,
         Err(response) => return response,
     };
-    match resources.get_resource_version(&auth.user().user_code, request.into()) {
-        Ok(record) => Json(ResourceHttpApiResponse::success(
-            ResourceVersionResponse::from(record),
-        ))
-        .into_response(),
+    match resources.get_resource(&auth.user().user_code, request.into()) {
+        Ok(record) => Json(ResourceHttpApiResponse::success(ResourceResponse::from(record)))
+            .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
 }
@@ -267,15 +76,55 @@ pub async fn create_resource(
     auth: RequestAuthContext,
     request: Result<Multipart, MultipartRejection>,
 ) -> Response {
-    commit_resource(resources, auth, request, true).await
+    let locale = auth.locale.clone();
+    let multipart = match request {
+        Ok(multipart) => multipart,
+        Err(error) => return malformed_request_response(error.status(), &locale),
+    };
+    let actor_user_code = auth.user().user_code.clone();
+    let form: ResourceCommitForm = match parse_create_form(multipart, &resources).await {
+        Ok(form) => form.into(),
+        Err(UploadParseError::Malformed(status)) => {
+            return malformed_request_response(status, &locale);
+        }
+        Err(UploadParseError::Resource(error)) => return resource_error_response(error, &locale),
+        Err(UploadParseError::Internal) => return internal_error_response(&locale),
+    };
+    let service = resources.clone();
+    match tokio::task::spawn_blocking(move || {
+        let ResourceCommitForm { command, mut binary } = form;
+        std::io::Seek::seek(&mut binary.source, std::io::SeekFrom::Start(0))
+            .map_err(|_| ResourceError::StorageFailure)?;
+        service.create_file_resource(&actor_user_code, command, Some(binary))
+    })
+    .await
+    {
+        Ok(Ok(result)) => Json(ResourceHttpApiResponse::success(ResourceCommitResponse::from(
+            result,
+        )))
+        .into_response(),
+        Ok(Err(error)) => resource_error_response(error, &locale),
+        Err(_) => internal_error_response(&locale),
+    }
 }
 
 pub async fn update_resource(
     State(resources): State<ResourceService>,
     auth: RequestAuthContext,
-    request: Result<Multipart, MultipartRejection>,
+    request: Result<Json<ResourceUpdateRequest>, JsonRejection>,
 ) -> Response {
-    commit_resource(resources, auth, request, false).await
+    let locale = auth.locale.clone();
+    let request = match json_body(request, &locale) {
+        Ok(request) => request,
+        Err(response) => return response,
+    };
+    match resources.update_resource(&auth.user().user_code, request.into()) {
+        Ok(result) => Json(ResourceHttpApiResponse::success(ResourceCommitResponse::from(
+            result,
+        )))
+        .into_response(),
+        Err(error) => resource_error_response(error, &locale),
+    }
 }
 
 pub async fn delete_resource(
@@ -288,121 +137,11 @@ pub async fn delete_resource(
         Ok(request) => request,
         Err(response) => return response,
     };
-    let command = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.delete_resource_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceDeleteResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn create_resource_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<ResourceCreateDraftRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.create_resource_draft_for_http(&auth.user().user_code, request.into()) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceDraftActionResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn update_resource_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<ResourceUpdateDraftRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let command: ResourceUpdateDraftCommand = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.update_resource_draft_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceDraftActionResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn discard_resource_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<ResourceDraftTargetRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let command: ResourceDiscardDraftCommand = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.discard_resource_draft_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceDraftActionResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn publish_resource_draft(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<ResourceDraftTargetRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let command: ResourcePublishDraftCommand = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.publish_resource_draft_for_http(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceActivationResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
-    }
-}
-
-pub async fn activate_resource_version(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<ResourceActivateVersionRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    match resources.activate_resource_version_for_http(&auth.user().user_code, request.into()) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceActivationResponse::from(result),
-        ))
+    let command: ResourceDeleteCommand = request.into();
+    match resources.delete_resource(&auth.user().user_code, command) {
+        Ok(result) => Json(ResourceHttpApiResponse::success(ResourceDeleteResponse::from(
+            result,
+        )))
         .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
@@ -437,7 +176,14 @@ pub async fn upload_binary(
     let service = resources.clone();
     match tokio::task::spawn_blocking(move || {
         let mut file = form.file;
-        service.upload_http_binary_from_file(&actor_user_code, form.command, &mut file)
+        std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(0))
+            .map_err(|_| ResourceError::StorageFailure)?;
+        service.upload_binary_from_reader(
+            &actor_user_code,
+            form.command,
+            &form.file_name,
+            &mut file,
+        )
     })
     .await
     {
@@ -447,70 +193,6 @@ pub async fn upload_binary(
         .into_response(),
         Ok(Err(error)) => resource_error_response(error, &locale),
         Err(_) => internal_error_response(&locale),
-    }
-}
-
-async fn commit_resource(
-    resources: ResourceService,
-    auth: RequestAuthContext,
-    request: Result<Multipart, MultipartRejection>,
-    create: bool,
-) -> Response {
-    let locale = auth.locale.clone();
-    let multipart = match request {
-        Ok(multipart) => multipart,
-        Err(error) => return malformed_request_response(error.status(), &locale),
-    };
-    let actor_user_code = auth.user().user_code.clone();
-    let form = match parse_resource_commit_form(multipart, &resources, &actor_user_code, create)
-        .await
-    {
-        Ok(form) => form,
-        Err(UploadParseError::Malformed(status)) => {
-            return malformed_request_response(status, &locale);
-        }
-        Err(UploadParseError::Resource(error)) => return resource_error_response(error, &locale),
-        Err(UploadParseError::Internal) => return internal_error_response(&locale),
-    };
-    let service = resources.clone();
-    match tokio::task::spawn_blocking(move || {
-        if create {
-            service.create_resource_for_http(&actor_user_code, form.command, form.binaries)
-        } else {
-            service.update_resource_for_http(&actor_user_code, form.command, form.binaries)
-        }
-    })
-    .await
-    {
-        Ok(Ok(result)) => Json(ResourceHttpApiResponse::success(
-            ResourceActivationResponse::from(result),
-        ))
-        .into_response(),
-        Ok(Err(error)) => resource_error_response(error, &locale),
-        Err(_) => internal_error_response(&locale),
-    }
-}
-
-pub async fn remove_binary(
-    State(resources): State<ResourceService>,
-    auth: RequestAuthContext,
-    request: Result<Json<ResourceBinaryRemoveRequest>, JsonRejection>,
-) -> Response {
-    let locale = auth.locale.clone();
-    let request = match json_body(request, &locale) {
-        Ok(request) => request,
-        Err(response) => return response,
-    };
-    let command: ResourceHttpBinaryRemoveCommand = match request.try_into() {
-        Ok(command) => command,
-        Err(error) => return resource_error_response(error, &locale),
-    };
-    match resources.remove_http_binary(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(
-            ResourceBinaryActionResponse::from(result),
-        ))
-        .into_response(),
-        Err(error) => resource_error_response(error, &locale),
     }
 }
 
@@ -524,28 +206,33 @@ pub async fn download_binary(
         Ok(request) => request,
         Err(response) => return response,
     };
-    let command: ResourceHttpBinaryDownloadCommand = request.into();
+    let command: ResourceBinaryDownloadCommand = request.into();
+    let actor_user_code = auth.user().user_code.clone();
+    let service = resources.clone();
+    let (download, record) = match resources.download_binary_to_file(&actor_user_code, command) {
+        Ok(value) => value,
+        Err(error) => return resource_error_response(error, &locale),
+    };
     let file = match tempfile() {
         Ok(file) => file,
         Err(_) => return internal_error_response(&locale),
     };
-    let actor_user_code = auth.user().user_code.clone();
-    let service = resources.clone();
-    let (download, file) = match tokio::task::spawn_blocking(move || {
+    let download_result = tokio::task::spawn_blocking(move || {
         let mut file = file;
-        let download =
-            service.download_http_binary_to_file(&actor_user_code, command, &mut file)?;
-        Ok::<_, ResourceError>((download, file))
+        service.download_binary_storage(&record, &mut file)?;
+        std::io::Seek::seek(&mut file, std::io::SeekFrom::Start(0))
+            .map_err(|_| ResourceError::StorageFailure)?;
+        Ok::<_, ResourceError>(file)
     })
-    .await
-    {
-        Ok(Ok(download)) => download,
+    .await;
+    let file = match download_result {
+        Ok(Ok(file)) => file,
         Ok(Err(error)) => return resource_error_response(error, &locale),
         Err(_) => return internal_error_response(&locale),
     };
     let file = tokio::fs::File::from_std(file);
     let content_length = download.byte_size;
-    let file_name = download.binary_name;
+    let file_name = download.file_name;
     let stream = async_stream::stream! {
         let mut file = file;
         let mut buffer = vec![0_u8; 64 * 1024];
@@ -587,13 +274,23 @@ pub(super) fn json_body<T>(
 }
 
 struct UploadBinaryForm {
-    command: crate::application::resource::ResourceHttpBinaryUploadCommand,
-    file: File,
+    command: crate::application::resource::ResourceBinaryUploadCommand,
+    file_name: String,
+    file: std::fs::File,
 }
 
-struct ResourceCommitForm {
-    command: ResourceCommitCommand,
-    binaries: Vec<ResourceCommitBinary>,
+struct CreateResourceForm {
+    command: ResourceCreateCommand,
+    binary: ResourceCommitBinary,
+}
+
+impl From<CreateResourceForm> for ResourceCommitForm {
+    fn from(value: CreateResourceForm) -> Self {
+        Self {
+            command: value.command,
+            binary: value.binary,
+        }
+    }
 }
 
 enum UploadParseError {
@@ -604,6 +301,74 @@ enum UploadParseError {
 
 const MAX_UPLOAD_CONTROL_FIELD_BYTES: usize = 8 * 1024;
 
+async fn parse_create_form(
+    mut multipart: Multipart,
+    resources: &ResourceService,
+) -> Result<CreateResourceForm, UploadParseError> {
+    let mut command = None;
+    let mut binary = None;
+
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|error| UploadParseError::Malformed(error.status()))?
+    {
+        let name = field
+            .name()
+            .map(str::to_owned)
+            .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
+        match name.as_str() {
+            "command" if command.is_none() && binary.is_none() => {
+                let value =
+                    read_upload_text_with_limit(field, resources.max_commit_control_bytes())
+                        .await?;
+                let request: ResourceCreateRequest = serde_json::from_str(&value)
+                    .map_err(|_| UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
+                command = Some(request.into());
+            }
+            "binary" if command.is_some() && binary.is_none() => {
+                let file_name = field
+                    .file_name()
+                    .map(str::to_owned)
+                    .filter(|name| !name.trim().is_empty())
+                    .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
+                let mut output =
+                    tokio::fs::File::from_std(tempfile().map_err(|_| UploadParseError::Internal)?);
+                let mut received = 0_u64;
+                while let Some(chunk) = field
+                    .chunk()
+                    .await
+                    .map_err(|error| UploadParseError::Malformed(error.status()))?
+                {
+                    received = received
+                        .checked_add(chunk.len() as u64)
+                        .ok_or(UploadParseError::Malformed(StatusCode::PAYLOAD_TOO_LARGE))?;
+                    if received > resources.max_binary_bytes() {
+                        return Err(UploadParseError::Malformed(StatusCode::PAYLOAD_TOO_LARGE));
+                    }
+                    output
+                        .write_all(&chunk)
+                        .await
+                        .map_err(|_| UploadParseError::Internal)?;
+                }
+                output
+                    .flush()
+                    .await
+                    .map_err(|_| UploadParseError::Internal)?;
+                binary = Some(ResourceCommitBinary {
+                    source: output.into_std().await,
+                    file_name,
+                });
+            }
+            _ => return Err(UploadParseError::Malformed(StatusCode::BAD_REQUEST)),
+        }
+    }
+    let command: ResourceCreateCommand =
+        command.ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
+    let binary = binary.ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
+    Ok(CreateResourceForm { command, binary })
+}
+
 async fn parse_upload_form(
     mut multipart: Multipart,
     max_binary_bytes: u64,
@@ -611,12 +376,8 @@ async fn parse_upload_form(
     actor_user_code: &str,
 ) -> Result<UploadBinaryForm, UploadParseError> {
     let mut seen = BTreeSet::new();
-    let mut scope_kind = None;
     let mut workspace_code = None;
     let mut resource_code = None;
-    let mut resource_version = None;
-    let mut expected_draft_revision = None;
-    let mut binary_name = None;
     let mut file = None;
 
     while let Some(mut field) = multipart
@@ -632,31 +393,29 @@ async fn parse_upload_form(
             return Err(UploadParseError::Malformed(StatusCode::BAD_REQUEST));
         }
         if file.is_some() {
-            // Every control field must arrive before the binary field.  This
-            // lets us authorize the exact target before allocating a file.
             return Err(UploadParseError::Malformed(StatusCode::BAD_REQUEST));
         }
         match name.as_str() {
-            "scopeKind" => scope_kind = Some(read_upload_text(field).await?),
             "workspaceCode" => workspace_code = Some(read_upload_text(field).await?),
             "resourceCode" => resource_code = Some(read_upload_text(field).await?),
-            "resourceVersion" => resource_version = Some(read_upload_text(field).await?),
-            "expectedDraftRevision" => {
-                expected_draft_revision = Some(read_upload_text(field).await?)
-            }
-            "binaryName" => binary_name = Some(read_upload_text(field).await?),
             "file" => {
-                let command = upload_command_from_fields(
-                    &scope_kind,
-                    &workspace_code,
-                    &resource_code,
-                    &resource_version,
-                    &expected_draft_revision,
-                    &binary_name,
-                )?;
+                let command = binary_upload_command(
+                    workspace_code
+                        .as_deref()
+                        .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?,
+                    resource_code
+                        .as_deref()
+                        .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?,
+                )
+                .map_err(UploadParseError::Resource)?;
                 resources
-                    .preflight_http_binary_upload(actor_user_code, &command)
+                    .preflight_binary_upload(actor_user_code, &command)
                     .map_err(UploadParseError::Resource)?;
+                let file_name = field
+                    .file_name()
+                    .map(str::to_owned)
+                    .filter(|name| !name.trim().is_empty())
+                    .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
                 let mut output =
                     tokio::fs::File::from_std(tempfile().map_err(|_| UploadParseError::Internal)?);
                 let mut received = 0_u64;
@@ -680,104 +439,19 @@ async fn parse_upload_form(
                     .flush()
                     .await
                     .map_err(|_| UploadParseError::Internal)?;
-                file = Some((command, output.into_std().await));
+                file = Some((command, file_name, output.into_std().await));
             }
             _ => return Err(UploadParseError::Malformed(StatusCode::BAD_REQUEST)),
         }
     }
 
-    let (command, file) = file.ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
-    Ok(UploadBinaryForm { command, file })
-}
-
-async fn parse_resource_commit_form(
-    mut multipart: Multipart,
-    resources: &ResourceService,
-    actor_user_code: &str,
-    create: bool,
-) -> Result<ResourceCommitForm, UploadParseError> {
-    let mut command = None;
-    let mut binaries = Vec::new();
-    let mut binary_names = BTreeSet::new();
-    let mut received_total = 0_u64;
-    let mut seen_binary = false;
-
-    while let Some(mut field) = multipart
-        .next_field()
-        .await
-        .map_err(|error| UploadParseError::Malformed(error.status()))?
-    {
-        let name = field
-            .name()
-            .map(str::to_owned)
-            .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
-        match name.as_str() {
-            "command" if !seen_binary && command.is_none() => {
-                let value =
-                    read_upload_text_with_limit(field, resources.max_commit_control_bytes())
-                        .await?;
-                let request: ResourceCommitRequest = serde_json::from_str(&value)
-                    .map_err(|_| UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
-                let parsed: ResourceCommitCommand = request.into();
-                resources
-                    .preflight_resource_commit(actor_user_code, &parsed, create)
-                    .map_err(UploadParseError::Resource)?;
-                command = Some(parsed);
-            }
-            "binary" => {
-                let _ = command
-                    .as_ref()
-                    .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
-                seen_binary = true;
-                if binaries.len() >= resources.max_commit_binaries() {
-                    return Err(UploadParseError::Malformed(StatusCode::PAYLOAD_TOO_LARGE));
-                }
-                let binary_name = field
-                    .file_name()
-                    .map(str::to_owned)
-                    .filter(|name| !name.trim().is_empty())
-                    .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
-                if !binary_names.insert(binary_name.clone()) {
-                    return Err(UploadParseError::Malformed(StatusCode::BAD_REQUEST));
-                }
-                let mut output =
-                    tokio::fs::File::from_std(tempfile().map_err(|_| UploadParseError::Internal)?);
-                let mut received = 0_u64;
-                while let Some(chunk) = field
-                    .chunk()
-                    .await
-                    .map_err(|error| UploadParseError::Malformed(error.status()))?
-                {
-                    received = received
-                        .checked_add(chunk.len() as u64)
-                        .ok_or(UploadParseError::Malformed(StatusCode::PAYLOAD_TOO_LARGE))?;
-                    received_total = received_total
-                        .checked_add(chunk.len() as u64)
-                        .ok_or(UploadParseError::Malformed(StatusCode::PAYLOAD_TOO_LARGE))?;
-                    if received > resources.max_binary_bytes()
-                        || received_total > resources.max_commit_bytes()
-                    {
-                        return Err(UploadParseError::Malformed(StatusCode::PAYLOAD_TOO_LARGE));
-                    }
-                    output
-                        .write_all(&chunk)
-                        .await
-                        .map_err(|_| UploadParseError::Internal)?;
-                }
-                output
-                    .flush()
-                    .await
-                    .map_err(|_| UploadParseError::Internal)?;
-                binaries.push(ResourceCommitBinary {
-                    binary_name,
-                    source: output.into_std().await,
-                });
-            }
-            _ => return Err(UploadParseError::Malformed(StatusCode::BAD_REQUEST)),
-        }
-    }
-    let command = command.ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
-    Ok(ResourceCommitForm { command, binaries })
+    let (command, file_name, file) =
+        file.ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
+    Ok(UploadBinaryForm {
+        command,
+        file_name,
+        file,
+    })
 }
 
 async fn read_upload_text(
@@ -821,35 +495,6 @@ async fn read_upload_text_with_limit(
         bytes.extend_from_slice(&chunk);
     }
     String::from_utf8(bytes).map_err(|_| UploadParseError::Malformed(StatusCode::BAD_REQUEST))
-}
-
-fn upload_command_from_fields(
-    scope_kind: &Option<String>,
-    workspace_code: &Option<String>,
-    resource_code: &Option<String>,
-    resource_version: &Option<String>,
-    expected_draft_revision: &Option<String>,
-    binary_name: &Option<String>,
-) -> Result<crate::application::resource::ResourceHttpBinaryUploadCommand, UploadParseError> {
-    binary_upload_command(
-        scope_kind
-            .as_deref()
-            .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?,
-        workspace_code.clone(),
-        resource_code
-            .clone()
-            .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?,
-        resource_version
-            .clone()
-            .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?,
-        expected_draft_revision
-            .as_deref()
-            .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?,
-        binary_name
-            .clone()
-            .ok_or(UploadParseError::Malformed(StatusCode::BAD_REQUEST))?,
-    )
-    .map_err(UploadParseError::Resource)
 }
 
 fn content_disposition(
