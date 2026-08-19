@@ -766,6 +766,17 @@ export function TronShell({
                 >
                   {mobileSidebarOpen ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
                 </Button>
+                <Button
+                  className="-ml-3 hidden lg:flex"
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setSidebarCollapsed(!sidebarCollapsed)
+                  }}
+                >
+                  {sidebarCollapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
+                </Button>
                 <button
                   ref={workspaceTriggerRef}
                   className="inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 items-center gap-2 rounded-lg bg-[var(--color-surface-container)] px-3 text-sm font-medium text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
@@ -1007,11 +1018,6 @@ export function TronShell({
           >
             <div className={cn("h-full overflow-y-auto px-2 pt-2")}>
               {renderSidebarContent()}
-            </div>
-            <div className={cn('w-full h-10 flex-none px-5 flex items-center shadow-[0px_-10px_28px_rgba(15,23,42,0.04)]')}>
-              <div className="cursor-pointer" onClick={() => setSidebarCollapsed(!sidebarCollapsed)}>
-                {sidebarCollapsed ? <PanelLeftClose size={17} /> : <PanelLeftOpen size={17} />}
-              </div>
             </div>
           </aside>
 
