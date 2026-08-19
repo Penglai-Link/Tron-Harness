@@ -153,10 +153,19 @@ const workspaceResources: ResourceRecord[] = [
 export function listWorkspaceResources(workspaceCode: string, workspaceName: string) {
   if (!workspaceCode) return [];
   void workspaceName;
-  return workspaceResources.map((record) => ({
-    ...clone(record),
-    workspaceCode,
-  }));
+  const records = new Map<string, ResourceRecord>();
+  for (const record of workspaceResources) {
+    const key = mockResourceKey(workspaceCode, record.resourceCode);
+    if (!mockDeletedResourceKeys.has(key)) {
+      records.set(record.resourceCode, { ...clone(record), workspaceCode });
+    }
+  }
+  for (const record of mockResourceOverrides) {
+    if (record.workspaceCode === workspaceCode) {
+      records.set(record.resourceCode, clone(record));
+    }
+  }
+  return [...records.values()];
 }
 
 export function getWorkspaceResourceDetail(
@@ -179,7 +188,33 @@ export interface MockQuickResourceCreateInput {
   workspaceCode: string;
 }
 
-const mockCreatedResources: ResourceRecord[] = [];
+export interface MockManagedResourceCreateInput {
+  allowInheritance: boolean;
+  attributes: Record<string, unknown> | null;
+  description: string;
+  file: ResourceRecord["file"];
+  kind: ResourceRecord["kind"];
+  name: string;
+  resourceCode: string;
+  workspaceCode: string;
+}
+
+const mockResourceOverrides: ResourceRecord[] = [];
+const mockDeletedResourceKeys = new Set<string>();
+
+function mockResourceKey(workspaceCode: string, resourceCode: string) {
+  return `${workspaceCode}:${resourceCode}`;
+}
+
+function upsertMockResource(record: ResourceRecord) {
+  const index = mockResourceOverrides.findIndex((candidate) => (
+    candidate.workspaceCode === record.workspaceCode
+    && candidate.resourceCode === record.resourceCode
+  ));
+  if (index >= 0) mockResourceOverrides.splice(index, 1, clone(record));
+  else mockResourceOverrides.unshift(clone(record));
+  mockDeletedResourceKeys.delete(mockResourceKey(record.workspaceCode, record.resourceCode));
+}
 
 export function createMockQuickResource(input: MockQuickResourceCreateInput): ResourceRecord {
   const now = new Date().toISOString();
@@ -203,10 +238,71 @@ export function createMockQuickResource(input: MockQuickResourceCreateInput): Re
     updatedAt: now,
     workspaceCode: input.workspaceCode,
   };
-  mockCreatedResources.unshift(record);
+  upsertMockResource(record);
+  return clone(record);
+}
+
+export function createMockManagedResource(input: MockManagedResourceCreateInput): ResourceRecord {
+  const now = new Date().toISOString();
+  const record: ResourceRecord = {
+    ...input,
+    createdAt: now,
+    sourceKind: "LOCAL",
+    updatedAt: now,
+  };
+  upsertMockResource(record);
   return clone(record);
 }
 
 export function listMockCreatedResources(workspaceCode: string) {
-  return mockCreatedResources.filter((record) => record.workspaceCode === workspaceCode).map(clone);
+  return mockResourceOverrides
+    .filter((record) => record.workspaceCode === workspaceCode)
+    .map(clone);
+}
+
+export function updateMockResource(
+  workspaceCode: string,
+  resourceCode: string,
+  changes: Pick<ResourceRecord, "allowInheritance" | "attributes" | "description" | "name">,
+) {
+  const current = getWorkspaceResourceDetail(workspaceCode, "", resourceCode);
+  if (!current || current.sourceKind !== "LOCAL") return null;
+  const updated: ResourceRecord = {
+    ...current,
+    ...changes,
+    updatedAt: new Date().toISOString(),
+  };
+  upsertMockResource(updated);
+  return clone(updated);
+}
+
+export function replaceMockResourceFile(
+  workspaceCode: string,
+  resourceCode: string,
+  file: File,
+) {
+  const current = getWorkspaceResourceDetail(workspaceCode, "", resourceCode);
+  if (!current || current.sourceKind !== "LOCAL" || !current.file) return null;
+  const updated: ResourceRecord = {
+    ...current,
+    file: {
+      byteSize: file.size,
+      fileExtension: file.name.includes(".") ? file.name.slice(file.name.lastIndexOf(".") + 1).toLowerCase() : "",
+      fileName: file.name,
+    },
+    updatedAt: new Date().toISOString(),
+  };
+  upsertMockResource(updated);
+  return clone(updated);
+}
+
+export function deleteMockResource(workspaceCode: string, resourceCode: string) {
+  const current = getWorkspaceResourceDetail(workspaceCode, "", resourceCode);
+  if (!current || current.sourceKind !== "LOCAL") return false;
+  mockDeletedResourceKeys.add(mockResourceKey(workspaceCode, resourceCode));
+  const index = mockResourceOverrides.findIndex((candidate) => (
+    candidate.workspaceCode === workspaceCode && candidate.resourceCode === resourceCode
+  ));
+  if (index >= 0) mockResourceOverrides.splice(index, 1);
+  return true;
 }

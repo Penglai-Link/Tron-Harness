@@ -25,6 +25,10 @@ use super::{ObjectStorage, ResourceConnectionVerifier, ResourceRepository};
 
 pub use storage::StorageRouter;
 
+/// The platform settings resource scope has no workspace record or upstream
+/// workspace inheritance.
+const PLATFORM_RESOURCE_SCOPE: &str = "PLATFORM";
+
 #[derive(Clone)]
 pub struct ResourceService {
     repository: Arc<Mutex<Box<dyn ResourceRepository>>>,

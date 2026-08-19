@@ -1,27 +1,29 @@
 import { useMemo } from "react";
 
-import { pageConnections } from "@/domain/resource/api";
-import { listWorkspaceResources } from "@/domain/resource/mock";
-import type {
-  ResourceApiRecord,
-  ResourceKindCode,
-  ResourceSourceCode,
+import {
+  fromResourceKindCode,
+  fromResourceSourceCode,
+  pageConnections,
+  toResourceKindCode,
 } from "@/domain/resource/api";
+import { listWorkspaceResources } from "@/domain/resource/mock";
+import type { ResourceApiRecord } from "@/domain/resource/api";
+import type { ResourceKind, ResourceSourceKind } from "@/domain/resource/model";
 
 import { useResourceApiQuery } from "./useResourceApiQuery";
 
 export interface ManagedResourceRecord {
   attributes: Record<string, unknown>;
   description: string;
-  kind: ResourceKindCode;
+  kind: ResourceKind;
   name: string;
   resourceCode: string;
-  sourceKind: ResourceSourceCode;
+  sourceKind: ResourceSourceKind;
   updatedAt: number;
 }
 
 interface ManagedResourceQuery {
-  kinds: readonly ResourceKindCode[];
+  kinds: readonly ResourceKind[];
   search: string;
   workspaceCode: string | null;
   workspaceName: string;
@@ -31,10 +33,10 @@ function toManagedRecord(record: ResourceApiRecord): ManagedResourceRecord {
   return {
     attributes: record.attributes ?? {},
     description: record.description,
-    kind: record.kind,
+    kind: fromResourceKindCode(record.kind),
     name: record.name,
     resourceCode: record.resourceCode,
-    sourceKind: record.sourceKind,
+    sourceKind: fromResourceSourceCode(record.sourceKind),
     updatedAt: record.updatedAt,
   };
 }
@@ -60,14 +62,19 @@ export function useManagedResourceRecords(query: ManagedResourceQuery) {
   const kindKey = query.kinds.join("|");
   const result = useResourceApiQuery<ManagedResourceRecord[]>({
     api: async () => {
-      const pages = await Promise.all(query.kinds.map((kind) => pageConnections({
+      const request = {
         current: 1,
-        kind,
+        kinds: query.kinds.map(toResourceKindCode),
         search: query.search.trim() || null,
-        size: 200,
+        size: 50,
         workspaceCode: query.workspaceCode ?? "",
-      })));
-      return pages
+      };
+      const firstPage = await pageConnections(request);
+      const remainingPages = await Promise.all(Array.from(
+        { length: Math.max(0, Math.ceil(firstPage.total / firstPage.size) - 1) },
+        (_, index) => pageConnections({ ...request, current: index + 2 }),
+      ));
+      return [firstPage, ...remainingPages]
         .flatMap((page) => page.records.map(toManagedRecord))
         .sort((left, right) => right.updatedAt - left.updatedAt);
     },

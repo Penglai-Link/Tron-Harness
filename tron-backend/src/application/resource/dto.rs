@@ -6,7 +6,8 @@ use crate::domain::resource::{ResourceKind, ResourceSourceKind};
 #[derive(Debug, Clone)]
 pub struct ResourcePageQuery {
     pub workspace_code: String,
-    pub kind: Option<ResourceKind>,
+    pub kinds: Vec<ResourceKind>,
+    pub source_kind: Option<ResourceSourceKind>,
     pub search: Option<String>,
     pub current: usize,
     pub size: usize,

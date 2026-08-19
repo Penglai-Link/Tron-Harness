@@ -27,14 +27,8 @@ pub fn routes(resources: &ResourceService) -> Router<AppState> {
             "/api/v1/resources/upload-binary",
             post(upload_binary).layer(upload_body_limit(resources.max_binary_bytes())),
         )
-        .route(
-            "/api/v1/resources/download-binary",
-            post(download_binary),
-        )
-        .route(
-            "/api/v1/resource-connections/page",
-            post(page_connections),
-        )
+        .route("/api/v1/resources/download-binary", post(download_binary))
+        .route("/api/v1/resource-connections/page", post(page_connections))
         .route(
             "/api/v1/resource-connections/data-sources",
             post(create_data_source),

@@ -48,8 +48,10 @@ pub async fn page_resources(
         Err(response) => return response,
     };
     match resources.query_resources(&auth.user().user_code, request.into()) {
-        Ok(page) => Json(ResourceHttpApiResponse::success(ResourcePageResponse::from(page)))
-            .into_response(),
+        Ok(page) => Json(ResourceHttpApiResponse::success(
+            ResourcePageResponse::from(page),
+        ))
+        .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
 }
@@ -65,8 +67,10 @@ pub async fn get_resource(
         Err(response) => return response,
     };
     match resources.get_resource(&auth.user().user_code, request.into()) {
-        Ok(record) => Json(ResourceHttpApiResponse::success(ResourceResponse::from(record)))
-            .into_response(),
+        Ok(record) => Json(ResourceHttpApiResponse::success(ResourceResponse::from(
+            record,
+        )))
+        .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
 }
@@ -92,16 +96,19 @@ pub async fn create_resource(
     };
     let service = resources.clone();
     match tokio::task::spawn_blocking(move || {
-        let ResourceCommitForm { command, mut binary } = form;
+        let ResourceCommitForm {
+            command,
+            mut binary,
+        } = form;
         std::io::Seek::seek(&mut binary.source, std::io::SeekFrom::Start(0))
             .map_err(|_| ResourceError::StorageFailure)?;
         service.create_file_resource(&actor_user_code, command, Some(binary))
     })
     .await
     {
-        Ok(Ok(result)) => Json(ResourceHttpApiResponse::success(ResourceCommitResponse::from(
-            result,
-        )))
+        Ok(Ok(result)) => Json(ResourceHttpApiResponse::success(
+            ResourceCommitResponse::from(result),
+        ))
         .into_response(),
         Ok(Err(error)) => resource_error_response(error, &locale),
         Err(_) => internal_error_response(&locale),
@@ -119,9 +126,9 @@ pub async fn update_resource(
         Err(response) => return response,
     };
     match resources.update_resource(&auth.user().user_code, request.into()) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(ResourceCommitResponse::from(
-            result,
-        )))
+        Ok(result) => Json(ResourceHttpApiResponse::success(
+            ResourceCommitResponse::from(result),
+        ))
         .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
@@ -139,9 +146,9 @@ pub async fn delete_resource(
     };
     let command: ResourceDeleteCommand = request.into();
     match resources.delete_resource(&auth.user().user_code, command) {
-        Ok(result) => Json(ResourceHttpApiResponse::success(ResourceDeleteResponse::from(
-            result,
-        )))
+        Ok(result) => Json(ResourceHttpApiResponse::success(
+            ResourceDeleteResponse::from(result),
+        ))
         .into_response(),
         Err(error) => resource_error_response(error, &locale),
     }
@@ -270,7 +277,7 @@ pub(super) fn json_body<T>(
 ) -> Result<T, Response> {
     request
         .map(|Json(value)| value)
-        .map_err(|error| malformed_request_response(error.status(), locale))
+        .map_err(|_| malformed_request_response(StatusCode::BAD_REQUEST, locale))
 }
 
 struct UploadBinaryForm {

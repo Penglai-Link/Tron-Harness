@@ -60,6 +60,31 @@ impl From<ResourcePage> for ResourcePageResponse {
     }
 }
 
+/// Response DTO for the connection-specific page endpoint.
+///
+/// Keep this separate from `ResourcePageResponse`: this endpoint is a
+/// connection-only contract and must not silently gain file-resource fields
+/// when the generic resource API evolves.
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionPageResponse {
+    pub current: usize,
+    pub size: usize,
+    pub total: usize,
+    pub records: Vec<ConnectionResponse>,
+}
+
+impl From<ResourcePage> for ConnectionPageResponse {
+    fn from(value: ResourcePage) -> Self {
+        Self {
+            current: value.current,
+            size: value.size,
+            total: value.total,
+            records: value.records.into_iter().map(Into::into).collect(),
+        }
+    }
+}
+
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceFileSummaryResponse {
@@ -108,6 +133,44 @@ impl From<ResourceRecord> for ResourceResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ConnectionResponse {
+    pub workspace_code: String,
+    pub source_kind: ResourceSourceKind,
+    pub resource_code: String,
+    pub kind: ResourceKind,
+    pub name: String,
+    pub description: String,
+    pub allow_inheritance: bool,
+    pub file: Option<ResourceFileSummaryResponse>,
+    pub attributes: Option<serde_json::Value>,
+    pub created_at: i64,
+    pub updated_at: i64,
+}
+
+impl From<ResourceRecord> for ConnectionResponse {
+    fn from(value: ResourceRecord) -> Self {
+        Self {
+            workspace_code: value.workspace_code,
+            source_kind: value.source_kind,
+            resource_code: value.resource_code,
+            kind: value.kind,
+            name: value.name,
+            description: value.description,
+            allow_inheritance: value.allow_inheritance,
+            file: value.file.map(|file| ResourceFileSummaryResponse {
+                file_name: file.file_name,
+                file_extension: file.file_extension,
+                byte_size: file.byte_size,
+            }),
+            attributes: value.attributes,
+            created_at: timestamp_to_millis(&value.created_at),
+            updated_at: timestamp_to_millis(&value.updated_at),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub struct ResourceCommitResponse {
     pub resource_code: String,
     pub kind: ResourceKind,
@@ -130,6 +193,22 @@ pub struct ResourceDeleteResponse {
 }
 
 impl From<ResourceDeleteResult> for ResourceDeleteResponse {
+    fn from(value: ResourceDeleteResult) -> Self {
+        Self {
+            resource_code: value.resource_code,
+            deleted: value.deleted,
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ConnectionDeleteResponse {
+    pub resource_code: String,
+    pub deleted: bool,
+}
+
+impl From<ResourceDeleteResult> for ConnectionDeleteResponse {
     fn from(value: ResourceDeleteResult) -> Self {
         Self {
             resource_code: value.resource_code,

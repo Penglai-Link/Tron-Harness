@@ -1,20 +1,20 @@
 import { requestApi } from "@/shared/api/httpClient";
 
 import type {
-  ResourceApiPage,
-  ResourceApiRecord,
-  ResourcePageApiRequest,
+  ResourceApiPage, ResourceApiRecord,
 } from "./resourceApiContract";
 import type {
   ConnectionCommitApiResult,
   ConnectionDeleteApiRequest,
   ConnectionDeleteApiResult,
+  ConnectionPageApiRequest,
   DataSourceCreateApiRequest,
   DataSourceUpdateApiRequest,
   ServerAccountCreateApiRequest,
   ServerCreateApiRequest,
   ServerCreateApiResult,
 } from "./resourceConnectionApiContract";
+import { toResourceKindCode } from "./resourceApiContract";
 
 export const resourceConnectionApiEndpoints = {
   connectionDelete: "POST /api/v1/resource-connections/delete",
@@ -25,7 +25,7 @@ export const resourceConnectionApiEndpoints = {
   createServerAccount: "POST /api/v1/resource-connections/server-accounts",
 } as const;
 
-export function pageConnections(request: ResourcePageApiRequest) {
+export function pageConnections(request: ConnectionPageApiRequest) {
   return requestApi<ResourceApiPage<ResourceApiRecord>>(
     resourceConnectionApiEndpoints.connectionPage,
     { body: request },
@@ -35,7 +35,7 @@ export function pageConnections(request: ResourcePageApiRequest) {
 export function createDataSourceConnection(request: DataSourceCreateApiRequest) {
   return requestApi<ConnectionCommitApiResult>(
     resourceConnectionApiEndpoints.createDataSource,
-    { body: request },
+    { body: { ...request, kind: toResourceKindCode(request.kind) } },
   );
 }
 

@@ -8,12 +8,14 @@ use std::{
     time::{SystemTime, UNIX_EPOCH},
 };
 
+use tokio::sync::Notify;
+
 use serde_json::json;
 use tron_backend::{
     app::AppState,
     application::resource::{
         DataSourceCreateCommand, ResourceConnectionTarget, ResourceConnectionVerificationFuture,
-        ResourceConnectionVerifier, ResourceDeleteCommand, ResourcePageQuery,
+        ResourceConnectionVerifier, ResourceDeleteCommand, ResourceGetQuery, ResourcePageQuery,
         ServerAccountCreateCommand, ServerAccountCreateInput, ServerCreateCommand,
     },
     config::{AppConfig, ResourceConfig},
@@ -23,13 +25,36 @@ use tron_backend::{
 use common::prepared_config;
 
 const ACTOR: &str = "USR-AUTH-0001";
+const PLATFORM_ACTOR: &str = "USR-LARGE-ID";
 const WORKSPACE: &str = "TRON_CORE";
+const PLATFORM_WORKSPACE: &str = "PLATFORM";
 const SECRET_VARIABLE: &str = "OPENAI_API_KEY";
 
 #[derive(Clone)]
 struct FakeConnectionVerifier {
     calls: Arc<AtomicUsize>,
     fail: bool,
+}
+
+#[derive(Clone)]
+struct BlockingConnectionVerifier {
+    release: Arc<Notify>,
+    started: Arc<Notify>,
+}
+
+impl ResourceConnectionVerifier for BlockingConnectionVerifier {
+    fn verify(
+        &self,
+        _target: ResourceConnectionTarget,
+    ) -> ResourceConnectionVerificationFuture<'_> {
+        let release = self.release.clone();
+        let started = self.started.clone();
+        Box::pin(async move {
+            started.notify_one();
+            release.notified().await;
+            Ok(())
+        })
+    }
 }
 
 impl ResourceConnectionVerifier for FakeConnectionVerifier {
@@ -99,6 +124,48 @@ async fn non_data_source_kind_is_rejected_by_connection_endpoint() {
 }
 
 #[tokio::test]
+async fn data_source_attribute_validation_rejects_invalid_schema_values_before_verification() {
+    let (state, calls) = resource_state("data-source-attribute-validation", false);
+    let mut invalid_mysql = mysql_attributes();
+    invalid_mysql["connectionMode"] = json!("NOT_A_MODE");
+    for (resource_code, kind, attributes) in [
+        (
+            "MYSQL_INVALID_MODE",
+            ResourceKind::MysqlConnection,
+            invalid_mysql,
+        ),
+        (
+            "REDIS_NEGATIVE_DATABASE",
+            ResourceKind::RedisConnection,
+            json!({
+                "topology": "STANDALONE",
+                "endpoints": [{ "host": "redis.internal", "port": 6379 }],
+                "database": -1,
+                "tls": { "mode": "DISABLED" }
+            }),
+        ),
+    ] {
+        let result = state
+            .resources
+            .create_data_source_for_http(
+                ACTOR,
+                DataSourceCreateCommand {
+                    workspace_code: WORKSPACE.to_string(),
+                    resource_code: resource_code.to_string(),
+                    kind,
+                    name: resource_code.to_string(),
+                    description: String::new(),
+                    attributes,
+                    allow_inheritance: false,
+                },
+            )
+            .await;
+        assert_eq!(result, Err(ResourceError::InvalidInput));
+    }
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+}
+
+#[tokio::test]
 async fn failed_data_source_probe_does_not_persist_the_resource() {
     let (state, calls) = resource_state("data-source-failure", true);
     let error = state
@@ -154,17 +221,39 @@ async fn data_source_password_accepts_direct_input_or_a_variable_reference() {
     }
     assert_eq!(calls.load(Ordering::SeqCst), 2);
     let direct = resources(&state, Some("MYSQL_DIRECT_PASSWORD"));
+    assert!(direct.records[0].attributes.is_none());
+    let direct = state
+        .resources
+        .get_resource(
+            ACTOR,
+            ResourceGetQuery {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "MYSQL_DIRECT_PASSWORD".to_string(),
+            },
+        )
+        .expect("direct connection should be readable without its secret");
     assert_eq!(
-        direct.records[0]
+        direct
             .attributes
             .as_ref()
             .and_then(|attributes| attributes.pointer("/credentials/password/value"))
-            .and_then(serde_json::Value::as_str),
-        Some("database-password")
+            .cloned(),
+        Some(serde_json::Value::Null)
     );
     let variable = resources(&state, Some("MYSQL_VARIABLE_PASSWORD"));
+    assert!(variable.records[0].attributes.is_none());
+    let variable = state
+        .resources
+        .get_resource(
+            ACTOR,
+            ResourceGetQuery {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "MYSQL_VARIABLE_PASSWORD".to_string(),
+            },
+        )
+        .expect("variable connection should be readable");
     assert_eq!(
-        variable.records[0]
+        variable
             .attributes
             .as_ref()
             .and_then(|attributes| attributes.pointer("/credentials/password/variableKey"))
@@ -238,6 +327,17 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
             .next()
             .expect("account should be queryable");
         assert_eq!(account.kind, ResourceKind::ServerAccount);
+        assert!(account.attributes.is_none());
+        let account = state
+            .resources
+            .get_resource(
+                ACTOR,
+                ResourceGetQuery {
+                    workspace_code: WORKSPACE.to_string(),
+                    resource_code: account_code.to_string(),
+                },
+            )
+            .expect("account details should be queryable");
         assert_eq!(
             account
                 .attributes
@@ -247,10 +347,15 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
             Some("SERVER_PROD_1")
         );
     }
-    let private_key_account = resources(&state, Some("SERVER_PROD_1_AUTOMATION"))
-        .records
-        .into_iter()
-        .next()
+    let private_key_account = state
+        .resources
+        .get_resource(
+            ACTOR,
+            ResourceGetQuery {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "SERVER_PROD_1_AUTOMATION".to_string(),
+            },
+        )
         .expect("private-key account should be queryable");
     assert_eq!(
         private_key_account
@@ -327,10 +432,201 @@ async fn failed_ssh_probe_persists_neither_server_nor_initial_account() {
     assert_eq!(resources(&state, Some("SERVER_FAILED_ROOT")).total, 0);
 }
 
+#[tokio::test]
+async fn inherited_server_accepts_a_local_workspace_account() {
+    let (state, _) = resource_state("inherited-server-account", false);
+    state
+        .resources
+        .create_server_for_http(
+            PLATFORM_ACTOR,
+            ServerCreateCommand {
+                workspace_code: PLATFORM_WORKSPACE.to_string(),
+                server_code: "PLATFORM_SHARED_SERVER".to_string(),
+                name: "Platform server".to_string(),
+                description: String::new(),
+                host: "server.internal".to_string(),
+                port: 22,
+                allow_inheritance: true,
+                initial_account: password_account_with_variable(
+                    "PLATFORM_SHARED_SERVER_ROOT",
+                    "root",
+                    "ROUTER_TIMEOUT_MS",
+                ),
+            },
+        )
+        .await
+        .expect("platform server should be created");
+
+    let inherited = resources(&state, Some("PLATFORM_SHARED_SERVER"));
+    assert_eq!(inherited.total, 1);
+    assert_eq!(
+        inherited.records[0].source_kind,
+        tron_backend::domain::resource::ResourceSourceKind::Inherited,
+    );
+
+    let created = state
+        .resources
+        .create_server_account_for_http(
+            ACTOR,
+            ServerAccountCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                server_code: "PLATFORM_SHARED_SERVER".to_string(),
+                account: password_account("TRON_CORE_SHARED_SERVER_DEPLOY", "deploy"),
+            },
+        )
+        .expect("child workspace should be able to bind its own account");
+    assert_eq!(created.kind, ResourceKind::ServerAccount);
+}
+
+#[tokio::test]
+async fn server_account_rejects_unknown_or_blank_variable_references() {
+    let (state, _) = resource_state("server-account-variable-validation", false);
+    state
+        .resources
+        .create_server_for_http(
+            ACTOR,
+            ServerCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                server_code: "VARIABLE_CHECK_SERVER".to_string(),
+                name: "Variable check server".to_string(),
+                description: String::new(),
+                host: "server.internal".to_string(),
+                port: 22,
+                allow_inheritance: false,
+                initial_account: password_account("VARIABLE_CHECK_ROOT", "root"),
+            },
+        )
+        .await
+        .expect("server should be created");
+
+    let mut blank = password_account("VARIABLE_CHECK_BLANK", "blank");
+    blank.password_variable_key = Some(" ".to_string());
+    assert_eq!(
+        state.resources.create_server_account_for_http(
+            ACTOR,
+            ServerAccountCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                server_code: "VARIABLE_CHECK_SERVER".to_string(),
+                account: blank,
+            },
+        ),
+        Err(ResourceError::InvalidInput),
+    );
+
+    let unknown = password_account_with_variable(
+        "VARIABLE_CHECK_UNKNOWN",
+        "unknown",
+        "MISSING_SERVER_PASSWORD",
+    );
+    assert_eq!(
+        state.resources.create_server_account_for_http(
+            ACTOR,
+            ServerAccountCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                server_code: "VARIABLE_CHECK_SERVER".to_string(),
+                account: unknown,
+            },
+        ),
+        Err(ResourceError::InvalidVariableReference),
+    );
+}
+
+#[tokio::test]
+async fn data_source_update_does_not_overwrite_a_concurrent_metadata_change() {
+    let (mut state, _) = resource_state("data-source-update-conflict", false);
+    state
+        .resources
+        .create_data_source_for_http(
+            ACTOR,
+            DataSourceCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "MYSQL_CONCURRENT".to_string(),
+                kind: ResourceKind::MysqlConnection,
+                name: "Original name".to_string(),
+                description: String::new(),
+                attributes: mysql_attributes(),
+                allow_inheritance: false,
+            },
+        )
+        .await
+        .expect("data source should be created");
+
+    let started = Arc::new(Notify::new());
+    let release = Arc::new(Notify::new());
+    state.resources =
+        state
+            .resources
+            .clone()
+            .with_connection_verifier(Arc::new(BlockingConnectionVerifier {
+                release: release.clone(),
+                started: started.clone(),
+            }));
+    let updating = state.resources.clone();
+    let update = tokio::spawn(async move {
+        updating
+            .update_data_source_for_http(
+                ACTOR,
+                tron_backend::application::resource::DataSourceUpdateCommand {
+                    workspace_code: WORKSPACE.to_string(),
+                    resource_code: "MYSQL_CONCURRENT".to_string(),
+                    name: None,
+                    description: None,
+                    attributes: Some(mysql_attributes_with_host("mysql-relocated.internal")),
+                    allow_inheritance: None,
+                },
+            )
+            .await
+    });
+    started.notified().await;
+
+    state
+        .resources
+        .update_resource(
+            ACTOR,
+            tron_backend::application::resource::ResourceUpdateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "MYSQL_CONCURRENT".to_string(),
+                name: Some("Concurrent name".to_string()),
+                description: None,
+                allow_inheritance: None,
+            },
+        )
+        .expect("metadata update should succeed while verification is pending");
+    release.notify_one();
+
+    assert_eq!(
+        update.await.expect("update task should join"),
+        Err(ResourceError::Conflict),
+    );
+    let detail = state
+        .resources
+        .get_resource(
+            ACTOR,
+            ResourceGetQuery {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "MYSQL_CONCURRENT".to_string(),
+            },
+        )
+        .expect("data source should remain readable");
+    assert_eq!(detail.name, "Concurrent name");
+    assert_eq!(
+        detail
+            .attributes
+            .as_ref()
+            .and_then(|attributes| attributes.pointer("/endpoints/0/host"))
+            .and_then(serde_json::Value::as_str),
+        Some("mysql.internal"),
+    );
+}
+
 fn mysql_attributes() -> serde_json::Value {
+    mysql_attributes_with_host("mysql.internal")
+}
+
+fn mysql_attributes_with_host(host: &str) -> serde_json::Value {
     json!({
         "connectionMode": "SINGLE",
-        "endpoints": [{ "host": "mysql.internal", "port": 3306 }],
+        "endpoints": [{ "host": host, "port": 3306 }],
         "database": "tron",
         "credentials": {
             "username": "tron_user",
@@ -354,13 +650,21 @@ fn mysql_attributes_with_variable_password() -> serde_json::Value {
 }
 
 fn password_account(account_code: &str, username: &str) -> ServerAccountCreateInput {
+    password_account_with_variable(account_code, username, SECRET_VARIABLE)
+}
+
+fn password_account_with_variable(
+    account_code: &str,
+    username: &str,
+    password_variable_key: &str,
+) -> ServerAccountCreateInput {
     ServerAccountCreateInput {
         account_code: account_code.to_string(),
         name: format!("{username} account"),
         description: String::new(),
         username: username.to_string(),
         authentication_type: ServerAuthenticationType::Password,
-        password_variable_key: Some(SECRET_VARIABLE.to_string()),
+        password_variable_key: Some(password_variable_key.to_string()),
         private_key_variable_key: None,
         private_key_passphrase_variable_key: None,
         allow_inheritance: false,
@@ -410,7 +714,8 @@ fn resources(
             ACTOR,
             ResourcePageQuery {
                 workspace_code: WORKSPACE.to_string(),
-                kind: None,
+                kinds: Vec::new(),
+                source_kind: None,
                 search: resource_code.map(str::to_string),
                 current: 1,
                 size: 50,

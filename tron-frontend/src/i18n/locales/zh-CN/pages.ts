@@ -234,7 +234,7 @@ export const pages = {
         created: "{{name}} 已上传。",
       },
       pdf: {
-        failed: "无法读取 PDF 页数。编辑页会保留为 0，请手动补充正确页数。",
+        failed: "无法读取 PDF 页数，但仍可继续上传该 PDF。",
         pages: "已识别 {{count}} 页",
         reading: "正在读取 PDF 页数...",
       },
@@ -257,6 +257,7 @@ export const pages = {
       override: "覆盖",
     },
     title: {
+      platform: "平台资源",
       workspace: "资源",
     },
   },

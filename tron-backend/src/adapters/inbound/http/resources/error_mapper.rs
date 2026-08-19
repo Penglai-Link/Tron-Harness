@@ -8,7 +8,17 @@ use crate::domain::resource::ResourceError;
 
 use super::ResourceHttpApiResponse;
 
-const UNREGISTERED_RESOURCE_ERROR_CODE: &str = "-1";
+const RESOURCE_MALFORMED_REQUEST_CODE: &str = "100100001";
+const RESOURCE_NOT_FOUND_CODE: &str = "100100002";
+const RESOURCE_FORBIDDEN_CODE: &str = "100100003";
+const RESOURCE_CONFLICT_CODE: &str = "100100004";
+const RESOURCE_INVALID_INPUT_CODE: &str = "100100005";
+const RESOURCE_VARIABLE_REFERENCE_CODE: &str = "100100006";
+const RESOURCE_BINARY_MISSING_CODE: &str = "100100007";
+const RESOURCE_PATH_DENIED_CODE: &str = "100100008";
+const RESOURCE_STORAGE_PROFILE_CODE: &str = "100100009";
+const RESOURCE_STORAGE_LOCATOR_CODE: &str = "100100010";
+const RESOURCE_CONNECTION_VERIFICATION_CODE: &str = "100100011";
 
 pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
     let status = match &error {
@@ -29,7 +39,7 @@ pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
     (
         status,
         Json(ResourceHttpApiResponse::error(
-            UNREGISTERED_RESOURCE_ERROR_CODE,
+            resource_error_code(&error),
             localized_resource_error(error, locale),
         )),
     )
@@ -40,7 +50,7 @@ pub fn malformed_request_response(status: StatusCode, locale: &str) -> Response 
     (
         status,
         Json(ResourceHttpApiResponse::error(
-            UNREGISTERED_RESOURCE_ERROR_CODE,
+            RESOURCE_MALFORMED_REQUEST_CODE,
             localized_message(
                 locale,
                 "请求参数或请求体格式不正确",
@@ -49,6 +59,25 @@ pub fn malformed_request_response(status: StatusCode, locale: &str) -> Response 
         )),
     )
         .into_response()
+}
+
+fn resource_error_code(error: &ResourceError) -> &'static str {
+    match error {
+        ResourceError::NotFound => RESOURCE_NOT_FOUND_CODE,
+        ResourceError::Forbidden => RESOURCE_FORBIDDEN_CODE,
+        ResourceError::Conflict | ResourceError::ServerHasAccounts => RESOURCE_CONFLICT_CODE,
+        ResourceError::MissingBinaryObject => RESOURCE_BINARY_MISSING_CODE,
+        ResourceError::PathDenied => RESOURCE_PATH_DENIED_CODE,
+        ResourceError::StorageProfileNotFound => RESOURCE_STORAGE_PROFILE_CODE,
+        ResourceError::StorageLocatorInvalid => RESOURCE_STORAGE_LOCATOR_CODE,
+        ResourceError::ConnectionVerificationFailed(_) => RESOURCE_CONNECTION_VERIFICATION_CODE,
+        ResourceError::WorkspaceRequired
+        | ResourceError::InvalidWorkspace
+        | ResourceError::InvalidCode
+        | ResourceError::InvalidInput => RESOURCE_INVALID_INPUT_CODE,
+        ResourceError::InvalidVariableReference => RESOURCE_VARIABLE_REFERENCE_CODE,
+        ResourceError::StorageFailure => "-1",
+    }
 }
 
 pub fn internal_error_response(locale: &str) -> Response {

@@ -3,6 +3,7 @@ mod common;
 use std::{
     fs,
     path::PathBuf,
+    sync::Arc,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -11,17 +12,18 @@ use tempfile::tempfile;
 use tron_backend::{
     app::AppState,
     application::{
-        agent::{BusinessToolCatalog, tool_record_to_effective_tool},
+        agent::{BusinessToolCatalog, register_default_agent_tools, tool_record_to_effective_tool},
         resource::{
-            ResourceBinaryAgentCommand, ResourceCommitBinary, ResourceCreateCommand,
-            ResourcePageQuery, ResourceUpdateCommand,
+            ResourceBinaryAgentCommand, ResourceCommitBinary, ResourceConnectionTarget,
+            ResourceConnectionVerificationFuture, ResourceConnectionVerifier,
+            ResourceCreateCommand, ResourcePageQuery, ResourceUpdateCommand,
         },
     },
     config::{AppConfig, ResourceConfig},
     domain::{
         agent::{
             AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
-            AgentRunContext, AgentRunLimits, EffectiveSkill, ToolRequest,
+            AgentRunContext, AgentRunLimits, EffectiveSkill, ToolRegistry, ToolRequest,
         },
         resource::{ResourceKind, ResourceSourceKind},
     },
@@ -36,13 +38,27 @@ const PARENT_WORKSPACE: &str = "PLATFORM";
 const PARENT_ACTOR: &str = "USR-LARGE-ID";
 
 #[test]
-fn resource_catalog_exposes_only_fixed_type_tools() {
+fn resource_catalog_exposes_full_resource_lifecycle_tools() {
     let _state = resource_state("catalog");
     let tool_codes = BusinessToolCatalog::list_tools(Some("resource"), None, "en-US")
         .into_iter()
         .map(|tool| tool.tool_code)
         .collect::<Vec<_>>();
-    assert_eq!(tool_codes, vec!["resource.query", "resource.binary"]);
+    assert_eq!(
+        tool_codes,
+        vec![
+            "resource.query",
+            "resource.get",
+            "resource.create",
+            "resource.update",
+            "resource.delete",
+            "resource.binary",
+            "resource.data_source.create",
+            "resource.data_source.update",
+            "resource.server.create",
+            "resource.server_account.create",
+        ]
+    );
 }
 
 #[test]
@@ -75,7 +91,8 @@ fn file_resources_support_direct_crud_and_platform_inheritance() {
             ACTOR,
             ResourcePageQuery {
                 workspace_code: WORKSPACE.to_string(),
-                kind: Some(ResourceKind::File),
+                kinds: vec![ResourceKind::File],
+                source_kind: None,
                 search: None,
                 current: 1,
                 size: 50,
@@ -83,7 +100,10 @@ fn file_resources_support_direct_crud_and_platform_inheritance() {
         )
         .expect("workspace query should project platform resources");
     assert_eq!(workspace_page.total, 1);
-    assert_eq!(workspace_page.records[0].source_kind, ResourceSourceKind::Inherited);
+    assert_eq!(
+        workspace_page.records[0].source_kind,
+        ResourceSourceKind::Inherited
+    );
     assert_eq!(
         workspace_page.records[0]
             .file
@@ -91,6 +111,28 @@ fn file_resources_support_direct_crud_and_platform_inheritance() {
             .expect("file summary should be present")
             .byte_size,
         13
+    );
+
+    let agent_directory = temp_directory("inherited-agent-download");
+    let downloaded = state
+        .resources
+        .handle_agent_binary_download(
+            ACTOR,
+            WORKSPACE,
+            ResourceBinaryAgentCommand {
+                resource_code: "platform-template".to_string(),
+                source_path: None,
+                target_path: Some("platform-template.md".to_string()),
+                overwrite: false,
+                agent_local_directory: Some(agent_directory.display().to_string()),
+            },
+        )
+        .expect("agent should download an inherited file");
+    assert_eq!(downloaded.action, "DOWNLOADED");
+    assert_eq!(
+        fs::read_to_string(agent_directory.join("platform-template.md"))
+            .expect("downloaded inherited file should be readable"),
+        "template body",
     );
 
     state
@@ -290,7 +332,11 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
             &context,
         )
         .expect_err("Resources permission does not bypass workspace access");
-    assert!(inaccessible_workspace.to_string().contains("not authorized"));
+    assert!(
+        inaccessible_workspace
+            .to_string()
+            .contains("not authorized")
+    );
 
     let mut viewer_context = context.clone();
     viewer_context.user_code = Some(VIEWER.to_string());
@@ -343,12 +389,236 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
     assert!(raw_binary_payload.to_string().contains("unknown field"));
 }
 
+#[test]
+fn agent_resource_tools_create_all_supported_resource_families() {
+    let state = resource_state("agent-resource-lifecycle");
+    let base = temp_directory("agent-resource-payload");
+    fs::write(base.join("release-notes.md"), "release notes")
+        .expect("agent source file should be created");
+    let tools = BusinessToolCatalog::list_tools(Some("resource"), None, "en-US")
+        .into_iter()
+        .map(tool_record_to_effective_tool)
+        .collect::<Vec<_>>();
+    let mut context = resource_tool_context(tools);
+    context.execution_scope.local_directory = Some(base.display().to_string());
+
+    let created_file = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.create".to_string(),
+                input: json!({
+                    "resourceCode": "agent-release-notes",
+                    "kind": "File",
+                    "name": "Agent release notes",
+                    "allowInheritance": false,
+                    "sourcePath": "release-notes.md"
+                }),
+            },
+            &context,
+        )
+        .expect("agent should create a file resource");
+    let created_file: Value = serde_json::from_str(&created_file.observation.output)
+        .expect("file create result should be JSON");
+    assert_eq!(created_file["kind"], "File");
+
+    let file_detail = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.get".to_string(),
+                input: json!({ "resourceCode": "agent-release-notes" }),
+            },
+            &context,
+        )
+        .expect("agent should read a file resource");
+    let file_detail: Value =
+        serde_json::from_str(&file_detail.observation.output).expect("file detail should be JSON");
+    assert_eq!(file_detail["file"]["fileName"], "release-notes.md");
+
+    state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.update".to_string(),
+                input: json!({
+                    "resourceCode": "agent-release-notes",
+                    "name": "Agent release notes v2"
+                }),
+            },
+            &context,
+        )
+        .expect("agent should update file metadata");
+
+    let data_source = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.data_source.create".to_string(),
+                input: json!({
+                    "resourceCode": "agent-mysql",
+                    "kind": "MysqlConnection",
+                    "name": "Agent MySQL",
+                    "attributes": {
+                        "connectionMode": "SINGLE",
+                        "endpoints": [{ "host": "mysql.internal", "port": 3306 }],
+                        "database": "tron",
+                        "credentials": {
+                            "username": "tron_user",
+                            "password": { "source": "DIRECT", "value": "database-password" }
+                        },
+                        "tls": { "mode": "DISABLED" }
+                    },
+                    "allowInheritance": false
+                }),
+            },
+            &context,
+        )
+        .expect("agent should create a data source");
+    let data_source: Value = serde_json::from_str(&data_source.observation.output)
+        .expect("data-source create result should be JSON");
+    assert_eq!(data_source["kind"], "MysqlConnection");
+    assert!(!data_source.to_string().contains("database-password"));
+
+    state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.data_source.update".to_string(),
+                input: json!({
+                    "resourceCode": "agent-mysql",
+                    "description": "Agent-owned data source"
+                }),
+            },
+            &context,
+        )
+        .expect("agent should update a data source");
+
+    let created_server = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.server.create".to_string(),
+                input: json!({
+                    "serverCode": "agent-bastion",
+                    "name": "Agent bastion",
+                    "host": "bastion.internal",
+                    "port": 22,
+                    "allowInheritance": false,
+                    "initialAccount": {
+                        "accountCode": "agent-bastion-ops",
+                        "name": "Agent operations",
+                        "username": "ops",
+                        "authenticationType": "Password",
+                        "passwordVariableKey": "OPENAI_API_KEY",
+                        "allowInheritance": false
+                    }
+                }),
+            },
+            &context,
+        )
+        .expect("agent should create a server and initial account");
+    let created_server: Value = serde_json::from_str(&created_server.observation.output)
+        .expect("server create result should be JSON");
+    assert_eq!(created_server["server"]["kind"], "ServerConnection");
+    assert_eq!(created_server["initialAccount"]["kind"], "ServerAccount");
+
+    let created_account = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.server_account.create".to_string(),
+                input: json!({
+                    "serverCode": "agent-bastion",
+                    "account": {
+                        "accountCode": "agent-bastion-deploy",
+                        "name": "Agent deploy",
+                        "username": "deploy",
+                        "authenticationType": "PrivateKey",
+                        "privateKeyVariableKey": "OPENAI_API_KEY",
+                        "allowInheritance": false
+                    }
+                }),
+            },
+            &context,
+        )
+        .expect("agent should create a separate server account");
+    let created_account: Value = serde_json::from_str(&created_account.observation.output)
+        .expect("server-account create result should be JSON");
+    assert_eq!(created_account["kind"], "ServerAccount");
+
+    let data_source_detail = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.get".to_string(),
+                input: json!({ "resourceCode": "agent-mysql" }),
+            },
+            &context,
+        )
+        .expect("agent should read a data source");
+    let data_source_detail: Value = serde_json::from_str(&data_source_detail.observation.output)
+        .expect("data-source detail should be JSON");
+    assert_eq!(
+        data_source_detail["attributes"]["credentials"]["password"]["value"],
+        Value::Null
+    );
+
+    let deleted = state
+        .agent_tool_registry
+        .execute_allowed(
+            ToolRequest {
+                tool_name: "resource.delete".to_string(),
+                input: json!({ "resourceCode": "agent-bastion-deploy" }),
+            },
+            &context,
+        )
+        .expect("agent should delete a local server account");
+    let deleted: Value =
+        serde_json::from_str(&deleted.observation.output).expect("delete result should be JSON");
+    assert_eq!(deleted["deleted"], true);
+}
+
+#[derive(Clone)]
+struct SuccessfulConnectionVerifier;
+
+impl ResourceConnectionVerifier for SuccessfulConnectionVerifier {
+    fn verify(
+        &self,
+        _target: ResourceConnectionTarget,
+    ) -> ResourceConnectionVerificationFuture<'_> {
+        Box::pin(async move { Ok(()) })
+    }
+}
+
 fn resource_state(test_name: &str) -> AppState {
     let base = temp_directory(test_name);
     let mut config = AppConfig::default();
     config.database_url = base.join("tron.sqlite3").display().to_string();
     config.resource = ResourceConfig::with_default_root(base.join("objects").display().to_string());
-    AppState::new(prepared_config(config)).expect("resource test app should initialize")
+    let mut state =
+        AppState::new(prepared_config(config)).expect("resource test app should initialize");
+    state.resources = state
+        .resources
+        .clone()
+        .with_connection_verifier(Arc::new(SuccessfulConnectionVerifier));
+    let agent_tool_registry = Arc::new(ToolRegistry::default());
+    register_default_agent_tools(
+        agent_tool_registry.as_ref(),
+        state.workspaces.clone(),
+        state.apps.clone(),
+        state.automations.clone(),
+        state.tasks.clone(),
+        state.models.clone(),
+        state.skills.clone(),
+        state.variables.clone(),
+        state.resources.clone(),
+        state.memory.clone(),
+        state.short_term_memory.clone(),
+    )
+    .expect("resource test tools should register");
+    state.agent_tool_registry = agent_tool_registry;
+    state
 }
 
 fn resource_tool_context(

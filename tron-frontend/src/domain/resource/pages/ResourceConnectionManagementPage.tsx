@@ -38,7 +38,8 @@ import {
   ServerCreateDialog,
 } from "@/domain/resource/components";
 import { deleteConnection } from "@/domain/resource/api";
-import type { ResourceKindCode } from "@/domain/resource/api";
+import { deleteMockResource } from "@/domain/resource/mock";
+import type { ResourceKind } from "@/domain/resource/model";
 import {
   useManagedResourceRecords,
   type ManagedResourceRecord,
@@ -56,7 +57,7 @@ const PAGE_SIZE = 15;
 
 const KIND_CONFIG: Record<ResourceConnectionKind, {
   basePath: string;
-  kinds: readonly ResourceKindCode[];
+  kinds: readonly ResourceKind[];
 }> = {
   dataSource: {
     basePath: "/resource-management/data-sources",
@@ -160,10 +161,13 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
     setDeleting(true);
     try {
       if (getServiceDataSource("resource") === "api") {
-        await deleteConnection({
+        const result = await deleteConnection({
           resourceCode: deleteTarget.resourceCode,
           workspaceCode,
         });
+        if (!result.deleted) throw new Error(pageT("messages.deleteFailed"));
+      } else if (!deleteMockResource(workspaceCode, deleteTarget.resourceCode)) {
+        throw new Error(pageT("messages.deleteFailed"));
       }
       toastManager.add({
         description: pageT("messages.deleted", { name: deleteTarget.name }),
@@ -256,14 +260,16 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
                   {new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }).format(record.updatedAt)}
                 </TableCell>
                 <TableCell>
-                  <div className="flex justify-end gap-1">
-                    <Button aria-label={pageT("actions.edit")} size="icon-sm" variant="ghost" onClick={() => navigate(`${config.basePath}/detail?resourceCode=${encodeURIComponent(record.resourceCode)}`)}>
-                      <Pencil aria-hidden="true" />
-                    </Button>
-                    <Button aria-label={pageT("actions.delete")} size="icon-sm" variant="ghost" onClick={() => setDeleteTarget(record)}>
-                      <Trash2 aria-hidden="true" />
-                    </Button>
-                  </div>
+                  {record.sourceKind !== "INHERITED" ? (
+                    <div className="flex justify-end gap-1">
+                      <Button aria-label={pageT("actions.edit")} size="icon-sm" variant="ghost" onClick={() => navigate(`${config.basePath}/detail?resourceCode=${encodeURIComponent(record.resourceCode)}`)}>
+                        <Pencil aria-hidden="true" />
+                      </Button>
+                      <Button aria-label={pageT("actions.delete")} size="icon-sm" variant="ghost" onClick={() => setDeleteTarget(record)}>
+                        <Trash2 aria-hidden="true" />
+                      </Button>
+                    </div>
+                  ) : null}
                 </TableCell>
               </TableRow>
             )) : (

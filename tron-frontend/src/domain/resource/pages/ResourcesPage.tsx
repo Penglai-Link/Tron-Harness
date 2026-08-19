@@ -8,7 +8,6 @@ import {
   useNavigate,
 } from "react-router";
 import {
-  Plus,
   RefreshCcw,
   Upload,
 } from "lucide-react";
@@ -19,7 +18,7 @@ import {
   QuickResourceUploadDialog,
   type QuickResourceCreateCommand,
 } from "@/domain/resource/features/quick-upload";
-import { createResource } from "@/domain/resource/api";
+import { createResource, fromResourceKindCode } from "@/domain/resource/api";
 import { resourceFileKinds } from "@/domain/resource/constants";
 import { useResourcePage, useSettingsResourceScope } from "@/domain/resource/hooks";
 import { createMockQuickResource } from "@/domain/resource/mock";
@@ -76,6 +75,7 @@ export function ResourcesPage() {
     ? (settingsScope.workspaceCode ? { workspaceCode: settingsScope.workspaceCode, name: settingsScope.workspaceName } : undefined)
     : consoleWorkspace;
   const isFileManagement = location.pathname.startsWith("/resource-management/files");
+  const isPlatformResources = settingsScope.isSettings;
   const basePath = settingsScope.isSettings ? "/settings/resources" : isFileManagement ? "/resource-management/files" : "/resources";
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
   const activeWorkspaceName = activeWorkspace?.name ?? "";
@@ -88,7 +88,7 @@ export function ResourcesPage() {
   const [quickUploadOpen, setQuickUploadOpen] = useState(false);
   const kindOptions = isFileManagement ? resourceFileKinds : allResourceKinds;
   const resourcePage = useResourcePage({
-    context: contextFilter,
+    context: isPlatformResources ? "ALL" : contextFilter,
     current,
     kinds: kindFilter === "ALL" ? (isFileManagement ? resourceFileKinds : []) : [kindFilter as ResourceKind],
     search: query,
@@ -125,7 +125,7 @@ export function ResourcesPage() {
         resourceCode: command.resourceCode,
         workspaceCode: command.workspaceCode,
       });
-      return { kind: result.kind, resourceCode: result.resourceCode };
+      return { kind: fromResourceKindCode(result.kind), resourceCode: result.resourceCode };
     }
 
     const created = createMockQuickResource({
@@ -157,56 +157,30 @@ export function ResourcesPage() {
   return (
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
       <PageHeader
-        title={isFileManagement ? t("pages:resourceConnections.file.title", { defaultValue: "File Management" }) : pageT("title.workspace")}
+        title={isFileManagement ? t("pages:resourceConnections.file.title", { defaultValue: "File Management" }) : isPlatformResources ? pageT("title.platform", { defaultValue: "Platform Resources" }) : pageT("title.workspace")}
         actions={(
           <>
             <Button variant="outline" onClick={() => {
               resourcePage.refresh();
-              toast.success(pageT("messages.refreshed"));
             }}>
               <RefreshCcw aria-hidden="true" size={15} />
               {t("common:actions.refresh")}
             </Button>
             <Button
               disabled={!activeWorkspace}
-              variant={isFileManagement ? "default" : "outline"}
+              variant="default"
               onClick={() => setQuickUploadOpen(true)}
             >
               <Upload aria-hidden="true" size={15} />
               {pageT("actions.quickUpload")}
             </Button>
-            {!isFileManagement ? (
-              <Button disabled={!activeWorkspace} onClick={() => navigate(`${basePath}/new`)}>
-                <Plus aria-hidden="true" size={15} />
-                {pageT("actions.new")}
-              </Button>
-            ) : null}
           </>
         )}
       />
 
       <div className="space-y-5">
         <SurfaceCard>
-          <div className="grid gap-4 md:grid-cols-4">
-            {settingsScope.isSettings ? (
-              <div className="min-w-0">
-                <Field label={pageT("filters.labels.workspace")}>
-                  <SelectInput
-                    aria-label={pageT("filters.workspaceAria")}
-                    className="w-full"
-                    value={activeWorkspaceCode}
-                    onValueChange={(value) => {
-                      settingsScope.selectWorkspace(value ?? "");
-                      setCurrent(1);
-                    }}
-                  >
-                    {settingsScope.options.map((option) => (
-                      <SelectItem key={option.workspaceCode} value={option.workspaceCode}>{option.name}</SelectItem>
-                    ))}
-                  </SelectInput>
-                </Field>
-              </div>
-            ) : null}
+          <div className="grid gap-4 md:grid-cols-3">
             <div className="min-w-0">
               <Field label={pageT("search.label")}>
                 <TextInput
@@ -239,25 +213,27 @@ export function ResourcesPage() {
                 </SelectInput>
               </Field>
             </div>
-            <div className="min-w-0">
-              <Field label={pageT("filters.labels.source")}>
-                <SelectInput
-                  aria-label={pageT("filters.sourceAria")}
-                  className="w-full"
-                  value={contextFilter}
-                  onValueChange={(value) => {
-                    setContextFilter(value as ResourceSourceKind | "ALL");
-                    setCurrent(1);
-                  }}
-                >
-                  {(["ALL", "LOCAL", "INHERITED", "OVERRIDE"] as const).map((value) => (
-                    <SelectItem key={value} value={value}>
-                      {value === "ALL" ? pageT("filters.allSources") : pageT(`source.${value.toLowerCase()}`)}
-                    </SelectItem>
-                  ))}
-                </SelectInput>
-              </Field>
-            </div>
+            {!isPlatformResources ? (
+              <div className="min-w-0">
+                <Field label={pageT("filters.labels.source")}>
+                  <SelectInput
+                    aria-label={pageT("filters.sourceAria")}
+                    className="w-full"
+                    value={contextFilter}
+                    onValueChange={(value) => {
+                      setContextFilter(value as ResourceSourceKind | "ALL");
+                      setCurrent(1);
+                    }}
+                  >
+                    {(["ALL", "LOCAL", "INHERITED", "OVERRIDE"] as const).map((value) => (
+                      <SelectItem key={value} value={value}>
+                        {value === "ALL" ? pageT("filters.allSources") : pageT(`source.${value.toLowerCase()}`)}
+                      </SelectItem>
+                    ))}
+                  </SelectInput>
+                </Field>
+              </div>
+            ) : null}
           </div>
         </SurfaceCard>
 
@@ -323,15 +299,15 @@ export function ResourcesPage() {
                 </span>
               ),
             },
-            {
+            ...(!isPlatformResources ? [{
               id: "source",
               header: pageT("columns.source"),
               width: "13%",
               colClassName: "hidden sm:table-column",
               headerClassName: "hidden px-4 sm:table-cell",
               cellClassName: "hidden px-4 py-2.5 sm:table-cell",
-              render: (row) => <Badge tone={row.sourceKind === "LOCAL" ? "success" : row.sourceKind === "INHERITED" ? "info" : row.sourceKind === "OVERRIDE" ? "warning" : "outline"}>{pageT(`source.${row.sourceKind.toLowerCase()}`)}</Badge>,
-            },
+              render: (row: ResourceRecord) => <Badge tone={row.sourceKind === "LOCAL" ? "success" : row.sourceKind === "INHERITED" ? "info" : row.sourceKind === "OVERRIDE" ? "warning" : "outline"}>{pageT(`source.${row.sourceKind.toLowerCase()}`)}</Badge>,
+            }] : []),
             {
               id: "updatedAt",
               header: pageT("columns.updatedAt"),

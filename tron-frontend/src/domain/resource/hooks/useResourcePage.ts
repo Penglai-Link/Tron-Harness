@@ -1,12 +1,11 @@
 import { adaptResourceRecord } from "@/domain/resource/adapters";
 import {
   pageResources,
+  toResourceKindCode,
+  toResourceSourceCode,
   type ResourcePageApiRequest,
 } from "@/domain/resource/api";
-import {
-  listMockCreatedResources,
-  listWorkspaceResources,
-} from "@/domain/resource/mock";
+import { listWorkspaceResources } from "@/domain/resource/mock";
 import type {
   ResourceKind,
   ResourceRecord,
@@ -32,21 +31,19 @@ export interface ResourcePageResult {
   total: number;
 }
 
-function toApiRequest(query: ResourcePageQuery, kind: ResourceKind | null): ResourcePageApiRequest {
+function toApiRequest(query: ResourcePageQuery): ResourcePageApiRequest {
   return {
     current: query.current,
-    kind,
+    kinds: query.kinds.map(toResourceKindCode),
     search: query.search.trim() || null,
     size: query.size,
+    sourceKind: query.context === "ALL" ? null : toResourceSourceCode(query.context),
     workspaceCode: query.workspaceCode ?? "",
   };
 }
 
 function mockPage(query: ResourcePageQuery): ResourcePageResult {
-  const source = [
-    ...listMockCreatedResources(query.workspaceCode ?? ""),
-    ...listWorkspaceResources(query.workspaceCode ?? "", query.workspaceName),
-  ];
+  const source = listWorkspaceResources(query.workspaceCode ?? "", query.workspaceName);
   const search = query.search.trim().toLowerCase();
   const records = source.filter((record) => {
     if (query.kinds.length && !query.kinds.includes(record.kind)) return false;
@@ -67,25 +64,12 @@ function mockPage(query: ResourcePageQuery): ResourcePageResult {
 export function useResourcePage(query: ResourcePageQuery) {
   return useResourceApiQuery<ResourcePageResult>({
     api: async () => {
-      const kinds = query.kinds.length ? query.kinds : [null];
-      const pages = await Promise.all(kinds.map(async (kind) => {
-        const firstPage = await pageResources(toApiRequest(query, kind));
-        const remainingPageCount = Math.ceil(firstPage.total / firstPage.size) - 1;
-        const remainingPages = await Promise.all(Array.from({ length: remainingPageCount }, (_, index) => (
-          pageResources({ ...toApiRequest(query, kind), current: index + 2 })
-        )));
-        return [firstPage, ...remainingPages].flatMap((page) => page.records);
-      }));
-      const records = pages.flat()
-        .map(adaptResourceRecord)
-        .filter((record) => query.context === "ALL" || record.sourceKind === query.context)
-        .sort((left, right) => Date.parse(right.updatedAt) - Date.parse(left.updatedAt));
-      const start = (query.current - 1) * query.size;
+      const page = await pageResources(toApiRequest(query));
       return {
-        current: query.current,
-        records: records.slice(start, start + query.size),
-        size: query.size,
-        total: records.length,
+        current: page.current,
+        records: page.records.map(adaptResourceRecord),
+        size: page.size,
+        total: page.total,
       };
     },
     deps: [query],

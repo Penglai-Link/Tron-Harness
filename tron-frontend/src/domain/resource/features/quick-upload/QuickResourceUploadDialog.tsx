@@ -97,7 +97,7 @@ export function QuickResourceUploadDialog({
   const onCloseRef = useRef(onClose);
   const previousFocusRef = useRef<HTMLElement | null>(null);
   const submittingRef = useRef(false);
-  const [allowInheritance, setAllowInheritance] = useState(true);
+  const [allowInheritance, setAllowInheritance] = useState(false);
   const [description, setDescription] = useState("");
   const [error, setError] = useState("");
   const [file, setFile] = useState<File | null>(null);
@@ -139,7 +139,7 @@ export function QuickResourceUploadDialog({
 
   function reset() {
     editorHandoffStartedRef.current = false;
-    setAllowInheritance(true);
+    setAllowInheritance(false);
     setDescription("");
     setError("");
     setFile(null);
@@ -240,7 +240,7 @@ export function QuickResourceUploadDialog({
     // mistaken for a silently generated collision suffix.
     setMoreOpen(generatedCode === `FILE_${generatedAt}`);
     setDescription("");
-    setAllowInheritance(true);
+    setAllowInheritance(false);
   }
 
   function handleFileInput(event: ChangeEvent<HTMLInputElement>) {

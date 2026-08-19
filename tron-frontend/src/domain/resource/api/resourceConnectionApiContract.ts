@@ -24,6 +24,14 @@ export interface ConnectionDeleteApiResult {
   deleted: boolean;
 }
 
+export interface ConnectionPageApiRequest {
+  workspaceCode: string;
+  kinds: ResourceKindCode[];
+  search: string | null;
+  current: number;
+  size: number;
+}
+
 export interface DataSourceCreateApiRequest {
   workspaceCode: string;
   resourceCode: string;

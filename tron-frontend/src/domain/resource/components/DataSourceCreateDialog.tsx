@@ -19,6 +19,7 @@ import {
   createDataSourceConnection,
   type DataSourceKindCode,
 } from "@/domain/resource/api";
+import { createMockManagedResource } from "@/domain/resource/mock";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 import {
@@ -225,12 +226,24 @@ export function DataSourceCreateDialog({
     event.preventDefault();
     setSubmitting(true);
     try {
+      const connectionAttributes = attributes();
       if (getServiceDataSource("resource") === "api") {
         await createDataSourceConnection({
           allowInheritance: false,
-          attributes: attributes(),
+          attributes: connectionAttributes,
           kind,
           description: description.trim() || null,
+          name: name.trim(),
+          resourceCode: resourceCode.trim(),
+          workspaceCode,
+        });
+      } else {
+        createMockManagedResource({
+          allowInheritance: false,
+          attributes: connectionAttributes,
+          description: description.trim(),
+          file: null,
+          kind,
           name: name.trim(),
           resourceCode: resourceCode.trim(),
           workspaceCode,

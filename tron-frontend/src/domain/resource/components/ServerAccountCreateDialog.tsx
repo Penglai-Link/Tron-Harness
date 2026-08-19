@@ -17,6 +17,7 @@ import { Spinner } from "@/components/ui/spinner";
 import { toastManager } from "@/components/ui/toast";
 import { createServerAccountConnection } from "@/domain/resource/api";
 import type { ManagedResourceRecord } from "@/domain/resource/hooks";
+import { createMockManagedResource } from "@/domain/resource/mock";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 import {
@@ -59,25 +60,42 @@ export function ServerAccountCreateDialog({
     event.preventDefault();
     setSubmitting(true);
     try {
+      const accountRequest = {
+        accountCode: account.accountCode.trim(),
+        allowInheritance: false,
+        authenticationType: account.authenticationType,
+        description: account.description.trim() || null,
+        name: account.name.trim(),
+        ...(account.authenticationType === "Password"
+          ? { passwordVariableKey: account.passwordVariableKey.trim() }
+          : {
+              privateKeyVariableKey: account.privateKeyVariableKey.trim(),
+              ...(account.privateKeyPassphraseVariableKey.trim()
+                ? { privateKeyPassphraseVariableKey: account.privateKeyPassphraseVariableKey.trim() }
+                : {}),
+            }),
+        username: account.username.trim(),
+      };
       if (getServiceDataSource("resource") === "api") {
         await createServerAccountConnection({
-          account: {
-            accountCode: account.accountCode.trim(),
-            allowInheritance: false,
-            authenticationType: account.authenticationType,
-            description: account.description.trim() || null,
-            name: account.name.trim(),
-            ...(account.authenticationType === "Password"
-              ? { passwordVariableKey: account.passwordVariableKey.trim() }
-              : {
-                  privateKeyVariableKey: account.privateKeyVariableKey.trim(),
-                  ...(account.privateKeyPassphraseVariableKey.trim()
-                    ? { privateKeyPassphraseVariableKey: account.privateKeyPassphraseVariableKey.trim() }
-                    : {}),
-                }),
-            username: account.username.trim(),
-          },
+          account: accountRequest,
           serverCode,
+          workspaceCode,
+        });
+      } else {
+        createMockManagedResource({
+          allowInheritance: false,
+          attributes: {
+            authenticationType: accountRequest.authenticationType,
+            serverCode,
+            serverWorkspaceCode: workspaceCode,
+            username: accountRequest.username,
+          },
+          description: accountRequest.description ?? "",
+          file: null,
+          kind: "SERVER_ACCOUNT",
+          name: accountRequest.name,
+          resourceCode: accountRequest.accountCode,
           workspaceCode,
         });
       }

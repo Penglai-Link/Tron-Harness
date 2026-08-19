@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 use crate::{
     application::resource::{
         DataSourceCreateCommand, DataSourceUpdateCommand, ResourceCommitOutcome,
@@ -28,11 +30,8 @@ impl ResourceService {
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
         self.ensure_resource_create_is_available(&workspace_code, &command.resource_code)?;
-        let target = self.data_source_connection_target(
-            &workspace_code,
-            command.kind,
-            &command.attributes,
-        )?;
+        let target =
+            self.data_source_connection_target(&workspace_code, command.kind, &command.attributes)?;
         self.connection_verifier.verify(target).await?;
         let now = current_timestamp();
         let record = DataSourceConnectionRecord {
@@ -43,6 +42,7 @@ impl ResourceService {
             description: command.description.trim().to_string(),
             attributes: command.attributes,
             allow_inheritance: command.allow_inheritance,
+            revision: 0,
             created_at: now.clone(),
             updated_at: now,
         };
@@ -80,13 +80,11 @@ impl ResourceService {
             None => return Err(ResourceError::NotFound),
         };
         if let Some(attributes) = &command.attributes {
-            let target = self.data_source_connection_target(
-                &workspace_code,
-                record.kind,
-                attributes,
-            )?;
+            let attributes = merge_redacted_direct_secrets(&record.attributes, attributes)?;
+            let target =
+                self.data_source_connection_target(&workspace_code, record.kind, &attributes)?;
             self.connection_verifier.verify(target).await?;
-            record.attributes = attributes.clone();
+            record.attributes = attributes;
         }
         if let Some(name) = &command.name {
             let name = name.trim();
@@ -102,8 +100,19 @@ impl ResourceService {
             record.allow_inheritance = allow_inheritance;
         }
         record.updated_at = current_timestamp();
-        self.repository(|repository| repository.update_data_source_connection(&record))?;
-        Ok(commit_outcome(&workspace_code, &record.resource_code, record.kind))
+        if !self.repository(|repository| repository.update_data_source_connection(&record))? {
+            return Err(ResourceError::Conflict);
+        }
+        self.publish_resource_audit(
+            actor_user_code,
+            &ManagedResource::DataSourceConnection(record.clone()),
+            "resource.updated",
+        );
+        Ok(commit_outcome(
+            &workspace_code,
+            &record.resource_code,
+            record.kind,
+        ))
     }
 
     pub async fn create_server_for_http(
@@ -116,7 +125,11 @@ impl ResourceService {
         if command.server_code == command.initial_account.account_code {
             return Err(ResourceError::InvalidInput);
         }
-        if command.name.trim().is_empty() || command.initial_account.name.trim().is_empty() {
+        if command.name.trim().is_empty()
+            || command.host.trim().is_empty()
+            || command.port == 0
+            || command.initial_account.name.trim().is_empty()
+        {
             return Err(ResourceError::InvalidInput);
         }
         let workspace_code =
@@ -143,21 +156,18 @@ impl ResourceService {
             host: command.host.trim().to_string(),
             port: command.port,
             allow_inheritance: command.allow_inheritance,
+            revision: 0,
             created_at: now.clone(),
             updated_at: now.clone(),
         };
         let account = server_account_record(
             &workspace_code,
+            &server.workspace_code,
             &command.server_code,
             &command.initial_account,
             &now,
         )?;
-        self.repository(|repository| repository.insert_server(&server))?;
-        if let Err(error) = self.repository(|repository| repository.insert_server_account(&account)) {
-            let _ = self
-                .repository(|repository| repository.delete_server(&workspace_code, &command.server_code));
-            return Err(error);
-        }
+        self.repository(|repository| repository.insert_server_bundle(&server, &account))?;
         self.publish_resource_audit(
             actor_user_code,
             &ManagedResource::Server(server.clone()),
@@ -195,17 +205,26 @@ impl ResourceService {
         }
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
-        let server = self
-            .managed_resource(&workspace_code, &command.server_code)?
-            .ok_or(ResourceError::NotFound)?;
-        if !matches!(server, ManagedResource::Server(_)) {
-            return Err(ResourceError::NotFound);
-        }
+        let server = match self
+            .effective_resources(&workspace_code)?
+            .remove(&command.server_code)
+            .map(|effective| effective.resource)
+        {
+            Some(ManagedResource::Server(record)) => record,
+            Some(_) | None => return Err(ResourceError::NotFound),
+        };
         self.ensure_resource_create_is_available(&workspace_code, &command.account.account_code)?;
         validate_account_credentials(&command.account)?;
+        self.ssh_connection_target(
+            &workspace_code,
+            server.host.clone(),
+            server.port,
+            &command.account,
+        )?;
         let now = current_timestamp();
         let account = server_account_record(
             &workspace_code,
+            &server.workspace_code,
             &command.server_code,
             &command.account,
             &now,
@@ -222,28 +241,11 @@ impl ResourceService {
             crate::domain::resource::ResourceKind::ServerAccount,
         ))
     }
-
-    pub(super) fn ensure_server_has_no_accounts(
-        &self,
-        workspace_code: &str,
-        server_code: &str,
-    ) -> Result<(), ResourceError> {
-        let has_accounts = self
-            .repository(|repository| repository.list_server_accounts())?
-            .iter()
-            .any(|account| {
-                account.workspace_code == workspace_code && account.server_code == server_code
-            });
-        if has_accounts {
-            Err(ResourceError::ServerHasAccounts)
-        } else {
-            Ok(())
-        }
-    }
 }
 
 fn server_account_record(
     workspace_code: &str,
+    server_workspace_code: &str,
     server_code: &str,
     input: &crate::application::resource::ServerAccountCreateInput,
     now: &str,
@@ -251,6 +253,7 @@ fn server_account_record(
     Ok(ServerAccountRecord {
         workspace_code: workspace_code.to_string(),
         resource_code: input.account_code.clone(),
+        server_workspace_code: server_workspace_code.to_string(),
         server_code: server_code.to_string(),
         name: input.name.trim().to_string(),
         description: input.description.trim().to_string(),
@@ -260,6 +263,7 @@ fn server_account_record(
         private_key_variable_key: input.private_key_variable_key.clone(),
         private_key_passphrase_variable_key: input.private_key_passphrase_variable_key.clone(),
         allow_inheritance: input.allow_inheritance,
+        revision: 0,
         created_at: now.to_string(),
         updated_at: now.to_string(),
     })
@@ -273,7 +277,7 @@ fn validate_account_credentials(
     }
     match input.authentication_type {
         crate::domain::resource::ServerAuthenticationType::Password => {
-            if input.password_variable_key.is_none()
+            if !non_blank_variable_key(input.password_variable_key.as_deref())
                 || input.private_key_variable_key.is_some()
                 || input.private_key_passphrase_variable_key.is_some()
             {
@@ -281,12 +285,73 @@ fn validate_account_credentials(
             }
         }
         crate::domain::resource::ServerAuthenticationType::PrivateKey => {
-            if input.private_key_variable_key.is_none() || input.password_variable_key.is_some() {
+            if !non_blank_variable_key(input.private_key_variable_key.as_deref())
+                || input.password_variable_key.is_some()
+                || input
+                    .private_key_passphrase_variable_key
+                    .as_deref()
+                    .is_some_and(|key| key.trim().is_empty())
+            {
                 return Err(ResourceError::InvalidInput);
             }
         }
     }
     Ok(())
+}
+
+fn non_blank_variable_key(value: Option<&str>) -> bool {
+    value.is_some_and(|value| !value.trim().is_empty())
+}
+
+fn merge_redacted_direct_secrets(
+    existing: &Value,
+    replacement: &Value,
+) -> Result<Value, ResourceError> {
+    let mut replacement = replacement.clone();
+    merge_redacted_direct_secrets_in_place(existing, &mut replacement)?;
+    Ok(replacement)
+}
+
+fn merge_redacted_direct_secrets_in_place(
+    existing: &Value,
+    replacement: &mut Value,
+) -> Result<(), ResourceError> {
+    match (existing, replacement) {
+        (Value::Object(existing), Value::Object(replacement)) => {
+            let is_redacted_direct = replacement
+                .get("source")
+                .and_then(Value::as_str)
+                .is_some_and(|source| source == "DIRECT")
+                && replacement.get("value").is_some_and(Value::is_null);
+            if is_redacted_direct {
+                let source_matches = existing
+                    .get("source")
+                    .and_then(Value::as_str)
+                    .is_some_and(|source| source == "DIRECT");
+                let value = existing.get("value").and_then(Value::as_str);
+                if !source_matches || value.is_none() {
+                    return Err(ResourceError::InvalidInput);
+                }
+                replacement.insert(
+                    "value".to_string(),
+                    Value::String(value.unwrap().to_string()),
+                );
+            }
+            for (key, replacement_value) in replacement.iter_mut() {
+                if let Some(existing_value) = existing.get(key) {
+                    merge_redacted_direct_secrets_in_place(existing_value, replacement_value)?;
+                }
+            }
+            Ok(())
+        }
+        (Value::Array(existing), Value::Array(replacement)) => {
+            for (existing_value, replacement_value) in existing.iter().zip(replacement.iter_mut()) {
+                merge_redacted_direct_secrets_in_place(existing_value, replacement_value)?;
+            }
+            Ok(())
+        }
+        _ => Ok(()),
+    }
 }
 
 fn commit_outcome(

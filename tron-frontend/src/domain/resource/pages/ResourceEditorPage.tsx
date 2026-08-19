@@ -24,11 +24,17 @@ import {
   createResource,
   deleteResource,
   downloadResourceBinary,
+  updateDataSourceConnection,
   updateResource,
   uploadResourceBinary,
 } from "@/domain/resource/api";
 import { useResourceDetail, useSettingsResourceScope } from "@/domain/resource/hooks";
-import { createMockQuickResource } from "@/domain/resource/mock";
+import {
+  createMockQuickResource,
+  deleteMockResource,
+  replaceMockResourceFile,
+  updateMockResource,
+} from "@/domain/resource/mock";
 import type { ResourceKind, ResourceRecord } from "@/domain/resource/model";
 import {
   useQuickResourceUploadHandoffStore,
@@ -46,6 +52,12 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/shared/ui/Badge";
 
 const fileKinds: ResourceKind[] = ["FILE", "IMAGE", "PDF"];
+const dataSourceKinds: ResourceKind[] = [
+  "MYSQL_CONNECTION",
+  "POSTGRESQL_CONNECTION",
+  "REDIS_CONNECTION",
+  "KAFKA_CONNECTION",
+];
 
 function formatByteSize(byteSize: number) {
   if (byteSize < 1024) return `${byteSize} B`;
@@ -127,6 +139,7 @@ export function ResourceEditorPage() {
   const [allowInheritance, setAllowInheritance] = useState(false);
   const [resourceCode, setResourceCode] = useState("");
   const [kind, setKind] = useState<ResourceKind>("FILE");
+  const [attributesText, setAttributesText] = useState("{}");
   const [stagedFile, setStagedFile] = useState<File | null>(null);
   const [record, setRecord] = useState<ResourceRecord | null>(null);
   const [saving, setSaving] = useState(false);
@@ -134,6 +147,19 @@ export function ResourceEditorPage() {
   const [deleting, setDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const initializedFromRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (isNew) return;
+    const key = `${workspaceCode}:${requestedResourceCode}`;
+    if (initializedFromRef.current === key) return;
+    setEditing(false);
+    setRecord(null);
+    setAllowInheritance(false);
+    setAttributesText("{}");
+    setDescription("");
+    setName("");
+    setResourceCode(requestedResourceCode);
+  }, [isNew, requestedResourceCode, workspaceCode]);
 
   useEffect(() => {
     if (!scopeReady) return;
@@ -171,10 +197,12 @@ export function ResourceEditorPage() {
     }
 
     const loaded = detailQuery.data;
-    if (loaded && initializedFromRef.current !== loaded.resourceCode) {
-      initializedFromRef.current = loaded.resourceCode;
+    const loadedKey = `${workspaceCode}:${loaded?.resourceCode ?? ""}`;
+    if (loaded && loaded.workspaceCode === workspaceCode && initializedFromRef.current !== loadedKey) {
+      initializedFromRef.current = loadedKey;
       setRecord(loaded);
       setAllowInheritance(loaded.allowInheritance);
+      setAttributesText(JSON.stringify(loaded.attributes ?? {}, null, 2));
       setDescription(loaded.description);
       setKind(loaded.kind);
       setName(loaded.name);
@@ -183,8 +211,10 @@ export function ResourceEditorPage() {
   }, [detailQuery.data, isNew, quickUploadId, scopeReady, toast, workspaceCode]);
 
   const isFileKind = fileKinds.includes(kind);
+  const isDataSource = dataSourceKinds.includes(kind);
   const loadedResource = isNew ? null : record;
-  const saveDisabled = saving || !name.trim() || (isNew && (!resourceCode.trim() || !stagedFile));
+  const inherited = loadedResource?.sourceKind === "INHERITED";
+  const saveDisabled = saving || inherited || !name.trim() || (isNew && (!resourceCode.trim() || !stagedFile));
 
   async function save() {
     if (saveDisabled) return;
@@ -222,21 +252,58 @@ export function ResourceEditorPage() {
       }
 
       if (!loadedResource) return;
-      if (isApi) {
-        await updateResource({
-          allowInheritance,
-          description,
-          name: name.trim(),
-          resourceCode: loadedResource.resourceCode,
-          workspaceCode,
-        });
-        setRecord({
-          ...loadedResource,
-          allowInheritance,
-          description,
-          name: name.trim(),
-        });
+      let attributes = loadedResource.attributes;
+      if (isDataSource) {
+        try {
+          const parsed: unknown = JSON.parse(attributesText);
+          if (!parsed || Array.isArray(parsed) || typeof parsed !== "object") {
+            throw new Error(editorT("messages.invalidAttributes", "Connection attributes must be a JSON object."));
+          }
+          attributes = parsed as Record<string, unknown>;
+        } catch (cause) {
+          throw cause instanceof Error
+            ? cause
+            : new Error(editorT("messages.invalidAttributes", "Connection attributes must be a JSON object."));
+        }
       }
+      if (isApi) {
+        if (isDataSource) {
+          await updateDataSourceConnection({
+            allowInheritance,
+            attributes: attributes ?? {},
+            description,
+            name: name.trim(),
+            resourceCode: loadedResource.resourceCode,
+            workspaceCode,
+          });
+        } else {
+          await updateResource({
+            allowInheritance,
+            description,
+            name: name.trim(),
+            resourceCode: loadedResource.resourceCode,
+            workspaceCode,
+          });
+        }
+      }
+      const updated = isApi
+        ? {
+            ...loadedResource,
+            allowInheritance,
+            attributes,
+            description,
+            name: name.trim(),
+          }
+        : updateMockResource(workspaceCode, loadedResource.resourceCode, {
+            allowInheritance,
+            attributes,
+            description,
+            name: name.trim(),
+          });
+      if (!updated) {
+        throw new Error(editorT("messages.saveFailed", "Resource could not be saved."));
+      }
+      setRecord(updated);
       setEditing(false);
       toast.success(editorT("messages.saved", "Resource saved"));
     } catch (cause) {
@@ -249,7 +316,7 @@ export function ResourceEditorPage() {
   async function replaceFile(event: ChangeEvent<HTMLInputElement>) {
     const file = event.target.files?.[0];
     event.target.value = "";
-    if (!file || !loadedResource) return;
+    if (!file || !loadedResource || inherited) return;
     if (isApi) {
       try {
         const result = await uploadResourceBinary({
@@ -271,6 +338,12 @@ export function ResourceEditorPage() {
       }
       return;
     }
+    const updated = replaceMockResourceFile(workspaceCode, loadedResource.resourceCode, file);
+    if (!updated) {
+      toast.error(editorT("messages.replaceFailed", "Resource could not be replaced."));
+      return;
+    }
+    setRecord(updated);
     toast.success(editorT("messages.replaced", "{{name}} replaced with {{file}}", { file: file.name, name: loadedResource.name }));
   }
 
@@ -297,10 +370,13 @@ export function ResourceEditorPage() {
     setDeleting(true);
     try {
       if (isApi) {
-        await deleteResource({
+        const result = await deleteResource({
           resourceCode: loadedResource.resourceCode,
           workspaceCode,
         });
+        if (!result.deleted) throw new Error(editorT("messages.deleteFailed", "Resource was not deleted."));
+      } else if (!deleteMockResource(workspaceCode, loadedResource.resourceCode)) {
+        throw new Error(editorT("messages.deleteFailed", "Resource was not deleted."));
       }
       setDeleteOpen(false);
       toast.success(editorT("messages.deleted", "{{name}} deleted", { name: loadedResource.name }));
@@ -320,7 +396,7 @@ export function ResourceEditorPage() {
     return <p className="text-sm text-[var(--color-on-surface-variant)]">{editorT("notFound", "Resource not found.")}</p>;
   }
 
-  const readOnly = !isNew && !editing;
+  const readOnly = inherited || (!isNew && !editing);
 
   return (
     <div className="min-w-0">
@@ -408,7 +484,7 @@ export function ResourceEditorPage() {
                   {editorT("actions.saveActive", "Save")}
                 </Button>
               </>
-            ) : (
+            ) : inherited ? null : (
               <>
                 <Button onClick={() => setEditing(true)}>
                   <Pencil aria-hidden="true" size={15} />
@@ -475,10 +551,25 @@ export function ResourceEditorPage() {
                 type="file"
                 onChange={(event) => { void replaceFile(event); }}
               />
-              <Button disabled={saving} type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
-                <FileUp aria-hidden="true" size={15} />
-                {editorT("file.replace", "Replace file")}
-              </Button>
+              {!inherited ? (
+                <Button disabled={saving} type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+                  <FileUp aria-hidden="true" size={15} />
+                  {editorT("file.replace", "Replace file")}
+                </Button>
+              ) : null}
+            </div>
+          ) : loadedResource && isDataSource && editing ? (
+            <div className="space-y-2">
+              <TextArea
+                aria-label={editorT("fields.connectionAttributes", "Connection attributes")}
+                className="min-h-72 font-mono text-[12px]"
+                disabled={saving}
+                value={attributesText}
+                onChange={(event) => setAttributesText(event.target.value)}
+              />
+              <p className="text-xs text-[var(--color-on-surface-variant)]">
+                {editorT("hints.directSecretRedacted", "Direct secret values are redacted. Leave their null value unchanged to retain the existing secret, or enter a replacement value.")}
+              </p>
             </div>
           ) : loadedResource && loadedResource.attributes ? (
             <pre className="overflow-x-auto rounded-lg bg-[var(--color-surface-container-low)] p-3 font-mono text-[12px] leading-5">

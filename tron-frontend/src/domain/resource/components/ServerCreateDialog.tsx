@@ -16,6 +16,7 @@ import {
 import { Spinner } from "@/components/ui/spinner";
 import { toastManager } from "@/components/ui/toast";
 import { createServerConnection } from "@/domain/resource/api";
+import { createMockManagedResource } from "@/domain/resource/mock";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 import {
@@ -82,9 +83,37 @@ export function ServerCreateDialog({ onCreated, onOpenChange, open, workspaceCod
         serverCode: serverCode.trim(),
         workspaceCode,
       };
-      const connectivityVerified = getServiceDataSource("resource") === "api"
+      const isApi = getServiceDataSource("resource") === "api";
+      const connectivityVerified = isApi
         ? (await createServerConnection(request)).connectivityVerified
         : true;
+      if (!isApi) {
+        createMockManagedResource({
+          allowInheritance: false,
+          attributes: { host: request.host, port: request.port, protocol: "Ssh" },
+          description: request.description ?? "",
+          file: null,
+          kind: "SERVER_CONNECTION",
+          name: request.name,
+          resourceCode: request.serverCode,
+          workspaceCode,
+        });
+        createMockManagedResource({
+          allowInheritance: false,
+          attributes: {
+            authenticationType: request.initialAccount.authenticationType,
+            serverCode: request.serverCode,
+            serverWorkspaceCode: workspaceCode,
+            username: request.initialAccount.username,
+          },
+          description: request.initialAccount.description ?? "",
+          file: null,
+          kind: "SERVER_ACCOUNT",
+          name: request.initialAccount.name,
+          resourceCode: request.initialAccount.accountCode,
+          workspaceCode,
+        });
+      }
       toastManager.add({
         description: pageT("messages.serverCreated"),
         title: connectivityVerified

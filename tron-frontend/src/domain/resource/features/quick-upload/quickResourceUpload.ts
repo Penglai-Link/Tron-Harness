@@ -4,7 +4,7 @@ export type QuickResourceType = typeof quickResourceTypes[number];
 
 export type QuickUploadBlockedReason = "FILE_TOO_LARGE";
 
-export type QuickUploadEditorReason = "BINARY_NAME" | "PDF_PAGE_COUNT";
+export type QuickUploadEditorReason = "BINARY_NAME";
 
 export const quickResourceMaxFileSizeBytes = 1_073_741_824;
 
@@ -79,17 +79,13 @@ export function generateQuickResourceCode(fileName: string, now = Date.now()) {
   return normalized || `FILE_${now}`;
 }
 
-export function evaluateQuickResourceUpload({ binaryName, file, pageCount, type }: QuickResourceUploadInput): QuickResourceUploadDecision {
+export function evaluateQuickResourceUpload({ binaryName, file, type }: QuickResourceUploadInput): QuickResourceUploadDecision {
   if (file.size > quickResourceMaxFileSizeBytes) {
     return { kind: "BLOCKED", reason: "FILE_TOO_LARGE" };
   }
 
   const editorReasons: QuickUploadEditorReason[] = [];
   if (!binaryName.trim()) editorReasons.push("BINARY_NAME");
-  if (type === "PDF" && (!Number.isInteger(pageCount) || (pageCount ?? 0) < 1)) {
-    editorReasons.push("PDF_PAGE_COUNT");
-  }
-
   if (editorReasons.length) {
     return { binaryName, kind: "EDITOR", reasons: Array.from(new Set(editorReasons)), type };
   }

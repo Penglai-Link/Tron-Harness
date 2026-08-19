@@ -1,6 +1,6 @@
 use std::{
     fs,
-    io::Read,
+    io::{self, Read},
     path::{Component, Path, PathBuf},
 };
 
@@ -9,7 +9,8 @@ use rand::RngCore;
 use crate::{
     application::resource::{
         ResourceBinaryAgentCommand, ResourceBinaryDownloadCommand, ResourceBinaryResult,
-        ResourceBinaryUploadCommand, ResourceHttpBinaryDownload,
+        ResourceBinaryUploadCommand, ResourceCommitBinary, ResourceCommitResult,
+        ResourceCreateCommand, ResourceHttpBinaryDownload,
     },
     domain::resource::{
         DEFAULT_BINARY_STORAGE_PROFILE, ManagedResource, ResourceError, ResourceFileRecord,
@@ -21,13 +22,46 @@ use crate::{
 use super::ResourceService;
 
 impl ResourceService {
+    pub fn create_file_resource_from_agent_path(
+        &self,
+        actor_user_code: &str,
+        mut command: ResourceCreateCommand,
+        source_path: &str,
+        agent_local_directory: Option<&str>,
+    ) -> Result<ResourceCommitResult, ResourceError> {
+        let workspace_code =
+            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        let source_path = self.resolve_agent_file_path(source_path, agent_local_directory)?;
+        let file_name = source_path
+            .file_name()
+            .map(|name| name.to_string_lossy().to_string())
+            .filter(|name| !name.trim().is_empty())
+            .ok_or(ResourceError::PathDenied)?;
+        let source = fs::File::open(&source_path).map_err(|_| ResourceError::PathDenied)?;
+        if source
+            .metadata()
+            .map_err(|_| ResourceError::PathDenied)?
+            .len()
+            > self.config.limits.max_binary_bytes
+        {
+            return Err(ResourceError::InvalidInput);
+        }
+        command.workspace_code = workspace_code;
+        self.create_file_resource(
+            actor_user_code,
+            command,
+            Some(ResourceCommitBinary { source, file_name }),
+        )
+    }
+
     pub fn preflight_binary_upload(
         &self,
         actor_user_code: &str,
         command: &ResourceBinaryUploadCommand,
     ) -> Result<(), ResourceError> {
         validate_resource_code(&command.resource_code)?;
-        let workspace_code = self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        let workspace_code =
+            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
         match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(_)) => Ok(()),
             Some(_) | None => Err(ResourceError::NotFound),
@@ -41,12 +75,13 @@ impl ResourceService {
         file_name: &str,
         source: &mut dyn Read,
     ) -> Result<ResourceBinaryResult, ResourceError> {
-        let workspace_code = self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        let workspace_code =
+            self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
         let record = match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(record)) => record,
             Some(_) | None => return Err(ResourceError::NotFound),
         };
-        let updated = self.replace_file_contents(&record, file_name, source)?;
+        let updated = self.replace_file_contents(actor_user_code, &record, file_name, source)?;
         Ok(ResourceBinaryResult {
             action: "UPLOADED".to_string(),
             resource_code: updated.resource_code,
@@ -64,7 +99,11 @@ impl ResourceService {
         validate_resource_code(&command.resource_code)?;
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, false)?;
-        let record = match self.managed_resource(&workspace_code, &command.resource_code)? {
+        let record = match self
+            .effective_resources(&workspace_code)?
+            .remove(&command.resource_code)
+            .map(|effective| effective.resource)
+        {
             Some(ManagedResource::File(record)) => record,
             Some(_) | None => return Err(ResourceError::NotFound),
         };
@@ -101,10 +140,8 @@ impl ResourceService {
             .source_path
             .as_deref()
             .ok_or(ResourceError::InvalidInput)?;
-        let source = self.resolve_agent_file_path(
-            source_path,
-            command.agent_local_directory.as_deref(),
-        )?;
+        let source =
+            self.resolve_agent_file_path(source_path, command.agent_local_directory.as_deref())?;
         let record = match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(record)) => record,
             Some(_) | None => return Err(ResourceError::NotFound),
@@ -115,7 +152,16 @@ impl ResourceService {
             .filter(|name| !name.trim().is_empty())
             .ok_or(ResourceError::InvalidInput)?;
         let mut input = fs::File::open(&source).map_err(|_| ResourceError::PathDenied)?;
-        let updated = self.replace_file_contents(&record, &file_name, &mut input)?;
+        if input
+            .metadata()
+            .map_err(|_| ResourceError::PathDenied)?
+            .len()
+            > self.config.limits.max_binary_bytes
+        {
+            return Err(ResourceError::InvalidInput);
+        }
+        let updated =
+            self.replace_file_contents(actor_user_code, &record, &file_name, &mut input)?;
         Ok(ResourceBinaryResult {
             action: "UPLOADED".to_string(),
             resource_code: updated.resource_code,
@@ -134,7 +180,11 @@ impl ResourceService {
         validate_resource_code(&command.resource_code)?;
         self.authorize_workspace_read(actor_user_code, workspace_code)?;
         let workspace_code = self.active_workspace_code(workspace_code)?;
-        let record = match self.managed_resource(&workspace_code, &command.resource_code)? {
+        let record = match self
+            .effective_resources(&workspace_code)?
+            .remove(&command.resource_code)
+            .map(|effective| effective.resource)
+        {
             Some(ManagedResource::File(record)) => record,
             Some(_) | None => return Err(ResourceError::NotFound),
         };
@@ -180,13 +230,17 @@ impl ResourceService {
         source: &mut dyn Read,
     ) -> Result<ResourceFileRecord, ResourceError> {
         validate_binary_name(file_name, self.config.limits.max_binary_name_length)?;
+        let (temporary, byte_size) =
+            spool_limited_binary(source, self.config.limits.max_binary_bytes)?;
         let object_key = self.next_object_key(workspace_code, resource_code);
-        let (locator, byte_size) =
-            self.storage
-                .put_reader(DEFAULT_BINARY_STORAGE_PROFILE, &object_key, source)?;
-        if byte_size > self.config.limits.max_binary_bytes {
+        let (locator, stored_byte_size) = self.storage.put_file(
+            DEFAULT_BINARY_STORAGE_PROFILE,
+            &object_key,
+            temporary.path(),
+        )?;
+        if stored_byte_size != byte_size {
             let _ = self.storage.delete(&locator);
-            return Err(ResourceError::InvalidInput);
+            return Err(ResourceError::StorageFailure);
         }
         let now = current_timestamp();
         let record = ResourceFileRecord {
@@ -200,6 +254,7 @@ impl ResourceService {
             byte_size,
             storage_locator: locator,
             allow_inheritance,
+            revision: 0,
             created_at: now.clone(),
             updated_at: now,
         };
@@ -212,18 +267,23 @@ impl ResourceService {
 
     fn replace_file_contents(
         &self,
+        actor_user_code: &str,
         record: &ResourceFileRecord,
         file_name: &str,
         source: &mut dyn Read,
     ) -> Result<ResourceFileRecord, ResourceError> {
         validate_binary_name(file_name, self.config.limits.max_binary_name_length)?;
+        let (temporary, byte_size) =
+            spool_limited_binary(source, self.config.limits.max_binary_bytes)?;
         let object_key = self.next_object_key(&record.workspace_code, &record.resource_code);
-        let (locator, byte_size) =
-            self.storage
-                .put_reader(DEFAULT_BINARY_STORAGE_PROFILE, &object_key, source)?;
-        if byte_size > self.config.limits.max_binary_bytes {
+        let (locator, stored_byte_size) = self.storage.put_file(
+            DEFAULT_BINARY_STORAGE_PROFILE,
+            &object_key,
+            temporary.path(),
+        )?;
+        if stored_byte_size != byte_size {
             let _ = self.storage.delete(&locator);
-            return Err(ResourceError::InvalidInput);
+            return Err(ResourceError::StorageFailure);
         }
         let previous_locator = record.storage_locator.clone();
         let mut updated = record.clone();
@@ -232,11 +292,23 @@ impl ResourceService {
         updated.byte_size = byte_size;
         updated.storage_locator = locator;
         updated.updated_at = current_timestamp();
-        if let Err(error) = self.repository(|repository| repository.update_file(&updated)) {
-            self.delete_unreferenced_locator(&updated.storage_locator);
-            return Err(error);
+        match self.repository(|repository| repository.update_file(&updated)) {
+            Ok(true) => {}
+            Ok(false) => {
+                self.delete_unreferenced_locator(&updated.storage_locator);
+                return Err(ResourceError::Conflict);
+            }
+            Err(error) => {
+                self.delete_unreferenced_locator(&updated.storage_locator);
+                return Err(error);
+            }
         }
         self.delete_unreferenced_locator(&previous_locator);
+        self.publish_resource_audit(
+            actor_user_code,
+            &ManagedResource::File(updated.clone()),
+            "resource.updated",
+        );
         Ok(updated)
     }
 
@@ -350,6 +422,22 @@ impl ResourceService {
         }
         Ok(canonical)
     }
+}
+
+fn spool_limited_binary(
+    source: &mut dyn Read,
+    maximum_bytes: u64,
+) -> Result<(tempfile::NamedTempFile, u64), ResourceError> {
+    let mut temporary =
+        tempfile::NamedTempFile::new().map_err(|_| ResourceError::StorageFailure)?;
+    let sentinel_limit = maximum_bytes.saturating_add(1);
+    let mut limited = source.take(sentinel_limit);
+    let byte_size = io::copy(&mut limited, temporary.as_file_mut())
+        .map_err(|_| ResourceError::StorageFailure)?;
+    if byte_size > maximum_bytes {
+        return Err(ResourceError::InvalidInput);
+    }
+    Ok((temporary, byte_size))
 }
 
 pub(super) fn file_extension(file_name: &str) -> String {

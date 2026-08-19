@@ -1,3 +1,5 @@
+use serde_json::Value;
+
 use crate::{
     application::resource::{
         ResourceCommitBinary, ResourceCommitResult, ResourceCreateCommand, ResourceDeleteCommand,
@@ -21,12 +23,37 @@ impl ResourceService {
         actor_user_code: &str,
         query: ResourcePageQuery,
     ) -> Result<ResourcePage, ResourceError> {
+        self.query_resource_records(actor_user_code, query, false)
+    }
+
+    pub fn query_connections(
+        &self,
+        actor_user_code: &str,
+        query: ResourcePageQuery,
+    ) -> Result<ResourcePage, ResourceError> {
+        self.query_resource_records(actor_user_code, query, true)
+    }
+
+    fn query_resource_records(
+        &self,
+        actor_user_code: &str,
+        query: ResourcePageQuery,
+        connections_only: bool,
+    ) -> Result<ResourcePage, ResourceError> {
         let workspace_code = self.workspace_scope(actor_user_code, &query.workspace_code, false)?;
         let mut records = self
             .effective_resources(&workspace_code)?
             .into_values()
-            .map(|effective| self.resource_record(&effective.resource, effective.source_kind))
-            .filter(|record| query.kind.is_none_or(|kind| kind == record.kind))
+            .map(|effective| {
+                self.resource_record(&effective.resource, effective.source_kind, connections_only)
+            })
+            .filter(|record| !connections_only || record.kind.is_connection_kind())
+            .filter(|record| query.kinds.is_empty() || query.kinds.contains(&record.kind))
+            .filter(|record| {
+                query
+                    .source_kind
+                    .is_none_or(|source_kind| source_kind == record.source_kind)
+            })
             .filter(|record| {
                 query.search.as_deref().is_none_or(|search| {
                     let search = search.trim().to_ascii_lowercase();
@@ -37,7 +64,12 @@ impl ResourceService {
                 })
             })
             .collect::<Vec<_>>();
-        records.sort_by(|left, right| left.resource_code.cmp(&right.resource_code));
+        records.sort_by(|left, right| {
+            right
+                .updated_at
+                .cmp(&left.updated_at)
+                .then_with(|| left.resource_code.cmp(&right.resource_code))
+        });
         let total = records.len();
         let (current, size, start, end) = page_bounds(query.current, query.size, total);
         Ok(ResourcePage {
@@ -59,7 +91,7 @@ impl ResourceService {
             .effective_resources(&workspace_code)?
             .remove(&query.resource_code)
             .ok_or(ResourceError::NotFound)?;
-        Ok(self.resource_record(&resource.resource, resource.source_kind))
+        Ok(self.resource_record(&resource.resource, resource.source_kind, true))
     }
 
     pub fn create_file_resource(
@@ -114,7 +146,9 @@ impl ResourceService {
                 apply_description(&mut record.description, command.description.as_deref());
                 apply_inheritance(&mut record.allow_inheritance, command.allow_inheritance);
                 record.updated_at = current_timestamp();
-                self.repository(|repository| repository.update_file(&record))?;
+                if !self.repository(|repository| repository.update_file(&record))? {
+                    return Err(ResourceError::Conflict);
+                }
                 self.publish_resource_audit(
                     actor_user_code,
                     &ManagedResource::File(record.clone()),
@@ -127,7 +161,16 @@ impl ResourceService {
                 apply_description(&mut record.description, command.description.as_deref());
                 apply_inheritance(&mut record.allow_inheritance, command.allow_inheritance);
                 record.updated_at = current_timestamp();
-                self.repository(|repository| repository.update_data_source_connection(&record))?;
+                if !self
+                    .repository(|repository| repository.update_data_source_connection(&record))?
+                {
+                    return Err(ResourceError::Conflict);
+                }
+                self.publish_resource_audit(
+                    actor_user_code,
+                    &ManagedResource::DataSourceConnection(record.clone()),
+                    "resource.updated",
+                );
                 record.kind
             }
             Some(ManagedResource::Server(mut record)) => {
@@ -135,7 +178,14 @@ impl ResourceService {
                 apply_description(&mut record.description, command.description.as_deref());
                 apply_inheritance(&mut record.allow_inheritance, command.allow_inheritance);
                 record.updated_at = current_timestamp();
-                self.repository(|repository| repository.update_server(&record))?;
+                if !self.repository(|repository| repository.update_server(&record))? {
+                    return Err(ResourceError::Conflict);
+                }
+                self.publish_resource_audit(
+                    actor_user_code,
+                    &ManagedResource::Server(record.clone()),
+                    "resource.updated",
+                );
                 ResourceKind::ServerConnection
             }
             Some(ManagedResource::ServerAccount(mut record)) => {
@@ -143,7 +193,14 @@ impl ResourceService {
                 apply_description(&mut record.description, command.description.as_deref());
                 apply_inheritance(&mut record.allow_inheritance, command.allow_inheritance);
                 record.updated_at = current_timestamp();
-                self.repository(|repository| repository.update_server_account(&record))?;
+                if !self.repository(|repository| repository.update_server_account(&record))? {
+                    return Err(ResourceError::Conflict);
+                }
+                self.publish_resource_audit(
+                    actor_user_code,
+                    &ManagedResource::ServerAccount(record.clone()),
+                    "resource.updated",
+                );
                 ResourceKind::ServerAccount
             }
             None => return Err(ResourceError::NotFound),
@@ -159,49 +216,86 @@ impl ResourceService {
         actor_user_code: &str,
         command: ResourceDeleteCommand,
     ) -> Result<ResourceDeleteResult, ResourceError> {
+        self.delete_owned_resource(actor_user_code, command, false)
+    }
+
+    pub fn delete_connection(
+        &self,
+        actor_user_code: &str,
+        command: ResourceDeleteCommand,
+    ) -> Result<ResourceDeleteResult, ResourceError> {
+        self.delete_owned_resource(actor_user_code, command, true)
+    }
+
+    fn delete_owned_resource(
+        &self,
+        actor_user_code: &str,
+        command: ResourceDeleteCommand,
+        connections_only: bool,
+    ) -> Result<ResourceDeleteResult, ResourceError> {
         validate_resource_code(&command.resource_code)?;
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
-        let deleted = match self.managed_resource(&workspace_code, &command.resource_code)? {
-            Some(ManagedResource::File(record)) => {
-                self.repository(|repository| {
-                    repository.delete_file(&workspace_code, &command.resource_code)
+        let resource = self
+            .managed_resource(&workspace_code, &command.resource_code)?
+            .ok_or(ResourceError::NotFound)?;
+        if connections_only && !resource.kind().is_connection_kind() {
+            return Err(ResourceError::InvalidInput);
+        }
+        let deleted = match resource {
+            ManagedResource::File(record) => {
+                let deleted = self.repository(|repository| {
+                    repository.delete_file(&workspace_code, &command.resource_code, record.revision)
                 })?;
+                if !deleted {
+                    return Err(ResourceError::Conflict);
+                }
                 self.delete_unreferenced_locator(&record.storage_locator);
                 true
             }
-            Some(ManagedResource::DataSourceConnection(_)) => {
-                self.repository(|repository| {
+            ManagedResource::DataSourceConnection(record) => {
+                if !self.repository(|repository| {
                     repository.delete_data_source_connection(
                         &workspace_code,
                         &command.resource_code,
+                        record.revision,
                     )
-                })?;
+                })? {
+                    return Err(ResourceError::Conflict);
+                }
                 true
             }
-            Some(ManagedResource::Server(_)) => {
-                self.ensure_server_has_no_accounts(&workspace_code, &command.resource_code)?;
-                self.repository(|repository| {
-                    repository.delete_server(&workspace_code, &command.resource_code)
-                })?;
+            ManagedResource::Server(record) => {
+                if !self.repository(|repository| {
+                    repository.delete_server_if_no_accounts(
+                        &workspace_code,
+                        &command.resource_code,
+                        record.revision,
+                    )
+                })? {
+                    return Err(ResourceError::Conflict);
+                }
                 true
             }
-            Some(ManagedResource::ServerAccount(_)) => {
-                self.repository(|repository| {
-                    repository.delete_server_account(&workspace_code, &command.resource_code)
-                })?;
+            ManagedResource::ServerAccount(record) => {
+                if !self.repository(|repository| {
+                    repository.delete_server_account(
+                        &workspace_code,
+                        &command.resource_code,
+                        record.revision,
+                    )
+                })? {
+                    return Err(ResourceError::Conflict);
+                }
                 true
             }
-            None => false,
         };
-        if deleted {
-            self.publish_resource_audit_code(
-                actor_user_code,
-                &workspace_code,
-                &command.resource_code,
-                "resource.deleted",
-            );
-        }
+        self.publish_resource_audit_code(
+            actor_user_code,
+            &workspace_code,
+            &command.resource_code,
+            "resource.deleted",
+        );
         Ok(ResourceDeleteResult {
             resource_code: command.resource_code,
             deleted,
@@ -212,6 +306,7 @@ impl ResourceService {
         &self,
         resource: &ManagedResource,
         source_kind: ResourceSourceKind,
+        include_attributes: bool,
     ) -> ResourceRecord {
         match resource {
             ManagedResource::File(record) => ResourceRecord {
@@ -240,7 +335,7 @@ impl ResourceService {
                 description: record.description.clone(),
                 allow_inheritance: record.allow_inheritance,
                 file: None,
-                attributes: Some(record.attributes.clone()),
+                attributes: include_attributes.then(|| redact_direct_secrets(&record.attributes)),
                 created_at: record.created_at.clone(),
                 updated_at: record.updated_at.clone(),
             },
@@ -253,11 +348,13 @@ impl ResourceService {
                 description: record.description.clone(),
                 allow_inheritance: record.allow_inheritance,
                 file: None,
-                attributes: Some(serde_json::json!({
-                    "host": record.host,
-                    "port": record.port,
-                    "protocol": "Ssh",
-                })),
+                attributes: include_attributes.then(|| {
+                    serde_json::json!({
+                        "host": record.host,
+                        "port": record.port,
+                        "protocol": "Ssh",
+                    })
+                }),
                 created_at: record.created_at.clone(),
                 updated_at: record.updated_at.clone(),
             },
@@ -270,11 +367,14 @@ impl ResourceService {
                 description: record.description.clone(),
                 allow_inheritance: record.allow_inheritance,
                 file: None,
-                attributes: Some(serde_json::json!({
-                    "serverCode": record.server_code,
-                    "username": record.username,
-                    "authenticationType": record.authentication_type,
-                })),
+                attributes: include_attributes.then(|| {
+                    serde_json::json!({
+                        "serverWorkspaceCode": record.server_workspace_code,
+                        "serverCode": record.server_code,
+                        "username": record.username,
+                        "authenticationType": record.authentication_type,
+                    })
+                }),
                 created_at: record.created_at.clone(),
                 updated_at: record.updated_at.clone(),
             },
@@ -312,6 +412,35 @@ impl ResourceService {
                 .summary("Resource changed")
                 .attr("workspaceCode", workspace_code.to_string()),
         );
+    }
+}
+
+fn redact_direct_secrets(attributes: &Value) -> Value {
+    let mut redacted = attributes.clone();
+    redact_direct_secrets_in_place(&mut redacted);
+    redacted
+}
+
+fn redact_direct_secrets_in_place(value: &mut Value) {
+    match value {
+        Value::Array(values) => {
+            for value in values {
+                redact_direct_secrets_in_place(value);
+            }
+        }
+        Value::Object(values) => {
+            let is_direct = values
+                .get("source")
+                .and_then(Value::as_str)
+                .is_some_and(|source| source == "DIRECT");
+            if is_direct && values.contains_key("value") {
+                values.insert("value".to_string(), Value::Null);
+            }
+            for value in values.values_mut() {
+                redact_direct_secrets_in_place(value);
+            }
+        }
+        _ => {}
     }
 }
 

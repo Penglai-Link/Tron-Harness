@@ -96,7 +96,7 @@ async function routeQuickUploadApi(
         resourceCode,
         scopeCode,
         workspaceCode: scopeCode,
-        sourceKind: "LOCAL",
+        sourceKind: "Local",
         updatedAt: 1_768_000_000_000,
       };
       resources.push(created);
@@ -106,7 +106,9 @@ async function routeQuickUploadApi(
 
     const body = route.request().postDataJSON() as JsonRecord | null;
     if (path.endsWith("/page")) {
-      const kindFilter = body && typeof body.kind === "string" ? body.kind : null;
+      const kindFilter = body && Array.isArray(body.kinds) && body.kinds.length === 1
+        ? String(body.kinds[0])
+        : null;
       const search = body && typeof body.search === "string" ? body.search.toLowerCase() : "";
       const matching = resources.filter((item) => (
         (!kindFilter || item.kind === kindFilter)
@@ -159,9 +161,9 @@ test("quick upload creates an IMAGE with one multipart file", async ({ page }) =
   expect(multipart[0].path).toMatch(/\/api\/v1\/resources\/create$/);
   expect(multipartNames(multipart[0].rawBody)).toEqual(["Brand Logo.PNG"]);
   expect(multipart[0].command).toMatchObject({
-    allowInheritance: true,
+    allowInheritance: false,
     description: "",
-    kind: "IMAGE",
+    kind: "Image",
     name: "Brand Logo",
     resourceCode: "brand-logo",
     workspaceCode: "TRON_CORE",
@@ -187,7 +189,7 @@ test("quick upload waits for a readable PDF page count before creating", async (
   await dialog.getByRole("button", { exact: true, name: "Upload" }).click();
 
   await expect.poll(() => multipart).toHaveLength(1);
-  expect(multipart[0].command).toMatchObject({ kind: "PDF", resourceCode: "policy" });
+  expect(multipart[0].command).toMatchObject({ kind: "Pdf", resourceCode: "policy" });
 });
 
 test("a resource-code conflict keeps the selected file and expands its editable code", async ({ page }) => {
@@ -213,10 +215,22 @@ test("a resource-code conflict keeps the selected file and expands its editable 
   await expect(dialog.getByLabel("Resource code")).toHaveValue("brand-logo");
   await expect(dialog.getByTestId("quick-resource-upload-dropzone").getByText("Brand Logo.PNG", { exact: true })).toBeVisible();
   expect(multipart).toHaveLength(1);
-  await expect(page).toHaveURL(/\/settings\/resources$/);
+  await expect(page).toHaveURL(/\/resources$/);
 });
 
-test("quick upload rejects a multiple-file drop and sends an unreadable PDF to the editor", async ({ page }) => {
+test("platform resources have no source filter and only expose quick upload creation", async ({ page }) => {
+  const multipart: CapturedMultipartRequest[] = [];
+  await routeQuickUploadApi(page, multipart);
+  await seedResourceUiShell(page);
+
+  await page.goto(`${frontend!.baseUrl}/settings/resources`);
+  await expect(page.getByRole("heading", { name: "Platform Resources" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("button", { exact: true, name: "Quick Upload" })).toBeVisible();
+  await expect(page.getByRole("button", { exact: true, name: "New Resource" })).toHaveCount(0);
+  await expect(page.getByLabel("Filter resources by source")).toHaveCount(0);
+});
+
+test("quick upload rejects a multiple-file drop and accepts an unreadable PDF", async ({ page }) => {
   const multipart: CapturedMultipartRequest[] = [];
   await routeQuickUploadApi(page, multipart);
   await seedResourceUiShell(page);
@@ -236,8 +250,9 @@ test("quick upload rejects a multiple-file drop and sends an unreadable PDF to t
     mimeType: "application/pdf",
     name: "broken.pdf",
   });
-  await expect(page).toHaveURL(/\/resources\/new\?quickUpload=/, { timeout: 20_000 });
-  await expect(page.getByLabel("Resource name")).toHaveValue("broken");
-  await expect(page.getByLabel("Resource code")).toHaveValue("broken");
-  expect(multipart).toHaveLength(0);
+  await expect(page.getByText("Page count could not be read. The PDF can still be uploaded.", { exact: true })).toBeVisible({ timeout: 20_000 });
+  await page.getByRole("button", { exact: true, name: "Upload" }).click();
+  await expect.poll(() => multipart).toHaveLength(1);
+  expect(multipart[0].command).toMatchObject({ kind: "Pdf", resourceCode: "broken" });
+  await expect(page).toHaveURL(/\/resources\/detail\?resourceCode=broken$/);
 });

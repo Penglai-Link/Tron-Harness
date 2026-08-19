@@ -15,9 +15,10 @@ import { setApiAccessToken } from "@/shared/api/httpClient";
 
 const pageRequest = {
   current: 1,
-  kind: null,
+  kinds: [],
   search: null,
   size: 20,
+  sourceKind: null,
   workspaceCode: "TRON_CORE",
 };
 
@@ -42,10 +43,10 @@ describe("Resource API client", () => {
       createdAt: 1_767_225_600_000,
       description: "Quarterly report",
       file: { byteSize: 184_320, fileExtension: "pdf", fileName: "report.pdf" },
-      kind: "PDF",
+      kind: "Pdf",
       name: "Q3 report",
       resourceCode: "q3-report",
-      sourceKind: "LOCAL",
+      sourceKind: "Local",
       updatedAt: 1_767_312_000_000,
       workspaceCode: "TRON_CORE",
     });
@@ -100,7 +101,7 @@ describe("Resource API client", () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({
         code: "0",
-        data: { kind: "FILE", resourceCode: "readme" },
+        data: { kind: "File", resourceCode: "readme" },
         message: "ok",
       }))
       .mockResolvedValueOnce(jsonResponse({
@@ -132,7 +133,7 @@ describe("Resource API client", () => {
       name: "Readme",
       resourceCode: "readme",
       workspaceCode: "TRON_CORE",
-    })).resolves.toEqual({ kind: "FILE", resourceCode: "readme" });
+    })).resolves.toEqual({ kind: "File", resourceCode: "readme" });
 
     const [, createRequest] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(createRequest.body).toBeInstanceOf(FormData);
@@ -140,7 +141,7 @@ describe("Resource API client", () => {
     expect(JSON.parse(String(createForm.get("command")))).toEqual({
       allowInheritance: true,
       description: "Readme",
-      kind: "FILE",
+      kind: "File",
       name: "Readme",
       resourceCode: "readme",
       workspaceCode: "TRON_CORE",
@@ -179,7 +180,7 @@ describe("Resource API client", () => {
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(jsonResponse({
         code: "0",
-        data: { kind: "IMAGE", resourceCode: "hero-image" },
+        data: { kind: "Image", resourceCode: "hero-image" },
         message: "ok",
       }))
       .mockResolvedValueOnce(jsonResponse({
@@ -195,7 +196,7 @@ describe("Resource API client", () => {
       name: "Hero image",
       resourceCode: "hero-image",
       workspaceCode: "TRON_CORE",
-    })).resolves.toEqual({ kind: "IMAGE", resourceCode: "hero-image" });
+    })).resolves.toEqual({ kind: "Image", resourceCode: "hero-image" });
 
     await expect(deleteResource({
       resourceCode: "hero-image",

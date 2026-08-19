@@ -35,14 +35,14 @@ describe("quick resource upload helpers", () => {
     })).toEqual({ binaryName: "readme.md", kind: "READY", type: "FILE" });
   });
 
-  it("sends missing page counts to the editor", () => {
+  it("accepts PDFs whose page count cannot be read", () => {
     const file = new File(["pdf"], "policy.pdf");
     expect(evaluateQuickResourceUpload({
       binaryName: file.name,
       file,
       pageCount: 0,
       type: "PDF",
-    })).toMatchObject({ kind: "EDITOR", reasons: ["PDF_PAGE_COUNT"] });
+    })).toEqual({ binaryName: "policy.pdf", kind: "READY", type: "PDF" });
   });
 
   it("blocks files above the fixed size limit", () => {

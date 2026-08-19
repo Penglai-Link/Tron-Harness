@@ -11,7 +11,8 @@ pub trait ResourceRepository: Send {
         &mut self,
         workspace_code: &str,
         resource_code: &str,
-    ) -> Result<Option<ResourceFileRecord>, ResourceError>;
+        revision: u64,
+    ) -> Result<bool, ResourceError>;
 
     fn list_data_source_connections(
         &mut self,
@@ -28,25 +29,36 @@ pub trait ResourceRepository: Send {
         &mut self,
         workspace_code: &str,
         resource_code: &str,
-    ) -> Result<Option<DataSourceConnectionRecord>, ResourceError>;
+        revision: u64,
+    ) -> Result<bool, ResourceError>;
 
     fn list_servers(&mut self) -> Result<Vec<ServerRecord>, ResourceError>;
     fn insert_server(&mut self, record: &ServerRecord) -> Result<(), ResourceError>;
+    fn insert_server_bundle(
+        &mut self,
+        server: &ServerRecord,
+        initial_account: &ServerAccountRecord,
+    ) -> Result<(), ResourceError>;
     fn update_server(&mut self, record: &ServerRecord) -> Result<bool, ResourceError>;
-    fn delete_server(
+    fn delete_server_if_no_accounts(
         &mut self,
         workspace_code: &str,
         resource_code: &str,
-    ) -> Result<Option<ServerRecord>, ResourceError>;
+        revision: u64,
+    ) -> Result<bool, ResourceError>;
 
     fn list_server_accounts(&mut self) -> Result<Vec<ServerAccountRecord>, ResourceError>;
     fn insert_server_account(&mut self, record: &ServerAccountRecord) -> Result<(), ResourceError>;
-    fn update_server_account(&mut self, record: &ServerAccountRecord) -> Result<bool, ResourceError>;
+    fn update_server_account(
+        &mut self,
+        record: &ServerAccountRecord,
+    ) -> Result<bool, ResourceError>;
     fn delete_server_account(
         &mut self,
         workspace_code: &str,
         resource_code: &str,
-    ) -> Result<Option<ServerAccountRecord>, ResourceError>;
+        revision: u64,
+    ) -> Result<bool, ResourceError>;
 }
 
 pub trait ObjectStorage: Send + Sync {

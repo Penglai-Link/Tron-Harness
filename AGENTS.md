@@ -42,3 +42,4 @@ Pagable response body format:
 ## What's more
 - macOS ships GNU Make 3.81, which does not support `.ONESHELL`; keep recipes from relying on shell state across recipe lines.
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
+<!-- SQLite `CREATE TABLE IF NOT EXISTS` does not retrofit columns or foreign keys; resource schema upgrades need an applied-version ledger and an explicit compatibility path. -->

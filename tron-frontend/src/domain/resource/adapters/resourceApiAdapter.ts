@@ -1,4 +1,8 @@
-import type { ResourceApiRecord } from "@/domain/resource/api";
+import {
+  fromResourceKindCode,
+  fromResourceSourceCode,
+  type ResourceApiRecord,
+} from "@/domain/resource/api";
 import type { ResourceRecord } from "@/domain/resource/model";
 
 function toTimestamp(value: number) {
@@ -16,10 +20,10 @@ export function adaptResourceRecord(record: ResourceApiRecord): ResourceRecord {
     createdAt: toTimestamp(record.createdAt),
     description: record.description,
     file: record.file,
-    kind: record.kind,
+    kind: fromResourceKindCode(record.kind),
     name: record.name,
     resourceCode: record.resourceCode,
-    sourceKind: record.sourceKind,
+    sourceKind: fromResourceSourceCode(record.sourceKind),
     updatedAt: toTimestamp(record.updatedAt),
     workspaceCode: record.workspaceCode,
   };

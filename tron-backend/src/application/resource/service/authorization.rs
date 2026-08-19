@@ -1,10 +1,10 @@
 use crate::domain::{
     resource::ResourceError,
     user::UserStatus,
-    workspace::WorkspaceStatus,
+    workspace::{WorkspaceError, WorkspaceStatus},
 };
 
-use super::ResourceService;
+use super::{PLATFORM_RESOURCE_SCOPE, ResourceService};
 
 impl ResourceService {
     pub(super) fn authorize_workspace_read(
@@ -29,9 +29,7 @@ impl ResourceService {
         workspace_code: &str,
         write: bool,
     ) -> Result<String, ResourceError> {
-        let workspace_code = workspace_code
-            .trim()
-            .to_string();
+        let workspace_code = workspace_code.trim().to_string();
         if workspace_code.is_empty() {
             return Err(ResourceError::WorkspaceRequired);
         }
@@ -67,6 +65,23 @@ impl ResourceService {
             .map_err(|_| ResourceError::StorageFailure)?
         {
             return Err(ResourceError::Forbidden);
+        }
+        // New installations do not materialize PLATFORM as a workspace. Keep
+        // its resources in the system scope for administrators while retaining
+        // workspace-grant authorization for installations that still have the
+        // legacy PLATFORM workspace.
+        if workspace_code == PLATFORM_RESOURCE_SCOPE {
+            match self.workspaces.get_workspace(workspace_code) {
+                Ok(_) => {}
+                Err(WorkspaceError::NotFound) => {
+                    return role_codes
+                        .iter()
+                        .any(|role| role == "ADMIN")
+                        .then_some(())
+                        .ok_or(ResourceError::Forbidden);
+                }
+                Err(_) => return Err(ResourceError::StorageFailure),
+            }
         }
         if !self
             .workspaces

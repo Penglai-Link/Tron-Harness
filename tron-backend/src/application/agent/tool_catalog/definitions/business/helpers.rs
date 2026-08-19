@@ -222,6 +222,26 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         ("resource.query", "sampleResultSummary") => {
             "agent.toolCatalog.tools.resource.query.sampleResultSummary"
         }
+        ("resource.get", "name") => "agent.toolCatalog.tools.resource.get.name",
+        ("resource.get", "description") => "agent.toolCatalog.tools.resource.get.description",
+        ("resource.get", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.get.sampleResultSummary"
+        }
+        ("resource.create", "name") => "agent.toolCatalog.tools.resource.create.name",
+        ("resource.create", "description") => "agent.toolCatalog.tools.resource.create.description",
+        ("resource.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.create.sampleResultSummary"
+        }
+        ("resource.update", "name") => "agent.toolCatalog.tools.resource.update.name",
+        ("resource.update", "description") => "agent.toolCatalog.tools.resource.update.description",
+        ("resource.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.update.sampleResultSummary"
+        }
+        ("resource.delete", "name") => "agent.toolCatalog.tools.resource.delete.name",
+        ("resource.delete", "description") => "agent.toolCatalog.tools.resource.delete.description",
+        ("resource.delete", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.delete.sampleResultSummary"
+        }
         ("resource.draft", "name") => "agent.toolCatalog.tools.resource.draft.name",
         ("resource.draft", "description") => "agent.toolCatalog.tools.resource.draft.description",
         ("resource.draft", "sampleResultSummary") => {
@@ -238,6 +258,40 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         ("resource.binary", "description") => "agent.toolCatalog.tools.resource.binary.description",
         ("resource.binary", "sampleResultSummary") => {
             "agent.toolCatalog.tools.resource.binary.sampleResultSummary"
+        }
+        ("resource.data_source.create", "name") => {
+            "agent.toolCatalog.tools.resource.data_source.create.name"
+        }
+        ("resource.data_source.create", "description") => {
+            "agent.toolCatalog.tools.resource.data_source.create.description"
+        }
+        ("resource.data_source.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.data_source.create.sampleResultSummary"
+        }
+        ("resource.data_source.update", "name") => {
+            "agent.toolCatalog.tools.resource.data_source.update.name"
+        }
+        ("resource.data_source.update", "description") => {
+            "agent.toolCatalog.tools.resource.data_source.update.description"
+        }
+        ("resource.data_source.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.data_source.update.sampleResultSummary"
+        }
+        ("resource.server.create", "name") => "agent.toolCatalog.tools.resource.server.create.name",
+        ("resource.server.create", "description") => {
+            "agent.toolCatalog.tools.resource.server.create.description"
+        }
+        ("resource.server.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.server.create.sampleResultSummary"
+        }
+        ("resource.server_account.create", "name") => {
+            "agent.toolCatalog.tools.resource.server_account.create.name"
+        }
+        ("resource.server_account.create", "description") => {
+            "agent.toolCatalog.tools.resource.server_account.create.description"
+        }
+        ("resource.server_account.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.resource.server_account.create.sampleResultSummary"
         }
         _ => "agent.toolCatalog.tools.unknown.name",
     }

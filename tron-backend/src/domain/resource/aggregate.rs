@@ -18,6 +18,7 @@ pub struct ResourceFileRecord {
     pub byte_size: u64,
     pub storage_locator: String,
     pub allow_inheritance: bool,
+    pub revision: u64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -32,6 +33,7 @@ pub struct DataSourceConnectionRecord {
     pub description: String,
     pub attributes: Value,
     pub allow_inheritance: bool,
+    pub revision: u64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -46,6 +48,7 @@ pub struct ServerRecord {
     pub host: String,
     pub port: u16,
     pub allow_inheritance: bool,
+    pub revision: u64,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -55,6 +58,9 @@ pub struct ServerRecord {
 pub struct ServerAccountRecord {
     pub workspace_code: String,
     pub resource_code: String,
+    /// Workspace that owns the server this account is attached to. It can differ
+    /// from `workspace_code` when the account targets an inherited server.
+    pub server_workspace_code: String,
     pub server_code: String,
     pub name: String,
     pub description: String,
@@ -64,6 +70,7 @@ pub struct ServerAccountRecord {
     pub private_key_variable_key: Option<String>,
     pub private_key_passphrase_variable_key: Option<String>,
     pub allow_inheritance: bool,
+    pub revision: u64,
     pub created_at: String,
     pub updated_at: String,
 }

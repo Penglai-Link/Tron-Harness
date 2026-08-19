@@ -1,14 +1,64 @@
-export type ResourceSourceCode = "LOCAL" | "INHERITED" | "OVERRIDE";
+import type { ResourceKind, ResourceSourceKind } from "@/domain/resource/model";
+
+export type ResourceSourceCode = "Local" | "Inherited" | "Override";
 export type ResourceKindCode =
-  | "FILE"
-  | "IMAGE"
-  | "PDF"
-  | "MYSQL_CONNECTION"
-  | "POSTGRESQL_CONNECTION"
-  | "REDIS_CONNECTION"
-  | "KAFKA_CONNECTION"
-  | "SERVER_CONNECTION"
-  | "SERVER_ACCOUNT";
+  | "File"
+  | "Image"
+  | "Pdf"
+  | "MysqlConnection"
+  | "PostgresqlConnection"
+  | "RedisConnection"
+  | "KafkaConnection"
+  | "ServerConnection"
+  | "ServerAccount";
+
+const resourceKindCodes: Record<ResourceKind, ResourceKindCode> = {
+  FILE: "File",
+  IMAGE: "Image",
+  PDF: "Pdf",
+  MYSQL_CONNECTION: "MysqlConnection",
+  POSTGRESQL_CONNECTION: "PostgresqlConnection",
+  REDIS_CONNECTION: "RedisConnection",
+  KAFKA_CONNECTION: "KafkaConnection",
+  SERVER_CONNECTION: "ServerConnection",
+  SERVER_ACCOUNT: "ServerAccount",
+};
+
+const resourceSourceCodes: Record<ResourceSourceKind, ResourceSourceCode> = {
+  LOCAL: "Local",
+  INHERITED: "Inherited",
+  OVERRIDE: "Override",
+};
+
+export function toResourceKindCode(value: ResourceKind): ResourceKindCode {
+  return resourceKindCodes[value];
+}
+
+export function fromResourceKindCode(value: ResourceKindCode): ResourceKind {
+  switch (value) {
+    case "File": return "FILE";
+    case "Image": return "IMAGE";
+    case "Pdf": return "PDF";
+    case "MysqlConnection": return "MYSQL_CONNECTION";
+    case "PostgresqlConnection": return "POSTGRESQL_CONNECTION";
+    case "RedisConnection": return "REDIS_CONNECTION";
+    case "KafkaConnection": return "KAFKA_CONNECTION";
+    case "ServerConnection": return "SERVER_CONNECTION";
+    case "ServerAccount": return "SERVER_ACCOUNT";
+  }
+}
+
+export function toResourceSourceCode(value: ResourceSourceKind): ResourceSourceCode {
+  return resourceSourceCodes[value];
+}
+
+export function fromResourceSourceCode(value: ResourceSourceCode): ResourceSourceKind {
+  switch (value) {
+    case "Local": return "LOCAL";
+    case "Inherited": return "INHERITED";
+    case "Override": return "OVERRIDE";
+  }
+}
 
 export interface ResourceApiPage<T> {
   current: number;
@@ -39,7 +89,8 @@ export interface ResourceApiRecord {
 
 export interface ResourcePageApiRequest {
   workspaceCode: string;
-  kind: ResourceKindCode | null;
+  kinds: ResourceKindCode[];
+  sourceKind: ResourceSourceCode | null;
   search: string | null;
   current: number;
   size: number;

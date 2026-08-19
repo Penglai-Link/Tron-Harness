@@ -8,31 +8,32 @@ use crate::{
         ResourceGetQuery, ResourcePageQuery, ResourceUpdateCommand, ServerAccountCreateCommand,
         ServerAccountCreateInput, ServerCreateCommand,
     },
-    domain::resource::{ResourceError, ResourceKind, ServerAuthenticationType, is_data_source_kind},
+    domain::resource::{
+        ResourceError, ResourceKind, ResourceSourceKind, ServerAuthenticationType,
+        is_connection_managed_kind, is_data_source_kind,
+    },
 };
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct ResourcePageRequest {
     pub workspace_code: String,
-    #[serde(default)]
-    pub kind: Option<ResourceKind>,
-    #[serde(default)]
+    pub kinds: Vec<ResourceKind>,
+    pub source_kind: Option<ResourceSourceKind>,
     pub search: Option<String>,
-    #[serde(default)]
-    pub current: Option<usize>,
-    #[serde(default)]
-    pub size: Option<usize>,
+    pub current: usize,
+    pub size: usize,
 }
 
 impl From<ResourcePageRequest> for ResourcePageQuery {
     fn from(value: ResourcePageRequest) -> Self {
         Self {
             workspace_code: value.workspace_code,
-            kind: value.kind,
+            kinds: value.kinds,
+            source_kind: value.source_kind,
             search: value.search,
-            current: value.current.unwrap_or(1),
-            size: value.size.unwrap_or(20),
+            current: value.current,
+            size: value.size,
         }
     }
 }
@@ -62,7 +63,6 @@ pub struct ResourceCreateRequest {
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
-    #[serde(default = "default_true")]
     pub allow_inheritance: bool,
 }
 
@@ -111,6 +111,54 @@ pub struct ResourceDeleteRequest {
     pub resource_code: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConnectionDeleteRequest {
+    pub workspace_code: String,
+    pub resource_code: String,
+}
+
+impl From<ConnectionDeleteRequest> for ResourceDeleteCommand {
+    fn from(value: ConnectionDeleteRequest) -> Self {
+        Self {
+            workspace_code: value.workspace_code,
+            resource_code: value.resource_code,
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct ConnectionPageRequest {
+    pub workspace_code: String,
+    pub kinds: Vec<ResourceKind>,
+    pub search: Option<String>,
+    pub current: usize,
+    pub size: usize,
+}
+
+impl TryFrom<ConnectionPageRequest> for ResourcePageQuery {
+    type Error = ResourceError;
+
+    fn try_from(value: ConnectionPageRequest) -> Result<Self, Self::Error> {
+        if value
+            .kinds
+            .iter()
+            .any(|kind| !is_connection_managed_kind(kind.as_str()))
+        {
+            return Err(ResourceError::InvalidInput);
+        }
+        Ok(Self {
+            workspace_code: value.workspace_code,
+            kinds: value.kinds,
+            source_kind: None,
+            search: value.search,
+            current: value.current,
+            size: value.size,
+        })
+    }
+}
+
 impl From<ResourceDeleteRequest> for ResourceDeleteCommand {
     fn from(value: ResourceDeleteRequest) -> Self {
         Self {
@@ -146,7 +194,6 @@ pub struct DataSourceCreateRequest {
     #[serde(default)]
     pub description: Option<String>,
     pub attributes: Value,
-    #[serde(default = "default_true")]
     pub allow_inheritance: bool,
 }
 
@@ -212,7 +259,6 @@ pub struct ServerAccountCreateInputRequest {
     pub private_key_variable_key: Option<String>,
     #[serde(default)]
     pub private_key_passphrase_variable_key: Option<String>,
-    #[serde(default = "default_true")]
     pub allow_inheritance: bool,
 }
 
@@ -242,7 +288,6 @@ pub struct ServerCreateRequest {
     pub description: Option<String>,
     pub host: String,
     pub port: u16,
-    #[serde(default = "default_true")]
     pub allow_inheritance: bool,
     pub initial_account: ServerAccountCreateInputRequest,
 }
@@ -291,8 +336,4 @@ pub fn binary_upload_command(
         workspace_code: workspace_code.to_string(),
         resource_code: resource_code.to_string(),
     })
-}
-
-fn default_true() -> bool {
-    true
 }

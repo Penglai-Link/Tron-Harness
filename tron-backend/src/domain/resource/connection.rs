@@ -18,7 +18,10 @@ pub enum ServerAuthenticationType {
 pub fn is_data_source_kind(code: &str) -> bool {
     matches!(
         code,
-        MYSQL_CONNECTION_CODE | POSTGRESQL_CONNECTION_CODE | REDIS_CONNECTION_CODE | KAFKA_CONNECTION_CODE
+        MYSQL_CONNECTION_CODE
+            | POSTGRESQL_CONNECTION_CODE
+            | REDIS_CONNECTION_CODE
+            | KAFKA_CONNECTION_CODE
     )
 }
 

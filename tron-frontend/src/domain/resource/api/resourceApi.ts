@@ -18,6 +18,7 @@ import type {
   ResourcePageApiRequest,
   ResourceUpdateApiRequest,
 } from "./resourceApiContract";
+import { toResourceKindCode } from "./resourceApiContract";
 
 export const resourceApiEndpoints = {
   resourceCreate: "POST /api/v1/resources/create",
@@ -44,7 +45,7 @@ export function getResource(request: ResourceGetApiRequest) {
 export function createResource(request: ResourceCreateApiRequest) {
   const { file, ...command } = request;
   const body = new FormData();
-  body.set("command", JSON.stringify(command));
+  body.set("command", JSON.stringify({ ...command, kind: toResourceKindCode(command.kind) }));
   body.set("binary", file, file.name);
   return requestApi<ResourceCommitApiResult>(resourceApiEndpoints.resourceCreate, { body });
 }

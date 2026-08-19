@@ -18,6 +18,13 @@ use crate::{
 
 use super::ResourceService;
 
+mod validation;
+
+use validation::{
+    validate_kafka_attributes, validate_mysql_attributes, validate_postgresql_attributes,
+    validate_redis_attributes,
+};
+
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct EndpointAttributes {
@@ -145,10 +152,17 @@ impl ResourceService {
         kind: ResourceKind,
         attributes: &Value,
     ) -> Result<ResourceConnectionTarget, ResourceError> {
+        if serde_json::to_vec(attributes)
+            .map_err(|_| ResourceError::InvalidInput)?
+            .len()
+            > self.config.limits.attributes_max_bytes
+        {
+            return Err(ResourceError::InvalidInput);
+        }
         match kind {
             ResourceKind::MysqlConnection => {
                 let attributes: MysqlAttributes = parse(attributes)?;
-                let _ = &attributes.connection_mode;
+                validate_mysql_attributes(&attributes)?;
                 let values = self.resolve_connection_variables(
                     workspace_code,
                     mysql_variable_keys(&attributes),
@@ -164,7 +178,7 @@ impl ResourceService {
             }
             ResourceKind::PostgresqlConnection => {
                 let attributes: PostgresqlAttributes = parse(attributes)?;
-                let _ = (&attributes.target_session, &attributes.load_balance);
+                validate_postgresql_attributes(&attributes)?;
                 let values = self.resolve_connection_variables(
                     workspace_code,
                     postgresql_variable_keys(&attributes),
@@ -185,7 +199,7 @@ impl ResourceService {
             }
             ResourceKind::RedisConnection => {
                 let attributes: RedisAttributes = parse(attributes)?;
-                let _ = &attributes.properties;
+                validate_redis_attributes(&attributes)?;
                 let values = self.resolve_connection_variables(
                     workspace_code,
                     redis_variable_keys(&attributes),
@@ -229,6 +243,7 @@ impl ResourceService {
             }
             ResourceKind::KafkaConnection => {
                 let attributes: KafkaAttributes = parse(attributes)?;
+                validate_kafka_attributes(&attributes)?;
                 let values = self.resolve_connection_variables(
                     workspace_code,
                     kafka_variable_keys(&attributes),

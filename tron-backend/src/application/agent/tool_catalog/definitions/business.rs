@@ -45,7 +45,15 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         variable_update_definition(),
         variable_delete_definition(),
         resource_query_definition(),
+        resource_get_definition(),
+        resource_create_definition(),
+        resource_update_definition(),
+        resource_delete_definition(),
         resource_binary_definition(),
+        resource_data_source_create_definition(),
+        resource_data_source_update_definition(),
+        resource_server_create_definition(),
+        resource_server_account_create_definition(),
     ]
 }
 
@@ -472,7 +480,7 @@ fn resource_query_definition() -> ToolCatalogDefinition {
         ToolOperationKind::Query,
         schema(
             "agent.toolCatalog.tools.resource.query.description",
-            json!([{ "workspaceCode": "TRON_CORE", "kind": "FILE", "current": 1, "size": 20 }]),
+            json!([{ "workspaceCode": "TRON_CORE", "kind": "File", "current": 1, "size": 20 }]),
             json!({
                 "type": "object",
                 "properties": {
@@ -481,6 +489,111 @@ fn resource_query_definition() -> ToolCatalogDefinition {
                     "kind": resource_kind_schema(),
                     "current": { "type": "integer", "minimum": 1, "default": 1 },
                     "size": { "type": "integer", "minimum": 1, "maximum": 50, "default": 20 }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_get_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.get",
+        "resource",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.resource.get.description",
+            json!([{ "workspaceCode": "TRON_CORE", "resourceCode": "release-notes" }]),
+            json!({
+                "type": "object",
+                "required": ["resourceCode"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "resourceCode": resource_code_schema()
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.create",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.create.description",
+            json!([{
+                "workspaceCode": "TRON_CORE",
+                "resourceCode": "release-notes",
+                "kind": "File",
+                "name": "Release notes",
+                "description": "Current release notes",
+                "allowInheritance": false,
+                "sourcePath": "release-notes.md"
+            }]),
+            json!({
+                "type": "object",
+                "required": ["resourceCode", "kind", "name", "allowInheritance", "sourcePath"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "resourceCode": resource_code_schema(),
+                    "kind": resource_file_kind_schema(),
+                    "name": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "allowInheritance": { "type": "boolean" },
+                    "sourcePath": { "type": "string", "minLength": 1 }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.update",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.update.description",
+            json!([{
+                "workspaceCode": "TRON_CORE",
+                "resourceCode": "release-notes",
+                "name": "Release notes v2",
+                "allowInheritance": true
+            }]),
+            json!({
+                "type": "object",
+                "required": ["resourceCode"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "resourceCode": resource_code_schema(),
+                    "name": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "allowInheritance": { "type": "boolean" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_delete_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.delete",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.delete.description",
+            json!([{ "workspaceCode": "TRON_CORE", "resourceCode": "release-notes" }]),
+            json!({
+                "type": "object",
+                "required": ["resourceCode"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "resourceCode": resource_code_schema()
                 },
                 "additionalProperties": false
             }),
@@ -517,8 +630,185 @@ fn resource_binary_definition() -> ToolCatalogDefinition {
     )
 }
 
+fn resource_data_source_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.data_source.create",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.data_source.create.description",
+            json!([{
+                "workspaceCode": "TRON_CORE",
+                "resourceCode": "mysql-primary",
+                "kind": "MysqlConnection",
+                "name": "Primary MySQL",
+                "attributes": {
+                    "connectionMode": "SINGLE",
+                    "endpoints": [{ "host": "mysql.internal", "port": 3306 }],
+                    "database": "tron",
+                    "credentials": {
+                        "username": "tron_user",
+                        "password": { "source": "VARIABLE", "variableKey": "MYSQL_PASSWORD" }
+                    },
+                    "tls": { "mode": "DISABLED" }
+                },
+                "allowInheritance": false
+            }]),
+            json!({
+                "type": "object",
+                "required": ["resourceCode", "kind", "name", "attributes", "allowInheritance"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "resourceCode": resource_code_schema(),
+                    "kind": resource_data_source_kind_schema(),
+                    "name": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "attributes": { "type": "object" },
+                    "allowInheritance": { "type": "boolean" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_data_source_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.data_source.update",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.data_source.update.description",
+            json!([{
+                "workspaceCode": "TRON_CORE",
+                "resourceCode": "mysql-primary",
+                "description": "Primary transactional database"
+            }]),
+            json!({
+                "type": "object",
+                "required": ["resourceCode"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "resourceCode": resource_code_schema(),
+                    "name": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "attributes": { "type": "object" },
+                    "allowInheritance": { "type": "boolean" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_server_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.server.create",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.server.create.description",
+            json!([{
+                "workspaceCode": "TRON_CORE",
+                "serverCode": "production-bastion",
+                "name": "Production bastion",
+                "host": "bastion.internal",
+                "port": 22,
+                "allowInheritance": false,
+                "initialAccount": {
+                    "accountCode": "bastion-ops",
+                    "name": "Operations account",
+                    "username": "ops",
+                    "authenticationType": "Password",
+                    "passwordVariableKey": "BASTION_PASSWORD",
+                    "allowInheritance": false
+                }
+            }]),
+            json!({
+                "type": "object",
+                "required": ["serverCode", "name", "host", "port", "allowInheritance", "initialAccount"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "serverCode": resource_code_schema(),
+                    "name": { "type": "string", "minLength": 1 },
+                    "description": { "type": "string" },
+                    "host": { "type": "string", "minLength": 1 },
+                    "port": { "type": "integer", "minimum": 1, "maximum": 65535 },
+                    "allowInheritance": { "type": "boolean" },
+                    "initialAccount": resource_server_account_schema()
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn resource_server_account_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "resource.server_account.create",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.resource.server_account.create.description",
+            json!([{
+                "workspaceCode": "TRON_CORE",
+                "serverCode": "production-bastion",
+                "account": {
+                    "accountCode": "bastion-deploy",
+                    "name": "Deploy account",
+                    "username": "deploy",
+                    "authenticationType": "PrivateKey",
+                    "privateKeyVariableKey": "DEPLOY_PRIVATE_KEY",
+                    "allowInheritance": false
+                }
+            }]),
+            json!({
+                "type": "object",
+                "required": ["serverCode", "account"],
+                "properties": {
+                    "workspaceCode": resource_workspace_code_schema(),
+                    "serverCode": resource_code_schema(),
+                    "account": resource_server_account_schema()
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
 fn resource_kind_schema() -> serde_json::Value {
-    json!({ "type": "string", "enum": ["FILE", "IMAGE", "PDF", "MYSQL_CONNECTION", "POSTGRESQL_CONNECTION", "REDIS_CONNECTION", "KAFKA_CONNECTION", "SERVER_CONNECTION", "SERVER_ACCOUNT"] })
+    json!({ "type": "string", "enum": ["File", "Image", "Pdf", "MysqlConnection", "PostgresqlConnection", "RedisConnection", "KafkaConnection", "ServerConnection", "ServerAccount"] })
+}
+
+fn resource_file_kind_schema() -> serde_json::Value {
+    json!({ "type": "string", "enum": ["File", "Image", "Pdf"] })
+}
+
+fn resource_data_source_kind_schema() -> serde_json::Value {
+    json!({ "type": "string", "enum": ["MysqlConnection", "PostgresqlConnection", "RedisConnection", "KafkaConnection"] })
+}
+
+fn resource_server_account_schema() -> serde_json::Value {
+    json!({
+        "type": "object",
+        "required": ["accountCode", "name", "username", "authenticationType", "allowInheritance"],
+        "properties": {
+            "accountCode": resource_code_schema(),
+            "name": { "type": "string", "minLength": 1 },
+            "description": { "type": "string" },
+            "username": { "type": "string", "minLength": 1 },
+            "authenticationType": { "type": "string", "enum": ["Password", "PrivateKey"] },
+            "passwordVariableKey": { "type": "string", "minLength": 1 },
+            "privateKeyVariableKey": { "type": "string", "minLength": 1 },
+            "privateKeyPassphraseVariableKey": { "type": "string", "minLength": 1 },
+            "allowInheritance": { "type": "boolean" }
+        },
+        "allOf": [{ "oneOf": [
+            { "properties": { "authenticationType": { "const": "Password" } }, "required": ["passwordVariableKey"] },
+            { "properties": { "authenticationType": { "const": "PrivateKey" } }, "required": ["privateKeyVariableKey"] }
+        ] }],
+        "additionalProperties": false
+    })
 }
 
 fn resource_workspace_code_schema() -> serde_json::Value {

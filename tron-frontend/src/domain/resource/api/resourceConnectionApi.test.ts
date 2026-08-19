@@ -7,6 +7,7 @@ import {
   createServerAccountConnection,
   createServerConnection,
   deleteConnection,
+  pageConnections,
   updateDataSourceConnection,
 } from "@/domain/resource/api";
 
@@ -23,17 +24,45 @@ afterEach(() => {
 });
 
 describe("Resource connection API client", () => {
+  it("pages connections through the dedicated paginated contract", async () => {
+    const fetchMock = vi.fn().mockResolvedValueOnce(successResponse({
+      current: 2,
+      records: [],
+      size: 50,
+      total: 70,
+    }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await pageConnections({
+      current: 2,
+      kinds: ["MysqlConnection"],
+      search: "primary",
+      size: 50,
+      workspaceCode: "TRON_CORE",
+    });
+
+    const [url, request] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(new URL(url).pathname).toBe("/api/v1/resource-connections/page");
+    expect(request.body).toBe(JSON.stringify({
+      current: 2,
+      kinds: ["MysqlConnection"],
+      search: "primary",
+      size: 50,
+      workspaceCode: "TRON_CORE",
+    }));
+  });
+
   it("uses the dedicated endpoints and preserves connection commands", async () => {
     const commitResult = {
-      kind: "MYSQL_CONNECTION",
+      kind: "MysqlConnection",
       resourceCode: "production-mysql",
       workspaceCode: "TRON_CORE",
     };
     const fetchMock = vi.fn()
       .mockResolvedValueOnce(successResponse(commitResult))
-      .mockResolvedValueOnce(successResponse({ ...commitResult, kind: "SERVER_CONNECTION" }))
-      .mockResolvedValueOnce(successResponse({ ...commitResult, kind: "SERVER_ACCOUNT" }))
-      .mockResolvedValueOnce(successResponse({ ...commitResult, kind: "REDIS_CONNECTION" }))
+      .mockResolvedValueOnce(successResponse({ ...commitResult, kind: "ServerConnection" }))
+      .mockResolvedValueOnce(successResponse({ ...commitResult, kind: "ServerAccount" }))
+      .mockResolvedValueOnce(successResponse({ ...commitResult, kind: "RedisConnection" }))
       .mockResolvedValueOnce(successResponse({ deleted: true, resourceCode: "production-mysql" }));
     vi.stubGlobal("fetch", fetchMock);
 
@@ -98,7 +127,7 @@ describe("Resource connection API client", () => {
       "/api/v1/resource-connections/delete",
     ]);
     expect(calls.map(([, request]) => request.method)).toEqual(["POST", "POST", "POST", "POST", "POST"]);
-    expect(calls[0][1].body).toBe(JSON.stringify(dataSource));
+    expect(calls[0][1].body).toBe(JSON.stringify({ ...dataSource, kind: "MysqlConnection" }));
     expect(calls[1][1].body).toBe(JSON.stringify(server));
     expect(calls[2][1].body).toBe(JSON.stringify({
       account,

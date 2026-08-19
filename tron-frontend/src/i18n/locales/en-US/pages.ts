@@ -234,7 +234,7 @@ export const pages = {
         created: "{{name}} uploaded.",
       },
       pdf: {
-        failed: "Page count could not be read. The editor will keep it as 0 so you can enter the correct value.",
+        failed: "Page count could not be read. The PDF can still be uploaded.",
         pages: "{{count}} pages detected",
         reading: "Reading PDF page count...",
       },
@@ -257,6 +257,7 @@ export const pages = {
       override: "OVERRIDE",
     },
     title: {
+      platform: "Platform Resources",
       workspace: "Resources",
     },
   },

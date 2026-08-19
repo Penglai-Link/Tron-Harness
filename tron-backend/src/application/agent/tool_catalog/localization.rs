@@ -129,14 +129,40 @@ fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.domains.resource.name" => "Resource Tools",
         "agent.toolCatalog.domains.resource.description" => {
-            "Query fixed-type resources and manage their file contents."
+            "Manage file, data-source, server, and server-account resources."
         }
         "agent.toolCatalog.tools.resource.query.name" => "Query resources",
         "agent.toolCatalog.tools.resource.query.description" => {
-            "List workspace resources by type."
+            "List effective workspace resources by type."
         }
         "agent.toolCatalog.tools.resource.query.sampleResultSummary" => {
             "Returns matching resource records."
+        }
+        "agent.toolCatalog.tools.resource.get.name" => "Get resource",
+        "agent.toolCatalog.tools.resource.get.description" => {
+            "Read one effective resource with direct secret values redacted."
+        }
+        "agent.toolCatalog.tools.resource.get.sampleResultSummary" => {
+            "Returns one resource detail record."
+        }
+        "agent.toolCatalog.tools.resource.create.name" => "Create file resource",
+        "agent.toolCatalog.tools.resource.create.description" => {
+            "Create a file, image, or PDF resource from an agent-local file."
+        }
+        "agent.toolCatalog.tools.resource.create.sampleResultSummary" => {
+            "Returns the created resource code and kind."
+        }
+        "agent.toolCatalog.tools.resource.update.name" => "Update resource",
+        "agent.toolCatalog.tools.resource.update.description" => {
+            "Update local resource metadata and inheritance."
+        }
+        "agent.toolCatalog.tools.resource.update.sampleResultSummary" => {
+            "Returns the updated resource code and kind."
+        }
+        "agent.toolCatalog.tools.resource.delete.name" => "Delete resource",
+        "agent.toolCatalog.tools.resource.delete.description" => "Delete a local resource.",
+        "agent.toolCatalog.tools.resource.delete.sampleResultSummary" => {
+            "Returns whether the local resource was deleted."
         }
         "agent.toolCatalog.tools.resource.binary.name" => "Manage resource file",
         "agent.toolCatalog.tools.resource.binary.description" => {
@@ -144,6 +170,34 @@ fn translate_en_us(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.resource.binary.sampleResultSummary" => {
             "Returns file operation status."
+        }
+        "agent.toolCatalog.tools.resource.data_source.create.name" => "Create data source",
+        "agent.toolCatalog.tools.resource.data_source.create.description" => {
+            "Create and verify a data-source connection."
+        }
+        "agent.toolCatalog.tools.resource.data_source.create.sampleResultSummary" => {
+            "Returns the created data-source code and kind."
+        }
+        "agent.toolCatalog.tools.resource.data_source.update.name" => "Update data source",
+        "agent.toolCatalog.tools.resource.data_source.update.description" => {
+            "Update and re-verify a data-source connection."
+        }
+        "agent.toolCatalog.tools.resource.data_source.update.sampleResultSummary" => {
+            "Returns the updated data-source code and kind."
+        }
+        "agent.toolCatalog.tools.resource.server.create.name" => "Create server",
+        "agent.toolCatalog.tools.resource.server.create.description" => {
+            "Create and verify an SSH server with its initial account."
+        }
+        "agent.toolCatalog.tools.resource.server.create.sampleResultSummary" => {
+            "Returns the created server and initial-account records."
+        }
+        "agent.toolCatalog.tools.resource.server_account.create.name" => "Create server account",
+        "agent.toolCatalog.tools.resource.server_account.create.description" => {
+            "Create an account for an effective SSH server."
+        }
+        "agent.toolCatalog.tools.resource.server_account.create.sampleResultSummary" => {
+            "Returns the created server-account code and kind."
         }
         "agent.toolCatalog.domains.skill.name" => "Skill Tools",
         "agent.toolCatalog.domains.skill.description" => {
@@ -334,21 +388,59 @@ fn translate_zh_cn(key: &str) -> &'static str {
         "agent.toolCatalog.domains.model.description" => "查看生效中的模型目录配置。",
         "agent.toolCatalog.domains.resource.name" => "资源工具",
         "agent.toolCatalog.domains.resource.description" => {
-            "查询固定类型资源并管理其文件内容。"
+            "管理文件、数据源、服务器和服务器账号资源。"
         }
         "agent.toolCatalog.tools.resource.query.name" => "查询资源",
-        "agent.toolCatalog.tools.resource.query.description" => {
-            "按类型查询工作区资源。"
+        "agent.toolCatalog.tools.resource.query.description" => "按类型查询工作区生效资源。",
+        "agent.toolCatalog.tools.resource.query.sampleResultSummary" => "返回匹配的资源记录。",
+        "agent.toolCatalog.tools.resource.get.name" => "获取资源",
+        "agent.toolCatalog.tools.resource.get.description" => "读取单个生效资源，并脱敏直接密钥。",
+        "agent.toolCatalog.tools.resource.get.sampleResultSummary" => "返回单个资源详情记录。",
+        "agent.toolCatalog.tools.resource.create.name" => "创建文件资源",
+        "agent.toolCatalog.tools.resource.create.description" => {
+            "从 Agent 本地文件创建文件、图片或 PDF 资源。"
         }
-        "agent.toolCatalog.tools.resource.query.sampleResultSummary" => {
-            "返回匹配的资源记录。"
+        "agent.toolCatalog.tools.resource.create.sampleResultSummary" => {
+            "返回已创建资源的编码和类型。"
         }
+        "agent.toolCatalog.tools.resource.update.name" => "更新资源",
+        "agent.toolCatalog.tools.resource.update.description" => "更新本地资源的元数据和继承设置。",
+        "agent.toolCatalog.tools.resource.update.sampleResultSummary" => {
+            "返回已更新资源的编码和类型。"
+        }
+        "agent.toolCatalog.tools.resource.delete.name" => "删除资源",
+        "agent.toolCatalog.tools.resource.delete.description" => "删除本地资源。",
+        "agent.toolCatalog.tools.resource.delete.sampleResultSummary" => "返回本地资源是否已删除。",
         "agent.toolCatalog.tools.resource.binary.name" => "管理资源文件",
-        "agent.toolCatalog.tools.resource.binary.description" => {
-            "上传或下载文件资源的文件内容。"
+        "agent.toolCatalog.tools.resource.binary.description" => "上传或下载文件资源的文件内容。",
+        "agent.toolCatalog.tools.resource.binary.sampleResultSummary" => "返回文件操作状态。",
+        "agent.toolCatalog.tools.resource.data_source.create.name" => "创建数据源",
+        "agent.toolCatalog.tools.resource.data_source.create.description" => {
+            "创建并验证数据源连接。"
         }
-        "agent.toolCatalog.tools.resource.binary.sampleResultSummary" => {
-            "返回文件操作状态。"
+        "agent.toolCatalog.tools.resource.data_source.create.sampleResultSummary" => {
+            "返回已创建数据源的编码和类型。"
+        }
+        "agent.toolCatalog.tools.resource.data_source.update.name" => "更新数据源",
+        "agent.toolCatalog.tools.resource.data_source.update.description" => {
+            "更新并重新验证数据源连接。"
+        }
+        "agent.toolCatalog.tools.resource.data_source.update.sampleResultSummary" => {
+            "返回已更新数据源的编码和类型。"
+        }
+        "agent.toolCatalog.tools.resource.server.create.name" => "创建服务器",
+        "agent.toolCatalog.tools.resource.server.create.description" => {
+            "创建并验证带初始账号的 SSH 服务器。"
+        }
+        "agent.toolCatalog.tools.resource.server.create.sampleResultSummary" => {
+            "返回已创建的服务器和初始账号记录。"
+        }
+        "agent.toolCatalog.tools.resource.server_account.create.name" => "创建服务器账号",
+        "agent.toolCatalog.tools.resource.server_account.create.description" => {
+            "为生效的 SSH 服务器创建账号。"
+        }
+        "agent.toolCatalog.tools.resource.server_account.create.sampleResultSummary" => {
+            "返回已创建服务器账号的编码和类型。"
         }
         "agent.toolCatalog.domains.skill.name" => "技能工具",
         "agent.toolCatalog.domains.skill.description" => "查看工作区技能绑定和注册项。",

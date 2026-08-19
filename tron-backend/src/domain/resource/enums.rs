@@ -1,7 +1,7 @@
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "PascalCase")]
 pub enum ResourceSourceKind {
     Local,
     Inherited,
@@ -9,7 +9,7 @@ pub enum ResourceSourceKind {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+#[serde(rename_all = "PascalCase")]
 pub enum ResourceKind {
     File,
     Image,

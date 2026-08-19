@@ -28,7 +28,7 @@ async fn file_resource_lifecycle_uses_the_management_contract() {
     assert_eq!(created.status(), StatusCode::OK);
     let created = response_json(created).await;
     assert_eq!(created["data"]["resourceCode"], "release-notes");
-    assert_eq!(created["data"]["kind"], "FILE");
+    assert_eq!(created["data"]["kind"], "File");
 
     let page = api_json(
         &app,
@@ -36,7 +36,8 @@ async fn file_resource_lifecycle_uses_the_management_contract() {
         "/api/v1/resources/page",
         json!({
             "workspaceCode": WORKSPACE,
-            "kind": "FILE",
+            "kinds": ["File"],
+            "sourceKind": null,
             "search": null,
             "current": 1,
             "size": 50
@@ -46,9 +47,9 @@ async fn file_resource_lifecycle_uses_the_management_contract() {
     assert_eq!(page["code"], "0");
     assert_eq!(page["data"]["total"], 1);
     let record = &page["data"]["records"][0];
-    assert_eq!(record["kind"], "FILE");
+    assert_eq!(record["kind"], "File");
     assert_eq!(record["workspaceCode"], WORKSPACE);
-    assert_eq!(record["sourceKind"], "LOCAL");
+    assert_eq!(record["sourceKind"], "Local");
     assert_eq!(record["file"]["fileName"], "notes.txt");
     assert_eq!(record["file"]["byteSize"], 13);
     assert!(record["attributes"].is_null());
@@ -109,7 +110,9 @@ async fn file_resource_lifecycle_uses_the_management_contract() {
         "/api/v1/resources/page",
         json!({
             "workspaceCode": WORKSPACE,
-            "kind": "FILE",
+            "kinds": ["File"],
+            "sourceKind": null,
+            "search": null,
             "current": 1,
             "size": 50
         }),
@@ -139,8 +142,14 @@ async fn file_binary_can_be_replaced_and_downloaded() {
     let created = create_file_resource(&app, &token, "binary-file", b"first").await;
     assert_eq!(created.status(), StatusCode::OK);
 
-    let upload = multipart_upload(&app, &token, "binary-file", "updated.txt", b"second content")
-        .await;
+    let upload = multipart_upload(
+        &app,
+        &token,
+        "binary-file",
+        "updated.txt",
+        b"second content",
+    )
+    .await;
     assert_eq!(upload.status(), StatusCode::OK);
     let upload_body = response_json(upload).await;
     assert_eq!(upload_body["data"]["action"], "UPLOADED");
@@ -209,7 +218,84 @@ async fn workspace_page_requires_workspace_read_permission() {
         &app,
         &viewer_token,
         "/api/v1/resources/page",
-        json!({ "workspaceCode": WORKSPACE, "current": 1, "size": 50 }),
+        json!({ "workspaceCode": WORKSPACE, "kinds": [], "sourceKind": null, "search": null, "current": 1, "size": 50 }),
+    )
+    .await;
+    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+}
+
+#[tokio::test]
+async fn platform_admin_can_manage_platform_resources_without_workspace_membership() {
+    let (app, _) = resource_app_without_platform_workspace("platform-admin-resource-authorization");
+    let token = authenticated_bearer_token(&app).await;
+
+    let created = create_file_resource_in_workspace(
+        &app,
+        &token,
+        "PLATFORM",
+        "platform-admin-resource",
+        b"platform resource",
+    )
+    .await;
+    let status = created.status();
+    let body = response_json(created).await;
+    assert_eq!(status, StatusCode::OK, "platform create failed: {body}");
+
+    let page = api_json(
+        &app,
+        &token,
+        "/api/v1/resources/page",
+        json!({
+            "workspaceCode": "PLATFORM",
+            "kinds": ["File"],
+            "sourceKind": null,
+            "search": null,
+            "current": 1,
+            "size": 50
+        }),
+    )
+    .await;
+    assert_eq!(page["code"], "0");
+    assert_eq!(page["data"]["total"], 1);
+    assert_eq!(
+        page["data"]["records"][0]["resourceCode"],
+        "platform-admin-resource"
+    );
+    assert_eq!(page["data"]["records"][0]["sourceKind"], "Local");
+
+    let inherited_page = api_json(
+        &app,
+        &token,
+        "/api/v1/resources/page",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "kinds": ["File"],
+            "sourceKind": null,
+            "search": null,
+            "current": 1,
+            "size": 50
+        }),
+    )
+    .await;
+    assert_eq!(inherited_page["data"]["total"], 1);
+    assert_eq!(
+        inherited_page["data"]["records"][0]["sourceKind"],
+        "Inherited"
+    );
+
+    let viewer_token = signed_access_token("USR-0007", &["VIEWER"], &["SUPPORT"]);
+    let forbidden = authenticated_json_response(
+        &app,
+        &viewer_token,
+        "/api/v1/resources/page",
+        json!({
+            "workspaceCode": "PLATFORM",
+            "kinds": [],
+            "sourceKind": null,
+            "search": null,
+            "current": 1,
+            "size": 50
+        }),
     )
     .await;
     assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
@@ -224,9 +310,14 @@ async fn child_workspace_page_projects_inherited_parent_resources() {
         &["WORKSPACE_ADMIN", "DEVELOPER"],
         &["ENTERPRISE", "PLATFORM"],
     );
-    let created =
-        create_file_resource_in_workspace(&app, &parent_token, "PLATFORM", "shared-template", b"shared")
-            .await;
+    let created = create_file_resource_in_workspace(
+        &app,
+        &parent_token,
+        "PLATFORM",
+        "shared-template",
+        b"shared",
+    )
+    .await;
     let status = created.status();
     let body = response_json(created).await;
     assert_eq!(status, StatusCode::OK, "create failed: {body}");
@@ -237,14 +328,32 @@ async fn child_workspace_page_projects_inherited_parent_resources() {
         "/api/v1/resources/page",
         json!({
             "workspaceCode": WORKSPACE,
-            "kind": "FILE",
+            "kinds": ["File"],
+            "sourceKind": null,
+            "search": null,
             "current": 1,
             "size": 50
         }),
     )
     .await;
     assert_eq!(page["data"]["total"], 1);
-    assert_eq!(page["data"]["records"][0]["sourceKind"], "INHERITED");
+    assert_eq!(page["data"]["records"][0]["sourceKind"], "Inherited");
+
+    let download = authenticated_json_response(
+        &app,
+        &token,
+        "/api/v1/resources/download-binary",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "resourceCode": "shared-template"
+        }),
+    )
+    .await;
+    assert_eq!(download.status(), StatusCode::OK);
+    let bytes = to_bytes(download.into_body(), usize::MAX)
+        .await
+        .expect("inherited download should drain");
+    assert_eq!(bytes.as_ref(), b"shared");
 }
 
 #[tokio::test]
@@ -255,6 +364,158 @@ async fn creating_a_duplicate_resource_code_conflicts() {
     assert_eq!(first.status(), StatusCode::OK);
     let second = create_file_resource(&app, &token, "duplicate", b"two").await;
     assert_eq!(second.status(), StatusCode::CONFLICT);
+}
+
+#[tokio::test]
+async fn connection_endpoints_cannot_page_or_delete_file_resources() {
+    let (app, _) = resource_app("connection-boundaries");
+    let token = authenticated_bearer_token(&app).await;
+    let created = create_file_resource(&app, &token, "file-only", b"payload").await;
+    assert_eq!(created.status(), StatusCode::OK);
+
+    let page = authenticated_json_response(
+        &app,
+        &token,
+        "/api/v1/resource-connections/page",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "kinds": ["File"],
+            "search": null,
+            "current": 1,
+            "size": 50
+        }),
+    )
+    .await;
+    assert_eq!(page.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response_json(page).await["code"], "100100005");
+
+    let delete = authenticated_json_response(
+        &app,
+        &token,
+        "/api/v1/resource-connections/delete",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "resourceCode": "file-only"
+        }),
+    )
+    .await;
+    assert_eq!(delete.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response_json(delete).await["code"], "100100005");
+
+    let detail = api_json(
+        &app,
+        &token,
+        "/api/v1/resources/get",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "resourceCode": "file-only"
+        }),
+    )
+    .await;
+    assert_eq!(detail["data"]["resourceCode"], "file-only");
+}
+
+#[tokio::test]
+async fn connection_create_routes_validate_their_own_http_contracts() {
+    let (app, _) = resource_app("connection-create-contracts");
+    let token = authenticated_bearer_token(&app).await;
+    for uri in [
+        "/api/v1/resource-connections/data-sources",
+        "/api/v1/resource-connections/servers",
+        "/api/v1/resource-connections/server-accounts",
+    ] {
+        let response = authenticated_json_response(&app, &token, uri, json!({})).await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{uri}");
+        assert_eq!(response_json(response).await["code"], "100100001", "{uri}");
+    }
+
+    let update = authenticated_json_response(
+        &app,
+        &token,
+        "/api/v1/resource-connections/data-sources/update",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "resourceCode": "missing-data-source"
+        }),
+    )
+    .await;
+    assert_eq!(update.status(), StatusCode::NOT_FOUND);
+    assert_eq!(response_json(update).await["code"], "100100002");
+}
+
+#[tokio::test]
+async fn resource_create_requires_an_explicit_inheritance_choice() {
+    let (app, storage_root) = resource_app("inheritance-required");
+    let token = authenticated_bearer_token(&app).await;
+    let boundary = "tron-resource-create-boundary";
+    let body = create_multipart_body(
+        boundary,
+        &json!({
+            "workspaceCode": WORKSPACE,
+            "resourceCode": "inheritance-choice",
+            "kind": "File",
+            "name": "inheritance-choice",
+            "description": "missing allowInheritance"
+        }),
+        b"payload",
+    );
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/resources/create")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(body))
+                .expect("create request should build"),
+        )
+        .await
+        .expect("create response should return");
+    assert_eq!(response.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(response_json(response).await["code"], "100100001");
+    assert_storage_root_is_empty(&storage_root);
+}
+
+#[tokio::test]
+async fn oversized_multipart_binary_is_rejected_before_storage_persistence() {
+    let (app, storage_root) = resource_app_with_binary_limit("oversized-binary", 4);
+    let token = authenticated_bearer_token(&app).await;
+
+    let response = create_file_resource(&app, &token, "too-large", b"12345").await;
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(response_json(response).await["code"], "100100001");
+    assert_storage_root_is_empty(&storage_root);
+}
+
+#[tokio::test]
+async fn oversized_upload_control_fields_are_rejected_before_resource_lookup() {
+    let (app, storage_root) = resource_app("oversized-upload-control");
+    let token = authenticated_bearer_token(&app).await;
+    let boundary = "tron-resource-upload-control-boundary";
+    let body = text_only_multipart_body(boundary, "workspaceCode", &"x".repeat(8 * 1024 + 1));
+    let response = app
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method("POST")
+                .uri("/api/v1/resources/upload-binary")
+                .header(header::AUTHORIZATION, format!("Bearer {token}"))
+                .header(
+                    header::CONTENT_TYPE,
+                    format!("multipart/form-data; boundary={boundary}"),
+                )
+                .body(Body::from(body))
+                .expect("upload request should build"),
+        )
+        .await
+        .expect("upload response should return");
+    assert_eq!(response.status(), StatusCode::PAYLOAD_TOO_LARGE);
+    assert_eq!(response_json(response).await["code"], "100100001");
+    assert_storage_root_is_empty(&storage_root);
 }
 
 async fn create_file_resource(
@@ -276,7 +537,7 @@ async fn create_file_resource_in_workspace(
     let command = json!({
         "workspaceCode": workspace_code,
         "resourceCode": resource_code,
-        "kind": "FILE",
+        "kind": "File",
         "name": resource_code,
         "description": "http fixture",
         "allowInheritance": true
@@ -373,6 +634,13 @@ fn upload_multipart_body(
     body
 }
 
+fn text_only_multipart_body(boundary: &str, name: &str, value: &str) -> Vec<u8> {
+    format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"{name}\"\r\n\r\n{value}\r\n--{boundary}--\r\n"
+    )
+    .into_bytes()
+}
+
 async fn api_json(app: &Router, token: &str, uri: &str, body: Value) -> Value {
     let response = authenticated_json_response(app, token, uri, body).await;
     assert_eq!(response.status(), StatusCode::OK, "{uri} should succeed");
@@ -420,17 +688,54 @@ fn collected_storage_files(storage_root: &std::path::Path) -> Vec<PathBuf> {
 }
 
 fn resource_app(test_name: &str) -> (Router, PathBuf) {
+    resource_app_with_binary_limit(test_name, 1_073_741_824)
+}
+
+fn resource_app_with_binary_limit(test_name: &str, max_binary_bytes: u64) -> (Router, PathBuf) {
+    let (app, storage_root, _) = resource_app_with_database(test_name, max_binary_bytes);
+    (app, storage_root)
+}
+
+fn resource_app_without_platform_workspace(test_name: &str) -> (Router, PathBuf) {
+    let (app, storage_root, database_path) = resource_app_with_database(test_name, 1_073_741_824);
+    let connection = rusqlite::Connection::open(&database_path)
+        .expect("resource HTTP API test database should open");
+    connection
+        .execute_batch(
+            "PRAGMA foreign_keys = OFF;
+             DELETE FROM workspace_role_access WHERE workspace_code = 'PLATFORM';
+             DELETE FROM workspace_user_access WHERE workspace_code = 'PLATFORM';
+             UPDATE workspaces
+             SET parent_workspace_code = NULL
+             WHERE parent_workspace_code = 'PLATFORM';
+             DELETE FROM workspaces WHERE workspace_code = 'PLATFORM';
+             PRAGMA foreign_keys = ON;",
+        )
+        .expect("platform workspace fixture should be removable");
+    (app, storage_root)
+}
+
+fn resource_app_with_database(
+    test_name: &str,
+    max_binary_bytes: u64,
+) -> (Router, PathBuf, PathBuf) {
     let nanos = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .expect("clock should advance")
         .as_nanos();
+    let database_path = std::env::temp_dir().join(format!(
+        "tron-resource-http-api-{test_name}-{}-{nanos}.sqlite",
+        std::process::id(),
+    ));
     let storage_root = std::env::temp_dir().join(format!(
         "tron-resource-http-api-{test_name}-{}-{nanos}",
         std::process::id(),
     ));
     let mut config = AppConfig::default();
+    config.database_url = database_path.display().to_string();
     config.resource = ResourceConfig::with_default_root(storage_root.display().to_string());
-    (app_with_config(config), storage_root)
+    config.resource.limits.max_binary_bytes = max_binary_bytes;
+    (app_with_config(config), storage_root, database_path)
 }
 
 #[derive(serde::Serialize)]

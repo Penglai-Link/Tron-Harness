@@ -16,10 +16,7 @@ use tron_backend::{
         ResourcePageQuery, ResourceUpdateCommand,
     },
     config::{AppConfig, ResourceConfig},
-    domain::resource::{
-        ResourceError, ResourceKind, ResourceSourceKind,
-        ServerAuthenticationType,
-    },
+    domain::resource::{ResourceError, ResourceKind, ResourceSourceKind, ServerAuthenticationType},
 };
 
 use common::prepared_config;
@@ -227,6 +224,20 @@ fn data_source_update_reverifies_attributes_before_persisting() {
         .find(|record| record.resource_code == "MYSQL_REVERIFY")
         .expect("data source should remain queryable");
     assert_eq!(
+        record.attributes, None,
+        "list responses must not expose attributes"
+    );
+    let record = state
+        .resources
+        .get_resource(
+            ACTOR,
+            tron_backend::application::resource::ResourceGetQuery {
+                workspace_code: WORKSPACE.to_string(),
+                resource_code: "MYSQL_REVERIFY".to_string(),
+            },
+        )
+        .expect("data source detail should remain queryable");
+    assert_eq!(
         record
             .attributes
             .as_ref()
@@ -326,16 +337,15 @@ fn get_workspace_file(
         .expect("resource should exist")
 }
 
-fn workspace_page(
-    state: &AppState,
-) -> tron_backend::application::resource::ResourcePage {
+fn workspace_page(state: &AppState) -> tron_backend::application::resource::ResourcePage {
     state
         .resources
         .query_resources(
             ACTOR,
             ResourcePageQuery {
                 workspace_code: WORKSPACE.to_string(),
-                kind: None,
+                kinds: Vec::new(),
+                source_kind: None,
                 search: None,
                 current: 1,
                 size: 50,
