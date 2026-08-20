@@ -1360,6 +1360,7 @@ async fn verify_uses_protocol_specific_request_shapes() {
             capture.path == "/responses"
                 && capture.body["input"] == json!("ping")
                 && capture.body["model"] == json!("verify-text")
+                && capture.body["max_output_tokens"] == json!(16)
         }),
         "RESPONSES + TEXT should POST /responses with plain input",
     );
@@ -1376,6 +1377,7 @@ async fn verify_uses_protocol_specific_request_shapes() {
             capture.path == "/chat/completions"
                 && capture.body["messages"].is_array()
                 && capture.body["model"] == json!("verify-chat")
+                && capture.body["max_tokens"] == json!(16)
         }),
         "OPENAI_COMPATIBLE + TEXT should POST /chat/completions",
     );
@@ -1384,6 +1386,7 @@ async fn verify_uses_protocol_specific_request_shapes() {
             capture.path == "/responses"
                 && capture.body["input"].is_array()
                 && capture.body["model"] == json!("verify-image")
+                && capture.body["max_output_tokens"] == json!(16)
         }),
         "RESPONSES + IMAGE should POST /responses with array input",
     );

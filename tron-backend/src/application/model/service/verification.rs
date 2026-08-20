@@ -1,5 +1,7 @@
 use super::*;
 
+const MIN_VERIFY_OUTPUT_TOKENS: u32 = 16;
+
 pub(super) fn default_verify_path(protocol: ModelProtocol, model_type: ModelType) -> &'static str {
     match (protocol, model_type) {
         (ModelProtocol::OpenAiCompatible, ModelType::Text) => "/chat/completions",
@@ -20,7 +22,7 @@ pub(super) fn verify_request_payload(
         (ModelProtocol::OpenAiCompatible, ModelType::Text) => json!({
             "model": model_name,
             "messages": [{ "role": "user", "content": "ping" }],
-            "max_tokens": 1
+            "max_tokens": MIN_VERIFY_OUTPUT_TOKENS
         }),
         (ModelProtocol::OpenAiCompatible, ModelType::Embedding) => json!({
             "model": model_name,
@@ -29,7 +31,7 @@ pub(super) fn verify_request_payload(
         (ModelProtocol::Responses, ModelType::Text) => json!({
             "model": model_name,
             "input": "ping",
-            "max_output_tokens": 1
+            "max_output_tokens": MIN_VERIFY_OUTPUT_TOKENS
         }),
         (ModelProtocol::Responses, ModelType::Image) => json!({
             "model": model_name,
@@ -41,7 +43,7 @@ pub(super) fn verify_request_payload(
                     ]
                 }
             ],
-            "max_output_tokens": 1
+            "max_output_tokens": MIN_VERIFY_OUTPUT_TOKENS
         }),
         (ModelProtocol::Rerank, ModelType::Rerank) => json!({
             "model": model_name,

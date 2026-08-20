@@ -183,7 +183,11 @@ export function ModelRegistryPage() {
       return haystack.includes(normalizedSearch);
     });
   }, [protocolFilter, records, searchQuery, statusFilter, typeFilter]);
-  const pagination = useTablePagination(filteredRecords);
+  const sortedRecords = useMemo(
+    () => [...filteredRecords].sort((left, right) => Number(right.isDefault) - Number(left.isDefault)),
+    [filteredRecords],
+  );
+  const pagination = useTablePagination(sortedRecords);
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
   );

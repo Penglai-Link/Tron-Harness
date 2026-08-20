@@ -33,7 +33,11 @@ import {
 import type { ModelRecord } from "@/domain/model/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-import { isEditableWorkspaceLocalRecord } from "./workspaceModelPageHelpers";
+import {
+  formatWorkspaceDisplayLabel,
+  formatWorkspaceModelError,
+  isEditableWorkspaceLocalRecord,
+} from "./workspaceModelPageHelpers";
 
 export function CreateWorkspaceModelPage() {
   const navigate = useNavigate();
@@ -42,6 +46,7 @@ export function CreateWorkspaceModelPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
+  const activeWorkspaceLabel = formatWorkspaceDisplayLabel(activeWorkspace, activeWorkspaceCode);
   const [records, setRecords] = useState<ModelRecord[]>([]);
   const [form, setForm] = useState<ModelFormState>(emptyModelFormState());
   const [allowInheritance, setAllowInheritance] = useState(true);
@@ -92,7 +97,7 @@ export function CreateWorkspaceModelPage() {
       return;
     }
     if (duplicateDisplayName) {
-      toast.error(`displayName already exists in workspace ${activeWorkspaceCode}`);
+      toast.error(`displayName already exists in workspace ${activeWorkspaceLabel}`);
       return;
     }
 
@@ -126,9 +131,11 @@ export function CreateWorkspaceModelPage() {
       }
       navigate(`/models/detail?modelCode=${encodeURIComponent(saved.modelCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error
-        ? error.message
-        : (verifyAfterCreate ? "Verify failed" : "Workspace model could not be created"));
+      toast.error(formatWorkspaceModelError(
+        error,
+        activeWorkspaceLabel,
+        verifyAfterCreate ? "Verify failed" : "Workspace model could not be created",
+      ));
     } finally {
       setSubmitting(false);
       setVerifying(false);
@@ -173,7 +180,7 @@ export function CreateWorkspaceModelPage() {
               onChange={setForm}
               apiKeyInputRef={apiKeyInputRef}
               syncModelNameFromDisplayName
-              displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceCode}` : undefined}
+              displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceLabel}` : undefined}
             />
 
             <ToggleSwitch

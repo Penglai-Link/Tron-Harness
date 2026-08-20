@@ -56,6 +56,8 @@ import type { ModelRecord } from "@/domain/model/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 import {
+  formatWorkspaceDisplayLabel,
+  formatWorkspaceModelError,
   isEditableWorkspaceLocalRecord,
   isEditableWorkspaceDefinitionRecord,
 } from "./workspaceModelPageHelpers";
@@ -89,6 +91,7 @@ export function WorkspaceModelDetailsPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
+  const activeWorkspaceLabel = formatWorkspaceDisplayLabel(activeWorkspace, activeWorkspaceCode);
   const modelCode = searchParams.get("modelCode") ?? "";
   const startsInEditMode = searchParams.get("mode") === "edit";
   const [records, setRecords] = useState<ModelRecord[]>([]);
@@ -197,7 +200,7 @@ export function WorkspaceModelDetailsPage() {
   async function saveModel() {
     if (!selectedRecord || !activeWorkspaceCode || !editableDefinition) return;
     if (duplicateDisplayName) {
-      toast.error(`displayName already exists in workspace ${activeWorkspaceCode}`);
+      toast.error(`displayName already exists in workspace ${activeWorkspaceLabel}`);
       return;
     }
 
@@ -216,7 +219,7 @@ export function WorkspaceModelDetailsPage() {
       exitEditing();
       await refreshWorkspaceModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace model could not be saved");
+      toast.error(formatWorkspaceModelError(error, activeWorkspaceLabel, "Workspace model could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -442,7 +445,7 @@ export function WorkspaceModelDetailsPage() {
                 apiKeyInputRef={apiKeyInputRef}
                 apiKeyFieldHint="Leave blank to keep the current key."
                 onApiKeyDirtyChange={setApiKeyDirty}
-                displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceCode}` : undefined}
+                displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceLabel}` : undefined}
               />
               <ToggleSwitch
                 checked={allowInheritance}
