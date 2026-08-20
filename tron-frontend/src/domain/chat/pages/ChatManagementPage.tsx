@@ -15,6 +15,7 @@ import {
   BookmarkPlus,
   Bot,
   BrainCircuit,
+  Check,
   CheckCircle2,
   ChevronDown,
   ChevronLeft,
@@ -49,7 +50,6 @@ import {
   ConfirmDialog,
   InfoTooltip,
   MarkdownContent,
-  SelectInput,
   useWorkspaceSpaces,
   useConsoleShellConfig,
   useDismissibleLayer,
@@ -159,7 +159,12 @@ import {
 import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { SelectItem } from "@/components/ui/select";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { throttle } from "lodash-es";
 
 function formatTime(value: string) {
@@ -2865,9 +2870,7 @@ function ChatModelSelector({
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedModelCode, setExpandedModelCode] = useState<string | null>(null);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedModel = models.find((model) => model.optionCode === selectedModelCode) ?? null;
   const filteredModels = useMemo(
     () => models.filter((model) => fuzzyModelMatch(searchQuery, model)),
@@ -2875,13 +2878,6 @@ function ChatModelSelector({
   );
   const disabled = loading || models.length === 0;
   const selectedModelLabel = loading ? "Loading models..." : selectedModel ? selectedModel.displayName : emptyLabel;
-
-  useDismissibleLayer({
-    onDismiss: () => setOpen(false),
-    open,
-    popupRef: menuRef,
-    triggerElement: triggerRef.current,
-  });
 
   useEffect(() => {
     if (!open) {
@@ -2898,30 +2894,24 @@ function ChatModelSelector({
 
   return (
     <div className="relative min-w-0">
-      <button
-        ref={triggerRef}
-        className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
-        type="button"
-        aria-label="Select chat model"
-        aria-expanded={open}
-        title={selectedModelLabel}
-        disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Sparkles size={14} />
-        <span className="truncate">
-          {selectedModelLabel}
-        </span>
-        <ChevronDown size={14} />
-      </button>
-      {open ? (
-        <div
-          ref={menuRef}
-          className="absolute bottom-full left-0 z-30 mb-2 max-h-72 min-w-full w-max max-w-[260px] overflow-y-auto overscroll-contain rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-1.5 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
-          role="listbox"
-          aria-label="Chat models"
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger
+          aria-label="Select chat model"
+          className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+          disabled={disabled}
+          title={selectedModelLabel}
         >
-          <div className="sticky top-0 z-10 bg-[var(--color-elevated-surface)] pb-1.5">
+          <Sparkles aria-hidden="true" size={14} />
+          <span className="truncate">{selectedModelLabel}</span>
+          <ChevronDown aria-hidden="true" size={14} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent
+          align="start"
+          className="max-h-72 min-w-[180px] max-w-[260px] overflow-y-auto overscroll-contain p-1.5"
+          side="top"
+          sideOffset={8}
+        >
+          <div className="sticky top-0 z-10 bg-popover pb-1.5">
             <input
               ref={searchInputRef}
               aria-label="Search chat models"
@@ -2940,16 +2930,13 @@ function ChatModelSelector({
             />
           </div>
           {filteredModels.length ? filteredModels.map((model) => (
-            <button
+            <DropdownMenuItem
               className={cn(
-                "flex w-full items-start rounded-md px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]",
+                "w-full items-start px-3 py-2",
                 model.optionCode === selectedModelCode && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
               )}
               key={model.optionCode}
-              type="button"
-              role="option"
               title={model.displayName}
-              aria-selected={model.optionCode === selectedModelCode}
               onMouseEnter={() => setExpandedModelCode(model.optionCode)}
               onMouseLeave={() => setExpandedModelCode((current) => (
                 current === model.optionCode ? null : current
@@ -2960,9 +2947,9 @@ function ChatModelSelector({
               ))}
               onClick={() => {
                 onSelect(model.optionCode);
-                setOpen(false);
               }}
             >
+              {model.optionCode === selectedModelCode ? <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" /> : <span className="size-4 shrink-0" />}
               <span
                 className={cn(
                   "block min-w-0 font-medium",
@@ -2973,14 +2960,14 @@ function ChatModelSelector({
               >
                 {model.displayName}
               </span>
-            </button>
+            </DropdownMenuItem>
           )) : (
             <p className="px-3 py-2 text-xs text-[var(--color-on-surface-variant)]">
               No models match "{searchQuery.trim()}".
             </p>
           )}
-        </div>
-      ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -2999,66 +2986,43 @@ function ChatAgentSelector({
   selectedAgentCode: string;
 }) {
   const [open, setOpen] = useState(false);
-  const triggerRef = useRef<HTMLButtonElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
   const selectedAgent = agents.find((agent) => agent.agentCode === selectedAgentCode) ?? null;
   const disabled = loading || agents.length === 0 || Boolean(locked);
 
-  useDismissibleLayer({
-    onDismiss: () => setOpen(false),
-    open,
-    popupRef: menuRef,
-    triggerElement: triggerRef.current,
-  });
-
   return (
     <div className="relative min-w-0">
-      <button
-        ref={triggerRef}
-        className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
-        type="button"
-        aria-label="Select chat agent"
-        aria-expanded={open}
-        title={locked ? "Agent is locked after the first chat turn in this session" : undefined}
-        disabled={disabled}
-        onClick={() => setOpen((value) => !value)}
-      >
-        <Bot size={14} />
-        <span className="truncate">
-          {loading ? "Loading agents..." : selectedAgent?.name ?? "Main Agent"}
-        </span>
-        <ChevronDown size={14} />
-      </button>
-      {open ? (
-        <div
-          ref={menuRef}
-          className="absolute bottom-full left-0 z-30 mb-2 max-h-72 min-w-full w-max max-w-[260px] overflow-y-auto overscroll-contain rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-1.5 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
-          role="listbox"
-          aria-label="Chat agents"
+      <DropdownMenu open={open} onOpenChange={setOpen}>
+        <DropdownMenuTrigger
+          aria-label="Select chat agent"
+          className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+          disabled={disabled}
+          title={locked ? "Agent is locked after the first chat turn in this session" : undefined}
         >
+          <Bot aria-hidden="true" size={14} />
+          <span className="truncate">{loading ? "Loading agents..." : selectedAgent?.name ?? "Main Agent"}</span>
+          <ChevronDown aria-hidden="true" size={14} />
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="max-h-72 min-w-[180px] max-w-[260px] overflow-y-auto p-1.5" side="top" sideOffset={8}>
           {agents.map((agent) => (
-            <button
+            <DropdownMenuItem
               className={cn(
-                "flex w-full flex-col items-start rounded-md px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]",
+                "w-full flex-col items-start px-3 py-2 pr-8",
                 agent.agentCode === selectedAgentCode && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
               )}
               key={agent.agentCode}
-              type="button"
-              role="option"
-              aria-selected={agent.agentCode === selectedAgentCode}
               onClick={() => {
                 onSelect(agent.agentCode);
-                setOpen(false);
               }}
             >
+              {agent.agentCode === selectedAgentCode ? <Check aria-hidden="true" className="absolute right-2 top-2 size-4" /> : null}
               <span className="block min-w-0 truncate font-medium">{agent.name}</span>
               <span className="mt-0.5 block min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">
                 {agent.agentCode}
               </span>
-            </button>
+            </DropdownMenuItem>
           ))}
-        </div>
-      ) : null}
+        </DropdownMenuContent>
+      </DropdownMenu>
     </div>
   );
 }
@@ -4921,10 +4885,7 @@ export function ChatManagementPage() {
           </div>
         )}
         <div
-          className={cn(
-            "min-w-0 max-w-full",
-            agentSelectionLocked ? "w-[min(100%,16rem)]" : "w-[min(100%,14rem)]",
-          )}
+          className={cn("min-w-0 max-w-full")}
         >
           <ChatModelSelector
             emptyLabel={modelEmptyLabel}
@@ -4935,37 +4896,42 @@ export function ChatManagementPage() {
           />
         </div>
         {selectedReasoningEffortOptions.length ? (
-          <SelectInput
-            aria-label={t("common:reasoningEffort.chatLabel", "Reasoning effort")}
-            className="h-8 min-h-8 w-36 min-w-36 flex-none gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none before:shadow-none hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:border-transparent focus-visible:ring-0"
-            displayValue={(
-              <span className="flex min-w-0 items-center gap-2">
-                <BrainCircuit aria-hidden="true" className="size-3.5 shrink-0" />
-                <span className="truncate">{selectedReasoningEffortLabel}</span>
-              </span>
-            )}
-            size="sm"
-            value={selectedReasoningEffortControlValue}
-            onValueChange={(value) => {
-              setSelectedReasoningEffort(
-                value === modelDefaultReasoningEffortValue
-                  || value === selectedModelDefaultReasoningEffort
-                  ? null
-                  : value as ReasoningEffort,
-              );
-            }}
-          >
-            {selectedModelDefaultReasoningEffort ? null : (
-              <SelectItem value={modelDefaultReasoningEffortValue}>
-                {selectedReasoningEffortDefaultLabel}
-              </SelectItem>
-            )}
-            {selectedReasoningEffortOptions.map((option) => (
-              <SelectItem key={option.value} value={option.value}>
-                {option.label}
-              </SelectItem>
-            ))}
-          </SelectInput>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              aria-label={t("common:reasoningEffort.chatLabel", "Reasoning effort")}
+              className="inline-flex h-8 flex-none items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+            >
+              <BrainCircuit aria-hidden="true" className="size-3.5 shrink-0" />
+              <span className="min-w-0 truncate">{selectedReasoningEffortLabel}</span>
+              <ChevronDown aria-hidden="true" className="size-3.5 shrink-0" />
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="start" side="top" sideOffset={8}>
+              {selectedModelDefaultReasoningEffort ? null : (
+                <DropdownMenuItem
+                  className="relative pr-8"
+                  onClick={() => setSelectedReasoningEffort(null)}
+                >
+                  {selectedReasoningEffortControlValue === modelDefaultReasoningEffortValue ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
+                  {selectedReasoningEffortDefaultLabel}
+                </DropdownMenuItem>
+              )}
+              {selectedReasoningEffortOptions.map((option) => {
+                const selected = selectedReasoningEffortControlValue === option.value;
+                return (
+                  <DropdownMenuItem
+                    className="relative pr-8"
+                    key={option.value}
+                    onClick={() => setSelectedReasoningEffort(
+                      option.value === selectedModelDefaultReasoningEffort ? null : option.value as ReasoningEffort,
+                    )}
+                  >
+                    {selected ? <Check aria-hidden="true" className="absolute right-2 size-4" /> : null}
+                    {option.label}
+                  </DropdownMenuItem>
+                );
+              })}
+            </DropdownMenuContent>
+          </DropdownMenu>
         ) : null}
       </div>
     </div>
