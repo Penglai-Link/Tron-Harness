@@ -1,6 +1,14 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
 import { cn } from "@/shared/lib/utils";
 
 export interface DataTableColumn<T> {
@@ -76,80 +84,78 @@ export function DataTable<T>({
           ) : null}
         </div>
       )}
-      <div className="overflow-x-auto">
-        <table className={cn("w-full min-w-[720px] border-collapse text-left text-sm", tableClassName)}>
-          {columns.some((column) => column.width) ? (
-            <colgroup>
-              {columns.map((column) => (
-                <col
-                  className={column.colClassName}
-                  key={column.id}
-                  style={column.width ? { width: column.width } : undefined}
-                />
-              ))}
-            </colgroup>
-          ) : null}
-          <thead>
-            <tr className="border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-              {columns.map((column) => (
-                <th
-                  className={cn(
-                    "px-5 py-3",
-                    column.align === "right" ? "text-right" : "text-left",
-                    column.headerClassName,
-                  )}
-                  key={column.id}
-                >
-                  {column.header}
-                </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {rows.length ? (
-              rows.map((row, index) => (
-                <tr
-                  className={cn(
-                    "group border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-hover-surface)]",
-                    onRowClick ? "cursor-pointer" : null,
-                    rowClassName?.(row),
-                  )}
-                  key={rowKey(row, index)}
-                  tabIndex={onRowClick ? 0 : undefined}
-                  onClick={onRowClick ? () => onRowClick(row, index) : undefined}
-                  onKeyDown={onRowClick
-                    ? (event) => {
-                      if (event.key === "Enter" || event.key === " ") {
-                        event.preventDefault();
-                        onRowClick(row, index);
-                      }
+      <Table className={cn("w-full min-w-[720px] border-collapse text-left text-sm", tableClassName)}>
+        {columns.some((column) => column.width) ? (
+          <colgroup>
+            {columns.map((column) => (
+              <col
+                className={column.colClassName}
+                key={column.id}
+                style={column.width ? { width: column.width } : undefined}
+              />
+            ))}
+          </colgroup>
+        ) : null}
+        <TableHeader>
+          <TableRow className="border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container-low)]">
+            {columns.map((column) => (
+              <TableHead
+                className={cn(
+                  "px-5 py-3",
+                  column.align === "right" ? "text-right" : "text-left",
+                  column.headerClassName,
+                )}
+                key={column.id}
+              >
+                {column.header}
+              </TableHead>
+            ))}
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {rows.length ? (
+            rows.map((row, index) => (
+              <TableRow
+                className={cn(
+                  "group border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-hover-surface)]",
+                  onRowClick ? "cursor-pointer" : null,
+                  rowClassName?.(row),
+                )}
+                key={rowKey(row, index)}
+                tabIndex={onRowClick ? 0 : undefined}
+                onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+                onKeyDown={onRowClick
+                  ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      onRowClick(row, index);
                     }
-                    : undefined}
-                >
-                  {columns.map((column) => (
-                    <td
-                      className={cn(
-                        "px-5 py-3 align-middle",
-                        column.align === "right" ? "text-right" : "text-left",
-                        column.cellClassName,
-                      )}
-                      key={column.id}
-                    >
-                      {column.render(row)}
-                    </td>
-                  ))}
-                </tr>
-              ))
-            ) : (
-              <tr>
-                <td className="px-5 py-8 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={columns.length}>
-                  {emptyState ?? t("table.empty")}
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+                  }
+                  : undefined}
+              >
+                {columns.map((column) => (
+                  <TableCell
+                    className={cn(
+                      "px-5 py-3 align-middle",
+                      column.align === "right" ? "text-right" : "text-left",
+                      column.cellClassName,
+                    )}
+                    key={column.id}
+                  >
+                    {column.render(row)}
+                  </TableCell>
+                ))}
+              </TableRow>
+            ))
+          ) : (
+            <TableRow>
+              <TableCell className="px-5 py-8 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={columns.length}>
+                {emptyState ?? t("table.empty")}
+              </TableCell>
+            </TableRow>
+          )}
+        </TableBody>
+      </Table>
       <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] px-5 py-3 text-[13px] text-[var(--color-on-surface-variant)]">
         {pagination}
       </div>
