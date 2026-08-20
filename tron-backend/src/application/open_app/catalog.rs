@@ -2,7 +2,9 @@ use std::collections::BTreeMap;
 
 use serde::Serialize;
 
-use crate::domain::open_app::{OPEN_API_CAPABILITY_AGENT_CHAT, OpenApiRouteGrant, OpenAppError};
+use crate::domain::open_app::{
+    OPEN_API_CAPABILITY_AGENT_CHAT, OPEN_API_CAPABILITY_TERMINAL, OpenApiRouteGrant, OpenAppError,
+};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +37,26 @@ struct OpenApiRouteDefinition {
 }
 
 const OPEN_API_ROUTE_DEFINITIONS: &[OpenApiRouteDefinition] = &[
+    OpenApiRouteDefinition {
+        method: "POST",
+        path_template: "/open-api/v1/terminals/socket-tickets",
+        capability_code: OPEN_API_CAPABILITY_TERMINAL,
+        capability_name: "Terminal OpenAPI",
+        capability_description: "External terminal access scoped to an application local directory.",
+        operation_code: "socket.connect",
+        operation_name: "Connect Terminal",
+        operation_description: "Issue a short-lived, single-use Socket.IO terminal ticket.",
+    },
+    OpenApiRouteDefinition {
+        method: "POST",
+        path_template: "/open-api/v1/terminals/commands/generate",
+        capability_code: OPEN_API_CAPABILITY_TERMINAL,
+        capability_name: "Terminal OpenAPI",
+        capability_description: "External terminal access scoped to an application local directory.",
+        operation_code: "command.generate",
+        operation_name: "Generate Command",
+        operation_description: "Generate one shell command through the workspace text model.",
+    },
     OpenApiRouteDefinition {
         method: "GET",
         path_template: "/open-api/v1/chats/session-groups",
@@ -306,9 +328,11 @@ mod tests {
     #[test]
     fn catalog_groups_operations_and_routes() {
         let catalog = list_open_api_capability_catalog();
-        assert_eq!(catalog.len(), 1);
-        let agent_chat = &catalog[0];
-        assert_eq!(agent_chat.capability_code, OPEN_API_CAPABILITY_AGENT_CHAT);
+        assert_eq!(catalog.len(), 2);
+        let agent_chat = catalog
+            .iter()
+            .find(|group| group.capability_code == OPEN_API_CAPABILITY_AGENT_CHAT)
+            .expect("agent-chat capability should be catalogued");
         let session_read = agent_chat
             .operations
             .iter()
@@ -359,6 +383,25 @@ mod tests {
                 .iter()
                 .any(|route| { route == "POST /open-api/v1/chats/sessions/stop-run" })
         );
+
+        let terminal = catalog
+            .iter()
+            .find(|group| group.capability_code == OPEN_API_CAPABILITY_TERMINAL)
+            .expect("terminal capability should be catalogued");
+        assert!(terminal.operations.iter().any(|operation| {
+            operation.operation_code == "socket.connect"
+                && operation
+                    .routes
+                    .iter()
+                    .any(|route| route == "POST /open-api/v1/terminals/socket-tickets")
+        }));
+        assert!(terminal.operations.iter().any(|operation| {
+            operation.operation_code == "command.generate"
+                && operation
+                    .routes
+                    .iter()
+                    .any(|route| route == "POST /open-api/v1/terminals/commands/generate")
+        }));
     }
 
     #[test]
@@ -375,11 +418,21 @@ mod tests {
             resolve_open_api_route_grant("GET", "/open-api/v1/agents/agui/streams/STR-100/events")
                 .expect("agui events route should resolve");
         assert_eq!(agui_events.operation_code, "session.read");
+
+        let terminal_ticket =
+            resolve_open_api_route_grant("POST", "/open-api/v1/terminals/socket-tickets")
+                .expect("terminal socket ticket route should resolve");
+        assert_eq!(
+            terminal_ticket.capability_code,
+            OPEN_API_CAPABILITY_TERMINAL
+        );
+        assert_eq!(terminal_ticket.operation_code, "socket.connect");
     }
 
     #[test]
     fn capability_validation_rejects_unknown_pairs() {
         assert!(validate_open_api_grant("agent-chat", "message.write").is_ok());
+        assert!(validate_open_api_grant("terminal", "socket.connect").is_ok());
         assert_eq!(
             validate_open_api_grant("unknown", "message.write"),
             Err(OpenAppError::InvalidCapability)

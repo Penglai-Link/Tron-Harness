@@ -33,6 +33,7 @@ pub enum ChatSessionSourceType {
     Manual,
     Task,
     Automation,
+    Terminal,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

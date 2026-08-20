@@ -41,6 +41,7 @@ export function createMockChatAdapter(): ChatAdapter {
         lastRunCode: null,
         lastRunStatus: null,
         sessionCode,
+        sourceType: input.sourceType ?? "MANUAL",
         status: "ACTIVE",
         systemAgentSessionId: null,
         taskCode: input.taskCode ?? null,
@@ -52,6 +53,16 @@ export function createMockChatAdapter(): ChatAdapter {
       sessions.set(sessionCode, session);
       messagesBySession.set(sessionCode, []);
       protocolEventsBySession.set(sessionCode, []);
+      return session;
+    },
+    async deleteSession(sessionCode: string) {
+      const session = sessions.get(sessionCode);
+      if (!session) {
+        throw new Error("Chat session was not found");
+      }
+      sessions.delete(sessionCode);
+      messagesBySession.delete(sessionCode);
+      protocolEventsBySession.delete(sessionCode);
       return session;
     },
     async loadAguiEvents() {

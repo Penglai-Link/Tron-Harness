@@ -16,6 +16,7 @@ pub mod short_term_memory;
 pub mod skill;
 pub mod system_config;
 pub mod task;
+pub mod terminal;
 pub mod user;
 pub mod variable;
 pub mod workspace;

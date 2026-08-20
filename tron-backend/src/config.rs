@@ -67,6 +67,7 @@ pub struct AppConfig {
     pub graph_storage_path: String,
     pub frontend_dist_dir: String,
     pub project_doc_root: String,
+    pub terminal_working_directory: String,
     pub skills_registry_root: String,
     pub resource: ResourceConfig,
     pub system_agents: SystemAgentConfig,
@@ -162,6 +163,7 @@ impl AppConfig {
             graph_storage_path: default_graph_storage_path_from_home(),
             frontend_dist_dir: DEFAULT_FRONTEND_DIST_DIR.into(),
             project_doc_root: DEFAULT_PROJECT_DOC_ROOT.into(),
+            terminal_working_directory: DEFAULT_PROJECT_DOC_ROOT.into(),
             skills_registry_root: default_skills_registry_root_from_home(),
             resource: ResourceConfig::with_default_root(default_resource_storage_root_from_home()),
             system_agents: SystemAgentConfig {
@@ -205,6 +207,11 @@ impl AppConfig {
             && !value.trim().is_empty()
         {
             self.project_doc_root = normalize_storage_path(value);
+        }
+        if let Ok(value) = std::env::var("TRON_TERMINAL_WORKING_DIRECTORY")
+            && !value.trim().is_empty()
+        {
+            self.terminal_working_directory = normalize_storage_path(value);
         }
         self.auth.github_oauth = parsing::github_oauth_env_override(self.auth.github_oauth.take())?;
         if let Some(value) = ldap_env_override().transpose()? {

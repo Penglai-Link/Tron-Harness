@@ -21,6 +21,9 @@ export function normalizeChatSession(session: ChatSession): ChatSession {
   return {
     ...session,
     lastRunStatus: session.lastRunStatus ? toScreamingSnakeCase(session.lastRunStatus) : session.lastRunStatus,
+    sourceType: session.sourceType
+      ? toScreamingSnakeCase(session.sourceType) as ChatSession["sourceType"]
+      : session.sourceType,
     status: toScreamingSnakeCase(session.status) as ChatSession["status"],
   };
 }

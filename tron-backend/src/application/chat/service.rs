@@ -148,7 +148,9 @@ impl ChatService {
             normalized_required(query.workspace_code).ok_or(ChatError::WorkspaceRequired)?;
         let mut sessions = self.repository().list_sessions()?;
         sessions.retain(|session| {
-            session.workspace_code == workspace_code && session.status == ChatSessionStatus::Active
+            session.workspace_code == workspace_code
+                && session.status == ChatSessionStatus::Active
+                && session.source_type != ChatSessionSourceType::Terminal
         });
 
         let mut grouped = BTreeMap::<String, ChatSessionGroup>::new();
@@ -159,6 +161,7 @@ impl ChatService {
                     session.task_code.clone().unwrap_or_else(|| "Task".into())
                 }
                 ChatSessionSourceType::Manual => "Chat".into(),
+                ChatSessionSourceType::Terminal => "Terminal".into(),
             };
             let group_key = format!(
                 "{:?}:{}:{}",

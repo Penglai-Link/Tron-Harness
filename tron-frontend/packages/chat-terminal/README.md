@@ -59,6 +59,73 @@ const terminal = initTerminal({
 terminal.dispose();
 ```
 
+## Tron 后端接入
+
+Tron 的终端和 AI 能力使用不同的后端通道。组件先通过适配器获取一次性 Socket.IO 票据，再连接终端命名空间；不要把登录 Token 或 OpenAPI HMAC 凭据放进 Socket.IO 握手。
+
+| SDK 能力 | 后端通道 | 内部接口 | 开放接口 |
+| --- | --- | --- | --- |
+| 执行命令、交互输入、取消、尺寸同步 | Socket.IO `/terminals` | `POST /api/v1/terminals/socket-tickets` | `POST /open-api/v1/terminals/socket-tickets` |
+| `commandGenerate` | REST，工作区文本模型 | `POST /api/v1/terminals/commands/generate` | `POST /open-api/v1/terminals/commands/generate` |
+| `commandExplain`、终端聊天 | ChatService SSE | `POST /api/v1/chats/sessions/{sessionCode}/messages/stream` | `POST /open-api/v1/chats/sessions/{sessionCode}/messages/stream` |
+
+内部前端应使用 `@tron/chat-internal-adapter`，而不是在终端组件中自行 `fetch` 终端接口：
+
+```ts
+import { createInternalChatAdapter, createInternalTerminalAdapter } from "@tron/chat-internal-adapter";
+import { createTerminalTransport, initTerminal } from "@tron/chat-terminal";
+
+const workspaceCode = "TRON_CORE";
+const appCode: string | null = null; // null uses TRON_TERMINAL_WORKING_DIRECTORY
+const accessToken = "<access-token>";
+const adapterOptions = {
+  getAccessToken: () => accessToken,
+};
+const chatAdapter = createInternalChatAdapter(adapterOptions);
+const terminalAdapter = createInternalTerminalAdapter(adapterOptions);
+const session = await chatAdapter.createSession({
+  sourceType: "TERMINAL",
+  workspaceCode,
+});
+const connection = await terminalAdapter.createSocketTicket({ appCode, workspaceCode });
+
+const terminal = initTerminal({
+  el,
+  transport: {
+    terminal: createTerminalTransport({
+      url: connection.socketUrl,
+      socketOptions: {
+        auth: { ticket: connection.ticket },
+        path: connection.socketPath,
+        reconnection: false,
+      },
+    }),
+    ai: {
+      async stream(content, { onChunk, signal }) {
+        const requestId = crypto.randomUUID();
+        await chatAdapter.streamMessage(session, { content, workspaceCode }, {
+          onDelta: (delta) => onChunk({ delta, requestId }),
+        }, signal);
+        return { requestId };
+      },
+      async request(content, { signal } = {}) {
+        const result = await terminalAdapter.generateCommand({
+          prompt: content,
+          workspaceCode,
+        }, signal);
+        return result.command;
+      },
+    },
+  },
+});
+
+// Close the terminal first, then remove its transient ChatService session.
+terminal.dispose();
+await chatAdapter.deleteSession(session.sessionCode);
+```
+
+`appCode` 为可选字段。提供时服务端以应用的 `localDirectory` 作为 cwd；为 `null` 或未提供时服务端以 `TRON_TERMINAL_WORKING_DIRECTORY` 作为 cwd，客户端不能自行提交目录。终端创建会话时必须传 `sourceType: "TERMINAL"`：服务端不会把它返回给 Chat Management，终端关闭时必须调用 `deleteSession` 清理会话、消息和关联的短期记忆。开放应用使用 `createOpenApiTerminalAdapter`。它会为两个 REST 调用签名；拿到的 `ticket` 仍仅用于一次 Socket.IO 连接。票据 60 秒失效且服务端消费后不可重用，因此连接断开后应重新签发票据并创建新的终端 transport。
+
 
 ### `initTerminal` 选项
 

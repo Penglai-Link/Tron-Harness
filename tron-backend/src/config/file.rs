@@ -64,6 +64,9 @@ impl AppConfig {
         if let Some(value) = overrides.project_doc_root {
             self.project_doc_root = normalize_storage_path(value);
         }
+        if let Some(value) = overrides.terminal_working_directory {
+            self.terminal_working_directory = normalize_storage_path(value);
+        }
         if let Some(value) = overrides.skills_registry_root {
             self.skills_registry_root = value;
         }
@@ -138,6 +141,7 @@ struct AppConfigFile {
     graph_storage_path: Option<String>,
     frontend_dist_dir: Option<String>,
     project_doc_root: Option<String>,
+    terminal_working_directory: Option<String>,
     skills_registry_root: Option<String>,
     resource: Option<ResourceFileConfig>,
     system_agents: Option<SystemAgentFileConfig>,

@@ -6,7 +6,7 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    create_session, list_agui_stream_events, list_agui_stream_protocol_events, list_messages,
+    create_session, delete_session, list_agui_stream_events, list_agui_stream_protocol_events, list_messages,
     list_session_groups, patch_session, send_message, steer_message, stream_message,
 };
 use crate::adapters::inbound::http::chats::handler::{
@@ -32,7 +32,7 @@ pub fn routes() -> Router<AppState> {
         .route("/open-api/v1/chats/sessions/stop-run", post(stop_run))
         .route(
             "/open-api/v1/chats/sessions/{session_code}",
-            patch(patch_session),
+            patch(patch_session).delete(delete_session),
         )
         .route(
             "/open-api/v1/chats/sessions/{session_code}/messages",

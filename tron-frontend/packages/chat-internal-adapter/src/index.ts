@@ -19,10 +19,16 @@ import {
   type ChatSteerResult,
   type ChatStopResult,
   type CreateChatSessionInput,
+  type GenerateTerminalCommandInput,
+  type GenerateTerminalCommandResult,
   type SendChatMessageInput,
+  type TerminalAdapter,
+  type TerminalSocketConnection,
+  type TerminalSocketTicket,
+  resolveTerminalSocketUrl,
 } from "@tron/chat-core";
 
-interface InternalAdapterOptions {
+export interface InternalAdapterOptions {
   baseUrl?: string;
   credentials?: RequestCredentials;
   getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
@@ -67,12 +73,21 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         body: {
           agentCode: input.agentCode,
           appCode: input.appCode,
+          sourceType: input.sourceType ?? null,
           taskCode: input.taskCode,
           title: input.title,
           workspaceCode: input.workspaceCode,
         },
         method: "POST",
         path: "/api/v1/chats/sessions",
+      }).then(normalizeChatSession);
+    },
+    deleteSession(sessionCode, signal) {
+      return transport.requestJson<ChatSession>({
+        method: "DELETE",
+        path: "/api/v1/chats/sessions/{sessionCode}",
+        pathParams: { sessionCode },
+        signal,
       }).then(normalizeChatSession);
     },
     async downloadAttachment(session, attachment, signal) {
@@ -218,5 +233,52 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         signal,
       });
     },
+  };
+}
+
+export function createInternalTerminalAdapter(
+  options: InternalAdapterOptions = {},
+): TerminalAdapter {
+  const transport = createFetchTransport({
+    baseUrl: options.baseUrl,
+    credentials: options.credentials ?? "include",
+    getHeaders: () => authHeaders(options.getAccessToken),
+  });
+
+  return {
+    async createSocketTicket(input, signal) {
+      const ticket = await transport.requestJson<TerminalSocketTicket>({
+        body: {
+          appCode: input.appCode ?? null,
+          workspaceCode: input.workspaceCode,
+        },
+        method: "POST",
+        path: "/api/v1/terminals/socket-tickets",
+        signal,
+      });
+      return terminalSocketConnection(options.baseUrl, ticket);
+    },
+    generateCommand(input: GenerateTerminalCommandInput, signal) {
+      return transport.requestJson<GenerateTerminalCommandResult>({
+        body: {
+          modelCode: input.modelCode ?? null,
+          prompt: input.prompt,
+          workspaceCode: input.workspaceCode,
+        },
+        method: "POST",
+        path: "/api/v1/terminals/commands/generate",
+        signal,
+      });
+    },
+  };
+}
+
+function terminalSocketConnection(
+  baseUrl: string | undefined,
+  ticket: TerminalSocketTicket,
+): TerminalSocketConnection {
+  return {
+    ...ticket,
+    socketUrl: resolveTerminalSocketUrl(baseUrl, ticket.socketNamespace),
   };
 }

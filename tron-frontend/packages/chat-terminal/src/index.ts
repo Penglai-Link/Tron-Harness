@@ -244,8 +244,6 @@ export function initTerminal(options: ChatTerminalOptions) {
   const sessionDisposable = terminalTransport.onSessionChange((session) => {
     setCurrentDirectory(session.currentDirectory);
   });
-  termInstance.terminal.write(formatePath(currentDirectory));
-  termInstance.markPromptRendered();
   void terminalTransport.connect().catch((error) => {
     const normalizedError = toError(error);
     if (normalizeOptions.onError) {

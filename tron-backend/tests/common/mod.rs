@@ -32,10 +32,10 @@ use tron_backend::{
     domain::{
         app::{App, AppRuntimeRole, AppStatus, AppTag},
         open_app::{
-            OPEN_API_CAPABILITY_AGENT_CHAT, OpenApiCanonicalRequest, OpenApp,
-            OpenAppCapabilityGrant, OpenAppCredential, OpenAppCredentialStatus, OpenAppStatus,
-            OpenAppUserGrant, build_open_api_canonical_request, compute_open_api_signature,
-            open_app_secret_fingerprint,
+            OPEN_API_CAPABILITY_AGENT_CHAT, OPEN_API_CAPABILITY_TERMINAL, OpenApiCanonicalRequest,
+            OpenApp, OpenAppCapabilityGrant, OpenAppCredential, OpenAppCredentialStatus,
+            OpenAppStatus, OpenAppUserGrant, build_open_api_canonical_request,
+            compute_open_api_signature, open_app_secret_fingerprint,
         },
         role::seeded_roles,
         user::{ListUsersQuery, PhoneNumber, User, UserSourceType, UserStatus},
@@ -377,6 +377,21 @@ fn seed_open_apps(config: &AppConfig) {
             })
             .expect("open-app capability grant fixture should seed");
     }
+    for (offset, operation_code) in ["socket.connect", "command.generate"]
+        .into_iter()
+        .enumerate()
+    {
+        repository
+            .insert_capability_grant(&OpenAppCapabilityGrant {
+                id: SnowflakeId::new(734_103_002_743_196_200 + offset as i64),
+                grant_code: format!("OPENAPP-TERMINAL-GRANT-FIXTURE-{:04}", offset + 1),
+                open_app_code: open_app.open_app_code.clone(),
+                capability_code: OPEN_API_CAPABILITY_TERMINAL.into(),
+                operation_code: operation_code.into(),
+                created_at: now.clone(),
+            })
+            .expect("open-app terminal capability grant fixture should seed");
+    }
 }
 
 fn seeded_users() -> Vec<User> {
@@ -605,11 +620,18 @@ fn seeded_workspaces() -> Vec<Workspace> {
 }
 
 fn seeded_workspace_user_access() -> Vec<WorkspaceUserAccess> {
-    vec![WorkspaceUserAccess {
-        user_code: "USR-AUTH-0001".into(),
-        is_owner: true,
-        granted_at: FIXTURE_TIMESTAMP.into(),
-    }]
+    vec![
+        WorkspaceUserAccess {
+            user_code: "USR-AUTH-0001".into(),
+            is_owner: true,
+            granted_at: FIXTURE_TIMESTAMP.into(),
+        },
+        WorkspaceUserAccess {
+            user_code: OPEN_API_TEST_USER_CODE.into(),
+            is_owner: false,
+            granted_at: FIXTURE_TIMESTAMP.into(),
+        },
+    ]
 }
 
 fn seeded_workspace_role_access() -> Vec<WorkspaceRoleAccess> {

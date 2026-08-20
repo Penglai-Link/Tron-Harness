@@ -12,3 +12,5 @@ The backend is implemented in **Rust** and follows a **domain-driven** architect
 - **utoipa**: code-first OpenAPI 3.1 generation; HTTP request/response DTOs and handlers are annotated incrementally by bounded context
 - **Scalar**: interactive OpenAPI preview, served by the backend at `/api/docs`; the YAML document is available at `/api/openapi.yaml`
 - **OpenAPI Export**: `make openapi` generates the repository-root `openapi.yaml` for CI validation and external consumers
+- **socketioxide**: Socket.IO server mounted as an Axum/Tower layer for interactive terminal PTY sessions; REST issues short-lived, single-use connection tickets before the socket handshake. Tickets optionally bind an `appCode` to `App.localDirectory`; without one they use the server-side `TRON_TERMINAL_WORKING_DIRECTORY`.
+- **portable-pty**: cross-platform pseudo-terminal runtime behind the Socket.IO terminal gateway

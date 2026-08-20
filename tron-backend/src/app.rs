@@ -10,6 +10,7 @@ mod startup;
 mod state_extractors;
 
 use axum::{Router, routing::get};
+use socketioxide::SocketIo;
 
 use crate::{
     adapters::{
@@ -17,6 +18,7 @@ use crate::{
             auth::routes as auth_routes, frontend::routes as frontend_routes,
             mcp::routes::transport_routes as mcp_transport_routes,
         },
+        inbound::socket::terminal as terminal_socket,
         outbound::{
             config::YamlSystemConfigStore,
             crypto::{BcryptPasswordHasher, Sm4GcmVariableCipher},
@@ -56,6 +58,7 @@ use crate::{
     application::skill::SkillRegistryService,
     application::system_config::SystemConfigService,
     application::task::TaskService,
+    application::terminal::TerminalService,
     application::user::UserService,
     application::variable::VariableService,
     application::workspace::WorkspaceService,
@@ -126,6 +129,7 @@ pub struct AppState {
     pub graph_explorer: GraphExplorerService,
     pub roles: RoleService,
     pub tasks: TaskService,
+    pub terminal: TerminalService,
     pub users: UserService,
     pub variables: VariableService,
     pub resources: ResourceService,
@@ -232,6 +236,11 @@ impl AppState {
                 event_bus.clone(),
             )
         };
+        let terminal = TerminalService::new(
+            apps.clone(),
+            workspaces.clone(),
+            config.terminal_working_directory.clone(),
+        );
         let variables = if config.database_url == ":memory:" {
             GLOBAL_VARIABLE_SERVICE
                 .get_or_init(|| build_variable_service(":memory:", workspaces.clone(), &config))
@@ -473,6 +482,7 @@ impl AppState {
             system_config,
             roles,
             tasks,
+            terminal,
             users,
             variables,
             resources,
@@ -495,6 +505,12 @@ where
     let state = AppState::new_with_id_provider(config, id_provider)?;
     let protected_routes = build_protected_routes(&state);
     let open_api_routes = build_open_api_routes(&state);
+    let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone());
+    let (socket_layer, socket_io) = SocketIo::builder()
+        .with_state(terminal_gateway)
+        .max_payload(64 * 1024)
+        .build_layer();
+    terminal_socket::configure(&socket_io);
 
     Ok(Router::new()
         .route("/api/v1/health", get(health))
@@ -505,7 +521,8 @@ where
         .merge(protected_routes)
         .merge(frontend_routes())
         .merge(open_api_routes)
-        .with_state(state))
+        .with_state(state)
+        .layer(socket_layer))
 }
 
 include!("app/builders.rs");

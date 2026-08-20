@@ -6,6 +6,7 @@ export * from "./mock";
 export * from "./normalize";
 export * from "./openapi-signing";
 export * from "./transcript";
+export * from "./terminal";
 export * from "./transport";
 export * from "./types";
 export * from "./window-state";

@@ -385,6 +385,75 @@ fn chat_session_code_uses_shared_snowflake_id_provider() {
 }
 
 #[tokio::test]
+async fn terminal_sessions_are_hidden_from_chat_management_and_can_be_deleted() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let created = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "sourceType": "TERMINAL",
+            "workspaceCode": "TRON_CORE"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let created = response_json(created).await;
+    let session_code = created["data"]["sessionCode"]
+        .as_str()
+        .expect("terminal session code should be returned")
+        .to_string();
+    assert_eq!(created["data"]["sourceType"], json!("TERMINAL"));
+
+    let groups = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/chats/session-groups?workspaceCode=TRON_CORE",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(groups.status(), StatusCode::OK);
+    let groups = response_json(groups).await;
+    assert!(
+        groups["data"]
+            .as_array()
+            .expect("groups should be an array")
+            .iter()
+            .flat_map(|group| group["sessions"].as_array().into_iter().flatten())
+            .all(|session| session["sessionCode"] != session_code)
+    );
+
+    let deleted = request_with_headers(
+        &app,
+        Method::DELETE,
+        &format!("/api/v1/chats/sessions/{session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(deleted.status(), StatusCode::OK);
+
+    let messages = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(messages.status(), StatusCode::NOT_FOUND);
+}
+
+#[tokio::test]
 async fn chat_message_history_requires_an_existing_session() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;

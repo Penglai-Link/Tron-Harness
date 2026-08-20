@@ -3,7 +3,9 @@ mod entities;
 mod error;
 mod signatures;
 
-pub use constants::{OPEN_API_CAPABILITY_AGENT_CHAT, OPEN_API_SIGNATURE_VERSION};
+pub use constants::{
+    OPEN_API_CAPABILITY_AGENT_CHAT, OPEN_API_CAPABILITY_TERMINAL, OPEN_API_SIGNATURE_VERSION,
+};
 pub use entities::{
     OpenApiCanonicalRequest, OpenApiNonceRecord, OpenApiRouteGrant, OpenApp, OpenAppAuthState,
     OpenAppCapabilityGrant, OpenAppCredential, OpenAppCredentialStatus, OpenAppStatus,

@@ -96,7 +96,7 @@ pub async fn create_session(
             title: request.title,
             app_code: request.app_code,
             task_code: request.task_code,
-            source_type: None,
+            source_type: request.source_type,
             source_code: None,
             agent_code: request.agent_code,
         },
@@ -108,6 +108,18 @@ pub async fn create_session(
                 session,
             ))),
         )
+            .into_response(),
+        Err(error) => chat_error_response(error),
+    }
+}
+
+pub async fn delete_session(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path(session_code): Path<String>,
+) -> Response {
+    match state.chats.delete_session(&session_code) {
+        Ok(session) => Json(ApiResponse::success(OpenApiChatSessionResponse::from(session)))
             .into_response(),
         Err(error) => chat_error_response(error),
     }

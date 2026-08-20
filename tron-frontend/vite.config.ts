@@ -31,6 +31,11 @@ export default defineConfig(({ mode }) => {
               changeOrigin: true,
               target: backendProxyTarget,
             },
+            "/socket.io": {
+              changeOrigin: true,
+              target: backendProxyTarget,
+              ws: true,
+            },
           },
     },
     resolve: {

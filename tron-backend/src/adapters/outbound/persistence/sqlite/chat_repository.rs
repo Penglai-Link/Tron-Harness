@@ -535,6 +535,7 @@ fn session_source_type_to_storage(source_type: ChatSessionSourceType) -> &'stati
         ChatSessionSourceType::Manual => "MANUAL",
         ChatSessionSourceType::Task => "TASK",
         ChatSessionSourceType::Automation => "AUTOMATION",
+        ChatSessionSourceType::Terminal => "TERMINAL",
     }
 }
 
@@ -543,6 +544,7 @@ fn session_source_type_from_storage(value: &str) -> Result<ChatSessionSourceType
         "MANUAL" => Ok(ChatSessionSourceType::Manual),
         "TASK" => Ok(ChatSessionSourceType::Task),
         "AUTOMATION" => Ok(ChatSessionSourceType::Automation),
+        "TERMINAL" => Ok(ChatSessionSourceType::Terminal),
         _ => Err(ChatError::StorageFailure),
     }
 }

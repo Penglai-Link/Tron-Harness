@@ -6,7 +6,7 @@ import type {
   SendChatMessageInput,
 } from "@tron/chat-core";
 
-import { createOpenApiChatAdapter } from "./index";
+import { createOpenApiChatAdapter, createOpenApiTerminalAdapter } from "./index";
 
 const originalFetch = globalThis.fetch;
 
@@ -141,6 +141,7 @@ describe("createOpenApiChatAdapter", () => {
     });
 
     await adapter.createSession({
+      sourceType: "TERMINAL",
       title: "Open session",
       workspaceCode: "TRON_CORE",
     });
@@ -158,6 +159,10 @@ describe("createOpenApiChatAdapter", () => {
     expect(headers.get("X-Tron-Timestamp")).toBe("1718100000");
     expect(headers.get("X-Tron-Nonce")).toBe("abc123nonce789");
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(String(init?.body))).toMatchObject({
+      sourceType: "TERMINAL",
+      workspaceCode: "TRON_CORE",
+    });
   });
 
   it("signs stream requests before opening the SSE channel", async () => {
@@ -327,6 +332,73 @@ describe("createOpenApiChatAdapter", () => {
       content: "Steer the active response",
       expectedRunCode: "RUN-1",
       sessionCode: "SESSION-1",
+    });
+  });
+});
+
+describe("createOpenApiTerminalAdapter", () => {
+  it("signs terminal ticket and command generation requests", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope({
+        expiresAt: 1_786_000_000_000,
+        socketNamespace: "/terminals",
+        socketPath: "/socket.io",
+        ticket: "single-use-ticket",
+      })), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope({
+        command: "git status --short",
+        modelCode: "MODEL-1",
+      })), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createOpenApiTerminalAdapter({
+      appKey: "secret-key-123",
+      baseUrl: "https://openapi.example.com",
+      nonceFactory: () => "terminalnonce",
+      openAppCode: "OPENAPP-TEST-0001",
+      timestampFactory: () => 1_718_100_005,
+      userCode: "USR-0001",
+    });
+
+    await expect(adapter.createSocketTicket({
+      workspaceCode: "TRON_CORE",
+    })).resolves.toMatchObject({
+      socketUrl: "https://openapi.example.com/terminals",
+      ticket: "single-use-ticket",
+    });
+    await expect(adapter.generateCommand({
+      modelCode: "MODEL-1",
+      prompt: "show the current changes",
+      workspaceCode: "TRON_CORE",
+    })).resolves.toEqual({
+      command: "git status --short",
+      modelCode: "MODEL-1",
+    });
+
+    const [ticketUrl, ticketInit] = fetchMock.mock.calls[0] ?? [];
+    const [commandUrl, commandInit] = fetchMock.mock.calls[1] ?? [];
+    expect(ticketUrl).toBe("https://openapi.example.com/open-api/v1/terminals/socket-tickets");
+    expect(ticketInit?.method).toBe("POST");
+    expect(new Headers(ticketInit?.headers).get("X-Tron-App-Code")).toBe("OPENAPP-TEST-0001");
+    expect(new Headers(ticketInit?.headers).get("X-Tron-User-Code")).toBe("USR-0001");
+    expect(new Headers(ticketInit?.headers).get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(String(ticketInit?.body))).toEqual({
+      appCode: null,
+      workspaceCode: "TRON_CORE",
+    });
+    expect(commandUrl).toBe("https://openapi.example.com/open-api/v1/terminals/commands/generate");
+    expect(commandInit?.method).toBe("POST");
+    expect(new Headers(commandInit?.headers).get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(String(commandInit?.body))).toEqual({
+      modelCode: "MODEL-1",
+      prompt: "show the current changes",
+      workspaceCode: "TRON_CORE",
     });
   });
 });

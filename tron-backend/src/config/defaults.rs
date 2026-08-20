@@ -26,6 +26,7 @@ impl Default for AppConfig {
                 .display()
                 .to_string(),
             project_doc_root: std::env::temp_dir().display().to_string(),
+            terminal_working_directory: std::env::temp_dir().display().to_string(),
             skills_registry_root: std::env::temp_dir()
                 .join("tron-skills-registry-test")
                 .display()

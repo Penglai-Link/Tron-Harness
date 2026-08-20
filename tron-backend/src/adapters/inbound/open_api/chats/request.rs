@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 use crate::domain::{
     agent::{AgentRunLimits, EffectiveTool},
-    chat::ChatMessageAttachment,
+    chat::{ChatMessageAttachment, ChatSessionSourceType},
     reasoning::ReasoningEffort,
 };
 
@@ -19,6 +19,7 @@ pub struct OpenApiCreateChatSessionRequest {
     pub title: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
+    pub source_type: Option<ChatSessionSourceType>,
     pub agent_code: Option<String>,
 }
 

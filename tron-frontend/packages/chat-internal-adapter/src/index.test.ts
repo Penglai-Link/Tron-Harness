@@ -6,7 +6,7 @@ import {
   type SendChatMessageInput,
 } from "@tron/chat-core";
 
-import { createInternalChatAdapter } from "./index";
+import { createInternalChatAdapter, createInternalTerminalAdapter } from "./index";
 
 const originalFetch = globalThis.fetch;
 
@@ -54,6 +54,40 @@ afterEach(() => {
 });
 
 describe("createInternalChatAdapter", () => {
+  it("creates and removes terminal-scoped sessions with the chat session contract", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope(sessionFixture())), {
+        headers: { "Content-Type": "application/json" },
+        status: 201,
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope(sessionFixture())), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createInternalChatAdapter({
+      baseUrl: "https://internal.example.com",
+    });
+
+    await adapter.createSession({
+      sourceType: "TERMINAL",
+      workspaceCode: "TRON_CORE",
+    });
+    await adapter.deleteSession("SESSION-1");
+
+    const [createUrl, createInit] = fetchMock.mock.calls[0] ?? [];
+    const [deleteUrl, deleteInit] = fetchMock.mock.calls[1] ?? [];
+    expect(createUrl).toBe("https://internal.example.com/api/v1/chats/sessions");
+    expect(createInit?.method).toBe("POST");
+    expect(JSON.parse(String(createInit?.body))).toMatchObject({
+      sourceType: "TERMINAL",
+      workspaceCode: "TRON_CORE",
+    });
+    expect(deleteUrl).toBe("https://internal.example.com/api/v1/chats/sessions/SESSION-1");
+    expect(deleteInit?.method).toBe("DELETE");
+  });
+
   it("preserves the active-run conflict code from a failed stream request", async () => {
     globalThis.fetch = vi.fn(async () => new Response(JSON.stringify({
       code: "CHAT_RUN_ALREADY_ACTIVE",
@@ -201,6 +235,72 @@ describe("createInternalChatAdapter", () => {
       content: "Steer the active response",
       expectedRunCode: "RUN-1",
       sessionCode: "SESSION-1",
+    });
+  });
+});
+
+describe("createInternalTerminalAdapter", () => {
+  it("uses the internal terminal contracts with the authenticated bearer token", async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope({
+        expiresAt: 1_786_000_000_000,
+        socketNamespace: "/terminals",
+        socketPath: "/socket.io",
+        ticket: "single-use-ticket",
+      })), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope({
+        command: "git status --short",
+        modelCode: "MODEL-1",
+      })), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createInternalTerminalAdapter({
+      baseUrl: "https://internal.example.com",
+      getAccessToken: () => "internal-token",
+    });
+    const abortController = new AbortController();
+
+    await expect(adapter.createSocketTicket({
+      workspaceCode: "TRON_CORE",
+    }, abortController.signal)).resolves.toEqual({
+      expiresAt: 1_786_000_000_000,
+      socketNamespace: "/terminals",
+      socketPath: "/socket.io",
+      socketUrl: "https://internal.example.com/terminals",
+      ticket: "single-use-ticket",
+    });
+    await expect(adapter.generateCommand({
+      prompt: "show the current changes",
+      workspaceCode: "TRON_CORE",
+    }, abortController.signal)).resolves.toEqual({
+      command: "git status --short",
+      modelCode: "MODEL-1",
+    });
+
+    const [ticketUrl, ticketInit] = fetchMock.mock.calls[0] ?? [];
+    const [commandUrl, commandInit] = fetchMock.mock.calls[1] ?? [];
+    expect(ticketUrl).toBe("https://internal.example.com/api/v1/terminals/socket-tickets");
+    expect(ticketInit?.method).toBe("POST");
+    expect(ticketInit?.signal).toBe(abortController.signal);
+    expect(new Headers(ticketInit?.headers).get("Authorization")).toBe("Bearer internal-token");
+    expect(JSON.parse(String(ticketInit?.body))).toEqual({
+      appCode: null,
+      workspaceCode: "TRON_CORE",
+    });
+    expect(commandUrl).toBe("https://internal.example.com/api/v1/terminals/commands/generate");
+    expect(commandInit?.method).toBe("POST");
+    expect(commandInit?.signal).toBe(abortController.signal);
+    expect(new Headers(commandInit?.headers).get("Authorization")).toBe("Bearer internal-token");
+    expect(JSON.parse(String(commandInit?.body))).toEqual({
+      modelCode: null,
+      prompt: "show the current changes",
+      workspaceCode: "TRON_CORE",
     });
   });
 });

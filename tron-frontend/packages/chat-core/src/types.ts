@@ -1,4 +1,5 @@
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
+export type ChatSessionSourceType = "MANUAL" | "TASK" | "AUTOMATION" | "TERMINAL";
 export type ChatMessageRole = "USER" | "ASSISTANT";
 export type ChatMessageChannel = "MAIN_AGENT" | "TASK_AGENT";
 export type ChatRunningSubmitMode = "steer" | "queue";
@@ -20,6 +21,7 @@ export interface ChatSession {
   userCode?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
+  sourceType?: string | null;
   agentCode?: string | null;
   systemAgentSessionId?: string | null;
   title: string;
@@ -41,6 +43,7 @@ export interface CreateChatSessionInput {
   title?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
+  sourceType?: ChatSessionSourceType | null;
   agentCode?: string | null;
 }
 
@@ -233,6 +236,7 @@ export interface ChatAdapterCapabilities {
 export interface ChatAdapter {
   capabilities: ChatAdapterCapabilities;
   createSession: (input: CreateChatSessionInput) => Promise<ChatSession>;
+  deleteSession: (sessionCode: string, signal?: AbortSignal) => Promise<ChatSession>;
   downloadAttachment?: (
     session: ChatSession,
     attachment: ChatMessageAttachment,

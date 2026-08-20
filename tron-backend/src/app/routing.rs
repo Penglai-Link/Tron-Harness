@@ -31,10 +31,12 @@ use crate::adapters::{
         skills::routes::routes as skill_routes,
         system_config::routes as system_config_routes,
         tasks::routes as task_routes,
+        terminals::routes::routes as terminal_routes,
         variables::routes::routes as variable_routes,
     },
     inbound::open_api::{
         auth::require_open_api_auth, chats::routes::routes as open_api_chat_routes,
+        terminals::routes::routes as open_api_terminal_routes,
     },
 };
 
@@ -65,6 +67,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(knowledge_graph_routes::routes())
         .merge(skill_routes())
         .merge(system_config_routes())
+        .merge(terminal_routes())
         .route_layer(middleware::from_fn_with_state(
             state.users.clone(),
             require_auth,
@@ -73,6 +76,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
 
 pub(super) fn build_open_api_routes(state: &AppState) -> Router<AppState> {
     open_api_chat_routes()
+        .merge(open_api_terminal_routes())
         .route_layer(middleware::from_fn_with_state(
             state.open_apps.clone(),
             require_open_api_auth,
