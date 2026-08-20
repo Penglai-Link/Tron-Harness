@@ -29,6 +29,7 @@ import {
 } from "@tron/chat-core";
 import { FileText, Paperclip, X } from "lucide-react";
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -38,6 +39,7 @@ import {
 } from "react";
 import { TronChatPanel } from "./TronChatPanel";
 import { TronChatWindow } from "./TronChatWindow";
+import { isImageAttachment, useAttachmentImageSource } from "./chatAttachments";
 
 interface ToastLikeCallback {
   (message: string, title?: string): void;
@@ -68,6 +70,65 @@ function defaultErrorReporter(message: string) {
 function normalizeOptionalValue(value: string | null | undefined) {
   const normalized = value?.trim();
   return normalized ? normalized : undefined;
+}
+
+function attachmentLabel(attachment: ChatMessageAttachment) {
+  return attachment.fileName || attachment.title || attachment.summary || attachment.id;
+}
+
+function attachmentTypeLabel(attachment: ChatMessageAttachment) {
+  const name = attachment.fileName || attachment.title || "";
+  const extension = name.includes(".") ? name.split(".").pop() : undefined;
+  return (extension || attachment.contentType?.split("/").pop() || "FILE").toUpperCase();
+}
+
+function PendingAttachmentCard({
+  attachment,
+  downloadAttachment,
+  onRemove,
+}: {
+  attachment: ChatMessageAttachment;
+  downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+  onRemove: (attachmentId: string) => void;
+}) {
+  const label = attachmentLabel(attachment);
+  const imageSource = useAttachmentImageSource(attachment, downloadAttachment);
+
+  if (isImageAttachment(attachment)) {
+    return (
+      <div className="tron-chat__runtime-attachment-image">
+        {imageSource ? <img alt={label} src={imageSource} /> : null}
+        <button
+          aria-label={`Remove ${label}`}
+          className="tron-chat__runtime-attachment-remove tron-chat__runtime-attachment-remove--floating"
+          type="button"
+          onClick={() => onRemove(attachment.id)}
+        >
+          <X size={13} />
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="tron-chat__runtime-attachment-file">
+      <span className="tron-chat__runtime-attachment-file-icon" aria-hidden="true">
+        <FileText size={22} />
+      </span>
+      <span className="tron-chat__runtime-attachment-file-info">
+        <span className="tron-chat__runtime-attachment-file-name" title={label}>{label}</span>
+        <span className="tron-chat__runtime-attachment-file-type">{attachmentTypeLabel(attachment)}</span>
+      </span>
+      <button
+        aria-label={`Remove ${label}`}
+        className="tron-chat__runtime-attachment-remove tron-chat__runtime-attachment-remove--floating"
+        type="button"
+        onClick={() => onRemove(attachment.id)}
+      >
+        <X size={13} />
+      </button>
+    </div>
+  );
 }
 
 export function TronChatRuntimeWindow({
@@ -1071,9 +1132,26 @@ export function TronChatRuntimeWindow({
       : debugOptions?.debugEventTypes,
   }), [debugOptions, liveAguiEvents, presentationDebugEvents, protocolEvents]);
 
-  const attachmentDownloader = session && activeAdapter.downloadAttachment
-    ? (attachment: ChatMessageAttachment) => activeAdapter.downloadAttachment!(session, attachment)
-    : undefined;
+  const attachmentDownloader = useCallback(
+    session && activeAdapter.downloadAttachment
+      ? (attachment: ChatMessageAttachment) => activeAdapter.downloadAttachment!(session, attachment)
+      : undefined,
+    [activeAdapter, session],
+  );
+  const pendingAttachmentHeader = pendingAttachments.length ? (
+    <div className="tron-chat__runtime-attachments tron-chat__runtime-attachments--pending">
+      {pendingAttachments.map((attachment) => (
+        <PendingAttachmentCard
+          attachment={attachment}
+          downloadAttachment={attachmentDownloader}
+          key={attachment.id}
+          onRemove={(attachmentId) => setPendingAttachments((current) => (
+            current.filter((item) => item.id !== attachmentId)
+          ))}
+        />
+      ))}
+    </div>
+  ) : null;
   const runtimeFooterAddon = (
     <div className="tron-chat__runtime-footer-addon">
       {activeAdapter.uploadAttachment ? (
@@ -1094,25 +1172,6 @@ export function TronChatRuntimeWindow({
           >
             <Paperclip size={16} />
           </button>
-          {pendingAttachments.map((attachment) => {
-            const label = attachment.fileName || attachment.title || attachment.summary || attachment.id;
-            return (
-              <span className="tron-chat__runtime-attachment-chip" key={attachment.id}>
-                <FileText aria-hidden="true" size={14} />
-                <span title={label}>{label}</span>
-                <button
-                  aria-label={`Remove ${label}`}
-                  className="tron-chat__runtime-attachment-remove"
-                  type="button"
-                  onClick={() => setPendingAttachments((current) => (
-                    current.filter((item) => item.id !== attachment.id)
-                  ))}
-                >
-                  <X size={13} />
-                </button>
-              </span>
-            );
-          })}
         </div>
       ) : null}
       {footerAddon}
@@ -1122,6 +1181,7 @@ export function TronChatRuntimeWindow({
   const panel = (
     <TronChatPanel
       attachmentDownloader={attachmentDownloader}
+      composerHeader={pendingAttachmentHeader}
       createSessionLabel="Start chat"
       currentUserDisplayName={currentUserDisplayName}
       debugOptions={resolvedDebugOptions}
@@ -1167,6 +1227,7 @@ export function TronChatRuntimeWindow({
     return (
       <TronChatWindow
         attachmentDownloader={attachmentDownloader}
+        composerHeader={pendingAttachmentHeader}
         currentUserDisplayName={currentUserDisplayName}
         debugOptions={resolvedDebugOptions}
         disabledInput={Boolean(config.disabledInput)}

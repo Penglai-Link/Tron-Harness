@@ -97,6 +97,77 @@ function completedResult(
 }
 
 describe("TronChatRuntimeWindow", () => {
+  it("shows pending images as thumbnails and files with name and type, then clears them after send", async () => {
+    const uploadedAttachments = [
+      {
+        contentType: "image/png",
+        fileName: "screen.png",
+        id: "IMAGE-1",
+        imageUrl: "data:image/png;base64,AA==",
+        kind: "image" as const,
+        metadata: {},
+        summary: "screen.png",
+      },
+      {
+        contentType: "application/pdf",
+        fileName: "guide.pdf",
+        id: "FILE-1",
+        kind: "file" as const,
+        metadata: {},
+        summary: "guide.pdf",
+      },
+    ];
+    const streamMessage = vi.fn().mockResolvedValue(completedResult("RUN-ATTACHMENTS"));
+    const adapter = {
+      ...createAdapter().adapter,
+      streamMessage,
+      uploadAttachment: vi.fn()
+        .mockResolvedValueOnce(uploadedAttachments[0])
+        .mockResolvedValueOnce(uploadedAttachments[1]),
+    } satisfies ChatAdapter;
+    const { container } = render(
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        config={{ floating: false, workspaceCode: "WS-1" }}
+        initialSession={restoredSession()}
+      />,
+    );
+
+    await waitFor(() => expect(adapter.loadMessages).toHaveBeenCalled());
+    const fileInput = container.querySelector('input[type="file"]');
+    expect(fileInput).toBeTruthy();
+    function fileList(file: File): FileList {
+      return {
+        0: file,
+        length: 1,
+        item: (index: number) => (index === 0 ? file : null),
+      } as FileList;
+    }
+    fireEvent.change(fileInput as HTMLInputElement, {
+      target: { files: fileList(new File(["image"], "screen.png", { type: "image/png" })) },
+    });
+    fireEvent.change(fileInput as HTMLInputElement, {
+      target: { files: fileList(new File(["pdf"], "guide.pdf", { type: "application/pdf" })) },
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("img", { name: "screen.png" })).toBeTruthy();
+      expect(screen.getByText("guide.pdf")).toBeTruthy();
+      expect(screen.getByText("PDF")).toBeTruthy();
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Remove guide.pdf" }));
+    expect(screen.queryByText("guide.pdf")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Send" }));
+    await waitFor(() => expect(streamMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionCode: "SESSION-RESTORED" }),
+      expect.objectContaining({ attachments: [uploadedAttachments[0]] }),
+      expect.anything(),
+      expect.anything(),
+    ));
+    await waitFor(() => expect(screen.queryByRole("img", { name: "screen.png" })).toBeNull());
+  });
+
   it("synchronizes a later initialSession value into the runtime state", async () => {
     const { adapter, loadMessages } = createAdapter();
     const { rerender } = render(

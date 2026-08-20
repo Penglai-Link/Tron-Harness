@@ -392,6 +392,14 @@
   padding: 12px;
 }
 
+.tron-chat__composer-header {
+  display: flex;
+  min-width: 0;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
 .tron-chat__textarea {
   min-height: 72px;
   width: 100%;
@@ -690,6 +698,83 @@
   gap: 8px;
 }
 
+.tron-chat__runtime-attachments--pending {
+  width: 100%;
+  flex: none;
+  align-items: stretch;
+}
+
+.tron-chat__runtime-attachment-image,
+.tron-chat__runtime-attachment-file {
+  position: relative;
+  display: flex;
+  min-width: 0;
+  overflow: hidden;
+  border: 1px solid var(--tron-chat-border);
+  border-radius: 12px;
+  background: var(--tron-chat-surface-soft);
+}
+
+.tron-chat__runtime-attachment-image {
+  width: 88px;
+  height: 64px;
+  align-items: center;
+  justify-content: center;
+}
+
+.tron-chat__runtime-attachment-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.tron-chat__runtime-attachment-file {
+  width: min(280px, 100%);
+  min-height: 64px;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 40px 8px 10px;
+}
+
+.tron-chat__runtime-attachment-file-icon {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  border-radius: 10px;
+  background: var(--tron-chat-surface-muted);
+  color: var(--tron-chat-text-muted);
+}
+
+.tron-chat__runtime-attachment-file-info {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.tron-chat__runtime-attachment-file-name,
+.tron-chat__runtime-attachment-file-type {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tron-chat__runtime-attachment-file-name {
+  color: var(--tron-chat-text);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.tron-chat__runtime-attachment-file-type {
+  color: var(--tron-chat-text-muted);
+  font-size: 13px;
+}
+
 .tron-chat__runtime-attachment-input {
   display: none;
 }
@@ -708,6 +793,17 @@
   color: var(--tron-chat-text-muted);
   cursor: pointer;
   padding: 0;
+}
+
+.tron-chat__runtime-attachment-remove--floating {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: var(--tron-chat-text);
+  color: var(--tron-chat-surface-strong);
 }
 
 .tron-chat__runtime-attachment-remove:hover {

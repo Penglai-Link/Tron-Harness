@@ -56,6 +56,7 @@ import {
 import "github-markdown-css/github-markdown.css";
 import { ChatHistoryRail } from "./ChatHistoryRail";
 import { buildChatHistoryTurns } from "./chatHistory";
+import { isImageAttachment, useAttachmentImageSource } from "./chatAttachments";
 
 function cx(...values: Array<string | false | null | undefined>) {
   return values.filter(Boolean).join(" ");
@@ -101,21 +102,6 @@ function defaultFormatAnnotationCount(count: number) {
   return `${count} annotation${count === 1 ? "" : "s"}`;
 }
 
-function isImageAttachment(attachment: ChatMessageAttachment) {
-  const contentType = attachment.contentType?.toLowerCase();
-  return Boolean(
-    attachment.imageUrl
-    || matchesSupportedImageContentType(contentType),
-  );
-}
-
-function matchesSupportedImageContentType(contentType: string | undefined) {
-  return contentType === "image/png"
-    || contentType === "image/jpeg"
-    || contentType === "image/webp"
-    || contentType === "image/gif";
-}
-
 function AttachmentImagePreview({
   attachment,
   downloadAttachment,
@@ -123,35 +109,7 @@ function AttachmentImagePreview({
   attachment: ChatMessageAttachment;
   downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
 }) {
-  const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (attachment.imageUrl || !downloadAttachment || !isImageAttachment(attachment)) {
-      setRemoteUrl(null);
-      return;
-    }
-    let active = true;
-    let objectUrl: string | null = null;
-    void downloadAttachment(attachment)
-      .then((blob) => {
-        const nextObjectUrl = URL.createObjectURL(blob);
-        if (!active) {
-          URL.revokeObjectURL(nextObjectUrl);
-          return;
-        }
-        objectUrl = nextObjectUrl;
-        setRemoteUrl(nextObjectUrl);
-      })
-      .catch(() => {
-        if (active) setRemoteUrl(null);
-      });
-    return () => {
-      active = false;
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
-    };
-  }, [attachment, downloadAttachment]);
-
-  const source = attachment.imageUrl ?? remoteUrl;
+  const source = useAttachmentImageSource(attachment, downloadAttachment);
   if (!source) return null;
   return (
     <figure className="tron-chat__inspection-preview">
@@ -824,6 +782,7 @@ export interface TronChatPanelProps {
   debugOptions?: ChatDebugOptions;
   disabledInput?: boolean;
   draft: string;
+  composerHeader?: ReactNode;
   emptyDescription?: string;
   emptyTitle?: string;
   footerAddon?: ReactNode;
@@ -869,6 +828,7 @@ export function TronChatPanel({
   debugOptions,
   disabledInput = false,
   draft,
+  composerHeader,
   emptyDescription = "Create a session to start chatting.",
   emptyTitle = "No session selected",
   footerAddon,
@@ -1196,6 +1156,11 @@ export function TronChatPanel({
               </section>
             ) : null}
             <div className="tron-chat__composer">
+              {composerHeader ? (
+                <div className="tron-chat__composer-header">
+                  {composerHeader}
+                </div>
+              ) : null}
               <textarea
                 autoFocus={autoFocusComposer}
                 key={session?.sessionCode ?? "composer"}
