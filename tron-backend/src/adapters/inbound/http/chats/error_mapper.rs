@@ -19,6 +19,11 @@ pub fn chat_error_response(error: ChatError) -> Response {
         ChatError::AttachmentInvalid(message) => {
             (StatusCode::BAD_REQUEST, "CHAT_ATTACHMENT_INVALID", message)
         }
+        ChatError::AttachmentNotFound => (
+            StatusCode::NOT_FOUND,
+            "CHAT_ATTACHMENT_NOT_FOUND",
+            "chat attachment was not found".to_string(),
+        ),
         ChatError::MessageRequired => (
             StatusCode::BAD_REQUEST,
             "CHAT_MESSAGE_REQUIRED",

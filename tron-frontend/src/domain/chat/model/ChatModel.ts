@@ -1,4 +1,4 @@
-import type { ReasoningEffort } from "@tron/chat-core";
+import type { ChatMessageAttachmentKind, ReasoningEffort } from "@tron/chat-core";
 
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
 export type ChatMessageRole = "USER" | "ASSISTANT";
@@ -151,8 +151,13 @@ export interface ChatSendResult {
 
 export interface ChatMessageAttachment {
   id: string;
-  kind: "inspection";
+  kind: ChatMessageAttachmentKind;
+  title?: string | null;
   imageUrl?: string | null;
+  resourceCode?: string | null;
+  fileName?: string | null;
+  contentType?: string | null;
+  byteSize?: number | null;
   metadata: Record<string, unknown>;
   summary: string;
 }

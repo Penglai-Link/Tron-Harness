@@ -3,6 +3,7 @@ export const chatApiEndpoints = {
   archiveChatSession: "POST /api/v1/chats/sessions/{sessionCode}/archive",
   createChatSession: "POST /api/v1/chats/sessions",
   deleteChatSession: "DELETE /api/v1/chats/sessions/{sessionCode}",
+  downloadChatSessionAttachment: "GET /api/v1/chats/sessions/{sessionCode}/attachments/{attachmentCode}",
   updateChatSession: "PATCH /api/v1/chats/sessions/{sessionCode}",
   listChatMessages: "GET /api/v1/chats/sessions/{sessionCode}/messages",
   getChatSessionTodos: "GET /api/v1/chats/sessions/get-todos?sessionCode={sessionCode}",
@@ -21,6 +22,7 @@ export const chatApiEndpoints = {
   stopChatRun: "POST /api/v1/chats/sessions/stop-run",
   sendChatMessage: "POST /api/v1/chats/sessions/{sessionCode}/messages",
   streamChatMessage: "POST /api/v1/chats/sessions/{sessionCode}/messages/stream",
+  uploadChatSessionAttachment: "POST /api/v1/chats/sessions/{sessionCode}/attachments",
   listAguiEvents: "GET /api/v1/agents/agui/streams/{streamKey}/events",
   listAguiProtocolEvents: "GET /api/v1/agents/agui/streams/{streamKey}/protocol-events",
 } as const;

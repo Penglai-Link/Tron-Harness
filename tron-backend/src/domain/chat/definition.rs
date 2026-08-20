@@ -83,7 +83,16 @@ pub struct ChatMessageAttachment {
     #[serde(default)]
     pub title: Option<String>,
     pub summary: String,
+    #[serde(default)]
     pub image_url: Option<String>,
+    #[serde(default)]
+    pub resource_code: Option<String>,
+    #[serde(default)]
+    pub file_name: Option<String>,
+    #[serde(default)]
+    pub content_type: Option<String>,
+    #[serde(default)]
+    pub byte_size: Option<u64>,
     #[serde(default)]
     pub metadata: Value,
 }
@@ -101,6 +110,7 @@ pub struct ChatSessionGroup {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ChatError {
     AttachmentInvalid(String),
+    AttachmentNotFound,
     MessageRequired,
     SessionNotFound,
     SessionTitleRequired,
@@ -113,6 +123,7 @@ impl Display for ChatError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::AttachmentInvalid(message) => write!(f, "chat attachment is invalid: {message}"),
+            Self::AttachmentNotFound => f.write_str("chat attachment was not found"),
             Self::MessageRequired => f.write_str("chat message content is required"),
             Self::SessionNotFound => f.write_str("chat session was not found"),
             Self::SessionTitleRequired => f.write_str("chat session title is required"),

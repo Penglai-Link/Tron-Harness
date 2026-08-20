@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import type { TargetPageFrameInspectionResult } from "@/shared";
 
-import { createInspectionAttachment } from "./useInspection";
+import { createInspectionAttachmentUpload } from "./useInspection";
 
 function findDataUrl(value: unknown): string[] {
   if (!value || typeof value !== "object") {
@@ -19,8 +19,8 @@ function findDataUrl(value: unknown): string[] {
   });
 }
 
-describe("createInspectionAttachment", () => {
-  it("keeps the screenshot only in the top-level imageUrl", () => {
+describe("createInspectionAttachmentUpload", () => {
+  it("creates a resource upload payload without persisting the screenshot data URL in metadata", async () => {
     vi.spyOn(Date, "now").mockReturnValue(123);
     const dataUrl = "data:image/png;base64,AAAA";
     const result: TargetPageFrameInspectionResult = {
@@ -56,11 +56,16 @@ describe("createInspectionAttachment", () => {
       remark: "检查按钮",
     };
 
-    const attachment = createInspectionAttachment(result);
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(new Blob(["screenshot"], { type: "image/png" })),
+    );
+    const attachment = await createInspectionAttachmentUpload(result);
 
     expect(attachment).toMatchObject({
-      id: "inspection-123",
-      imageUrl: dataUrl,
+      file: expect.objectContaining({
+        name: "page-inspection-123.png",
+        type: "image/png",
+      }),
       kind: "inspection",
       metadata: {
         event: {

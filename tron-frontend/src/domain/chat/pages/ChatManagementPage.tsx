@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
 } from "react";
 import { useNavigate, useSearchParams } from "react-router";
 import {
@@ -29,14 +30,15 @@ import {
   MessageSquareText,
   Pause,
   Pencil,
+  Paperclip,
   Play,
   Plus,
   RefreshCw,
   Send,
+  Sparkles,
   Square,
   Terminal,
   UserRound,
-  Wrench,
   type LucideIcon,
   X,
 } from "lucide-react";
@@ -148,12 +150,15 @@ import type {
 } from "@/domain/chat/model";
 import { EditableTabs, type EditableTab } from "@/components/editable-tabs";
 import { useInspection } from "../hooks/useInspection";
+import {
+  downloadChatSessionAttachment,
+  uploadChatSessionAttachment,
+} from "../api/chatAttachmentApi";
 import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { SelectItem } from "@/components/ui/select";
 import { throttle } from "lodash-es";
-import TerminalCom from "../components/terminal"
 
 function formatTime(value: string) {
   const date = new Date(value);
@@ -259,20 +264,23 @@ function isChatManagementPathname(pathname: string) {
   return pathname === "/chats" || pathname.startsWith("/chats/");
 }
 
-function ChatInspectionAttachmentChip({
+function ChatAttachmentChip({
   attachment,
   onRemove,
 }: {
   attachment: ChatMessageAttachment;
   onRemove: () => void;
 }) {
+  const label = attachment.kind === "inspection"
+    ? "注释"
+    : (attachment.fileName || attachment.title || "附件");
   return (
     <div className="group relative">
       <Button variant="outline" size="sm" className="hover:bg-background!">
-        <MessageCircleMore />
-        <p className="text-sm">注释</p>
+        {attachment.kind === "inspection" ? <MessageCircleMore /> : <Paperclip />}
+        <p className="max-w-40 truncate text-sm">{label}</p>
       </Button>
-      <Button variant="outline" onClick={onRemove} size="sm" className="cursor-pointer rounded-full absolute right-[2px] top-[2px] w-6 h-6 hidden group-hover:flex"><X size={2} /></Button>
+      <Button variant="outline" onClick={onRemove} size="sm" className="absolute right-[2px] top-[2px] hidden h-6 w-6 cursor-pointer rounded-full group-hover:flex"><X size={14} /></Button>
       <Card size="sm" className="pointer-events-none absolute hidden bottom-[calc(100%+0.5rem)] left-0 z-20 group-hover:block --card-spacing:--spacing(4)">
         <CardContent className="space-x-1 flex item-center">
           <div className="w-6 h-6 rounded-sm overflow-hidden flex-none">
@@ -284,7 +292,7 @@ function ChatInspectionAttachmentChip({
               />
             ) : null}
           </div>
-          <p className="max-w-20 truncate whitespace-nowrap text-[var(--color-on-surface)]">{attachment.summary}</p>
+          <p className="max-w-40 truncate whitespace-nowrap text-[var(--color-on-surface)]">{attachment.summary}</p>
         </CardContent>
       </Card>
     </div>
@@ -2908,7 +2916,7 @@ function ChatModelSelector({
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
-        <Bot size={14} />
+        <Sparkles size={14} />
         <span className="truncate">
           {selectedModelLabel}
         </span>
@@ -3023,7 +3031,7 @@ function ChatAgentSelector({
         disabled={disabled}
         onClick={() => setOpen((value) => !value)}
       >
-        <Wrench size={14} />
+        <Bot size={14} />
         <span className="truncate">
           {loading ? "Loading agents..." : selectedAgent?.name ?? "Main Agent"}
         </span>
@@ -4035,7 +4043,8 @@ export function ChatManagementPage() {
   const [deleteTargetSession, setDeleteTargetSession] = useState<ChatSession | null>(null);
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [inspectionAttachments, setInspectionAttachments] = useState<ChatMessageAttachment[]>([]);
+  const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
+  const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
   const activeSessionCodeRef = useRef("");
   const modelSelectionSessionRef = useRef("");
   const streamOwnershipRegistryRef = useRef(new ChatStreamOwnershipRegistry());
@@ -4060,6 +4069,7 @@ export function ChatManagementPage() {
   const autoStickToBottomRef = useRef(true);
   const messageScrollRef = useRef<HTMLElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const attachmentFileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
   const visibleSessionCodeRef = useRef("");
   const liveAssistantDraftRef = useRef("");
@@ -4108,7 +4118,7 @@ export function ChatManagementPage() {
     ? "No text model"
     : `No models for ${selectedAgent?.name ?? effectiveAgentCode}`;
   const currentUserDisplayName = authSession?.user.displayName ?? "";
-  const { createInspectionAttachment } = useInspection()
+  const { createInspectionAttachmentUpload } = useInspection();
 
   function setSendingState(value: boolean) {
     sendingRef.current = value;
@@ -4182,6 +4192,76 @@ export function ChatManagementPage() {
       input.reasoningEffort = selectedReasoningEffort;
     }
     return input;
+  }
+
+  async function uploadAttachmentForActiveSession(
+    file: File,
+    options: Omit<Parameters<typeof uploadChatSessionAttachment>[1], "file"> = {},
+  ): Promise<ChatMessageAttachment | null> {
+    const targetSession = activeSession;
+    if (!targetSession) {
+      toast.warning("Create or select a session before attaching a file", { title: "Session required" });
+      return null;
+    }
+
+    setAttachmentUploadPending(true);
+    try {
+      const attachment = await uploadChatSessionAttachment(targetSession, {
+        ...options,
+        file,
+      });
+      return activeSessionCodeRef.current === targetSession.sessionCode
+        ? attachment
+        : null;
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Chat attachment upload failed", {
+        title: "Attachment upload failed",
+      });
+      return null;
+    } finally {
+      setAttachmentUploadPending(false);
+    }
+  }
+
+  async function handleAttachmentFileInputChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.currentTarget.files?.item(0);
+    event.currentTarget.value = "";
+    if (!file) return;
+    const attachment = await uploadAttachmentForActiveSession(file, {
+      kind: file.type.startsWith("image/") ? "image" : "file",
+      summary: file.name,
+    });
+    if (!attachment) return;
+    setPendingAttachments((current) => [...current, attachment]);
+  }
+
+  async function handleInspectionConfirm(result: TargetPageFrameInspectionResult) {
+    try {
+      const inspection = await createInspectionAttachmentUpload(result);
+      const attachment = await uploadAttachmentForActiveSession(inspection.file, {
+        kind: inspection.kind,
+        metadata: inspection.metadata,
+        summary: inspection.summary,
+      });
+      if (!attachment) return;
+
+      const content = inspectionMessageContent(result);
+      if (inspectionSubmitMode(result) === "send" && selectedModel) {
+        await handleSend(content, [attachment]);
+        return;
+      }
+      if (content) setComposer(content);
+      setPendingAttachments((current) => [...current, attachment]);
+      if (inspectionSubmitMode(result) === "send" && !selectedModel) {
+        toast.warning("Select a model before sending the page annotation", { title: "Model required" });
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Page annotation attachment failed", {
+        title: "Attachment upload failed",
+      });
+    }
   }
 
   const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
@@ -4499,6 +4579,10 @@ export function ChatManagementPage() {
   }, [activeSession?.sessionCode]);
 
   useEffect(() => {
+    setPendingAttachments([]);
+  }, [activeSession?.sessionCode]);
+
+  useEffect(() => {
     autoStickToBottomRef.current = true;
     setShowScrollToBottom(false);
     scrollToLatestMessage("auto");
@@ -4629,7 +4713,7 @@ export function ChatManagementPage() {
   const queueDisabled = Boolean(
     !activeSession
     || !selectedModel
-    || !composer.trim()
+    || (!composer.trim() && !pendingAttachments.length)
     || creatingSession,
   );
   const steerDisabled = queueDisabled || steering || !canSteerCurrentRun;
@@ -4655,7 +4739,6 @@ export function ChatManagementPage() {
   const handleCreateGoalForRightPanel = useStableCallback(handleCreateGoal);
   const handlePauseGoalForRightPanel = useStableCallback(handlePauseGoal);
   const handleResumeGoalForRightPanel = useStableCallback(handleResumeGoal);
-  const handleSendForRightPanel = useStableCallback(handleSend);
   const handleUpdateGoalForRightPanel = useStableCallback(handleUpdateGoal);
   const workspaceGoalRunning = Boolean(
     activeSession?.sessionCode
@@ -4733,17 +4816,7 @@ export function ChatManagementPage() {
           <div className="min-h-0 h-full">
             <PageView
               url="https://www.baidu.com"
-              onInspectionConfirm={(result) => {
-                if (inspectionSubmitMode(result) === "send") {
-                  void handleSendForRightPanel(inspectionMessageContent(result), [createInspectionAttachment(result)]);
-                  return;
-                }
-
-                setInspectionAttachments((current) => [
-                  ...current,
-                  createInspectionAttachment(result),
-                ]);
-              }}
+              onInspectionConfirm={(result) => { void handleInspectionConfirm(result); }}
             />
           </div>
         ),
@@ -4764,7 +4837,6 @@ export function ChatManagementPage() {
     activeGoal,
     aguiEvents,
     compactingSessionCode,
-    createInspectionAttachment,
     goalActionSessionCode,
     goalStatus,
     hasActiveSession,
@@ -4774,7 +4846,7 @@ export function ChatManagementPage() {
     handleCreateGoalForRightPanel,
     handlePauseGoalForRightPanel,
     handleResumeGoalForRightPanel,
-    handleSendForRightPanel,
+    handleInspectionConfirm,
     handleUpdateGoalForRightPanel,
     latestCompaction,
     latestCompactionStatus,
@@ -4794,20 +4866,37 @@ export function ChatManagementPage() {
   }), [aguiDebugPreferences, aguiWorkReplayPreferences.recentTurnLimit]);
   const transcriptFooterAddon = useMemo(() => (
     <div className="flex w-full min-w-0 max-w-full flex-col items-start gap-2">
-      {inspectionAttachments.length ? (
+      {pendingAttachments.length ? (
         <div className="flex max-w-full flex-wrap gap-2">
-          {inspectionAttachments.map((attachment) => (
-            <ChatInspectionAttachmentChip
+          {pendingAttachments.map((attachment) => (
+            <ChatAttachmentChip
               attachment={attachment}
               key={attachment.id}
               onRemove={() => {
-                setInspectionAttachments((current) => current.filter((item) => item.id !== attachment.id));
+                setPendingAttachments((current) => current.filter((item) => item.id !== attachment.id));
               }}
             />
           ))}
         </div>
       ) : null}
       <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1">
+        <input
+          className="hidden"
+          ref={attachmentFileInputRef}
+          type="file"
+          onChange={(event) => { void handleAttachmentFileInputChange(event); }}
+        />
+        <Button
+          aria-label="Upload attachment"
+          disabled={!activeSession || attachmentUploadPending}
+          size="icon"
+          title={attachmentUploadPending ? "Uploading…" : "Upload attachment"}
+          type="button"
+          variant="ghost"
+          onClick={() => attachmentFileInputRef.current?.click()}
+        >
+          <Paperclip aria-hidden="true" />
+        </Button>
         {agentSelectionLocked ? null : (
           <div className="min-w-0 max-w-[9.5rem] shrink">
             <ChatAgentSelector
@@ -4839,7 +4928,7 @@ export function ChatManagementPage() {
             className="h-8 min-h-8 w-36 min-w-36 flex-none gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none before:shadow-none hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:border-transparent focus-visible:ring-0"
             displayValue={(
               <span className="flex min-w-0 items-center gap-2">
-                <BrainCircuit className="size-3.5 shrink-0" />
+                <BrainCircuit aria-hidden="true" className="size-3.5 shrink-0" />
                 <span className="truncate">{selectedReasoningEffortLabel}</span>
               </span>
             )}
@@ -4872,8 +4961,10 @@ export function ChatManagementPage() {
     agentScopedModels,
     agentSelectionLocked,
     agentsLoading,
+    activeSession,
+    attachmentUploadPending,
     chatAgents,
-    inspectionAttachments,
+    handleAttachmentFileInputChange,
     modelEmptyLabel,
     modelsLoading,
     selectedAgentCode,
@@ -4885,6 +4976,7 @@ export function ChatManagementPage() {
     selectedReasoningEffortLabel,
     selectedReasoningEffortOptions,
     t,
+    pendingAttachments,
   ]);
   const formatAnnotationCount = useCallback(
     (count: number) => t("chat.attachments.annotationCount", { count }),
@@ -5200,7 +5292,8 @@ export function ChatManagementPage() {
       ? parseGoalCommand(rawContent)
       : { isGoalCommand: false, content: rawContent.trim() };
     const content = goalCommand.content;
-    if (!content) {
+    const attachments = attachmentOverride ?? pendingAttachments;
+    if (!content && !attachments.length) {
       toast.warning(
         goalCommand.isGoalCommand ? "Goal content is required" : "Message content is required",
         { title: goalCommand.isGoalCommand ? "Goal required" : "Nothing to send" },
@@ -5217,7 +5310,6 @@ export function ChatManagementPage() {
       if (!goalSet) return;
     }
 
-    const attachments = attachmentOverride ?? inspectionAttachments;
     const sendInput = createSendInput(activeSession, content, attachments);
     if (!sendInput) return;
     await runChatInput(
@@ -5275,11 +5367,11 @@ export function ChatManagementPage() {
       return false;
     }
     const content = sendInput.content.trim();
-    if (!content) {
+    if (!content && !(sendInput.attachments?.length)) {
       restoreSourceSubmission();
       return false;
     }
-    const pendingInspectionAttachments = sendInput.attachments ?? [];
+    const pendingSubmissionAttachments = sendInput.attachments ?? [];
     const autoDrainEpoch = autoDrainEpochRef.current;
     const sendingSessionCode = targetSession.sessionCode;
     const abortController = new AbortController();
@@ -5308,7 +5400,7 @@ export function ChatManagementPage() {
       actor: "User",
       channel: targetSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
       content,
-      attachments: pendingInspectionAttachments,
+      attachments: pendingSubmissionAttachments,
       createdAt: optimisticCreatedAt,
       id: -sendStartedAt,
       messageCode: optimisticUserCode,
@@ -5334,7 +5426,7 @@ export function ChatManagementPage() {
       setComposer("");
     }
     if (shouldClearComposer) {
-      setInspectionAttachments([]);
+      setPendingAttachments([]);
     }
     if (activeSessionCodeRef.current === sendingSessionCode) {
       setVisibleMessages((current) => [
@@ -5528,8 +5620,8 @@ export function ChatManagementPage() {
       } else {
         const rawMessage = error instanceof Error ? error.message : "Chat send failed";
         const toastMessage = chatSendErrorToastMessage(rawMessage);
-        if (!sourceSubmission && pendingInspectionAttachments.length) {
-          setInspectionAttachments((current) => [...pendingInspectionAttachments, ...current]);
+        if (!sourceSubmission && pendingSubmissionAttachments.length) {
+          setPendingAttachments((current) => [...pendingSubmissionAttachments, ...current]);
         }
         if (activeSessionCodeRef.current === sendingSessionCode) {
           setVisibleMessages((current) => current.filter((item) => (
@@ -5570,15 +5662,15 @@ export function ChatManagementPage() {
   async function handleQueueMessage() {
     if (queueDisabled || !activeSession) return;
     const content = composer.trim();
-    if (!content) return;
+    if (!content && !pendingAttachments.length) return;
     const sendInput = createSendInput(
       activeSession,
       content,
-      inspectionAttachments,
+      pendingAttachments,
     );
     if (!sendInput) return;
     setComposer("");
-    setInspectionAttachments([]);
+    setPendingAttachments([]);
     if (sendingRef.current || authoritativeActiveRun || replayActiveRunLoadingHint) {
       enqueueSubmission(activeSession, sendInput);
       return;
@@ -5589,11 +5681,11 @@ export function ChatManagementPage() {
   async function handleSteerMessage() {
     if (steeringRef.current || steerDisabled || !activeSession) return;
     const content = composer.trim();
-    if (!content) return;
+    if (!content && !pendingAttachments.length) return;
     const sendInput = createSendInput(
       activeSession,
       content,
-      inspectionAttachments,
+      pendingAttachments,
     );
     if (!sendInput) return;
     const localRunIsTarget = sendingRef.current
@@ -5611,7 +5703,7 @@ export function ChatManagementPage() {
       );
     const autoDrainEpoch = autoDrainEpochRef.current;
     setComposer("");
-    setInspectionAttachments([]);
+    setPendingAttachments([]);
     if (
       (!localRunIsTarget && !authoritativeRunIsTarget)
       || !expectedRunCode
@@ -5716,7 +5808,7 @@ export function ChatManagementPage() {
       removeQueuedChatSubmission(queuedSubmissionsRef.current, id),
     );
     setComposer(content);
-    setInspectionAttachments(submission?.input.attachments ?? []);
+    setPendingAttachments(submission?.input.attachments ?? []);
   }
 
   function handleRemoveQueuedMessage(id: string) {
@@ -6070,6 +6162,10 @@ export function ChatManagementPage() {
         </header>
 
         <TronChatPanel
+          attachmentDownloader={activeSession
+            ? (attachment) => downloadChatSessionAttachment(activeSession, attachment)
+              .then((response) => response.blob)
+            : undefined}
           autoFocusComposer={shouldAutoFocusChatComposer()}
           composerRef={composerRef}
           createSessionLabel="Create session"

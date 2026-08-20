@@ -409,7 +409,8 @@ impl AppState {
         } else {
             build_chat_service_with_id_provider(&config.database_url, id_provider)
         }
-        .with_active_runs(active_runs.clone());
+        .with_active_runs(active_runs.clone())
+        .with_resources(resources.clone());
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
             automations.clone(),
             chats.clone(),

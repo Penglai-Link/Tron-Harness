@@ -84,6 +84,15 @@ pub struct ResourceBinaryAgentCommand {
     pub agent_local_directory: Option<String>,
 }
 
+#[derive(Debug, Clone)]
+pub struct ChatSessionAttachmentCreateCommand {
+    pub workspace_code: String,
+    pub session_code: String,
+    pub attachment_code: String,
+    pub file_name: String,
+    pub content_type: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceFileSummary {

@@ -6,6 +6,7 @@ import {
   ChevronDown,
   ChevronRight,
   Copy,
+  FileText,
   LoaderCircle,
   MessageSquareText,
   Pencil,
@@ -32,6 +33,7 @@ import {
   type ChatAguiStreamEvent,
   type ChatDebugOptions,
   type ChatMessage,
+  type ChatMessageAttachment,
   type ChatQueuedSubmission,
   type ChatRunningSubmitMode,
   type ChatSession,
@@ -99,34 +101,156 @@ function defaultFormatAnnotationCount(count: number) {
   return `${count} annotation${count === 1 ? "" : "s"}`;
 }
 
-function InspectionAttachments({
+function isImageAttachment(attachment: ChatMessageAttachment) {
+  const contentType = attachment.contentType?.toLowerCase();
+  return Boolean(
+    attachment.imageUrl
+    || matchesSupportedImageContentType(contentType),
+  );
+}
+
+function matchesSupportedImageContentType(contentType: string | undefined) {
+  return contentType === "image/png"
+    || contentType === "image/jpeg"
+    || contentType === "image/webp"
+    || contentType === "image/gif";
+}
+
+function AttachmentImagePreview({
+  attachment,
+  downloadAttachment,
+}: {
+  attachment: ChatMessageAttachment;
+  downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+}) {
+  const [remoteUrl, setRemoteUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (attachment.imageUrl || !downloadAttachment || !isImageAttachment(attachment)) {
+      setRemoteUrl(null);
+      return;
+    }
+    let active = true;
+    let objectUrl: string | null = null;
+    void downloadAttachment(attachment)
+      .then((blob) => {
+        const nextObjectUrl = URL.createObjectURL(blob);
+        if (!active) {
+          URL.revokeObjectURL(nextObjectUrl);
+          return;
+        }
+        objectUrl = nextObjectUrl;
+        setRemoteUrl(nextObjectUrl);
+      })
+      .catch(() => {
+        if (active) setRemoteUrl(null);
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment, downloadAttachment]);
+
+  const source = attachment.imageUrl ?? remoteUrl;
+  if (!source) return null;
+  return (
+    <figure className="tron-chat__inspection-preview">
+      <img alt={attachment.summary} src={source} />
+    </figure>
+  );
+}
+
+function ChatAttachmentFile({
+  attachment,
+  downloadAttachment,
+}: {
+  attachment: ChatMessageAttachment;
+  downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+}) {
+  const label = attachment.fileName || attachment.title || attachment.summary || attachment.id;
+  async function download() {
+    if (!downloadAttachment) return;
+    try {
+      const blob = await downloadAttachment(attachment);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = attachment.fileName || attachment.title || attachment.id;
+      link.click();
+      window.setTimeout(() => URL.revokeObjectURL(url), 0);
+    } catch {
+      // The resource can have been deleted together with its chat session.
+    }
+  }
+  return (
+    <button
+      className="tron-chat__attachment-file"
+      disabled={!downloadAttachment}
+      title={downloadAttachment ? `Download ${label}` : label}
+      type="button"
+      onClick={() => { void download(); }}
+    >
+      <FileText aria-hidden="true" size={15} />
+      <span>{label}</span>
+      {attachment.byteSize ? <small>{formatByteSize(attachment.byteSize)}</small> : null}
+    </button>
+  );
+}
+
+function formatByteSize(value: number) {
+  if (value < 1024) return `${value} B`;
+  if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`;
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function ChatAttachments({
   attachments,
+  downloadAttachment,
   formatAnnotationCount,
 }: {
   attachments: ChatMessage["attachments"];
+  downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   formatAnnotationCount: (count: number) => string;
 }) {
-  const inspectionAttachments = attachments?.filter((attachment) => attachment.kind === "inspection") ?? [];
+  const attachmentItems = attachments ?? [];
+  const inspectionAttachments = attachmentItems.filter((attachment) => attachment.kind === "inspection");
+  const imageAttachments = attachmentItems.filter(isImageAttachment);
+  const fileAttachments = attachmentItems.filter((attachment) => !isImageAttachment(attachment));
 
-  if (!inspectionAttachments.length) return null;
+  if (!attachmentItems.length) return null;
 
-  const countLabel = formatAnnotationCount(inspectionAttachments.length);
+  const countLabel = inspectionAttachments.length
+    ? formatAnnotationCount(inspectionAttachments.length)
+    : "Attachments";
 
   return (
-    <section aria-label={countLabel} className="tron-chat__inspection-attachments">
+    <section aria-label={countLabel || "Attachments"} className="tron-chat__inspection-attachments">
       <div className="tron-chat__inspection-previews">
-        {inspectionAttachments.map((attachment) => (
-          attachment.imageUrl ? (
-            <figure className="tron-chat__inspection-preview" key={attachment.id}>
-              <img alt={attachment.summary} src={attachment.imageUrl} />
-            </figure>
-          ) : null
+        {imageAttachments.map((attachment) => (
+          <AttachmentImagePreview
+            attachment={attachment}
+            downloadAttachment={downloadAttachment}
+            key={attachment.id}
+          />
         ))}
       </div>
-      <div className="tron-chat__inspection-count">
-        <MessageSquareText aria-hidden="true" size={16} />
-        <span>{countLabel}</span>
-      </div>
+      {fileAttachments.length ? (
+        <div className="tron-chat__attachment-files">
+          {fileAttachments.map((attachment) => (
+            <ChatAttachmentFile
+              attachment={attachment}
+              downloadAttachment={downloadAttachment}
+              key={attachment.id}
+            />
+          ))}
+        </div>
+      ) : null}
+      {inspectionAttachments.length ? (
+        <div className="tron-chat__inspection-count">
+          <MessageSquareText aria-hidden="true" size={16} />
+          <span>{countLabel}</span>
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -692,6 +816,7 @@ function WaitingRail() {
 }
 
 export interface TronChatPanelProps {
+  attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   autoFocusComposer?: boolean;
   createSessionLabel?: string;
   currentUserDisplayName?: string;
@@ -736,6 +861,7 @@ export interface TronChatPanelProps {
 }
 
 export function TronChatPanel({
+  attachmentDownloader,
   autoFocusComposer = false,
   createSessionLabel = "Create session",
   currentUserDisplayName,
@@ -949,8 +1075,9 @@ export function TronChatPanel({
                         <Fragment key={message.messageCode}>
                           {message.role === "USER" ? (
                             <div className="tron-chat__user-message-group">
-                              <InspectionAttachments
+                              <ChatAttachments
                                 attachments={message.attachments}
+                                downloadAttachment={attachmentDownloader}
                                 formatAnnotationCount={formatAnnotationCount}
                               />
                               <ChatBubble

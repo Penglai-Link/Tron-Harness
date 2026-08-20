@@ -4,6 +4,7 @@ mod connection_attributes;
 mod connections;
 mod projection;
 mod resources;
+mod session_attachments;
 mod storage;
 
 use std::{

@@ -6,6 +6,9 @@ use std::{
     },
 };
 
+use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
+use serde_json::{Value, json};
+
 use crate::{
     application::{
         agent::{
@@ -13,17 +16,19 @@ use crate::{
             AgentInvocationService, AgentSteerInput, ModelStreamSink,
         },
         chat::{
-            ChatRepository, ChatSendResult, ChatSessionQuery, ChatSteerError, ChatSteerResult,
-            CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
-            UpdateChatSessionCommand,
+            ChatRepository, ChatSendResult, ChatSessionAttachmentUploadCommand, ChatSessionQuery,
+            ChatSteerError, ChatSteerResult, CreateChatSessionCommand, SendChatMessageCommand,
+            SteerChatMessageCommand, UpdateChatSessionCommand,
         },
         llm::LlmRuntimeService,
+        resource::{ChatSessionAttachmentCreateCommand, ResourceService},
     },
     domain::agent::{AgentModelConfig, ModelTokenUsage},
     domain::chat::{
         ChatError, ChatMessage, ChatMessageAttachment, ChatMessageChannel, ChatMessageRole,
         ChatSession, ChatSessionGroup, ChatSessionSourceType, ChatSessionStatus,
     },
+    domain::resource::{ChatSessionAttachmentRecord, ResourceError},
     shared::{
         id::{SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
         time::current_timestamp,
@@ -36,12 +41,15 @@ use super::{
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
+const MAX_AGENT_ATTACHMENT_IMAGE_BYTES: usize = 5 * 1024 * 1024;
+const MAX_AGENT_ATTACHMENT_TEXT_CHARS: usize = 256 * 1024;
 static SESSION_RUN_COORDINATOR: OnceLock<Mutex<BTreeSet<String>>> = OnceLock::new();
 static CHAT_SERVICE_COORDINATOR_NAMESPACE: AtomicU64 = AtomicU64::new(1);
 
 #[derive(Clone)]
 pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
+    resources: Option<ResourceService>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
     coordinator_namespace: u64,
     pub(super) active_runs: ActiveRunRegistry,
@@ -61,6 +69,7 @@ impl ChatService {
     ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            resources: None,
             id_provider,
             coordinator_namespace: CHAT_SERVICE_COORDINATOR_NAMESPACE
                 .fetch_add(1, Ordering::Relaxed),
@@ -71,6 +80,7 @@ impl ChatService {
     pub fn clone_with_id_provider(&self, id_provider: Arc<dyn SnowflakeIdProvider>) -> Self {
         Self {
             repository: self.repository.clone(),
+            resources: self.resources.clone(),
             id_provider,
             coordinator_namespace: self.coordinator_namespace,
             active_runs: self.active_runs.clone(),
@@ -79,6 +89,11 @@ impl ChatService {
 
     pub fn with_active_runs(mut self, active_runs: ActiveRunRegistry) -> Self {
         self.active_runs = active_runs;
+        self
+    }
+
+    pub fn with_resources(mut self, resources: ResourceService) -> Self {
+        self.resources = Some(resources);
         self
     }
 
@@ -181,8 +196,76 @@ impl ChatService {
 
     pub fn delete_session(&self, session_code: &str) -> Result<ChatSession, ChatError> {
         let session = self.repository().get_session(session_code)?;
+        if let Some(resources) = self.resources.as_ref() {
+            resources
+                .delete_chat_session_attachments(session_code)
+                .map_err(chat_error_from_resource)?;
+        }
         self.repository().delete_session(session_code)?;
         Ok(session)
+    }
+
+    pub fn store_session_attachment_from_reader(
+        &self,
+        session_code: &str,
+        command: ChatSessionAttachmentUploadCommand,
+        source: &mut dyn std::io::Read,
+    ) -> Result<ChatMessageAttachment, ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        let resources = self.resources.as_ref().ok_or(ChatError::StorageFailure)?;
+        let id = self
+            .id_provider
+            .next_id()
+            .map_err(|_| ChatError::StorageFailure)?
+            .value();
+        let attachment_code = format!("CHAT-ATTACH-{id}");
+        let summary =
+            normalized_optional(command.summary).unwrap_or_else(|| command.file_name.clone());
+        let attachment = ChatMessageAttachment {
+            id: attachment_code.clone(),
+            kind: command.kind,
+            title: Some(command.file_name.clone()),
+            summary,
+            image_url: None,
+            resource_code: Some(attachment_code.clone()),
+            file_name: Some(command.file_name.clone()),
+            content_type: Some(command.content_type.clone()),
+            byte_size: None,
+            metadata: command.metadata,
+        };
+        let mut attachment = normalize_chat_attachments(vec![attachment])?
+            .pop()
+            .expect("a single normalized attachment is retained");
+        let record = resources
+            .store_chat_session_attachment(
+                ChatSessionAttachmentCreateCommand {
+                    workspace_code: session.workspace_code,
+                    session_code: session.session_code,
+                    attachment_code,
+                    file_name: command.file_name,
+                    content_type: command.content_type,
+                },
+                source,
+            )
+            .map_err(chat_error_from_resource)?;
+        apply_attachment_record(&mut attachment, &record);
+        Ok(attachment)
+    }
+
+    pub fn read_session_attachment(
+        &self,
+        session_code: &str,
+        attachment_code: &str,
+    ) -> Result<(ChatSessionAttachmentRecord, Vec<u8>), ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        let resources = self.resources.as_ref().ok_or(ChatError::StorageFailure)?;
+        resources
+            .read_chat_session_attachment(
+                &session.workspace_code,
+                &session.session_code,
+                attachment_code,
+            )
+            .map_err(chat_error_from_resource)
     }
 
     pub fn update_session(
@@ -210,14 +293,20 @@ impl ChatService {
             normalized_required(command.session_code).ok_or(ChatSteerError::SessionCodeRequired)?;
         let expected_run_code = normalized_required(command.expected_run_code)
             .ok_or(ChatSteerError::ExpectedRunCodeRequired)?;
-        let content = normalized_required(command.content)
-            .ok_or(ChatSteerError::Chat(ChatError::MessageRequired))?;
+        let content = normalized_optional(command.content).unwrap_or_default();
         let attachments =
             normalize_chat_attachments(command.attachments).map_err(ChatSteerError::Chat)?;
+        if content.is_empty() && attachments.is_empty() {
+            return Err(ChatSteerError::Chat(ChatError::MessageRequired));
+        }
         let session = self
             .repository()
             .get_session(&session_code)
             .map_err(ChatSteerError::Chat)?;
+        let (attachments, invocation_attachments) = self
+            .prepare_session_attachments(&session, attachments)
+            .map_err(ChatSteerError::Chat)?;
+        let prompt = agent_prompt_for_content(&content);
         let channel = if session.task_code.is_some() {
             ChatMessageChannel::TaskAgent
         } else {
@@ -239,8 +328,8 @@ impl ChatService {
                 )?;
                 let input = AgentSteerInput {
                     steer_code: message.message_code.clone(),
-                    content: content.clone(),
-                    attachments: attachments.clone(),
+                    content: prompt.clone(),
+                    attachments: invocation_attachments.clone(),
                 };
                 Ok::<_, ChatSendError>((
                     ChatSteerResult {
@@ -318,14 +407,20 @@ impl ChatService {
         agent: AgentInvocationService,
         sink: Option<ModelStreamSink>,
     ) -> Result<ChatSendResult, ChatSendError> {
-        let content = normalized_required(command.content)
-            .ok_or(ChatSendError::Chat(ChatError::MessageRequired))?;
+        let content = normalized_optional(command.content).unwrap_or_default();
         let attachments =
             normalize_chat_attachments(command.attachments).map_err(ChatSendError::Chat)?;
+        if content.is_empty() && attachments.is_empty() {
+            return Err(ChatSendError::Chat(ChatError::MessageRequired));
+        }
         let session = self
             .repository()
             .get_session(session_code)
             .map_err(ChatSendError::Chat)?;
+        let (attachments, invocation_attachments) = self
+            .prepare_session_attachments(&session, attachments)
+            .map_err(ChatSendError::Chat)?;
+        let prompt = agent_prompt_for_content(&content);
         let should_generate_title = should_generate_manual_session_title(&session);
         let workspace_code = session.workspace_code.clone();
         let channel = if command
@@ -374,7 +469,7 @@ impl ChatService {
         let tools_for_invocation = command.tools;
         let invocation = AgentInvocationCommand {
             run_code: Some(run_code),
-            prompt: Some(content.clone()),
+            prompt: Some(prompt),
             workspace_code: Some(workspace_code.clone()),
             conversation_code: Some(session.session_code.clone()),
             agent_code: Some(effective_agent_code.clone()),
@@ -386,7 +481,7 @@ impl ChatService {
             system_model_id: system_model_id_for_invocation.clone(),
             limits: limits_for_invocation,
             tools: tools_for_invocation.clone(),
-            attachments,
+            attachments: invocation_attachments,
             transcript_input_kind: None,
             transcript_input_metadata: None,
         };
@@ -446,7 +541,10 @@ impl ChatService {
                 &updated_at,
             )
             .map_err(ChatSendError::Chat)?;
-        if should_generate_title && let Some(llm_runtime) = llm_runtime {
+        if should_generate_title
+            && !content.is_empty()
+            && let Some(llm_runtime) = llm_runtime
+        {
             self.try_generate_manual_session_title(
                 session_code,
                 &workspace_code,
@@ -486,6 +584,42 @@ impl ChatService {
             run,
             messages: result_messages,
         })
+    }
+
+    fn prepare_session_attachments(
+        &self,
+        session: &ChatSession,
+        attachments: Vec<ChatMessageAttachment>,
+    ) -> Result<(Vec<ChatMessageAttachment>, Vec<ChatMessageAttachment>), ChatError> {
+        if attachments
+            .iter()
+            .all(|attachment| attachment.resource_code.is_none())
+        {
+            return Ok((attachments.clone(), attachments));
+        }
+        let resources = self.resources.as_ref().ok_or(ChatError::StorageFailure)?;
+        let mut persisted = Vec::with_capacity(attachments.len());
+        let mut invocation = Vec::with_capacity(attachments.len());
+        for mut attachment in attachments {
+            let Some(attachment_code) = attachment.resource_code.clone() else {
+                invocation.push(attachment.clone());
+                persisted.push(attachment);
+                continue;
+            };
+            let (record, bytes) = resources
+                .read_chat_session_attachment(
+                    &session.workspace_code,
+                    &session.session_code,
+                    &attachment_code,
+                )
+                .map_err(chat_error_from_resource)?;
+            apply_attachment_record(&mut attachment, &record);
+            let mut agent_attachment = attachment.clone();
+            hydrate_attachment_for_agent(&mut agent_attachment, &record, &bytes);
+            persisted.push(attachment);
+            invocation.push(agent_attachment);
+        }
+        Ok((persisted, invocation))
     }
 
     pub(super) fn create_message(
@@ -571,6 +705,138 @@ fn acquire_session_run(
         });
     }
     Ok(SessionRunGuard { run_key })
+}
+
+fn apply_attachment_record(
+    attachment: &mut ChatMessageAttachment,
+    record: &ChatSessionAttachmentRecord,
+) {
+    attachment.id = record.attachment_code.clone();
+    attachment.resource_code = Some(record.attachment_code.clone());
+    attachment.title = Some(record.file_name.clone());
+    attachment.file_name = Some(record.file_name.clone());
+    attachment.content_type = Some(record.content_type.clone());
+    attachment.byte_size = Some(record.byte_size);
+    attachment.image_url = None;
+}
+
+fn hydrate_attachment_for_agent(
+    attachment: &mut ChatMessageAttachment,
+    record: &ChatSessionAttachmentRecord,
+    bytes: &[u8],
+) {
+    if bytes.len() <= MAX_AGENT_ATTACHMENT_IMAGE_BYTES
+        && is_supported_agent_image(&record.content_type)
+    {
+        attachment.image_url = Some(format!(
+            "data:{};base64,{}",
+            record.content_type,
+            BASE64.encode(bytes),
+        ));
+    }
+    if let Some(text) = attachment_text_excerpt(record, bytes) {
+        let metadata = std::mem::take(&mut attachment.metadata);
+        attachment.metadata = match metadata {
+            Value::Object(mut object) => {
+                object.insert("__chatAttachmentText".to_string(), Value::String(text));
+                Value::Object(object)
+            }
+            metadata => json!({
+                "__chatAttachmentText": text,
+                "metadata": metadata,
+            }),
+        };
+    }
+}
+
+fn is_supported_agent_image(content_type: &str) -> bool {
+    matches!(
+        content_type,
+        "image/png" | "image/jpeg" | "image/webp" | "image/gif"
+    )
+}
+
+fn attachment_text_excerpt(record: &ChatSessionAttachmentRecord, bytes: &[u8]) -> Option<String> {
+    let content_type = record.content_type.to_ascii_lowercase();
+    let text_like_content_type = content_type.starts_with("text/")
+        || matches!(
+            content_type.as_str(),
+            "application/json"
+                | "application/ld+json"
+                | "application/xml"
+                | "application/x-yaml"
+                | "application/yaml"
+        );
+    let text_like_extension = record
+        .file_name
+        .rsplit_once('.')
+        .map(|(_, extension)| {
+            matches!(
+                extension.to_ascii_lowercase().as_str(),
+                "txt"
+                    | "md"
+                    | "markdown"
+                    | "json"
+                    | "csv"
+                    | "tsv"
+                    | "log"
+                    | "yaml"
+                    | "yml"
+                    | "xml"
+                    | "html"
+                    | "htm"
+                    | "rs"
+                    | "ts"
+                    | "tsx"
+                    | "js"
+                    | "jsx"
+                    | "py"
+                    | "java"
+                    | "go"
+                    | "sql"
+                    | "sh"
+                    | "toml"
+            )
+        })
+        .unwrap_or(false);
+    if !text_like_content_type && !text_like_extension {
+        return None;
+    }
+    let text = std::str::from_utf8(bytes).ok()?;
+    let excerpt = text
+        .chars()
+        .take(MAX_AGENT_ATTACHMENT_TEXT_CHARS)
+        .collect::<String>();
+    (!excerpt.trim().is_empty()).then_some(excerpt)
+}
+
+fn agent_prompt_for_content(content: &str) -> String {
+    if content.trim().is_empty() {
+        "Please review the attached file(s).".to_string()
+    } else {
+        content.to_string()
+    }
+}
+
+fn chat_error_from_resource(error: ResourceError) -> ChatError {
+    match error {
+        ResourceError::NotFound | ResourceError::MissingBinaryObject => {
+            ChatError::AttachmentNotFound
+        }
+        ResourceError::InvalidCode
+        | ResourceError::InvalidInput
+        | ResourceError::InvalidVariableReference
+        | ResourceError::PathDenied
+        | ResourceError::StorageLocatorInvalid => ChatError::AttachmentInvalid(error.to_string()),
+        ResourceError::Forbidden
+        | ResourceError::WorkspaceRequired
+        | ResourceError::InvalidWorkspace
+        | ResourceError::Conflict
+        | ResourceError::StorageFailure
+        | ResourceError::StorageProfileNotFound
+        | ResourceError::ConnectionVerificationFailed(_)
+        | ResourceError::ServerHasAccounts => ChatError::StorageFailure,
+    }
 }
 
 fn normalized_optional(value: Option<String>) -> Option<String> {

@@ -5,13 +5,15 @@ use rusqlite::{Connection, Error as SqliteError, OptionalExtension, params};
 use crate::{
     application::resource::ResourceRepository,
     domain::resource::{
-        DataSourceConnectionRecord, ResourceError, ResourceFileRecord, ResourceKind,
-        ServerAccountRecord, ServerRecord,
+        ChatSessionAttachmentRecord, DataSourceConnectionRecord, ResourceError, ResourceFileRecord,
+        ResourceKind, ServerAccountRecord, ServerRecord,
     },
-    shared::time::timestamp_to_millis,
+    shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
 
-use super::migrations::RESOURCE_MANAGEMENT_SIMPLIFY_MIGRATION;
+use super::migrations::{
+    CHAT_SESSION_ATTACHMENTS_RESOURCE_MIGRATION, RESOURCE_MANAGEMENT_SIMPLIFY_MIGRATION,
+};
 
 mod legacy;
 mod rows;
@@ -30,6 +32,7 @@ use schema::{
 };
 
 const RESOURCE_MANAGEMENT_SIMPLIFY_VERSION: &str = "20260818_0001";
+const CHAT_SESSION_ATTACHMENTS_RESOURCE_VERSION: &str = "20260820_0001";
 
 pub struct SqliteResourceRepository {
     connection: Connection,
@@ -91,6 +94,27 @@ impl SqliteResourceRepository {
                     "INSERT INTO resource_management_migrations (version, applied_at)
                      VALUES (?1, strftime('%s', 'now') * 1000)",
                     [RESOURCE_MANAGEMENT_SIMPLIFY_VERSION],
+                )
+                .map_err(storage_error)?;
+        }
+        let session_attachments_applied = transaction
+            .query_row(
+                "SELECT 1 FROM resource_management_migrations WHERE version = ?1",
+                [CHAT_SESSION_ATTACHMENTS_RESOURCE_VERSION],
+                |_| Ok(()),
+            )
+            .optional()
+            .map_err(storage_error)?
+            .is_some();
+        if !session_attachments_applied {
+            transaction
+                .execute_batch(CHAT_SESSION_ATTACHMENTS_RESOURCE_MIGRATION)
+                .map_err(storage_error)?;
+            transaction
+                .execute(
+                    "INSERT INTO resource_management_migrations (version, applied_at)
+                     VALUES (?1, strftime('%s', 'now') * 1000)",
+                    [CHAT_SESSION_ATTACHMENTS_RESOURCE_VERSION],
                 )
                 .map_err(storage_error)?;
         }
@@ -504,6 +528,97 @@ impl ResourceRepository for SqliteResourceRepository {
         transaction.commit().map_err(storage_error)?;
         Ok(deleted > 0)
     }
+
+    fn insert_chat_session_attachment(
+        &mut self,
+        record: &ChatSessionAttachmentRecord,
+    ) -> Result<(), ResourceError> {
+        self.connection
+            .execute(
+                "INSERT INTO resource_chat_session_attachments (
+                    workspace_code, session_code, attachment_code, file_name,
+                    content_type, byte_size, storage_locator, created_at
+                ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    record.workspace_code,
+                    record.session_code,
+                    record.attachment_code,
+                    record.file_name,
+                    record.content_type,
+                    record.byte_size as i64,
+                    record.storage_locator,
+                    timestamp_to_millis(&record.created_at),
+                ],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+
+    fn get_chat_session_attachment(
+        &mut self,
+        workspace_code: &str,
+        session_code: &str,
+        attachment_code: &str,
+    ) -> Result<ChatSessionAttachmentRecord, ResourceError> {
+        self.connection
+            .query_row(
+                "SELECT workspace_code, session_code, attachment_code, file_name,
+                        content_type, byte_size, storage_locator, created_at
+                 FROM resource_chat_session_attachments
+                 WHERE workspace_code = ?1 AND session_code = ?2 AND attachment_code = ?3",
+                params![workspace_code, session_code, attachment_code],
+                chat_session_attachment_from_row,
+            )
+            .optional()
+            .map_err(storage_error)?
+            .ok_or(ResourceError::NotFound)
+    }
+
+    fn list_chat_session_attachments(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Vec<ChatSessionAttachmentRecord>, ResourceError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT workspace_code, session_code, attachment_code, file_name,
+                        content_type, byte_size, storage_locator, created_at
+                 FROM resource_chat_session_attachments
+                 WHERE session_code = ?1
+                 ORDER BY created_at, id",
+            )
+            .map_err(storage_error)?;
+        statement
+            .query_map([session_code], chat_session_attachment_from_row)
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
+    }
+
+    fn delete_chat_session_attachments(&mut self, session_code: &str) -> Result<(), ResourceError> {
+        self.connection
+            .execute(
+                "DELETE FROM resource_chat_session_attachments WHERE session_code = ?1",
+                [session_code],
+            )
+            .map_err(storage_error)?;
+        Ok(())
+    }
+}
+
+fn chat_session_attachment_from_row(
+    row: &rusqlite::Row<'_>,
+) -> Result<ChatSessionAttachmentRecord, SqliteError> {
+    Ok(ChatSessionAttachmentRecord {
+        workspace_code: row.get(0)?,
+        session_code: row.get(1)?,
+        attachment_code: row.get(2)?,
+        file_name: row.get(3)?,
+        content_type: row.get(4)?,
+        byte_size: row.get::<_, i64>(5)? as u64,
+        storage_locator: row.get(6)?,
+        created_at: timestamp_from_millis(row.get(7)?),
+    })
 }
 
 fn ensure_database_parent(database_url: &str) -> Result<(), ResourceError> {

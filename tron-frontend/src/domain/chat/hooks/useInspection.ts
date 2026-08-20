@@ -2,6 +2,13 @@ import type { TargetPageFrameInspectionResult } from "@/shared";
 
 import type { ChatMessageAttachment } from "../model";
 
+export interface InspectionAttachmentUpload {
+  file: File;
+  kind: ChatMessageAttachment["kind"];
+  metadata: Record<string, unknown>;
+  summary: string;
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return null;
@@ -71,19 +78,56 @@ function inspectionMetadata(result: TargetPageFrameInspectionResult): Record<str
   };
 }
 
-export function createInspectionAttachment(result: TargetPageFrameInspectionResult): ChatMessageAttachment {
+function inspectionSummary(result: TargetPageFrameInspectionResult) {
   const dom = result.dom;
-  const summary = result.remark || readString(dom, "remark") || readString(dom, "url") || "已选择页面元素";
+  return result.remark || readString(dom, "remark") || readString(dom, "url") || "已选择页面元素";
+}
+
+function extensionForImageType(contentType: string) {
+  if (contentType === "image/jpeg") return "jpg";
+  if (contentType === "image/webp") return "webp";
+  if (contentType === "image/gif") return "gif";
+  return "png";
+}
+
+async function annotationImageFile(
+  result: TargetPageFrameInspectionResult,
+  metadata: Record<string, unknown>,
+): Promise<File> {
+  const image = readAnnotationImage(result.dom);
+  if (!image) {
+    return new File(
+      [JSON.stringify(metadata, null, 2)],
+      `page-inspection-${Date.now()}.json`,
+      { type: "application/json" },
+    );
+  }
+
+  const response = await fetch(image);
+  const blob = await response.blob();
+  const imageMetadata = asRecord(metadata.screenshot);
+  const contentType = blob.type || readString(imageMetadata, "mimeType") || "image/png";
+  return new File(
+    [blob],
+    `page-inspection-${Date.now()}.${extensionForImageType(contentType)}`,
+    { type: contentType },
+  );
+}
+
+export async function createInspectionAttachmentUpload(
+  result: TargetPageFrameInspectionResult,
+): Promise<InspectionAttachmentUpload> {
+  const metadata = inspectionMetadata(result);
+  const file = await annotationImageFile(result, metadata);
 
   return {
-    id: `inspection-${Date.now()}`,
-    imageUrl: readAnnotationImage(dom),
     kind: "inspection",
-    metadata: inspectionMetadata(result),
-    summary,
+    file,
+    metadata,
+    summary: inspectionSummary(result),
   };
 }
 
 export const useInspection = () => ({
-  createInspectionAttachment,
+  createInspectionAttachmentUpload,
 });

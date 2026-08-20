@@ -15,9 +15,9 @@ pub(crate) fn user_prompt_message(
     let mut parts = vec![AgentMessagePart::Text { text: prompt }];
     for attachment in attachments {
         parts.push(AgentMessagePart::Context {
-            kind: "page_comment".into(),
-            text: page_comment_context_text(attachment),
-            metadata: Some(redacted_attachment_metadata(&attachment.metadata)),
+            kind: attachment_context_kind(attachment).into(),
+            text: attachment_context_text(attachment),
+            metadata: Some(attachment_context_metadata(attachment)),
         });
         if let Some((mime_type, data)) = image_part_from_attachment(attachment) {
             parts.push(AgentMessagePart::Image { mime_type, data });
@@ -26,12 +26,51 @@ pub(crate) fn user_prompt_message(
     AgentMessage::new("user", parts)
 }
 
-fn page_comment_context_text(attachment: &ChatMessageAttachment) -> String {
-    let metadata = redacted_attachment_metadata(&attachment.metadata);
+fn attachment_context_kind(attachment: &ChatMessageAttachment) -> &'static str {
+    if attachment.kind == "inspection" {
+        "page_comment"
+    } else {
+        "chat_attachment"
+    }
+}
+
+fn attachment_context_text(attachment: &ChatMessageAttachment) -> String {
+    let metadata = attachment_context_metadata(attachment);
+    let tag = if attachment.kind == "inspection" {
+        "page-comment"
+    } else {
+        "chat-attachment"
+    };
+    let file_details = attachment
+        .file_name
+        .as_deref()
+        .map(|file_name| {
+            let content_type = attachment
+                .content_type
+                .as_deref()
+                .unwrap_or("application/octet-stream");
+            let byte_size = attachment.byte_size.unwrap_or_default();
+            format!("\nFile: {file_name} ({content_type}, {byte_size} bytes)")
+        })
+        .unwrap_or_default();
+    let extracted_text = attachment
+        .metadata
+        .get("__chatAttachmentText")
+        .and_then(Value::as_str)
+        .map(|text| format!("\nExtracted text:\n{text}"))
+        .unwrap_or_default();
     format!(
-        "<page-comment id=\"{}\" kind=\"{}\">\nSummary: {}\nMetadata: {}\n</page-comment>",
-        attachment.id, attachment.kind, attachment.summary, metadata
+        "<{tag} id=\"{}\" kind=\"{}\">\nSummary: {}{file_details}{extracted_text}\nMetadata: {}\n</{tag}>",
+        attachment.id, attachment.kind, attachment.summary, metadata,
     )
+}
+
+fn attachment_context_metadata(attachment: &ChatMessageAttachment) -> Value {
+    let mut metadata = redacted_attachment_metadata(&attachment.metadata);
+    if let Some(object) = metadata.as_object_mut() {
+        object.remove("__chatAttachmentText");
+    }
+    metadata
 }
 
 fn redacted_attachment_metadata(metadata: &Value) -> Value {

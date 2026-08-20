@@ -5,6 +5,23 @@ use super::{ResourceKind, ServerAuthenticationType};
 
 pub const DEFAULT_BINARY_STORAGE_PROFILE: &str = "@default";
 
+/// A binary attachment owned exclusively by one chat session.
+///
+/// This deliberately does not implement `ManagedResource`: session attachments
+/// must never participate in resource projection, inheritance, or resource
+/// management pages.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ChatSessionAttachmentRecord {
+    pub workspace_code: String,
+    pub session_code: String,
+    pub attachment_code: String,
+    pub file_name: String,
+    pub content_type: String,
+    pub byte_size: u64,
+    pub storage_locator: String,
+    pub created_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ResourceFileRecord {

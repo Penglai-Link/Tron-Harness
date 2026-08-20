@@ -6,8 +6,9 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    archive_session, create_session, delete_session, list_messages, list_session_groups,
-    patch_session, send_message, steer_message, stream_message,
+    archive_session, create_session, delete_session, download_session_attachment, list_messages,
+    list_session_groups, patch_session, send_message, steer_message, stream_message,
+    upload_session_attachment,
 };
 use super::run_control::{get_active_run, stop_run};
 use super::short_term_memory::{
@@ -57,5 +58,13 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/chats/sessions/{session_code}/messages/stream",
             post(stream_message),
+        )
+        .route(
+            "/api/v1/chats/sessions/{session_code}/attachments",
+            post(upload_session_attachment).layer(super::handler::chat_attachment_body_limit()),
+        )
+        .route(
+            "/api/v1/chats/sessions/{session_code}/attachments/{attachment_code}",
+            get(download_session_attachment),
         )
 }

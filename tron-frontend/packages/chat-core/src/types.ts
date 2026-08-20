@@ -64,12 +64,26 @@ export interface ChatMessage {
   createdAt: string;
 }
 
+export type ChatMessageAttachmentKind = "file" | "image" | "inspection";
+
 export interface ChatMessageAttachment {
   id: string;
-  kind: "inspection";
+  kind: ChatMessageAttachmentKind;
+  title?: string | null;
   imageUrl?: string | null;
+  resourceCode?: string | null;
+  fileName?: string | null;
+  contentType?: string | null;
+  byteSize?: number | null;
   metadata: Record<string, unknown>;
   summary: string;
+}
+
+export interface ChatAttachmentUploadInput {
+  file: File;
+  kind?: ChatMessageAttachmentKind;
+  metadata?: Record<string, unknown>;
+  summary?: string;
 }
 
 export interface ChatTokenUsage {
@@ -219,6 +233,11 @@ export interface ChatAdapterCapabilities {
 export interface ChatAdapter {
   capabilities: ChatAdapterCapabilities;
   createSession: (input: CreateChatSessionInput) => Promise<ChatSession>;
+  downloadAttachment?: (
+    session: ChatSession,
+    attachment: ChatMessageAttachment,
+    signal?: AbortSignal,
+  ) => Promise<Blob>;
   getActiveRun?: (
     sessionCode: string,
     signal?: AbortSignal,
@@ -237,6 +256,11 @@ export interface ChatAdapter {
     context: ChatStopContext,
     signal?: AbortSignal,
   ) => Promise<ChatStopResult>;
+  uploadAttachment?: (
+    session: ChatSession,
+    input: ChatAttachmentUploadInput,
+    signal?: AbortSignal,
+  ) => Promise<ChatMessageAttachment>;
   streamMessage: (
     session: ChatSession,
     input: SendChatMessageInput,

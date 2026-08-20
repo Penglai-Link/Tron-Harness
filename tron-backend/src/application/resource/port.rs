@@ -1,6 +1,6 @@
 use crate::domain::resource::{
-    DataSourceConnectionRecord, ResourceError, ResourceFileRecord, ServerAccountRecord,
-    ServerRecord,
+    ChatSessionAttachmentRecord, DataSourceConnectionRecord, ResourceError, ResourceFileRecord,
+    ServerAccountRecord, ServerRecord,
 };
 
 pub trait ResourceRepository: Send {
@@ -59,6 +59,22 @@ pub trait ResourceRepository: Send {
         resource_code: &str,
         revision: u64,
     ) -> Result<bool, ResourceError>;
+
+    fn insert_chat_session_attachment(
+        &mut self,
+        record: &ChatSessionAttachmentRecord,
+    ) -> Result<(), ResourceError>;
+    fn get_chat_session_attachment(
+        &mut self,
+        workspace_code: &str,
+        session_code: &str,
+        attachment_code: &str,
+    ) -> Result<ChatSessionAttachmentRecord, ResourceError>;
+    fn list_chat_session_attachments(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Vec<ChatSessionAttachmentRecord>, ResourceError>;
+    fn delete_chat_session_attachments(&mut self, session_code: &str) -> Result<(), ResourceError>;
 }
 
 pub trait ObjectStorage: Send + Sync {

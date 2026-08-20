@@ -1,4 +1,4 @@
-use std::{collections::BTreeSet, convert::Infallible, sync::Arc, time::Duration};
+use std::{collections::BTreeSet, convert::Infallible, io::Seek, sync::Arc, time::Duration};
 
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
@@ -6,8 +6,9 @@ use crate::{
     application::{
         agent::{AgentAguiStreamService, AgentInvocationService, generate_agent_run_code},
         chat::{
-            ChatSendError, ChatSessionQuery, CreateChatSessionCommand, SendChatMessageCommand,
-            SteerChatMessageCommand, UpdateChatSessionCommand,
+            ChatSendError, ChatSessionAttachmentUploadCommand, ChatSessionQuery,
+            CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
+            UpdateChatSessionCommand,
         },
     },
     domain::{
@@ -19,14 +20,21 @@ use crate::{
 };
 use axum::{
     Json,
-    extract::{Path, Query, State, rejection::JsonRejection},
-    http::StatusCode,
+    body::Body,
+    extract::{
+        DefaultBodyLimit, Multipart, Path, Query, State, multipart::MultipartRejection,
+        rejection::JsonRejection,
+    },
+    http::{
+        HeaderValue, StatusCode,
+        header::{CONTENT_DISPOSITION, CONTENT_LENGTH, CONTENT_TYPE},
+    },
     response::{
         IntoResponse, Response,
         sse::{Event, KeepAlive, Sse},
     },
 };
-use serde_json::Value;
+use serde_json::{Value, json};
 
 use super::error_mapper::{
     chat_error_response, chat_send_error_response, chat_steer_error_response,
@@ -102,6 +110,75 @@ pub async fn delete_session(
         Ok(session) => Json(ApiResponse::success(session)).into_response(),
         Err(error) => chat_error_response(error),
     }
+}
+
+pub async fn upload_session_attachment(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path(session_code): Path<String>,
+    request: Result<Multipart, MultipartRejection>,
+) -> Response {
+    let multipart = match request {
+        Ok(request) => request,
+        Err(error) => return chat_attachment_request_error(error.status()),
+    };
+    let maximum = state.resources.max_chat_session_attachment_bytes();
+    let form = match parse_session_attachment_form(multipart, maximum).await {
+        Ok(form) => form,
+        Err(error) => return chat_attachment_form_error_response(error),
+    };
+    let chats = state.chats.clone();
+    let result = tokio::task::spawn_blocking(move || {
+        let mut file = form.file;
+        file.seek(std::io::SeekFrom::Start(0))
+            .map_err(|_| ChatError::StorageFailure)?;
+        chats.store_session_attachment_from_reader(
+            &session_code,
+            ChatSessionAttachmentUploadCommand {
+                kind: form.kind,
+                summary: form.summary,
+                metadata: form.metadata,
+                file_name: form.file_name,
+                content_type: form.content_type,
+            },
+            &mut file,
+        )
+    })
+    .await;
+    match result {
+        Ok(Ok(attachment)) => {
+            (StatusCode::CREATED, Json(ApiResponse::success(attachment))).into_response()
+        }
+        Ok(Err(error)) => chat_error_response(error),
+        Err(_) => chat_error_response(ChatError::StorageFailure),
+    }
+}
+
+pub async fn download_session_attachment(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path((session_code, attachment_code)): Path<(String, String)>,
+) -> Response {
+    let (record, bytes) = match state
+        .chats
+        .read_session_attachment(&session_code, &attachment_code)
+    {
+        Ok(result) => result,
+        Err(error) => return chat_error_response(error),
+    };
+    let mut response = Response::new(Body::from(bytes));
+    response.headers_mut().insert(
+        CONTENT_TYPE,
+        HeaderValue::from_str(&record.content_type)
+            .unwrap_or_else(|_| HeaderValue::from_static("application/octet-stream")),
+    );
+    if let Ok(value) = HeaderValue::from_str(&record.byte_size.to_string()) {
+        response.headers_mut().insert(CONTENT_LENGTH, value);
+    }
+    if let Ok(value) = chat_attachment_content_disposition(&record.file_name) {
+        response.headers_mut().insert(CONTENT_DISPOSITION, value);
+    }
+    response
 }
 
 pub async fn list_messages(
@@ -452,4 +529,202 @@ pub(crate) fn run_started_with_supports_steer(
         object.insert("supportsSteer".to_string(), Value::Bool(supports_steer));
     }
     data
+}
+
+const MAX_CHAT_ATTACHMENT_BODY_OVERHEAD_BYTES: u64 = 1_048_576;
+const MAX_CHAT_ATTACHMENT_BYTES: u64 = 20 * 1024 * 1024;
+const MAX_CHAT_ATTACHMENT_KIND_BYTES: usize = 64;
+const MAX_CHAT_ATTACHMENT_SUMMARY_BYTES: usize = 2_048;
+const MAX_CHAT_ATTACHMENT_METADATA_BYTES: usize = 256 * 1024;
+
+struct SessionAttachmentForm {
+    kind: String,
+    summary: Option<String>,
+    metadata: Value,
+    file_name: String,
+    content_type: String,
+    file: std::fs::File,
+}
+
+enum SessionAttachmentFormError {
+    Invalid,
+    TooLarge,
+    Storage,
+}
+
+pub fn chat_attachment_body_limit() -> DefaultBodyLimit {
+    let maximum = MAX_CHAT_ATTACHMENT_BYTES
+        .saturating_add(MAX_CHAT_ATTACHMENT_BODY_OVERHEAD_BYTES)
+        .min(usize::MAX as u64) as usize;
+    DefaultBodyLimit::max(maximum)
+}
+
+async fn parse_session_attachment_form(
+    mut multipart: Multipart,
+    maximum_bytes: u64,
+) -> Result<SessionAttachmentForm, SessionAttachmentFormError> {
+    let mut seen = BTreeSet::new();
+    let mut kind = None;
+    let mut summary = None;
+    let mut metadata = None;
+    let mut file = None;
+
+    while let Some(mut field) = multipart
+        .next_field()
+        .await
+        .map_err(|_| SessionAttachmentFormError::Invalid)?
+    {
+        let name = field
+            .name()
+            .map(str::to_owned)
+            .ok_or(SessionAttachmentFormError::Invalid)?;
+        if !seen.insert(name.clone()) {
+            return Err(SessionAttachmentFormError::Invalid);
+        }
+        match name.as_str() {
+            "kind" => {
+                kind = Some(
+                    read_session_attachment_text(field, MAX_CHAT_ATTACHMENT_KIND_BYTES).await?,
+                );
+            }
+            "summary" => {
+                summary = Some(
+                    read_session_attachment_text(field, MAX_CHAT_ATTACHMENT_SUMMARY_BYTES).await?,
+                );
+            }
+            "metadata" => {
+                let value =
+                    read_session_attachment_text(field, MAX_CHAT_ATTACHMENT_METADATA_BYTES).await?;
+                metadata = Some(
+                    serde_json::from_str(&value)
+                        .map_err(|_| SessionAttachmentFormError::Invalid)?,
+                );
+            }
+            "file" => {
+                let file_name = field
+                    .file_name()
+                    .map(str::to_owned)
+                    .filter(|value| !value.trim().is_empty())
+                    .ok_or(SessionAttachmentFormError::Invalid)?;
+                let content_type = field
+                    .content_type()
+                    .map(ToString::to_string)
+                    .unwrap_or_else(|| "application/octet-stream".to_string());
+                let mut output = tokio::fs::File::from_std(
+                    tempfile::tempfile().map_err(|_| SessionAttachmentFormError::Storage)?,
+                );
+                let mut received = 0_u64;
+                while let Some(chunk) = field
+                    .chunk()
+                    .await
+                    .map_err(|_| SessionAttachmentFormError::Invalid)?
+                {
+                    received = received
+                        .checked_add(chunk.len() as u64)
+                        .ok_or(SessionAttachmentFormError::TooLarge)?;
+                    if received > maximum_bytes {
+                        return Err(SessionAttachmentFormError::TooLarge);
+                    }
+                    tokio::io::AsyncWriteExt::write_all(&mut output, &chunk)
+                        .await
+                        .map_err(|_| SessionAttachmentFormError::Storage)?;
+                }
+                tokio::io::AsyncWriteExt::flush(&mut output)
+                    .await
+                    .map_err(|_| SessionAttachmentFormError::Storage)?;
+                file = Some((file_name, content_type, output.into_std().await));
+            }
+            _ => return Err(SessionAttachmentFormError::Invalid),
+        }
+    }
+
+    let (file_name, content_type, file) = file.ok_or(SessionAttachmentFormError::Invalid)?;
+    let kind = kind
+        .unwrap_or_else(|| {
+            if content_type.starts_with("image/") {
+                "image".to_string()
+            } else {
+                "file".to_string()
+            }
+        })
+        .trim()
+        .to_ascii_lowercase();
+    if !matches!(kind.as_str(), "file" | "image" | "inspection") {
+        return Err(SessionAttachmentFormError::Invalid);
+    }
+    let summary = summary.filter(|value| !value.trim().is_empty());
+    Ok(SessionAttachmentForm {
+        kind,
+        summary,
+        metadata: metadata.unwrap_or_else(|| json!({})),
+        file_name,
+        content_type,
+        file,
+    })
+}
+
+async fn read_session_attachment_text(
+    mut field: axum::extract::multipart::Field<'_>,
+    maximum: usize,
+) -> Result<String, SessionAttachmentFormError> {
+    let mut bytes = Vec::new();
+    while let Some(chunk) = field
+        .chunk()
+        .await
+        .map_err(|_| SessionAttachmentFormError::Invalid)?
+    {
+        let length = bytes
+            .len()
+            .checked_add(chunk.len())
+            .ok_or(SessionAttachmentFormError::TooLarge)?;
+        if length > maximum {
+            return Err(SessionAttachmentFormError::TooLarge);
+        }
+        bytes.extend_from_slice(&chunk);
+    }
+    String::from_utf8(bytes).map_err(|_| SessionAttachmentFormError::Invalid)
+}
+
+fn chat_attachment_form_error_response(error: SessionAttachmentFormError) -> Response {
+    match error {
+        SessionAttachmentFormError::Invalid => chat_error_response(ChatError::AttachmentInvalid(
+            "attachment upload form is invalid".to_string(),
+        )),
+        SessionAttachmentFormError::TooLarge => (
+            StatusCode::PAYLOAD_TOO_LARGE,
+            Json(ApiResponse::error(
+                "CHAT_ATTACHMENT_TOO_LARGE",
+                "chat attachment exceeds the maximum allowed size",
+            )),
+        )
+            .into_response(),
+        SessionAttachmentFormError::Storage => chat_error_response(ChatError::StorageFailure),
+    }
+}
+
+fn chat_attachment_request_error(status: StatusCode) -> Response {
+    if status == StatusCode::PAYLOAD_TOO_LARGE {
+        return chat_attachment_form_error_response(SessionAttachmentFormError::TooLarge);
+    }
+    chat_attachment_form_error_response(SessionAttachmentFormError::Invalid)
+}
+
+fn chat_attachment_content_disposition(
+    file_name: &str,
+) -> Result<HeaderValue, axum::http::header::InvalidHeaderValue> {
+    let mut encoded = String::new();
+    for byte in file_name.as_bytes() {
+        if byte.is_ascii_alphanumeric()
+            || matches!(
+                *byte,
+                b'!' | b'#' | b'$' | b'&' | b'+' | b'-' | b'.' | b'^' | b'_' | b'`' | b'|' | b'~'
+            )
+        {
+            encoded.push(*byte as char);
+        } else {
+            use std::fmt::Write;
+            let _ = write!(encoded, "%{byte:02X}");
+        }
+    }
+    HeaderValue::from_str(&format!("attachment; filename*=UTF-8''{encoded}"))
 }

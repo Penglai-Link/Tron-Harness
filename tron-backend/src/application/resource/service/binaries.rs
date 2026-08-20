@@ -424,7 +424,7 @@ impl ResourceService {
     }
 }
 
-fn spool_limited_binary(
+pub(super) fn spool_limited_binary(
     source: &mut dyn Read,
     maximum_bytes: u64,
 ) -> Result<(tempfile::NamedTempFile, u64), ResourceError> {

@@ -16,6 +16,7 @@ import {
   type ChatActiveRun,
   type ChatAguiEvent,
   type ChatAguiStreamEvent,
+  type ChatMessageAttachment,
   type ChatClientConfig,
   type ChatDebugOptions,
   type ChatMessage,
@@ -26,11 +27,13 @@ import {
   type ChatSubmitMode,
   type SendChatMessageInput,
 } from "@tron/chat-core";
+import { FileText, Paperclip, X } from "lucide-react";
 import {
   useEffect,
   useMemo,
   useRef,
   useState,
+  type ChangeEvent,
   type ReactNode,
 } from "react";
 import { TronChatPanel } from "./TronChatPanel";
@@ -99,6 +102,8 @@ export function TronChatRuntimeWindow({
   const [liveAguiEvents, setLiveAguiEvents] = useState<ChatAguiStreamEvent[]>([]);
   const [liveAguiAnchorMessageCodes, setLiveAguiAnchorMessageCodes] = useState<Record<string, string>>({});
   const [draft, setDraft] = useState("");
+  const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
+  const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
   const [sending, setSending] = useState(false);
   const [steering, setSteering] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -124,6 +129,7 @@ export function TronChatRuntimeWindow({
   const queuedSubmissionsRef = useRef<ChatQueuedSubmission[]>([]);
   const queueGenerationRef = useRef(0);
   const queuedSubmissionSequenceRef = useRef(0);
+  const attachmentFileInputRef = useRef<HTMLInputElement | null>(null);
   const optimisticMessageSequenceRef = useRef(0);
   const currentLiveAguiRunCodesRef = useRef<Set<string>>(new Set());
   const observedRemoteRunRef = useRef<{ runCode: string; sessionCode: string } | null>(null);
@@ -277,14 +283,17 @@ export function TronChatRuntimeWindow({
   function createSendInput(
     activeSession: ChatSession,
     content: string,
+    attachments: ChatMessageAttachment[] = [],
   ): SendChatMessageInput {
-    return {
+    const input: SendChatMessageInput = {
       agentCode: normalizeOptionalValue(config.agentCode),
       appCode: normalizeOptionalValue(activeSession.appCode ?? config.appCode),
       content,
       taskCode: normalizeOptionalValue(activeSession.taskCode ?? config.taskCode),
       workspaceCode: activeSession.workspaceCode,
     };
+    if (attachments.length) input.attachments = attachments;
+    return input;
   }
 
   function enqueueSubmission(
@@ -350,6 +359,7 @@ export function TronChatRuntimeWindow({
       replaceRemoteActiveRun(null);
       replaceActiveRunStatusPending(false);
       observedRemoteRunRef.current = null;
+      setPendingAttachments([]);
     }
     activeSessionCodeRef.current = nextSessionCode;
     onSessionChange?.(session);
@@ -528,12 +538,12 @@ export function TronChatRuntimeWindow({
 
   const sendDisabled = useMemo(() => {
     if (loading || config.disabledInput) return true;
-    if (!draft.trim()) return true;
+    if (!draft.trim() && !pendingAttachments.length) return true;
     return !session && !config.workspaceCode;
-  }, [config.disabledInput, config.workspaceCode, draft, loading, session]);
+  }, [config.disabledInput, config.workspaceCode, draft, loading, pendingAttachments.length, session]);
   const queueDisabled = useMemo(
-    () => loading || Boolean(config.disabledInput) || !draft.trim() || !session,
-    [config.disabledInput, draft, loading, session],
+    () => loading || Boolean(config.disabledInput) || (!draft.trim() && !pendingAttachments.length) || !session,
+    [config.disabledInput, draft, loading, pendingAttachments.length, session],
   );
   const steerDisabled = queueDisabled || steering || !canSteer;
 
@@ -558,6 +568,32 @@ export function TronChatRuntimeWindow({
     return created;
   }
 
+  async function handleAttachmentFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.item(0);
+    event.currentTarget.value = "";
+    if (!file || !activeAdapter.uploadAttachment || attachmentUploadPending) return;
+    const activeSession = await ensureSession();
+    if (!activeSession) return;
+    setAttachmentUploadPending(true);
+    try {
+      const attachment = await activeAdapter.uploadAttachment(activeSession, {
+        file,
+        kind: file.type.startsWith("image/") ? "image" : "file",
+        summary: file.name,
+      });
+      if (activeSessionCodeRef.current === activeSession.sessionCode) {
+        setPendingAttachments((current) => [...current, attachment]);
+      }
+    } catch (error) {
+      onError(
+        error instanceof Error ? error.message : "Chat attachment upload failed",
+        "Attachment upload failed",
+      );
+    } finally {
+      setAttachmentUploadPending(false);
+    }
+  }
+
   async function runMessage(
     activeSession: ChatSession,
     sendInput: SendChatMessageInput,
@@ -577,10 +613,11 @@ export function TronChatRuntimeWindow({
       return false;
     }
     const content = sendInput.content.trim();
-    if (!content) {
+    if (!content && !(sendInput.attachments?.length)) {
       restoreSourceSubmission();
       return false;
     }
+    const submittedAttachments = sendInput.attachments ?? [];
     const autoDrainEpoch = autoDrainEpochRef.current;
     const abortController = new AbortController();
     abortRef.current = abortController;
@@ -602,6 +639,7 @@ export function TronChatRuntimeWindow({
         actor: currentUserDisplayName || "User",
         channel: activeSession.taskCode ? "TASK_AGENT" : "MAIN_AGENT",
         content,
+        attachments: submittedAttachments,
         createdAt: optimisticCreatedAt,
         id: -Date.now() - optimisticMessageSequenceRef.current,
         messageCode: optimisticUserCode,
@@ -748,6 +786,9 @@ export function TronChatRuntimeWindow({
       } else if (abortReason === "detach") {
         shouldRestoreSourceSubmission = false;
       } else {
+        if (!sourceSubmission && submittedAttachments.length) {
+          setPendingAttachments((current) => [...submittedAttachments, ...current]);
+        }
         onError(error instanceof Error ? error.message : "Chat send failed", "Chat send failed");
       }
     } finally {
@@ -791,9 +832,10 @@ export function TronChatRuntimeWindow({
     const activeSession = await ensureSession();
     if (!activeSession) return;
     const content = draft.trim();
-    if (!content) return;
-    const sendInput = createSendInput(activeSession, content);
+    if (!content && !pendingAttachments.length) return;
+    const sendInput = createSendInput(activeSession, content, pendingAttachments);
     setDraft("");
+    setPendingAttachments([]);
     if (remoteActiveRunRef.current) {
       enqueueSubmission(activeSession, sendInput);
       return;
@@ -806,9 +848,10 @@ export function TronChatRuntimeWindow({
     const activeSession = await ensureSession();
     if (!activeSession) return;
     const content = draft.trim();
-    if (!content) return;
-    const sendInput = createSendInput(activeSession, content);
+    if (!content && !pendingAttachments.length) return;
+    const sendInput = createSendInput(activeSession, content, pendingAttachments);
     setDraft("");
+    setPendingAttachments([]);
     if (sendingRef.current || remoteActiveRunRef.current) {
       enqueueSubmission(activeSession, sendInput);
       return;
@@ -821,14 +864,15 @@ export function TronChatRuntimeWindow({
     const activeSession = session;
     if (!activeSession) return;
     const content = draft.trim();
-    if (!content) return;
-    const sendInput = createSendInput(activeSession, content);
+    if (!content && !pendingAttachments.length) return;
+    const sendInput = createSendInput(activeSession, content, pendingAttachments);
     const expectedRunCode = activeRunCodeRef.current
       || remoteActiveRunRef.current?.runCode
       || "";
     const queueGeneration = queueGenerationRef.current;
     const autoDrainEpoch = autoDrainEpochRef.current;
     setDraft("");
+    setPendingAttachments([]);
     if (
       !expectedRunCode
       || !activeAdapter.capabilities.supportsSteer
@@ -914,10 +958,12 @@ export function TronChatRuntimeWindow({
   }
 
   function handleEditQueuedMessage(id: string, content: string) {
+    const submission = queuedSubmissionsRef.current.find((item) => item.id === id);
     replaceQueuedSubmissions(
       removeQueuedChatSubmission(queuedSubmissionsRef.current, id),
     );
     setDraft(content);
+    setPendingAttachments(submission?.input.attachments ?? []);
   }
 
   function handleRemoveQueuedMessage(id: string) {
@@ -990,6 +1036,7 @@ export function TronChatRuntimeWindow({
     setProtocolEvents([]);
     setLiveAguiEvents([]);
     setLiveAguiAnchorMessageCodes({});
+    setPendingAttachments([]);
     activeRunCodeRef.current = "";
     setActiveRunCode("");
     setActiveRunSupportsSteer(null);
@@ -1024,8 +1071,57 @@ export function TronChatRuntimeWindow({
       : debugOptions?.debugEventTypes,
   }), [debugOptions, liveAguiEvents, presentationDebugEvents, protocolEvents]);
 
+  const attachmentDownloader = session && activeAdapter.downloadAttachment
+    ? (attachment: ChatMessageAttachment) => activeAdapter.downloadAttachment!(session, attachment)
+    : undefined;
+  const runtimeFooterAddon = (
+    <div className="tron-chat__runtime-footer-addon">
+      {activeAdapter.uploadAttachment ? (
+        <div className="tron-chat__runtime-attachments">
+          <input
+            className="tron-chat__runtime-attachment-input"
+            ref={attachmentFileInputRef}
+            type="file"
+            onChange={(event) => { void handleAttachmentFileInputChange(event); }}
+          />
+          <button
+            aria-label="Attach file"
+            className="tron-chat__icon-button"
+            disabled={Boolean(config.disabledInput) || attachmentUploadPending}
+            title={attachmentUploadPending ? "Uploading attachment" : "Attach file"}
+            type="button"
+            onClick={() => attachmentFileInputRef.current?.click()}
+          >
+            <Paperclip size={16} />
+          </button>
+          {pendingAttachments.map((attachment) => {
+            const label = attachment.fileName || attachment.title || attachment.summary || attachment.id;
+            return (
+              <span className="tron-chat__runtime-attachment-chip" key={attachment.id}>
+                <FileText aria-hidden="true" size={14} />
+                <span title={label}>{label}</span>
+                <button
+                  aria-label={`Remove ${label}`}
+                  className="tron-chat__runtime-attachment-remove"
+                  type="button"
+                  onClick={() => setPendingAttachments((current) => (
+                    current.filter((item) => item.id !== attachment.id)
+                  ))}
+                >
+                  <X size={13} />
+                </button>
+              </span>
+            );
+          })}
+        </div>
+      ) : null}
+      {footerAddon}
+    </div>
+  );
+
   const panel = (
     <TronChatPanel
+      attachmentDownloader={attachmentDownloader}
       createSessionLabel="Start chat"
       currentUserDisplayName={currentUserDisplayName}
       debugOptions={resolvedDebugOptions}
@@ -1034,7 +1130,7 @@ export function TronChatRuntimeWindow({
       emptyDescription={config.workspaceCode
         ? "Open a session and start talking to your configured agent."
         : "Set a workspace code before starting a session."}
-      footerAddon={footerAddon}
+      footerAddon={runtimeFooterAddon}
       headerContent={headerContent}
       inputPlaceholder={config.inputPlaceholder}
       liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
@@ -1070,6 +1166,7 @@ export function TronChatRuntimeWindow({
   if (config.floating !== false) {
     return (
       <TronChatWindow
+        attachmentDownloader={attachmentDownloader}
         currentUserDisplayName={currentUserDisplayName}
         debugOptions={resolvedDebugOptions}
         disabledInput={Boolean(config.disabledInput)}
@@ -1077,7 +1174,7 @@ export function TronChatRuntimeWindow({
         emptyDescription={config.workspaceCode
           ? "Open a session and start talking to your configured agent."
           : "Set a workspace code before starting a session."}
-        footerAddon={footerAddon}
+        footerAddon={runtimeFooterAddon}
         inputPlaceholder={config.inputPlaceholder}
         liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
         liveAguiEvents={liveAguiEvents}

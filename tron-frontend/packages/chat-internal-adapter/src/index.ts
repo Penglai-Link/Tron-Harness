@@ -1,4 +1,5 @@
 import {
+  buildApiUrl,
   createFetchTransport,
   FetchTransportError,
   normalizeChatActiveRunResult,
@@ -8,9 +9,11 @@ import {
   normalizeChatSteerResult,
   type ChatAdapter,
   type ChatActiveRunResult,
+  type ChatAttachmentUploadInput,
   type ChatAguiEvent,
   type ChatAguiStreamEvent,
   type ChatMessage,
+  type ChatMessageAttachment,
   type ChatSendResult,
   type ChatSession,
   type ChatSteerResult,
@@ -72,6 +75,40 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         path: "/api/v1/chats/sessions",
       }).then(normalizeChatSession);
     },
+    async downloadAttachment(session, attachment, signal) {
+      const attachmentCode = attachment.resourceCode?.trim() || attachment.id.trim();
+      if (!attachmentCode) {
+        throw new FetchTransportError("Chat attachment reference is missing", {
+          code: "CHAT_ATTACHMENT_INVALID",
+          status: 400,
+        });
+      }
+      const url = buildApiUrl(
+        options.baseUrl,
+        "/api/v1/chats/sessions/{sessionCode}/attachments/{attachmentCode}",
+        { attachmentCode, sessionCode: session.sessionCode },
+      );
+      const response = await fetch(url, {
+        credentials: options.credentials ?? "include",
+        headers: await authHeaders(options.getAccessToken),
+        method: "GET",
+        signal,
+      });
+      if (!response.ok) {
+        const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+        throw new FetchTransportError(
+          typeof payload?.message === "string"
+            ? payload.message
+            : `GET ${response.url} failed with ${response.status}`,
+          {
+            code: typeof payload?.code === "string" ? payload.code : undefined,
+            data: payload?.data,
+            status: response.status,
+          },
+        );
+      }
+      return response.blob();
+    },
     getActiveRun(sessionCode, signal) {
       return transport.requestJson<ChatActiveRunResult>({
         path: "/api/v1/chats/sessions/get-active-run",
@@ -124,6 +161,26 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         },
         method: "POST",
         path: "/api/v1/chats/sessions/stop-run",
+        signal,
+      });
+    },
+    uploadAttachment(
+      session: ChatSession,
+      input: ChatAttachmentUploadInput,
+      signal?: AbortSignal,
+    ) {
+      const body = new FormData();
+      if (input.kind) body.set("kind", input.kind);
+      if (input.summary?.trim()) body.set("summary", input.summary.trim());
+      if (input.metadata && Object.keys(input.metadata).length) {
+        body.set("metadata", JSON.stringify(input.metadata));
+      }
+      body.set("file", input.file, input.file.name);
+      return transport.requestJson<ChatMessageAttachment>({
+        body,
+        method: "POST",
+        path: "/api/v1/chats/sessions/{sessionCode}/attachments",
+        pathParams: { sessionCode: session.sessionCode },
         signal,
       });
     },

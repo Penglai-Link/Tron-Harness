@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 
 use crate::{
     application::agent::AgentInvocationResult,
@@ -61,6 +62,15 @@ pub struct SteerChatMessageCommand {
     pub content: Option<String>,
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
+}
+
+#[derive(Debug, Clone)]
+pub struct ChatSessionAttachmentUploadCommand {
+    pub kind: String,
+    pub summary: Option<String>,
+    pub metadata: Value,
+    pub file_name: String,
+    pub content_type: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
