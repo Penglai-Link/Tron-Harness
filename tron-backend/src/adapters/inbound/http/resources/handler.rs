@@ -34,7 +34,10 @@ use super::{
     ResourceCreateRequest, ResourceDeleteRequest, ResourceDeleteResponse, ResourceGetRequest,
     ResourceHttpApiResponse, ResourcePageRequest, ResourcePageResponse, ResourceResponse,
     ResourceUpdateRequest, binary_upload_command,
-    error_mapper::{internal_error_response, malformed_request_response, resource_error_response},
+    error_mapper::{
+        internal_error_response, malformed_json_request_response, malformed_request_response,
+        resource_error_response, resource_error_with_field,
+    },
 };
 
 pub async fn page_resources(
@@ -52,7 +55,9 @@ pub async fn page_resources(
             ResourcePageResponse::from(page),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
+        }
     }
 }
 
@@ -71,7 +76,9 @@ pub async fn get_resource(
             record,
         )))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
+        }
     }
 }
 
@@ -91,7 +98,9 @@ pub async fn create_resource(
         Err(UploadParseError::Malformed(status)) => {
             return malformed_request_response(status, &locale);
         }
-        Err(UploadParseError::Resource(error)) => return resource_error_response(error, &locale),
+        Err(UploadParseError::Resource(error)) => {
+            return resource_error_response(resource_error_with_field(error, "command"), &locale);
+        }
         Err(UploadParseError::Internal) => return internal_error_response(&locale),
     };
     let service = resources.clone();
@@ -110,7 +119,10 @@ pub async fn create_resource(
             ResourceCommitResponse::from(result),
         ))
         .into_response(),
-        Ok(Err(error)) => resource_error_response(error, &locale),
+        Ok(Err(error)) => resource_error_response(
+            resource_error_with_field(error, "command.resourceCode"),
+            &locale,
+        ),
         Err(_) => internal_error_response(&locale),
     }
 }
@@ -125,12 +137,18 @@ pub async fn update_resource(
         Ok(request) => request,
         Err(response) => return response,
     };
-    match resources.update_resource(&auth.user().user_code, request.into()) {
+    let command = match request.try_into() {
+        Ok(command) => command,
+        Err(error) => return resource_error_response(error, &locale),
+    };
+    match resources.update_resource(&auth.user().user_code, command) {
         Ok(result) => Json(ResourceHttpApiResponse::success(
             ResourceCommitResponse::from(result),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
+        }
     }
 }
 
@@ -150,7 +168,9 @@ pub async fn delete_resource(
             ResourceDeleteResponse::from(result),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
+        }
     }
 }
 
@@ -177,7 +197,12 @@ pub async fn upload_binary(
         Err(UploadParseError::Malformed(status)) => {
             return malformed_request_response(status, &locale);
         }
-        Err(UploadParseError::Resource(error)) => return resource_error_response(error, &locale),
+        Err(UploadParseError::Resource(error)) => {
+            return resource_error_response(
+                resource_error_with_field(error, "resourceCode"),
+                &locale,
+            );
+        }
         Err(UploadParseError::Internal) => return internal_error_response(&locale),
     };
     let service = resources.clone();
@@ -198,7 +223,9 @@ pub async fn upload_binary(
             ResourceBinaryActionResponse::from(result),
         ))
         .into_response(),
-        Ok(Err(error)) => resource_error_response(error, &locale),
+        Ok(Err(error)) => {
+            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
+        }
         Err(_) => internal_error_response(&locale),
     }
 }
@@ -218,7 +245,12 @@ pub async fn download_binary(
     let service = resources.clone();
     let (download, record) = match resources.download_binary_to_file(&actor_user_code, command) {
         Ok(value) => value,
-        Err(error) => return resource_error_response(error, &locale),
+        Err(error) => {
+            return resource_error_response(
+                resource_error_with_field(error, "resourceCode"),
+                &locale,
+            );
+        }
     };
     let file = match tempfile() {
         Ok(file) => file,
@@ -277,7 +309,7 @@ pub(super) fn json_body<T>(
 ) -> Result<T, Response> {
     request
         .map(|Json(value)| value)
-        .map_err(|_| malformed_request_response(StatusCode::BAD_REQUEST, locale))
+        .map_err(|error| malformed_json_request_response(&error, locale))
 }
 
 struct UploadBinaryForm {
@@ -331,7 +363,9 @@ async fn parse_create_form(
                         .await?;
                 let request: ResourceCreateRequest = serde_json::from_str(&value)
                     .map_err(|_| UploadParseError::Malformed(StatusCode::BAD_REQUEST))?;
-                command = Some(request.into());
+                let parsed: ResourceCreateCommand =
+                    request.try_into().map_err(UploadParseError::Resource)?;
+                command = Some(parsed);
             }
             "binary" if command.is_some() && binary.is_none() => {
                 let file_name = field

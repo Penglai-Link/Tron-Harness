@@ -1453,15 +1453,17 @@ export function GraphCanvas({
         </button>
       </div>
 
-      <GraphLegend items={legendItems} />
-      <div
-        aria-label={pageT("canvas.metricsAria", "Graph canvas metrics")}
-        className="absolute bottom-16 right-4 z-20 flex items-center gap-2 rounded-xl border border-[var(--color-card-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
-        style={floatingCanvasPanelStyle}
-      >
-        <span>{pageT("canvas.metrics.nodes", "{{count}} nodes", { count: numberText(metrics.nodeCount, locale) })}</span>
-        <span className="text-[var(--color-outline)]">·</span>
-        <span>{pageT("canvas.metrics.edges", "{{count}} edges", { count: numberText(metrics.edgeCount, locale) })}</span>
+      <div className="absolute bottom-4 right-4 z-20 flex max-w-[min(42rem,calc(100%-1rem))] flex-col items-end gap-2">
+        <GraphLegend items={legendItems} />
+        <div
+          aria-label={pageT("canvas.metricsAria", "Graph canvas metrics")}
+          className="flex items-center gap-2 rounded-xl border border-[var(--color-card-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+          style={floatingCanvasPanelStyle}
+        >
+          <span>{pageT("canvas.metrics.nodes", "{{count}} nodes", { count: numberText(metrics.nodeCount, locale) })}</span>
+          <span className="text-[var(--color-outline)]">·</span>
+          <span>{pageT("canvas.metrics.edges", "{{count}} edges", { count: numberText(metrics.edgeCount, locale) })}</span>
+        </div>
       </div>
     </section>
   );

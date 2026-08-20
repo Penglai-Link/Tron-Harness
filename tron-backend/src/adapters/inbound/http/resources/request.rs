@@ -10,7 +10,7 @@ use crate::{
     },
     domain::resource::{
         ResourceError, ResourceKind, ResourceSourceKind, ServerAuthenticationType,
-        is_connection_managed_kind, is_data_source_kind,
+        is_connection_managed_kind, is_data_source_kind, validate_resource_code,
     },
 };
 
@@ -66,16 +66,27 @@ pub struct ResourceCreateRequest {
     pub allow_inheritance: bool,
 }
 
-impl From<ResourceCreateRequest> for ResourceCreateCommand {
-    fn from(value: ResourceCreateRequest) -> Self {
-        Self {
+impl TryFrom<ResourceCreateRequest> for ResourceCreateCommand {
+    type Error = ResourceError;
+
+    fn try_from(value: ResourceCreateRequest) -> Result<Self, Self::Error> {
+        validate_non_blank(&value.workspace_code, "workspaceCode")?;
+        validate_code(&value.resource_code, "resourceCode")?;
+        validate_non_blank(&value.name, "name")?;
+        if !value.kind.is_file_kind() {
+            return Err(ResourceError::InvalidField {
+                field: "kind".to_string(),
+                reason: "must be a file resource kind".to_string(),
+            });
+        }
+        Ok(Self {
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
             kind: value.kind,
             name: value.name,
             description: value.description.unwrap_or_default(),
             allow_inheritance: value.allow_inheritance,
-        }
+        })
     }
 }
 
@@ -92,15 +103,29 @@ pub struct ResourceUpdateRequest {
     pub allow_inheritance: Option<bool>,
 }
 
-impl From<ResourceUpdateRequest> for ResourceUpdateCommand {
-    fn from(value: ResourceUpdateRequest) -> Self {
-        Self {
+impl TryFrom<ResourceUpdateRequest> for ResourceUpdateCommand {
+    type Error = ResourceError;
+
+    fn try_from(value: ResourceUpdateRequest) -> Result<Self, Self::Error> {
+        validate_non_blank(&value.workspace_code, "workspaceCode")?;
+        validate_code(&value.resource_code, "resourceCode")?;
+        if value
+            .name
+            .as_deref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err(ResourceError::InvalidField {
+                field: "name".to_string(),
+                reason: "must not be blank".to_string(),
+            });
+        }
+        Ok(Self {
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
             name: value.name,
             description: value.description,
             allow_inheritance: value.allow_inheritance,
-        }
+        })
     }
 }
 
@@ -146,7 +171,10 @@ impl TryFrom<ConnectionPageRequest> for ResourcePageQuery {
             .iter()
             .any(|kind| !is_connection_managed_kind(kind.as_str()))
         {
-            return Err(ResourceError::InvalidInput);
+            return Err(ResourceError::InvalidField {
+                field: "kinds".to_string(),
+                reason: "must contain only connection resource kinds".to_string(),
+            });
         }
         Ok(Self {
             workspace_code: value.workspace_code,
@@ -202,8 +230,18 @@ impl TryFrom<DataSourceCreateRequest> for DataSourceCreateCommand {
 
     fn try_from(value: DataSourceCreateRequest) -> Result<Self, ResourceError> {
         if !is_data_source_kind(value.kind.as_str()) {
-            return Err(ResourceError::InvalidInput);
+            return Err(ResourceError::InvalidField {
+                field: "kind".to_string(),
+                reason: "must be a data-source connection kind".to_string(),
+            });
         }
+        if value.name.trim().is_empty() {
+            return Err(ResourceError::InvalidField {
+                field: "name".to_string(),
+                reason: "must not be blank".to_string(),
+            });
+        }
+        validate_code(&value.resource_code, "resourceCode")?;
         Ok(Self {
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
@@ -231,16 +269,29 @@ pub struct DataSourceUpdateRequest {
     pub allow_inheritance: Option<bool>,
 }
 
-impl From<DataSourceUpdateRequest> for DataSourceUpdateCommand {
-    fn from(value: DataSourceUpdateRequest) -> Self {
-        Self {
+impl TryFrom<DataSourceUpdateRequest> for DataSourceUpdateCommand {
+    type Error = ResourceError;
+
+    fn try_from(value: DataSourceUpdateRequest) -> Result<Self, Self::Error> {
+        validate_code(&value.resource_code, "resourceCode")?;
+        if value
+            .name
+            .as_deref()
+            .is_some_and(|name| name.trim().is_empty())
+        {
+            return Err(ResourceError::InvalidField {
+                field: "name".to_string(),
+                reason: "must not be blank".to_string(),
+            });
+        }
+        Ok(Self {
             workspace_code: value.workspace_code,
             resource_code: value.resource_code,
             name: value.name,
             description: value.description,
             attributes: value.attributes,
             allow_inheritance: value.allow_inheritance,
-        }
+        })
     }
 }
 
@@ -292,9 +343,21 @@ pub struct ServerCreateRequest {
     pub initial_account: ServerAccountCreateInputRequest,
 }
 
-impl From<ServerCreateRequest> for ServerCreateCommand {
-    fn from(value: ServerCreateRequest) -> Self {
-        Self {
+impl TryFrom<ServerCreateRequest> for ServerCreateCommand {
+    type Error = ResourceError;
+
+    fn try_from(value: ServerCreateRequest) -> Result<Self, Self::Error> {
+        validate_non_blank(&value.workspace_code, "workspaceCode")?;
+        validate_code(&value.server_code, "serverCode")?;
+        validate_non_blank(&value.name, "name")?;
+        validate_non_blank(&value.host, "host")?;
+        validate_code(
+            &value.initial_account.account_code,
+            "initialAccount.accountCode",
+        )?;
+        validate_non_blank(&value.initial_account.name, "initialAccount.name")?;
+        validate_non_blank(&value.initial_account.username, "initialAccount.username")?;
+        Ok(Self {
             workspace_code: value.workspace_code,
             server_code: value.server_code,
             name: value.name,
@@ -303,7 +366,7 @@ impl From<ServerCreateRequest> for ServerCreateCommand {
             port: value.port,
             allow_inheritance: value.allow_inheritance,
             initial_account: value.initial_account.into(),
-        }
+        })
     }
 }
 
@@ -315,14 +378,41 @@ pub struct ServerAccountCreateRequest {
     pub account: ServerAccountCreateInputRequest,
 }
 
-impl From<ServerAccountCreateRequest> for ServerAccountCreateCommand {
-    fn from(value: ServerAccountCreateRequest) -> Self {
-        Self {
+impl TryFrom<ServerAccountCreateRequest> for ServerAccountCreateCommand {
+    type Error = ResourceError;
+
+    fn try_from(value: ServerAccountCreateRequest) -> Result<Self, Self::Error> {
+        validate_non_blank(&value.workspace_code, "workspaceCode")?;
+        validate_code(&value.server_code, "serverCode")?;
+        validate_code(&value.account.account_code, "account.accountCode")?;
+        validate_non_blank(&value.account.name, "account.name")?;
+        validate_non_blank(&value.account.username, "account.username")?;
+        Ok(Self {
             workspace_code: value.workspace_code,
             server_code: value.server_code,
             account: value.account.into(),
-        }
+        })
     }
+}
+
+fn validate_non_blank(value: &str, field: &str) -> Result<(), ResourceError> {
+    if value.trim().is_empty() {
+        return Err(ResourceError::InvalidField {
+            field: field.to_string(),
+            reason: "must not be blank".to_string(),
+        });
+    }
+    Ok(())
+}
+
+fn validate_code(value: &str, field: &str) -> Result<(), ResourceError> {
+    validate_resource_code(value).map_err(|error| match error {
+        ResourceError::InvalidCode => ResourceError::InvalidField {
+            field: field.to_string(),
+            reason: "must match the resource code format".to_string(),
+        },
+        error => error,
+    })
 }
 
 pub fn binary_upload_command(
@@ -332,6 +422,7 @@ pub fn binary_upload_command(
     if workspace_code.trim().is_empty() {
         return Err(ResourceError::WorkspaceRequired);
     }
+    validate_code(resource_code, "resourceCode")?;
     Ok(ResourceBinaryUploadCommand {
         workspace_code: workspace_code.to_string(),
         resource_code: resource_code.to_string(),

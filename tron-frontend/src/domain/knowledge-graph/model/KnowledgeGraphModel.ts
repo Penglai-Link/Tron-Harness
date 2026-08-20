@@ -101,6 +101,7 @@ export interface KnowledgeGraphExplorerFilters {
 }
 
 export interface KnowledgeGraphExplorerView extends KnowledgeGraphView {
+  error: Error | null;
   expandNode: (nodeCode: string) => Promise<void>;
   filterOptionEdges: GraphEdgeView[];
   filterOptionFacets: GraphFacet[];

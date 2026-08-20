@@ -185,6 +185,9 @@ fn translate_en_us(key: &str) -> &'static str {
         "agent.toolCatalog.tools.resource.data_source.update.sampleResultSummary" => {
             "Returns the updated data-source code and kind."
         }
+        "agent.toolCatalog.schemas.resource.dataSource.attributes.description" => {
+            "Connection attributes must match the selected resource kind."
+        }
         "agent.toolCatalog.tools.resource.server.create.name" => "Create server",
         "agent.toolCatalog.tools.resource.server.create.description" => {
             "Create and verify an SSH server with its initial account."
@@ -427,6 +430,9 @@ fn translate_zh_cn(key: &str) -> &'static str {
         }
         "agent.toolCatalog.tools.resource.data_source.update.sampleResultSummary" => {
             "返回已更新数据源的编码和类型。"
+        }
+        "agent.toolCatalog.schemas.resource.dataSource.attributes.description" => {
+            "连接属性必须与所选资源类型匹配。"
         }
         "agent.toolCatalog.tools.resource.server.create.name" => "创建服务器",
         "agent.toolCatalog.tools.resource.server.create.description" => {

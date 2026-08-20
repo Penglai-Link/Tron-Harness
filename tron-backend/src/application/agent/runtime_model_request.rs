@@ -1,7 +1,7 @@
 use crate::{
     application::short_term_memory::{ModelRequestTranscriptFacts, PreparedModelContext},
     domain::agent::{
-        AgentMessage, AgentModelProtocol, AgentRunContext, EffectiveTool, ModelRequest,
+        AgentModelProtocol, AgentRunContext, EffectiveTool, ModelRequest,
     },
 };
 
@@ -14,8 +14,6 @@ pub(super) fn model_request_facts(
     usage_estimate: crate::domain::agent::TokenEstimateSnapshot,
 ) -> ModelRequestTranscriptFacts {
     ModelRequestTranscriptFacts {
-        message_count: request.messages.len(),
-        part_count: request_message_part_count(&request.messages),
         estimated_tokens: prepared_context.estimated_tokens,
         message_hashes: request
             .messages
@@ -46,10 +44,6 @@ pub(super) fn prepared_context_event_payload(
         payload.push(("overBudgetReason".to_string(), reason.clone()));
     }
     payload
-}
-
-fn request_message_part_count(messages: &[AgentMessage]) -> usize {
-    messages.iter().map(|message| message.parts.len()).sum()
 }
 
 pub(super) fn estimate_tool_schema_tokens(tools: &[EffectiveTool]) -> u32 {

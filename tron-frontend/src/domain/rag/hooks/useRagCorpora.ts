@@ -18,6 +18,7 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 export interface RagCorporaResult {
   corpora: CorpusRecord[];
+  error: Error | null;
   loading: boolean;
   refresh: () => void;
 }
@@ -57,6 +58,7 @@ async function fetchCorpusDetailRecords(records: CorpusRecord[], signal: AbortSi
 export function useRagCorpora(): RagCorporaResult {
   const dataSource = getServiceDataSource("rag");
   const [reloadKey, setReloadKey] = useState(0);
+  const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
   const [corpora, setCorpora] = useState<CorpusRecord[]>(() => (
     dataSource === "api" ? [] : getRagMockCorpora()
@@ -65,8 +67,10 @@ export function useRagCorpora(): RagCorporaResult {
   useEffect(() => {
     if (dataSource === "api") {
       setCorpora([]);
+      setError(null);
       return;
     }
+    setError(null);
     setCorpora(getRagMockCorpora());
   }, [dataSource, reloadKey]);
 
@@ -74,6 +78,7 @@ export function useRagCorpora(): RagCorporaResult {
     if (dataSource !== "api") return;
     const controller = new AbortController();
     setLoading(true);
+    setError(null);
 
     fetchRagCorpora(controller.signal)
       .then(async (records) => {
@@ -93,7 +98,11 @@ export function useRagCorpora(): RagCorporaResult {
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
-        console.warn("[rag] Corpus list request failed.", error);
+        const normalizedError = error instanceof Error
+          ? error
+          : new Error("RAG corpora could not be loaded.");
+        console.warn("[rag] Corpus list request failed.", normalizedError);
+        setError(normalizedError);
         setCorpora([]);
       })
       .finally(() => {
@@ -107,6 +116,7 @@ export function useRagCorpora(): RagCorporaResult {
 
   return {
     corpora,
+    error,
     loading,
     refresh,
   };

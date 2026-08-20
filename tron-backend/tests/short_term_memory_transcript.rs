@@ -777,12 +777,6 @@ fn transcript_service_records_todos_and_compaction() {
         .record_model_requested(
             &second_context,
             ModelRequestTranscriptFacts {
-                message_count: prepared.messages.len(),
-                part_count: prepared
-                    .messages
-                    .iter()
-                    .map(|message| message.parts.len())
-                    .sum(),
                 estimated_tokens: prepared.estimated_tokens,
                 message_hashes: vec!["hash".into(); prepared.messages.len()],
                 tool_schema_token_estimate: 12,
@@ -803,7 +797,6 @@ fn transcript_service_records_todos_and_compaction() {
             |row| row.get(0),
         )
         .expect("model request event payload should be persisted");
-    assert!(model_requested_payload.contains("\"partCount\""));
     assert!(model_requested_payload.contains("\"toolSchemaTokenEstimate\":12"));
     assert!(model_requested_payload.contains("\"protocol\":\"chatCompletions\""));
     assert!(model_requested_payload.contains("\"previousResponseIdPresent\":false"));
@@ -2483,8 +2476,6 @@ fn model_response_usage_audit_persists_when_visible_parts_are_empty() {
         context_window_limit: Some(8_192),
         effective_input_budget: Some(7_000),
         output_token_reserve: Some(512),
-        message_count: 2,
-        part_count: 2,
         rebased: false,
         over_budget: false,
         compaction_trigger_reached: false,
@@ -5044,8 +5035,6 @@ fn event_log_payload_is_bounded_before_persistence() {
         .record_model_requested(
             &context,
             ModelRequestTranscriptFacts {
-                message_count: 1,
-                part_count: 1,
                 estimated_tokens: 1,
                 message_hashes: vec!["x".repeat(2_000)],
                 tool_schema_token_estimate: 1,
@@ -5149,8 +5138,6 @@ fn lifecycle_only_event_log_keeps_projections_and_run_events() {
         .record_model_requested(
             &context,
             ModelRequestTranscriptFacts {
-                message_count: 1,
-                part_count: 1,
                 estimated_tokens: 1,
                 message_hashes: vec!["hash".into()],
                 tool_schema_token_estimate: 1,

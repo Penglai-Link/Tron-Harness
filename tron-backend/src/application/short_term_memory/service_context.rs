@@ -141,8 +141,6 @@ impl ShortTermMemoryService {
             "agent.model.requested",
             "RUNTIME",
             json!({
-                "messageCount": facts.message_count,
-                "partCount": facts.part_count,
                 "messageHashes": facts.message_hashes,
                 "toolSchemaTokenEstimate": facts.tool_schema_token_estimate,
                 "protocol": facts.protocol,
@@ -166,7 +164,6 @@ fn prompt_prefix_snapshot(messages: &[AgentMessage]) -> Value {
             .iter()
             .map(|message| json!({
                 "role": message.role,
-                "partCount": message.parts.len(),
                 "textHash": hash_text(&message.text_content()),
                 "tokenEstimate": estimate_text_tokens(&message.text_content()),
             }))

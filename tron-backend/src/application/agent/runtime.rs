@@ -244,7 +244,7 @@ impl ReactAgent {
                 prepared_context.rebased,
                 prepared_context.context_hash.as_deref(),
             );
-            let request_estimate = request_estimate_snapshot(&request, context, &prepared_context);
+            let request_estimate = request_estimate_snapshot(context, &prepared_context);
             self.publish_with_payload(
                 &context,
                 "agent.model.requested",

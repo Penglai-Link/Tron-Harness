@@ -74,8 +74,6 @@ export interface ChatTokenEstimateSnapshot {
   contextWindowLimit?: number | null;
   effectiveInputBudget?: number | null;
   outputTokenReserve?: number | null;
-  messageCount: number;
-  partCount: number;
   rebased: boolean;
   overBudget: boolean;
   compactionTriggerReached: boolean;
@@ -88,6 +86,7 @@ export interface ChatTokenEstimateSnapshot {
 }
 
 export interface ChatContextBudgetBreakdown {
+  promptPrefixMessageCount?: number | null;
   promptPrefixTokens: number;
   checkpointTokens: number;
   sessionFamilyContextTokens: number;

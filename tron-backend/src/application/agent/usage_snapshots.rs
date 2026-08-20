@@ -6,7 +6,7 @@ use std::{
 use crate::{
     application::short_term_memory::PreparedModelContext,
     domain::agent::{
-        AgentModelProtocol, AgentRunContext, ModelRequest, ModelResponse, ModelTokenUsage,
+        AgentModelProtocol, AgentRunContext, ModelResponse, ModelTokenUsage,
         TokenEstimateSnapshot, TokenUsageAuditSnapshot,
     },
 };
@@ -14,7 +14,6 @@ use crate::{
 const CALIBRATION_ALPHA: f64 = 0.2;
 
 pub(crate) fn request_estimate_snapshot(
-    request: &ModelRequest,
     context: &AgentRunContext,
     prepared_context: &PreparedModelContext,
 ) -> TokenEstimateSnapshot {
@@ -27,12 +26,6 @@ pub(crate) fn request_estimate_snapshot(
             .or(context.model.context_window_tokens),
         effective_input_budget: prepared_context.effective_input_budget,
         output_token_reserve: prepared_context.output_token_reserve,
-        message_count: request.messages.len() as u32,
-        part_count: request
-            .messages
-            .iter()
-            .map(|message| message.parts.len() as u32)
-            .sum(),
         rebased: prepared_context.rebased,
         over_budget: prepared_context.over_budget,
         compaction_trigger_reached: prepared_context.compaction_trigger_reached,

@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use crate::{
     application::llm::{LlmRuntimeService, LlmTextGenerationCallCommand},
     domain::chat::{ChatSession, ChatSessionSourceType},
@@ -7,7 +9,9 @@ use crate::{
 use super::service::ChatService;
 
 pub(super) const DEFAULT_MANUAL_SESSION_TITLE: &str = "New chat";
+pub(super) const DEFAULT_MAIN_AGENT_SESSION_TITLE: &str = "Main Agent";
 const MAX_GENERATED_TITLE_CHARS: usize = 64;
+const TITLE_GENERATION_TIMEOUT: Duration = Duration::from_secs(30);
 
 impl ChatService {
     pub(super) async fn try_generate_manual_session_title(
@@ -15,23 +19,30 @@ impl ChatService {
         session_code: &str,
         workspace_code: &str,
         user_message: &str,
-        assistant_message: &str,
         llm_runtime: LlmRuntimeService,
     ) {
-        let prompt = manual_session_title_prompt(user_message, assistant_message);
-        let result = llm_runtime
-            .text_generation_call(LlmTextGenerationCallCommand {
+        let prompt = manual_session_title_prompt(user_message);
+        let result = tokio::time::timeout(
+            TITLE_GENERATION_TIMEOUT,
+            llm_runtime.text_generation_call(LlmTextGenerationCallCommand {
                 workspace_code: workspace_code.to_string(),
                 model_code: None,
                 prompt,
-            })
-            .await;
-        let Ok(result) = result else {
+            }),
+        )
+        .await;
+        let Ok(Ok(result)) = result else {
             return;
         };
         let Some(title) = normalize_generated_session_title(&result.output) else {
             return;
         };
+        let Ok(session) = self.repository().get_session(session_code) else {
+            return;
+        };
+        if !should_generate_manual_session_title(&session) {
+            return;
+        }
         let updated_at = current_timestamp();
         let _ = self
             .repository()
@@ -42,22 +53,25 @@ impl ChatService {
 pub(super) fn should_generate_manual_session_title(session: &ChatSession) -> bool {
     session.source_type == ChatSessionSourceType::Manual
         && session.task_code.is_none()
-        && session
+        && (session
             .title
             .trim()
             .eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE)
+            || session
+                .title
+                .trim()
+                .eq_ignore_ascii_case(DEFAULT_MAIN_AGENT_SESSION_TITLE))
 }
 
-fn manual_session_title_prompt(user_message: &str, assistant_message: &str) -> String {
+fn manual_session_title_prompt(user_message: &str) -> String {
     format!(
-        "Generate a concise chat title from the first exchange.\n\
+        "Generate a concise chat title from the user's first message.\n\
         Rules:\n\
         - Return only the title.\n\
         - Use 3 to 8 words.\n\
         - No quotes, punctuation-only decorations, markdown, or prefixes.\n\
         - Preserve product names and technical terms.\n\n\
-        User message:\n{user_message}\n\n\
-        Assistant response:\n{assistant_message}"
+        User message:\n{user_message}"
     )
 }
 
@@ -89,7 +103,10 @@ fn normalize_generated_session_title(value: &str) -> Option<String> {
         .split_whitespace()
         .collect::<Vec<_>>()
         .join(" ");
-    if title.is_empty() || title.eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE) {
+    if title.is_empty()
+        || title.eq_ignore_ascii_case(DEFAULT_MANUAL_SESSION_TITLE)
+        || title.eq_ignore_ascii_case(DEFAULT_MAIN_AGENT_SESSION_TITLE)
+    {
         return None;
     }
     if title.chars().count() > MAX_GENERATED_TITLE_CHARS {
@@ -128,6 +145,14 @@ mod tests {
     #[test]
     fn manual_new_chat_title_generation_retries_after_first_run() {
         let session = manual_new_chat_session(Some("RUN-1".into()));
+
+        assert!(should_generate_manual_session_title(&session));
+    }
+
+    #[test]
+    fn main_agent_default_title_is_generated_after_first_run() {
+        let mut session = manual_new_chat_session(Some("RUN-1".into()));
+        session.title = DEFAULT_MAIN_AGENT_SESSION_TITLE.into();
 
         assert!(should_generate_manual_session_title(&session));
     }

@@ -145,6 +145,70 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
 }
 
 #[test]
+fn request_builders_preserve_nested_data_source_schema_and_examples() {
+    let config = AgentModelConfig {
+        model_code: "MODEL-1".into(),
+        protocol: AgentModelProtocol::Responses,
+        base_url: "https://provider.test/v1".into(),
+        api_path: None,
+        api_key: "sk-test".into(),
+        model_name: "qwen-test".into(),
+        thinking_enabled: false,
+        reasoning_effort: None,
+        responses_stateful_enabled: false,
+        temperature: None,
+        max_tokens: None,
+        context_window_tokens: None,
+        top_p: None,
+        max_retries: None,
+    };
+    let tool = crate::application::agent::BusinessToolCatalog::tool(
+        "resource.data_source.create",
+        "en-US",
+    )
+    .expect("data source create tool should be catalogued");
+    let request = ModelRequest {
+        messages: vec![AgentMessage::user("create a mysql connection")],
+        tools: vec![crate::domain::agent::EffectiveTool {
+            tool_name: tool.tool_code,
+            domain_code: Some(tool.domain_code),
+            description: tool.description,
+            input_schema: tool.input_schema.clone(),
+            skill_name: None,
+            required_variable_keys: vec![],
+        }],
+        system_agent_session_id: None,
+        response_input_items: None,
+        previous_response_id: None,
+    };
+
+    let responses = responses_request(&config, &request);
+    assert_eq!(responses["tools"][0]["parameters"], tool.input_schema);
+    assert!(
+        responses["tools"][0]["parameters"]["examples"][0]["attributes"]["credentials"]["password"]
+            ["source"]
+            .is_string()
+    );
+    assert!(
+        responses["tools"][0]["parameters"]["properties"]["attributes"]["oneOf"]
+            .as_array()
+            .is_some_and(|variants| variants.len() == 4)
+    );
+
+    let chat = chat_completions_request(
+        &AgentModelConfig {
+            protocol: AgentModelProtocol::ChatCompletions,
+            ..config
+        },
+        &request,
+    );
+    assert_eq!(
+        chat["tools"][0]["function"]["parameters"],
+        tool.input_schema
+    );
+}
+
+#[test]
 fn request_builders_handle_tool_observations_per_protocol() {
     let config = AgentModelConfig {
         model_code: "MODEL-1".into(),

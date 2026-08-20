@@ -1,5 +1,6 @@
 use axum::{
     Json,
+    extract::rejection::JsonRejection,
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -31,6 +32,7 @@ pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
         | ResourceError::InvalidWorkspace
         | ResourceError::InvalidCode
         | ResourceError::InvalidInput
+        | ResourceError::InvalidField { .. }
         | ResourceError::InvalidVariableReference
         | ResourceError::PathDenied
         | ResourceError::StorageProfileNotFound
@@ -46,6 +48,28 @@ pub fn resource_error_response(error: ResourceError, locale: &str) -> Response {
         .into_response()
 }
 
+pub fn resource_error_with_field(error: ResourceError, field: &str) -> ResourceError {
+    match error {
+        ResourceError::InvalidInput => ResourceError::InvalidField {
+            field: field.to_string(),
+            reason: "does not satisfy the resource validation rules".to_string(),
+        },
+        ResourceError::InvalidCode => ResourceError::InvalidField {
+            field: field.to_string(),
+            reason: "must match the resource code format".to_string(),
+        },
+        ResourceError::InvalidField { field: nested, reason } if !nested.is_empty() => {
+            let field = if nested == field || nested.starts_with(&format!("{field}.")) {
+                nested
+            } else {
+                format!("{field}.{nested}")
+            };
+            ResourceError::InvalidField { field, reason }
+        }
+        error => error,
+    }
+}
+
 pub fn malformed_request_response(status: StatusCode, locale: &str) -> Response {
     (
         status,
@@ -56,6 +80,17 @@ pub fn malformed_request_response(status: StatusCode, locale: &str) -> Response 
                 "请求参数或请求体格式不正确",
                 "The request parameters or body are invalid",
             ),
+        )),
+    )
+        .into_response()
+}
+
+pub fn malformed_json_request_response(error: &JsonRejection, locale: &str) -> Response {
+    (
+        StatusCode::BAD_REQUEST,
+        Json(ResourceHttpApiResponse::error(
+            RESOURCE_MALFORMED_REQUEST_CODE,
+            localized_json_request_error(error.body_text(), locale),
         )),
     )
         .into_response()
@@ -74,7 +109,8 @@ fn resource_error_code(error: &ResourceError) -> &'static str {
         ResourceError::WorkspaceRequired
         | ResourceError::InvalidWorkspace
         | ResourceError::InvalidCode
-        | ResourceError::InvalidInput => RESOURCE_INVALID_INPUT_CODE,
+        | ResourceError::InvalidInput
+        | ResourceError::InvalidField { .. } => RESOURCE_INVALID_INPUT_CODE,
         ResourceError::InvalidVariableReference => RESOURCE_VARIABLE_REFERENCE_CODE,
         ResourceError::StorageFailure => "-1",
     }
@@ -109,6 +145,9 @@ fn localized_resource_error(error: ResourceError, locale: &str) -> String {
             "The resource business code is invalid",
         ),
         ResourceError::InvalidInput => ("资源请求参数不正确", "The resource request is invalid"),
+        ResourceError::InvalidField { field, reason } => {
+            return localized_invalid_field_error(field, reason, locale);
+        }
         ResourceError::InvalidVariableReference => (
             "资源变量引用不正确",
             "The resource Variable reference is invalid",
@@ -146,6 +185,47 @@ fn localized_resource_error(error: ResourceError, locale: &str) -> String {
         ),
     };
     localized_message(locale, zh, en)
+}
+
+fn localized_invalid_field_error(field: String, reason: String, locale: &str) -> String {
+    let field = field.trim();
+    let reason = reason.trim();
+    if locale.starts_with("en") {
+        format!("Invalid resource field '{field}': {reason}")
+    } else {
+        format!("资源字段不正确：{field}（{reason}）")
+    }
+}
+
+fn localized_json_request_error(detail: String, locale: &str) -> String {
+    let detail = detail.trim();
+    let field = [
+        "missing field `",
+        "missing field '",
+        "unknown field `",
+        "unknown field '",
+        " for key `",
+        " for key '",
+    ]
+    .iter()
+    .find_map(|marker| {
+        detail.find(marker).and_then(|start| {
+            let value = &detail[start + marker.len()..];
+            let end = value.find(['`', '\''])?;
+            Some(value[..end].to_string())
+        })
+    });
+    if let Some(field) = field {
+        if locale.to_ascii_lowercase().starts_with("zh") {
+            return format!("资源字段不正确：{field}（{detail}）");
+        }
+        return format!("Invalid resource field '{field}': {detail}");
+    }
+    if locale.to_ascii_lowercase().starts_with("zh") {
+        format!("资源请求字段格式不正确：{detail}")
+    } else {
+        format!("Invalid resource request field: {detail}")
+    }
 }
 
 fn localized_message(locale: &str, zh: &str, en: &str) -> String {

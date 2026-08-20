@@ -12,6 +12,7 @@ import {
   AlarmClock,
   ArrowDown,
   Archive,
+  BookmarkPlus,
   Bot,
   BrainCircuit,
   CheckCircle2,
@@ -46,6 +47,7 @@ import {
 import { Badge } from "@/shared/ui/Badge";
 import {
   ConfirmDialog,
+  InfoTooltip,
   MarkdownContent,
   SelectInput,
   useWorkspaceSpaces,
@@ -517,7 +519,6 @@ function normalizeUsageEstimate(parsed: Partial<ChatTokenEstimateSnapshot> | nul
     contextWindowLimit: tokenField(parsed.contextWindowLimit),
     effectiveInputBudget: tokenField(parsed.effectiveInputBudget),
     estimatedInputTokens: parsed.estimatedInputTokens,
-    messageCount: tokenField(parsed.messageCount) ?? 0,
     messageTokenEstimate: parsed.messageTokenEstimate,
     modelCode: parsed.modelCode ?? "",
     modelName: parsed.modelName ?? "",
@@ -525,7 +526,6 @@ function normalizeUsageEstimate(parsed: Partial<ChatTokenEstimateSnapshot> | nul
     outputTokenReserve: tokenField(parsed.outputTokenReserve),
     overBudget: Boolean(parsed.overBudget),
     compactionTriggerReached: Boolean(parsed.compactionTriggerReached),
-    partCount: tokenField(parsed.partCount) ?? 0,
     rebased: Boolean(parsed.rebased),
     toolSchemaTokenEstimate: parsed.toolSchemaTokenEstimate,
     usageConfidence: parsed.usageConfidence ?? "estimated",
@@ -551,6 +551,7 @@ function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudgetBreakd
     historySourceMessageCount: tokenField(parsed.historySourceMessageCount),
     inputBudgetExceeded: Boolean(parsed.inputBudgetExceeded),
     outputTokenReserve: tokenField(parsed.outputTokenReserve),
+    promptPrefixMessageCount: tokenField(parsed.promptPrefixMessageCount),
     promptPrefixBudgetTokens: tokenField(parsed.promptPrefixBudgetTokens),
     promptPrefixTokens: tokenField(parsed.promptPrefixTokens) ?? 0,
     rawTailMessageCount: tokenField(parsed.rawTailMessageCount),
@@ -2027,7 +2028,6 @@ function buildContextMemoryBlocks({
   const activeGoalCount = goal && isEditableGoalStatus(goal.goal.status) ? 1 : 0;
   const historyMessageCount = breakdown?.rawTailMessageCount
     ?? breakdown?.historySourceMessageCount
-    ?? requestEstimate?.messageCount
     ?? 0;
   const checkpointTokens = breakdown?.checkpointTokens ?? 0;
   const checkpointCode = contextValue(requestEstimate?.checkpointCode);
@@ -2050,9 +2050,6 @@ function buildContextMemoryBlocks({
   const sharedInputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? null;
   const toolSchemaTokens = breakdown?.toolSchemaTokens ?? requestEstimate?.toolSchemaTokenEstimate ?? 0;
   const toolSchemaLimit = sharedInputBudget ?? breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? null;
-  const toolSchemaStat = toolSchemaLimit
-    ? translate("chat.shortTermMemory.contextPanel.sharedWindow")
-    : translate("chat.shortTermMemory.contextPanel.schemaStat");
   const compressedCount = breakdown?.compressedHistoryMessageCount ?? 0;
   const rawTailCount = breakdown?.rawTailMessageCount ?? 0;
   const historyMeta = compressedCount > 0
@@ -2068,8 +2065,10 @@ function buildContextMemoryBlocks({
       color: "seed",
       limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
       meta: translate("chat.shortTermMemory.contextPanel.seedMeta"),
-      name: "Seed Prompt Prefix",
-      stat: translate("chat.shortTermMemory.contextPanel.blockCount", { count: 1 }),
+      name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
+      stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
+        count: breakdown?.promptPrefixMessageCount ?? 0,
+      }),
       tokens: breakdown?.promptPrefixTokens ?? 0,
     },
     {
@@ -2078,7 +2077,7 @@ function buildContextMemoryBlocks({
       limitTokens: toolSchemaLimit,
       meta: translate("chat.shortTermMemory.contextPanel.toolMeta"),
       name: "Tool Schema",
-      stat: toolSchemaStat,
+      stat: "",
       tokens: toolSchemaTokens,
     },
     {
@@ -2140,12 +2139,9 @@ function ContextOverviewPanel({
   const usedTokens = breakdown?.estimatedInputTokens ?? requestEstimate?.estimatedInputTokens ?? (fallbackWindowLimit ? 0 : null);
   const inputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? fallbackWindowLimit ?? null;
   const windowLimit = breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? fallbackWindowLimit ?? null;
-  const remainingTokens = safeSubtract(inputBudget, usedTokens);
   const percent = contextPercent(usedTokens, inputBudget ?? windowLimit);
   const statusLabel = contextStatusLabel(requestEstimate, breakdown, (key) => t(key));
   const statusTone = contextStatusTone(requestEstimate, breakdown);
-  const messageCount = requestEstimate?.messageCount ?? 0;
-  const partCount = requestEstimate?.partCount ?? 0;
 
   return (
     <section className="space-y-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
@@ -2187,12 +2183,6 @@ function ContextOverviewPanel({
           style={{ width: `${percent}%` }}
         />
       </div>
-      <div className="grid grid-cols-4 gap-1.5">
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.messages")} value={formatTokenCount(messageCount)} />
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.parts")} value={formatTokenCount(partCount)} />
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.blocks")} value="6" />
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.remaining")} value={formatCompactTokenCount(remainingTokens)} />
-      </div>
     </section>
   );
 }
@@ -2221,13 +2211,18 @@ function ContextStructurePanel({
   return (
     <section className="space-y-2">
       <div className="flex min-w-0 items-center justify-between gap-2">
-        <div className="min-w-0">
+        <div className="flex min-w-0 items-center gap-1">
           <h3 className="truncate text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
             {t("chat.shortTermMemory.contextPanel.structure")}
           </h3>
-          <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
-            {t("chat.shortTermMemory.contextPanel.structureSubtitle")}
-          </p>
+          <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="start">
+            <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
+              <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
+              <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
+              <p className="whitespace-pre-line">{t("chat.shortTermMemory.contextPanel.historyFormula")}</p>
+              <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
+            </div>
+          </InfoTooltip>
         </div>
         <button
           aria-label={t("chat.shortTermMemory.createCheckpoint")}
@@ -2237,7 +2232,7 @@ function ContextStructurePanel({
           type="button"
           onClick={onCreateCompaction}
         >
-          {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <Archive size={15} />}
+          {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
         </button>
       </div>
       <div className="space-y-2">
@@ -2254,10 +2249,7 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
   const percent = contextPercent(block.tokens, block.limitTokens);
   const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
   return (
-    <div className="grid grid-cols-[1.75rem_minmax(0,1fr)] gap-2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-2.5">
-      <span className={cn("flex size-7 items-center justify-center rounded-md text-[11px] font-semibold", colors.dot)}>
-        {block.code}
-      </span>
+    <div className="rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-2.5">
       <div className="min-w-0">
         <div className="flex min-w-0 items-baseline justify-between gap-2">
           <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
@@ -2273,7 +2265,7 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
         </div>
         <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[10px] text-[var(--color-on-surface-variant)]">
           <span className="min-w-0 truncate">{block.meta}</span>
-          <span className="shrink-0">{block.stat}</span>
+          {block.stat ? <span className="shrink-0">{block.stat}</span> : null}
         </div>
       </div>
     </div>
@@ -2524,7 +2516,7 @@ function RightWorkspaceSidebar({
             {t("chat.shortTermMemory.goalMaxRuns")}
           </span>
           <input
-            className="h-8 w-24 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)]"
+            className="block h-8 w-24 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 text-sm text-[var(--color-on-surface)] outline-none transition focus:border-[var(--color-primary)]"
             disabled={goalBusy}
             min={1}
             type="number"
@@ -4071,6 +4063,7 @@ export function ChatManagementPage() {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const attachmentFileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
+  const sessionTitleRefreshTimersRef = useRef<number[]>([]);
   const visibleSessionCodeRef = useRef("");
   const liveAssistantDraftRef = useRef("");
   const liveAguiObservedRef = useRef(false);
@@ -4124,6 +4117,25 @@ export function ChatManagementPage() {
     sendingRef.current = value;
     setSending(value);
   }
+
+  function scheduleSessionTitleRefresh(session: ChatSession) {
+    const defaultTitle = session.title.trim().toLocaleLowerCase();
+    if (defaultTitle !== "new chat" && defaultTitle !== "main agent") return;
+    [500, 1500, 3000, 6000, 12000].forEach((delay) => {
+      const timer = window.setTimeout(() => {
+        sessionTitleRefreshTimersRef.current = sessionTitleRefreshTimersRef.current.filter(
+          (candidate) => candidate !== timer,
+        );
+        setActiveChatDataRefreshKey((current) => current + 1);
+      }, delay);
+      sessionTitleRefreshTimersRef.current.push(timer);
+    });
+  }
+
+  useEffect(() => () => {
+    sessionTitleRefreshTimersRef.current.forEach((timer) => window.clearTimeout(timer));
+    sessionTitleRefreshTimersRef.current = [];
+  }, []);
 
   function replaceQueuedSubmissions(next: ChatQueuedSubmission[]) {
     queuedSubmissionsRef.current = next;
@@ -5521,6 +5533,7 @@ export function ChatManagementPage() {
       }
       shouldRestoreSourceSubmission = false;
       setSessionGroups((current) => replaceSession(current, result.session));
+      scheduleSessionTitleRefresh(result.session);
       setLatestRequestEstimatesBySessionCode((current) => {
         if (result.run.latestRequestEstimate) {
           return {

@@ -23,6 +23,43 @@ import type {
 } from "@/domain/knowledge-graph/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
+function emptyKnowledgeGraph(workspaceCode: string, namespace: string): KnowledgeGraphView {
+  return {
+    edges: [],
+    facets: [],
+    metrics: {
+      edgeCount: 0,
+      namespaceCount: 0,
+      nodeCount: 0,
+    },
+    namespaces: [],
+    nodes: [],
+    paths: [],
+    scope: {
+      appCode: "",
+      currentWorkspaceCode: workspaceCode,
+      inheritanceMode: "WORKSPACE_LINEAGE",
+      namedGraph: "",
+      namespace,
+      rootWorkspaceCode: "",
+      schema: "",
+      scopeModes: ["SPACE", "USER"],
+      userCode: "",
+      visibleUserCodes: [],
+      visibleWorkspaceCodes: [],
+      workspaceCode,
+    },
+    window: {
+      edgeTotal: 0,
+      hasMore: false,
+      limit: 0,
+      nodeTotal: 0,
+      returnedEdgeCount: 0,
+      returnedNodeCount: 0,
+    },
+  };
+}
+
 function nodeMatchesLabels(node: GraphNodeView, labels: string[]) {
   return labels.length === 0 || labels.some((label) => node.labels.includes(label));
 }
@@ -72,23 +109,27 @@ export function useKnowledgeGraphNamespaces(workspaceCode: string) {
   const [namespaces, setNamespaces] = useState<string[]>(() => (
     dataSource === "mock" ? mockNamespaces : []
   ));
+  const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (dataSource === "mock") {
       setNamespaces(mockNamespaces);
+      setError(null);
       setLoading(false);
       return undefined;
     }
 
     if (!workspaceCode.trim()) {
       setNamespaces([]);
+      setError(null);
       setLoading(false);
       return undefined;
     }
 
     const controller = new AbortController();
     setNamespaces([]);
+    setError(null);
     setLoading(true);
     fetchKnowledgeGraphNamespaces({
       workspaceCode,
@@ -96,11 +137,13 @@ export function useKnowledgeGraphNamespaces(workspaceCode: string) {
       .then((nextNamespaces) => {
         if (controller.signal.aborted) return;
         setNamespaces(nextNamespaces);
+        setError(null);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((nextError: unknown) => {
         if (controller.signal.aborted) return;
-        setNamespaces(mockNamespaces);
+        setNamespaces([]);
+        setError(nextError instanceof Error ? nextError : new Error("Knowledge graph namespace request failed"));
         setLoading(false);
       });
 
@@ -108,14 +151,16 @@ export function useKnowledgeGraphNamespaces(workspaceCode: string) {
   }, [dataSource, mockNamespaces, workspaceCode]);
 
   return {
+    error,
     loading,
     namespaces,
   };
 }
 
 function useApiKnowledgeGraph(filters: KnowledgeGraphExplorerFilters, enabled: boolean, refreshToken: number) {
-  const [graph, setGraph] = useState<KnowledgeGraphView>(() => getKnowledgeGraphMock());
-  const [filterOptionGraph, setFilterOptionGraph] = useState<KnowledgeGraphView>(() => getKnowledgeGraphMock());
+  const [graph, setGraph] = useState<KnowledgeGraphView>(() => emptyKnowledgeGraph(filters.workspaceCode, filters.namespace));
+  const [filterOptionGraph, setFilterOptionGraph] = useState<KnowledgeGraphView>(() => emptyKnowledgeGraph(filters.workspaceCode, filters.namespace));
+  const [error, setError] = useState<Error | null>(null);
   const [loading, setLoading] = useState(false);
   const filterKey = JSON.stringify({
     labels: filters.labels,
@@ -124,10 +169,19 @@ function useApiKnowledgeGraph(filters: KnowledgeGraphExplorerFilters, enabled: b
   const previousFilterKey = useRef<string | null>(null);
 
   useEffect(() => {
+    const emptyGraph = emptyKnowledgeGraph(filters.workspaceCode, filters.namespace);
+    setGraph(emptyGraph);
+    setFilterOptionGraph(emptyGraph);
+    setError(null);
+    setLoading(false);
+  }, [filters.namespace, filters.workspaceCode]);
+
+  useEffect(() => {
     if (!enabled) return undefined;
 
     const controller = new AbortController();
 
+    setError(null);
     setLoading(true);
     fetchKnowledgeGraphSnapshot({
       namespace: filters.namespace,
@@ -137,13 +191,15 @@ function useApiKnowledgeGraph(filters: KnowledgeGraphExplorerFilters, enabled: b
         if (controller.signal.aborted) return;
         setGraph(snapshot);
         setFilterOptionGraph(snapshot);
+        setError(null);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((nextError: unknown) => {
         if (controller.signal.aborted) return;
-        const fallbackGraph = getKnowledgeGraphMock();
-        setGraph(fallbackGraph);
-        setFilterOptionGraph(fallbackGraph);
+        const emptyGraph = emptyKnowledgeGraph(filters.workspaceCode, filters.namespace);
+        setGraph(emptyGraph);
+        setFilterOptionGraph(emptyGraph);
+        setError(nextError instanceof Error ? nextError : new Error("Knowledge graph snapshot request failed"));
         setLoading(false);
       });
 
@@ -162,16 +218,19 @@ function useApiKnowledgeGraph(filters: KnowledgeGraphExplorerFilters, enabled: b
     previousFilterKey.current = filterKey;
     const controller = new AbortController();
 
+    setError(null);
     setLoading(true);
     queryKnowledgeGraph(createQueryBody(filters), controller.signal)
       .then((result) => {
         if (controller.signal.aborted) return;
         setGraph(result);
+        setError(null);
         setLoading(false);
       })
-      .catch(() => {
+      .catch((nextError: unknown) => {
         if (controller.signal.aborted) return;
-        setGraph(getKnowledgeGraphMock());
+        setGraph(emptyKnowledgeGraph(filters.workspaceCode, filters.namespace));
+        setError(nextError instanceof Error ? nextError : new Error("Knowledge graph query request failed"));
         setLoading(false);
       });
 
@@ -179,20 +238,26 @@ function useApiKnowledgeGraph(filters: KnowledgeGraphExplorerFilters, enabled: b
   }, [enabled, filterKey, filters]);
 
   const expandNode = useCallback(async (nodeCode: string) => {
-    const result = await expandKnowledgeGraph({
-      depth: 1,
-      inheritanceMode: "WORKSPACE_LINEAGE",
-      limit: 100,
-      namespace: filters.namespace,
-      nodeCode,
-      relationships: [],
-      scopeModes: ["SPACE", "USER"],
-      workspaceCode: filters.workspaceCode,
-    });
-    setGraph((current) => mergeGraphWindow(current, result));
+    try {
+      const result = await expandKnowledgeGraph({
+        depth: 1,
+        inheritanceMode: "WORKSPACE_LINEAGE",
+        limit: 100,
+        namespace: filters.namespace,
+        nodeCode,
+        relationships: [],
+        scopeModes: ["SPACE", "USER"],
+        workspaceCode: filters.workspaceCode,
+      });
+      setGraph((current) => mergeGraphWindow(current, result));
+      setError(null);
+    } catch (nextError: unknown) {
+      setError(nextError instanceof Error ? nextError : new Error("Knowledge graph expansion request failed"));
+    }
   }, [filters.namespace, filters.workspaceCode]);
 
   return {
+    error,
     expandNode,
     filterOptionGraph,
     graph,
@@ -217,6 +282,7 @@ export function useKnowledgeGraphExplorer(
     ? apiGraph.expandNode
     : async () => undefined;
   const loading = dataSource === "api" ? apiGraph.loading : false;
+  const error = dataSource === "api" ? apiGraph.error : null;
 
   return useMemo(() => {
     const isMockMode = dataSource === "mock";
@@ -246,6 +312,7 @@ export function useKnowledgeGraphExplorer(
 
     return {
       ...graph,
+      error,
       expandNode,
       filterOptionEdges: filterOptionGraph.edges,
       filterOptionFacets: filterOptionGraph.facets,

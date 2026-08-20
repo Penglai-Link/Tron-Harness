@@ -462,6 +462,25 @@ impl ChatService {
             attachments.clone(),
             None,
         )?;
+        if should_generate_title
+            && !content.is_empty()
+            && let Some(llm_runtime) = llm_runtime
+        {
+            let chat_service = self.clone();
+            let session_code = session_code.to_string();
+            let workspace_code = workspace_code.clone();
+            let user_message_content = content.clone();
+            tokio::spawn(async move {
+                chat_service
+                    .try_generate_manual_session_title(
+                        &session_code,
+                        &workspace_code,
+                        &user_message_content,
+                        llm_runtime,
+                    )
+                    .await;
+            });
+        }
         let app_code_for_invocation = command.app_code.or(session.app_code.clone());
         let task_code_for_invocation = command.task_code.or(session.task_code.clone());
         let system_model_id_for_invocation = command.system_model_id;
@@ -506,7 +525,6 @@ impl ChatService {
                 .await
         }
         .map_err(ChatSendError::Agent)?;
-        let final_output = run.final_output.clone();
         let assistant_message = self.create_message(
             session_code,
             Some(run.run_code.clone()),
@@ -541,19 +559,6 @@ impl ChatService {
                 &updated_at,
             )
             .map_err(ChatSendError::Chat)?;
-        if should_generate_title
-            && !content.is_empty()
-            && let Some(llm_runtime) = llm_runtime
-        {
-            self.try_generate_manual_session_title(
-                session_code,
-                &workspace_code,
-                &content,
-                &final_output,
-                llm_runtime,
-            )
-            .await;
-        }
         if let Some(short_term_memory) = agent.short_term_memory() {
             let goal_messages = self
                 .run_goal_continuations(
@@ -825,6 +830,7 @@ fn chat_error_from_resource(error: ResourceError) -> ChatError {
         }
         ResourceError::InvalidCode
         | ResourceError::InvalidInput
+        | ResourceError::InvalidField { .. }
         | ResourceError::InvalidVariableReference
         | ResourceError::PathDenied
         | ResourceError::StorageLocatorInvalid => ChatError::AttachmentInvalid(error.to_string()),

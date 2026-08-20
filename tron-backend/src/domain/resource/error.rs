@@ -8,6 +8,7 @@ pub enum ResourceError {
     InvalidWorkspace,
     InvalidCode,
     InvalidInput,
+    InvalidField { field: String, reason: String },
     InvalidVariableReference,
     Conflict,
     StorageFailure,
@@ -28,6 +29,9 @@ impl fmt::Display for ResourceError {
             Self::InvalidWorkspace => "workspace is not active",
             Self::InvalidCode => "resource business code is invalid",
             Self::InvalidInput => "resource input is invalid",
+            Self::InvalidField { field, reason } => {
+                return write!(formatter, "resource field '{field}' is invalid: {reason}");
+            }
             Self::InvalidVariableReference => "resource variable reference is invalid",
             Self::Conflict => "resource state conflicts with the requested operation",
             Self::StorageFailure => "resource storage operation failed",

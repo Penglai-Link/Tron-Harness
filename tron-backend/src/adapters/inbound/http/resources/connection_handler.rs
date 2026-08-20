@@ -12,7 +12,8 @@ use super::{
     ConnectionDeleteRequest, ConnectionDeleteResponse, ConnectionPageRequest,
     ConnectionPageResponse, DataSourceCreateRequest, DataSourceUpdateRequest,
     ResourceCommitOutcomeResponse, ResourceHttpApiResponse, ServerAccountCreateRequest,
-    ServerCreateRequest, ServerCreateResponse, error_mapper::resource_error_response,
+    ServerCreateRequest, ServerCreateResponse,
+    error_mapper::{resource_error_response, resource_error_with_field},
     handler::json_body,
 };
 
@@ -38,7 +39,9 @@ pub async fn create_data_source(
             ResourceCommitOutcomeResponse::from(result),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "attributes"), &locale)
+        }
     }
 }
 
@@ -52,15 +55,21 @@ pub async fn update_data_source(
         Ok(request) => request,
         Err(response) => return response,
     };
+    let command = match request.try_into() {
+        Ok(command) => command,
+        Err(error) => return resource_error_response(error, &locale),
+    };
     match resources
-        .update_data_source_for_http(&auth.user().user_code, request.into())
+        .update_data_source_for_http(&auth.user().user_code, command)
         .await
     {
         Ok(result) => Json(ResourceHttpApiResponse::success(
             ResourceCommitOutcomeResponse::from(result),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "attributes"), &locale)
+        }
     }
 }
 
@@ -74,15 +83,21 @@ pub async fn create_server(
         Ok(request) => request,
         Err(response) => return response,
     };
+    let command = match request.try_into() {
+        Ok(command) => command,
+        Err(error) => return resource_error_response(error, &locale),
+    };
     match resources
-        .create_server_for_http(&auth.user().user_code, request.into())
+        .create_server_for_http(&auth.user().user_code, command)
         .await
     {
         Ok(result) => Json(ResourceHttpApiResponse::success(
             ServerCreateResponse::from(result),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "initialAccount"), &locale)
+        }
     }
 }
 
@@ -96,12 +111,16 @@ pub async fn create_server_account(
         Ok(request) => request,
         Err(response) => return response,
     };
-    match resources.create_server_account_for_http(&auth.user().user_code, request.into()) {
+    let command = match request.try_into() {
+        Ok(command) => command,
+        Err(error) => return resource_error_response(error, &locale),
+    };
+    match resources.create_server_account_for_http(&auth.user().user_code, command) {
         Ok(result) => Json(ResourceHttpApiResponse::success(
             ResourceCommitOutcomeResponse::from(result),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => resource_error_response(resource_error_with_field(error, "account"), &locale),
     }
 }
 
@@ -121,7 +140,9 @@ pub async fn delete_connection(
             ConnectionDeleteResponse::from(result),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => {
+            resource_error_response(resource_error_with_field(error, "resourceCode"), &locale)
+        }
     }
 }
 
@@ -144,6 +165,6 @@ pub async fn page_connections(
             ConnectionPageResponse::from(page),
         ))
         .into_response(),
-        Err(error) => resource_error_response(error, &locale),
+        Err(error) => resource_error_response(resource_error_with_field(error, "kinds"), &locale),
     }
 }

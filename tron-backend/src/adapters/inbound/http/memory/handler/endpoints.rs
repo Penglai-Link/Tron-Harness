@@ -17,7 +17,7 @@ use crate::{
         },
         workspace::WorkspaceService,
     },
-    domain::workspace::{WorkspaceAccessListQuery, WorkspaceDetail},
+    domain::workspace::WorkspaceDetail,
     response::ApiResponse,
     shared::time::timestamp_from_millis,
 };
@@ -264,4 +264,3 @@ pub async fn disable_work_domain(
         Err(error) => memory_error_response(error),
     }
 }
-

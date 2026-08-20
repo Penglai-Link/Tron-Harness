@@ -85,6 +85,7 @@ export function GraphPage() {
   const namespaceState = useKnowledgeGraphNamespaces(activeWorkspaceCode);
   const namespaceOptions = namespaceState.namespaces;
   const graph = useKnowledgeGraphExplorer(filters, selectedNodeCode, refreshTick);
+  const graphError = namespaceState.error ?? graph.error;
   const relationships = useMemo(
     () => Array.from(new Set(graph.filterOptionEdges.map((edge) => edge.relationship))).sort(),
     [graph.filterOptionEdges],
@@ -266,6 +267,14 @@ export function GraphPage() {
         className="shrink-0"
         title={pageT("title", "Knowledge Graph")}
       />
+      {graphError ? (
+        <p
+          className="mb-3 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 px-3 py-2 text-sm text-[var(--color-error)]"
+          role="alert"
+        >
+          {graphError.message}
+        </p>
+      ) : null}
 
       {graphFullscreenActive && typeof document !== "undefined" ? createPortal(
         <div className="fixed inset-0 z-[1000] bg-[var(--color-surface-container-lowest)]">

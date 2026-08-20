@@ -144,6 +144,19 @@ async fn data_source_attribute_validation_rejects_invalid_schema_values_before_v
                 "tls": { "mode": "DISABLED" }
             }),
         ),
+        (
+            "MYSQL_MISSING_TLS",
+            ResourceKind::MysqlConnection,
+            json!({
+                "connectionMode": "SINGLE",
+                "endpoints": [{ "host": "mysql.internal", "port": 3306 }],
+                "database": "app",
+                "credentials": {
+                    "username": "app",
+                    "password": "MYSQL_PASSWORD"
+                }
+            }),
+        ),
     ] {
         let result = state
             .resources
@@ -160,7 +173,13 @@ async fn data_source_attribute_validation_rejects_invalid_schema_values_before_v
                 },
             )
             .await;
-        assert_eq!(result, Err(ResourceError::InvalidInput));
+        assert!(matches!(
+            result,
+            Err(ResourceError::InvalidField { field, reason })
+                if (field == "connectionMode" && reason.contains("SINGLE"))
+                    || (field == "database" && reason.contains("non-negative"))
+                    || (field == "tls" && reason.contains("missing field"))
+        ));
     }
     assert_eq!(calls.load(Ordering::SeqCst), 0);
 }

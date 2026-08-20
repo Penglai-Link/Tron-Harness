@@ -93,6 +93,7 @@ pub(super) fn assemble_context(
         message_token_estimate: estimated_tokens,
         tool_schema_token_estimate: 0,
         budget_breakdown: Some(ContextBudgetBreakdown {
+            prompt_prefix_message_count: prompt_prefix.len(),
             prompt_prefix_tokens,
             checkpoint_tokens,
             session_family_context_tokens,

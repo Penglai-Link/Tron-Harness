@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, BTreeSet};
 
-use serde::Deserialize;
+use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::Value;
 
 use crate::{
@@ -153,11 +153,20 @@ impl ResourceService {
         attributes: &Value,
     ) -> Result<ResourceConnectionTarget, ResourceError> {
         if serde_json::to_vec(attributes)
-            .map_err(|_| ResourceError::InvalidInput)?
+            .map_err(|_| ResourceError::InvalidField {
+                field: "attributes".to_string(),
+                reason: "must be a valid JSON value".to_string(),
+            })?
             .len()
             > self.config.limits.attributes_max_bytes
         {
-            return Err(ResourceError::InvalidInput);
+            return Err(ResourceError::InvalidField {
+                field: "attributes".to_string(),
+                reason: format!(
+                    "must not exceed {} bytes",
+                    self.config.limits.attributes_max_bytes
+                ),
+            });
         }
         match kind {
             ResourceKind::MysqlConnection => {
@@ -309,8 +318,33 @@ impl ResourceService {
     }
 }
 
-fn parse<T: for<'de> Deserialize<'de>>(value: &Value) -> Result<T, ResourceError> {
-    serde_json::from_value(value.clone()).map_err(|_| ResourceError::InvalidInput)
+fn parse<T: DeserializeOwned>(value: &Value) -> Result<T, ResourceError> {
+    let encoded = serde_json::to_vec(value).map_err(|_| ResourceError::InvalidInput)?;
+    let mut deserializer = serde_json::Deserializer::from_slice(&encoded);
+    serde_path_to_error::deserialize(&mut deserializer).map_err(|error| {
+        let detail = error.inner().to_string();
+        let path = error.path().to_string();
+        let field = if path == "." || path.is_empty() {
+            serde_error_field(&detail).unwrap_or(path)
+        } else {
+            path
+        };
+        ResourceError::InvalidField {
+            field,
+            reason: detail,
+        }
+    })
+}
+
+fn serde_error_field(detail: &str) -> Option<String> {
+    ["missing field \u{0060}", "unknown field \u{0060}", "missing field '", "unknown field '"]
+        .iter()
+        .find_map(|marker| {
+            let start = detail.find(marker)? + marker.len();
+            let value = &detail[start..];
+            let end = value.find(['\u{0060}', '\''])?;
+            Some(value[..end].to_string())
+        })
 }
 
 fn endpoints(values: Vec<EndpointAttributes>) -> Vec<ConnectionEndpoint> {

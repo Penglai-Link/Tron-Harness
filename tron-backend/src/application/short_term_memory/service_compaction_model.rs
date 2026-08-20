@@ -508,8 +508,6 @@ fn compaction_usage_estimate(
         context_window_limit: model.context_window_tokens,
         effective_input_budget: Some(input.max_input_tokens),
         output_token_reserve: model.max_tokens,
-        message_count: 2,
-        part_count: 2,
         rebased: false,
         over_budget: input.compaction_input_token_estimate > input.max_input_tokens,
         checkpoint_code: input.previous_checkpoint_message_code.clone(),

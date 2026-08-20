@@ -408,7 +408,6 @@ impl ShortTermMemoryService {
             "agent.context.assembled",
             "RUNTIME",
             json!({
-                "messageCount": prepared.messages.len(),
                 "estimatedTokens": prepared.estimated_tokens,
                 "toolSchemaTokenEstimate": tool_schema_token_estimate,
                 "rebased": prepared.rebased,

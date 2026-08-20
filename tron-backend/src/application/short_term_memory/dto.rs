@@ -98,8 +98,6 @@ pub struct ModelCompactionOutput {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ModelRequestTranscriptFacts {
-    pub message_count: usize,
-    pub part_count: usize,
     pub estimated_tokens: u32,
     pub message_hashes: Vec<String>,
     pub tool_schema_token_estimate: u32,
@@ -258,6 +256,7 @@ pub struct PreparedModelContext {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextBudgetBreakdown {
+    pub prompt_prefix_message_count: usize,
     pub prompt_prefix_tokens: u32,
     pub checkpoint_tokens: u32,
     pub session_family_context_tokens: u32,

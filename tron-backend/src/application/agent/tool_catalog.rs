@@ -148,4 +148,33 @@ mod tests {
                 .is_some()
         );
     }
+
+    #[test]
+    fn data_source_tools_describe_kind_specific_nested_attributes() {
+        let create = BusinessToolCatalog::tool("resource.data_source.create", "en-US")
+            .expect("data source create tool should be catalogued");
+        let attributes = &create.input_schema["properties"]["attributes"];
+        let variants = attributes["oneOf"]
+            .as_array()
+            .expect("attributes should expose connection variants");
+        assert_eq!(variants.len(), 4);
+        assert!(variants.iter().any(|variant| {
+            variant["title"] == "MysqlConnection"
+                && variant["properties"]["credentials"]["properties"]["password"]
+                    .get("oneOf")
+                    .is_some()
+        }));
+        assert!(
+            create.input_schema["examples"][0]["attributes"]["endpoints"][0]["host"].is_string()
+        );
+
+        let update = BusinessToolCatalog::tool("resource.data_source.update", "en-US")
+            .expect("data source update tool should be catalogued");
+        assert_eq!(
+            update.input_schema["properties"]["attributes"]["oneOf"]
+                .as_array()
+                .map(Vec::len),
+            Some(4)
+        );
+    }
 }

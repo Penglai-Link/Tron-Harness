@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router";
 import {
   BookCopy,
   Database,
@@ -9,6 +10,8 @@ import {
 
 import { listKnowledgeBases } from "@/domain/knowledge-base/mock/data";
 import type { KnowledgeBaseRecord } from "@/domain/knowledge-base/model/KnowledgeBaseModel";
+import { useRagCorpora } from "@/domain/rag/hooks/useRagCorpora";
+import type { CorpusRecord } from "@/domain/rag/model/RagModel";
 import {
   DataTable,
   InspectorPanel,
@@ -25,8 +28,9 @@ import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/components/ui/button";
 import { SelectInput } from "@/shared/ui/Forms";
 import { SelectItem } from "@/components/ui/select";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-const statusFilters = ["All", "Active", "Indexing", "Draft"] as const;
+const statusFilters = ["All", "Active", "Indexing", "Draft", "Disabled", "Reserved", "Warning"] as const;
 
 function statusTone(status: KnowledgeBaseRecord["status"]) {
   switch (status) {
@@ -35,24 +39,77 @@ function statusTone(status: KnowledgeBaseRecord["status"]) {
     case "Indexing":
       return "info";
     case "Draft":
+    case "Reserved":
+    case "Warning":
       return "warning";
+    case "Disabled":
+      return "error";
     default:
       return "outline";
   }
 }
 
+function mapRagCorpusStatus(status: CorpusRecord["status"]): KnowledgeBaseRecord["status"] {
+  switch (status) {
+    case "Indexing":
+      return "Indexing";
+    case "Disabled":
+      return "Disabled";
+    case "Reserved":
+      return "Reserved";
+    case "Warning":
+      return "Warning";
+    default:
+      return "Active";
+  }
+}
+
+function mapRagCorpusToKnowledgeBase(corpus: CorpusRecord): KnowledgeBaseRecord {
+  const ingestProfile = corpus.ingestProfile.trim();
+  const retrievalProfile = corpus.retrievalProfile.trim();
+  const strategySummary = corpus.strategies.join(" + ");
+
+  return {
+    chunkProfile: ingestProfile ? `Ingest profile: ${ingestProfile}` : strategySummary || "Not configured",
+    documentCount: null,
+    embeddingFootprint: corpus.vectorCoverage > 0
+      ? `${corpus.vectorCoverage}% vector capability`
+      : "Not configured",
+    freshness: corpus.lastIndexed && corpus.lastIndexed !== "API" ? corpus.lastIndexed : "Not reported",
+    id: corpus.code,
+    name: corpus.name || corpus.code,
+    ownerWorkspace: corpus.scope === "management" ? "RAG management" : corpus.scope || "RAG management",
+    retrievalProfile: retrievalProfile || "Not configured",
+    sourceCount: null,
+    status: mapRagCorpusStatus(corpus.status),
+    syncLagMinutes: null,
+  };
+}
+
 export function KnowledgeBasePage() {
+  const navigate = useNavigate();
   const openRightSidebar = useOpenRightSidebar();
+  const dataSource = getServiceDataSource("rag");
+  const {
+    corpora,
+    error: ragError,
+    loading: ragLoading,
+    refresh: refreshCorpora,
+  } = useRagCorpora();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<(typeof statusFilters)[number]>("All");
-  const [selectedId, setSelectedId] = useState("kb-001");
+  const [selectedId, setSelectedId] = useState("");
   const [notice, setNotice] = useState("");
-  const knowledgeBases = useMemo(() => listKnowledgeBases(), []);
+  const knowledgeBases = useMemo(
+    () => dataSource === "api" ? corpora.map(mapRagCorpusToKnowledgeBase) : listKnowledgeBases(),
+    [corpora, dataSource],
+  );
   const filteredKnowledgeBases = useMemo(
     () => knowledgeBases.filter((knowledgeBase) => {
       const normalizedQuery = query.trim().toLowerCase();
       const matchesQuery = !normalizedQuery
         || knowledgeBase.name.toLowerCase().includes(normalizedQuery)
+        || knowledgeBase.id.toLowerCase().includes(normalizedQuery)
         || knowledgeBase.ownerWorkspace.toLowerCase().includes(normalizedQuery)
         || knowledgeBase.retrievalProfile.toLowerCase().includes(normalizedQuery);
       const matchesStatus = statusFilter === "All" || knowledgeBase.status === statusFilter;
@@ -61,46 +118,73 @@ export function KnowledgeBasePage() {
     [knowledgeBases, query, statusFilter],
   );
   const pagination = useTablePagination(filteredKnowledgeBases);
-  const selectedKnowledgeBase = knowledgeBases.find((knowledgeBase) => knowledgeBase.id === selectedId) ?? knowledgeBases[0];
+  const selectedKnowledgeBase = knowledgeBases.find((knowledgeBase) => knowledgeBase.id === selectedId);
   const activeCount = knowledgeBases.filter((knowledgeBase) => knowledgeBase.status === "Active").length;
-  const documentCount = knowledgeBases.reduce((total, knowledgeBase) => total + knowledgeBase.documentCount, 0);
-  const sourceCount = knowledgeBases.reduce((total, knowledgeBase) => total + knowledgeBase.sourceCount, 0);
+  const documentCount = knowledgeBases.reduce((total, knowledgeBase) => total + (knowledgeBase.documentCount ?? 0), 0);
+  const sourceCount = knowledgeBases.reduce((total, knowledgeBase) => total + (knowledgeBase.sourceCount ?? 0), 0);
+  const hasDocumentCounts = knowledgeBases.some((knowledgeBase) => knowledgeBase.documentCount !== null);
+  const hasSourceCounts = knowledgeBases.some((knowledgeBase) => knowledgeBase.sourceCount !== null);
   const indexingCount = knowledgeBases.filter((knowledgeBase) => knowledgeBase.status === "Indexing").length;
-  const rightPanel = useMemo(() => (
-    <InspectorPanel title="Selected KnowledgeBase">
-      <div>
-        <p className="text-2xl font-semibold">{selectedKnowledgeBase.name}</p>
-        <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{selectedKnowledgeBase.ownerWorkspace}</p>
-      </div>
-
-      <div className="grid gap-3 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-low)] p-4 text-sm">
-        <InspectorRow label="Retrieval Profile" value={selectedKnowledgeBase.retrievalProfile} />
-        <InspectorRow label="Chunk Profile" value={selectedKnowledgeBase.chunkProfile} />
-        <InspectorRow label="Embedding Footprint" value={selectedKnowledgeBase.embeddingFootprint} />
-        <InspectorRow
-          label="Sync Lag"
-          value={selectedKnowledgeBase.syncLagMinutes === 999 ? "Draft" : `${selectedKnowledgeBase.syncLagMinutes} min`}
-        />
-      </div>
-
-      <div>
-        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Operational Notes</p>
-        <div className="mt-3 space-y-2 text-sm text-[var(--color-on-surface-variant)]">
-          <p>Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows.</p>
-          <p>KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.</p>
+  const rightPanel = useMemo(() => {
+    if (!selectedKnowledgeBase) return null;
+    return (
+      <InspectorPanel title="Selected KnowledgeBase">
+        <div>
+          <p className="text-2xl font-semibold">{selectedKnowledgeBase.name}</p>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{selectedKnowledgeBase.ownerWorkspace}</p>
         </div>
-      </div>
 
-      <div className="mt-auto flex gap-2">
-        <Button size="lg" className="flex-1" variant="outline" onClick={() => setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`)}>
-          Review Policy
-        </Button>
-        <Button size="lg" className="flex-1" onClick={() => setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`)}>
-          Reindex Now
-        </Button>
-      </div>
-    </InspectorPanel>
-  ), [selectedKnowledgeBase]);
+        <div className="grid gap-3 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-low)] p-4 text-sm">
+          <InspectorRow label="Retrieval Profile" value={selectedKnowledgeBase.retrievalProfile} />
+          <InspectorRow label="Chunk Profile" value={selectedKnowledgeBase.chunkProfile} />
+          <InspectorRow
+            label={dataSource === "api" ? "Vector Coverage" : "Embedding Footprint"}
+            value={selectedKnowledgeBase.embeddingFootprint}
+          />
+          <InspectorRow
+            label="Sync Lag"
+            value={selectedKnowledgeBase.syncLagMinutes === null
+              ? "Not reported"
+              : selectedKnowledgeBase.syncLagMinutes === 999
+                ? "Draft"
+                : `${selectedKnowledgeBase.syncLagMinutes} min`}
+          />
+        </div>
+
+        <div>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Operational Notes</p>
+          <div className="mt-3 space-y-2 text-sm text-[var(--color-on-surface-variant)]">
+            <p>{dataSource === "api"
+              ? "This view is backed by the RAG corpus management API. Index counts and freshness metrics are shown only when the API reports them."
+              : "Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows."}</p>
+            <p>KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.</p>
+          </div>
+        </div>
+
+        <div className="mt-auto flex gap-2">
+          <Button size="lg" className="flex-1" variant="outline" onClick={() => {
+            if (dataSource === "api") {
+              navigate(`/rag/corpora/${encodeURIComponent(selectedKnowledgeBase.id)}/edit`);
+              return;
+            }
+            setNotice(`Ingestion policy opened for ${selectedKnowledgeBase.name}.`);
+          }}>
+            Review Policy
+          </Button>
+          <Button size="lg" className="flex-1" onClick={() => {
+            if (dataSource === "api") {
+              refreshCorpora();
+              setNotice(`Refreshed ${selectedKnowledgeBase.name} from the RAG API.`);
+              return;
+            }
+            setNotice(`Sync job started for ${selectedKnowledgeBase.name}.`);
+          }}>
+            {dataSource === "api" ? "Refresh" : "Reindex Now"}
+          </Button>
+        </div>
+      </InspectorPanel>
+    );
+  }, [dataSource, navigate, refreshCorpora, selectedKnowledgeBase]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -109,21 +193,44 @@ export function KnowledgeBasePage() {
     openRightSidebar();
   }
 
+  function handleRefresh() {
+    if (dataSource === "api") {
+      refreshCorpora();
+      setNotice("Knowledge bases refreshed from the RAG API.");
+      return;
+    }
+    setNotice("Knowledge base catalog refreshed.");
+  }
+
+  function handleCreate() {
+    if (dataSource === "api") {
+      navigate("/rag/corpora/new");
+      return;
+    }
+    setNotice("Create KnowledgeBase drawer opened.");
+  }
+
   return (
     <>
       <PageHeader
         title="Knowledge Base"
         actions={(
           <>
-            <Button size="lg" variant="outline" onClick={() => setNotice("Embedding sync queued for all active knowledge bases.")}>
-              Sync Embeddings
+            <Button size="lg" variant="outline" onClick={handleRefresh}>
+              {dataSource === "api" ? "Refresh" : "Sync Embeddings"}
             </Button>
-            <Button size="lg" onClick={() => setNotice("Create KnowledgeBase drawer opened.")}>
+            <Button size="lg" onClick={handleCreate}>
               New
             </Button>
           </>
         )}
       />
+
+      {dataSource === "api" && ragError ? (
+        <p className="mt-4 rounded-lg border border-[var(--color-error)]/30 bg-[var(--color-error)]/10 p-3 text-sm text-[var(--color-error)]">
+          {ragError.message}
+        </p>
+      ) : null}
 
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <MetricCard
@@ -135,20 +242,30 @@ export function KnowledgeBasePage() {
         <MetricCard
           icon={<Database size={18} aria-hidden="true" />}
           label="Indexed Documents"
-          value={documentCount.toLocaleString()}
-          trend={`${sourceCount} upstream corpora`}
+          value={hasDocumentCounts ? documentCount.toLocaleString() : "—"}
+          trend={hasSourceCounts
+            ? `${sourceCount} configured sources`
+            : dataSource === "api"
+              ? "Document counts are not reported by the RAG API"
+              : "No upstream sources reported"}
         />
         <MetricCard
           icon={<FolderSync size={18} aria-hidden="true" />}
           label="Freshness SLA"
-          value="< 20m"
-          trend="Index pipelines stay inside the retrieval freshness budget"
+          value={dataSource === "api" ? "—" : "< 20m"}
+          trend={dataSource === "api"
+            ? "Freshness metrics are not reported by the RAG API"
+            : "Index pipelines stay inside the retrieval freshness budget"}
         />
         <MetricCard
           icon={<Sparkles size={18} aria-hidden="true" />}
           label="Default Retrieval"
-          value="Hybrid"
-          trend="Vector search plus lexical reranking for traditional RAG"
+          value={dataSource === "api"
+            ? knowledgeBases.some((knowledgeBase) => knowledgeBase.retrievalProfile !== "Not configured") ? "Configured" : "—"
+            : "Hybrid"}
+          trend={dataSource === "api"
+            ? "Configured retrieval profiles from the RAG API"
+            : "Vector search plus lexical reranking for traditional RAG"}
         />
       </div>
 
@@ -190,7 +307,7 @@ export function KnowledgeBasePage() {
             rowKey={(knowledgeBase) => knowledgeBase.id}
             onRowClick={selectKnowledgeBase}
             rowClassName={(knowledgeBase) => (
-              knowledgeBase.id === selectedKnowledgeBase.id ? "bg-[var(--color-surface-container-low)]" : undefined
+              knowledgeBase.id === selectedKnowledgeBase?.id ? "bg-[var(--color-surface-container-low)]" : undefined
             )}
             toolbar={(
               <span className="text-[13px] text-[var(--color-on-surface-variant)]">
@@ -213,8 +330,10 @@ export function KnowledgeBasePage() {
                 header: "Corpus",
                 render: (knowledgeBase) => (
                   <div>
-                    <p>{knowledgeBase.documentCount.toLocaleString()} docs</p>
-                    <p className="text-[13px] text-[var(--color-on-surface-variant)]">{knowledgeBase.sourceCount} sources</p>
+                    <p>{knowledgeBase.documentCount === null ? "—" : knowledgeBase.documentCount.toLocaleString()} docs</p>
+                    <p className="text-[13px] text-[var(--color-on-surface-variant)]">
+                      {knowledgeBase.sourceCount === null ? "—" : knowledgeBase.sourceCount} sources
+                    </p>
                   </div>
                 ),
               },
@@ -239,6 +358,11 @@ export function KnowledgeBasePage() {
                 render: (knowledgeBase) => <Badge tone={statusTone(knowledgeBase.status)}>{knowledgeBase.status}</Badge>,
               },
             ]}
+            emptyState={ragLoading
+              ? "Loading corpora from the RAG API..."
+              : ragError
+                ? "RAG corpora could not be loaded."
+                : "No knowledge bases match the current filters."}
             pagination={<TablePagination itemLabel="knowledge bases" {...pagination.paginationProps} />}
           />
         </SurfaceCard>

@@ -49,8 +49,6 @@ pub struct TokenEstimateSnapshot {
     pub context_window_limit: Option<u32>,
     pub effective_input_budget: Option<u32>,
     pub output_token_reserve: Option<u32>,
-    pub message_count: u32,
-    pub part_count: u32,
     pub rebased: bool,
     pub over_budget: bool,
     pub compaction_trigger_reached: bool,

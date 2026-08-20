@@ -29,7 +29,10 @@ SKILL_VALIDATOR ?= $(subst \,/,$(USERPROFILE))/.codex/skills/.system/skill-creat
 # variable remains overridable (including with an empty value) for other
 # networks.
 ELECTRON_MIRROR ?= https://registry.npmmirror.com/-/binary/electron/
-DEFAULT_GRAPH_STORAGE_PATH := $(subst \,/,$(TEMP))/tron-api-$(if $(strip $(PORT)),$(PORT),8080).graph.grafeo
+# Keep local development pointed at the same persistent graph store as the
+# backend runtime defaults.  Pass an explicit GRAPH_STORAGE_PATH to isolate a
+# development instance when needed.
+DEFAULT_GRAPH_STORAGE_PATH := $(subst \,/,$(if $(strip $(USERPROFILE)),$(USERPROFILE),$(if $(strip $(HOME)),$(HOME),~)))/.tron/tron.graph.grafeo
 TRON_SCRATCH_GLOB := $(TEMP)\tron*
 
 WIN_PATH = $(subst /,\,$(1))
@@ -88,7 +91,10 @@ NPM := npm
 CARGO := cargo
 PYTHON ?= python3
 SKILL_VALIDATOR ?= /home/baiyihuan/.codex/skills/.system/skill-creator/scripts/quick_validate.py
-DEFAULT_GRAPH_STORAGE_PATH := /tmp/tron-api-$(if $(strip $(PORT)),$(PORT),8080).graph.grafeo
+# Keep local development pointed at the same persistent graph store as the
+# backend runtime defaults.  Pass an explicit GRAPH_STORAGE_PATH to isolate a
+# development instance when needed.
+DEFAULT_GRAPH_STORAGE_PATH := $(if $(strip $(HOME)),$(HOME),~)/.tron/tron.graph.grafeo
 TRON_SCRATCH_GLOB := /tmp/tron*
 
 define REMOVE

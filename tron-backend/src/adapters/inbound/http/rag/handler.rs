@@ -13,7 +13,6 @@ use crate::{
         RagCorpusManagementInput, RagFilterValidateInput, RagProfileManagementInput,
     },
     application::workspace::WorkspaceService,
-    domain::workspace::WorkspaceAccessListQuery,
     response::ApiResponse,
 };
 
@@ -348,15 +347,8 @@ fn user_has_workspace_access(
     user_code: &str,
 ) -> bool {
     workspaces
-        .list_effective_users(
-            workspace_code,
-            WorkspaceAccessListQuery {
-                current: Some(1),
-                size: Some(1),
-                search: Some(user_code.to_string()),
-            },
-        )
-        .is_ok_and(|page| page.records.iter().any(|user| user.user_code == user_code))
+        .user_has_effective_access(workspace_code, user_code)
+        .unwrap_or(false)
 }
 
 fn has_required_request_fields(request: &crate::application::rag::RagIngestRequest) -> bool {
