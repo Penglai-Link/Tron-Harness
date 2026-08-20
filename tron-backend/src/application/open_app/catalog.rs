@@ -126,6 +126,26 @@ const OPEN_API_ROUTE_DEFINITIONS: &[OpenApiRouteDefinition] = &[
         operation_description: "Consume streaming chat responses.",
     },
     OpenApiRouteDefinition {
+        method: "POST",
+        path_template: "/open-api/v1/chats/sessions/{sessionCode}/attachments",
+        capability_code: OPEN_API_CAPABILITY_AGENT_CHAT,
+        capability_name: "Agent Chat OpenAPI",
+        capability_description: "External session and message access for agent chat.",
+        operation_code: "attachment.write",
+        operation_name: "Write Attachments",
+        operation_description: "Upload a private attachment to an agent chat session.",
+    },
+    OpenApiRouteDefinition {
+        method: "GET",
+        path_template: "/open-api/v1/chats/sessions/{sessionCode}/attachments/{attachmentCode}",
+        capability_code: OPEN_API_CAPABILITY_AGENT_CHAT,
+        capability_name: "Agent Chat OpenAPI",
+        capability_description: "External session and message access for agent chat.",
+        operation_code: "attachment.read",
+        operation_name: "Read Attachments",
+        operation_description: "Download a private attachment from an agent chat session.",
+    },
+    OpenApiRouteDefinition {
         method: "GET",
         path_template: "/open-api/v1/agents/agui/streams/{streamKey}/events",
         capability_code: OPEN_API_CAPABILITY_AGENT_CHAT,
@@ -312,6 +332,22 @@ mod tests {
                 .iter()
                 .any(|route| { route == "GET /open-api/v1/chats/sessions/get-active-run" })
         );
+        let attachment_read = agent_chat
+            .operations
+            .iter()
+            .find(|operation| operation.operation_code == "attachment.read")
+            .expect("attachment.read should be catalogued");
+        assert!(attachment_read.routes.iter().any(|route| {
+            route == "GET /open-api/v1/chats/sessions/{sessionCode}/attachments/{attachmentCode}"
+        }));
+        let attachment_write = agent_chat
+            .operations
+            .iter()
+            .find(|operation| operation.operation_code == "attachment.write")
+            .expect("attachment.write should be catalogued");
+        assert!(attachment_write.routes.iter().any(|route| {
+            route == "POST /open-api/v1/chats/sessions/{sessionCode}/attachments"
+        }));
         let message_write = agent_chat
             .operations
             .iter()

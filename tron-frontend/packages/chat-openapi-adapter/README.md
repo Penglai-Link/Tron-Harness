@@ -66,3 +66,5 @@ export default function App() {
 - **`supportsAgui`**: `true` (支持获取 AG-UI 事件)
 - **`supportsProtocolReplay`**: `true` (支持协议回放)
 - **`supportsStreaming`**: `true` (支持流式响应)
+
+该适配器同时支持会话私有附件的上传与下载，附件请求使用与其他 Open API 请求相同的 HMAC 签名机制。

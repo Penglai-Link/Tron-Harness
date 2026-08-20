@@ -212,6 +212,65 @@ describe("createOpenApiChatAdapter", () => {
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("signs multipart attachment uploads and attachment downloads", async () => {
+    const attachment = {
+      byteSize: 7,
+      contentType: "text/plain",
+      fileName: "report.txt",
+      id: "ATTACHMENT-1",
+      kind: "file" as const,
+      metadata: {},
+      resourceCode: "RESOURCE-ATTACHMENT-1",
+      summary: "report",
+    };
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope(attachment)), {
+        headers: { "Content-Type": "application/json" },
+        status: 201,
+      }))
+      .mockResolvedValueOnce(new Response(new Blob(["payload"], { type: "text/plain" }), {
+        headers: { "Content-Type": "text/plain" },
+        status: 200,
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createOpenApiChatAdapter({
+      appKey: "secret-key-123",
+      baseUrl: "https://openapi.example.com",
+      nonceFactory: () => "attachmentnonce",
+      openAppCode: "OPENAPP-TEST-0001",
+      timestampFactory: () => 1718100004,
+      userCode: "USR-0001",
+    });
+
+    await expect(adapter.uploadAttachment?.(sessionFixture(), {
+      file: new File(["payload"], "report.txt", { type: "text/plain" }),
+      kind: "file",
+      metadata: { source: "test" },
+      summary: "report",
+    })).resolves.toEqual(attachment);
+    const downloaded = await adapter.downloadAttachment?.(sessionFixture(), attachment);
+    expect(downloaded).toBeInstanceOf(Blob);
+    await expect(downloaded?.text()).resolves.toBe("payload");
+
+    const [uploadUrl, uploadInit] = fetchMock.mock.calls[0] ?? [];
+    expect(uploadUrl).toBe("https://openapi.example.com/open-api/v1/chats/sessions/SESSION-1/attachments");
+    expect(uploadInit?.method).toBe("POST");
+    expect(new Headers(uploadInit?.headers).get("Content-Type")).toMatch(
+      /^multipart\/form-data; boundary=\S+$/,
+    );
+    expect(new Headers(uploadInit?.headers).get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+    expect(await (uploadInit?.body as Blob).text()).toContain('filename="report.txt"');
+    expect(await (uploadInit?.body as Blob).text()).toContain("payload");
+
+    const [downloadUrl, downloadInit] = fetchMock.mock.calls[1] ?? [];
+    expect(downloadUrl).toBe(
+      "https://openapi.example.com/open-api/v1/chats/sessions/SESSION-1/attachments/RESOURCE-ATTACHMENT-1",
+    );
+    expect(downloadInit?.method).toBe("GET");
+    expect(new Headers(downloadInit?.headers).get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+  });
+
   it("signs steer requests with protected turn identifiers and the abort signal", async () => {
     const fetchMock = vi.fn(async () => new Response(
       JSON.stringify(successEnvelope(steerResultFixture())),

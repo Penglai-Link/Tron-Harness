@@ -1,4 +1,5 @@
 import {
+  buildApiUrl,
   buildOpenApiSignedHeaders,
   createFetchTransport,
   FetchTransportError,
@@ -11,9 +12,11 @@ import {
   type BodyInitLike,
   type ChatAdapter,
   type ChatActiveRunResult,
+  type ChatAttachmentUploadInput,
   type ChatAguiEvent,
   type ChatAguiStreamEvent,
   type ChatMessage,
+  type ChatMessageAttachment,
   type ChatClientConfig,
   type ChatSendResult,
   type ChatSession,
@@ -21,6 +24,8 @@ import {
   type ChatStopResult,
   type CreateChatSessionInput,
   type SendChatMessageInput,
+  randomHex,
+  unwrapEnvelope,
 } from "@tron/chat-core";
 
 interface OpenApiAdapterOptions extends Pick<ChatClientConfig, "appKey" | "baseUrl" | "openAppCode" | "userCode" | "userId"> {
@@ -61,6 +66,83 @@ async function openApiHeaders(
   });
 }
 
+function attachmentCode(attachment: ChatMessageAttachment) {
+  return attachment.resourceCode?.trim() || attachment.id.trim();
+}
+
+function escapeMultipartHeader(value: string) {
+  return value.replace(/[\\"\r\n]/g, "_");
+}
+
+async function buildAttachmentMultipart(input: ChatAttachmentUploadInput) {
+  const boundary = `----TronChatAttachment${randomHex(24)}`;
+  const chunks: BlobPart[] = [];
+  const appendField = (name: string, value: string) => {
+    chunks.push(
+      `--${boundary}\r\nContent-Disposition: form-data; name="${name}"\r\n\r\n${value}\r\n`,
+    );
+  };
+
+  if (input.kind) appendField("kind", input.kind);
+  if (input.summary?.trim()) appendField("summary", input.summary.trim());
+  if (input.metadata && Object.keys(input.metadata).length) {
+    appendField("metadata", JSON.stringify(input.metadata));
+  }
+  chunks.push(
+    `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${escapeMultipartHeader(input.file.name)}"\r\nContent-Type: ${input.file.type || "application/octet-stream"}\r\n\r\n`,
+    input.file,
+    "\r\n",
+    `--${boundary}--\r\n`,
+  );
+
+  return new Blob(chunks, { type: `multipart/form-data; boundary=${boundary}` });
+}
+
+async function openApiAttachmentRequest(
+  options: OpenApiAdapterOptions,
+  request: {
+    body?: BodyInitLike;
+    contentType?: string;
+    method: string;
+    path: string;
+    signal?: AbortSignal;
+  },
+) {
+  const url = buildApiUrl(options.baseUrl, request.path);
+  const parsedUrl = new URL(url, typeof window === "undefined" ? "http://localhost" : window.location.origin);
+  const headers = new Headers(await openApiHeaders(options, {
+    body: request.body,
+    method: request.method,
+    path: parsedUrl.pathname,
+    rawQuery: parsedUrl.search.startsWith("?") ? parsedUrl.search.slice(1) : parsedUrl.search,
+    signal: request.signal,
+    url,
+  }));
+  if (request.contentType) headers.set("Content-Type", request.contentType);
+
+  const response = await fetch(url, {
+    body: request.body instanceof Blob ? request.body : undefined,
+    credentials: options.credentials ?? "omit",
+    headers,
+    method: request.method,
+    signal: request.signal,
+  });
+  if (response.status < 200 || response.status >= 300) {
+    const payload = await response.json().catch(() => null) as Record<string, unknown> | null;
+    throw new FetchTransportError(
+      typeof payload?.message === "string"
+        ? payload.message
+        : `${request.method} ${response.url} failed with ${response.status}`,
+      {
+        code: typeof payload?.code === "string" ? payload.code : undefined,
+        data: payload?.data,
+        status: response.status,
+      },
+    );
+  }
+  return response;
+}
+
 export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): ChatAdapter {
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
@@ -90,6 +172,21 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
         method: "POST",
         path: "/open-api/v1/chats/sessions",
       }).then(normalizeChatSession);
+    },
+    async downloadAttachment(session, attachment, signal) {
+      const code = attachmentCode(attachment);
+      if (!code) {
+        throw new FetchTransportError("Chat attachment reference is missing", {
+          code: "CHAT_ATTACHMENT_INVALID",
+          status: 400,
+        });
+      }
+      const response = await openApiAttachmentRequest(options, {
+        method: "GET",
+        path: `/open-api/v1/chats/sessions/${encodeURIComponent(session.sessionCode)}/attachments/${encodeURIComponent(code)}`,
+        signal,
+      });
+      return response.blob();
     },
     getActiveRun(sessionCode, signal) {
       return transport.requestJson<ChatActiveRunResult>({
@@ -145,6 +242,17 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
         path: "/open-api/v1/chats/sessions/stop-run",
         signal,
       });
+    },
+    async uploadAttachment(session, input, signal) {
+      const body = await buildAttachmentMultipart(input);
+      const response = await openApiAttachmentRequest(options, {
+        body,
+        contentType: body.type,
+        method: "POST",
+        path: `/open-api/v1/chats/sessions/${encodeURIComponent(session.sessionCode)}/attachments`,
+        signal,
+      });
+      return unwrapEnvelope<ChatMessageAttachment>(await response.json());
     },
     streamMessage(session: ChatSession, input: SendChatMessageInput, handlers, signal) {
       return transport.streamSse<ChatSendResult>({

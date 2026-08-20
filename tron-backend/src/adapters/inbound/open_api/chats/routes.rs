@@ -9,6 +9,9 @@ use super::handler::{
     create_session, list_agui_stream_events, list_agui_stream_protocol_events, list_messages,
     list_session_groups, patch_session, send_message, steer_message, stream_message,
 };
+use crate::adapters::inbound::http::chats::handler::{
+    chat_attachment_body_limit, download_session_attachment, upload_session_attachment,
+};
 use super::run_control::{get_active_run, stop_run};
 
 pub fn routes() -> Router<AppState> {
@@ -38,6 +41,14 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/open-api/v1/chats/sessions/{session_code}/messages/stream",
             post(stream_message),
+        )
+        .route(
+            "/open-api/v1/chats/sessions/{session_code}/attachments",
+            post(upload_session_attachment).layer(chat_attachment_body_limit()),
+        )
+        .route(
+            "/open-api/v1/chats/sessions/{session_code}/attachments/{attachment_code}",
+            get(download_session_attachment),
         )
         .route(
             "/open-api/v1/agents/agui/streams/{stream_key}/events",
