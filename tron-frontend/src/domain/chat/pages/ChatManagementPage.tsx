@@ -28,7 +28,6 @@ import {
   Hammer,
   ListTodo,
   LoaderCircle,
-  MessageCircleMore,
   MessageSquareText,
   Pause,
   Pencil,
@@ -158,7 +157,6 @@ import {
 } from "../api/chatAttachmentApi";
 import DraggleLine from "@/shared/ui/DraggleLine";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -273,35 +271,86 @@ function isChatManagementPathname(pathname: string) {
 
 function ChatAttachmentChip({
   attachment,
+  downloadAttachment,
   onRemove,
 }: {
   attachment: ChatMessageAttachment;
+  downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   onRemove: () => void;
 }) {
-  const label = attachment.kind === "inspection"
-    ? "注释"
-    : (attachment.fileName || attachment.title || "附件");
+  const label = attachment.fileName || attachment.title || attachment.summary || attachment.id;
+  const contentType = attachment.contentType?.toLowerCase();
+  const isImage = attachment.kind === "image"
+    || Boolean(attachment.imageUrl)
+    || contentType?.startsWith("image/");
+  const [imageSource, setImageSource] = useState<string | null>(attachment.imageUrl ?? null);
+
+  useEffect(() => {
+    if (!isImage || attachment.imageUrl || !downloadAttachment) {
+      setImageSource(attachment.imageUrl ?? null);
+      return;
+    }
+    let active = true;
+    let objectUrl: string | null = null;
+    void downloadAttachment(attachment)
+      .then((blob) => {
+        const nextObjectUrl = URL.createObjectURL(blob);
+        if (!active) {
+          URL.revokeObjectURL(nextObjectUrl);
+          return;
+        }
+        objectUrl = nextObjectUrl;
+        setImageSource(nextObjectUrl);
+      })
+      .catch(() => {
+        if (active) setImageSource(null);
+      });
+    return () => {
+      active = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [attachment, downloadAttachment, isImage]);
+
+  if (isImage) {
+    return (
+      <div className="group relative h-16 w-20 overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)]">
+        {imageSource ? (
+          <img alt={label} className="h-full w-full object-cover" src={imageSource} />
+        ) : null}
+        <Button
+          aria-label={`Remove ${label}`}
+          size="icon"
+          variant="outline"
+          className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
+          onClick={onRemove}
+        >
+          <X size={14} />
+        </Button>
+      </div>
+    );
+  }
+
+  const fileName = attachment.fileName || attachment.title || label;
+  const extension = fileName.includes(".") ? fileName.split(".").pop() : undefined;
+  const typeLabel = (extension || contentType?.split("/").pop() || "FILE").toUpperCase();
   return (
-    <div className="group relative">
-      <Button variant="outline" size="sm" className="hover:bg-background!">
-        {attachment.kind === "inspection" ? <MessageCircleMore /> : <Paperclip />}
-        <p className="max-w-40 truncate text-sm">{label}</p>
+    <div className="relative flex h-16 w-[min(280px,100%)] min-w-0 items-center gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] px-2.5 py-2 pr-10">
+      <span className="flex size-11 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
+        <Paperclip aria-hidden="true" size={20} />
+      </span>
+      <span className="flex min-w-0 flex-col gap-0.5 text-left">
+        <span className="truncate text-sm font-semibold text-[var(--color-on-surface)]" title={label}>{label}</span>
+        <span className="truncate text-xs text-[var(--color-on-surface-variant)]">{typeLabel}</span>
+      </span>
+      <Button
+        aria-label={`Remove ${label}`}
+        size="icon"
+        variant="outline"
+        className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
+        onClick={onRemove}
+      >
+        <X size={14} />
       </Button>
-      <Button variant="outline" onClick={onRemove} size="sm" className="absolute right-[2px] top-[2px] hidden h-6 w-6 cursor-pointer rounded-full group-hover:flex"><X size={14} /></Button>
-      <Card size="sm" className="pointer-events-none absolute hidden bottom-[calc(100%+0.5rem)] left-0 z-20 group-hover:block --card-spacing:--spacing(4)">
-        <CardContent className="space-x-1 flex item-center">
-          <div className="w-6 h-6 rounded-sm overflow-hidden flex-none">
-            {attachment.imageUrl ? (
-              <img
-                alt="Inspection attachment preview"
-                className="object-cover w-full h-full"
-                src={attachment.imageUrl}
-              />
-            ) : null}
-          </div>
-          <p className="max-w-40 truncate whitespace-nowrap text-[var(--color-on-surface)]">{attachment.summary}</p>
-        </CardContent>
-      </Card>
     </div>
   );
 }
@@ -4840,21 +4889,29 @@ export function ChatManagementPage() {
     debugEventTypes: resolveAguiDebugEventTypes(aguiDebugPreferences),
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
   }), [aguiDebugPreferences, aguiWorkReplayPreferences.recentTurnLimit]);
+  const downloadPendingAttachment = useCallback(
+    (attachment: ChatMessageAttachment) => {
+      if (!activeSession) return Promise.reject(new Error("No active chat session"));
+      return downloadChatSessionAttachment(activeSession, attachment).then((response) => response.blob);
+    },
+    [activeSession],
+  );
+  const transcriptAttachmentHeader = pendingAttachments.length ? (
+    <div className="flex max-w-full flex-wrap gap-2">
+      {pendingAttachments.map((attachment) => (
+        <ChatAttachmentChip
+          attachment={attachment}
+          downloadAttachment={downloadPendingAttachment}
+          key={attachment.id}
+          onRemove={() => {
+            setPendingAttachments((current) => current.filter((item) => item.id !== attachment.id));
+          }}
+        />
+      ))}
+    </div>
+  ) : null;
   const transcriptFooterAddon = useMemo(() => (
     <div className="flex w-full min-w-0 max-w-full flex-col items-start gap-2">
-      {pendingAttachments.length ? (
-        <div className="flex max-w-full flex-wrap gap-2">
-          {pendingAttachments.map((attachment) => (
-            <ChatAttachmentChip
-              attachment={attachment}
-              key={attachment.id}
-              onRemove={() => {
-                setPendingAttachments((current) => current.filter((item) => item.id !== attachment.id));
-              }}
-            />
-          ))}
-        </div>
-      ) : null}
       <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1">
         <input
           className="hidden"
@@ -4954,7 +5011,6 @@ export function ChatManagementPage() {
     selectedReasoningEffortLabel,
     selectedReasoningEffortOptions,
     t,
-    pendingAttachments,
   ]);
   const formatAnnotationCount = useCallback(
     (count: number) => t("chat.attachments.annotationCount", { count }),
@@ -6147,6 +6203,7 @@ export function ChatManagementPage() {
             : undefined}
           autoFocusComposer={shouldAutoFocusChatComposer()}
           composerRef={composerRef}
+          composerHeader={transcriptAttachmentHeader}
           createSessionLabel="Create session"
           currentUserDisplayName={currentUserDisplayName}
           debugOptions={transcriptDebugOptions}
