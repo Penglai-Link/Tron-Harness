@@ -66,7 +66,7 @@ function ToolbarField({ children, className, hint, label }: ToolbarFieldProps) {
 
   return (
     <div className={`flex min-w-0 flex-col items-stretch gap-2 ${className}`}>
-      <div className="inline-flex self-start items-center gap-2 font-medium text-base/4.5 text-foreground sm:text-sm/4">
+      <div className="inline-flex self-start items-center gap-2 whitespace-nowrap font-medium text-base/4.5 text-foreground sm:text-sm/4">
         <span>{label}</span>
         <InfoTooltip ariaLabel={t("pages:knowledgeGraph.toolbar.fieldHelpAria", {
           defaultValue: "{{label}} field help",
@@ -207,9 +207,9 @@ export function GraphToolbar({
   return (
     <div className="relative z-30 space-y-3 overflow-visible border-b border-[var(--color-outline-variant)] p-3">
       <div className="overflow-visible pb-1">
-        <div className="flex min-w-[1180px] items-end gap-2">
+        <div className="grid min-w-0 grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-[minmax(0,420px)_minmax(0,1fr)_minmax(0,1fr)]">
           <ToolbarField
-            className="w-[420px] shrink-0"
+            className="w-full min-w-0 sm:col-span-2 lg:col-span-1 lg:w-[420px]"
             label={pageT("toolbar.locate.label", "Locate node")}
             hint={pageT("toolbar.locate.hint", "Type a node code or title, then choose a match to select and center it on the canvas.")}
           >
@@ -270,7 +270,7 @@ export function GraphToolbar({
             </div>
           </ToolbarField>
           <ToolbarField
-            className="w-[160px] shrink-0"
+            className="w-full min-w-0"
             label={pageT("toolbar.namespace.label", "Namespace")}
             hint={pageT("toolbar.namespace.hint", "Choose which graph namespace to browse.")}
           >
@@ -287,7 +287,7 @@ export function GraphToolbar({
             </SelectInput>
           </ToolbarField>
           <ToolbarField
-            className="w-[160px] shrink-0"
+            className="w-full min-w-0"
             label={pageT("toolbar.displayField.label", "Display field")}
             hint={pageT("toolbar.displayField.hint", "Choose the node property shown beside enlarged graph nodes.")}
           >
@@ -303,15 +303,15 @@ export function GraphToolbar({
               ))}
             </SelectInput>
           </ToolbarField>
-          <div className="flex shrink-0 items-end gap-2">
+          <div className="flex min-w-0 items-end gap-1 sm:col-span-2 sm:gap-2 lg:col-span-3">
             <ToolbarField
-              className="w-[148px]"
+              className="min-w-0 flex-1 sm:w-[220px] sm:flex-none lg:w-[148px]"
               label={pageT("toolbar.layout.label", "Layout")}
               hint={pageT("toolbar.layout.hint", "Choose how nodes are arranged on the graph canvas.")}
             >
               <SelectInput
                 aria-label={pageT("toolbar.layout.aria", "Graph layout")}
-                className="w-full"
+                className="w-full min-w-0"
                 value={layoutMode}
                 onValueChange={(event) => onLayoutModeChange((event ?? "Radial") as GraphLayoutMode)}
               >
@@ -321,7 +321,7 @@ export function GraphToolbar({
               </SelectInput>
             </ToolbarField>
             <Button
-              className="h-9 px-3"
+              className="h-9 shrink-0 px-2 sm:px-3"
               size="sm"
               variant={filtersOpen || activeFilterCount ? "secondary" : "ghost"}
               type="button"
@@ -330,44 +330,44 @@ export function GraphToolbar({
               onClick={() => setFiltersOpen((current) => !current)}
             >
               <SlidersHorizontal size={15} aria-hidden="true" />
-              {pageT("toolbar.filters.label", "Filters")}
+              <span className="hidden sm:inline">{pageT("toolbar.filters.label", "Filters")}</span>
               {activeFilterCount ? (
                 <span className="rounded-full bg-[var(--color-primary)] px-1.5 font-mono text-[10px] text-[var(--color-on-primary)]">
                   {activeFilterCount}
                 </span>
               ) : null}
             </Button>
-          </div>
-          <div className="ml-auto flex shrink-0 items-center gap-2">
-            <Button className="size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>
-              <Plus size={16} aria-hidden="true" />
-            </Button>
-            <Button className="size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomOut", "Zoom out")} title={pageT("toolbar.zoomOut", "Zoom out")} onClick={() => onZoomChange(-10)}>
-              <Minus size={16} aria-hidden="true" />
-            </Button>
-            <Button
-              className="size-9"
-              size="icon"
-              variant={fullscreenActive ? "secondary" : "ghost"}
-              type="button"
-              aria-label={fullscreenActive ? pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen") : pageT("toolbar.fullscreen.openAria", "Open graph fullscreen")}
-              title={fullscreenActive ? pageT("toolbar.fullscreen.exit", "Exit fullscreen") : pageT("toolbar.fullscreen.open", "Fullscreen")}
-              onClick={onToggleFullscreen}
-            >
-              {fullscreenActive ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
-            </Button>
-            <Button
-              className="size-9"
-              size="icon"
-              variant="ghost"
-              type="button"
-              aria-label={pageT("actions.refresh", "Refresh graph")}
-              title={pageT("actions.refresh", "Refresh graph")}
-              disabled={!namespace || refreshing}
-              onClick={onRefresh}
-            >
-              <RefreshCw className={refreshing ? "animate-spin" : undefined} size={16} aria-hidden="true" />
-            </Button>
+            <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+              <Button className="size-8 sm:size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>
+                <Plus size={16} aria-hidden="true" />
+              </Button>
+              <Button className="size-8 sm:size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomOut", "Zoom out")} title={pageT("toolbar.zoomOut", "Zoom out")} onClick={() => onZoomChange(-10)}>
+                <Minus size={16} aria-hidden="true" />
+              </Button>
+              <Button
+                className="size-8 sm:size-9"
+                size="icon"
+                variant={fullscreenActive ? "secondary" : "ghost"}
+                type="button"
+                aria-label={fullscreenActive ? pageT("toolbar.fullscreen.exitAria", "Exit graph fullscreen") : pageT("toolbar.fullscreen.openAria", "Open graph fullscreen")}
+                title={fullscreenActive ? pageT("toolbar.fullscreen.exit", "Exit fullscreen") : pageT("toolbar.fullscreen.open", "Fullscreen")}
+                onClick={onToggleFullscreen}
+              >
+                {fullscreenActive ? <Minimize2 size={16} aria-hidden="true" /> : <Maximize2 size={16} aria-hidden="true" />}
+              </Button>
+              <Button
+                className="size-8 sm:size-9"
+                size="icon"
+                variant="ghost"
+                type="button"
+                aria-label={pageT("actions.refresh", "Refresh graph")}
+                title={pageT("actions.refresh", "Refresh graph")}
+                disabled={!namespace || refreshing}
+                onClick={onRefresh}
+              >
+                <RefreshCw className={refreshing ? "animate-spin" : undefined} size={16} aria-hidden="true" />
+              </Button>
+            </div>
           </div>
         </div>
       </div>

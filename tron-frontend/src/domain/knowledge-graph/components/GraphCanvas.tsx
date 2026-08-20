@@ -991,6 +991,17 @@ function centerGraphAt(graph: Graph, point: ViewportPoint, duration: number) {
   ], duration ? { duration } : false);
 }
 
+function graphViewportCenter(graph: Graph): Point {
+  const [width, height] = graph.getSize();
+  return [width / 2, height / 2];
+}
+
+function viewportPointFromEvent(event: IElementEvent): Point | undefined {
+  const viewport = (event as IElementEvent & { viewport?: { x?: number; y?: number } }).viewport;
+  if (typeof viewport?.x !== "number" || typeof viewport.y !== "number") return undefined;
+  return [viewport.x, viewport.y];
+}
+
 async function centerGraphNode(graph: Graph, nodeCode: string, duration: number) {
   const [width, height] = graph.getSize();
   if (!width || !height) return;
@@ -1272,9 +1283,12 @@ export function GraphCanvas({
       onClearSelectionRef.current();
     };
 
-    const handleCanvasDoubleClick = () => {
+    const handleCanvasDoubleClick = (event: IElementEvent) => {
       void trackGraphTask(graph, async () => {
-        await graph.zoomBy(1.28, { duration: 220 });
+        // Canvas interactions zoom around the pointer. Toolbar buttons use the
+        // explicit viewport center below, so the two interaction modes remain
+        // predictable and do not unexpectedly move the graph under the cursor.
+        await graph.zoomBy(1.28, { duration: 220 }, viewportPointFromEvent(event) ?? graphViewportCenter(graph));
         if (active) scheduleSyncViewportState(graph);
       });
     };
@@ -1363,7 +1377,10 @@ export function GraphCanvas({
     suppressZoomReportRef.current = true;
     void trackGraphTask(graph, async () => {
       try {
-        await graph.zoomTo(targetScale, { duration: 180 });
+        // This effect is driven by the toolbar's +/- controls. Unlike pointer
+        // interactions, toolbar zoom is intentionally anchored at the canvas
+        // center.
+        await graph.zoomTo(targetScale, { duration: 180 }, graphViewportCenter(graph));
       } finally {
         suppressZoomReportRef.current = false;
         if (graphRef.current === graph) {
