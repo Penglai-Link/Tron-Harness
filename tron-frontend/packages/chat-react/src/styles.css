@@ -596,7 +596,7 @@
 .tron-chat__inspection-attachments {
   display: flex;
   max-width: 100%;
-  align-items: center;
+  align-items: flex-end;
   flex-direction: column;
   gap: 8px;
 }

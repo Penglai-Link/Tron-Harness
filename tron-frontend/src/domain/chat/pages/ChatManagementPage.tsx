@@ -313,7 +313,7 @@ function ChatAttachmentChip({
 
   if (isImage) {
     return (
-      <div className="group relative h-16 w-20 overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)]">
+      <div className="group relative h-16 w-16 overflow-hidden rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)]">
         {imageSource ? (
           <img alt={label} className="h-full w-full object-cover" src={imageSource} />
         ) : null}
