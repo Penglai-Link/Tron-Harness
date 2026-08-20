@@ -1,10 +1,8 @@
-import {
-  useMemo,
-  useState,
-} from "react";
+import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
+  MoreHorizontal,
   Pencil,
   Plus,
   RefreshCcw,
@@ -15,6 +13,12 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
+  DataTable as TanStackDataTable,
+  TablePagination as TanStackTablePagination,
+  type TableColumnDef,
+  useServerTable,
+} from "@/components/table";
+import {
   Dialog,
   DialogContent,
   DialogFooter,
@@ -23,14 +27,6 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
 import { toastManager } from "@/components/ui/toast";
 import {
   DataSourceCreateDialog,
@@ -39,13 +35,27 @@ import {
 } from "@/domain/resource/components";
 import { deleteConnection } from "@/domain/resource/api";
 import { deleteMockResource } from "@/domain/resource/mock";
-import type { ResourceKind } from "@/domain/resource/model";
+import type { ResourceKind, ResourceRecord } from "@/domain/resource/model";
 import {
+  queryResourcePage,
   useManagedResourceRecords,
-  type ManagedResourceRecord,
 } from "@/domain/resource/hooks";
-import { PageHeader, useWorkspaceSpaces } from "@/shared";
+import {
+  Field,
+  PageHeader,
+  SurfaceCard,
+  TextInput,
+  useLocaleFormatters,
+  useWorkspaceSpaces,
+} from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import {
+  DropdownMenu,
+  DropdownMenuTrigger,
+  DropdownMenuContent,
+  DropdownMenuItem,
+} from "@/components/ui/dropdown-menu";
+import { profile } from "console";
 
 type ResourceConnectionKind = "dataSource" | "server" | "serverAccount";
 
@@ -55,10 +65,13 @@ interface ResourceConnectionManagementPageProps {
 
 const PAGE_SIZE = 15;
 
-const KIND_CONFIG: Record<ResourceConnectionKind, {
-  basePath: string;
-  kinds: readonly ResourceKind[];
-}> = {
+const KIND_CONFIG: Record<
+  ResourceConnectionKind,
+  {
+    basePath: string;
+    kinds: readonly ResourceKind[];
+  }
+> = {
   dataSource: {
     basePath: "/resource-management/data-sources",
     kinds: [
@@ -89,72 +102,219 @@ function firstEndpoint(attributes: Record<string, unknown>) {
   const values = Array.isArray(attributes.endpoints)
     ? attributes.endpoints
     : Array.isArray(attributes.brokers)
-      ? attributes.brokers
-      : [];
+    ? attributes.brokers
+    : [];
   const endpoint = values[0];
   if (!endpoint || typeof endpoint !== "object") return null;
   const { host, port } = endpoint as Record<string, unknown>;
-  return typeof host === "string" && typeof port === "number" ? `${host}:${port}` : null;
+  return typeof host === "string" && typeof port === "number"
+    ? `${host}:${port}`
+    : null;
 }
 
-function stringAttribute(record: ManagedResourceRecord, key: string) {
-  const value = record.attributes[key];
+function stringAttribute(record: ResourceRecord, key: string) {
+  const value = record.attributes?.[key];
   return typeof value === "string" ? value : "—";
 }
 
-export function ResourceConnectionManagementPage({ kind }: ResourceConnectionManagementPageProps) {
-  const { t, i18n } = useTranslation("pages");
+export function ResourceConnectionManagementPage({
+  kind,
+}: ResourceConnectionManagementPageProps) {
+  const { t } = useTranslation("pages");
   const navigate = useNavigate();
+  const { formatDateTime } = useLocaleFormatters();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const workspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const workspaceCode = workspace?.workspaceCode ?? "";
   const workspaceName = workspace?.name ?? "";
   const config = KIND_CONFIG[kind];
   const [search, setSearch] = useState("");
-  const [current, setCurrent] = useState(1);
   const [createOpen, setCreateOpen] = useState(false);
-  const [deleteTarget, setDeleteTarget] = useState<ManagedResourceRecord | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<ResourceRecord | null>(null);
   const [deleting, setDeleting] = useState(false);
-  const recordsQuery = useManagedResourceRecords({
-    kinds: config.kinds,
-    search,
-    workspaceCode: workspaceCode || null,
-    workspaceName,
-  });
+  const resourceQueryParams = useMemo(
+    () => ({
+      context: "ALL" as const,
+      kinds: config.kinds,
+      search,
+      workspaceCode: workspaceCode || null,
+      workspaceName,
+    }),
+    [config.kinds, search, workspaceCode, workspaceName],
+  );
   const serversQuery = useManagedResourceRecords({
     kinds: ["SERVER_CONNECTION"],
     search: "",
     workspaceCode: workspaceCode || null,
     workspaceName,
   });
-  const pageT = (key: string, options?: Record<string, unknown>) => t(`resourceConnections.${key}`, options);
-  const pageCount = Math.max(1, Math.ceil(recordsQuery.data.length / PAGE_SIZE));
-  const pageRecords = useMemo(
-    () => recordsQuery.data.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE),
-    [current, recordsQuery.data],
-  );
+  const pageT = (key: string, options?: Record<string, unknown>) =>
+    t(`resourceConnections.${key}`, options);
 
-  function connectionLabel(record: ManagedResourceRecord) {
+  function connectionLabel(record: ResourceRecord) {
     if (kind === "server") {
       const host = stringAttribute(record, "host");
-      const port = record.attributes.port;
+      const port = record.attributes?.port;
       return `${host}:${typeof port === "number" ? port : "—"}`;
     }
     if (kind === "serverAccount") {
-      return `${stringAttribute(record, "username")} @ ${stringAttribute(record, "serverCode")}`;
+      return `${stringAttribute(record, "username")} @ ${stringAttribute(
+        record,
+        "serverCode",
+      )}`;
     }
-    return firstEndpoint(record.attributes) ?? "—";
+    return firstEndpoint(record.attributes ?? {}) ?? "—";
   }
 
-  function secondaryLabel(record: ManagedResourceRecord) {
+  function secondaryLabel(record: ResourceRecord) {
     if (kind === "serverAccount") {
-      return pageT(`authentication.${stringAttribute(record, "authenticationType") === "PrivateKey" ? "privateKey" : "password"}`);
+      return pageT(
+        `authentication.${
+          stringAttribute(record, "authenticationType") === "PrivateKey"
+            ? "privateKey"
+            : "password"
+        }`,
+      );
     }
     if (kind === "dataSource") {
       return DATA_SOURCE_KIND_LABELS[record.kind] ?? record.kind;
     }
     return "SSH";
   }
+
+  const columns = useMemo<TableColumnDef<ResourceRecord>[]>(
+    () => [
+      {
+        accessorKey: "name",
+        cell: ({ row }) => (
+          <div className="min-w-0">
+            <p className="truncate font-medium" title={row.original.name}>
+              {row.original.name}
+            </p>
+            <p
+              className="mt-1 truncate font-mono text-xs text-muted-foreground"
+              title={row.original.resourceCode}
+            >
+              {row.original.resourceCode}
+            </p>
+          </div>
+        ),
+        header: pageT("columns.name"),
+        id: "resource",
+        meta: { width: "30%" },
+      },
+      {
+        cell: ({ row }) => (
+          <span className="font-mono text-xs">
+            {connectionLabel(row.original)}
+          </span>
+        ),
+        header: pageT(
+          kind === "serverAccount"
+            ? "columns.accountBinding"
+            : "columns.endpoint",
+        ),
+        id: "endpoint",
+      },
+      {
+        cell: ({ row }) => (
+          <Badge variant="outline">{secondaryLabel(row.original)}</Badge>
+        ),
+        header: pageT(
+          kind === "dataSource"
+            ? "columns.type"
+            : kind === "serverAccount"
+            ? "columns.authentication"
+            : "columns.protocol",
+        ),
+        id: "type",
+      },
+      {
+        cell: ({ row }) => (
+          <Badge
+            variant={
+              row.original.sourceKind === "LOCAL" ? "secondary" : "outline"
+            }
+          >
+            {pageT(`source.${row.original.sourceKind.toLowerCase()}`)}
+          </Badge>
+        ),
+        header: pageT("columns.source"),
+        id: "source",
+      },
+      {
+        cell: ({ row }) => (
+          <span className="text-xs text-muted-foreground">
+            {formatDateTime(row.original.updatedAt, {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+          </span>
+        ),
+        header: pageT("columns.updatedAt"),
+        id: "updatedAt",
+      },
+      {
+        cell: ({ row }) =>
+          row.original.sourceKind !== "INHERITED" ? (
+            <DropdownMenu>
+              <DropdownMenuTrigger>
+                <MoreHorizontal
+                  onClick={(e) => e.stopPropagation()}
+                  size={16}
+                  aria-hidden="true"
+                />
+              </DropdownMenuTrigger>
+              <DropdownMenuContent className="w-40" align="start">
+                <DropdownMenuItem
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    navigate(
+                      `${
+                        config.basePath
+                      }/detail?resourceCode=${encodeURIComponent(
+                        row.original.resourceCode,
+                      )}`,
+                    );
+                  }}
+                >
+                  {pageT("actions.edit")}
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                  className="text-red-500"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    setDeleteTarget(row.original);
+                  }}
+                >
+                  {pageT("actions.delete")}
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          ) : null,
+        header: pageT("columns.actions"),
+        id: "actions",
+        meta: { align: "right" },
+        size: 112,
+      },
+    ],
+    [config.basePath, formatDateTime, kind, navigate, t],
+  );
+
+  const resourceTable = useServerTable({
+    columns,
+    enabled: Boolean(workspaceCode),
+    getRowId: (row) => `${row.workspaceCode}:${row.resourceCode}`,
+    initialPageSize: PAGE_SIZE,
+    params: resourceQueryParams,
+    queryFn: ({ pageIndex, pageSize, params }) =>
+      queryResourcePage({
+        ...params,
+        current: pageIndex + 1,
+        size: pageSize,
+      }),
+    resource: `resource-connections:${kind}`,
+  });
 
   async function confirmDelete() {
     if (!deleteTarget) return;
@@ -166,7 +326,9 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
           workspaceCode,
         });
         if (!result.deleted) throw new Error(pageT("messages.deleteFailed"));
-      } else if (!deleteMockResource(workspaceCode, deleteTarget.resourceCode)) {
+      } else if (
+        !deleteMockResource(workspaceCode, deleteTarget.resourceCode)
+      ) {
         throw new Error(pageT("messages.deleteFailed"));
       }
       toastManager.add({
@@ -175,10 +337,13 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
         type: "success",
       });
       setDeleteTarget(null);
-      recordsQuery.refresh();
+      await resourceTable.refresh();
     } catch (cause) {
       toastManager.add({
-        description: cause instanceof Error ? cause.message : pageT("messages.deleteFailed"),
+        description:
+          cause instanceof Error
+            ? cause.message
+            : pageT("messages.deleteFailed"),
         title: pageT("messages.deleteFailed"),
         type: "error",
       });
@@ -190,131 +355,110 @@ export function ResourceConnectionManagementPage({ kind }: ResourceConnectionMan
   const title = pageT(`${kind}.title`);
 
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
-      <PageHeader
+    <>
+      <TanStackDataTable<ResourceRecord>
+        emptyState={
+          workspace ? pageT(`${kind}.empty`) : pageT("workspaceRequired")
+        }
         title={title}
-        actions={(
-          <>
-            <Button variant="outline" onClick={() => recordsQuery.refresh()}>
-              <RefreshCcw aria-hidden="true" />
-              {pageT("actions.refresh")}
-            </Button>
-            <Button disabled={!workspace} onClick={() => setCreateOpen(true)}>
-              <Plus aria-hidden="true" />
+        toolbar={
+          <div className="flex gap-2">
+            <TextInput
+              className="w-full"
+              placeholder={pageT(`${kind}.searchPlaceholder`)}
+              type="search"
+              value={search}
+              onChange={(event) => {
+                setSearch(event.target.value);
+              }}
+            />
+            <Button size="lg" disabled={!workspace} onClick={() => setCreateOpen(true)}>
               {pageT(`${kind}.createAction`)}
             </Button>
-          </>
-        )}
+          </div>
+        }
+        error={resourceTable.error}
+        loading={resourceTable.isLoading}
+        pagination={
+          <TanStackTablePagination
+            itemLabel={pageT("pagination.itemLabel", {
+              defaultValue: "records",
+            })}
+            pageSizeOptions={[15, 25, 50]}
+            table={resourceTable.table}
+            totalItems={resourceTable.data.total}
+          />
+        }
+        table={resourceTable.table}
+        tableClassName="min-w-[900px]"
+        onRowClick={(row) =>
+          navigate(
+            `${config.basePath}/detail?resourceCode=${encodeURIComponent(
+              row.resourceCode,
+            )}`,
+          )
+        }
       />
 
-      <div className="mb-4 flex max-w-md items-center gap-2">
-        <div className="relative w-full">
-          <Search aria-hidden="true" className="pointer-events-none absolute left-2.5 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            aria-label={pageT("search.label")}
-            className="pl-8"
-            placeholder={pageT(`${kind}.searchPlaceholder`)}
-            type="search"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setCurrent(1);
-            }}
-          />
-        </div>
-      </div>
-
-      <div className="min-h-0 flex-1">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[34%]">{pageT("columns.name")}</TableHead>
-              <TableHead>{pageT(kind === "serverAccount" ? "columns.accountBinding" : "columns.endpoint")}</TableHead>
-              <TableHead>{pageT(kind === "dataSource" ? "columns.type" : kind === "serverAccount" ? "columns.authentication" : "columns.protocol")}</TableHead>
-              <TableHead>{pageT("columns.source")}</TableHead>
-              <TableHead>{pageT("columns.updatedAt")}</TableHead>
-              <TableHead className="text-right">{pageT("columns.actions")}</TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {recordsQuery.loading ? (
-              <TableRow>
-                <TableCell className="h-32 text-center" colSpan={6}><Spinner className="mx-auto" /></TableCell>
-              </TableRow>
-            ) : pageRecords.length ? pageRecords.map((record) => (
-              <TableRow key={record.resourceCode}>
-                <TableCell>
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{record.name}</p>
-                    <p className="mt-0.5 truncate font-mono text-xs text-muted-foreground">{record.resourceCode}</p>
-                  </div>
-                </TableCell>
-                <TableCell className="font-mono text-xs">{connectionLabel(record)}</TableCell>
-                <TableCell><Badge variant="outline">{secondaryLabel(record)}</Badge></TableCell>
-                <TableCell>
-                  <Badge variant={record.sourceKind === "LOCAL" ? "secondary" : "outline"}>
-                    {pageT(`source.${record.sourceKind.toLowerCase()}`)}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-xs text-muted-foreground">
-                  {new Intl.DateTimeFormat(i18n.language, { dateStyle: "medium", timeStyle: "short" }).format(record.updatedAt)}
-                </TableCell>
-                <TableCell>
-                  {record.sourceKind !== "INHERITED" ? (
-                    <div className="flex justify-end gap-1">
-                      <Button aria-label={pageT("actions.edit")} size="icon-sm" variant="ghost" onClick={() => navigate(`${config.basePath}/detail?resourceCode=${encodeURIComponent(record.resourceCode)}`)}>
-                        <Pencil aria-hidden="true" />
-                      </Button>
-                      <Button aria-label={pageT("actions.delete")} size="icon-sm" variant="ghost" onClick={() => setDeleteTarget(record)}>
-                        <Trash2 aria-hidden="true" />
-                      </Button>
-                    </div>
-                  ) : null}
-                </TableCell>
-              </TableRow>
-            )) : (
-              <TableRow>
-                <TableCell className="h-32 text-center text-muted-foreground" colSpan={6}>
-                  {workspace ? pageT(`${kind}.empty`) : pageT("workspaceRequired")}
-                </TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
-      </div>
-
-      <div className="mt-4 flex items-center justify-between border-t pt-3 text-sm text-muted-foreground">
-        <span>{pageT("pagination.total", { total: recordsQuery.data.length })}</span>
-        <div className="flex items-center gap-2">
-          <Button disabled={current <= 1} size="sm" variant="outline" onClick={() => setCurrent((value) => Math.max(1, value - 1))}>{pageT("pagination.previous")}</Button>
-          <span>{current} / {pageCount}</span>
-          <Button disabled={current >= pageCount} size="sm" variant="outline" onClick={() => setCurrent((value) => Math.min(pageCount, value + 1))}>{pageT("pagination.next")}</Button>
-        </div>
-      </div>
-
       {kind === "dataSource" ? (
-        <DataSourceCreateDialog onCreated={recordsQuery.refresh} onOpenChange={setCreateOpen} open={createOpen} workspaceCode={workspaceCode} />
+        <DataSourceCreateDialog
+          onCreated={resourceTable.refresh}
+          onOpenChange={setCreateOpen}
+          open={createOpen}
+          workspaceCode={workspaceCode}
+        />
       ) : kind === "server" ? (
-        <ServerCreateDialog onCreated={() => { recordsQuery.refresh(); serversQuery.refresh(); }} onOpenChange={setCreateOpen} open={createOpen} workspaceCode={workspaceCode} />
+        <ServerCreateDialog
+          onCreated={() => {
+            void resourceTable.refresh();
+            serversQuery.refresh();
+          }}
+          onOpenChange={setCreateOpen}
+          open={createOpen}
+          workspaceCode={workspaceCode}
+        />
       ) : (
-        <ServerAccountCreateDialog onCreated={recordsQuery.refresh} onOpenChange={setCreateOpen} open={createOpen} servers={serversQuery.data} workspaceCode={workspaceCode} />
+        <ServerAccountCreateDialog
+          onCreated={resourceTable.refresh}
+          onOpenChange={setCreateOpen}
+          open={createOpen}
+          servers={serversQuery.data}
+          workspaceCode={workspaceCode}
+        />
       )}
 
-      <Dialog onOpenChange={(open) => !open && setDeleteTarget(null)} open={Boolean(deleteTarget)}>
+      <Dialog
+        onOpenChange={(open) => !open && setDeleteTarget(null)}
+        open={Boolean(deleteTarget)}
+      >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{pageT("delete.title", { name: deleteTarget?.name ?? "" })}</DialogTitle>
+            <DialogTitle>
+              {pageT("delete.title", { name: deleteTarget?.name ?? "" })}
+            </DialogTitle>
           </DialogHeader>
           <DialogFooter>
-            <Button disabled={deleting} variant="outline" onClick={() => setDeleteTarget(null)}>{pageT("actions.cancel")}</Button>
-            <Button disabled={deleting} variant="destructive" onClick={() => { void confirmDelete(); }}>
+            <Button
+              disabled={deleting}
+              variant="outline"
+              onClick={() => setDeleteTarget(null)}
+            >
+              {pageT("actions.cancel")}
+            </Button>
+            <Button
+              disabled={deleting}
+              variant="destructive"
+              onClick={() => {
+                void confirmDelete();
+              }}
+            >
               {deleting ? <Spinner /> : null}
               {pageT("actions.delete")}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-    </div>
+    </>
   );
 }
 

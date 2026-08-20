@@ -197,5 +197,8 @@ export const common = {
   },
   table: {
     empty: "No records match the current filters.",
+    loading: "Loading...",
+    selectAllRows: "Select all rows on this page",
+    selectRow: "Select row",
   },
 } as const;

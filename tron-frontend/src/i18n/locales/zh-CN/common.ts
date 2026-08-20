@@ -197,5 +197,8 @@ export const common = {
   },
   table: {
     empty: "当前筛选下没有记录。",
+    loading: "加载中...",
+    selectAllRows: "选择当前页的所有行",
+    selectRow: "选择行",
   },
 } as const;

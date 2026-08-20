@@ -1,5 +1,5 @@
 import {
-  useEffect,
+  useMemo,
   useState,
 } from "react";
 import { useTranslation } from "react-i18next";
@@ -15,12 +15,18 @@ import { SelectItem } from "@/components/ui/select";
 
 import { Button } from "@/components/ui/button";
 import {
+  DataTable as TanStackDataTable,
+  TablePagination as TanStackTablePagination,
+  type TableColumnDef,
+  useServerTable,
+} from "@/components/table";
+import {
   QuickResourceUploadDialog,
   type QuickResourceCreateCommand,
 } from "@/domain/resource/features/quick-upload";
 import { createResource, fromResourceKindCode } from "@/domain/resource/api";
 import { resourceFileKinds } from "@/domain/resource/constants";
-import { useResourcePage, useSettingsResourceScope } from "@/domain/resource/hooks";
+import { queryResourcePage, useSettingsResourceScope } from "@/domain/resource/hooks";
 import { createMockQuickResource } from "@/domain/resource/mock";
 import type {
   QuickResourceUploadHandoffPayload,
@@ -30,12 +36,10 @@ import type {
 } from "@/domain/resource/model";
 import { useQuickResourceUploadHandoffStore } from "@/domain/resource/model";
 import {
-  DataTable,
   Field,
   PageHeader,
   SelectInput,
   SurfaceCard,
-  TablePagination,
   TextInput,
   useLocaleFormatters,
   useToast,
@@ -83,32 +87,114 @@ export function ResourcesPage() {
   const [query, setQuery] = useState("");
   const [kindFilter, setKindFilter] = useState<string>(isFileManagement ? "FILE" : "ALL");
   const [contextFilter, setContextFilter] = useState<ResourceSourceKind | "ALL">("ALL");
-  const [current, setCurrent] = useState(1);
-  const [size, setSize] = useState(15);
   const [quickUploadOpen, setQuickUploadOpen] = useState(false);
   const kindOptions = isFileManagement ? resourceFileKinds : allResourceKinds;
-  const resourcePage = useResourcePage({
+  const resourceQueryParams = useMemo(() => ({
     context: isPlatformResources ? "ALL" : contextFilter,
-    current,
     kinds: kindFilter === "ALL" ? (isFileManagement ? resourceFileKinds : []) : [kindFilter as ResourceKind],
     search: query,
-    size,
     workspaceCode: activeWorkspaceCode || null,
     workspaceName: activeWorkspaceName,
-  });
-  const records = resourcePage.data.records;
+  }), [activeWorkspaceCode, activeWorkspaceName, contextFilter, isFileManagement, isPlatformResources, kindFilter, query]);
 
   const pageT = (key: string, options?: Record<string, unknown>) => (
     t(`pages:resources.${key}`, options)
   );
 
-  const pageCount = Math.max(1, Math.ceil(resourcePage.data.total / size));
-  const startItem = resourcePage.data.total ? (current - 1) * size + 1 : 0;
-  const endItem = Math.min(current * size, resourcePage.data.total);
+  const columns = useMemo<TableColumnDef<ResourceRecord>[]>(() => [
+    {
+      accessorKey: "name",
+      cell: ({ row }) => (
+        <div className="min-w-0">
+          <p className="truncate font-medium text-[var(--color-on-surface)]" title={row.original.name}>{row.original.name}</p>
+          <div className="mt-1 flex min-w-0 items-center gap-2 text-[12px] text-[var(--color-on-surface-variant)]">
+            <span className="truncate font-mono" title={row.original.resourceCode}>{row.original.resourceCode}</span>
+            <span aria-hidden="true" className="hidden text-[var(--color-outline)] xl:inline">·</span>
+            <span className="hidden truncate xl:inline" title={row.original.description}>{row.original.description}</span>
+          </div>
+        </div>
+      ),
+      header: pageT("columns.resource"),
+      id: "resource",
+      meta: {
+        cellClassName: "px-4 py-2.5 max-sm:w-[58%] max-sm:px-3",
+        headerClassName: "px-4 max-sm:w-[58%] max-sm:px-3",
+        width: "32%",
+      },
+    },
+    {
+      cell: ({ row }) => <Badge tone="outline">{pageT(`kind.${row.original.kind.toLowerCase()}`)}</Badge>,
+      header: pageT("columns.kind"),
+      id: "kind",
+      meta: {
+        cellClassName: "hidden px-4 py-2.5 lg:table-cell",
+        colClassName: "hidden lg:table-column",
+        headerClassName: "hidden px-4 lg:table-cell",
+        width: "17%",
+      },
+    },
+    {
+      cell: ({ row }) => (
+        <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
+          {row.original.file ? formatByteSize(row.original.file.byteSize) : "—"}
+        </span>
+      ),
+      header: pageT("columns.fileSize"),
+      id: "fileSize",
+      meta: {
+        cellClassName: "hidden whitespace-nowrap px-4 py-2.5 sm:table-cell",
+        colClassName: "hidden sm:table-column",
+        headerClassName: "hidden px-4 sm:table-cell",
+        width: "12%",
+      },
+    },
+    ...(!isPlatformResources ? [{
+      cell: ({ row }: { row: { original: ResourceRecord } }) => <Badge tone={row.original.sourceKind === "LOCAL" ? "success" : row.original.sourceKind === "INHERITED" ? "info" : row.original.sourceKind === "OVERRIDE" ? "warning" : "outline"}>{pageT(`source.${row.original.sourceKind.toLowerCase()}`)}</Badge>,
+      header: pageT("columns.source"),
+      id: "source",
+      meta: {
+        cellClassName: "hidden px-4 py-2.5 sm:table-cell",
+        colClassName: "hidden sm:table-column",
+        headerClassName: "hidden px-4 sm:table-cell",
+        width: "13%",
+      },
+    }] : []),
+    {
+      cell: ({ row }) => (
+        <span className="text-[12px] text-[var(--color-on-surface-variant)]">
+          {formatDateTime(row.original.updatedAt, {
+            day: "2-digit",
+            hour: "2-digit",
+            minute: "2-digit",
+            month: "short",
+            year: "numeric",
+          })}
+        </span>
+      ),
+      header: pageT("columns.updatedAt"),
+      id: "updatedAt",
+      meta: {
+        align: "right",
+        cellClassName: "hidden whitespace-nowrap px-4 py-2.5 xl:table-cell",
+        colClassName: "hidden xl:table-column",
+        headerClassName: "hidden px-4 xl:table-cell",
+        width: "14%",
+      },
+    },
+  ], [formatDateTime, isPlatformResources, t]);
 
-  useEffect(() => {
-    if (!resourcePage.loading && current > pageCount) setCurrent(pageCount);
-  }, [current, pageCount, resourcePage.loading]);
+  const resourceTable = useServerTable({
+    columns,
+    enabled: Boolean(activeWorkspaceCode),
+    getRowId: (row) => `${row.workspaceCode}:${row.resourceCode}`,
+    params: resourceQueryParams,
+    queryFn: ({ pageIndex, pageSize, params }) => queryResourcePage({
+      ...params,
+      current: pageIndex + 1,
+      size: pageSize,
+    }),
+    resource: "resources",
+  });
 
   function openResource(record: ResourceRecord) {
     navigate(`${basePath}/detail?resourceCode=${encodeURIComponent(record.resourceCode)}`);
@@ -149,7 +235,7 @@ export function ResourcesPage() {
 
   function openQuickResource(result: { resourceCode: string }) {
     setQuickUploadOpen(false);
-    resourcePage.refresh();
+    void resourceTable.refresh();
     navigate(`${basePath}/detail?resourceCode=${encodeURIComponent(result.resourceCode)}`);
     toast.success(pageT("quickUpload.messages.created", { name: result.resourceCode }));
   }
@@ -161,7 +247,7 @@ export function ResourcesPage() {
         actions={(
           <>
             <Button variant="outline" onClick={() => {
-              resourcePage.refresh();
+              void resourceTable.refresh();
             }}>
               <RefreshCcw aria-hidden="true" size={15} />
               {t("common:actions.refresh")}
@@ -190,7 +276,6 @@ export function ResourcesPage() {
                   value={query}
                   onChange={(event) => {
                     setQuery(event.target.value);
-                    setCurrent(1);
                   }}
                 />
               </Field>
@@ -203,7 +288,6 @@ export function ResourcesPage() {
                   value={kindFilter}
                   onValueChange={(value) => {
                     setKindFilter(value ?? "ALL");
-                    setCurrent(1);
                   }}
                 >
                   {!isFileManagement ? <SelectItem value="ALL">{pageT("filters.allKinds")}</SelectItem> : null}
@@ -222,7 +306,6 @@ export function ResourcesPage() {
                     value={contextFilter}
                     onValueChange={(value) => {
                       setContextFilter(value as ResourceSourceKind | "ALL");
-                      setCurrent(1);
                     }}
                   >
                     {(["ALL", "LOCAL", "INHERITED", "OVERRIDE"] as const).map((value) => (
@@ -237,98 +320,20 @@ export function ResourcesPage() {
           </div>
         </SurfaceCard>
 
-        <DataTable<ResourceRecord>
-          rows={records}
+        <TanStackDataTable<ResourceRecord>
+          table={resourceTable.table}
+          loading={resourceTable.isLoading}
+          error={resourceTable.error}
           pagination={(
-            <TablePagination
+            <TanStackTablePagination
               itemLabel={pageT("pagination.itemLabel")}
               pageSizeOptions={[15, 25, 50]}
               showRange={false}
-              endItem={endItem}
-              onPageChange={(next) => setCurrent(Math.min(Math.max(next, 1), pageCount))}
-              onPageSizeChange={(next) => {
-                setSize(next);
-                setCurrent(1);
-              }}
-              page={Math.min(current, pageCount)}
-              pageCount={pageCount}
-              pageSize={size}
-              startItem={startItem}
-              totalItems={resourcePage.data.total}
+              table={resourceTable.table}
+              totalItems={resourceTable.data.total}
             />
           )}
-          rowKey={(row) => `${row.workspaceCode}:${row.resourceCode}`}
           onRowClick={openResource}
-          columns={[
-            {
-              id: "resource",
-              header: pageT("columns.resource"),
-              width: "32%",
-              headerClassName: "px-4 max-sm:w-[58%] max-sm:px-3",
-              cellClassName: "px-4 py-2.5 max-sm:w-[58%] max-sm:px-3",
-              render: (row) => (
-                <div className="min-w-0">
-                  <p className="truncate font-medium text-[var(--color-on-surface)]" title={row.name}>{row.name}</p>
-                  <div className="mt-1 flex min-w-0 items-center gap-2 text-[12px] text-[var(--color-on-surface-variant)]">
-                    <span className="truncate font-mono" title={row.resourceCode}>{row.resourceCode}</span>
-                    <span aria-hidden="true" className="hidden text-[var(--color-outline)] xl:inline">·</span>
-                    <span className="hidden truncate xl:inline" title={row.description}>{row.description}</span>
-                  </div>
-                </div>
-              ),
-            },
-            {
-              id: "kind",
-              header: pageT("columns.kind"),
-              width: "17%",
-              colClassName: "hidden lg:table-column",
-              headerClassName: "hidden px-4 lg:table-cell",
-              cellClassName: "hidden px-4 py-2.5 lg:table-cell",
-              render: (row) => <Badge tone="outline">{pageT(`kind.${row.kind.toLowerCase()}`)}</Badge>,
-            },
-            {
-              id: "fileSize",
-              header: pageT("columns.fileSize"),
-              width: "12%",
-              colClassName: "hidden sm:table-column",
-              headerClassName: "hidden px-4 sm:table-cell",
-              cellClassName: "hidden whitespace-nowrap px-4 py-2.5 sm:table-cell",
-              render: (row) => (
-                <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
-                  {row.file ? formatByteSize(row.file.byteSize) : "—"}
-                </span>
-              ),
-            },
-            ...(!isPlatformResources ? [{
-              id: "source",
-              header: pageT("columns.source"),
-              width: "13%",
-              colClassName: "hidden sm:table-column",
-              headerClassName: "hidden px-4 sm:table-cell",
-              cellClassName: "hidden px-4 py-2.5 sm:table-cell",
-              render: (row: ResourceRecord) => <Badge tone={row.sourceKind === "LOCAL" ? "success" : row.sourceKind === "INHERITED" ? "info" : row.sourceKind === "OVERRIDE" ? "warning" : "outline"}>{pageT(`source.${row.sourceKind.toLowerCase()}`)}</Badge>,
-            }] : []),
-            {
-              id: "updatedAt",
-              header: pageT("columns.updatedAt"),
-              align: "right",
-              width: "14%",
-              colClassName: "hidden xl:table-column",
-              headerClassName: "hidden px-4 xl:table-cell",
-              cellClassName: "hidden whitespace-nowrap px-4 py-2.5 xl:table-cell",
-              render: (row) => (
-                <span className="text-[12px] text-[var(--color-on-surface-variant)]">
-                  {formatDateTime(row.updatedAt, {
-                    day: "2-digit",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                  })}
-                </span>
-              ),
-            },
-          ]}
           emptyState={activeWorkspace ? pageT("empty") : pageT("emptyWorkspace")}
           tableClassName="min-w-full table-fixed max-sm:w-[calc(100%-1px)] max-sm:min-w-0 max-sm:[&>colgroup]:hidden xl:min-w-[900px]"
         />

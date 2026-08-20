@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AnchoredToastProvider, ToastProvider } from "@/components/ui/toast"
+import { QueryProvider } from "./providers/QueryProvider";
 import { App } from "./App";
 import "@/i18n";
 import "@tron/chat-theme";
@@ -16,7 +17,9 @@ createRoot(root).render(
   <StrictMode>
     <ToastProvider position="top-center">
       <AnchoredToastProvider>
-        <App />
+        <QueryProvider>
+          <App />
+        </QueryProvider>
       </AnchoredToastProvider>
     </ToastProvider>
   </StrictMode>,

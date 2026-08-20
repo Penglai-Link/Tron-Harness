@@ -84,7 +84,7 @@ export function DataTable<T>({
           ) : null}
         </div>
       )}
-      <Table className={cn("w-full min-w-[720px] border-collapse text-left text-sm", tableClassName)}>
+      <Table className={cn(tableClassName)}>
         {columns.some((column) => column.width) ? (
           <colgroup>
             {columns.map((column) => (
@@ -97,7 +97,7 @@ export function DataTable<T>({
           </colgroup>
         ) : null}
         <TableHeader>
-          <TableRow className="border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] hover:bg-[var(--color-surface-container-low)]">
+          <TableRow>
             {columns.map((column) => (
               <TableHead
                 className={cn(
@@ -117,21 +117,22 @@ export function DataTable<T>({
             rows.map((row, index) => (
               <TableRow
                 className={cn(
-                  "group border-b border-[var(--color-outline-variant)] last:border-0 hover:bg-[var(--color-hover-surface)]",
                   onRowClick ? "cursor-pointer" : null,
                   rowClassName?.(row),
                 )}
                 key={rowKey(row, index)}
                 tabIndex={onRowClick ? 0 : undefined}
                 onClick={onRowClick ? () => onRowClick(row, index) : undefined}
-                onKeyDown={onRowClick
-                  ? (event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onRowClick(row, index);
-                    }
-                  }
-                  : undefined}
+                onKeyDown={
+                  onRowClick
+                    ? (event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          onRowClick(row, index);
+                        }
+                      }
+                    : undefined
+                }
               >
                 {columns.map((column) => (
                   <TableCell
@@ -149,7 +150,10 @@ export function DataTable<T>({
             ))
           ) : (
             <TableRow>
-              <TableCell className="px-5 py-8 text-center text-sm text-[var(--color-on-surface-variant)]" colSpan={columns.length}>
+              <TableCell
+                className="px-5 py-8 text-center text-sm text-[var(--color-on-surface-variant)]"
+                colSpan={columns.length}
+              >
                 {emptyState ?? t("table.empty")}
               </TableCell>
             </TableRow>
