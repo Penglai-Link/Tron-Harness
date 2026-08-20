@@ -579,6 +579,22 @@ fn agent_resource_tools_create_all_supported_resource_families() {
     assert_eq!(deleted["deleted"], true);
 }
 
+#[test]
+fn resource_scope_accepts_ancestor_workspace_grants_but_rejects_unrelated_workspaces() {
+    let state = resource_state("ancestor-workspace-access");
+
+    assert!(
+        state
+            .workspaces
+            .user_has_effective_access(WORKSPACE, PARENT_ACTOR)
+            .expect("workspace access should resolve")
+    );
+    assert!(!state
+        .workspaces
+        .user_has_effective_access("COMPLIANCE", PARENT_ACTOR)
+        .expect("workspace access should resolve"));
+}
+
 #[derive(Clone)]
 struct SuccessfulConnectionVerifier;
 
