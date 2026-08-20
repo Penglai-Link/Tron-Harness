@@ -190,6 +190,252 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         ("variable.delete", "sampleResultSummary") => {
             "agent.toolCatalog.tools.variable.delete.sampleResultSummary"
         }
+        ("platform.variable.page", "name") => "agent.toolCatalog.tools.platform.variable.page.name",
+        ("platform.variable.page", "description") => {
+            "agent.toolCatalog.tools.platform.variable.page.description"
+        }
+        ("platform.variable.page", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.variable.page.sampleResultSummary"
+        }
+        ("platform.variable.create", "name") => {
+            "agent.toolCatalog.tools.platform.variable.create.name"
+        }
+        ("platform.variable.create", "description") => {
+            "agent.toolCatalog.tools.platform.variable.create.description"
+        }
+        ("platform.variable.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.variable.create.sampleResultSummary"
+        }
+        ("platform.variable.update", "name") => {
+            "agent.toolCatalog.tools.platform.variable.update.name"
+        }
+        ("platform.variable.update", "description") => {
+            "agent.toolCatalog.tools.platform.variable.update.description"
+        }
+        ("platform.variable.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.variable.update.sampleResultSummary"
+        }
+        ("platform.variable.delete", "name") => {
+            "agent.toolCatalog.tools.platform.variable.delete.name"
+        }
+        ("platform.variable.delete", "description") => {
+            "agent.toolCatalog.tools.platform.variable.delete.description"
+        }
+        ("platform.variable.delete", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.variable.delete.sampleResultSummary"
+        }
+        ("platform.model.page", "name") => "agent.toolCatalog.tools.platform.model.page.name",
+        ("platform.model.page", "description") => {
+            "agent.toolCatalog.tools.platform.model.page.description"
+        }
+        ("platform.model.page", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.model.page.sampleResultSummary"
+        }
+        ("platform.model.get", "name") => "agent.toolCatalog.tools.platform.model.get.name",
+        ("platform.model.get", "description") => {
+            "agent.toolCatalog.tools.platform.model.get.description"
+        }
+        ("platform.model.get", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.model.get.sampleResultSummary"
+        }
+        ("platform.model.create", "name") => "agent.toolCatalog.tools.platform.model.create.name",
+        ("platform.model.create", "description") => {
+            "agent.toolCatalog.tools.platform.model.create.description"
+        }
+        ("platform.model.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.model.create.sampleResultSummary"
+        }
+        ("platform.model.update", "name") => "agent.toolCatalog.tools.platform.model.update.name",
+        ("platform.model.update", "description") => {
+            "agent.toolCatalog.tools.platform.model.update.description"
+        }
+        ("platform.model.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.model.update.sampleResultSummary"
+        }
+        ("platform.model.enable", "name") => "agent.toolCatalog.tools.platform.model.enable.name",
+        ("platform.model.enable", "description") => {
+            "agent.toolCatalog.tools.platform.model.enable.description"
+        }
+        ("platform.model.enable", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.model.enable.sampleResultSummary"
+        }
+        ("platform.model.disable", "name") => "agent.toolCatalog.tools.platform.model.disable.name",
+        ("platform.model.disable", "description") => {
+            "agent.toolCatalog.tools.platform.model.disable.description"
+        }
+        ("platform.model.disable", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.model.disable.sampleResultSummary"
+        }
+        ("platform.model.delete", "name") => "agent.toolCatalog.tools.platform.model.delete.name",
+        ("platform.model.delete", "description") => {
+            "agent.toolCatalog.tools.platform.model.delete.description"
+        }
+        ("platform.model.delete", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.model.delete.sampleResultSummary"
+        }
+        ("platform.prompt.page", "name") => "agent.toolCatalog.tools.platform.prompt.page.name",
+        ("platform.prompt.page", "description") => {
+            "agent.toolCatalog.tools.platform.prompt.page.description"
+        }
+        ("platform.prompt.page", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.prompt.page.sampleResultSummary"
+        }
+        ("platform.prompt.get", "name") => "agent.toolCatalog.tools.platform.prompt.get.name",
+        ("platform.prompt.get", "description") => {
+            "agent.toolCatalog.tools.platform.prompt.get.description"
+        }
+        ("platform.prompt.get", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.prompt.get.sampleResultSummary"
+        }
+        ("platform.prompt.create", "name") => "agent.toolCatalog.tools.platform.prompt.create.name",
+        ("platform.prompt.create", "description") => {
+            "agent.toolCatalog.tools.platform.prompt.create.description"
+        }
+        ("platform.prompt.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.prompt.create.sampleResultSummary"
+        }
+        ("platform.prompt.update", "name") => "agent.toolCatalog.tools.platform.prompt.update.name",
+        ("platform.prompt.update", "description") => {
+            "agent.toolCatalog.tools.platform.prompt.update.description"
+        }
+        ("platform.prompt.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.prompt.update.sampleResultSummary"
+        }
+        ("platform.prompt.delete", "name") => "agent.toolCatalog.tools.platform.prompt.delete.name",
+        ("platform.prompt.delete", "description") => {
+            "agent.toolCatalog.tools.platform.prompt.delete.description"
+        }
+        ("platform.prompt.delete", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.prompt.delete.sampleResultSummary"
+        }
+        ("platform.mcp.page", "name") => "agent.toolCatalog.tools.platform.mcp.page.name",
+        ("platform.mcp.page", "description") => {
+            "agent.toolCatalog.tools.platform.mcp.page.description"
+        }
+        ("platform.mcp.page", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.mcp.page.sampleResultSummary"
+        }
+        ("platform.mcp.get", "name") => "agent.toolCatalog.tools.platform.mcp.get.name",
+        ("platform.mcp.get", "description") => {
+            "agent.toolCatalog.tools.platform.mcp.get.description"
+        }
+        ("platform.mcp.get", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.mcp.get.sampleResultSummary"
+        }
+        ("platform.mcp.create", "name") => "agent.toolCatalog.tools.platform.mcp.create.name",
+        ("platform.mcp.create", "description") => {
+            "agent.toolCatalog.tools.platform.mcp.create.description"
+        }
+        ("platform.mcp.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.mcp.create.sampleResultSummary"
+        }
+        ("platform.mcp.update", "name") => "agent.toolCatalog.tools.platform.mcp.update.name",
+        ("platform.mcp.update", "description") => {
+            "agent.toolCatalog.tools.platform.mcp.update.description"
+        }
+        ("platform.mcp.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.mcp.update.sampleResultSummary"
+        }
+        ("platform.mcp.delete", "name") => "agent.toolCatalog.tools.platform.mcp.delete.name",
+        ("platform.mcp.delete", "description") => {
+            "agent.toolCatalog.tools.platform.mcp.delete.description"
+        }
+        ("platform.mcp.delete", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.mcp.delete.sampleResultSummary"
+        }
+        ("platform.open_app.page", "name") => "agent.toolCatalog.tools.platform.open_app.page.name",
+        ("platform.open_app.page", "description") => {
+            "agent.toolCatalog.tools.platform.open_app.page.description"
+        }
+        ("platform.open_app.page", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.open_app.page.sampleResultSummary"
+        }
+        ("platform.open_app.get", "name") => "agent.toolCatalog.tools.platform.open_app.get.name",
+        ("platform.open_app.get", "description") => {
+            "agent.toolCatalog.tools.platform.open_app.get.description"
+        }
+        ("platform.open_app.get", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.open_app.get.sampleResultSummary"
+        }
+        ("platform.open_app.create", "name") => {
+            "agent.toolCatalog.tools.platform.open_app.create.name"
+        }
+        ("platform.open_app.create", "description") => {
+            "agent.toolCatalog.tools.platform.open_app.create.description"
+        }
+        ("platform.open_app.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.open_app.create.sampleResultSummary"
+        }
+        ("platform.open_app.update", "name") => {
+            "agent.toolCatalog.tools.platform.open_app.update.name"
+        }
+        ("platform.open_app.update", "description") => {
+            "agent.toolCatalog.tools.platform.open_app.update.description"
+        }
+        ("platform.open_app.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.open_app.update.sampleResultSummary"
+        }
+        ("platform.open_app.disable", "name") => {
+            "agent.toolCatalog.tools.platform.open_app.disable.name"
+        }
+        ("platform.open_app.disable", "description") => {
+            "agent.toolCatalog.tools.platform.open_app.disable.description"
+        }
+        ("platform.open_app.disable", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.open_app.disable.sampleResultSummary"
+        }
+        ("platform.resource.query", "name") => {
+            "agent.toolCatalog.tools.platform.resource.query.name"
+        }
+        ("platform.resource.query", "description") => {
+            "agent.toolCatalog.tools.platform.resource.query.description"
+        }
+        ("platform.resource.query", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.resource.query.sampleResultSummary"
+        }
+        ("platform.resource.get", "name") => "agent.toolCatalog.tools.platform.resource.get.name",
+        ("platform.resource.get", "description") => {
+            "agent.toolCatalog.tools.platform.resource.get.description"
+        }
+        ("platform.resource.get", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.resource.get.sampleResultSummary"
+        }
+        ("platform.resource.create", "name") => {
+            "agent.toolCatalog.tools.platform.resource.create.name"
+        }
+        ("platform.resource.create", "description") => {
+            "agent.toolCatalog.tools.platform.resource.create.description"
+        }
+        ("platform.resource.create", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.resource.create.sampleResultSummary"
+        }
+        ("platform.resource.update", "name") => {
+            "agent.toolCatalog.tools.platform.resource.update.name"
+        }
+        ("platform.resource.update", "description") => {
+            "agent.toolCatalog.tools.platform.resource.update.description"
+        }
+        ("platform.resource.update", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.resource.update.sampleResultSummary"
+        }
+        ("platform.resource.delete", "name") => {
+            "agent.toolCatalog.tools.platform.resource.delete.name"
+        }
+        ("platform.resource.delete", "description") => {
+            "agent.toolCatalog.tools.platform.resource.delete.description"
+        }
+        ("platform.resource.delete", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.resource.delete.sampleResultSummary"
+        }
+        ("platform.resource.binary", "name") => {
+            "agent.toolCatalog.tools.platform.resource.binary.name"
+        }
+        ("platform.resource.binary", "description") => {
+            "agent.toolCatalog.tools.platform.resource.binary.description"
+        }
+        ("platform.resource.binary", "sampleResultSummary") => {
+            "agent.toolCatalog.tools.platform.resource.binary.sampleResultSummary"
+        }
         ("resource_definition.query", "name") => {
             "agent.toolCatalog.tools.resource_definition.query.name"
         }

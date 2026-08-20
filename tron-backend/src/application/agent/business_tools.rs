@@ -9,8 +9,11 @@ use crate::{
     application::{
         app::AppService,
         automation::AutomationService,
+        mcp::McpService,
         memory::MemoryService,
         model::ModelService,
+        open_app::OpenAppService,
+        prompt::PromptService,
         rag::{
             RagDiagnosticsRepository, RagDocumentSourceRuntime, RagEmbeddingRuntime,
             RagIngestRepository, RagRetryIndexRepository, RagSearchRepository, RagSearchRuntime,
@@ -52,6 +55,9 @@ pub fn register_default_agent_tools<R, S, E>(
     skills: SkillRegistryService,
     variables: VariableService,
     resources: ResourceService,
+    prompts: PromptService,
+    mcp: McpService,
+    open_apps: OpenAppService,
     memory: MemoryService<R, S, E>,
     short_term_memory: ShortTermMemoryService,
 ) -> Result<(), ToolError>
@@ -76,6 +82,9 @@ where
         skills,
         variables,
         resources,
+        prompts,
+        mcp,
+        open_apps,
     );
     tools.extend(coding_tools::coding_domain_tools());
     tools.extend(memory_tools::memory_business_tools(memory));

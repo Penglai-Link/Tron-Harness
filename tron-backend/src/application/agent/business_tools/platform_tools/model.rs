@@ -255,7 +255,7 @@ impl Tool for ModelDeleteTool {
 
 #[derive(Debug, Clone, Default, Deserialize)]
 #[serde(rename_all = "camelCase")]
-struct ModelSpecInput {
+pub(super) struct ModelSpecInput {
     display_name: Option<String>,
     vendor: Option<String>,
     protocol: Option<String>,
@@ -281,7 +281,7 @@ struct ModelSpecInput {
 }
 
 impl ModelSpecInput {
-    fn create_command(self) -> Result<ModelCommand, ToolError> {
+    pub(super) fn create_command(self) -> Result<ModelCommand, ToolError> {
         let model_type = parse_required_model_type(self.model_type.as_deref(), "modelType")?;
         let capabilities = parse_model_capabilities(self.model_capabilities, model_type)?;
         let supported_reasoning_efforts =
@@ -314,7 +314,7 @@ impl ModelSpecInput {
         })
     }
 
-    fn update_command(self, current: &ModelView) -> Result<ModelCommand, ToolError> {
+    pub(super) fn update_command(self, current: &ModelView) -> Result<ModelCommand, ToolError> {
         let model_type =
             parse_model_type(self.model_type.as_deref())?.unwrap_or(current.model_type);
         let capabilities = match self.model_capabilities {

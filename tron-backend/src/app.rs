@@ -379,6 +379,9 @@ impl AppState {
             skills.clone(),
             variables.clone(),
             resources.clone(),
+            prompts.clone(),
+            mcp.clone(),
+            open_apps.clone(),
             memory.clone(),
             short_term_memory.clone(),
         )

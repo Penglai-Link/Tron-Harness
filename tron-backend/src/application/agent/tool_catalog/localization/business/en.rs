@@ -449,6 +449,394 @@ pub(super) const EN_US: &[(&str, &str)] = &[
         "Returns the variable delete result.",
     ),
     (
+        "agent.toolCatalog.tools.platform.variable.page.name",
+        "Page platform variables",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.page.description",
+        "Page variables configured in the platform settings scope.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.page.sampleResultSummary",
+        "Returns paged platform variable records with sensitive values masked.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.page.params.search",
+        "Optional platform variable key or description search text.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.create.name",
+        "Create platform variable",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.create.description",
+        "Create a variable in the platform settings scope.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.create.sampleResultSummary",
+        "Returns the created platform variable with sensitive values masked.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.update.name",
+        "Update platform variable",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.update.description",
+        "Update a variable in the platform settings scope.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.update.sampleResultSummary",
+        "Returns the updated platform variable with sensitive values masked.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.delete.name",
+        "Delete platform variable",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.delete.description",
+        "Delete a variable from the platform settings scope.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.variable.delete.sampleResultSummary",
+        "Returns the platform variable delete result.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.page.name",
+        "Page platform models",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.page.description",
+        "Page models configured in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.page.sampleResultSummary",
+        "Returns paged platform models.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.get.name",
+        "Get platform model",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.get.description",
+        "Read one platform model configuration.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.get.sampleResultSummary",
+        "Returns one platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.create.name",
+        "Create platform model",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.create.description",
+        "Create a model in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.create.sampleResultSummary",
+        "Returns the created platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.update.name",
+        "Update platform model",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.update.description",
+        "Update a platform model configuration.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.update.sampleResultSummary",
+        "Returns the updated platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.enable.name",
+        "Enable platform model",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.enable.description",
+        "Enable a platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.enable.sampleResultSummary",
+        "Returns the enabled platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.disable.name",
+        "Disable platform model",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.disable.description",
+        "Disable a platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.disable.sampleResultSummary",
+        "Returns the disabled platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.delete.name",
+        "Delete platform model",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.delete.description",
+        "Delete a platform model.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.model.delete.sampleResultSummary",
+        "Returns the platform model delete result.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.page.name",
+        "Page platform prompts",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.page.description",
+        "Page prompts configured in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.page.sampleResultSummary",
+        "Returns paged platform prompts.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.get.name",
+        "Get platform prompt",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.get.description",
+        "Read one platform prompt.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.get.sampleResultSummary",
+        "Returns one platform prompt.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.create.name",
+        "Create platform prompt",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.create.description",
+        "Create a prompt in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.create.sampleResultSummary",
+        "Returns the created platform prompt.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.update.name",
+        "Update platform prompt",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.update.description",
+        "Update a platform prompt.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.update.sampleResultSummary",
+        "Returns the updated platform prompt.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.delete.name",
+        "Delete platform prompt",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.delete.description",
+        "Delete a platform prompt.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.prompt.delete.sampleResultSummary",
+        "Returns the platform prompt delete result.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.page.name",
+        "Page platform MCP servers",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.page.description",
+        "Page MCP servers configured in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.page.sampleResultSummary",
+        "Returns paged platform MCP servers.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.get.name",
+        "Get platform MCP server",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.get.description",
+        "Read one platform MCP server.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.get.sampleResultSummary",
+        "Returns one platform MCP server.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.create.name",
+        "Create platform MCP server",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.create.description",
+        "Create an MCP server in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.create.sampleResultSummary",
+        "Returns the created platform MCP server.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.update.name",
+        "Update platform MCP server",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.update.description",
+        "Update a platform MCP server.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.update.sampleResultSummary",
+        "Returns the updated platform MCP server.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.delete.name",
+        "Delete platform MCP server",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.delete.description",
+        "Delete a platform MCP server.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.mcp.delete.sampleResultSummary",
+        "Returns the platform MCP delete result.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.page.name",
+        "Page platform OpenAPI apps",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.page.description",
+        "Page OpenAPI apps configured in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.page.sampleResultSummary",
+        "Returns paged platform OpenAPI apps.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.get.name",
+        "Get platform OpenAPI app",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.get.description",
+        "Read one platform OpenAPI app.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.get.sampleResultSummary",
+        "Returns one platform OpenAPI app.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.create.name",
+        "Create platform OpenAPI app",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.create.description",
+        "Create an OpenAPI app in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.create.sampleResultSummary",
+        "Returns the created platform OpenAPI app without exposing its secret key.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.update.name",
+        "Update platform OpenAPI app",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.update.description",
+        "Update a platform OpenAPI app.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.update.sampleResultSummary",
+        "Returns the updated platform OpenAPI app.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.disable.name",
+        "Disable platform OpenAPI app",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.disable.description",
+        "Disable a platform OpenAPI app.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.open_app.disable.sampleResultSummary",
+        "Returns the disabled platform OpenAPI app.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.query.name",
+        "Query platform resources",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.query.description",
+        "List resources in the platform settings scope.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.query.sampleResultSummary",
+        "Returns matching platform resources.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.get.name",
+        "Get platform resource",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.get.description",
+        "Read one platform resource.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.get.sampleResultSummary",
+        "Returns one platform resource.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.create.name",
+        "Create platform resource",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.create.description",
+        "Create a file resource in platform settings.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.create.sampleResultSummary",
+        "Returns the created platform resource.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.update.name",
+        "Update platform resource",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.update.description",
+        "Update platform resource metadata.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.update.sampleResultSummary",
+        "Returns the updated platform resource.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.delete.name",
+        "Delete platform resource",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.delete.description",
+        "Delete a platform resource.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.delete.sampleResultSummary",
+        "Returns the platform resource delete result.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.binary.name",
+        "Manage platform resource file",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.binary.description",
+        "Upload or download platform resource content.",
+    ),
+    (
+        "agent.toolCatalog.tools.platform.resource.binary.sampleResultSummary",
+        "Returns platform resource file operation status.",
+    ),
+    (
         "agent.toolCatalog.tools.automation.page.name",
         "Page automations",
     ),

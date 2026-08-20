@@ -38,12 +38,44 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         model_enable_definition(),
         model_disable_definition(),
         model_delete_definition(),
+        platform_model_page_definition(),
+        platform_model_get_definition(),
+        platform_model_create_definition(),
+        platform_model_update_definition(),
+        platform_model_enable_definition(),
+        platform_model_disable_definition(),
+        platform_model_delete_definition(),
         skill_page_definition(),
         skill_view_definition(),
         variable_page_definition(),
         variable_create_definition(),
         variable_update_definition(),
         variable_delete_definition(),
+        platform_variable_page_definition(),
+        platform_variable_create_definition(),
+        platform_variable_update_definition(),
+        platform_variable_delete_definition(),
+        platform_prompt_page_definition(),
+        platform_prompt_get_definition(),
+        platform_prompt_create_definition(),
+        platform_prompt_update_definition(),
+        platform_prompt_delete_definition(),
+        platform_mcp_page_definition(),
+        platform_mcp_get_definition(),
+        platform_mcp_create_definition(),
+        platform_mcp_update_definition(),
+        platform_mcp_delete_definition(),
+        platform_open_app_page_definition(),
+        platform_open_app_get_definition(),
+        platform_open_app_create_definition(),
+        platform_open_app_update_definition(),
+        platform_open_app_disable_definition(),
+        platform_resource_query_definition(),
+        platform_resource_get_definition(),
+        platform_resource_create_definition(),
+        platform_resource_update_definition(),
+        platform_resource_delete_definition(),
+        platform_resource_binary_definition(),
         resource_query_definition(),
         resource_get_definition(),
         resource_create_definition(),
@@ -374,6 +406,112 @@ fn model_delete_definition() -> ToolCatalogDefinition {
     model_code_definition("model.delete", ToolOperationKind::Command)
 }
 
+fn platform_model_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.model.page",
+        "model",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.platform.model.page.description",
+            json!([{ "current": 1, "size": 20, "search": "qwen", "enabled": true }]),
+            json!({
+                "type": "object",
+                "properties": {
+                    "current": { "type": "integer", "minimum": 1, "default": 1 },
+                    "size": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+                    "search": { "type": "string" },
+                    "enabled": { "type": "boolean" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn platform_model_get_definition() -> ToolCatalogDefinition {
+    platform_model_code_definition("platform.model.get", ToolOperationKind::Query)
+}
+
+fn platform_model_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.model.create",
+        "model",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.model.create.description",
+            json!([{ "displayName": "Qwen", "vendor": "Alibaba", "protocol": "responses", "modelType": "text", "baseUrl": "https://example.com/v1", "apiKeyRef": "OPENAI_API_KEY", "modelName": "qwen" }]),
+            platform_model_mutation_schema(true),
+        ),
+    )
+}
+
+fn platform_model_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.model.update",
+        "model",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.model.update.description",
+            json!([{ "modelCode": "MODEL-1", "displayName": "Qwen updated", "vendor": "Alibaba", "protocol": "responses", "modelType": "text", "baseUrl": "https://example.com/v1", "apiKeyRef": "OPENAI_API_KEY", "modelName": "qwen" }]),
+            platform_model_mutation_schema(false),
+        ),
+    )
+}
+
+fn platform_model_enable_definition() -> ToolCatalogDefinition {
+    platform_model_code_definition("platform.model.enable", ToolOperationKind::Command)
+}
+
+fn platform_model_disable_definition() -> ToolCatalogDefinition {
+    platform_model_code_definition("platform.model.disable", ToolOperationKind::Command)
+}
+
+fn platform_model_delete_definition() -> ToolCatalogDefinition {
+    platform_model_code_definition("platform.model.delete", ToolOperationKind::Command)
+}
+
+fn platform_model_code_definition(
+    tool_code: &'static str,
+    operation_kind: ToolOperationKind,
+) -> ToolCatalogDefinition {
+    definition(
+        tool_code,
+        "model",
+        operation_kind,
+        schema(
+            match tool_code {
+                "platform.model.get" => "agent.toolCatalog.tools.platform.model.get.description",
+                "platform.model.enable" => {
+                    "agent.toolCatalog.tools.platform.model.enable.description"
+                }
+                "platform.model.disable" => {
+                    "agent.toolCatalog.tools.platform.model.disable.description"
+                }
+                _ => "agent.toolCatalog.tools.platform.model.delete.description",
+            },
+            json!([{ "modelCode": "MODEL-1" }]),
+            json!({
+                "type": "object",
+                "required": ["modelCode"],
+                "properties": { "modelCode": { "type": "string", "minLength": 1 } },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn platform_model_mutation_schema(create: bool) -> serde_json::Value {
+    let mut value = model_mutation_schema(create);
+    if let Some(properties) = value
+        .get_mut("properties")
+        .and_then(|value| value.as_object_mut())
+    {
+        properties.remove("workspaceCode");
+        properties.remove("allowInheritance");
+    }
+    value
+}
+
 fn skill_page_definition() -> ToolCatalogDefinition {
     definition(
         "skill.page",
@@ -471,6 +609,473 @@ fn variable_delete_definition() -> ToolCatalogDefinition {
             }),
         ),
     )
+}
+
+fn platform_variable_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.variable.page",
+        "variable",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.platform.variable.page.description",
+            json!([{ "current": 1, "size": 20, "search": "OPENAI" }]),
+            json!({
+                "type": "object",
+                "properties": {
+                    "current": { "type": "integer", "minimum": 1, "default": 1 },
+                    "size": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+                    "search": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.platform.variable.page.params.search" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn platform_variable_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.variable.create",
+        "variable",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.variable.create.description",
+            json!([{ "key": "OPENAI_API_KEY", "value": "sk-...", "isSensitive": true }]),
+            platform_variable_mutation_schema(true),
+        ),
+    )
+}
+
+fn platform_variable_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.variable.update",
+        "variable",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.variable.update.description",
+            json!([{ "key": "OPENAI_API_KEY", "valueMode": "preserve", "description": "Updated description" }]),
+            platform_variable_mutation_schema(false),
+        ),
+    )
+}
+
+fn platform_variable_delete_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.variable.delete",
+        "variable",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.variable.delete.description",
+            json!([{ "key": "OPENAI_API_KEY" }]),
+            json!({
+                "type": "object",
+                "required": ["key"],
+                "properties": {
+                    "key": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.variable.common.params.key" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn platform_variable_mutation_schema(create: bool) -> serde_json::Value {
+    let required = if create {
+        json!(["key", "value"])
+    } else {
+        json!(["key"])
+    };
+    json!({
+        "type": "object",
+        "required": required,
+        "properties": {
+            "key": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.variable.common.params.key" },
+            "value": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.tools.variable.common.params.value" },
+            "description": { "type": "string", "x-i18n-description-key": "agent.toolCatalog.common.params.description" },
+            "isSensitive": { "type": "boolean", "x-i18n-description-key": "agent.toolCatalog.tools.variable.common.params.isSensitive" },
+            "valueMode": { "type": "string", "enum": ["replace", "preserve"], "x-i18n-description-key": "agent.toolCatalog.tools.variable.common.params.valueMode" }
+        },
+        "additionalProperties": false
+    })
+}
+
+fn platform_prompt_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.prompt.page",
+        "prompt",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.platform.prompt.page.description",
+            json!([{ "current": 1, "size": 20, "search": "release", "enabled": true }]),
+            json!({
+                "type": "object",
+                "properties": {
+                    "current": { "type": "integer", "minimum": 1, "default": 1 },
+                    "size": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
+                    "search": { "type": "string" },
+                    "category": { "type": "string", "enum": ["SYSTEM", "PERSONA", "TOOL", "TEMPLATE"] },
+                    "enabled": { "type": "boolean" }
+                },
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn platform_prompt_get_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.prompt.get",
+        "prompt",
+        "promptCode",
+        "PROMPT-1",
+        ToolOperationKind::Query,
+    )
+}
+
+fn platform_prompt_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.prompt.create",
+        "prompt",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.prompt.create.description",
+            json!([{ "displayName": "Release summary", "category": "TEMPLATE", "promptBody": "Summarize {{release}}", "enabled": true, "variables": [{ "name": "release", "type": "STRING", "description": "Release name" }] }]),
+            platform_prompt_mutation_schema(true),
+        ),
+    )
+}
+
+fn platform_prompt_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.prompt.update",
+        "prompt",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.prompt.update.description",
+            json!([{ "promptCode": "PROMPT-1", "expectedVersion": 1, "displayName": "Release summary", "promptBody": "Summarize {{release}}", "enabled": true, "variables": [] }]),
+            platform_prompt_mutation_schema(false),
+        ),
+    )
+}
+
+fn platform_prompt_delete_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.prompt.delete",
+        "prompt",
+        "promptCode",
+        "PROMPT-1",
+        ToolOperationKind::Command,
+    )
+}
+
+fn platform_prompt_mutation_schema(create: bool) -> serde_json::Value {
+    let mut properties = json!({
+        "displayName": { "type": "string", "minLength": 1 },
+        "category": { "type": "string", "enum": ["SYSTEM", "PERSONA", "TOOL", "TEMPLATE"] },
+        "promptBody": { "type": "string" },
+        "description": { "type": "string" },
+        "enabled": { "type": "boolean", "default": true },
+        "variables": { "type": "array", "items": {
+            "type": "object",
+            "required": ["name", "description"],
+            "properties": {
+                "name": { "type": "string" },
+                "type": { "type": "string", "enum": ["STRING", "NUMBER", "BOOLEAN", "JSON"], "default": "STRING" },
+                "description": { "type": "string" }
+            },
+            "additionalProperties": false
+        }}
+    });
+    let required = if create {
+        json!(["displayName", "category", "promptBody", "variables"])
+    } else {
+        json!([
+            "promptCode",
+            "expectedVersion",
+            "displayName",
+            "promptBody",
+            "variables"
+        ])
+    };
+    if !create {
+        properties
+            .as_object_mut()
+            .expect("prompt schema properties")
+            .remove("category");
+        properties["promptCode"] = json!({ "type": "string", "minLength": 1 });
+        properties["expectedVersion"] = json!({ "type": "integer", "minimum": 1 });
+    }
+    json!({ "type": "object", "required": required, "properties": properties, "additionalProperties": false })
+}
+
+fn platform_mcp_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.mcp.page",
+        "mcp",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.platform.mcp.page.description",
+            json!([{ "current": 1, "size": 20, "search": "github" }]),
+            json!({ "type": "object", "properties": { "current": { "type": "integer", "minimum": 1 }, "size": { "type": "integer", "minimum": 1, "maximum": 100 }, "search": { "type": "string" } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_mcp_get_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.mcp.get",
+        "mcp",
+        "serverCode",
+        "MCP-1",
+        ToolOperationKind::Query,
+    )
+}
+
+fn platform_mcp_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.mcp.create",
+        "mcp",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.mcp.create.description",
+            json!([{ "serverCode": "github", "name": "GitHub MCP", "transportKind": "streamable_http", "url": "https://mcp.example.com", "authKind": "none" }]),
+            platform_mcp_mutation_schema(true),
+        ),
+    )
+}
+
+fn platform_mcp_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.mcp.update",
+        "mcp",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.mcp.update.description",
+            json!([{ "serverCode": "github", "name": "GitHub MCP", "transportKind": "streamable_http", "url": "https://mcp.example.com", "authKind": "none" }]),
+            platform_mcp_mutation_schema(false),
+        ),
+    )
+}
+
+fn platform_mcp_delete_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.mcp.delete",
+        "mcp",
+        "serverCode",
+        "github",
+        ToolOperationKind::Command,
+    )
+}
+
+fn platform_mcp_mutation_schema(create: bool) -> serde_json::Value {
+    let required = if create {
+        json!(["serverCode", "name", "transportKind"])
+    } else {
+        json!(["serverCode", "name", "transportKind"])
+    };
+    json!({
+        "type": "object", "required": required,
+        "properties": {
+            "serverCode": { "type": "string", "minLength": 1 }, "name": { "type": "string", "minLength": 1 }, "description": { "type": "string" },
+            "transportKind": { "type": "string", "enum": ["streamable_http", "stdio"] }, "url": { "type": "string" },
+            "authKind": { "type": "string", "enum": ["none", "bearer_static"] }, "authPayload": { "type": "object" },
+            "headers": { "type": "object", "additionalProperties": { "type": "string" } }, "headersVariableRefs": { "type": "object", "additionalProperties": { "type": "string" } },
+            "command": { "type": "string" }, "args": { "type": "array", "items": { "type": "string" } },
+            "envVariableRefs": { "type": "object", "additionalProperties": { "type": "string" } }, "envPassthroughRefs": { "type": "array", "items": { "type": "string" } }, "workingDirectory": { "type": "string" }
+        }, "additionalProperties": false
+    })
+}
+
+fn platform_open_app_page_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.open_app.page",
+        "open_app",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.platform.open_app.page.description",
+            json!([{ "current": 1, "size": 20, "search": "client" }]),
+            json!({ "type": "object", "properties": { "current": { "type": "integer", "minimum": 1 }, "size": { "type": "integer", "minimum": 1, "maximum": 100 }, "search": { "type": "string" }, "status": { "type": "string", "enum": ["Enabled", "Disabled", "Archived"] } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_open_app_get_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.open_app.get",
+        "open_app",
+        "openAppCode",
+        "OPENAPP-1",
+        ToolOperationKind::Query,
+    )
+}
+
+fn platform_open_app_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.open_app.create",
+        "open_app",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.open_app.create.description",
+            json!([{ "name": "External client", "description": "API client" }]),
+            json!({ "type": "object", "required": ["name"], "properties": { "name": { "type": "string", "minLength": 1 }, "description": { "type": "string" } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_open_app_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.open_app.update",
+        "open_app",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.open_app.update.description",
+            json!([{ "openAppCode": "OPENAPP-1", "name": "External client", "status": "Enabled" }]),
+            json!({ "type": "object", "required": ["openAppCode", "name", "status"], "properties": { "openAppCode": { "type": "string" }, "name": { "type": "string" }, "description": { "type": "string" }, "status": { "type": "string", "enum": ["Enabled", "Disabled", "Archived"] } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_open_app_disable_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.open_app.disable",
+        "open_app",
+        "openAppCode",
+        "OPENAPP-1",
+        ToolOperationKind::Command,
+    )
+}
+
+fn platform_resource_query_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.resource.query",
+        "resource",
+        ToolOperationKind::Query,
+        schema(
+            "agent.toolCatalog.tools.platform.resource.query.description",
+            json!([{ "current": 1, "size": 20, "kind": "File" }]),
+            json!({ "type": "object", "properties": { "current": { "type": "integer", "minimum": 1 }, "size": { "type": "integer", "minimum": 1, "maximum": 50 }, "search": { "type": "string" }, "kind": { "type": "string" } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_resource_get_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.resource.get",
+        "resource",
+        "resourceCode",
+        "release-notes",
+        ToolOperationKind::Query,
+    )
+}
+
+fn platform_resource_create_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.resource.create",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.resource.create.description",
+            json!([{ "resourceCode": "release-notes", "kind": "File", "name": "Release notes", "sourcePath": "release-notes.md" }]),
+            json!({ "type": "object", "required": ["resourceCode", "kind", "name", "sourcePath"], "properties": { "resourceCode": { "type": "string" }, "kind": resource_file_kind_schema(), "name": { "type": "string" }, "description": { "type": "string" }, "sourcePath": { "type": "string" } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_resource_update_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.resource.update",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.resource.update.description",
+            json!([{ "resourceCode": "release-notes", "name": "Release notes v2" }]),
+            json!({ "type": "object", "required": ["resourceCode"], "properties": { "resourceCode": { "type": "string" }, "name": { "type": "string" }, "description": { "type": "string" } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_resource_delete_definition() -> ToolCatalogDefinition {
+    platform_code_definition(
+        "platform.resource.delete",
+        "resource",
+        "resourceCode",
+        "release-notes",
+        ToolOperationKind::Command,
+    )
+}
+
+fn platform_resource_binary_definition() -> ToolCatalogDefinition {
+    definition(
+        "platform.resource.binary",
+        "resource",
+        ToolOperationKind::Command,
+        schema(
+            "agent.toolCatalog.tools.platform.resource.binary.description",
+            json!([{ "action": "upload", "resourceCode": "release-notes", "sourcePath": "notes.txt" }]),
+            json!({ "type": "object", "required": ["action", "resourceCode"], "properties": { "action": { "type": "string", "enum": ["upload", "download"] }, "resourceCode": { "type": "string" }, "sourcePath": { "type": "string" }, "targetPath": { "type": "string" }, "overwrite": { "type": "boolean" } }, "additionalProperties": false }),
+        ),
+    )
+}
+
+fn platform_code_definition(
+    tool_code: &'static str,
+    domain: &'static str,
+    field: &'static str,
+    example: &'static str,
+    operation_kind: ToolOperationKind,
+) -> ToolCatalogDefinition {
+    let examples = json!([{}]);
+    let mut example_object = examples[0].as_object().cloned().unwrap_or_default();
+    example_object.insert(field.to_string(), json!(example));
+    let mut properties = serde_json::Map::new();
+    properties.insert(
+        field.to_string(),
+        json!({ "type": "string", "minLength": 1 }),
+    );
+    definition(
+        tool_code,
+        domain,
+        operation_kind,
+        schema(
+            tool_key_for_platform(tool_code, "description"),
+            json!([example_object]),
+            json!({
+                "type": "object",
+                "required": [field],
+                "properties": properties,
+                "additionalProperties": false
+            }),
+        ),
+    )
+}
+
+fn tool_key_for_platform(tool_code: &'static str, suffix: &'static str) -> &'static str {
+    match (tool_code, suffix) {
+        ("platform.prompt.get", "description") => {
+            "agent.toolCatalog.tools.platform.prompt.get.description"
+        }
+        ("platform.prompt.delete", "description") => {
+            "agent.toolCatalog.tools.platform.prompt.delete.description"
+        }
+        ("platform.mcp.get", "description") => {
+            "agent.toolCatalog.tools.platform.mcp.get.description"
+        }
+        ("platform.mcp.delete", "description") => {
+            "agent.toolCatalog.tools.platform.mcp.delete.description"
+        }
+        ("platform.open_app.get", "description") => {
+            "agent.toolCatalog.tools.platform.open_app.get.description"
+        }
+        ("platform.open_app.disable", "description") => {
+            "agent.toolCatalog.tools.platform.open_app.disable.description"
+        }
+        ("platform.resource.get", "description") => {
+            "agent.toolCatalog.tools.platform.resource.get.description"
+        }
+        ("platform.resource.delete", "description") => {
+            "agent.toolCatalog.tools.platform.resource.delete.description"
+        }
+        _ => "agent.toolCatalog.tools.platform.resource.get.description",
+    }
 }
 
 fn resource_query_definition() -> ToolCatalogDefinition {

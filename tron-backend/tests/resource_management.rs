@@ -47,6 +47,12 @@ fn resource_catalog_exposes_full_resource_lifecycle_tools() {
     assert_eq!(
         tool_codes,
         vec![
+            "platform.resource.query",
+            "platform.resource.get",
+            "platform.resource.create",
+            "platform.resource.update",
+            "platform.resource.delete",
+            "platform.resource.binary",
             "resource.query",
             "resource.get",
             "resource.create",
@@ -589,10 +595,12 @@ fn resource_scope_accepts_ancestor_workspace_grants_but_rejects_unrelated_worksp
             .user_has_effective_access(WORKSPACE, PARENT_ACTOR)
             .expect("workspace access should resolve")
     );
-    assert!(!state
-        .workspaces
-        .user_has_effective_access("COMPLIANCE", PARENT_ACTOR)
-        .expect("workspace access should resolve"));
+    assert!(
+        !state
+            .workspaces
+            .user_has_effective_access("COMPLIANCE", PARENT_ACTOR)
+            .expect("workspace access should resolve")
+    );
 }
 
 #[derive(Clone)]
@@ -629,6 +637,9 @@ fn resource_state(test_name: &str) -> AppState {
         state.skills.clone(),
         state.variables.clone(),
         state.resources.clone(),
+        state.prompts.clone(),
+        state.mcp.clone(),
+        state.open_apps.clone(),
         state.memory.clone(),
         state.short_term_memory.clone(),
     )

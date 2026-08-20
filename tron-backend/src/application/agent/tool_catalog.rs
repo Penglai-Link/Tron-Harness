@@ -107,3 +107,45 @@ impl BusinessToolCatalog {
 }
 
 pub(crate) use localization::{materialize_schema, translate};
+
+#[cfg(test)]
+mod tests {
+    use super::BusinessToolCatalog;
+
+    #[test]
+    fn platform_variable_crud_tools_are_catalogued_without_workspace_scope() {
+        let tools = BusinessToolCatalog::list_tools(Some("variable"), None, "en-US");
+        let codes = tools
+            .iter()
+            .map(|tool| tool.tool_code.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(codes.contains(&"platform.variable.page"));
+        assert!(codes.contains(&"platform.variable.create"));
+        assert!(codes.contains(&"platform.variable.update"));
+        assert!(codes.contains(&"platform.variable.delete"));
+        let all_codes = BusinessToolCatalog::tool_codes();
+        for code in [
+            "platform.model.page",
+            "platform.prompt.page",
+            "platform.mcp.page",
+            "platform.open_app.page",
+            "platform.resource.query",
+        ] {
+            assert!(
+                all_codes.iter().any(|candidate| candidate == code),
+                "missing catalog tool {code}"
+            );
+        }
+
+        let page = BusinessToolCatalog::tool("platform.variable.page", "en-US")
+            .expect("platform variable page tool should be catalogued");
+        assert!(
+            !page
+                .input_schema
+                .get("properties")
+                .and_then(|properties| properties.get("workspaceCode"))
+                .is_some()
+        );
+    }
+}
