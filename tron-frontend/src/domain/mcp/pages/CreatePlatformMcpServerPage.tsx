@@ -2,6 +2,7 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import {
   Save,
   ShieldCheck,
@@ -45,15 +46,16 @@ function VerificationResultCard({
 }: {
   record: PlatformMcpServerRecord;
 }) {
+  const { t } = useTranslation(["pages"]);
   const { formatDateTime } = useLocaleFormatters();
 
   return (
     <SurfaceCard className="space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="text-lg font-semibold">Verification result</h2>
+          <h2 className="text-lg font-semibold">{t("pages:mcp.verification.title", "Verification result")}</h2>
           <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-            Draft configuration verified against the platform MCP runtime.
+            {t("pages:mcp.verification.description", "Draft configuration verified against the platform MCP runtime.")}
           </p>
         </div>
         <Badge tone={platformMcpServerStateTone(record.lastHealthStatus)}>
@@ -62,12 +64,12 @@ function VerificationResultCard({
       </div>
 
       <p className="text-sm text-[var(--color-on-surface)]">
-        {record.lastHealthMessage ?? "No issues reported."}
+        {record.lastHealthMessage ?? t("pages:mcp.verification.noIssues", "No issues reported.")}
       </p>
 
       {record.lastHealthCheckedAt ? (
         <p className="text-xs text-[var(--color-on-surface-variant)]">
-          Checked {formatDateTime(record.lastHealthCheckedAt, {
+          {t("pages:mcp.verification.checked", "Checked")} {formatDateTime(record.lastHealthCheckedAt, {
             dateStyle: "medium",
             timeStyle: "short",
           })}
@@ -78,6 +80,7 @@ function VerificationResultCard({
 }
 
 export function CreatePlatformMcpServerPage() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const toast = useToast();
   const dataSource = getServiceDataSource("mcp");
@@ -110,10 +113,10 @@ export function CreatePlatformMcpServerPage() {
           definition: payload,
         });
       setVerificationResult(verified);
-      toast.success(`${verified.name} verified`);
+      toast.success(t("pages:mcp.messages.verified", "{{name}} verified", { name: verified.name }));
     } catch (error) {
       setVerificationResult(null);
-      toast.error(error instanceof Error ? error.message : "Verify failed");
+      toast.error(error instanceof Error ? error.message : t("pages:mcp.errors.verify", "Verify failed"));
     } finally {
       setVerifying(false);
     }
@@ -131,10 +134,10 @@ export function CreatePlatformMcpServerPage() {
       const saved = dataSource === "api"
         ? await createPlatformMcpServer(payload)
         : createPlatformMcpServerMock(payload);
-      toast.success(`${saved.name} created`);
+      toast.success(t("pages:mcp.messages.created", "{{name}} created", { name: saved.name }));
       navigate(`/settings/mcp-servers/detail?serverCode=${encodeURIComponent(saved.serverCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform MCP server could not be created");
+      toast.error(error instanceof Error ? error.message : t("pages:mcp.errors.create", "Platform MCP server could not be created"));
     } finally {
       setSubmitting(false);
     }
@@ -144,13 +147,13 @@ export function CreatePlatformMcpServerPage() {
     <>
       <PageHeader
         breadcrumbs={[
-          { label: "MCP Servers", href: "/settings/mcp-servers" },
-          { label: "New" },
+          { label: t("pages:mcp.title", "MCP Servers"), href: "/settings/mcp-servers" },
+          { label: t("pages:mcp.new", "New") },
         ]}
-        title="Connect MCP server"
+        title={t("pages:mcp.createTitle", "Connect MCP server")}
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/settings/mcp-servers")}>Cancel</Button>
+            <Button variant="secondary" onClick={() => navigate("/settings/mcp-servers")}>{t("pages:mcp.actions.cancel", "Cancel")}</Button>
             <Button
               variant="secondary"
               disabled={submitting || verifying || Boolean(validationError)}
@@ -158,7 +161,7 @@ export function CreatePlatformMcpServerPage() {
               onClick={() => void verifyDraft()}
             >
               <ShieldCheck size={16} aria-hidden="true" />
-              {verifying ? "Verifying..." : "Verify"}
+              {verifying ? t("pages:mcp.actions.verifying", "Verifying...") : t("pages:mcp.actions.verify", "Verify")}
             </Button>
             <Button
               disabled={submitting || verifying || Boolean(validationError)}
@@ -166,7 +169,7 @@ export function CreatePlatformMcpServerPage() {
               onClick={() => void saveServer()}
             >
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:mcp.actions.saving", "Saving...") : t("pages:mcp.actions.save", "Save")}
             </Button>
           </>
         )}

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
@@ -85,6 +86,7 @@ function SearchInput({
   disabled?: boolean;
   loading: boolean;
 }) {
+  const { t } = useTranslation(["pages"]);
   const activeOption =
     searchModeOptions.find((option) => option.mode === mode) ??
     searchModeOptions[0];
@@ -130,7 +132,7 @@ function SearchInput({
           aria-busy={loading}
           onClick={onSubmit}
         >
-          {loading ? "Searching..." : activeOption.buttonLabel}
+          {loading ? t("pages:skills.actions.searching", "Searching...") : t(`pages:skills.searchModes.${mode}.button`, activeOption.buttonLabel)}
         </Button>
       </Field>
     </div>
@@ -152,6 +154,7 @@ function CandidateCard({
   selected: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   const selectable = !installed && !disabled;
 
   return (
@@ -179,12 +182,12 @@ function CandidateCard({
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="info">{candidate.skillName}</Badge>
-            {installed ? <Badge tone="success">Installed</Badge> : null}
+            {installed ? <Badge tone="success">{t("pages:skills.status.installed", "Installed")}</Badge> : null}
             {installState?.state === "installing" ? (
-              <Badge tone="warning">Installing</Badge>
+              <Badge tone="warning">{t("pages:skills.status.installing", "Installing")}</Badge>
             ) : null}
             {installState?.state === "error" ? (
-              <Badge tone="error">Failed</Badge>
+              <Badge tone="error">{t("pages:skills.status.failed", "Failed")}</Badge>
             ) : null}
             {candidate.installsLabel ? (
               <Badge tone="info">{candidate.installsLabel}</Badge>
@@ -213,6 +216,7 @@ function CandidateCard({
 }
 
 export function CreateSkillPage() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const toast = useToast();
   const [query, setQuery] = useState("");
@@ -329,7 +333,7 @@ export function CreateSkillPage() {
       const results = await searchMarketplaceSkills(query.trim(), searchMode);
       setCandidates(results);
       if (!results.length) {
-        toast.info("No skills matched the current query");
+        toast.info(t("pages:skills.messages.noMatch", "No skills matched the current query"));
       }
     } catch (error) {
       const message =
@@ -492,7 +496,7 @@ export function CreateSkillPage() {
           { label: "Skill Center", href: "/settings/skills" },
           { label: "Sync" },
         ]}
-        title="Sync Skills"
+        title={t("pages:skills.syncTitle", "Sync Skills")}
         actions={
           <>
             <Button
@@ -501,7 +505,7 @@ export function CreateSkillPage() {
               disabled={installing}
               onClick={() => navigate("/settings/skills")}
             >
-              Cancel
+              {t("pages:skills.actions.cancel", "Cancel")}
             </Button>
             <Button
               size='lg'
@@ -512,7 +516,7 @@ export function CreateSkillPage() {
               {installing
                 ? `Syncing ${installProgress?.completedCount ?? 0}/${installProgress?.totalCount ?? selectedCount
                 }...`
-                : `Sync Selected${selectedCount ? ` (${selectedCount})` : ""}`}
+                : t("pages:skills.actions.syncSelected", "Sync Selected{{suffix}}", { suffix: selectedCount ? ` (${selectedCount})` : "" })}
             </Button>
           </>
         }
@@ -520,7 +524,7 @@ export function CreateSkillPage() {
 
       <div className="space-y-6">
         <SurfaceCard>
-          <Field label="Sync Type">
+          <Field label={t("pages:skills.fields.syncType", "Sync Type")}>
             <SearchInput
               mode={searchMode}
               value={query}
@@ -536,7 +540,7 @@ export function CreateSkillPage() {
         <div className="grid gap-5 xl:grid-cols-2">
           <SurfaceCard className="space-y-4">
             <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
-              Search Results
+              {t("pages:skills.sections.searchResults", "Search Results")}
             </h2>
 
             {!searched ? (
@@ -578,7 +582,7 @@ export function CreateSkillPage() {
 
           <SurfaceCard className="space-y-5">
             <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
-              Sync Plan
+              {t("pages:skills.sections.syncPlan", "Sync Plan")}
             </h2>
 
             {!planCandidates.length ? (

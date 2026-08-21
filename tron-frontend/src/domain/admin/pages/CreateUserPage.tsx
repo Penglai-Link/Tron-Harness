@@ -3,6 +3,7 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { UserPlus } from "lucide-react";
 
 import {
@@ -69,6 +70,7 @@ function makeMockCreatedUser(payload: CreateUserPayload): UserRecord {
 }
 
 export function CreateUserPage() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const toast = useToast();
   const [form, setForm] = useState<CreateUserForm>(defaultCreateForm);
@@ -115,7 +117,7 @@ export function CreateUserPage() {
       const createdUser = getServiceDataSource("admin") === "api"
         ? await createAdminUser(payload)
         : makeMockCreatedUser(payload);
-      const notice = `${createdUser.displayName} created successfully`;
+      const notice = t("pages:admin.users.messages.created", "{{name}} created successfully", { name: createdUser.displayName });
 
       toast.success(notice);
       navigate("/admin/users", {
@@ -124,7 +126,7 @@ export function CreateUserPage() {
         },
       });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "User could not be created";
+      const message = error instanceof Error ? error.message : t("pages:admin.users.errors.create", "User could not be created");
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -134,14 +136,14 @@ export function CreateUserPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: "New" }]}
-        title="Create User"
+        breadcrumbs={[{ label: t("pages:admin.users.title", "Users"), href: "/admin/users" }, { label: t("pages:admin.users.new", "New") }]}
+        title={t("pages:admin.users.createTitle", "Create User")}
         actions={(
           <>
-            <Button type="button" variant="secondary" onClick={() => navigate("/admin/users")}>Cancel</Button>
+            <Button type="button" variant="secondary" onClick={() => navigate("/admin/users")}>{t("pages:admin.actions.cancel", "Cancel")}</Button>
             <Button type="submit" form="create-user-form" disabled={submitting}>
               <UserPlus size={16} aria-hidden="true" />
-              {submitting ? "Creating..." : "Create User"}
+              {submitting ? t("pages:admin.users.creating", "Creating...") : t("pages:admin.users.createTitle", "Create User")}
             </Button>
           </>
         )}
@@ -149,31 +151,31 @@ export function CreateUserPage() {
       <SurfaceCard>
         <form className="grid gap-5" id="create-user-form" onSubmit={handleSubmit}>
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Username">
+            <Field label={t("pages:admin.users.fields.username", "Username")}>
               <TextInput required value={form.username} onChange={(event) => updateForm("username", event.target.value)} />
             </Field>
-            <Field label="First Name">
+            <Field label={t("pages:admin.users.fields.firstName", "First Name")}>
               <TextInput required value={form.firstName} onChange={(event) => updateNameField("firstName", event.target.value)} />
             </Field>
-            <Field label="Last Name">
+            <Field label={t("pages:admin.users.fields.lastName", "Last Name")}>
               <TextInput required value={form.lastName} onChange={(event) => updateNameField("lastName", event.target.value)} />
             </Field>
-            <Field label="Display Name">
+            <Field label={t("pages:admin.users.fields.displayName", "Display Name")}>
               <TextInput required value={form.displayName} onChange={(event) => updateForm("displayName", event.target.value)} />
             </Field>
-            <Field label="Email">
+            <Field label={t("pages:admin.users.fields.email", "Email")}>
               <TextInput required type="email" value={form.email} onChange={(event) => updateForm("email", event.target.value)} />
             </Field>
-            <Field label="Phone Country Code">
+            <Field label={t("pages:admin.users.fields.phoneCountryCode", "Phone Country Code")}>
               <TextInput value={form.phoneCountryCode} onChange={(event) => updateForm("phoneCountryCode", event.target.value)} />
             </Field>
-            <Field label="Phone">
+            <Field label={t("pages:admin.users.fields.phone", "Phone")}>
               <TextInput value={form.phoneNumber} onChange={(event) => updateForm("phoneNumber", event.target.value)} />
             </Field>
-            <Field label="Locale">
+            <Field label={t("pages:admin.users.fields.locale", "Locale")}>
               <TextInput value={form.locale} onChange={(event) => updateForm("locale", event.target.value)} />
             </Field>
-            <Field label="Timezone">
+            <Field label={t("pages:admin.users.fields.timezone", "Timezone")}>
               <TextInput value={form.timezone} onChange={(event) => updateForm("timezone", event.target.value)} />
             </Field>
           </div>

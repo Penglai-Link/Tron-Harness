@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -42,6 +43,10 @@ import {
 export function CreateWorkspaceModelPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`modelRegistry.${key}`, { defaultValue, ...options })
+  );
   const dataSource = getServiceDataSource("model");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
@@ -78,7 +83,7 @@ export function CreateWorkspaceModelPage() {
           : getWorkspaceModelCatalog(activeWorkspaceCode);
         if (active) setRecords(nextCatalog.records);
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Workspace models could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Workspace models could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -93,17 +98,17 @@ export function CreateWorkspaceModelPage() {
 
   async function saveModel(options?: { verifyAfterCreate?: boolean }) {
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace before creating a model");
+      toast.error(pageT("errors.workspaceRequired", "Select a workspace before creating a model"));
       return;
     }
     if (duplicateDisplayName) {
-      toast.error(`displayName already exists in workspace ${activeWorkspaceLabel}`);
+      toast.error(pageT("errors.duplicateDisplayName", "displayName already exists in workspace {{workspace}}", { workspace: activeWorkspaceLabel }));
       return;
     }
 
     const apiKeyRef = apiKeyInputRef.current?.value.trim() ?? "";
     if (!apiKeyRef) {
-      toast.error("apiKey is required");
+      toast.error(pageT("errors.apiKeyRequired", "apiKey is required"));
       return;
     }
 
@@ -119,7 +124,7 @@ export function CreateWorkspaceModelPage() {
         const verified = dataSource === "api"
           ? await verifyWorkspaceModelDraft(activeWorkspaceCode, payload)
           : verifyWorkspaceModelCreateDraftRecord(activeWorkspaceCode, payload);
-        toast.success(`${verified.displayName} verified`);
+        toast.success(pageT("messages.verified", "{{name}} verified", { name: verified.displayName }));
         return;
       }
 
@@ -127,14 +132,14 @@ export function CreateWorkspaceModelPage() {
         ? await createWorkspaceModel(activeWorkspaceCode, payload)
         : createWorkspaceModelRecord(activeWorkspaceCode, payload);
       if (!verifyAfterCreate) {
-        toast.success(`${saved.displayName} created`);
+        toast.success(pageT("messages.created", "{{name}} created", { name: saved.displayName }));
       }
       navigate(`/models/detail?modelCode=${encodeURIComponent(saved.modelCode)}`);
     } catch (error) {
       toast.error(formatWorkspaceModelError(
         error,
         activeWorkspaceLabel,
-        verifyAfterCreate ? "Verify failed" : "Workspace model could not be created",
+        verifyAfterCreate ? pageT("errors.verify", "Verify failed") : pageT("errors.create", "Workspace model could not be created"),
       ));
     } finally {
       setSubmitting(false);
@@ -145,18 +150,18 @@ export function CreateWorkspaceModelPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Models", href: "/models" }, { label: "New" }]}
-        title="Create Workspace Model"
+        breadcrumbs={[{ label: pageT("title", "Models"), href: "/models" }, { label: pageT("actions.new", "New") }]}
+        title={pageT("detail.createWorkspaceModel", "Create Workspace Model")}
         actions={(
           <>
-            <Button size="lg" variant="outline" onClick={() => navigate("/models")}>Cancel</Button>
+            <Button size="lg" variant="outline" onClick={() => navigate("/models")}>{pageT("actions.cancel", "Cancel")}</Button>
             <Button
               size="lg" variant="outline"
               disabled={!activeWorkspaceCode || loading || submitting || verifying || !form.displayName.trim()}
               aria-busy={verifying}
               onClick={() => void saveModel({ verifyAfterCreate: true })}
             >
-              {verifying ? "Verifying..." : "Verify"}
+              {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             <Button
               size="lg"
@@ -164,7 +169,7 @@ export function CreateWorkspaceModelPage() {
               aria-busy={submitting}
               onClick={() => void saveModel()}
             >
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>
         )}
@@ -172,7 +177,7 @@ export function CreateWorkspaceModelPage() {
 
       <div>
         {!activeWorkspaceCode ? (
-          <SurfaceCard>Select a workspace in the shell before creating a model.</SurfaceCard>
+          <SurfaceCard>{pageT("errors.workspaceRequired", "Select a workspace in the shell before creating a model.")}</SurfaceCard>
         ) : (
           <SurfaceCard className="space-y-5">
             <ModelFormFields
@@ -180,12 +185,12 @@ export function CreateWorkspaceModelPage() {
               onChange={setForm}
               apiKeyInputRef={apiKeyInputRef}
               syncModelNameFromDisplayName
-              displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceLabel}` : undefined}
+              displayNameError={duplicateDisplayName ? pageT("errors.duplicateDisplayName", "displayName already exists in workspace {{workspace}}", { workspace: activeWorkspaceLabel }) : undefined}
             />
 
             <ToggleSwitch
               checked={allowInheritance}
-              label="Allow Inheritance"
+              label={pageT("form.allowInheritance", "Allow Inheritance")}
               onCheckedChange={setAllowInheritance}
             />
           </SurfaceCard>

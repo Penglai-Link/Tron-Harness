@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Navigate,
   useNavigate,
@@ -80,6 +81,7 @@ function sourceLabel(record: VariableRecord) {
 }
 
 export function VariableDetailsPage() {
+  const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -199,24 +201,24 @@ export function VariableDetailsPage() {
 
     const trimmedKey = mode === "override" ? selectedRecord.key : form.key.trim();
     if (!trimmedKey) {
-      toast.error("Variable key is required");
+      toast.error(t("pages:variables.errors.keyRequired", "Variable key is required"));
       return;
     }
     const selectedIsSensitive = isSensitiveRecord(selectedRecord);
     if (selectedIsSensitive && !form.isSensitive && mode === "edit" && !form.value.trim()) {
-      toast.error("New value is required before turning off sensitivity");
+      toast.error(t("pages:variables.errors.newValueRequired", "New value is required before turning off sensitivity"));
       return;
     }
     if (!selectedIsSensitive && form.isSensitive && mode === "edit" && !form.value.trim()) {
-      toast.error("Sensitive value is required before turning on sensitivity");
+      toast.error(t("pages:variables.errors.sensitiveValueRequired", "Sensitive value is required before turning on sensitivity"));
       return;
     }
     if (selectedIsSensitive && mode === "override" && !form.isSensitive) {
-      toast.error("Inherited sensitive variables must stay sensitive when overridden");
+      toast.error(t("pages:variables.errors.inheritedSensitive", "Inherited sensitive variables must stay sensitive when overridden"));
       return;
     }
     if (form.isSensitive && !form.value.trim()) {
-      toast.error("Variable value is required");
+      toast.error(t("pages:variables.errors.valueRequired", "Variable value is required"));
       return;
     }
 
@@ -234,7 +236,7 @@ export function VariableDetailsPage() {
         saved = dataSource === "api"
           ? await createVariable(activeWorkspaceCode, payload)
           : createVariableRecord(activeWorkspaceCode, payload);
-        toast.success(`${saved.key} overridden in ${activeWorkspaceCode}`);
+        toast.success(t("pages:variables.messages.overridden", "{{key}} overridden in {{workspace}}", { key: saved.key, workspace: activeWorkspaceCode }));
       } else {
         const payload = {
           description: normalizeWorkspaceVariableDescription(form.description),
@@ -245,7 +247,7 @@ export function VariableDetailsPage() {
         saved = dataSource === "api"
           ? await updateVariable(activeWorkspaceCode, selectedRecord.key, payload)
           : updateVariableRecord(activeWorkspaceCode, selectedRecord.key, payload);
-        toast.success(`${saved.key} saved`);
+        toast.success(t("pages:variables.messages.saved", "{{key}} saved", { key: saved.key }));
       }
 
       setRevealedValue("");
@@ -253,7 +255,7 @@ export function VariableDetailsPage() {
       setMode("view");
       navigate(`/variables/detail?variableKey=${encodeURIComponent(saved.key)}`, { replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Variable could not be saved");
+      toast.error(error instanceof Error ? error.message : t("pages:variables.errors.save", "Variable could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -271,14 +273,14 @@ export function VariableDetailsPage() {
       setRevealedValue("");
       refresh();
       if (selectedRecord.sourceKind === "Override") {
-        toast.success(`${selectedRecord.key} reverted to inherited value`);
+        toast.success(t("pages:variables.messages.reverted", "{{key}} reverted to inherited value", { key: selectedRecord.key }));
         navigate(detailHref(), { replace: true });
       } else {
-        toast.success(`${selectedRecord.key} deleted`);
+        toast.success(t("pages:variables.messages.deleted", "{{key}} deleted", { key: selectedRecord.key }));
         navigate("/variables");
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Variable could not be removed");
+      toast.error(error instanceof Error ? error.message : t("pages:variables.errors.remove", "Variable could not be removed"));
     } finally {
       setDeleting(false);
     }
@@ -336,7 +338,7 @@ export function VariableDetailsPage() {
       setStepUpIntent(null);
       setRevealError("");
     } catch (error) {
-      setRevealError(error instanceof Error ? error.message : "Sensitive value could not be revealed");
+      setRevealError(error instanceof Error ? error.message : t("pages:variables.errors.reveal", "Sensitive value could not be revealed"));
     } finally {
       setRevealPending(false);
     }
@@ -346,10 +348,10 @@ export function VariableDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Variables", href: "/variables" }, { label: "Workspace" }]}
-          title="Variable"
+          breadcrumbs={[{ label: t("pages:variables.title", "Variables"), href: "/variables" }, { label: t("pages:variables.workspace", "Workspace") }]}
+          title={t("pages:variables.detailTitle", "Variable")}
         />
-        <SurfaceCard>Select a workspace in the shell to load this variable.</SurfaceCard>
+        <SurfaceCard>{t("pages:variables.empty.workspaceDetail", "Select a workspace in the shell to load this variable.")}</SurfaceCard>
       </>
     );
   }
@@ -358,10 +360,10 @@ export function VariableDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Variables", href: "/variables" }, { label: "Loading" }]}
-          title="Variable"
+          breadcrumbs={[{ label: t("pages:variables.title", "Variables"), href: "/variables" }, { label: t("pages:variables.loading", "Loading") }]}
+          title={t("pages:variables.detailTitle", "Variable")}
         />
-        <SurfaceCard>Loading variable...</SurfaceCard>
+        <SurfaceCard>{t("pages:variables.loadingValue", "Loading variable...")}</SurfaceCard>
       </>
     );
   }
@@ -370,10 +372,10 @@ export function VariableDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Variables", href: "/variables" }, { label: "Not Found" }]}
-          title="Variable"
+          breadcrumbs={[{ label: t("pages:variables.title", "Variables"), href: "/variables" }, { label: t("pages:variables.notFound", "Not Found") }]}
+          title={t("pages:variables.detailTitle", "Variable")}
         />
-        <SurfaceCard>Variable not found in the current workspace.</SurfaceCard>
+        <SurfaceCard>{t("pages:variables.empty.notFound", "Variable not found in the current workspace.")}</SurfaceCard>
       </>
     );
   }
@@ -381,17 +383,17 @@ export function VariableDetailsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Variables", href: "/variables" }, { label: selectedRecord.key }]}
-        title={mode === "override" ? `Override ${selectedRecord.key}` : selectedRecord.key}
+        breadcrumbs={[{ label: t("pages:variables.title", "Variables"), href: "/variables" }, { label: selectedRecord.key }]}
+        title={mode === "override" ? t("pages:variables.overrideTitle", "Override {{key}}", { key: selectedRecord.key }) : selectedRecord.key}
         actions={editing ? (
           <>
             <Button variant="secondary" disabled={submitting} onClick={exitEditing}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              {t("pages:variables.actions.cancel", "Cancel")}
             </Button>
             <Button disabled={submitting || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:variables.actions.saving", "Saving...") : t("pages:variables.actions.save", "Save")}
             </Button>
           </>
         ) : (
@@ -399,19 +401,19 @@ export function VariableDetailsPage() {
             {selectedRecord.sourceKind === "Inherited" ? (
               <Button variant="secondary" onClick={beginOverride}>
                 <Undo2 size={16} aria-hidden="true" />
-                Override
+                {t("pages:variables.actions.override", "Override")}
               </Button>
             ) : null}
             {isWorkspaceVariableEditable(selectedRecord) ? (
               <Button variant="secondary" onClick={beginEdit}>
                 <Edit3 size={16} aria-hidden="true" />
-                Edit
+                {t("pages:variables.actions.edit", "Edit")}
               </Button>
             ) : null}
             {isWorkspaceVariableRemovable(selectedRecord) ? (
               <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeVariable()}>
                 <Trash2 size={16} aria-hidden="true" />
-                {deleting ? "Deleting..." : (selectedRecord.sourceKind === "Override" ? "Revert" : "Delete")}
+                {deleting ? t("pages:variables.actions.deleting", "Deleting...") : (selectedRecord.sourceKind === "Override" ? t("pages:variables.actions.revert", "Revert") : t("pages:variables.actions.delete", "Delete"))}
               </Button>
             ) : null}
           </>
@@ -430,37 +432,37 @@ export function VariableDetailsPage() {
             />
           ) : (
             <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
-              <Field label="Variable Key">
+              <Field label={t("pages:variables.form.key", "Variable Key")}>
                 <ReadValue>
                   <code>{selectedRecord.key}</code>
                 </ReadValue>
               </Field>
-              <Field label="Sensitive Data">
+              <Field label={t("pages:variables.form.sensitive", "Sensitive Data")}>
                 <SensitiveDataBadge sensitive={isSensitiveRecord(selectedRecord)} />
               </Field>
-              <Field label="Source">
+              <Field label={t("pages:variables.detail.source", "Source")}>
                 <div className="flex min-h-6 flex-wrap items-center gap-2">
                   <Badge tone={getVariableSourceTone(selectedRecord.sourceKind)}>{selectedRecord.sourceKind}</Badge>
                   <span className="text-sm text-[var(--color-on-surface)]">{sourceLabel(selectedRecord)}</span>
                 </div>
               </Field>
               {inheritedWorkspace ? (
-                <Field label={selectedRecord.sourceKind === "Override" ? "Overrides" : "Inherited From"}>
+                <Field label={selectedRecord.sourceKind === "Override" ? t("pages:variables.detail.overrides", "Overrides") : t("pages:variables.detail.inheritedFrom", "Inherited From")}>
                   <ReadValue>
                     {inheritedWorkspace.label}
                     {inheritedWorkspace.code ? ` (${inheritedWorkspace.code})` : ""}
                   </ReadValue>
                 </Field>
               ) : null}
-              <Field label="Created">
+              <Field label={t("pages:variables.detail.created", "Created")}>
                 <ReadValue>{formatWorkspaceVariableTimestamp(selectedRecord.createdAt)}</ReadValue>
               </Field>
-              <Field label="Updated">
+              <Field label={t("pages:variables.detail.updated", "Updated")}>
                 <ReadValue>{formatWorkspaceVariableTimestamp(selectedRecord.updatedAt)}</ReadValue>
               </Field>
               <div className="md:col-span-2">
-                <Field label="Variable Value">
-                  <div className="min-h-32 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
+                <Field className="w-full" label={t("pages:variables.form.value", "Variable Value")}>
+                  <div className="min-h-32 w-full rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <SensitiveValueCode
                         className="min-w-0 flex-1"
@@ -488,8 +490,8 @@ export function VariableDetailsPage() {
                 </Field>
               </div>
               <div className="md:col-span-2">
-                <Field label="Description">
-                  <div className="min-h-20 whitespace-pre-wrap break-words rounded-lg border border-[var(--color-outline-variant)] p-4 text-sm leading-6 text-[var(--color-on-surface)]">
+                <Field className="w-full" label={t("pages:variables.form.description", "Description")}>
+                  <div className="min-h-20 w-full whitespace-pre-wrap break-words rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm leading-6 text-[var(--color-on-surface)]">
                     {selectedRecord.description ?? ""}
                   </div>
                 </Field>

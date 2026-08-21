@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { useTranslation } from "react-i18next";
 
 import {
   Field,
@@ -134,17 +135,18 @@ export function WorkspaceVariableFormFields({
   mode: "create" | "edit" | "override";
   onChange: (next: WorkspaceVariableFormState) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="space-y-5">
-      <Field label="Variable Key" hint={keyEditable ? "Letters, digits, underscore, hyphen, or dot." : undefined}>
+      <Field label={t("pages:variables.form.key", "Variable Key")} hint={keyEditable ? t("pages:variables.form.keyHint", "Letters, digits, underscore, hyphen, or dot.") : undefined}>
         <TextInput
-          aria-label="Variable key"
+          aria-label={t("pages:variables.form.key", "Variable key")}
           disabled={!keyEditable}
           value={form.key}
           onChange={(event) => onChange({ ...form, key: event.target.value })}
         />
       </Field>
-      <Field label="Sensitive Data">
+      <Field label={t("pages:variables.form.sensitive", "Sensitive Data")}>
         <SensitiveDataCheckbox
           checked={form.isSensitive}
           disabled={disableSensitiveDataToggle}
@@ -156,23 +158,23 @@ export function WorkspaceVariableFormFields({
         />
       </Field>
       <Field
-        label="Variable Value"
+        label={t("pages:variables.form.value", "Variable Value")}
         hint={form.isSensitive
-          ? "Masked by default and requires verification to reveal."
+          ? t("pages:variables.form.sensitiveHint", "Masked by default and requires verification to reveal.")
           : mode === "override"
-            ? "Save a local value in this workspace without mutating the inherited source."
-            : "Value is stored exactly as entered; no data typing is applied."}
+            ? t("pages:variables.form.overrideHint", "Save a local value in this workspace without mutating the inherited source.")
+            : t("pages:variables.form.valueHint", "Value is stored exactly as entered; no data typing is applied.")}
       >
         <TextArea
-          aria-label="Variable value"
+          aria-label={t("pages:variables.form.value", "Variable value")}
           className="min-h-32 font-mono"
           value={form.value}
           onChange={(event) => onChange({ ...form, value: event.target.value, valueMode: "REPLACE" })}
         />
       </Field>
-      <Field label="Description" hint="Optional operator-facing note about how this variable is used.">
+      <Field label={t("pages:variables.form.description", "Description")} hint={t("pages:variables.form.descriptionHint", "Optional operator-facing note about how this variable is used.")}>
         <TextArea
-          aria-label="Variable description"
+          aria-label={t("pages:variables.form.description", "Variable description")}
           className="min-h-24"
           value={form.description}
           onChange={(event) => onChange({ ...form, description: event.target.value })}

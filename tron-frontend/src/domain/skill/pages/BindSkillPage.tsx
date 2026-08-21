@@ -4,6 +4,7 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/shared/ui/Badge";
@@ -50,6 +51,7 @@ function SearchInput({
   onSubmit: () => void;
   loading: boolean;
 }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="flex flex-col gap-3 sm:flex-row">
       <SearchField
@@ -66,7 +68,7 @@ function SearchInput({
         }}
       />
       <Button size="lg" disabled={loading} aria-busy={loading} onClick={onSubmit}>
-        {loading ? "Searching..." : "Search"}
+        {loading ? t("pages:skills.actions.searching", "Searching...") : t("pages:skills.actions.search", "Search")}
       </Button>
     </div>
   );
@@ -83,6 +85,7 @@ function CandidateCard({
   selected: boolean;
   onToggle: () => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   const selectable = !installed;
   const description = truncateDescription(candidate.description);
 
@@ -110,7 +113,7 @@ function CandidateCard({
           <div className="flex flex-wrap items-center gap-2">
             <Badge tone="info">{candidate.skillName}</Badge>
             {installed ? (
-              <Badge tone="success">Installed</Badge>
+              <Badge tone="success">{t("pages:skills.status.installed", "Installed")}</Badge>
             ) : null}
             <Badge tone="info">{candidate.sourceType}</Badge>
             {candidate.declaredVersion ? (
@@ -132,6 +135,7 @@ function CandidateCard({
 }
 
 export function BindSkillPage() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const toast = useToast();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -140,7 +144,7 @@ export function BindSkillPage() {
   const activeWorkspaceLabel =
     selectedSecondarySpace?.label
     ?? selectedPrimarySpace?.name
-    ?? "No workspace selected";
+    ?? t("pages:skills.noWorkspace", "No workspace selected");
   const [query, setQuery] = useState("");
   const [searching, setSearching] = useState(false);
   const [binding, setBinding] = useState(false);
@@ -176,7 +180,7 @@ export function BindSkillPage() {
 
   async function handleSearch(options?: { silentEmpty?: boolean }) {
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before installing skills");
+      toast.error(t("pages:skills.errors.workspaceRequired", "Select a workspace in the shell header before installing skills"));
       return;
     }
 
@@ -193,7 +197,7 @@ export function BindSkillPage() {
         return current.filter((value) => nextSet.has(value));
       });
       if (!results.length && !options?.silentEmpty) {
-        toast.info("No installed skills matched the current query");
+        toast.info(t("pages:skills.messages.noInstalledMatch", "No installed skills matched the current query"));
       }
     } catch (error) {
       const message =
@@ -218,7 +222,7 @@ export function BindSkillPage() {
 
   async function handleBind() {
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before installing skills");
+      toast.error(t("pages:skills.errors.workspaceRequired", "Select a workspace in the shell header before installing skills"));
       return;
     }
     if (!selectedCandidates.length || binding) return;
@@ -247,18 +251,18 @@ export function BindSkillPage() {
         if (warnings.length) {
           toast.warning(warnings[0]);
         } else {
-          toast.success(`${boundCount} skill${boundCount > 1 ? "s" : ""} installed in ${activeWorkspaceCode}`);
+          toast.success(t("pages:skills.messages.installed", "{{count}} skill(s) installed in {{workspace}}", { count: boundCount, workspace: activeWorkspaceCode }));
         }
         navigate("/skills");
         return;
       }
 
       if (boundCount > 0) {
-        toast.error(`Installed ${boundCount} of ${selectedCandidates.length} skills. ${failures[0]}`);
+        toast.error(t("pages:skills.messages.partial", "Installed {{bound}} of {{total}} skills. {{failure}}", { bound: boundCount, total: selectedCandidates.length, failure: failures[0] }));
         return;
       }
 
-      toast.error(failures[0] ?? "Skill install failed");
+      toast.error(failures[0] ?? t("pages:skills.errors.install", "Skill install failed"));
     } finally {
       setBinding(false);
     }
@@ -268,16 +272,16 @@ export function BindSkillPage() {
     <>
       <PageHeader
         breadcrumbs={[{ label: "Skills", href: "/skills" }, { label: "Install" }]}
-        title="Install Skills"
+        title={t("pages:skills.installTitle", "Install Skills")}
         actions={(
           <>
             <Button size="lg" variant="outline" onClick={() => navigate("/skills")}>
-              Cancel
+              {t("pages:skills.actions.cancel", "Cancel")}
             </Button>
             <Button size="lg" disabled={!selectedCount || binding || !activeWorkspaceCode}
               aria-busy={binding}
               onClick={() => void handleBind()}>
-              {binding ? "Installing..." : `Install Selected${selectedCount ? ` (${selectedCount})` : ""}`}
+              {binding ? t("pages:skills.status.installing", "Installing...") : t("pages:skills.actions.installSelected", "Install Selected{{suffix}}", { suffix: selectedCount ? ` (${selectedCount})` : "" })}
             </Button>
           </>
         )}
@@ -285,7 +289,7 @@ export function BindSkillPage() {
 
       <div className="space-y-6">
         <SurfaceCard className="space-y-4">
-          <Field label="Skill Center">
+          <Field label={t("pages:skills.title", "Skill Center")}>
             <SearchInput
               value={query}
               onChange={setQuery}
@@ -298,16 +302,16 @@ export function BindSkillPage() {
         <div className="grid gap-5 xl:grid-cols-2">
           <SurfaceCard className="space-y-4">
             <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
-              Skill Center
+              {t("pages:skills.title", "Skill Center")}
             </h2>
 
             {!searched ? (
               <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-                Search synced skills in the local registry, then select the ones to install into this workspace.
+                {t("pages:skills.empty.searchHint", "Search synced skills in the local registry, then select the ones to install into this workspace.")}
               </div>
             ) : !candidates.length ? (
               <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-                No synced skills matched the current query.
+                {t("pages:skills.empty.noMatch", "No synced skills matched the current query.")}
               </div>
             ) : (
               <div className="space-y-3">
@@ -326,12 +330,12 @@ export function BindSkillPage() {
 
           <SurfaceCard className="space-y-5">
             <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
-              Install Plan
+              {t("pages:skills.sections.installPlan", "Install Plan")}
             </h2>
 
             {!selectedCount ? (
               <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
-                No skills are selected yet.
+                {t("pages:skills.empty.noneSelected", "No skills are selected yet.")}
               </div>
             ) : (
               <>

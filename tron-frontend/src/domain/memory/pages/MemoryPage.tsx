@@ -58,6 +58,7 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { cn } from "@/shared/lib/utils";
 import { SelectItem } from "@/components/ui/select";
+import { useTranslation } from "react-i18next";
 
 const visibleTargetLimit = 4;
 
@@ -195,17 +196,18 @@ function MemoryFilterControls({
   onSearchChange: (value: string) => void;
   query: string;
 }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <>
       <SearchField
-        ariaLabel="Search memories"
+        ariaLabel={t("pages:memory.search", "Search memories")}
         className="w-full"
-        placeholder="Search memories"
+        placeholder={t("pages:memory.search", "Search memories")}
         value={query}
         onChange={onSearchChange}
       />
       <SelectInput
-        aria-label="Filter memories by status"
+        aria-label={t("pages:memory.filters.status", "Filter memories by status")}
         className="w-full"
         value={filters.status}
         onValueChange={(event) =>
@@ -222,7 +224,7 @@ function MemoryFilterControls({
         ))}
       </SelectInput>
       <SelectInput
-        aria-label="Filter memories by review status"
+        aria-label={t("pages:memory.filters.review", "Filter memories by review status")}
         className="w-full"
         value={filters.reviewStatus}
         onValueChange={(event) =>
@@ -239,7 +241,7 @@ function MemoryFilterControls({
         ))}
       </SelectInput>
       <SelectInput
-        aria-label="Filter memories by context use"
+        aria-label={t("pages:memory.filters.injectable", "Filter memories by context use")}
         className="w-full"
         value={filters.injectable}
         onValueChange={(event) =>
@@ -319,6 +321,7 @@ function MemoryRecordsTable({
   onOpen: (memory: MemoryRecord) => void;
   query: string;
 } & Pick<DataTableProps<MemoryRecord>, "title" | "toolbar">) {
+  const { t } = useTranslation(["pages"]);
   const columns = useMemo<TableColumnDef<MemoryRecord>[]>(
     () => [
       {
@@ -329,7 +332,7 @@ function MemoryRecordsTable({
             onOpen={() => onOpen(row.original)}
           />
         ),
-        header: "Memory",
+        header: t("pages:memory.columns.memory", "Memory"),
         id: "memory",
         meta: {
           cellClassName: "min-w-0 py-4",
@@ -345,7 +348,7 @@ function MemoryRecordsTable({
             {row.original.memoryType}
           </Badge>
         ),
-        header: "Type",
+        header: t("pages:memory.columns.type", "Type"),
         id: "type",
         meta: {
           cellClassName: "py-4",
@@ -365,7 +368,7 @@ function MemoryRecordsTable({
             </span>
           </div>
         ),
-        header: "Status",
+        header: t("pages:memory.columns.status", "Status"),
         id: "status",
         meta: {
           cellClassName: "py-4",
@@ -384,7 +387,7 @@ function MemoryRecordsTable({
             </div>
           );
         },
-        header: "Use",
+        header: t("pages:memory.columns.use", "Use"),
         id: "use",
         meta: {
           cellClassName: "py-4",
@@ -393,7 +396,7 @@ function MemoryRecordsTable({
       },
       {
         cell: ({ row }) => row.original.updatedAt.split(" ")[0],
-        header: "Updated",
+        header: t("pages:memory.columns.updated", "Updated"),
         id: "updatedAt",
         meta: {
           width: "130px",
@@ -422,7 +425,7 @@ function MemoryRecordsTable({
                   onOpen(row.original);
                 }}
               >
-                Open details
+                {t("pages:memory.actions.open", "Open details")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 onClick={(event) => {
@@ -430,7 +433,7 @@ function MemoryRecordsTable({
                   onEdit(row.original);
                 }}
               >
-                Edit
+                {t("pages:memory.actions.edit", "Edit")}
               </DropdownMenuItem>
               <DropdownMenuItem
                 variant="destructive"
@@ -439,12 +442,12 @@ function MemoryRecordsTable({
                   onArchive(row.original);
                 }}
               >
-                Archive
+                {t("pages:memory.actions.archive", "Archive")}
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         ),
-        header: "Actions",
+        header: t("pages:memory.columns.actions", "Actions"),
         id: "actions",
         meta: {
           align: "right",
@@ -452,7 +455,7 @@ function MemoryRecordsTable({
         },
       },
     ],
-    [onArchive, onEdit, onOpen],
+    [onArchive, onEdit, onOpen, t],
   );
   const table = useReactTable({
     columns,
@@ -473,6 +476,7 @@ function MemoryRecordsTable({
 }
 
 function MemoryRepository() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const [refreshKey, setRefreshKey] = useState(0);
   const dataSource = getServiceDataSource("memory");
@@ -490,7 +494,7 @@ function MemoryRepository() {
   const [notice, setNotice] = useState("");
   const [archiveTarget, setArchiveTarget] = useState<MemoryRecord | null>(null);
 
-  useConsoleShellConfig({ searchPlaceholder: "Search memories..." });
+  useConsoleShellConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
 
   const workspaceLabel =
     selectedSecondarySpace?.name ?? selectedPrimarySpace?.name;
@@ -563,13 +567,13 @@ function MemoryRepository() {
         dataSource === "api" && workspaceCode
           ? await archiveMemoryRecord(workspaceCode, archiveTarget.memoryCode)
           : archiveMemoryFragment(archiveTarget.id);
-      setNotice(`${archived.title} archived.`);
+      setNotice(t("pages:memory.messages.archived", "{{title}} archived.", { title: archived.title }));
       setRefreshKey((value) => value + 1);
     } catch (error) {
       setNotice(
         error instanceof Error
           ? error.message
-          : "Memory could not be archived.",
+          : t("pages:memory.errors.archive", "Memory could not be archived."),
       );
     } finally {
       setArchiveTarget(null);
@@ -592,11 +596,11 @@ function MemoryRepository() {
           onArchive={setArchiveTarget}
           onEdit={editMemory}
           onOpen={openMemory}
-          title="Memory"
+          title={t("pages:memory.title", "Memory")}
           toolbar={
             <div className="flex gap-2">
               <SelectInput
-                aria-label="Filter memories by status"
+                aria-label={t("pages:memory.filters.target", "Filter memory target")}
                 className="w-full"
                 value={activeTargetId}
                 onValueChange={(event) => {
@@ -620,13 +624,13 @@ function MemoryRepository() {
                 variant="outline"
                 onClick={() => {
                   setRefreshKey((value) => value + 1);
-                  setNotice("Memory refreshed.");
+                  setNotice(t("pages:memory.messages.refreshed", "Memory refreshed."));
                 }}
               >
-                Refresh
+                {t("pages:memory.actions.refresh", "Refresh")}
               </Button>
               <Button size="lg" onClick={() => navigate("/memory/new")}>
-                New
+                {t("pages:memory.actions.new", "New")}
               </Button>
             </div>
           }
@@ -635,13 +639,13 @@ function MemoryRepository() {
 
       <ConfirmDialog
         open={archiveTarget !== null}
-        title="Archive memory?"
+        title={t("pages:memory.confirm.title", "Archive memory?")}
         description={
           archiveTarget
-            ? `${archiveTarget.title} will stay available for later review.`
+            ? t("pages:memory.confirm.description", "{{title}} will stay available for later review.", { title: archiveTarget.title })
             : undefined
         }
-        confirmText="Archive"
+        confirmText={t("pages:memory.actions.archive", "Archive")}
         onCancel={() => setArchiveTarget(null)}
         onConfirm={confirmArchive}
       />

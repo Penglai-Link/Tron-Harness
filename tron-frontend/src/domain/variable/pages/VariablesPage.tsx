@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   getCoreRowModel,
@@ -76,6 +77,10 @@ const variableSensitiveFilters = [
 
 export function VariablesPage() {
   const navigate = useNavigate();
+  const { t, i18n } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`variables.${key}`, { defaultValue, ...options })
+  );
   const toast = useToast();
   const dataSource = getServiceDataSource("variable");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -153,15 +158,15 @@ export function VariablesPage() {
       });
       toast.success(
         record.sourceKind === "Override"
-          ? `${record.key} reverted to inherited value`
-          : `${record.key} deleted`,
+          ? pageT("messages.reverted", "{{key}} reverted to inherited value", { key: record.key })
+          : pageT("messages.deleted", "{{key}} deleted", { key: record.key }),
       );
       refresh();
     } catch (error) {
       const message =
         error instanceof Error
           ? error.message
-          : "Variable could not be removed";
+          : pageT("errors.remove", "Variable could not be removed");
       toast.error(message);
     } finally {
       setRowBusyKey("");
@@ -169,7 +174,7 @@ export function VariablesPage() {
   }
 
   function sourceFilterLabel(source: VariableSourceFilter) {
-    return source === "All" ? "All Sources" : source;
+    return source === "All" ? pageT("filters.allSources", "All Sources") : pageT(`sources.${source}`, source);
   }
 
   function sourceFilterValue(source: string): VariableSourceFilter {
@@ -179,9 +184,9 @@ export function VariablesPage() {
   }
 
   function sensitiveFilterLabel(filter: VariableSensitiveFilter) {
-    if (filter === "Sensitive") return "Sensitive Data";
-    if (filter === "Plain") return "Plain Data";
-    return "All Data";
+    if (filter === "Sensitive") return pageT("filters.sensitiveData", "Sensitive Data");
+    if (filter === "Plain") return pageT("filters.plainData", "Plain Data");
+    return pageT("filters.allData", "All Data");
   }
 
   function sensitiveFilterValue(filter: string): VariableSensitiveFilter {
@@ -251,7 +256,7 @@ export function VariablesPage() {
       setRevealError(
         error instanceof Error
           ? error.message
-          : "Sensitive value could not be revealed",
+          : pageT("errors.reveal", "Sensitive value could not be revealed"),
       );
     } finally {
       setRevealPending(false);
@@ -280,7 +285,7 @@ export function VariablesPage() {
             ) : null}
           </div>
         ),
-        header: "Key",
+        header: pageT("columns.key", "Key"),
         id: "key",
         meta: {
           cellClassName: "min-w-0",
@@ -319,7 +324,7 @@ export function VariablesPage() {
             </div>
           );
         },
-        header: "Value",
+        header: pageT("columns.value", "Value"),
         id: "value",
         meta: {
           cellClassName: "min-w-0",
@@ -330,7 +335,7 @@ export function VariablesPage() {
         cell: ({ row }) => (
           <SensitiveDataBadge sensitive={isSensitiveRecord(row.original)} />
         ),
-        header: "Sensitive Data",
+        header: pageT("columns.sensitive", "Sensitive Data"),
         id: "sensitive",
         meta: { width: "150px" },
       },
@@ -340,7 +345,7 @@ export function VariablesPage() {
             {row.original.sourceKind}
           </Badge>
         ),
-        header: "Source",
+        header: pageT("columns.source", "Source"),
         id: "sourceKind",
         meta: { width: "130px" },
       },
@@ -370,7 +375,7 @@ export function VariablesPage() {
             </div>
           );
         },
-        header: "Inherited From",
+        header: pageT("columns.inheritedFrom", "Inherited From"),
         id: "inheritedFrom",
         meta: {
           cellClassName: "min-w-0",
@@ -383,7 +388,7 @@ export function VariablesPage() {
             {formatWorkspaceVariableTimestamp(row.original.updatedAt)}
           </span>
         ),
-        header: "Updated",
+        header: pageT("columns.updated", "Updated"),
         id: "updatedAt",
         meta: { width: "190px" },
       },
@@ -399,7 +404,7 @@ export function VariablesPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      aria-label={`Open actions for ${row.original.key}`}
+                      aria-label={pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.original.key })}
                       disabled={isBusy}
                       onClick={(event) => event.stopPropagation()}
                       onKeyDown={(event) => event.stopPropagation()}
@@ -416,7 +421,7 @@ export function VariablesPage() {
                         navigateToDetail(row.original, "override");
                       }}
                     >
-                      Override
+                      {pageT("actions.override", "Override")}
                     </DropdownMenuItem>
                   ) : (
                     <>
@@ -426,7 +431,7 @@ export function VariablesPage() {
                           navigateToDetail(row.original, "edit");
                         }}
                       >
-                        Edit
+                        {pageT("actions.edit", "Edit")}
                       </DropdownMenuItem>
                       <DropdownMenuItem
                         variant="destructive"
@@ -437,8 +442,8 @@ export function VariablesPage() {
                         }}
                       >
                         {row.original.sourceKind === "Override"
-                          ? "Revert"
-                          : "Delete"}
+                          ? pageT("actions.revert", "Revert")
+                          : pageT("actions.delete", "Delete")}
                       </DropdownMenuItem>
                     </>
                   )}
@@ -447,7 +452,7 @@ export function VariablesPage() {
             </div>
           );
         },
-        header: "Actions",
+        header: pageT("columns.actions", "Actions"),
         id: "actions",
         meta: {
           align: "right",
@@ -459,7 +464,7 @@ export function VariablesPage() {
         },
       },
     ],
-    [activeWorkspaceCode, dataSource, revealedValues, rowBusyKey],
+    [activeWorkspaceCode, dataSource, i18n.language, revealedValues, rowBusyKey],
   );
   const table = useReactTable({
     columns,
@@ -476,18 +481,18 @@ export function VariablesPage() {
     <>
       <>
         <DataTable<VariableRecord>
-          title="Variables"
+          title={pageT("title", "Variables")}
           toolbar={
             <div className="flex gap-2">
               <SearchField
-                ariaLabel="Search variables"
+                ariaLabel={pageT("aria.search", "Search variables")}
                 className="w-full"
-                placeholder="Search variables"
+                placeholder={pageT("filters.searchPlaceholder", "Search variables")}
                 value={search}
                 onChange={setSearch}
               />
               <SelectInput
-                aria-label="Filter variables by source"
+                aria-label={pageT("aria.sourceFilter", "Filter variables by source")}
                 className="w-full"
                 value={sourceFilter}
                 onValueChange={(event) =>
@@ -501,7 +506,7 @@ export function VariablesPage() {
                 ))}
               </SelectInput>
               <SelectInput
-                aria-label="Filter variables by sensitive data"
+                aria-label={pageT("aria.sensitiveFilter", "Filter variables by sensitive data")}
                 className="w-full"
                 value={sensitiveFilter}
                 onValueChange={(event) =>
@@ -519,7 +524,7 @@ export function VariablesPage() {
                 disabled={!activeWorkspaceCode}
                 onClick={() => navigate("/variables/new")}
               >
-                New
+                {pageT("actions.new", "New")}
               </Button>
             </div>
           }
@@ -529,15 +534,15 @@ export function VariablesPage() {
           onRowClick={(row) => navigateToDetail(row)}
           pagination={
             <TablePagination
-              itemLabel="variables"
+              itemLabel={pageT("pagination.itemLabel", "variables")}
               table={table}
               totalItems={filteredVariables.length}
             />
           }
           emptyState={
             activeWorkspaceCode
-              ? "No effective variables match the current filters."
-              : "Select a workspace in the shell to load variables."
+              ? pageT("empty.filtered", "No effective variables match the current filters.")
+              : pageT("empty.workspace", "Select a workspace in the shell to load variables.")
           }
         />
       </>

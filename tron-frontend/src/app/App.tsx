@@ -382,6 +382,9 @@ function AppRoutePage() {
       ...route.shellConfig,
       ...pageShellConfig,
     };
+    if (!pageShellConfig.searchPlaceholder && route.shellConfig?.searchPlaceholder) {
+      effectiveShellConfig.searchPlaceholder = t("shell:placeholders.search");
+    }
     if (route.layout === "settings") {
       // Settings 页面不使用 keep-alive，直接渲染
       return (
@@ -403,7 +406,8 @@ function AppRoutePage() {
           activeItem={route.activeNav}
           contentClassName={effectiveShellConfig.contentClassName}
           rightPanel={effectiveShellConfig.rightPanel}
-          searchPlaceholder={effectiveShellConfig.searchPlaceholder}
+          searchPlaceholder={effectiveShellConfig.searchPlaceholder
+            ?? (route.shellConfig?.searchPlaceholder ? t("shell:placeholders.search") : undefined)}
           roleCodes={session?.user.roleCodes}
           topbarActions={effectiveShellConfig.topbarActions}
           userMenuContent={<AuthUserMenuPanel />}

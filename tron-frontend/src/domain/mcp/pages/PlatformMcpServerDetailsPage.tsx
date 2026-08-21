@@ -8,6 +8,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { useTranslation } from "react-i18next";
 import {
   Edit3,
 } from "lucide-react";
@@ -48,17 +49,18 @@ function authKindLabel(authKind: McpAuthKind) {
   return authKind === "bearer_static" ? "Bearer static" : "None";
 }
 
-function ReadValue({ children }: { children: ReactNode }) {
+function ReadValue({ children }: { children?: ReactNode }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="min-h-6 text-sm leading-6 text-[var(--color-on-surface)] break-words">
-      {children || "None"}
+      {children || t("pages:mcp.form.none", "None")}
     </div>
   );
 }
 
 function ReadCodeBlock({ children }: { children: string[] }) {
   if (!children.length) {
-    return <ReadValue>None</ReadValue>;
+    return <ReadValue />;
   }
 
   return (
@@ -70,7 +72,7 @@ function ReadCodeBlock({ children }: { children: string[] }) {
 
 function ReadKeyValueBlock({ entries }: { entries: Array<[string, string]> }) {
   if (!entries.length) {
-    return <ReadValue>None</ReadValue>;
+    return <ReadValue />;
   }
 
   return (
@@ -87,6 +89,7 @@ function ReadKeyValueBlock({ entries }: { entries: Array<[string, string]> }) {
 }
 
 export function PlatformMcpServerDetailsPage() {
+  const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -112,7 +115,7 @@ export function PlatformMcpServerDetailsPage() {
         }
       } catch (error) {
         if (active) {
-          toast.error(error instanceof Error ? error.message : "Platform MCP server could not be loaded");
+          toast.error(error instanceof Error ? error.message : t("pages:mcp.errors.load", "Platform MCP server could not be loaded"));
         }
       } finally {
         if (active) {
@@ -136,10 +139,10 @@ export function PlatformMcpServerDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "MCP Servers", href: "/settings/mcp-servers" }, { label: "Loading" }]}
-          title="Platform MCP Server Detail"
+          breadcrumbs={[{ label: t("pages:mcp.title", "MCP Servers"), href: "/settings/mcp-servers" }, { label: t("pages:variables.loading", "Loading") }]}
+          title={t("pages:mcp.detailTitle", "Platform MCP Server Detail")}
         />
-        <SurfaceCard>Loading platform MCP server...</SurfaceCard>
+        <SurfaceCard>{t("pages:mcp.loading", "Loading platform MCP server...")}</SurfaceCard>
       </>
     );
   }
@@ -148,30 +151,30 @@ export function PlatformMcpServerDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "MCP Servers", href: "/settings/mcp-servers" }, { label: "Not Found" }]}
-          title="Platform MCP Server Detail"
+          breadcrumbs={[{ label: t("pages:mcp.title", "MCP Servers"), href: "/settings/mcp-servers" }, { label: t("pages:variables.notFound", "Not Found") }]}
+          title={t("pages:mcp.detailTitle", "Platform MCP Server Detail")}
         />
-        <SurfaceCard>Platform MCP server not found.</SurfaceCard>
+        <SurfaceCard>{t("pages:mcp.notFound", "Platform MCP server not found.")}</SurfaceCard>
       </>
     );
   }
 
   const detailHeader = record.transportKind === "streamable_http"
     ? [
-      ["URL", record.url],
-      ["Auth Kind", authKindLabel(record.authKind)],
-      ...(record.authKind === "bearer_static" ? [["Bearer token variable ref", record.authPayload?.tokenRef ?? ""]] : []),
+      [t("pages:mcp.detail.url", "URL"), record.url],
+      [t("pages:mcp.detail.authKind", "Auth Kind"), authKindLabel(record.authKind)],
+      ...(record.authKind === "bearer_static" ? [[t("pages:mcp.detail.tokenRef", "Bearer token variable ref"), record.authPayload?.tokenRef ?? ""]] : []),
     ]
     : [
-      ["Command", record.command],
-      ["Working directory", record.workingDirectory ?? ""],
+      [t("pages:mcp.form.command", "Command"), record.command],
+      [t("pages:mcp.form.workingDirectory", "Working directory"), record.workingDirectory ?? ""],
     ];
 
   return (
     <>
       <PageHeader
         breadcrumbs={[
-          { label: "MCP Servers", href: "/settings/mcp-servers" },
+          { label: t("pages:mcp.title", "MCP Servers"), href: "/settings/mcp-servers" },
           { label: record.name },
         ]}
         title={record.name}
@@ -179,7 +182,7 @@ export function PlatformMcpServerDetailsPage() {
           <>
             <Button variant="secondary" onClick={() => navigate(`/settings/mcp-servers/edit?serverCode=${encodeURIComponent(record.serverCode)}`)}>
               <Edit3 size={16} aria-hidden="true" />
-              Edit
+              {t("pages:mcp.actions.edit", "Edit")}
             </Button>
           </>
         )}
@@ -188,28 +191,28 @@ export function PlatformMcpServerDetailsPage() {
       <div className="max-w-5xl space-y-6">
         <SurfaceCard className="space-y-6">
           <div className="grid gap-4 md:grid-cols-3">
-            <Field label="Server Code">
+            <Field label={t("pages:mcp.form.serverCode", "Server Code")}>
               <ReadValue>
                 <code>{record.serverCode}</code>
               </ReadValue>
             </Field>
-            <Field label="Transport">
+            <Field label={t("pages:mcp.form.transport", "Transport")}>
               <ReadValue>{formatPlatformMcpTransportLabel(record.transportKind)}</ReadValue>
             </Field>
-            <Field label="Endpoint">
+            <Field label={t("pages:mcp.detail.endpoint", "Endpoint")}>
               <ReadValue>{formatPlatformMcpEndpoint(record)}</ReadValue>
             </Field>
-            <Field label="Enabled">
+            <Field label={t("pages:mcp.detail.enabled", "Enabled")}>
               <Badge tone={platformMcpServerEnabledTone(record.enabled)}>
-                {record.enabled ? "Enabled" : "Disabled"}
+                {record.enabled ? t("pages:mcp.detail.enabledValue", "Enabled") : t("pages:mcp.detail.disabledValue", "Disabled")}
               </Badge>
             </Field>
-            <Field label="Health">
+            <Field label={t("pages:mcp.detail.health", "Health")}>
               <Badge tone={platformMcpServerStateTone(record.lastHealthStatus)}>
                 {healthLabel(record.lastHealthStatus)}
               </Badge>
             </Field>
-            <Field label="Created">
+            <Field label={t("pages:mcp.detail.created", "Created")}>
               <ReadValue>
                 {formatDateTime(record.createdAt, {
                   dateStyle: "medium",
@@ -217,7 +220,7 @@ export function PlatformMcpServerDetailsPage() {
                 })}
               </ReadValue>
             </Field>
-            <Field label="Updated">
+            <Field label={t("pages:mcp.detail.updated", "Updated")}>
               <ReadValue>
                 {formatDateTime(record.updatedAt, {
                   dateStyle: "medium",
@@ -228,7 +231,7 @@ export function PlatformMcpServerDetailsPage() {
           </div>
 
           <div className="space-y-3">
-            <Field label="Description">
+            <Field label={t("pages:mcp.form.description", "Description")}>
               <ReadValue>{record.description}</ReadValue>
             </Field>
           </div>
@@ -246,23 +249,23 @@ export function PlatformMcpServerDetailsPage() {
           {record.transportKind === "streamable_http" ? (
             <div className="space-y-6">
               <div className="grid gap-6 md:grid-cols-2">
-                <Field label="Headers">
+                <Field label={t("pages:mcp.form.headers", "Headers")}>
                   <ReadKeyValueBlock entries={Object.entries(record.headers)} />
                 </Field>
-                <Field label="Header variable refs">
+                <Field label={t("pages:mcp.form.headerRefs", "Header variable refs")}>
                   <ReadKeyValueBlock entries={Object.entries(record.headersVariableRefs)} />
                 </Field>
               </div>
             </div>
           ) : (
             <div className="space-y-6">
-              <Field label="Arguments">
+              <Field label={t("pages:mcp.form.arguments", "Arguments")}>
                 <ReadCodeBlock children={record.args} />
               </Field>
-              <Field label="Environment variables">
+              <Field label={t("pages:mcp.form.environment", "Environment variables")}>
                 <ReadKeyValueBlock entries={Object.entries(record.envVariableRefs)} />
               </Field>
-              <Field label="Environment variable passthrough">
+              <Field label={t("pages:mcp.form.passthrough", "Environment variable passthrough")}>
                 <ReadCodeBlock children={record.envPassthroughRefs} />
               </Field>
             </div>

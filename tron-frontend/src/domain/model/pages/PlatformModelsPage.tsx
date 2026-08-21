@@ -33,8 +33,9 @@ import {
   verifyPlatformModel,
 } from "@/domain/model/api";
 import {
-  formatModelCapabilities,
+  formatModelCapability,
   formatModelProtocol,
+  normalizeModelCapabilities,
 } from "@/domain/model/constants/modelPageOptions";
 import {
   deletePlatformModelRecord,
@@ -70,7 +71,7 @@ export function PlatformModelsPage() {
     : null;
   const pagination = useTablePagination(records);
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:settingsPlatformModels.${key}`, { defaultValue, ...options })
+    t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
   );
 
   async function refreshPlatformModels() {
@@ -295,12 +296,12 @@ export function PlatformModelsPage() {
           {
             id: "protocol",
             header: pageT("columns.protocol", "Protocol"),
-            render: (row) => formatModelProtocol(row.protocol, row.modelType),
+              render: (row) => pageT(`protocol.${row.protocol === "OPENAI_COMPATIBLE" ? `openaiCompatible.${row.modelType === "EMBEDDING" ? "embedding" : "chat"}` : row.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(row.protocol, row.modelType)),
           },
           {
             id: "type",
             header: pageT("columns.type", "Type"),
-            render: (row) => formatModelCapabilities(row.modelCapabilities, row.modelType),
+              render: (row) => normalizeModelCapabilities(row.modelCapabilities, row.modelType).map((capability) => pageT(`capabilities.${capability}`, formatModelCapability(capability))).join(", "),
           },
           {
             id: "status",
@@ -343,7 +344,7 @@ export function PlatformModelsPage() {
             },
           },
         ]}
-        emptyState={pageT("emptyState", "No platform models yet.")}
+        emptyState={pageT("empty.platform", "No platform models yet.")}
       />
       {openRowMenu && openMenuRow
         ? createPortal(

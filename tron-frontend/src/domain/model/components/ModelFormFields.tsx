@@ -231,7 +231,10 @@ export function ModelFormFields({
       : (state.maxTokens.trim() ? state.maxTokens : DEFAULT_MAX_TOKENS);
   }
 
-  const { t } = useTranslation(["common"]);
+  const { t } = useTranslation(["common", "pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
+  );
   const protocolOptions = getModelProtocolOptions(state.modelType);
   const modelCapabilityGroups = getModelCapabilityGroups(state.protocol);
   const maxTokensDisabled = Boolean(readOnly || state.structuredOutputEnabled);
@@ -242,28 +245,28 @@ export function ModelFormFields({
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label="Display Name" error={displayNameError}>
+        <Field label={pageT("form.displayName", "Display Name")} error={displayNameError}>
           <TextInput
             value={state.displayName}
             onChange={(event) => patchDisplayName(event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label="Vendor Model ID">
+        <Field label={pageT("form.vendorModelId", "Vendor Model ID")}>
           <TextInput
             value={state.modelName}
             onChange={(event) => patchModelName(event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label="Vendor">
+        <Field label={pageT("form.vendor", "Vendor")}>
           <TextInput
             value={state.vendor}
             onChange={(event) => patch("vendor", event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label="Protocol">
+        <Field label={pageT("form.protocol", "Protocol")}>
           <SelectInput
             value={state.protocol}
             onValueChange={(event) => {
@@ -297,12 +300,12 @@ export function ModelFormFields({
           >
             {protocolOptions.map((item) => (
               <SelectItem key={item.value} value={item.value}>
-                {item.label}
+                {pageT(`protocol.${item.value === "OPENAI_COMPATIBLE" ? "openaiCompatible.label" : item.value === "RESPONSES" ? "responses" : "rerank"}`, item.label)}
               </SelectItem>
             ))}
           </SelectInput>
         </Field>
-        <Field label="Model Type">
+        <Field label={pageT("form.modelType", "Model Type")}>
           <SelectInput
             value={state.modelCapabilities}
             multiple
@@ -330,11 +333,11 @@ export function ModelFormFields({
           >
             {modelCapabilityGroups.map((group) => (
               <SelectGroup key={group.label} >
-                <SelectGroupLabel>{group.label}</SelectGroupLabel>
+                <SelectGroupLabel>{pageT(`capabilityGroups.${group.label}`, group.label)}</SelectGroupLabel>
                 {
                   group.options.map((item) => (
                     <SelectItem key={item.value} value={item.value}>
-                      {item.label}
+                      {pageT(`capabilities.${item.value}`, item.label)}
                     </SelectItem>
                   ))
                 }
@@ -342,21 +345,21 @@ export function ModelFormFields({
             ))}
           </SelectInput>
         </Field>
-        <Field label="Base URL">
+        <Field label={pageT("form.baseUrl", "Base URL")}>
           <TextInput
             value={state.baseUrl}
             onChange={(event) => patch("baseUrl", event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label="API Path">
+        <Field label={pageT("form.apiPath", "API Path")}>
           <TextInput
             value={state.apiPath}
             onChange={(event) => patch("apiPath", event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label="API Key" hint={apiKeyFieldHint}>
+        <Field label={pageT("form.apiKey", "API Key")} hint={apiKeyFieldHint}>
           {readOnly ? (
             <TextInput
               value={maskApiKeyValue(state.apiKeyRef)}
@@ -376,7 +379,7 @@ export function ModelFormFields({
         </Field>
       </div>
 
-      <Field label="Description">
+      <Field label={pageT("form.description", "Description")}>
         <TextArea
           className="min-h-24"
           value={state.description}
@@ -386,7 +389,7 @@ export function ModelFormFields({
       </Field>
 
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Field label="Temperature">
+        <Field label={pageT("form.temperature", "Temperature")}>
           <TextInput
             type="number"
             step="0.1"
@@ -395,7 +398,7 @@ export function ModelFormFields({
             disabled={readOnly}
           />
         </Field>
-        <Field label="Max Tokens">
+        <Field label={pageT("form.maxTokens", "Max Tokens")}>
           <TextInput
             type="number"
             step="1"
@@ -404,7 +407,7 @@ export function ModelFormFields({
             disabled={maxTokensDisabled}
           />
         </Field>
-        <Field label="Context Window">
+        <Field label={pageT("form.contextWindow", "Context Window")}>
           <TextInput
             type="number"
             step="1"
@@ -413,7 +416,7 @@ export function ModelFormFields({
             disabled={readOnly}
           />
         </Field>
-        <Field label="Top P">
+        <Field label={pageT("form.topP", "Top P")}>
           <TextInput
             type="number"
             step="0.1"
@@ -422,7 +425,7 @@ export function ModelFormFields({
             disabled={readOnly}
           />
         </Field>
-        <Field label="Max Retries">
+        <Field label={pageT("form.maxRetries", "Max Retries")}>
           <TextInput
             type="number"
             step="1"
@@ -474,7 +477,7 @@ export function ModelFormFields({
           >
             {reasoningEffortOptions.map((item) => (
               <SelectItem key={item.value} value={item.value}>
-                {item.label}
+                {pageT(`reasoning.${item.value}`, item.label)}
               </SelectItem>
             ))}
           </SelectInput>
@@ -501,7 +504,7 @@ export function ModelFormFields({
               .filter((item) => state.supportedReasoningEfforts.includes(item.value))
               .map((item) => (
                 <SelectItem key={item.value} value={item.value}>
-                  {item.label}
+                  {pageT(`reasoning.${item.value}`, item.label)}
                 </SelectItem>
               ))}
           </SelectInput>
@@ -512,13 +515,13 @@ export function ModelFormFields({
         <ToggleSwitch
           checked={state.thinkingEnabled}
           disabled={readOnly}
-          label="Thinking Enabled"
+            label={pageT("form.thinkingEnabled", "Thinking Enabled")}
           onCheckedChange={(checked) => patch("thinkingEnabled", checked)}
         />
         <ToggleSwitch
           checked={state.structuredOutputEnabled}
           disabled={readOnly}
-          label="Structured Output Enabled"
+          label={pageT("form.structuredOutputEnabled", "Structured Output Enabled")}
           onCheckedChange={(checked) => onChange({
             ...state,
             maxTokens: checked ? "" : (state.maxTokens.trim() ? state.maxTokens : DEFAULT_MAX_TOKENS),

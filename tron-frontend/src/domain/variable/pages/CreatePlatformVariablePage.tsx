@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { Save } from "lucide-react";
 
 import { createPlatformVariable } from "@/domain/variable/api";
@@ -19,6 +20,7 @@ import {
 } from "./platformVariablePageHelpers";
 
 export function CreatePlatformVariablePage() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const toast = useToast();
   const dataSource = getServiceDataSource("variable");
@@ -28,7 +30,7 @@ export function CreatePlatformVariablePage() {
   async function saveVariable() {
     const key = form.key.trim();
     if (!key) {
-      toast.error("Variable key is required");
+      toast.error(t("pages:variables.errors.keyRequired", "Variable key is required"));
       return;
     }
 
@@ -44,10 +46,10 @@ export function CreatePlatformVariablePage() {
       const saved = dataSource === "api"
         ? await createPlatformVariable(payload)
         : createPlatformVariableRecord(payload);
-      toast.success(`${saved.key} created`);
+      toast.success(t("pages:variables.messages.created", "{{key}} created", { key: saved.key }));
       navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(saved.key)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform variable could not be created");
+      toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.create", "Platform variable could not be created"));
     } finally {
       setSubmitting(false);
     }
@@ -56,14 +58,14 @@ export function CreatePlatformVariablePage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Variables", href: "/settings/variables" }, { label: "New" }]}
-        title="Create Platform Variable"
+        breadcrumbs={[{ label: t("pages:variablesPlatform.title", "Variables"), href: "/settings/variables" }, { label: t("pages:variablesPlatform.actions.new", "New") }]}
+        title={t("pages:variablesPlatform.createTitle", "Create Platform Variable")}
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/settings/variables")}>Cancel</Button>
+            <Button variant="secondary" onClick={() => navigate("/settings/variables")}>{t("pages:variables.actions.cancel", "Cancel")}</Button>
             <Button disabled={submitting || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:variables.actions.saving", "Saving...") : t("pages:variables.actions.save", "Save")}
             </Button>
           </>
         )}

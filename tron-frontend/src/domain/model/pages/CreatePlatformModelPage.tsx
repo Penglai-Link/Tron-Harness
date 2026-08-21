@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   Save,
@@ -47,6 +48,10 @@ function platformPayload(
 export function CreatePlatformModelPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`modelRegistry.${key}`, { defaultValue, ...options })
+  );
   const dataSource = getServiceDataSource("model");
   const [records, setRecords] = useState<ModelRecord[]>([]);
   const [form, setForm] = useState<ModelFormState>(emptyModelFormState());
@@ -70,7 +75,7 @@ export function CreatePlatformModelPage() {
           : listPlatformModelsMock();
         if (active) setRecords(nextRecords);
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Platform models could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform models could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -85,12 +90,12 @@ export function CreatePlatformModelPage() {
 
   async function saveModel(options?: { verifyAfterCreate?: boolean }) {
     if (duplicateDisplayName) {
-      toast.error("displayName already exists in platform models");
+      toast.error(pageT("errors.duplicatePlatformDisplayName", "displayName already exists in platform models"));
       return;
     }
     const apiKeyRef = apiKeyInputRef.current?.value.trim() ?? "";
     if (!apiKeyRef) {
-      toast.error("apiKey is required");
+      toast.error(pageT("errors.apiKeyRequired", "apiKey is required"));
       return;
     }
 
@@ -103,7 +108,7 @@ export function CreatePlatformModelPage() {
         const verified = dataSource === "api"
           ? await verifyPlatformModelDraft(payload)
           : verifyPlatformModelCreateDraftRecord(payload);
-        toast.success(`${verified.displayName} verified`);
+        toast.success(pageT("messages.verified", "{{name}} verified", { name: verified.displayName }));
         return;
       }
 
@@ -111,13 +116,13 @@ export function CreatePlatformModelPage() {
         ? await createPlatformModel(payload)
         : createPlatformModelRecord(payload);
       if (!verifyAfterCreate) {
-        toast.success(`${saved.displayName} created`);
+        toast.success(pageT("messages.created", "{{name}} created", { name: saved.displayName }));
       }
       navigate(`/settings/models/detail?modelCode=${encodeURIComponent(saved.modelCode)}`);
     } catch (error) {
       toast.error(error instanceof Error
         ? error.message
-        : (verifyAfterCreate ? "Verify failed" : "Platform model could not be created"));
+        : (verifyAfterCreate ? pageT("errors.verify", "Verify failed") : pageT("errors.createPlatform", "Platform model could not be created")));
     } finally {
       setSubmitting(false);
       setVerifying(false);
@@ -127,11 +132,11 @@ export function CreatePlatformModelPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Models", href: "/settings/models" }, { label: "New" }]}
-        title="Create Platform Model"
+        breadcrumbs={[{ label: pageT("title", "Models"), href: "/settings/models" }, { label: pageT("actions.new", "New") }]}
+        title={pageT("detail.createPlatformModel", "Create Platform Model")}
         actions={(
           <>
-            <Button variant="secondary" onClick={() => navigate("/settings/models")}>Cancel</Button>
+            <Button variant="secondary" onClick={() => navigate("/settings/models")}>{pageT("actions.cancel", "Cancel")}</Button>
             <Button
               variant="secondary"
               disabled={loading || submitting || verifying || !form.displayName.trim()}
@@ -139,7 +144,7 @@ export function CreatePlatformModelPage() {
               onClick={() => void saveModel({ verifyAfterCreate: true })}
             >
               <ShieldCheck size={16} aria-hidden="true" />
-              {verifying ? "Verifying..." : "Verify"}
+              {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             <Button
               disabled={loading || submitting || verifying || !form.displayName.trim()}
@@ -147,7 +152,7 @@ export function CreatePlatformModelPage() {
               onClick={() => void saveModel()}
             >
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>
         )}
@@ -160,7 +165,7 @@ export function CreatePlatformModelPage() {
             onChange={setForm}
             apiKeyInputRef={apiKeyInputRef}
             syncModelNameFromDisplayName
-            displayNameError={duplicateDisplayName ? "displayName already exists in platform models" : undefined}
+            displayNameError={duplicateDisplayName ? pageT("errors.duplicatePlatformDisplayName", "displayName already exists in platform models") : undefined}
           />
         </SurfaceCard>
       </div>

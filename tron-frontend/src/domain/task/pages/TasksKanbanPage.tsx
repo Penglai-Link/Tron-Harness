@@ -43,6 +43,7 @@ import { updateMockTaskStatus } from "@/domain/task/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { cn } from "@/shared/lib/utils";
 import { SelectItem } from "@/components/ui/select";
+import { useTranslation } from "react-i18next";
 
 type BoardScalePreset = "fit" | "100" | "90" | "80" | "70" | "60" | "50";
 
@@ -188,6 +189,7 @@ function KanbanCard({
   onDragStart: (event: React.DragEvent<HTMLButtonElement>) => void;
   onSelect: () => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <button
       aria-busy={pending}
@@ -219,14 +221,15 @@ function KanbanCard({
       </div>
       <ProgressBar value={task.progress} />
       <div className={cn("flex items-center justify-between gap-2", dense ? "mt-2" : compact ? "mt-2.5" : "mt-3")}>
-        <span className="min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">{task.assigneeUserCodes[0] ?? "Unassigned"}</span>
-        <span className="text-[11px] text-[var(--color-on-surface-variant)]">{task.subtaskCount} subtasks</span>
+        <span className="min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">{task.assigneeUserCodes[0] ?? t("pages:tasks.kanban.unassigned", "Unassigned")}</span>
+        <span className="text-[11px] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.subtasks", "{{count}} subtasks", { count: task.subtaskCount })}</span>
       </div>
     </button>
   );
 }
 
 export function TasksKanbanPage() {
+  const { t } = useTranslation(["pages"]);
   const options = useTaskOptions();
   const [searchInput, setSearchInput] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -411,7 +414,7 @@ export function TasksKanbanPage() {
     } catch (error) {
       setOptimisticColumns(null);
       refresh();
-      toast.error(error instanceof Error ? error.message : "Task status could not be updated");
+      toast.error(error instanceof Error ? error.message : t("pages:tasks.kanban.errors.status", "Task status could not be updated"));
     } finally {
       setPendingTaskCode(null);
     }
@@ -420,36 +423,36 @@ export function TasksKanbanPage() {
   return (
     <div className="flex min-h-[calc(100vh-6.5rem)] flex-col">
       <PageHeader
-        title="Task Management"
+        title={t("pages:tasks.kanban.title", "Task Management")}
         actions={
           <>
-            <SelectInput aria-label="Task board scale" className="w-[128px] bg-white" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
+            <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="w-[128px] bg-white" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
               <SelectItem value="fit">{`Fit (${boardScalePercent}%)`}</SelectItem>
               {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
             </SelectInput>
             <Button size="lg" variant="outline" onClick={() => {
               refresh();
-              toast.success("Task board refreshed");
-            }}>Refresh</Button>
-            <Button size="lg" onClick={() => navigate("/tasks/new")}>New</Button>
+              toast.success(t("pages:tasks.kanban.messages.refreshed", "Task board refreshed"));
+            }}>{t("pages:tasks.actions.refresh", "Refresh")}</Button>
+            <Button size="lg" onClick={() => navigate("/tasks/new")}>{t("pages:tasks.actions.new", "New")}</Button>
           </>
         }
       />
       <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px]">
         <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Search</span>
-          <SearchField placeholder="Filter task code, title, or description..." value={searchInput} onChange={setSearchInput} />
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.search", "Search")}</span>
+          <SearchField placeholder={t("pages:tasks.kanban.searchPlaceholder", "Filter task code, title, or description...")} value={searchInput} onChange={setSearchInput} />
         </div>
         <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Task Type</span>
-          <SelectInput aria-label="Task type filter" value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.taskType", "Task Type")}</span>
+          <SelectInput aria-label={t("pages:tasks.kanban.taskTypeFilter", "Task type filter")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
             {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
           </SelectInput>
         </div>
         <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">Priority</span>
-          <SelectInput aria-label="Task priority filter" value={priority} onValueChange={(event) => setPriority(event!)}>
-            <SelectItem value="">All priorities</SelectItem>
+          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.priority", "Priority")}</span>
+          <SelectInput aria-label={t("pages:tasks.kanban.priorityFilter", "Task priority filter")} value={priority} onValueChange={(event) => setPriority(event!)}>
+            <SelectItem value="">{t("pages:tasks.kanban.allPriorities", "All priorities")}</SelectItem>
             {options.priorities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
           </SelectInput>
         </div>

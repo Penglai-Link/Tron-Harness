@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 
 import { createVariable } from "@/domain/variable/api";
 import { createVariableRecord } from "@/domain/variable/mock/data";
@@ -19,6 +20,7 @@ import {
 } from "./workspaceVariablePageHelpers";
 
 export function CreateVariablePage() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const toast = useToast();
   const dataSource = getServiceDataSource("variable");
@@ -30,13 +32,13 @@ export function CreateVariablePage() {
 
   async function saveVariable() {
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace before creating a variable");
+      toast.error(t("pages:variables.errors.workspaceRequired", "Select a workspace before creating a variable"));
       return;
     }
 
     const key = form.key.trim();
     if (!key) {
-      toast.error("Variable key is required");
+      toast.error(t("pages:variables.errors.keyRequired", "Variable key is required"));
       return;
     }
 
@@ -52,10 +54,10 @@ export function CreateVariablePage() {
       const saved = dataSource === "api"
         ? await createVariable(activeWorkspaceCode, payload)
         : createVariableRecord(activeWorkspaceCode, payload);
-      toast.success(`${saved.key} created`);
+      toast.success(t("pages:variables.messages.created", "{{key}} created", { key: saved.key }));
       navigate(`/variables/detail?variableKey=${encodeURIComponent(saved.key)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Variable could not be created");
+      toast.error(error instanceof Error ? error.message : t("pages:variables.errors.create", "Variable could not be created"));
     } finally {
       setSubmitting(false);
     }
@@ -64,13 +66,13 @@ export function CreateVariablePage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Variables", href: "/variables" }, { label: "New" }]}
-        title="Create Variable"
+        breadcrumbs={[{ label: t("pages:variables.title", "Variables"), href: "/variables" }, { label: t("pages:variables.actions.new", "New") }]}
+        title={t("pages:variables.createTitle", "Create Variable")}
         actions={(
           <>
-            <Button size="lg" variant="outline" onClick={() => navigate("/variables")}>Cancel</Button>
+            <Button size="lg" variant="outline" onClick={() => navigate("/variables")}>{t("pages:variables.actions.cancel", "Cancel")}</Button>
             <Button size="lg" disabled={submitting || !activeWorkspaceCode || !form.key.trim()} aria-busy={submitting} onClick={() => void saveVariable()}>
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:variables.actions.saving", "Saving...") : t("pages:variables.actions.save", "Save")}
             </Button>
           </>
         )}
@@ -78,7 +80,7 @@ export function CreateVariablePage() {
 
       <div>
         {!activeWorkspaceCode ? (
-          <SurfaceCard>Select a workspace in the shell before creating a variable.</SurfaceCard>
+          <SurfaceCard>{t("pages:variables.errors.workspaceRequired", "Select a workspace in the shell before creating a variable.")}</SurfaceCard>
         ) : (
           <SurfaceCard>
             <WorkspaceVariableFormFields

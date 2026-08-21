@@ -10,6 +10,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import {
   Edit3,
@@ -126,6 +127,7 @@ function ReadValue({ children }: { children: ReactNode }) {
 }
 
 export function TaskDetailsPage() {
+  const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const taskCode = searchParams.get("taskCode") || "TSK-SEED-FEATURE";
@@ -634,7 +636,7 @@ export function TaskDetailsPage() {
       toast.success(`Task ${result.taskCode} execution started`, { title: result.runCode });
       navigate(`/chats?sessionCode=${encodeURIComponent(result.sessionCode)}&sourceTab=chat`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Task execution failed");
+      toast.error(error instanceof Error ? error.message : t("pages:tasks.detail.errors.execution", "Task execution failed"));
     } finally {
       setExecuting(false);
     }
@@ -644,19 +646,19 @@ export function TaskDetailsPage() {
     <>
       <PageHeader
         breadcrumbs={breadcrumbs}
-        title="Task Details"
+        title={t("pages:tasks.detail.title", "Task Details")}
         actions={
           <>
             <Button disabled={executing || archived} size="lg" onClick={() => void handleExecute()}>
-              {executing ? "Executing..." : "Execute"}
+              {executing ? t("pages:tasks.detail.actions.executing", "Executing...") : t("pages:tasks.detail.actions.execute", "Execute")}
             </Button>
             {detailEditable ? (
               <>
-                <Button size="lg" variant="outline" onClick={resetDetailFields}>Cancel</Button>
-                <Button size="lg" disabled={!detailDirty} onClick={() => void saveDetailFields()}>Save</Button>
+                <Button size="lg" variant="outline" onClick={resetDetailFields}>{t("pages:tasks.actions.cancel", "Cancel")}</Button>
+                <Button size="lg" disabled={!detailDirty} onClick={() => void saveDetailFields()}>{t("pages:tasks.actions.save", "Save")}</Button>
               </>
             ) : !archived ? (
-              <Button size="lg" variant="outline" onClick={() => setEditing(true)}>Edit</Button>
+              <Button size="lg" variant="outline" onClick={() => setEditing(true)}>{t("pages:tasks.detail.actions.edit", "Edit")}</Button>
             ) : null}
           </>
         }
@@ -664,30 +666,30 @@ export function TaskDetailsPage() {
       <div className="space-y-5">
         <SurfaceCard>
           <div className="mb-5">
-            <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Task Details</h2>
+            <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{t("pages:tasks.detail.title", "Task Details")}</h2>
             <p className="mt-1 font-mono text-sm text-[var(--color-on-surface-variant)]">{task.taskCode}</p>
           </div>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Task Status">
-              <SelectInput aria-label="Task detail status" value={status} onValueChange={(event) => {
+            <Field label={t("pages:tasks.detail.status", "Task Status")}>
+              <SelectInput aria-label={t("pages:tasks.detail.statusAria", "Task detail status")} value={status} onValueChange={(event) => {
                 void handleStatusChange(event as TaskStatus);
               }}>
                 {availableStatuses.map((item) => <SelectItem key={item} value={item}>{statusLabel(item)}</SelectItem>)}
               </SelectInput>
             </Field>
-            <Field label="Priority">
+            <Field label={t("pages:tasks.fields.priority", "Priority")}>
               {updatesEditable ? (
-                <SelectInput aria-label="Task detail priority" value={priority} onValueChange={(event) => handlePriorityChange(event as TaskPriority)}>
+                <SelectInput aria-label={t("pages:tasks.detail.priorityAria", "Task detail priority")} value={priority} onValueChange={(event) => handlePriorityChange(event as TaskPriority)}>
                   {options.priorities.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
                 </SelectInput>
               ) : (
                 <ReadValue>{task.priority}</ReadValue>
               )}
             </Field>
-            <Field label="Progress">
+            <Field label={t("pages:tasks.detail.progress", "Progress")}>
               {updatesEditable ? (
                 <TextInput
-                  aria-label="Task detail progress"
+                  aria-label={t("pages:tasks.detail.progressAria", "Task detail progress")}
                   disabled={progressManagedBySubtasks}
                   max="100"
                   min="0"
@@ -703,10 +705,10 @@ export function TaskDetailsPage() {
                 <ReadValue>{task.progress}%</ReadValue>
               )}
             </Field>
-            <Field label="Agent Codes">
+            <Field label={t("pages:tasks.fields.agentCodes", "Agent Codes")}>
               {updatesEditable ? (
                 <TextInput
-                  aria-label="Task detail agent codes"
+                  aria-label={t("pages:tasks.detail.agentCodesAria", "Task detail agent codes")}
                   placeholder="agent-reviewer, agent-builder"
                   value={agentCodesInput}
                   onChange={(event) => setAgentCodesInput(event.target.value)}

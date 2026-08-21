@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   Maximize2,
@@ -44,6 +45,10 @@ import { SelectItem } from "@/components/ui/select";
 export function CreateAutomationPage() {
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`automationCreate.${key}`, { defaultValue, ...options })
+  );
   const dataSource = getServiceDataSource("automation");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
@@ -131,7 +136,7 @@ export function CreateAutomationPage() {
         if (controller.signal.aborted) return;
         setAgentOptions([mainAutomationAgentOption]);
         setWorkspaceModelOptions([]);
-        toast.error(error instanceof Error ? error.message : "Execution options could not be loaded");
+        toast.error(error instanceof Error ? error.message : pageT("errors.executionOptions", "Execution options could not be loaded"));
       })
       .finally(() => {
         if (!controller.signal.aborted) setExecutionOptionsLoading(false);
@@ -160,7 +165,7 @@ export function CreateAutomationPage() {
   async function submitAutomation() {
     if (submitting) return;
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before creating an automation");
+      toast.error(pageT("errors.workspaceRequired", "Select a workspace in the shell header before creating an automation"));
       return;
     }
 
@@ -188,10 +193,10 @@ export function CreateAutomationPage() {
           status,
           workspaceCode: activeWorkspaceCode,
         });
-      toast.success(`Automation ${created.automationCode} created`);
+      toast.success(pageT("messages.created", "Automation {{code}} created", { code: created.automationCode }));
       navigate(`/automations/detail?automationCode=${encodeURIComponent(created.automationCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Automation could not be created");
+      toast.error(error instanceof Error ? error.message : pageT("errors.create", "Automation could not be created"));
     } finally {
       setSubmitting(false);
     }
@@ -200,13 +205,13 @@ export function CreateAutomationPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Automations", href: "/automations" }, { label: "New" }]}
-        title="Create Automation"
+        breadcrumbs={[{ label: pageT("title", "Automations"), href: "/automations" }, { label: pageT("actions.new", "New") }]}
+        title={pageT("detail.create", "Create Automation")}
         actions={
           <>
-            <Button size="lg" variant="outline" onClick={() => navigate("/automations")}>Cancel</Button>
+            <Button size="lg" variant="outline" onClick={() => navigate("/automations")}>{pageT("actions.cancel", "Cancel")}</Button>
             <Button size="lg" disabled={submitting || !activeWorkspaceCode || !name.trim() || !prompt.trim() || !selectedModelOptionCode} aria-busy={submitting} onClick={submitAutomation}>
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>
         }
@@ -214,27 +219,27 @@ export function CreateAutomationPage() {
       <div>
         <SurfaceCard className="space-y-5">
           <div className="grid gap-4 md:grid-cols-[minmax(0,1fr)_240px]">
-            <Field label="Automation name">
-              <TextInput aria-label="Automation name" placeholder="Daily workspace release digest" value={name} onChange={(event) => setName(event.target.value)} />
+            <Field label={pageT("fields.name", "Automation name")}>
+              <TextInput aria-label={pageT("fields.name", "Automation name")} placeholder={pageT("placeholders.name", "Daily workspace release digest")} value={name} onChange={(event) => setName(event.target.value)} />
             </Field>
-            <Field label="Automation status">
-              <SelectInput aria-label="Automation status" value={status} onValueChange={(event) => setStatus(event as AutomationOperationalStatus)}>
+            <Field label={pageT("fields.status", "Automation status")}>
+              <SelectInput aria-label={pageT("fields.status", "Automation status")} value={status} onValueChange={(event) => setStatus(event as AutomationOperationalStatus)}>
                 {editableAutomationStatuses.map((item) => (
-                  <SelectItem key={item} value={item}>{item}</SelectItem>
+                  <SelectItem key={item} value={item}>{pageT(`status.${item}`, item)}</SelectItem>
                 ))}
               </SelectInput>
             </Field>
           </div>
-          <Field label="Description">
-            <TextArea aria-label="Automation description" className="min-h-24" placeholder="Summarize the business intent, constraints, or expected operator-facing output." value={description} onChange={(event) => setDescription(event.target.value)} />
+          <Field label={pageT("fields.description", "Description")}>
+            <TextArea aria-label={pageT("aria.description", "Automation description")} className="min-h-24" placeholder={pageT("placeholders.description", "Summarize the business intent, constraints, or expected operator-facing output.")} value={description} onChange={(event) => setDescription(event.target.value)} />
           </Field>
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Execution agent">
+            <Field label={pageT("fields.executionAgent", "Execution agent")}>
               <OptionSelect
-                ariaLabel="Automation execution agent"
+                ariaLabel={pageT("aria.executionAgent", "Automation execution agent")}
                 disabled={executionOptionsLoading || !activeWorkspaceCode}
                 loading={executionOptionsLoading}
-                loadingLabel="Loading agents..."
+                loadingLabel={pageT("values.loadingAgents", "Loading agents...")}
                 options={executionAgentSelectOptions}
                 value={selectedAgentCode}
                 onChange={(value) => {
@@ -243,35 +248,35 @@ export function CreateAutomationPage() {
                 }}
               />
             </Field>
-            <Field label="Execution model">
+            <Field label={pageT("fields.executionModel", "Execution model")}>
               <OptionSelect
-                ariaLabel="Automation execution model"
-                emptyLabel="No executable models"
+                ariaLabel={pageT("aria.executionModel", "Automation execution model")}
+                emptyLabel={pageT("values.noModels", "No executable models")}
                 disabled={executionOptionsLoading || !activeWorkspaceCode || !modelOptions.length}
                 loading={executionOptionsLoading}
-                loadingLabel="Loading models..."
+                loadingLabel={pageT("values.loadingModels", "Loading models...")}
                 options={executionModelSelectOptions}
                 value={selectedModelOptionCode}
                 onChange={setSelectedModelOptionCode}
               />
             </Field>
           </div>
-          <Field label="Cron expression">
-            <TextInput aria-label="Cron expression" className="font-mono" placeholder="*/15 * * * *" value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
+          <Field label={pageT("fields.cron", "Cron expression")}>
+            <TextInput aria-label={pageT("fields.cron", "Cron expression")} className="font-mono" placeholder="*/15 * * * *" value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
           </Field>
           <div className="grid gap-1.5">
             <div className="flex items-center justify-between gap-3">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                Prompt body
+                {pageT("fields.prompt", "Prompt body")}
               </span>
               <Button size="lg" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
                 <Maximize2 size={14} aria-hidden="true" />
               </Button>
             </div>
             <TextArea
-              aria-label="Automation prompt"
+              aria-label={pageT("aria.prompt", "Automation prompt")}
               className="min-h-80 w-full"
-              placeholder="Write the long-form prompt that the automation should dispatch for this workspace."
+              placeholder={pageT("placeholders.prompt", "Write the long-form prompt that the automation should dispatch for this workspace.")}
               value={prompt}
               onChange={(event) => setPrompt(event.target.value)}
             />
@@ -284,22 +289,22 @@ export function CreateAutomationPage() {
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
-            aria-label="Prompt fullscreen editor"
+            aria-label={pageT("aria.promptFullscreen", "Prompt fullscreen editor")}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Automation prompt</h2>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("fields.automationPrompt", "Automation prompt")}</h2>
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                  Write the long-form prompt that will be dispatched whenever this automation runs.
+                  {pageT("promptFullscreenHint", "Write the long-form prompt that will be dispatched whenever this automation runs.")}
                 </p>
               </div>
-              <Button size="icon" type="button" variant="ghost" aria-label="Close prompt fullscreen" onClick={() => setPromptFullscreenOpen(false)}>
+              <Button size="icon" type="button" variant="ghost" aria-label={pageT("aria.closePrompt", "Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>
                 <X size={16} aria-hidden="true" />
               </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <TextArea
-                aria-label="Automation prompt fullscreen"
+                aria-label={pageT("aria.promptFullscreen", "Automation prompt fullscreen")}
                 className="h-full min-h-0 w-full resize-none"
                 value={prompt}
                 onChange={(event) => setPrompt(event.target.value)}

@@ -2,6 +2,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Navigate,
   useNavigate,
@@ -58,6 +59,7 @@ import {
 type StepUpIntent = "edit" | "reveal";
 
 export function PlatformVariableDetailsPage() {
+  const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -93,7 +95,7 @@ export function PlatformVariableDetailsPage() {
           setRevealError("");
         }
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Platform variable could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.load", "Platform variable could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -172,15 +174,15 @@ export function PlatformVariableDetailsPage() {
     if (!record) return;
     const wasSensitive = isSensitiveRecord(record);
     if (wasSensitive && !form.isSensitive && !form.value.trim()) {
-      toast.error("New value is required before turning off sensitivity");
+      toast.error(t("pages:variables.errors.newValueRequired", "New value is required before turning off sensitivity"));
       return;
     }
     if (form.isSensitive && !form.value.trim()) {
-      toast.error("Variable value is required");
+      toast.error(t("pages:variables.errors.valueRequired", "Variable value is required"));
       return;
     }
     if (!wasSensitive && form.isSensitive && !form.value.trim()) {
-      toast.error("Sensitive value is required before turning on sensitivity");
+      toast.error(t("pages:variables.errors.sensitiveValueRequired", "Sensitive value is required before turning on sensitivity"));
       return;
     }
 
@@ -195,14 +197,14 @@ export function PlatformVariableDetailsPage() {
       const saved = dataSource === "api"
         ? await updatePlatformVariable(record.key, payload)
         : updatePlatformVariableRecord(record.key, payload);
-      toast.success(`${saved.key} saved`);
+      toast.success(t("pages:variables.messages.saved", "{{key}} saved", { key: saved.key }));
       setRecord(saved);
       setRevealedValue("");
       setStepUpIntent(null);
       setRevealError("");
       exitEditing(saved.key);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform variable could not be saved");
+      toast.error(error instanceof Error ? error.message : t("pages:variables.errors.save", "Platform variable could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -217,10 +219,10 @@ export function PlatformVariableDetailsPage() {
       } else {
         deletePlatformVariableRecord(record.key);
       }
-      toast.success(`${record.key} deleted`);
+      toast.success(t("pages:variables.messages.deleted", "{{key}} deleted", { key: record.key }));
       navigate("/settings/variables");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform variable could not be deleted");
+      toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.delete", "Platform variable could not be deleted"));
     } finally {
       setDeleting(false);
     }
@@ -277,10 +279,10 @@ export function PlatformVariableDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Variables", href: "/settings/variables" }, { label: "Loading" }]}
-          title="Platform Variable"
+          breadcrumbs={[{ label: t("pages:variablesPlatform.title", "Variables"), href: "/settings/variables" }, { label: t("pages:variables.loading", "Loading") }]}
+          title={t("pages:variablesPlatform.detailTitle", "Platform Variable")}
         />
-        <SurfaceCard>Loading platform variable...</SurfaceCard>
+        <SurfaceCard>{t("pages:variablesPlatform.loading", "Loading platform variable...")}</SurfaceCard>
       </>
     );
   }
@@ -289,10 +291,10 @@ export function PlatformVariableDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Variables", href: "/settings/variables" }, { label: "Not Found" }]}
-          title="Platform Variable"
+          breadcrumbs={[{ label: t("pages:variablesPlatform.title", "Variables"), href: "/settings/variables" }, { label: t("pages:variables.notFound", "Not Found") }]}
+          title={t("pages:variablesPlatform.detailTitle", "Platform Variable")}
         />
-        <SurfaceCard>Platform variable not found.</SurfaceCard>
+        <SurfaceCard>{t("pages:variablesPlatform.notFound", "Platform variable not found.")}</SurfaceCard>
       </>
     );
   }
@@ -300,28 +302,28 @@ export function PlatformVariableDetailsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Variables", href: "/settings/variables" }, { label: record.key }]}
+        breadcrumbs={[{ label: t("pages:variablesPlatform.title", "Variables"), href: "/settings/variables" }, { label: record.key }]}
         title={record.key}
         actions={editing ? (
           <>
             <Button variant="secondary" disabled={submitting} onClick={resetDraft}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              {t("pages:variables.actions.cancel", "Cancel")}
             </Button>
             <Button disabled={submitting} aria-busy={submitting} onClick={() => void saveVariable()}>
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:variables.actions.saving", "Saving...") : t("pages:variables.actions.save", "Save")}
             </Button>
           </>
         ) : (
           <>
             <Button onClick={enterEditing}>
               <Edit3 size={16} aria-hidden="true" />
-              Edit
+              {t("pages:variables.actions.edit", "Edit")}
             </Button>
             <Button variant="ghost" disabled={deleting || loading} aria-busy={deleting} onClick={() => void removeVariable()}>
               <Trash2 size={16} aria-hidden="true" />
-              {deleting ? "Deleting..." : "Delete"}
+              {deleting ? t("pages:variables.actions.deleting", "Deleting...") : t("pages:variables.actions.delete", "Delete")}
             </Button>
           </>
         )}
@@ -333,29 +335,29 @@ export function PlatformVariableDetailsPage() {
             <PlatformVariableFormFields form={form} keyEditable={false} onChange={setForm} />
           ) : (
             <div className="grid gap-x-8 gap-y-6 md:grid-cols-2">
-              <Field label="Variable Key">
+              <Field label={t("pages:variables.form.key", "Variable Key")}>
                 <ReadValue>
                   <code>{record.key}</code>
                 </ReadValue>
               </Field>
-              <Field label="Sensitive Data">
+              <Field label={t("pages:variables.form.sensitive", "Sensitive Data")}>
                 <SensitiveDataBadge sensitive={isSensitiveRecord(record)} />
               </Field>
-              <Field label="Scope">
-                <ReadValue>Platform Configuration</ReadValue>
+              <Field label={t("pages:variablesPlatform.scope", "Scope")}>
+                <ReadValue>{t("pages:variablesPlatform.platformConfiguration", "Platform Configuration")}</ReadValue>
               </Field>
-              <Field label="Created">
+              <Field label={t("pages:variables.detail.created", "Created")}>
                 <ReadValue>{formatPlatformVariableTimestamp(record.createdAt)}</ReadValue>
               </Field>
-              <Field label="Updated">
+              <Field label={t("pages:variables.detail.updated", "Updated")}>
                 <ReadValue>{formatPlatformVariableTimestamp(record.updatedAt)}</ReadValue>
               </Field>
-              <Field label="Identifier">
+              <Field label={t("pages:variablesPlatform.identifier", "Identifier")}>
                 <ReadValue>{record.id}</ReadValue>
               </Field>
               <div className="md:col-span-2">
-                <Field label="Variable Value">
-                  <div className="min-h-32 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
+                <Field className="w-full" label={t("pages:variables.form.value", "Variable Value")}>
+                  <div className="min-h-32 w-full rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
                     <div className="flex flex-wrap items-start justify-between gap-3">
                       <SensitiveValueCode
                         className="min-w-0 flex-1"
@@ -383,8 +385,8 @@ export function PlatformVariableDetailsPage() {
                 </Field>
               </div>
               <div className="md:col-span-2">
-                <Field label="Description">
-                  <div className="min-h-20 whitespace-pre-wrap break-words rounded-lg border border-[var(--color-outline-variant)] p-4 text-sm leading-6 text-[var(--color-on-surface)]">
+                <Field className="w-full" label={t("pages:variables.form.description", "Description")}>
+                  <div className="min-h-20 w-full whitespace-pre-wrap break-words rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-sm leading-6 text-[var(--color-on-surface)]">
                     {record.description ?? ""}
                   </div>
                 </Field>

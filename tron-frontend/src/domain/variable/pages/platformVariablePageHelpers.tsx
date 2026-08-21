@@ -4,6 +4,7 @@ import {
   type MouseEvent,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import {
   Eye,
@@ -102,9 +103,10 @@ export function isSensitiveRecord(record: SensitiveDisplayRecord) {
 }
 
 export function ReadValue({ children }: { children: ReactNode }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="min-h-6 break-words text-sm leading-6 text-[var(--color-on-surface)]">
-      {children || "None"}
+      {children || t("variablesCommon.none", "None")}
     </div>
   );
 }
@@ -140,13 +142,15 @@ export function SensitiveRevealIconButton({
   revealed: boolean;
   variableKey: string;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const label = t(`variablesCommon.${revealed ? "hide" : "reveal"}`, { defaultValue: revealed ? "Hide" : "Reveal" });
   return (
     <Button
       type="button"
       size="icon"
       variant="ghost"
-      aria-label={`${revealed ? "Hide" : "Reveal"} ${variableKey}`}
-      title={revealed ? "Hide" : "Reveal"}
+      aria-label={`${label} ${variableKey}`}
+      title={label}
       onClick={onClick}
     >
       {revealed ? <EyeOff size={16} aria-hidden="true" /> : <Eye size={16} aria-hidden="true" />}
@@ -169,6 +173,8 @@ export function StepUpRevealDialog({
   pending?: boolean;
   variableKey: string;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string) => t(`variablesCommon.${key}`, { defaultValue });
   const [password, setPassword] = useState("");
 
   useEffect(() => {
@@ -202,16 +208,16 @@ export function StepUpRevealDialog({
         className="w-[min(92vw,32rem)] rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
         role="dialog"
         aria-modal="true"
-        aria-label={`Reveal ${variableKey}`}
+        aria-label={`${pageT("reveal", "Reveal")} ${variableKey}`}
       >
         <div className="flex items-start gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
           <div className="mt-0.5 rounded-full bg-[var(--color-primary-container)] p-2 text-[var(--color-on-primary-container)]">
             <ShieldCheck size={18} aria-hidden="true" />
           </div>
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Reveal Sensitive Value</h2>
+            <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("dialog.title", "Reveal Sensitive Value")}</h2>
             <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-              Verify your current password to reveal this value temporarily.
+              {pageT("dialog.description", "Verify your current password to reveal this value temporarily.")}
             </p>
           </div>
         </div>
@@ -222,9 +228,9 @@ export function StepUpRevealDialog({
             onSubmit(password);
           }}
         >
-          <Field label="Step-up Password" error={error}>
+          <Field label={pageT("dialog.password", "Step-up Password")} error={error}>
             <TextInput
-              aria-label="Step-up password"
+              aria-label={pageT("dialog.password", "Step-up password")}
               autoFocus
               type="password"
               value={password}
@@ -233,11 +239,11 @@ export function StepUpRevealDialog({
           </Field>
           <div className="flex justify-end gap-2">
             <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
-              Cancel
+              {pageT("dialog.cancel", "Cancel")}
             </Button>
             <Button type="submit" disabled={pending || !password.trim()} aria-busy={pending}>
               <Eye size={16} aria-hidden="true" />
-              {pending ? "Revealing..." : "Reveal Value"}
+              {pending ? pageT("dialog.revealing", "Revealing...") : pageT("dialog.revealValue", "Reveal Value")}
             </Button>
           </div>
         </form>
@@ -258,6 +264,8 @@ export function SensitiveDataCheckbox({
   label?: string;
   onChange: (checked: boolean) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const resolvedLabel = label === "Sensitive Data" ? t("variablesCommon.sensitiveData", "Sensitive Data") : label;
   return (
     <label
       className={cn(
@@ -267,13 +275,13 @@ export function SensitiveDataCheckbox({
     >
       <input
         type="checkbox"
-        aria-label={label}
+        aria-label={resolvedLabel}
         checked={checked}
         className="size-4 accent-[var(--color-primary)]"
         disabled={disabled}
         onChange={(event) => onChange(event.target.checked)}
       />
-      <span>{label}</span>
+      <span>{resolvedLabel}</span>
     </label>
   );
 }
@@ -283,12 +291,13 @@ export function SensitiveDataBadge({
 }: {
   sensitive: boolean;
 }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <span className="inline-flex w-fit max-w-max">
       <Badge
         tone={sensitive ? "warning" : "info"}
       >
-        {sensitive ? "Sensitive" : "Plain"}
+        {sensitive ? t("variablesCommon.sensitive", "Sensitive") : t("variablesCommon.plain", "Plain")}
       </Badge>
     </span>
   );
@@ -303,17 +312,19 @@ export function PlatformVariableFormFields({
   keyEditable: boolean;
   onChange: (next: PlatformVariableFormState) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string) => t(`variablesCommon.${key}`, { defaultValue });
   return (
     <div className="space-y-5">
-      <Field label="Variable Key" hint={keyEditable ? "Letters, digits, underscore, hyphen, or dot." : undefined}>
+      <Field label={pageT("form.key", "Variable Key")} hint={keyEditable ? pageT("form.keyHint", "Letters, digits, underscore, hyphen, or dot.") : undefined}>
         <TextInput
-          aria-label="Platform variable key"
+          aria-label={pageT("form.keyAria", "Platform variable key")}
           disabled={!keyEditable}
           value={form.key}
           onChange={(event) => onChange({ ...form, key: event.target.value })}
         />
       </Field>
-      <Field label="Sensitive Data">
+      <Field label={pageT("sensitiveData", "Sensitive Data")}>
         <SensitiveDataCheckbox
           checked={form.isSensitive}
           onChange={(checked) => onChange({
@@ -324,21 +335,21 @@ export function PlatformVariableFormFields({
         />
       </Field>
       <Field
-        label="Variable Value"
+        label={pageT("form.value", "Variable Value")}
         hint={form.isSensitive
-          ? "Masked by default and requires verification to reveal."
-          : "This value becomes the inherited default for all workspaces."}
+          ? pageT("form.maskedHint", "Masked by default and requires verification to reveal.")
+          : pageT("form.inheritedHint", "This value becomes the inherited default for all workspaces.")}
       >
         <TextArea
-          aria-label="Platform variable value"
+          aria-label={pageT("form.valueAria", "Platform variable value")}
           className="min-h-44 font-mono"
           value={form.value}
           onChange={(event) => onChange({ ...form, value: event.target.value, valueMode: "REPLACE" })}
         />
       </Field>
-      <Field label="Description" hint="Optional operator-facing note about how this platform variable is used.">
+      <Field label={pageT("form.description", "Description")} hint={pageT("form.descriptionHint", "Optional operator-facing note about how this platform variable is used.")}>
         <TextArea
-          aria-label="Platform variable description"
+          aria-label={pageT("form.descriptionAria", "Platform variable description")}
           className="min-h-24"
           value={form.description}
           onChange={(event) => onChange({ ...form, description: event.target.value })}

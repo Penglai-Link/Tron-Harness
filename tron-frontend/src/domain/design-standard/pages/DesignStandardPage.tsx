@@ -6,6 +6,7 @@ import {
   Search,
   ShieldCheck,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -22,6 +23,7 @@ import {
 
 
 export function DesignStandardPage() {
+  const { t } = useTranslation(["pages"]);
   return (
     <main className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
       <div className="grid min-h-screen grid-cols-1 lg:grid-cols-[240px_1fr]">
@@ -32,7 +34,7 @@ export function DesignStandardPage() {
             </div>
             <div>
               <p className="text-sm font-semibold">Tron</p>
-              <p className="text-xs text-[var(--color-on-surface-variant)]">Design Standard</p>
+              <p className="text-xs text-[var(--color-on-surface-variant)]">{t("pages:designStandard.label", "Design Standard")}</p>
             </div>
           </div>
           <nav className="mt-8 space-y-1" aria-label="Design standard preview navigation">
@@ -55,17 +57,17 @@ export function DesignStandardPage() {
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                  Design system / Tron light
+                  {t("pages:designStandard.eyebrow", "Design system / Tron light")}
                 </p>
-                <h1 className="mt-1 text-2xl font-semibold tracking-normal">Workspace UI foundation</h1>
+                <h1 className="mt-1 text-2xl font-semibold tracking-normal">{t("pages:designStandard.title", "Workspace UI foundation")}</h1>
               </div>
               <div className="flex items-center gap-2">
-                <Button size="icon" variant="secondary" aria-label="Search design standard">
+                <Button size="icon" variant="secondary" aria-label={t("pages:designStandard.search", "Search design standard")}>
                   <Search size={17} aria-hidden="true" />
                 </Button>
                 <Button>
                   <ShieldCheck size={16} aria-hidden="true" />
-                  Ready for onboarding
+                  {t("pages:designStandard.ready", "Ready for onboarding")}
                 </Button>
               </div>
             </div>
@@ -76,10 +78,10 @@ export function DesignStandardPage() {
               <div className="rounded-2xl border border-[var(--color-card-border)] bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.05)]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <Badge tone="info">Apple-like enterprise SaaS</Badge>
-                    <h2 className="mt-4 text-[40px] font-semibold leading-[1.1] tracking-normal">Calm control for agent operations</h2>
+                    <Badge tone="info">{t("pages:designStandard.badge", "Apple-like enterprise SaaS")}</Badge>
+                    <h2 className="mt-4 text-[40px] font-semibold leading-[1.1] tracking-normal">{t("pages:designStandard.heroTitle", "Calm control for agent operations")}</h2>
                     <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--color-on-surface-variant)]">
-                      The Tron light system uses restrained color, dense but breathable spacing, and stable workspace navigation for AI agent governance.
+                      {t("pages:designStandard.heroDescription", "The Tron light system uses restrained color, dense but breathable spacing, and stable workspace navigation for AI agent governance.")}
                     </p>
                   </div>
                   <div className="flex size-14 items-center justify-center rounded-2xl bg-[var(--color-accent-container)] text-[var(--color-on-accent-container)]">
@@ -92,7 +94,7 @@ export function DesignStandardPage() {
                     <div className="rounded-xl border border-[var(--color-card-border)] bg-[var(--color-surface-container-lowest)] p-4" key={item}>
                       <p className="text-sm font-semibold">{item}</p>
                       <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">
-                        Baseline pattern reserved for shared shell and later Stitch page implementation.
+                        {t("pages:designStandard.signalDescription", "Baseline pattern reserved for shared shell and later Stitch page implementation.")}
                       </p>
                     </div>
                   ))}
@@ -101,7 +103,7 @@ export function DesignStandardPage() {
 
               <div className="rounded-2xl border border-[var(--color-card-border)] bg-white p-5 shadow-[0_18px_50px_rgba(0,0,0,0.04)]">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-xl font-semibold">Component signals</h2>
+                  <h2 className="text-xl font-semibold">{t("pages:designStandard.componentSignals", "Component signals")}</h2>
                   <Gauge size={20} className="text-[var(--color-accent)]" aria-hidden="true" />
                 </div>
                 <div className="mt-5 space-y-3">
@@ -116,7 +118,7 @@ export function DesignStandardPage() {
 
             <section className="grid gap-4 xl:grid-cols-[420px_1fr]">
               <div className="rounded-2xl border border-[var(--color-card-border)] bg-white p-5">
-                <h2 className="text-xl font-semibold">Color roles</h2>
+                <h2 className="text-xl font-semibold">{t("pages:designStandard.colorRoles", "Color roles")}</h2>
                 <div className="mt-5 grid gap-3 sm:grid-cols-2">
                   {tronColors.map((color) => (
                     <div className="rounded-xl border border-[var(--color-card-border)] p-3" key={color.token}>
@@ -131,7 +133,7 @@ export function DesignStandardPage() {
 
               <div className="space-y-4">
                 <section className="rounded-2xl border border-[var(--color-card-border)] bg-white p-5">
-                  <h2 className="text-xl font-semibold">Typography scale</h2>
+                  <h2 className="text-xl font-semibold">{t("pages:designStandard.typography", "Typography scale")}</h2>
                   <div className="mt-4 divide-y divide-[var(--color-outline-variant)]">
                     {typeScale.map((type) => (
                       <div className="grid gap-3 py-4 lg:grid-cols-[190px_1fr_180px]" key={type.name}>
@@ -146,20 +148,20 @@ export function DesignStandardPage() {
                 <section className="overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-white">
                   <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
                     <div>
-                      <h2 className="text-xl font-semibold">Dense table pattern</h2>
-                      <p className="text-[13px] text-[var(--color-on-surface-variant)]">Token-governed rows for workspace resource views.</p>
+                      <h2 className="text-xl font-semibold">{t("pages:designStandard.tableTitle", "Dense table pattern")}</h2>
+                      <p className="text-[13px] text-[var(--color-on-surface-variant)]">{t("pages:designStandard.tableDescription", "Token-governed rows for workspace resource views.")}</p>
                     </div>
-                    <Button variant="secondary" size="sm">Export</Button>
+                    <Button variant="secondary" size="sm">{t("pages:designStandard.export", "Export")}</Button>
                   </div>
                   <div className="overflow-x-auto">
                     <table className="w-full min-w-[640px] border-collapse text-left text-sm">
                       <thead>
                         <tr className="border-b border-[var(--color-outline-variant)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                          <th className="px-5 py-3">Workspace</th>
-                          <th className="px-5 py-3">Source</th>
-                          <th className="px-5 py-3">Model</th>
-                          <th className="px-5 py-3">Usage</th>
-                          <th className="px-5 py-3">Status</th>
+                          <th className="px-5 py-3">{t("pages:designStandard.columns.workspace", "Workspace")}</th>
+                          <th className="px-5 py-3">{t("pages:designStandard.columns.source", "Source")}</th>
+                          <th className="px-5 py-3">{t("pages:designStandard.columns.model", "Model")}</th>
+                          <th className="px-5 py-3">{t("pages:designStandard.columns.usage", "Usage")}</th>
+                          <th className="px-5 py-3">{t("pages:designStandard.columns.status", "Status")}</th>
                         </tr>
                       </thead>
                       <tbody>

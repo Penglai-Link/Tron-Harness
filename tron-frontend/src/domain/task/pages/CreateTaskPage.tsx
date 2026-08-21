@@ -3,6 +3,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   Maximize2,
@@ -59,6 +60,10 @@ function splitCodes(value: string) {
 }
 
 export function CreateTaskPage() {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`tasks.${key}`, { defaultValue, ...options })
+  );
   const options = useTaskOptions();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
@@ -158,7 +163,7 @@ export function CreateTaskPage() {
         if (!active) return;
         setAgentOptions([mainAutomationAgentOption]);
         setWorkspaceModelOptions([]);
-        toast.error(error instanceof Error ? error.message : "Execution options could not be loaded");
+        toast.error(error instanceof Error ? error.message : pageT("errors.executionOptions", "Execution options could not be loaded"));
       })
       .finally(() => {
         if (active) setExecutionOptionsLoading(false);
@@ -200,7 +205,7 @@ export function CreateTaskPage() {
     if (submitting) return;
 
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before creating a task");
+      toast.error(pageT("errors.workspaceRequired", "Select a workspace in the shell header before creating a task"));
       return;
     }
 
@@ -222,10 +227,10 @@ export function CreateTaskPage() {
 
     try {
       const created = dataSource === "api" ? await createTask(payload) : createMockTask(payload);
-      toast.success(`Task ${created.taskCode} created`);
+      toast.success(pageT("messages.created", "Task {{code}} created", { code: created.taskCode }));
       navigate(`/tasks/detail?taskCode=${encodeURIComponent(created.taskCode)}`);
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Task could not be created";
+      const message = error instanceof Error ? error.message : pageT("errors.create", "Task could not be created");
       toast.error(message);
     } finally {
       setSubmitting(false);
@@ -235,73 +240,73 @@ export function CreateTaskPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Tasks", href: "/tasks" }, { label: "New" }]}
-        title="Create Task"
+        breadcrumbs={[{ label: pageT("title", "Tasks"), href: "/tasks" }, { label: pageT("actions.new", "New") }]}
+        title={pageT("detail.create", "Create Task")}
         actions={(
           <>
-            <Button size="lg" variant="outline" onClick={() => navigate("/tasks")}>Cancel</Button>
+            <Button size="lg" variant="outline" onClick={() => navigate("/tasks")}>{pageT("actions.cancel", "Cancel")}</Button>
             <Button size="lg" disabled={submitting || !title.trim() || !activeWorkspaceCode} aria-busy={submitting} onClick={submitTask}>
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>
         )}
       />
       <div className="space-y-6">
-        <Field label="Task Title">
-          <TextInput aria-label="Task title" className="w-full" value={title} onChange={(event) => setTitle(event.target.value)} />
+        <Field label={pageT("fields.title", "Task Title")}>
+          <TextInput aria-label={pageT("fields.title", "Task title")} className="w-full" value={title} onChange={(event) => setTitle(event.target.value)} />
         </Field>
         <div className="grid gap-6 xl:grid-cols-2">
-          <Field label="Priority">
-            <SelectInput aria-label="Priority" value={priority} onValueChange={(event) => setPriority(event as TaskPriority)}>
-              {options.priorities.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
+          <Field label={pageT("fields.priority", "Priority")}>
+            <SelectInput aria-label={pageT("fields.priority", "Priority")} value={priority} onValueChange={(event) => setPriority(event as TaskPriority)}>
+              {options.priorities.map((item) => <SelectItem key={item}>{pageT(`priorities.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
-          <Field label="Task Type">
-            <SelectInput aria-label="Task Type" value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
-              {options.taskTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
+          <Field label={pageT("fields.taskType", "Task Type")}>
+            <SelectInput aria-label={pageT("fields.taskType", "Task Type")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+              {options.taskTypes.map((item) => <SelectItem key={item}>{pageT(`types.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
-          <Field label="Source Type">
-            <SelectInput aria-label="Source Type" value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
-              {options.sourceTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
+          <Field label={pageT("fields.sourceType", "Source Type")}>
+            <SelectInput aria-label={pageT("fields.sourceType", "Source Type")} value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
+              {options.sourceTypes.map((item) => <SelectItem key={item}>{pageT(`sourceTypes.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
-          <Field label="Source URL">
-            <TextInput aria-label="Source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
+          <Field label={pageT("fields.sourceUrl", "Source URL")}>
+            <TextInput aria-label={pageT("fields.sourceUrl", "Source URL")} placeholder={pageT("placeholders.sourceUrl", "Optional GitHub/GitLab URL")} value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
           </Field>
-          <Field label="Execution Agent">
+          <Field label={pageT("fields.executionAgent", "Execution Agent")}>
             <OptionSelect
-              ariaLabel="Task execution agent"
+              ariaLabel={pageT("aria.executionAgent", "Task execution agent")}
               disabled={executionOptionsLoading || !activeWorkspaceCode}
               loading={executionOptionsLoading}
-              loadingLabel="Loading agents..."
+              loadingLabel={pageT("values.loadingAgents", "Loading agents...")}
               options={executionAgentSelectOptions}
               value={selectedAgentCode}
               onChange={setSelectedAgentCode}
             />
           </Field>
-          <Field label="Execution Model">
+          <Field label={pageT("fields.executionModel", "Execution Model")}>
             <OptionSelect
-              ariaLabel="Task execution model"
-              emptyLabel="No executable models"
+              ariaLabel={pageT("aria.executionModel", "Task execution model")}
+              emptyLabel={pageT("values.noModels", "No executable models")}
               disabled={executionOptionsLoading || !activeWorkspaceCode || !modelOptions.length}
               loading={executionOptionsLoading}
-              loadingLabel="Loading models..."
+              loadingLabel={pageT("values.loadingModels", "Loading models...")}
               options={executionModelSelectOptions}
               value={selectedModelOptionCode}
               onChange={setSelectedModelOptionCode}
             />
           </Field>
-          <Field label="Agent Codes">
-            <TextInput aria-label="Agent Codes" placeholder="agent-reviewer, agent-builder" value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
+          <Field label={pageT("fields.agentCodes", "Agent Codes")}>
+            <TextInput aria-label={pageT("fields.agentCodes", "Agent Codes")} placeholder={pageT("placeholders.agentCodes", "agent-reviewer, agent-builder")} value={agentCodesInput} onChange={(event) => setAgentCodesInput(event.target.value)} />
           </Field>
           <div className="lg:col-span-2">
-            <Field label="Apps" hint="Select active apps from the current workspace.">
+            <Field label={pageT("fields.apps", "Apps")} hint={pageT("hints.apps", "Select active apps from the current workspace.")}>
               <TaskAppSelectionField
                 availableApps={appOptions}
-                emptyMessage={activeWorkspaceCode ? "No active apps are available in this workspace." : "Select a workspace in the shell header to choose apps."}
+                emptyMessage={activeWorkspaceCode ? pageT("values.noActiveApps", "No active apps are available in this workspace.") : pageT("errors.workspaceRequiredApps", "Select a workspace in the shell header to choose apps.")}
                 loading={workspaceOptionsLoading}
                 selectedAppCodes={selectedAppCodes}
                 onToggle={(appCode) => setSelectedAppCodes((current) => toggleCode(current, appCode))}
@@ -309,14 +314,14 @@ export function CreateTaskPage() {
             </Field>
           </div>
         </div>
-        <Field label="Assigned Users" hint="Only effective users from the current workspace can be assigned.">
+        <Field label={pageT("fields.assignedUsers", "Assigned Users")} hint={pageT("hints.assignedUsers", "Only effective users from the current workspace can be assigned.")}>
           <MultiSelectDropdown
-            ariaLabel="Task assignees"
-            emptyMessage={activeWorkspaceCode ? "No effective users available for the active workspace." : "Select a workspace in the shell header to assign users."}
+            ariaLabel={pageT("aria.assignees", "Task assignees")}
+            emptyMessage={activeWorkspaceCode ? pageT("values.noUsers", "No effective users available for the active workspace.") : pageT("errors.workspaceRequiredUsers", "Select a workspace in the shell header to assign users.")}
             loading={workspaceOptionsLoading}
-            loadingMessage="Loading user options..."
+            loadingMessage={pageT("values.loadingUsers", "Loading user options...")}
             options={userOptions}
-            placeholder="Select assigned users"
+            placeholder={pageT("placeholders.assignedUsers", "Select assigned users")}
             selectedValues={assigneeUserCodes}
             onToggle={(userCode) => setAssigneeUserCodes((current) => toggleCode(current, userCode))}
           />
@@ -324,21 +329,21 @@ export function CreateTaskPage() {
         <SurfaceCard>
           <div className="grid gap-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("fields.description", "Description")}</span>
               <Button
                 size="lg"
                 type="button"
                 variant="ghost"
-                aria-label="Open description fullscreen"
+                aria-label={pageT("aria.openDescription", "Open description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(true)}
               >
                 <Maximize2 size={14} aria-hidden="true" />
               </Button>
             </div>
             <TextArea
-              aria-label="Task description"
+              aria-label={pageT("aria.description", "Task description")}
               className="min-h-36 w-full"
-              placeholder="Describe the outcome, expected deliverables, context, constraints, and variable references like $VAR1..."
+              placeholder={pageT("placeholders.description", "Describe the outcome, expected deliverables, context, constraints, and variable references like $VAR1...")}
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
@@ -351,20 +356,20 @@ export function CreateTaskPage() {
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
-            aria-label="Description fullscreen editor"
+            aria-label={pageT("aria.descriptionFullscreen", "Description fullscreen editor")}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Description</h2>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("fields.description", "Description")}</h2>
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                  Write the objective, deliverables, context, constraints, and variable references in a larger workspace.
+                  {pageT("descriptionFullscreenHint", "Write the objective, deliverables, context, constraints, and variable references in a larger workspace.")}
                 </p>
               </div>
               <Button
                 size="icon"
                 type="button"
                 variant="ghost"
-                aria-label="Close description fullscreen"
+                aria-label={pageT("aria.closeDescription", "Close description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(false)}
               >
                 <X size={16} aria-hidden="true" />
@@ -372,7 +377,7 @@ export function CreateTaskPage() {
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <TextArea
-                aria-label="Task description fullscreen"
+                aria-label={pageT("aria.descriptionFullscreen", "Task description fullscreen")}
                 className="h-full min-h-0 w-full resize-none"
                 value={description}
                 onChange={(event) => setDescription(event.target.value)}

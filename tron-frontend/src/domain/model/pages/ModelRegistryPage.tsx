@@ -43,8 +43,9 @@ import {
   ModelSourceBadge,
 } from "@/domain/model/components";
 import {
-  formatModelCapabilities,
+  formatModelCapability,
   formatModelProtocol,
+  normalizeModelCapabilities,
 } from "@/domain/model/constants/modelPageOptions";
 import {
   deleteWorkspaceModelRecord,
@@ -63,7 +64,7 @@ import { SelectItem } from "@/components/ui/select";
 
 export function ModelRegistryPage() {
   const navigate = useNavigate();
-  const { t } = useTranslation(["common", "pages"]);
+  const { t, i18n } = useTranslation(["common", "pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("model");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -76,6 +77,9 @@ export function ModelRegistryPage() {
   const [statusFilter, setStatusFilter] = useState("ALL");
   const [protocolFilter, setProtocolFilter] = useState("ALL");
   const [typeFilter, setTypeFilter] = useState("ALL");
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
+  );
 
   const records = catalog?.records ?? [];
 
@@ -83,17 +87,27 @@ export function ModelRegistryPage() {
     return record.protocol;
   }
 
-  function getProtocolFilterLabel(protocol: ModelRecord["protocol"]) {
+  function getProtocolLabel(protocol: ModelRecord["protocol"], modelType?: ModelRecord["modelType"]) {
     switch (protocol) {
       case "OPENAI_COMPATIBLE":
-        return "OpenAI Compatible";
+        return pageT(
+          `protocol.openaiCompatible.${modelType === "EMBEDDING" ? "embedding" : "chat"}`,
+          modelType === "EMBEDDING" ? "OpenAI Compatible - Embedding" : "OpenAI Compatible - Chat",
+        );
       case "RESPONSES":
-        return "OpenAI Compatible - Response";
+        return pageT("protocol.responses", "OpenAI Compatible - Response");
       case "RERANK":
-        return "OpenAI Compatible - Rerank";
+        return pageT("protocol.rerank", "OpenAI Compatible - Rerank");
       default:
         return protocol;
     }
+  }
+
+  function getProtocolFilterLabel(protocol: ModelRecord["protocol"]) {
+    if (protocol === "OPENAI_COMPATIBLE") {
+      return pageT("protocol.openaiCompatible.label", "OpenAI Compatible");
+    }
+    return getProtocolLabel(protocol);
   }
 
   function getTypeFilterValue(record: ModelRecord) {
@@ -101,19 +115,21 @@ export function ModelRegistryPage() {
   }
 
   function getTypeFilterLabel(record: ModelRecord) {
-    return formatModelCapabilities(record.modelCapabilities, record.modelType);
+    return normalizeModelCapabilities(record.modelCapabilities, record.modelType)
+      .map((capability) => pageT(`capabilities.${capability}`, formatModelCapability(capability)))
+      .join(", ");
   }
 
   function getWorkspaceSourceLabel(record: ModelRecord) {
     switch (record.sourceKind) {
       case "LOCAL":
-        return "Local";
+        return pageT("source.local", "Local");
       case "INHERITED":
-        return "Inherited";
+        return pageT("source.inherited", "Inherited");
       case "OVERRIDE":
-        return "Override";
+        return pageT("source.override", "Override");
       default:
-        return "Platform";
+        return pageT("source.platform", "Platform");
     }
   }
 
@@ -130,12 +146,12 @@ export function ModelRegistryPage() {
     if (record.sourceWorkspaceCode || record.sourceWorkspaceName) {
       return {
         code: record.sourceWorkspaceCode,
-        label: record.sourceWorkspaceName?.trim() || record.sourceWorkspaceCode || "Workspace",
+        label: record.sourceWorkspaceName?.trim() || record.sourceWorkspaceCode || pageT("source.workspace", "Workspace"),
       };
     }
     return {
       code: null,
-      label: "Platform",
+      label: pageT("source.platform", "Platform"),
     };
   }
 
@@ -147,7 +163,7 @@ export function ModelRegistryPage() {
       seen.add(value);
       return [{ value, label: getProtocolFilterLabel(record.protocol) }];
     });
-  }, [records]);
+  }, [i18n.language, records]);
 
   const typeOptions = useMemo(() => {
     const seen = new Set<string>();
@@ -157,7 +173,7 @@ export function ModelRegistryPage() {
       seen.add(value);
       return [{ value, label: getTypeFilterLabel(record) }];
     });
-  }, [records]);
+  }, [i18n.language, records]);
 
   const filteredRecords = useMemo(() => {
     const normalizedSearch = searchQuery.trim().toLowerCase();
@@ -177,21 +193,17 @@ export function ModelRegistryPage() {
         inheritedFrom?.label ?? "",
         inheritedFrom?.code ?? "",
         formatModelProtocol(record.protocol, record.modelType),
-        getProtocolFilterLabel(record.protocol),
+        getProtocolLabel(record.protocol, record.modelType),
         getTypeFilterLabel(record),
       ].join(" ").toLowerCase();
       return haystack.includes(normalizedSearch);
     });
-  }, [protocolFilter, records, searchQuery, statusFilter, typeFilter]);
+  }, [i18n.language, protocolFilter, records, searchQuery, statusFilter, typeFilter]);
   const sortedRecords = useMemo(
     () => [...filteredRecords].sort((left, right) => Number(right.isDefault) - Number(left.isDefault)),
     [filteredRecords],
   );
   const pagination = useTablePagination(sortedRecords);
-  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
-    t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
-  );
-
   async function refreshWorkspaceModels() {
     if (!activeWorkspaceCode) {
       setCatalog(null);
@@ -205,7 +217,7 @@ export function ModelRegistryPage() {
         : getWorkspaceModelCatalog(activeWorkspaceCode);
       setCatalog(nextCatalog);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace models could not be loaded");
+      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Workspace models could not be loaded"));
     } finally {
       setLoading(false);
     }
@@ -227,10 +239,13 @@ export function ModelRegistryPage() {
       await (dataSource === "api"
         ? setWorkspaceDefaultModel(activeWorkspaceCode, row.modelCode)
         : setWorkspaceDefaultRecord(activeWorkspaceCode, row.modelCode));
-      toast.success(`${row.displayName} set as the ${row.modelType.toLowerCase()} default`);
+      toast.success(pageT("messages.default", "{{name}} set as the {{type}} default", {
+        name: row.displayName,
+        type: pageT(`types.${row.modelType}`, row.modelType.toLowerCase()),
+      }));
       await refreshWorkspaceModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Default model could not be updated");
+      toast.error(error instanceof Error ? error.message : pageT("errors.default", "Default model could not be updated"));
     } finally {
       setRowBusyCode("");
     }
@@ -246,10 +261,13 @@ export function ModelRegistryPage() {
           ? await disableWorkspaceModel(activeWorkspaceCode, row.modelCode)
           : await enableWorkspaceModel(activeWorkspaceCode, row.modelCode))
         : setWorkspaceModelEnabled(activeWorkspaceCode, row.modelCode, !row.enabled);
-      toast.success(`${updated.displayName} ${updated.enabled ? "enabled" : "disabled"}`);
+      toast.success(pageT("messages.toggle", "{{name}} {{status}}", {
+        name: updated.displayName,
+        status: updated.enabled ? pageT("status.enabledLower", "enabled") : pageT("status.disabledLower", "disabled"),
+      }));
       await refreshWorkspaceModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Status update failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.status", "Status update failed"));
     } finally {
       setRowBusyCode("");
     }
@@ -258,8 +276,8 @@ export function ModelRegistryPage() {
   async function handleVerify(row: ModelRecord) {
     if (!activeWorkspaceCode || rowBusyCode === row.modelCode) return;
     setRowBusyCode(row.modelCode);
-    const verifyingToastId = toast.info(`Verifying connectivity for ${row.displayName}...`, {
-      title: "Verify",
+    const verifyingToastId = toast.info(pageT("messages.verifying", "Verifying connectivity for {{name}}...", { name: row.displayName }), {
+      title: pageT("actions.verify", "Verify"),
       durationMs: 0,
     });
 
@@ -267,10 +285,10 @@ export function ModelRegistryPage() {
       const verified = dataSource === "api"
         ? await verifyWorkspaceModel(activeWorkspaceCode, row.modelCode)
         : verifyWorkspaceModelRecord(activeWorkspaceCode, row.modelCode);
-      toast.success(`${verified.displayName} verified`);
+      toast.success(pageT("messages.verified", "{{name}} verified", { name: verified.displayName }));
       await refreshWorkspaceModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Verify failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.verify", "Verify failed"));
     } finally {
       toast.dismiss(verifyingToastId);
       setRowBusyCode("");
@@ -285,10 +303,10 @@ export function ModelRegistryPage() {
       const duplicated = dataSource === "api"
         ? await duplicateWorkspaceModel(activeWorkspaceCode, row.modelCode)
         : duplicateWorkspaceModelRecord(activeWorkspaceCode, row.modelCode);
-      toast.success(`${duplicated.displayName} created`);
+      toast.success(pageT("messages.created", "{{name}} created", { name: duplicated.displayName }));
       navigate(`/models/detail?modelCode=${encodeURIComponent(duplicated.modelCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace model could not be duplicated");
+      toast.error(error instanceof Error ? error.message : pageT("errors.duplicate", "Workspace model could not be duplicated"));
     } finally {
       setRowBusyCode("");
     }
@@ -304,14 +322,12 @@ export function ModelRegistryPage() {
       } else {
         deleteWorkspaceModelRecord(activeWorkspaceCode, row.modelCode);
       }
-      toast.success(
-        row.sourceKind === "OVERRIDE"
-          ? `${row.displayName} reverted to inherited`
-          : `${row.displayName} deleted`,
-      );
+      toast.success(row.sourceKind === "OVERRIDE"
+        ? pageT("messages.reverted", "{{name}} reverted to inherited", { name: row.displayName })
+        : pageT("messages.deleted", "{{name}} deleted", { name: row.displayName }));
       await refreshWorkspaceModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace model could not be removed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Workspace model could not be removed"));
     } finally {
       setRowBusyCode("");
     }
@@ -320,49 +336,49 @@ export function ModelRegistryPage() {
   const headerActions = useMemo(() => (
     <>
       <Button size="lg" variant="outline" disabled={loading} onClick={() => void refreshWorkspaceModels()}>
-        {loading ? "Refreshing..." : "Refresh"}
+        {loading ? pageT("actions.refreshing", "Refreshing...") : pageT("actions.refresh", "Refresh")}
       </Button>
       <Button size="lg" onClick={() => navigate("/models/new")}>
-        New
+        {pageT("actions.new", "New")}
       </Button>
     </>
-  ), [loading, navigate]);
+  ), [i18n.language, loading, navigate]);
 
   return (
     <>
-      <PageHeader title="Models" actions={headerActions} />
+      <PageHeader title={pageT("title", "Models")} actions={headerActions} />
 
       <div className="space-y-5">
         <SurfaceCard className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="min-w-0">
-              <Field label="Search">
+              <Field label={pageT("filters.search", "Search")}>
                 <TextInput
                   className="w-full"
                   value={searchQuery}
-                  placeholder="Search models"
+                  placeholder={pageT("filters.searchPlaceholder", "Search models")}
                   onChange={(event) => setSearchQuery(event.target.value)}
                 />
               </Field>
             </div>
             <div className="min-w-0">
-              <Field label="Status">
+              <Field label={pageT("filters.status", "Status")}>
                 <SelectInput className="w-full" value={statusFilter} onValueChange={(event) => setStatusFilter(event!)}>
-                  <SelectItem value="ALL">All</SelectItem>
-                  <SelectItem value="ENABLED">Enabled</SelectItem>
-                  <SelectItem value="DISABLED">Disabled</SelectItem>
+                  <SelectItem value="ALL">{pageT("filters.all", "All")}</SelectItem>
+                  <SelectItem value="ENABLED">{pageT("status.enabled", "Enabled")}</SelectItem>
+                  <SelectItem value="DISABLED">{pageT("status.disabled", "Disabled")}</SelectItem>
                 </SelectInput>
               </Field>
             </div>
             <div className="min-w-0">
-              <Field label="Protocol">
+              <Field label={pageT("filters.protocol", "Protocol")}>
                 <SelectInput
-                  aria-label="Protocol"
+                  aria-label={pageT("filters.protocol", "Protocol")}
                   className="w-full"
                   value={protocolFilter}
                   onValueChange={(event) => setProtocolFilter(event!)}
                 >
-                  <SelectItem value="ALL">All</SelectItem>
+                  <SelectItem value="ALL">{pageT("filters.all", "All")}</SelectItem>
                   {protocolOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -372,14 +388,14 @@ export function ModelRegistryPage() {
               </Field>
             </div>
             <div className="min-w-0">
-              <Field label="Type">
+              <Field label={pageT("filters.type", "Type")}>
                 <SelectInput
-                  aria-label="Type"
+                  aria-label={pageT("filters.type", "Type")}
                   className="w-full"
                   value={typeFilter}
                   onValueChange={(event) => setTypeFilter(event!)}
                 >
-                  <SelectItem value="ALL">All</SelectItem>
+                  <SelectItem value="ALL">{pageT("filters.all", "All")}</SelectItem>
                   {typeOptions.map((option) => (
                     <SelectItem key={option.value} value={option.value}>
                       {option.label}
@@ -399,7 +415,7 @@ export function ModelRegistryPage() {
           columns={[
             {
               id: "displayName",
-              header: "Display Name",
+              header: pageT("columns.displayName", "Display Name"),
               render: (row) => (
                 <div>
                   <p className="font-medium text-[var(--color-on-surface)]">{row.displayName}</p>
@@ -409,17 +425,17 @@ export function ModelRegistryPage() {
             },
             {
               id: "source",
-              header: "Source",
+              header: pageT("columns.source", "Source"),
               render: (row) => (
                 <ModelSourceBadge
                   sourceKind={row.sourceKind}
-                  label={row.sourceLabel || getWorkspaceSourceLabel(row)}
+                  label={getWorkspaceSourceLabel(row)}
                 />
               ),
             },
             {
               id: "inheritedFrom",
-              header: "Inherited From",
+              header: pageT("columns.inheritedFrom", "Inherited From"),
               render: (row) => {
                 const inheritedFrom = getWorkspaceInheritedFrom(row);
                 if (!inheritedFrom) {
@@ -438,27 +454,27 @@ export function ModelRegistryPage() {
             },
             {
               id: "protocol",
-              header: "Protocol",
-              render: (row) => formatModelProtocol(row.protocol, row.modelType),
+              header: pageT("columns.protocol", "Protocol"),
+              render: (row) => getProtocolLabel(row.protocol, row.modelType),
             },
             {
               id: "type",
-              header: "Type",
-              render: (row) => formatModelCapabilities(row.modelCapabilities, row.modelType),
+              header: pageT("columns.type", "Type"),
+              render: (row) => getTypeFilterLabel(row),
             },
             {
               id: "status",
-              header: "Status",
+              header: pageT("columns.status", "Status"),
               render: (row) => (
                 <div className="flex flex-wrap items-center gap-2">
-                  <Badge tone={row.enabled ? "success" : "info"}>{row.enabled ? "Enabled" : "Disabled"}</Badge>
-                  {row.isDefault ? <Badge tone="info">Default</Badge> : null}
+                  <Badge tone={row.enabled ? "success" : "info"}>{row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
+                  {row.isDefault ? <Badge tone="info">{pageT("status.default", "Default")}</Badge> : null}
                 </div>
               ),
             },
             {
               align: "right",
-              header: "Actions",
+              header: pageT("columns.actions", "Actions"),
               headerClassName: "w-24",
               id: "actions",
               cellClassName: "w-24",
@@ -487,7 +503,7 @@ export function ModelRegistryPage() {
                               void handleSetDefault(row);
                             }}
                           >
-                            Set Default
+                            {pageT("actions.setDefault", "Set Default")}
                           </DropdownMenuItem>
                         ) : null}
                         <DropdownMenuItem
@@ -497,7 +513,7 @@ export function ModelRegistryPage() {
                             void handleDuplicate(row);
                           }}
                         >
-                          Copy
+                          {pageT("actions.copy", "Copy")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           onClick={(event) => {
@@ -505,7 +521,7 @@ export function ModelRegistryPage() {
                             navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}&mode=edit`);
                           }}
                         >
-                          Edit
+                          {pageT("actions.edit", "Edit")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={isBusy}
@@ -514,7 +530,7 @@ export function ModelRegistryPage() {
                             void handleToggleEnabled(row);
                           }}
                         >
-                          {row.enabled ? "Disable" : "Enable"}
+                          {row.enabled ? pageT("actions.disable", "Disable") : pageT("actions.enable", "Enable")}
                         </DropdownMenuItem>
                         <DropdownMenuItem
                           disabled={isBusy}
@@ -523,7 +539,7 @@ export function ModelRegistryPage() {
                             void handleVerify(row);
                           }}
                         >
-                          Verify
+                          {pageT("actions.verify", "Verify")}
                         </DropdownMenuItem>
                         {row.sourceKind === "LOCAL" || row.sourceKind === "OVERRIDE" ? (
                           <DropdownMenuItem
@@ -534,7 +550,7 @@ export function ModelRegistryPage() {
                               void handleDelete(row);
                             }}
                           >
-                            {row.sourceKind === "OVERRIDE" ? "Revert" : "Delete"}
+                            {row.sourceKind === "OVERRIDE" ? pageT("actions.revert", "Revert") : pageT("actions.delete", "Delete")}
                           </DropdownMenuItem>
                         ) : null}
                       </DropdownMenuContent>
@@ -544,7 +560,7 @@ export function ModelRegistryPage() {
               },
             },
           ]}
-          emptyState={activeWorkspaceCode ? "No effective models match the current filters." : "Select a workspace in the shell to load models."}
+          emptyState={activeWorkspaceCode ? pageT("empty.filtered", "No effective models match the current filters.") : pageT("empty.workspace", "Select a workspace in the shell to load models.")}
         />
       </div>
     </>

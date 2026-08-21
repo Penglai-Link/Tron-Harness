@@ -4,6 +4,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { createPortal } from "react-dom";
 import { useNavigate } from "react-router";
 import {
@@ -65,6 +66,10 @@ const platformSensitiveFilters = ["All", "Sensitive", "Plain"] as const satisfie
 
 export function PlatformVariablesPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`variablesPlatform.${key}`, { defaultValue, ...options })
+  );
   const toast = useToast();
   const dataSource = getServiceDataSource("variable");
   const [records, setRecords] = useState<PlatformVariableRecord[]>([]);
@@ -107,7 +112,7 @@ export function PlatformVariablesPage() {
       setRevealTargetKey("");
       setRevealError("");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform variables could not be loaded");
+      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform variables could not be loaded"));
     } finally {
       setLoading(false);
     }
@@ -129,7 +134,7 @@ export function PlatformVariablesPage() {
           setRevealError("");
         }
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Platform variables could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform variables could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -207,19 +212,19 @@ export function PlatformVariablesPage() {
         delete next[row.key];
         return next;
       });
-      toast.success(`${row.key} deleted`);
+      toast.success(pageT("messages.deleted", "{{key}} deleted", { key: row.key }));
       await refreshPlatformVariables();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform variable could not be deleted");
+      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Platform variable could not be deleted"));
     } finally {
       setRowBusyKey("");
     }
   }
 
   function sensitiveFilterLabel(filter: PlatformSensitiveFilter) {
-    if (filter === "Sensitive") return "Sensitive Data";
-    if (filter === "Plain") return "Plain Data";
-    return "All Data";
+    if (filter === "Sensitive") return pageT("filters.sensitiveData", "Sensitive Data");
+    if (filter === "Plain") return pageT("filters.plainData", "Plain Data");
+    return pageT("filters.allData", "All Data");
   }
 
   function sensitiveFilterValue(filter: string): PlatformSensitiveFilter {
@@ -277,7 +282,7 @@ export function PlatformVariablesPage() {
       setRevealTargetKey("");
       setRevealError("");
     } catch (error) {
-      setRevealError(error instanceof Error ? error.message : "Sensitive value could not be revealed");
+      setRevealError(error instanceof Error ? error.message : pageT("errors.reveal", "Sensitive value could not be revealed"));
     } finally {
       setRevealPending(false);
     }
@@ -286,16 +291,16 @@ export function PlatformVariablesPage() {
   return (
     <>
       <PageHeader
-        title="Platform Variables"
+        title={pageT("title", "Platform Variables")}
         actions={(
           <>
             <Button variant="secondary" disabled={loading} aria-busy={loading} onClick={() => void refreshPlatformVariables()}>
               <RefreshCcw size={16} aria-hidden="true" />
-              {loading ? "Refreshing..." : "Refresh"}
+              {loading ? pageT("actions.refreshing", "Refreshing...") : pageT("actions.refresh", "Refresh")}
             </Button>
             <Button onClick={() => navigate("/settings/variables/new")}>
               <Plus size={16} aria-hidden="true" />
-              New
+              {pageT("actions.new", "New")}
             </Button>
           </>
         )}
@@ -304,18 +309,18 @@ export function PlatformVariablesPage() {
       <div className="space-y-5">
         <SurfaceCard className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
-            <Field label="Search">
+            <Field label={pageT("fields.search", "Search")}>
               <SearchField
-                ariaLabel="Search platform variables"
+                ariaLabel={pageT("aria.search", "Search platform variables")}
                 className="w-full"
-                placeholder="Search platform variables..."
+                placeholder={pageT("filters.searchPlaceholder", "Search platform variables...")}
                 value={query}
                 onChange={setQuery}
               />
             </Field>
-            <Field label="Sensitive Data">
+            <Field label={pageT("fields.sensitive", "Sensitive Data")}>
               <SelectInput
-                aria-label="Filter platform variables by sensitive data"
+                aria-label={pageT("aria.sensitiveFilter", "Filter platform variables by sensitive data")}
                 className="w-full"
                 value={sensitiveFilter}
                 onValueChange={(event) => setSensitiveFilter(sensitiveFilterValue(event!))}
@@ -335,12 +340,12 @@ export function PlatformVariablesPage() {
           rowKey={(row) => row.key}
           tableClassName="table-fixed min-w-[1080px]"
           onRowClick={(row) => navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(row.key)}`)}
-          pagination={<TablePagination itemLabel="platform variables" {...pagination.paginationProps} />}
-          emptyState="No platform variables match the current filters."
+          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "platform variables")} {...pagination.paginationProps} />}
+          emptyState={pageT("empty.filtered", "No platform variables match the current filters.")}
           columns={[
             {
               id: "key",
-              header: "Key",
+              header: pageT("columns.key", "Key"),
               width: "310px",
               cellClassName: "min-w-0",
               render: (row) => (
@@ -354,7 +359,7 @@ export function PlatformVariablesPage() {
             },
             {
               id: "value",
-              header: "Value",
+              header: pageT("columns.value", "Value"),
               width: "310px",
               cellClassName: "min-w-0",
               render: (row) => {
@@ -391,7 +396,7 @@ export function PlatformVariablesPage() {
             },
             {
               id: "sensitive",
-              header: "Sensitive Data",
+              header: pageT("columns.sensitive", "Sensitive Data"),
               width: "150px",
               render: (row) => (
                 <SensitiveDataBadge sensitive={isSensitiveRecord(row)} />
@@ -399,7 +404,7 @@ export function PlatformVariablesPage() {
             },
             {
               id: "updatedAt",
-              header: "Updated",
+              header: pageT("columns.updated", "Updated"),
               width: "210px",
               render: (row) => (
                 <span className="whitespace-nowrap text-[13px] text-[var(--color-on-surface)]">
@@ -423,7 +428,7 @@ export function PlatformVariablesPage() {
                     <Button
                       size="icon"
                       variant="ghost"
-                      aria-label={`Open actions for ${row.key}`}
+                      aria-label={pageT("aria.actionsFor", "Open actions for {{key}}", { key: row.key })}
                       aria-expanded={isMenuOpen}
                       disabled={isBusy}
                       onClick={(event) => {
@@ -447,7 +452,7 @@ export function PlatformVariablesPage() {
             style={{ left: openRowMenu.left, top: openRowMenu.top }}
             className="fixed z-[80] w-36 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
             role="menu"
-            aria-label={`Actions for ${openMenuRow.key}`}
+            aria-label={pageT("aria.menu", "Actions for {{key}}", { key: openMenuRow.key })}
             onClick={(event) => event.stopPropagation()}
           >
             <button
@@ -459,7 +464,7 @@ export function PlatformVariablesPage() {
                 navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(openMenuRow.key)}&mode=edit`);
               }}
             >
-              Edit
+              {pageT("actions.edit", "Edit")}
             </button>
             <button
               type="button"
@@ -470,7 +475,7 @@ export function PlatformVariablesPage() {
                 void handleDelete(openMenuRow);
               }}
             >
-              Delete
+              {pageT("actions.delete", "Delete")}
             </button>
           </div>,
           document.body,

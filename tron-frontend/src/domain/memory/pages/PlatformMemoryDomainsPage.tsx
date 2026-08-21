@@ -5,6 +5,7 @@ import {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
+import { useTranslation } from "react-i18next";
 import {
   Boxes,
   MoreHorizontal,
@@ -195,11 +196,12 @@ function DomainEditorDialog({
   onSubmit: () => void;
   submitting: boolean;
 }) {
+  const { t } = useTranslation(["pages"]);
   const title = mode === "create"
-    ? "New Memory Domain"
+    ? t("pages:memoryDomains.createTitle", "New Memory Domain")
     : mode === "preview"
-      ? "Memory Domain"
-      : "Edit Memory Domain";
+      ? t("pages:memoryDomains.detailTitle", "Memory Domain")
+      : t("pages:memoryDomains.editTitle", "Edit Memory Domain");
   const readOnly = mode === "preview";
 
   return (
@@ -214,7 +216,7 @@ function DomainEditorDialog({
         <div className="grid gap-5">
 
           <div className="grid gap-5 md:grid-cols-2">
-            <Field label="Domain Code">
+            <Field label={t("pages:memoryDomains.fields.code", "Domain Code")}>
               <TextInput
                 readOnly={readOnly}
                 value={form.domainCode}
@@ -222,7 +224,7 @@ function DomainEditorDialog({
                 onChange={(event) => onChange({ ...form, domainCode: event.target.value })}
               />
             </Field>
-            <Field label="Status">
+            <Field label={t("pages:memoryDomains.fields.status", "Status")}>
               <SelectInput
                 readOnly={readOnly}
                 value={form.status}
@@ -234,7 +236,7 @@ function DomainEditorDialog({
             </Field>
           </div>
 
-          <Field label="Name">
+          <Field label={t("pages:memoryDomains.fields.name", "Name")}>
             <TextInput
               readOnly={readOnly}
               value={form.name}
@@ -243,7 +245,7 @@ function DomainEditorDialog({
             />
           </Field>
 
-          <Field label="Description">
+          <Field label={t("pages:memoryDomains.fields.description", "Description")}>
             <TextArea
               readOnly={readOnly}
               value={form.description}
@@ -255,10 +257,10 @@ function DomainEditorDialog({
 
         {!readOnly && (
           <DialogFooter className="m-0 shrink-0 flex-row justify-end gap-2 rounded-none border-0 bg-transparent p-0">
-            <Button type="button" size="lg" variant="outline" onClick={onClose}>Cancel</Button>
+            <Button type="button" size="lg" variant="outline" onClick={onClose}>{t("pages:memoryDomains.actions.cancel", "Cancel")}</Button>
             <Button type="button" size="lg" disabled={submitting} aria-busy={submitting} onClick={onSubmit}>
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:memoryDomains.actions.saving", "Saving...") : t("pages:memoryDomains.actions.save", "Save")}
             </Button>
           </DialogFooter>
         )}
@@ -268,6 +270,7 @@ function DomainEditorDialog({
 }
 
 export function PlatformMemoryDomainsPage() {
+  const { t } = useTranslation(["pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("memory");
   const [records, setRecords] = useState<MemoryWorkDomainRecord[]>([]);
@@ -312,7 +315,7 @@ export function PlatformMemoryDomainsPage() {
           : listMemoryWorkDomainsMock({ includeDisabled, search: debouncedQuery });
         if (active) setRecords(nextRecords);
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Memory domains could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : t("pages:memoryDomains.errors.load", "Memory domains could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -421,7 +424,7 @@ export function PlatformMemoryDomainsPage() {
           }
         }
 
-        toast.success(`${created.name} created`);
+        toast.success(t("pages:memoryDomains.messages.created", "{{name}} created", { name: created.name }));
       } else if (editor.record) {
         const saved = dataSource === "api"
           ? await updateMemoryDomain(editor.record.domainCode, {
@@ -434,13 +437,13 @@ export function PlatformMemoryDomainsPage() {
             name: normalizeTextValue(editorForm.name),
             status: editorForm.status,
           });
-        toast.success(`${saved.name} saved`);
+        toast.success(t("pages:memoryDomains.messages.saved", "{{name}} saved", { name: saved.name }));
       }
 
       closeEditor();
       refreshDomains();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Memory domain could not be saved");
+      toast.error(error instanceof Error ? error.message : t("pages:memoryDomains.errors.save", "Memory domain could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -455,10 +458,10 @@ export function PlatformMemoryDomainsPage() {
       const updated = dataSource === "api"
         ? await enableMemoryDomain(record.domainCode)
         : enableMemoryWorkDomainRecord(record.domainCode);
-      toast.success(`${updated.name} enabled`);
+      toast.success(t("pages:memoryDomains.messages.enabled", "{{name}} enabled", { name: updated.name }));
       refreshDomains();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Memory domain could not be enabled");
+      toast.error(error instanceof Error ? error.message : t("pages:memoryDomains.errors.enable", "Memory domain could not be enabled"));
     } finally {
       setRowBusyCode("");
     }
@@ -472,10 +475,10 @@ export function PlatformMemoryDomainsPage() {
       const updated = dataSource === "api"
         ? await disableMemoryDomain(disableTarget.domainCode)
         : disableMemoryWorkDomainRecord(disableTarget.domainCode);
-      toast.success(`${updated.name} disabled`);
+      toast.success(t("pages:memoryDomains.messages.disabled", "{{name}} disabled", { name: updated.name }));
       refreshDomains();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Memory domain could not be disabled");
+      toast.error(error instanceof Error ? error.message : t("pages:memoryDomains.errors.disable", "Memory domain could not be disabled"));
     } finally {
       setDisableTarget(null);
       setRowBusyCode("");
@@ -485,14 +488,14 @@ export function PlatformMemoryDomainsPage() {
   return (
     <>
       <PageHeader
-        title="Memory Domains"
+        title={t("pages:memoryDomains.title", "Memory Domains")}
         actions={(
           <>
             <Button size="lg" variant="outline" disabled={loading} aria-busy={loading} onClick={refreshDomains}>
-              {loading ? "Refreshing..." : "Refresh"}
+              {loading ? t("pages:memoryDomains.actions.refreshing", "Refreshing...") : t("pages:memoryDomains.actions.refresh", "Refresh")}
             </Button>
             <Button size="lg" onClick={openCreateDialog}>
-              New Domain
+              {t("pages:memoryDomains.actions.new", "New Domain")}
             </Button>
           </>
         )}
@@ -501,37 +504,37 @@ export function PlatformMemoryDomainsPage() {
       <div className="space-y-5">
         <SurfaceCard className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <Field label="Search">
+            <Field label={t("pages:memoryDomains.fields.search", "Search")}>
               <SearchField
-                ariaLabel="Search memory domains"
+                ariaLabel={t("pages:memoryDomains.aria.search", "Search memory domains")}
                 className="w-full"
                 disabled={loading}
-                placeholder="Search domains"
+                placeholder={t("pages:memoryDomains.placeholders.search", "Search domains")}
                 value={query}
                 onChange={setQuery}
               />
             </Field>
-            <Field label="Status">
+            <Field label={t("pages:memoryDomains.fields.status", "Status")}>
               <SelectInput
-                aria-label="Filter memory domains by status"
+                aria-label={t("pages:memoryDomains.aria.status", "Filter memory domains by status")}
                 disabled={loading}
                 value={statusFilter}
                 onValueChange={(event) => setStatusFilter(event as DomainStatusFilter)}
               >
                 {domainStatusFilterOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>{t(`pages:memoryDomains.status.${option.value}`, option.label)}</SelectItem>
                 ))}
               </SelectInput>
             </Field>
-            <Field label="Sort">
+            <Field label={t("pages:memoryDomains.fields.sort", "Sort")}>
               <SelectInput
-                aria-label="Sort memory domains"
+                aria-label={t("pages:memoryDomains.aria.sort", "Sort memory domains")}
                 disabled={loading}
                 value={sortMode}
                 onValueChange={(event) => setSortMode(event as DomainSortMode)}
               >
                 {domainSortOptions.map((option) => (
-                  <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
+                  <SelectItem key={option.value} value={option.value}>{t(`pages:memoryDomains.sort.${option.value}`, option.label)}</SelectItem>
                 ))}
               </SelectInput>
             </Field>
@@ -543,13 +546,13 @@ export function PlatformMemoryDomainsPage() {
           rowKey={(row) => row.domainCode}
           rows={pagination.visibleItems}
           tableClassName="table-fixed min-w-[900px]"
-          pagination={<TablePagination itemLabel="memory domains" {...pagination.paginationProps} />}
-          title="Domains"
-          emptyState="No domains match the current filters."
+          pagination={<TablePagination itemLabel={t("pages:memoryDomains.pagination.itemLabel", "memory domains")} {...pagination.paginationProps} />}
+          title={t("pages:memoryDomains.table.title", "Domains")}
+          emptyState={t("pages:memoryDomains.table.empty", "No domains match the current filters.")}
           columns={[
             {
               id: "domain",
-              header: "Domain",
+              header: t("pages:memoryDomains.columns.domain", "Domain"),
               width: "290px",
               cellClassName: "min-w-0",
               render: (row) => (
@@ -566,24 +569,24 @@ export function PlatformMemoryDomainsPage() {
             },
             {
               id: "description",
-              header: "Description",
+              header: t("pages:memoryDomains.columns.description", "Description"),
               width: "340px",
               cellClassName: "min-w-0",
               render: (row) => (
                 <p className="line-clamp-2 text-[13px] text-[var(--color-on-surface-variant)]">
-                  {row.description || "No description"}
+                  {row.description || t("pages:memoryDomains.table.noDescription", "No description")}
                 </p>
               ),
             },
             {
               id: "status",
-              header: "Status",
+              header: t("pages:memoryDomains.columns.status", "Status"),
               width: "140px",
               render: (row) => <Badge variant={row.status === 'ACTIVE' ? 'success' : 'error'} >{row.status}</Badge>,
             },
             {
               id: "updatedAt",
-              header: "Updated",
+              header: t("pages:memoryDomains.columns.updated", "Updated"),
               width: "150px",
               render: (row) => (
                 <span className="whitespace-nowrap text-[13px] text-[var(--color-on-surface)]">
@@ -594,7 +597,7 @@ export function PlatformMemoryDomainsPage() {
             {
               align: "right",
               cellClassName: "sticky right-0 z-10 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)] group-hover:bg-[var(--color-hover-surface)]",
-              header: "Actions",
+              header: t("pages:memoryDomains.columns.actions", "Actions"),
               headerClassName: "sticky right-0 z-20 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
               id: "actions",
               width: "100px",
@@ -637,7 +640,7 @@ export function PlatformMemoryDomainsPage() {
               openPreviewDialog(openMenuRow);
             }}
           >
-            Preview
+            {t("pages:memoryDomains.actions.preview", "Preview")}
           </button>
           <button
             className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
@@ -648,7 +651,7 @@ export function PlatformMemoryDomainsPage() {
               openEditDialog(openMenuRow);
             }}
           >
-            Edit
+            {t("pages:memoryDomains.actions.edit", "Edit")}
           </button>
           {openMenuRow.status === "ACTIVE" ? (
             <button
@@ -660,7 +663,7 @@ export function PlatformMemoryDomainsPage() {
                 setDisableTarget(openMenuRow);
               }}
             >
-              Disable
+              {t("pages:memoryDomains.actions.disable", "Disable")}
             </button>
           ) : (
             <button
@@ -669,7 +672,7 @@ export function PlatformMemoryDomainsPage() {
               type="button"
               onClick={() => void handleEnable(openMenuRow)}
             >
-              Enable
+              {t("pages:memoryDomains.actions.enable", "Enable")}
             </button>
           )}
         </div>,
@@ -688,12 +691,12 @@ export function PlatformMemoryDomainsPage() {
       ) : null}
 
       <ConfirmDialog
-        cancelText="Cancel"
-        confirmText={rowBusyCode === disableTarget?.domainCode ? "Disabling..." : "Disable"}
-        description={disableTarget ? `${disableTarget.name} will be removed from active memory targets.` : ""}
+        cancelText={t("pages:memoryDomains.actions.cancel", "Cancel")}
+        confirmText={rowBusyCode === disableTarget?.domainCode ? t("pages:memoryDomains.actions.disabling", "Disabling...") : t("pages:memoryDomains.actions.disable", "Disable")}
+        description={disableTarget ? t("pages:memoryDomains.confirm.description", "{{name}} will be removed from active memory targets.", { name: disableTarget.name }) : ""}
         open={Boolean(disableTarget)}
         pending={rowBusyCode === disableTarget?.domainCode}
-        title="Disable domain?"
+        title={t("pages:memoryDomains.confirm.title", "Disable domain?")}
         tone="danger"
         onCancel={() => {
           if (rowBusyCode === disableTarget?.domainCode) return;

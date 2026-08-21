@@ -2,6 +2,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { FileText } from "lucide-react";
 
 import { Badge } from "@/shared/ui/Badge";
@@ -24,6 +25,7 @@ import {
 import { SelectItem } from "@/components/ui/select";
 
 export function AuditLogsPage() {
+  const { t } = useTranslation(["pages"]);
   const rows = useAuditLogList();
   const [query, setQuery] = useState("");
   const [status, setStatus] = useState("all");
@@ -37,37 +39,37 @@ export function AuditLogsPage() {
   return (
     <>
       <PageHeader
-        title="Users & Roles"
+        title={t("pages:admin.audit.title", "Audit Logs")}
         actions={
-          <Button variant="secondary" onClick={() => setNotice(`${filteredRows.length} audit rows exported`)}>
+          <Button variant="secondary" onClick={() => setNotice(t("pages:admin.audit.exported", "{{count}} audit rows exported", { count: filteredRows.length }))}>
             <FileText size={15} />
-            Export
+            {t("pages:admin.audit.export", "Export")}
           </Button>
         }
       />
       <p className="sr-only" aria-live="polite">{notice}</p>
       <DataTable<AuditLogRecord>
-        title="Audit Logs"
+        title={t("pages:admin.audit.title", "Audit Logs")}
         rows={auditPagination.visibleItems}
         rowKey={(row) => row.id}
         toolbar={
           <>
-            <TextInput className="h-8 w-60" placeholder="Search audit logs..." value={query} onChange={(event) => setQuery(event.target.value)} />
+            <TextInput className="h-8 w-60" placeholder={t("pages:admin.audit.search", "Search audit logs...")} value={query} onChange={(event) => setQuery(event.target.value)} />
             <SelectInput className="h-8 w-36" value={status} onValueChange={(event) => setStatus(event!)}>
               {adminAuditStatusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
             </SelectInput>
           </>
         }
         pagination={
-          <TablePagination itemLabel="entries" {...auditPagination.paginationProps} />
+          <TablePagination itemLabel={t("pages:admin.audit.entries", "entries")} {...auditPagination.paginationProps} />
         }
         columns={[
-          { id: "timestamp", header: "Timestamp", render: (row) => <span className="font-mono text-[13px]">{row.timestamp}</span> },
-          { id: "actor", header: "Actor", render: (row) => row.actor },
-          { id: "action", header: "Action", render: (row) => row.action },
-          { id: "resource", header: "Resource ID", render: (row) => <span className="font-mono text-[13px]">{row.resourceId}</span> },
-          { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
-          { id: "ip", header: "IP Address", align: "right", render: (row) => <span className="font-mono text-[13px]">{row.ipAddress}</span> },
+          { id: "timestamp", header: t("pages:admin.audit.columns.timestamp", "Timestamp"), render: (row) => <span className="font-mono text-[13px]">{row.timestamp}</span> },
+          { id: "actor", header: t("pages:admin.audit.columns.actor", "Actor"), render: (row) => row.actor },
+          { id: "action", header: t("pages:admin.audit.columns.action", "Action"), render: (row) => row.action },
+          { id: "resource", header: t("pages:admin.audit.columns.resource", "Resource ID"), render: (row) => <span className="font-mono text-[13px]">{row.resourceId}</span> },
+          { id: "status", header: t("pages:admin.audit.columns.status", "Status"), render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
+          { id: "ip", header: t("pages:admin.audit.columns.ip", "IP Address"), align: "right", render: (row) => <span className="font-mono text-[13px]">{row.ipAddress}</span> },
         ]}
       />
     </>

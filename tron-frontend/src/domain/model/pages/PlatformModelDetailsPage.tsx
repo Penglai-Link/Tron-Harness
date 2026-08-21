@@ -47,8 +47,9 @@ import {
   modelFormToPayload,
 } from "@/domain/model/components";
 import {
-  formatModelCapabilities,
+  formatModelCapability,
   formatModelProtocol,
+  normalizeModelCapabilities,
   formatReasoningEffort,
 } from "@/domain/model/constants/modelPageOptions";
 import {
@@ -72,9 +73,10 @@ function platformPayload(
 }
 
 function ReadValue({ children }: { children: string }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="min-h-6 text-sm leading-6 text-[var(--color-on-surface)] break-words">
-      {children || "None"}
+      {children || t("modelRegistry.values.none", "None")}
     </div>
   );
 }
@@ -95,7 +97,10 @@ export function PlatformModelDetailsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { t } = useTranslation(["common"]);
+  const { t } = useTranslation(["common", "pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
+  );
   const dataSource = getServiceDataSource("model");
   const modelCode = searchParams.get("modelCode") ?? "";
   const startsInEditMode = searchParams.get("mode") === "edit";
@@ -120,7 +125,7 @@ export function PlatformModelDetailsPage() {
         : getPlatformModelRecord(modelCode);
       setSelectedRecord(nextRecord);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform models could not be loaded");
+      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform models could not be loaded"));
     } finally {
       setLoading(false);
     }
@@ -139,7 +144,7 @@ export function PlatformModelDetailsPage() {
           : getPlatformModelRecord(modelCode);
         if (active) setSelectedRecord(nextRecord);
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Platform models could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform models could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -185,12 +190,12 @@ export function PlatformModelDetailsPage() {
       const saved = dataSource === "api"
         ? await updatePlatformModel(selectedRecord.modelCode, platformPayload(form, apiKeyRef, selectedRecord.enabled))
         : updatePlatformModelRecord(selectedRecord.modelCode, platformPayload(form, apiKeyRef, selectedRecord.enabled));
-      toast.success(`${saved.displayName} saved`);
+      toast.success(pageT("messages.saved", "{{name}} saved", { name: saved.displayName }));
       setVerifyPreview(null);
       exitEditing();
       await refreshPlatformModel();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform model could not be saved");
+      toast.error(error instanceof Error ? error.message : pageT("errors.save", "Platform model could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -200,9 +205,9 @@ export function PlatformModelDetailsPage() {
     if (!selectedRecord) return;
     setVerifying(true);
     const verifyTarget = editing ? (form.displayName.trim() || selectedRecord.displayName) : selectedRecord.displayName;
-    const verifyingToastId = toast.info(`Verifying connectivity for ${verifyTarget}...`, {
+    const verifyingToastId = toast.info(pageT("messages.verifying", "Verifying connectivity for {{name}}...", { name: verifyTarget }), {
       durationMs: 0,
-      title: "Verify",
+      title: pageT("actions.verify", "Verify"),
     });
     try {
       const payload = editing
@@ -220,10 +225,10 @@ export function PlatformModelDetailsPage() {
         setVerifyPreview(null);
         await refreshPlatformModel();
       }
-      toast.success(`${verified.displayName} verified`);
+      toast.success(pageT("messages.verified", "{{name}} verified", { name: verified.displayName }));
     } catch (error) {
       toast.dismiss(verifyingToastId);
-      toast.error(error instanceof Error ? error.message : "Verify failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.verify", "Verify failed"));
     } finally {
       setVerifying(false);
     }
@@ -249,10 +254,10 @@ export function PlatformModelDetailsPage() {
           ? await disablePlatformModel(selectedRecord.modelCode)
           : await enablePlatformModel(selectedRecord.modelCode))
         : setPlatformModelEnabled(selectedRecord.modelCode, !selectedRecord.enabled);
-      toast.success(`${toggled.displayName} ${toggled.enabled ? "enabled" : "disabled"}`);
+      toast.success(pageT("messages.toggle", "{{name}} {{status}}", { name: toggled.displayName, status: toggled.enabled ? pageT("status.enabledLower", "enabled") : pageT("status.disabledLower", "disabled") }));
       await refreshPlatformModel();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Status update failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.status", "Status update failed"));
     }
   }
 
@@ -265,10 +270,10 @@ export function PlatformModelDetailsPage() {
       } else {
         deletePlatformModelRecord(selectedRecord.modelCode);
       }
-      toast.success(`${selectedRecord.displayName} deleted`);
+      toast.success(pageT("messages.deleted", "{{name}} deleted", { name: selectedRecord.displayName }));
       navigate("/settings/models");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform model could not be deleted");
+      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Platform model could not be deleted"));
     } finally {
       setDeleting(false);
     }
@@ -283,10 +288,10 @@ export function PlatformModelDetailsPage() {
       } else {
         setPlatformDefaultRecord(selectedRecord.modelCode);
       }
-      toast.success(`${selectedRecord.displayName} set as default`);
+      toast.success(pageT("messages.setDefault", "{{name}} set as default", { name: selectedRecord.displayName }));
       await refreshPlatformModel();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Default model could not be updated");
+      toast.error(error instanceof Error ? error.message : pageT("errors.default", "Default model could not be updated"));
     } finally {
       setSubmitting(false);
     }
@@ -296,10 +301,10 @@ export function PlatformModelDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Models", href: "/settings/models" }, { label: "Loading" }]}
-          title="Platform Model"
+          breadcrumbs={[{ label: pageT("title", "Models"), href: "/settings/models" }, { label: pageT("detail.loading", "Loading") }]}
+          title={pageT("detail.platformModel", "Platform Model")}
         />
-        <SurfaceCard>Loading platform model...</SurfaceCard>
+        <SurfaceCard>{pageT("detail.loadingPlatformModel", "Loading platform model...")}</SurfaceCard>
       </>
     );
   }
@@ -308,10 +313,10 @@ export function PlatformModelDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Models", href: "/settings/models" }, { label: "Not Found" }]}
-          title="Platform Model"
+          breadcrumbs={[{ label: pageT("title", "Models"), href: "/settings/models" }, { label: pageT("detail.notFound", "Not Found") }]}
+          title={pageT("detail.platformModel", "Platform Model")}
         />
-        <SurfaceCard>Platform model not found.</SurfaceCard>
+        <SurfaceCard>{pageT("detail.platformModelNotFound", "Platform model not found.")}</SurfaceCard>
       </>
     );
   }
@@ -330,11 +335,11 @@ export function PlatformModelDetailsPage() {
               onClick={() => void runVerify()}
             >
               <ShieldCheck size={16} aria-hidden="true" />
-              {verifying ? "Verifying..." : "Verify"}
+              {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             <Button variant="secondary" disabled={submitting || verifying} onClick={resetDraft}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              {pageT("actions.cancel", "Cancel")}
             </Button>
             <Button
               disabled={submitting || verifying || !form.displayName.trim()}
@@ -342,32 +347,32 @@ export function PlatformModelDetailsPage() {
               onClick={() => void saveModel()}
             >
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>
         ) : (
           <>
             <Button variant="secondary" onClick={() => setEditing(true)}>
               <Edit3 size={16} aria-hidden="true" />
-              Edit
+              {pageT("actions.edit", "Edit")}
             </Button>
             <Button variant="secondary" disabled={verifying} aria-busy={verifying} onClick={() => void runVerify()}>
               <ShieldCheck size={16} aria-hidden="true" />
-              {verifying ? "Verifying..." : "Verify"}
+              {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             {!selectedRecord.isDefault && selectedRecord.enabled ? (
               <Button variant="secondary" disabled={submitting || verifying} onClick={() => void makeDefault()}>
                 <Save size={16} aria-hidden="true" />
-                Set Default
+                {pageT("actions.setDefault", "Set Default")}
               </Button>
             ) : null}
             <Button variant="secondary" onClick={() => void toggleEnabled()}>
               <Zap size={16} aria-hidden="true" />
-              {selectedRecord.enabled ? "Disable" : "Enable"}
+              {selectedRecord.enabled ? pageT("actions.disable", "Disable") : pageT("actions.enable", "Enable")}
             </Button>
             <Button variant="ghost" disabled={deleting} aria-busy={deleting} onClick={() => void removeModel()}>
               <Trash2 size={16} aria-hidden="true" />
-              {deleting ? "Deleting..." : "Delete"}
+              {deleting ? pageT("actions.deleting", "Deleting...") : pageT("actions.delete", "Delete")}
             </Button>
           </>
         )}
@@ -378,9 +383,9 @@ export function PlatformModelDetailsPage() {
 
         <SurfaceCard className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
-            <Badge tone={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
-            {selectedRecord.isDefault ? <Badge tone="info">Default</Badge> : null}
+            <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={pageT(`source.${selectedRecord.sourceKind.toLowerCase()}`, selectedRecord.sourceLabel)} />
+            <Badge tone={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
+            {selectedRecord.isDefault ? <Badge tone="info">{pageT("status.default", "Default")}</Badge> : null}
             <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
               {selectedRecord.modelCode}
             </code>
@@ -391,57 +396,57 @@ export function PlatformModelDetailsPage() {
               state={form}
               onChange={setForm}
               apiKeyInputRef={apiKeyInputRef}
-              apiKeyFieldHint="Leave blank to keep the current key."
+              apiKeyFieldHint={pageT("form.keepApiKeyHint", "Leave blank to keep the current key.")}
               onApiKeyDirtyChange={setApiKeyDirty}
             />
           ) : (
             <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
-              <Field label="Display Name">
+              <Field label={pageT("form.displayName", "Display Name")}>
                 <ReadValue>{selectedRecord.displayName}</ReadValue>
               </Field>
-              <Field label="Vendor Model ID">
+              <Field label={pageT("form.vendorModelId", "Vendor Model ID")}>
                 <ReadValue>{selectedRecord.modelName}</ReadValue>
               </Field>
-              <Field label="Vendor">
+              <Field label={pageT("form.vendor", "Vendor")}>
                 <ReadValue>{selectedRecord.vendor}</ReadValue>
               </Field>
-              <Field label="Protocol">
-                <ReadValue>{formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType)}</ReadValue>
+              <Field label={pageT("form.protocol", "Protocol")}>
+                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? `openaiCompatible.${selectedRecord.modelType === "EMBEDDING" ? "embedding" : "chat"}` : selectedRecord.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
               </Field>
-              <Field label="Model Type">
-                <ReadValue>{formatModelCapabilities(selectedRecord.modelCapabilities, selectedRecord.modelType)}</ReadValue>
+              <Field label={pageT("form.modelType", "Model Type")}>
+                <ReadValue>{normalizeModelCapabilities(selectedRecord.modelCapabilities, selectedRecord.modelType).map((capability) => pageT(`capabilities.${capability}`, formatModelCapability(capability))).join(", ")}</ReadValue>
               </Field>
-              <Field label="Base URL">
+              <Field label={pageT("form.baseUrl", "Base URL")}>
                 <ReadValue>{selectedRecord.baseUrl}</ReadValue>
               </Field>
-              <Field label="API Path">
+              <Field label={pageT("form.apiPath", "API Path")}>
                 <ReadValue>{formatOptionalText(selectedRecord.apiPath)}</ReadValue>
               </Field>
-              <Field label="API Key">
+              <Field label={pageT("form.apiKey", "API Key")}>
                 <ReadValue>{maskApiKeyValue(selectedRecord.apiKeyRef)}</ReadValue>
               </Field>
               <div className="md:col-span-2">
-                <Field label="Description">
+                <Field label={pageT("form.description", "Description")}>
                   <ReadValue>{formatOptionalText(selectedRecord.description)}</ReadValue>
                 </Field>
               </div>
-              <Field label="Temperature">
+              <Field label={pageT("form.temperature", "Temperature")}>
                 <ReadValue>{formatOptionalNumber(selectedRecord.temperature)}</ReadValue>
               </Field>
-              <Field label="Max Tokens">
+              <Field label={pageT("form.maxTokens", "Max Tokens")}>
                 <ReadValue>{selectedRecord.maxTokens === null ? "" : String(selectedRecord.maxTokens)}</ReadValue>
               </Field>
-              <Field label="Context Window">
+              <Field label={pageT("form.contextWindow", "Context Window")}>
                 <ReadValue>{selectedRecord.contextWindowTokens === null ? "" : String(selectedRecord.contextWindowTokens)}</ReadValue>
               </Field>
-              <Field label="Top P">
+              <Field label={pageT("form.topP", "Top P")}>
                 <ReadValue>{formatOptionalNumber(selectedRecord.topP)}</ReadValue>
               </Field>
-              <Field label="Max Retries">
+              <Field label={pageT("form.maxRetries", "Max Retries")}>
                 <ReadValue>{selectedRecord.maxRetries === null ? "" : String(selectedRecord.maxRetries)}</ReadValue>
               </Field>
-              <Field label="Thinking Enabled">
-                <ReadValue>{selectedRecord.thinkingEnabled ? "Enabled" : "Disabled"}</ReadValue>
+              <Field label={pageT("form.thinkingEnabled", "Thinking Enabled")}>
+                <ReadValue>{selectedRecord.thinkingEnabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</ReadValue>
               </Field>
               <Field label={t("common:reasoningEffort.supportedLabel", "Supported reasoning efforts")}>
                 <ReadValue>
@@ -455,8 +460,8 @@ export function PlatformModelDetailsPage() {
                     : t("common:reasoningEffort.providerDefault", "Provider default")}
                 </ReadValue>
               </Field>
-              <Field label="Structured Output Enabled">
-                <ReadValue>{selectedRecord.structuredOutputEnabled ? "Enabled" : "Disabled"}</ReadValue>
+              <Field label={pageT("form.structuredOutputEnabled", "Structured Output Enabled")}>
+                <ReadValue>{selectedRecord.structuredOutputEnabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</ReadValue>
               </Field>
               {selectedRecord.protocol === "RESPONSES" ? (
                 <Field label={t("common:responsesState.label", "Responses State")}>

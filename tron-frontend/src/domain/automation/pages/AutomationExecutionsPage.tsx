@@ -152,17 +152,17 @@ export function AutomationExecutionsPage() {
 
     return (
       <div className="min-h-full px-5 py-5">
-        <InspectorPanel title="Session detail">
+        <InspectorPanel title={pt("Session detail")}>
           <div className="space-y-5">
             <div className="space-y-3">
-              <DetailField label="Execution" value={selectedExecution.executionCode} />
-              <DetailField label="Session" value={selectedExecution.sessionCode ?? pt("No linked session")} />
+              <DetailField label={pt("Execution")} value={selectedExecution.executionCode} />
+              <DetailField label={pt("Session")} value={selectedExecution.sessionCode ?? pt("No linked session")} />
             </div>
             {selectedSessionCode ? (
               <>
                 <div className="flex items-center justify-between gap-2 border-t border-[var(--color-outline-variant)] pt-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                    Conversation
+                    {pt("Conversation")}
                   </p>
                   <Button size="sm" type="button" variant="ghost" onClick={() => navigate(chatSessionDetailHref(selectedSessionCode))}>
                     <ExternalLink size={14} aria-hidden="true" />
@@ -395,35 +395,35 @@ export function AutomationExecutionsPage() {
                 ),
               },
               {
-                header: "Trigger",
+                header: pt("Trigger"),
                 id: "trigger",
                 render: (row) => (
                   <Badge tone={row.triggerSource === "Manual" ? "info" : "outline"}>
-                    {row.triggerSource}
+                    {pt(row.triggerSource)}
                   </Badge>
                 ),
               },
               {
-                header: "Status",
+                header: pt("Status"),
                 id: "status",
                 render: (row) => (
                   <Badge tone={getAutomationExecutionStatusTone(row.status)}>
-                    {row.status}
+                    {pt(row.status)}
                   </Badge>
                 ),
               },
               {
-                header: "Started",
+                header: pt("Started"),
                 id: "started",
                 render: (row) => formatTimestamp(row.startedAt),
               },
               {
-                header: "Finished",
+                header: pt("Finished"),
                 id: "finished",
                 render: (row) => formatTimestamp(row.finishedAt),
               },
               {
-                header: "Summary",
+                header: pt("Summary"),
                 id: "summary",
                 render: (row) => (
                   <span

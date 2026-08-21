@@ -2,6 +2,7 @@ import {
   Plus,
   Trash2,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import type {
   McpAuthKind,
@@ -220,6 +221,7 @@ export function PlatformMcpServerFormFields({
   keyEditable: boolean;
   onChange: (next: PlatformMcpServerFormState) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   function updateForm(next: Partial<PlatformMcpServerFormState>) {
     onChange({ ...form, ...next });
   }
@@ -230,7 +232,7 @@ export function PlatformMcpServerFormFields({
 
   return (
     <div className="space-y-6">
-      <Field label="Transport">
+      <Field label={t("pages:mcp.form.transport", "Transport")}>
         <SegmentedTabs
           value={platformMcpServerTransportTabsValue(form.transportKind)}
           onValueChange={(value) => updateTransportKind(value as McpServerTransportKind)}
@@ -240,10 +242,10 @@ export function PlatformMcpServerFormFields({
 
       <div className="grid gap-5 md:grid-cols-2">
         <Field
-          label="Server Code"
+          label={t("pages:mcp.form.serverCode", "Server Code")}
           hint={keyEditable
-            ? "Lowercase letters, digits, underscore, and hyphen only."
-            : "Server code is immutable after creation."}
+            ? t("pages:mcp.form.serverCodeHint", "Lowercase letters, digits, underscore, and hyphen only.")
+            : t("pages:mcp.form.serverCodeImmutable", "Server code is immutable after creation.")}
         >
           <TextInput
             aria-label="Platform MCP server code"
@@ -252,7 +254,7 @@ export function PlatformMcpServerFormFields({
             onChange={(event) => updateForm({ serverCode: event.target.value })}
           />
         </Field>
-        <Field label="Name" hint="Human-readable name shown in registry lists.">
+        <Field label={t("pages:mcp.form.name", "Name")} hint={t("pages:mcp.form.nameHint", "Human-readable name shown in registry lists.")}>
           <TextInput
             aria-label="Platform MCP server name"
             value={form.name}
@@ -261,7 +263,7 @@ export function PlatformMcpServerFormFields({
         </Field>
       </div>
 
-      <Field label="Description" hint="Optional operator-facing description.">
+      <Field label={t("pages:mcp.form.description", "Description")} hint={t("pages:mcp.form.descriptionHint", "Optional operator-facing description.")}>
         <TextArea
           aria-label="Platform MCP server description"
           value={form.description}
@@ -272,14 +274,14 @@ export function PlatformMcpServerFormFields({
       {form.transportKind === "streamable_http" ? (
         <div className="space-y-5">
           <div className="grid gap-5 md:grid-cols-2">
-            <Field label="URL" hint="Streamable HTTP endpoint, for example https://example.com/mcp.">
+            <Field label={t("pages:mcp.form.url", "URL")} hint={t("pages:mcp.form.urlHint", "Streamable HTTP endpoint, for example https://example.com/mcp.")}>
               <TextInput
                 aria-label="Platform MCP server URL"
                 value={form.url}
                 onChange={(event) => updateForm({ url: event.target.value })}
               />
             </Field>
-            <Field label="Auth Kind" hint="Bearer static reads the token from Variable Management using {{var-name}}.">
+            <Field label={t("pages:mcp.form.authKind", "Auth Kind")} hint={t("pages:mcp.form.authKindHint", "Bearer static reads the token from Variable Management using {{var-name}}.")}>
               <SelectInput
                 aria-label="Platform MCP auth kind"
                 value={form.authKind}
@@ -292,7 +294,7 @@ export function PlatformMcpServerFormFields({
                   });
                 }}
               >
-                <SelectItem value="none">None</SelectItem>
+                <SelectItem value="none">{t("pages:mcp.form.none", "None")}</SelectItem>
                 <SelectItem value="bearer_static">Bearer static</SelectItem>
               </SelectInput>
             </Field>
@@ -300,8 +302,8 @@ export function PlatformMcpServerFormFields({
 
           {form.authKind === "bearer_static" ? (
             <Field
-              label="Bearer token variable ref"
-              hint="Enter a Variable Management reference in {{var-name}} form, such as {{MCP_TOKEN}}."
+              label={t("pages:mcp.form.tokenRef", "Bearer token variable ref")}
+              hint={t("pages:mcp.form.tokenRefHint", "Enter a Variable Management reference in {{var-name}} form, such as {{MCP_TOKEN}}.")}
             >
               <TextInput
                 aria-label="Bearer token variable ref"
@@ -312,7 +314,7 @@ export function PlatformMcpServerFormFields({
           ) : null}
 
           <KeyValueListSection
-            label="Headers"
+            label={t("pages:mcp.form.headers", "Headers")}
             addLabel="header"
             hint="Value can be a static string. If it should come from Variable Management, use {{var-name}}."
             rows={form.headers}
@@ -320,7 +322,7 @@ export function PlatformMcpServerFormFields({
           />
 
           <KeyValueListSection
-            label="Header variable refs"
+            label={t("pages:mcp.form.headerRefs", "Header variable refs")}
             addLabel="header ref"
             hint="Use {{var-name}} in the Value field so the header value resolves from Variable Management at runtime."
             rows={form.headersVariableRefs}
@@ -329,7 +331,7 @@ export function PlatformMcpServerFormFields({
         </div>
       ) : (
         <div className="space-y-5">
-          <Field label="Command" hint="Command used to launch the stdio MCP server.">
+          <Field label={t("pages:mcp.form.command", "Command")} hint={t("pages:mcp.form.commandHint", "Command used to launch the stdio MCP server.")}>
             <TextInput
               aria-label="Platform MCP stdio command"
               value={form.command}
@@ -338,7 +340,7 @@ export function PlatformMcpServerFormFields({
           </Field>
 
           <StringListSection
-            label="Arguments"
+            label={t("pages:mcp.form.arguments", "Arguments")}
             addLabel="argument"
             hint="Enter one argument per row. Do not paste the full command line into a single row."
             placeholder="Argument"
@@ -347,7 +349,7 @@ export function PlatformMcpServerFormFields({
           />
 
           <KeyValueListSection
-            label="Environment variables"
+            label={t("pages:mcp.form.environment", "Environment variables")}
             addLabel="environment variable"
             hint="Use {{var-name}} in the Value field so the env value resolves from Variable Management at runtime."
             rows={form.envVariableRefs}
@@ -355,14 +357,14 @@ export function PlatformMcpServerFormFields({
           />
 
           <StringListSection
-            label="Environment variable passthrough"
+            label={t("pages:mcp.form.passthrough", "Environment variable passthrough")}
             addLabel="passthrough variable"
             hint="These environment variables are forwarded from the current process."
             rows={form.envPassthroughRefs}
             onChange={(rows) => updateForm({ envPassthroughRefs: rows })}
           />
 
-          <Field label="Working directory" hint="Optional working directory for the spawned stdio process.">
+          <Field label={t("pages:mcp.form.workingDirectory", "Working directory")} hint={t("pages:mcp.form.workingDirectoryHint", "Optional working directory for the spawned stdio process.")}>
             <TextInput
               aria-label="Platform MCP working directory"
               value={form.workingDirectory}
@@ -388,6 +390,7 @@ function KeyValueListSection({
   rows: KeyValueRow[];
   onChange: (rows: KeyValueRow[]) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="grid gap-2">
       <div className="flex items-center gap-1.5">
@@ -401,7 +404,7 @@ function KeyValueListSection({
           <div key={`${label}-${index}`} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <TextInput
               aria-label={`${label} key ${index + 1}`}
-              placeholder="Key"
+              placeholder={t("pages:mcp.form.key", "Key")}
               value={row.key}
               onChange={(event) => onChange(rows.map((item, rowIndex) => (
                 rowIndex === index ? { ...item, key: event.target.value } : item
@@ -409,7 +412,7 @@ function KeyValueListSection({
             />
             <TextInput
               aria-label={`${label} value ${index + 1}`}
-              placeholder="Value"
+              placeholder={t("pages:mcp.form.value", "Value")}
               value={row.value}
               onChange={(event) => onChange(rows.map((item, rowIndex) => (
                 rowIndex === index ? { ...item, value: event.target.value } : item
@@ -431,7 +434,7 @@ function KeyValueListSection({
         onClick={() => onChange([...rows, { key: "", value: "" }])}
       >
         <Plus size={16} aria-hidden="true" />
-        Add {addLabel}
+        {t("pages:mcp.form.add", "Add {{label}}", { label: addLabel })}
       </Button>
     </div>
   );
@@ -452,6 +455,7 @@ function StringListSection({
   rows: StringRow[];
   onChange: (rows: StringRow[]) => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="grid gap-2">
       <div className="flex items-center gap-1.5">
@@ -465,7 +469,7 @@ function StringListSection({
           <div key={`${label}-${index}`} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
             <TextInput
               aria-label={`${label} item ${index + 1}`}
-              placeholder={placeholder}
+              placeholder={placeholder === "Value" ? t("pages:mcp.form.value", "Value") : placeholder}
               value={row.value}
               onChange={(event) => onChange(rows.map((item, rowIndex) => (
                 rowIndex === index ? { ...item, value: event.target.value } : item
@@ -484,7 +488,7 @@ function StringListSection({
       </div>
       <Button variant="secondary" onClick={() => onChange([...rows, { value: "" }])}>
         <Plus size={16} aria-hidden="true" />
-        Add {addLabel}
+        {t("pages:mcp.form.add", "Add {{label}}", { label: addLabel })}
       </Button>
     </div>
   );

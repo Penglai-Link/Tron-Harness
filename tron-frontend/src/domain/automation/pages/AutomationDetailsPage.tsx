@@ -82,9 +82,10 @@ function formatTimestamp(value?: string | null) {
 }
 
 function ReadValue({ children }: { children: ReactNode }) {
+  const pt = useLocaleText();
   return (
     <div className="min-h-6 py-1 text-sm leading-6 text-[var(--color-on-surface)] whitespace-pre-wrap">
-      {children || <span className="text-[var(--color-on-surface-variant)]">None</span>}
+      {children || <span className="text-[var(--color-on-surface-variant)]">{pt("None")}</span>}
     </div>
   );
 }
@@ -459,22 +460,22 @@ export function AutomationDetailsPage() {
         <SurfaceCard>
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Core definition</h2>
+              <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">{pt("Core definition")}</h2>
             </div>
           </div>
           <div className="grid gap-4 lg:grid-cols-2">
-            <Field label="Automation name">
-              <TextInput aria-label="Automation name" disabled={!editing || archived} value={name} onChange={(event) => setName(event.target.value)} />
+            <Field label={pt("Automation name")}>
+              <TextInput aria-label={pt("Automation name")} disabled={!editing || archived} value={name} onChange={(event) => setName(event.target.value)} />
             </Field>
-            <Field label="Workspace">
-              <TextInput aria-label="Workspace code" disabled value={automation.workspaceCode} />
+            <Field label={pt("Workspace")}>
+              <TextInput aria-label={pt("Workspace code")} disabled value={automation.workspaceCode} />
             </Field>
-            <Field label="Execution agent">
+            <Field label={pt("Execution agent")}>
               <OptionSelect
-                ariaLabel="Automation execution agent"
+                ariaLabel={pt("Automation execution agent")}
                 disabled={!editing || archived || executionOptionsLoading}
                 loading={executionOptionsLoading}
-                loadingLabel="Loading agents..."
+                loadingLabel={pt("Loading agents...")}
                 options={executionAgentSelectOptions}
                 value={selectedAgentCode}
                 onChange={(value) => {
@@ -483,29 +484,29 @@ export function AutomationDetailsPage() {
                 }}
               />
             </Field>
-            <Field label="Execution model">
+            <Field label={pt("Execution model")}>
               <OptionSelect
-                ariaLabel="Automation execution model"
-                emptyLabel="No executable models"
+                ariaLabel={pt("Automation execution model")}
+                emptyLabel={pt("No executable models")}
                 disabled={!editing || archived || executionOptionsLoading || !visibleModelOptions.length}
                 loading={executionOptionsLoading}
-                loadingLabel="Loading models..."
+                loadingLabel={pt("Loading models...")}
                 options={executionModelSelectOptions}
                 value={selectedModelOptionCode}
                 onChange={setSelectedModelOptionCode}
               />
             </Field>
-            <Field label="Cron expression">
-              <TextInput aria-label="Cron expression" className="font-mono" disabled={!editing || archived} value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
+            <Field label={pt("Cron expression")}>
+              <TextInput aria-label={pt("Cron expression")} className="font-mono" disabled={!editing || archived} value={cronExpression} onChange={(event) => setCronExpression(event.target.value)} />
             </Field>
-            <Field label="Scheduler expression">
-              <TextInput aria-label="Scheduler expression" className="font-mono" disabled value={automation.schedulerExpression} />
+            <Field label={pt("Scheduler expression")}>
+              <TextInput aria-label={pt("Scheduler expression")} className="font-mono" disabled value={automation.schedulerExpression} />
             </Field>
           </div>
           <div className="mt-4">
-            <Field label="Description">
+            <Field label={pt("Description")}>
               <TextArea
-                aria-label="Automation description"
+                aria-label={pt("Automation description")}
                 className="min-h-24"
                 disabled={!editing || archived}
                 value={description}
@@ -515,15 +516,15 @@ export function AutomationDetailsPage() {
           </div>
           <div className="mt-5 grid gap-1.5 border-t border-[var(--color-outline-variant)] pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Prompt body</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pt("Prompt body")}</span>
               <Button size="sm" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
                 <Maximize2 size={15} aria-hidden="true" />
-                Fullscreen
+                {pt("Fullscreen")}
               </Button>
             </div>
             {editing ? (
               <TextArea
-                aria-label="Automation prompt"
+                aria-label={pt("Automation prompt")}
                 className="min-h-80 w-full"
                 disabled={archived}
                 value={prompt}
@@ -540,23 +541,23 @@ export function AutomationDetailsPage() {
         </SurfaceCard>
         <SurfaceCard>
           <div className="mb-4">
-            <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">Metadata</h2>
+            <h2 className="text-lg font-semibold text-[var(--color-on-surface)]">{pt("Metadata")}</h2>
           </div>
           <div className="grid gap-4 lg:grid-cols-3">
-            <DetailField label="Automation code" value={<ReadValue>{automation.automationCode}</ReadValue>} />
-            <DetailField label="Record ID" value={<ReadValue>{automation.id}</ReadValue>} />
+            <DetailField label={pt("Automation code")} value={<ReadValue>{automation.automationCode}</ReadValue>} />
+            <DetailField label={pt("Record ID")} value={<ReadValue>{automation.id}</ReadValue>} />
             <DetailField
-              label="Status"
-              value={<Badge tone={getAutomationStatusTone(automation.status)}>{automation.status}</Badge>}
+              label={pt("Status")}
+              value={<Badge tone={getAutomationStatusTone(automation.status)}>{pt(automation.status)}</Badge>}
             />
-            <DetailField label="Workspace" value={<ReadValue>{automation.workspaceCode}</ReadValue>} />
-            <DetailField label="Agent code" value={<ReadValue>{automation.agentCode}</ReadValue>} />
-            <DetailField label="Model code" value={<ReadValue>{automation.modelCode}</ReadValue>} />
-            <DetailField label="Timezone" value={<ReadValue>{automation.timezone}</ReadValue>} />
-            <DetailField label="Created" value={formatTimestamp(automation.createdAt)} />
-            <DetailField label="Updated" value={formatTimestamp(automation.updatedAt)} />
-            <DetailField label="Archived at" value={formatTimestamp(automation.archivedAt)} />
-            <DetailField label="Previous status" value={<ReadValue>{automation.previousStatus}</ReadValue>} />
+            <DetailField label={pt("Workspace")} value={<ReadValue>{automation.workspaceCode}</ReadValue>} />
+            <DetailField label={pt("Agent code")} value={<ReadValue>{automation.agentCode}</ReadValue>} />
+            <DetailField label={pt("Model code")} value={<ReadValue>{automation.modelCode}</ReadValue>} />
+            <DetailField label={pt("Timezone")} value={<ReadValue>{automation.timezone}</ReadValue>} />
+            <DetailField label={pt("Created")} value={formatTimestamp(automation.createdAt)} />
+            <DetailField label={pt("Updated")} value={formatTimestamp(automation.updatedAt)} />
+            <DetailField label={pt("Archived at")} value={formatTimestamp(automation.archivedAt)} />
+            <DetailField label={pt("Previous status")} value={<ReadValue>{automation.previousStatus}</ReadValue>} />
           </div>
         </SurfaceCard>
       </div>
@@ -566,32 +567,32 @@ export function AutomationDetailsPage() {
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
-            aria-label={editing ? "Prompt fullscreen editor" : "Prompt fullscreen preview"}
+            aria-label={editing ? pt("Prompt fullscreen editor") : pt("Prompt fullscreen preview")}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Automation prompt</h2>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Automation prompt")}</h2>
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
                   {editing
-                    ? "Edit the long-form prompt in a larger workspace."
-                    : "Preview the rendered prompt that the scheduler will dispatch for this automation."}
+                    ? pt("Edit the long-form prompt in a larger workspace.")
+                    : pt("Preview the rendered prompt that the scheduler will dispatch for this automation.")}
                 </p>
               </div>
-              <Button size="icon" type="button" variant="ghost" aria-label="Close prompt fullscreen" onClick={() => setPromptFullscreenOpen(false)}>
+              <Button size="icon" type="button" variant="ghost" aria-label={pt("Close prompt fullscreen")} onClick={() => setPromptFullscreenOpen(false)}>
                 <X size={16} aria-hidden="true" />
               </Button>
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               {editing ? (
                 <TextArea
-                  aria-label="Automation prompt fullscreen"
+                  aria-label={pt("Automation prompt fullscreen")}
                   className="h-full min-h-0 w-full resize-none"
                   value={prompt}
                   onChange={(event) => setPrompt(event.target.value)}
                 />
               ) : (
                 <div className="h-full overflow-y-auto pr-1">
-                  <MarkdownContent ariaLabel="Automation prompt fullscreen preview" className="max-w-none" content={automation.prompt} />
+                  <MarkdownContent ariaLabel={pt("Automation prompt fullscreen preview")} className="max-w-none" content={automation.prompt} />
                 </div>
               )}
             </div>

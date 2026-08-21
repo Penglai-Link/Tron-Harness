@@ -16,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { Field as FieldPrimitive, FieldLabel, FieldError } from "@/components/ui/field";
 
 interface FieldProps {
+  className?: string;
   children: ReactNode;
   error?: string;
   hint?: string;
@@ -25,9 +26,9 @@ interface FieldProps {
 const disabledControlClasses =
   "disabled:cursor-not-allowed disabled:border-[var(--color-outline-variant)] disabled:bg-[var(--color-surface-container)] disabled:text-[var(--color-on-surface-variant)] disabled:opacity-100 disabled:placeholder:text-[var(--color-outline)] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
 
-export function Field({ children, error, hint, label }: FieldProps) {
+export function Field({ children, className, error, hint, label }: FieldProps) {
   return (
-    <FieldPrimitive>
+    <FieldPrimitive className={className}>
       <FieldLabel>
         {label}
         {

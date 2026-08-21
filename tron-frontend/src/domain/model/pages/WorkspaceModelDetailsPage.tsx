@@ -40,9 +40,10 @@ import {
   type ModelFormState,
 } from "@/domain/model/components";
 import {
-  formatModelCapabilities,
   formatModelProtocol,
   formatReasoningEffort,
+  formatModelCapability,
+  normalizeModelCapabilities,
 } from "@/domain/model/constants/modelPageOptions";
 import {
   deleteWorkspaceModelRecord,
@@ -63,9 +64,10 @@ import {
 } from "./workspaceModelPageHelpers";
 
 function ReadValue({ children }: { children: string }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <div className="min-h-6 break-words text-sm leading-6 text-[var(--color-on-surface)]">
-      {children || "None"}
+      {children || t("modelRegistry.values.none", "None")}
     </div>
   );
 }
@@ -86,7 +88,10 @@ export function WorkspaceModelDetailsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
-  const { t } = useTranslation(["common"]);
+  const { t } = useTranslation(["common", "pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
+  );
   const dataSource = getServiceDataSource("model");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
@@ -137,7 +142,7 @@ export function WorkspaceModelDetailsPage() {
         : getWorkspaceModelCatalog(activeWorkspaceCode);
       setRecords(nextCatalog.records);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace models could not be loaded");
+      toast.error(error instanceof Error ? error.message : pageT("errors.load", "Workspace models could not be loaded"));
     } finally {
       setLoading(false);
     }
@@ -200,7 +205,7 @@ export function WorkspaceModelDetailsPage() {
   async function saveModel() {
     if (!selectedRecord || !activeWorkspaceCode || !editableDefinition) return;
     if (duplicateDisplayName) {
-      toast.error(`displayName already exists in workspace ${activeWorkspaceLabel}`);
+      toast.error(pageT("errors.duplicateDisplayName", "displayName already exists in workspace {{workspace}}", { workspace: activeWorkspaceLabel }));
       return;
     }
 
@@ -214,12 +219,12 @@ export function WorkspaceModelDetailsPage() {
       const saved = dataSource === "api"
         ? await updateWorkspaceModel(activeWorkspaceCode, selectedRecord.modelCode, payload)
         : updateWorkspaceModelRecord(activeWorkspaceCode, selectedRecord.modelCode, payload);
-      toast.success(`${saved.displayName} saved`);
+      toast.success(pageT("messages.saved", "{{name}} saved", { name: saved.displayName }));
       setVerifyPreview(null);
       exitEditing();
       await refreshWorkspaceModels();
     } catch (error) {
-      toast.error(formatWorkspaceModelError(error, activeWorkspaceLabel, "Workspace model could not be saved"));
+      toast.error(formatWorkspaceModelError(error, activeWorkspaceLabel, pageT("errors.save", "Workspace model could not be saved")));
     } finally {
       setSubmitting(false);
     }
@@ -229,9 +234,9 @@ export function WorkspaceModelDetailsPage() {
     if (!selectedRecord || !activeWorkspaceCode || !verifiableRecord) return;
     setVerifying(true);
     const verifyTarget = editing ? (form.displayName.trim() || selectedRecord.displayName) : selectedRecord.displayName;
-    const verifyingToastId = toast.info(`Verifying connectivity for ${verifyTarget}...`, {
+    const verifyingToastId = toast.info(pageT("messages.verifying", "Verifying connectivity for {{name}}...", { name: verifyTarget }), {
       durationMs: 0,
-      title: "Verify",
+      title: pageT("actions.verify", "Verify"),
     });
     try {
       const payload = editing
@@ -252,10 +257,10 @@ export function WorkspaceModelDetailsPage() {
         setVerifyPreview(null);
         await refreshWorkspaceModels();
       }
-      toast.success(`${verified.displayName} verified`);
+      toast.success(pageT("messages.verified", "{{name}} verified", { name: verified.displayName }));
     } catch (error) {
       toast.dismiss(verifyingToastId);
-      toast.error(error instanceof Error ? error.message : "Verify failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.verify", "Verify failed"));
     } finally {
       setVerifying(false);
     }
@@ -282,10 +287,10 @@ export function WorkspaceModelDetailsPage() {
           ? await disableWorkspaceModel(activeWorkspaceCode, selectedRecord.modelCode)
           : await enableWorkspaceModel(activeWorkspaceCode, selectedRecord.modelCode))
         : setWorkspaceModelEnabled(activeWorkspaceCode, selectedRecord.modelCode, !selectedRecord.enabled);
-      toast.success(`${toggled.displayName} ${toggled.enabled ? "enabled" : "disabled"}`);
+      toast.success(pageT("messages.toggle", "{{name}} {{status}}", { name: toggled.displayName, status: toggled.enabled ? pageT("status.enabledLower", "enabled") : pageT("status.disabledLower", "disabled") }));
       await refreshWorkspaceModels();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Status update failed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.status", "Status update failed"));
     }
   }
 
@@ -300,12 +305,12 @@ export function WorkspaceModelDetailsPage() {
       }
       toast.success(
         selectedRecord.sourceKind === "OVERRIDE"
-          ? `${selectedRecord.displayName} reverted to inherited`
-          : `${selectedRecord.displayName} deleted`,
+          ? pageT("messages.reverted", "{{name}} reverted to inherited", { name: selectedRecord.displayName })
+          : pageT("messages.deleted", "{{name}} deleted", { name: selectedRecord.displayName }),
       );
       navigate("/models");
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Workspace model could not be removed");
+      toast.error(error instanceof Error ? error.message : pageT("errors.delete", "Workspace model could not be removed"));
     } finally {
       setDeleting(false);
     }
@@ -315,10 +320,10 @@ export function WorkspaceModelDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Models", href: "/models" }, { label: "Workspace" }]}
-          title="Workspace Model"
+          breadcrumbs={[{ label: pageT("title", "Models"), href: "/models" }, { label: pageT("source.workspace", "Workspace") }]}
+          title={pageT("detail.workspaceModel", "Workspace Model")}
         />
-        <SurfaceCard>Select a workspace in the shell to load this model.</SurfaceCard>
+        <SurfaceCard>{pageT("empty.selectWorkspace", "Select a workspace in the shell to load this model.")}</SurfaceCard>
       </>
     );
   }
@@ -327,10 +332,10 @@ export function WorkspaceModelDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Models", href: "/models" }, { label: "Loading" }]}
-          title="Workspace Model"
+          breadcrumbs={[{ label: pageT("title", "Models"), href: "/models" }, { label: pageT("detail.loading", "Loading") }]}
+          title={pageT("detail.workspaceModel", "Workspace Model")}
         />
-        <SurfaceCard>Loading workspace model...</SurfaceCard>
+        <SurfaceCard>{pageT("detail.loadingWorkspaceModel", "Loading workspace model...")}</SurfaceCard>
       </>
     );
   }
@@ -339,10 +344,10 @@ export function WorkspaceModelDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Models", href: "/models" }, { label: "Not Found" }]}
-          title="Workspace Model"
+          breadcrumbs={[{ label: pageT("title", "Models"), href: "/models" }, { label: pageT("detail.notFound", "Not Found") }]}
+          title={pageT("detail.workspaceModel", "Workspace Model")}
         />
-        <SurfaceCard>Workspace model not found.</SurfaceCard>
+        <SurfaceCard>{pageT("detail.workspaceModelNotFound", "Workspace model not found.")}</SurfaceCard>
       </>
     );
   }
@@ -361,7 +366,7 @@ export function WorkspaceModelDetailsPage() {
               aria-busy={verifying}
               onClick={() => void runVerify()}
             >
-              {verifying ? "Verifying..." : "Verify"}
+              {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
             </Button>
             <Button
               variant="outline"
@@ -369,7 +374,7 @@ export function WorkspaceModelDetailsPage() {
               disabled={submitting || verifying}
               onClick={resetDraft}
             >
-              Cancel
+              {pageT("actions.cancel", "Cancel")}
             </Button>
             <Button
               size="lg"
@@ -377,7 +382,7 @@ export function WorkspaceModelDetailsPage() {
               aria-busy={submitting}
               onClick={() => void saveModel()}
             >
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving", "Saving...") : pageT("actions.save", "Save")}
             </Button>
           </>
         ) : (
@@ -388,7 +393,7 @@ export function WorkspaceModelDetailsPage() {
                 size="lg"
                 onClick={() => setEditing(true)}
               >
-                Edit
+                {pageT("actions.edit", "Edit")}
               </Button>
             ) : null}
             {verifiableRecord ? (
@@ -399,7 +404,7 @@ export function WorkspaceModelDetailsPage() {
                 aria-busy={verifying}
                 onClick={() => void runVerify()}
               >
-                {verifying ? "Verifying..." : "Verify"}
+                {verifying ? pageT("actions.verifying", "Verifying...") : pageT("actions.verify", "Verify")}
               </Button>
             ) : null}
             {toggleableRecord ? (
@@ -408,7 +413,7 @@ export function WorkspaceModelDetailsPage() {
                 size="lg"
                 disabled={submitting} onClick={() => void toggleEnabled()}
               >
-                {selectedRecord.enabled ? "Disable" : "Enable"}
+                {selectedRecord.enabled ? pageT("actions.disable", "Disable") : pageT("actions.enable", "Enable")}
               </Button>
             ) : null}
             {removableRecord ? (
@@ -419,7 +424,7 @@ export function WorkspaceModelDetailsPage() {
                 aria-busy={deleting}
                 onClick={() => void removeModel()}
               >
-                {deleting ? "Deleting..." : (selectedRecord.sourceKind === "OVERRIDE" ? "Revert" : "Delete")}
+                {deleting ? pageT("actions.deleting", "Deleting...") : (selectedRecord.sourceKind === "OVERRIDE" ? pageT("actions.revert", "Revert") : pageT("actions.delete", "Delete"))}
               </Button>
             ) : null}
           </>
@@ -431,9 +436,9 @@ export function WorkspaceModelDetailsPage() {
 
         <SurfaceCard className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
-            <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={selectedRecord.sourceLabel} />
-            <Badge tone={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? "Enabled" : "Disabled"}</Badge>
-            {selectedRecord.isDefault ? <Badge tone="info">Default</Badge> : null}
+            <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={pageT(`source.${selectedRecord.sourceKind.toLowerCase()}`, selectedRecord.sourceLabel)} />
+            <Badge tone={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
+            {selectedRecord.isDefault ? <Badge tone="info">{pageT("status.default", "Default")}</Badge> : null}
             <Badge tone="outline">{selectedRecord.modelCode}</Badge>
           </div>
 
@@ -443,64 +448,64 @@ export function WorkspaceModelDetailsPage() {
                 state={form}
                 onChange={setForm}
                 apiKeyInputRef={apiKeyInputRef}
-                apiKeyFieldHint="Leave blank to keep the current key."
+                apiKeyFieldHint={pageT("form.keepApiKeyHint", "Leave blank to keep the current key.")}
                 onApiKeyDirtyChange={setApiKeyDirty}
-                displayNameError={duplicateDisplayName ? `displayName already exists in workspace ${activeWorkspaceLabel}` : undefined}
+                displayNameError={duplicateDisplayName ? pageT("errors.duplicateDisplayName", "displayName already exists in workspace {{workspace}}", { workspace: activeWorkspaceLabel }) : undefined}
               />
               <ToggleSwitch
                 checked={allowInheritance}
-                label="Allow Inheritance"
+                label={pageT("form.allowInheritance", "Allow Inheritance")}
                 onCheckedChange={setAllowInheritance}
               />
             </div>
           ) : (
             <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
-              <Field label="Display Name">
+              <Field label={pageT("form.displayName", "Display Name")}>
                 <ReadValue>{selectedRecord.displayName}</ReadValue>
               </Field>
-              <Field label="Vendor Model ID">
+              <Field label={pageT("form.vendorModelId", "Vendor Model ID")}>
                 <ReadValue>{selectedRecord.modelName}</ReadValue>
               </Field>
-              <Field label="Vendor">
+              <Field label={pageT("form.vendor", "Vendor")}>
                 <ReadValue>{selectedRecord.vendor}</ReadValue>
               </Field>
-              <Field label="Protocol">
-                <ReadValue>{formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType)}</ReadValue>
+              <Field label={pageT("form.protocol", "Protocol")}>
+                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? `openaiCompatible.${selectedRecord.modelType === "EMBEDDING" ? "embedding" : "chat"}` : selectedRecord.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
               </Field>
-              <Field label="Model Type">
-                <ReadValue>{formatModelCapabilities(selectedRecord.modelCapabilities, selectedRecord.modelType)}</ReadValue>
+              <Field label={pageT("form.modelType", "Model Type")}>
+                <ReadValue>{normalizeModelCapabilities(selectedRecord.modelCapabilities, selectedRecord.modelType).map((capability) => pageT(`capabilities.${capability}`, formatModelCapability(capability))).join(", ")}</ReadValue>
               </Field>
-              <Field label="Base URL">
+              <Field label={pageT("form.baseUrl", "Base URL")}>
                 <ReadValue>{selectedRecord.baseUrl}</ReadValue>
               </Field>
-              <Field label="API Path">
+              <Field label={pageT("form.apiPath", "API Path")}>
                 <ReadValue>{formatOptionalText(selectedRecord.apiPath)}</ReadValue>
               </Field>
-              <Field label="API Key">
+              <Field label={pageT("form.apiKey", "API Key")}>
                 <ReadValue>{maskApiKeyValue(selectedRecord.apiKeyRef)}</ReadValue>
               </Field>
               <div className="md:col-span-2">
-                <Field label="Description">
+                <Field label={pageT("form.description", "Description")}>
                   <ReadValue>{formatOptionalText(selectedRecord.description)}</ReadValue>
                 </Field>
               </div>
-              <Field label="Temperature">
+              <Field label={pageT("form.temperature", "Temperature")}>
                 <ReadValue>{formatOptionalNumber(selectedRecord.temperature)}</ReadValue>
               </Field>
-              <Field label="Max Tokens">
+              <Field label={pageT("form.maxTokens", "Max Tokens")}>
                 <ReadValue>{selectedRecord.maxTokens === null ? "" : String(selectedRecord.maxTokens)}</ReadValue>
               </Field>
-              <Field label="Context Window">
+              <Field label={pageT("form.contextWindow", "Context Window")}>
                 <ReadValue>{selectedRecord.contextWindowTokens === null ? "" : String(selectedRecord.contextWindowTokens)}</ReadValue>
               </Field>
-              <Field label="Top P">
+              <Field label={pageT("form.topP", "Top P")}>
                 <ReadValue>{formatOptionalNumber(selectedRecord.topP)}</ReadValue>
               </Field>
-              <Field label="Max Retries">
+              <Field label={pageT("form.maxRetries", "Max Retries")}>
                 <ReadValue>{selectedRecord.maxRetries === null ? "" : String(selectedRecord.maxRetries)}</ReadValue>
               </Field>
-              <Field label="Thinking Enabled">
-                <ReadValue>{selectedRecord.thinkingEnabled ? "Enabled" : "Disabled"}</ReadValue>
+              <Field label={pageT("form.thinkingEnabled", "Thinking Enabled")}>
+                <ReadValue>{selectedRecord.thinkingEnabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</ReadValue>
               </Field>
               <Field label={t("common:reasoningEffort.supportedLabel", "Supported reasoning efforts")}>
                 <ReadValue>
@@ -514,8 +519,8 @@ export function WorkspaceModelDetailsPage() {
                     : t("common:reasoningEffort.providerDefault", "Provider default")}
                 </ReadValue>
               </Field>
-              <Field label="Structured Output Enabled">
-                <ReadValue>{selectedRecord.structuredOutputEnabled ? "Enabled" : "Disabled"}</ReadValue>
+              <Field label={pageT("form.structuredOutputEnabled", "Structured Output Enabled")}>
+                <ReadValue>{selectedRecord.structuredOutputEnabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</ReadValue>
               </Field>
               {selectedRecord.protocol === "RESPONSES" ? (
                 <Field label={t("common:responsesState.label", "Responses State")}>
@@ -527,8 +532,8 @@ export function WorkspaceModelDetailsPage() {
                 </Field>
               ) : null}
               {selectedRecord.sourceKind === "LOCAL" ? (
-                <Field label="Allow Inheritance">
-                  <ReadValue>{selectedRecord.allowInheritance ? "Enabled" : "Disabled"}</ReadValue>
+                <Field label={pageT("form.allowInheritance", "Allow Inheritance")}>
+                  <ReadValue>{selectedRecord.allowInheritance ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</ReadValue>
                 </Field>
               ) : null}
             </div>

@@ -7,6 +7,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { useTranslation } from "react-i18next";
 import {
   Archive,
   Ban,
@@ -99,6 +100,7 @@ function targetFromMemory(memory: MemoryRecord): MemorySearchTarget {
 }
 
 export function MemoryDetailsPage() {
+  const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -119,7 +121,7 @@ export function MemoryDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
-  useConsoleShellConfig({ searchPlaceholder: "Search memories..." });
+  useConsoleShellConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
 
   useEffect(() => {
     if (!memory) return;
@@ -134,10 +136,10 @@ export function MemoryDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Memory", href: "/memory" }, { label: "Not Found" }]}
-          title="Memory"
+          breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: "/memory" }, { label: t("pages:variables.notFound", "Not Found") }]}
+          title={t("pages:memory.title", "Memory")}
         />
-        <SurfaceCard>Memory not found.</SurfaceCard>
+        <SurfaceCard>{t("pages:memory.errors.notFound", "Memory not found.")}</SurfaceCard>
       </>
     );
   }
@@ -182,11 +184,11 @@ export function MemoryDetailsPage() {
       const saved = dataSource === "api" && workspaceCode
         ? await updateMemoryRecord(workspaceCode, selectedMemory.memoryCode, payload)
         : updateMemoryFragment(selectedMemory.id, payload);
-      toast.success(`${saved.title} saved`);
+      toast.success(t("pages:memory.messages.saved", "{{title}} saved", { title: saved.title }));
       refreshMemory();
       navigate(detailHref(), { replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Memory could not be saved");
+      toast.error(error instanceof Error ? error.message : t("pages:memory.errors.save", "Memory could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -202,11 +204,11 @@ export function MemoryDetailsPage() {
         : confirmAction === "archive"
           ? archiveMemoryFragment(selectedMemory.id)
           : disableMemoryFragment(selectedMemory.id);
-      toast.success(`${next.title} ${confirmAction === "archive" ? "archived" : "disabled"}`);
+      toast.success(confirmAction === "archive" ? t("pages:memory.messages.archived", "{{title}} archived.", { title: next.title }) : t("pages:memory.messages.disabled", "{{title}} disabled", { title: next.title }));
       setConfirmAction(null);
       refreshMemory();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Memory status could not be updated");
+      toast.error(error instanceof Error ? error.message : t("pages:memory.errors.status", "Memory status could not be updated"));
     }
   }
 
@@ -219,30 +221,30 @@ export function MemoryDetailsPage() {
           <>
             <Button variant="secondary" disabled={submitting} onClick={cancelEdit}>
               <X size={16} aria-hidden="true" />
-              Cancel
+              {t("pages:memory.actions.cancel", "Cancel")}
             </Button>
             <Button disabled={submitting || !form?.title.trim()} aria-busy={submitting} onClick={saveMemory}>
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:memory.actions.saving", "Saving...") : t("pages:memory.actions.save", "Save")}
             </Button>
           </>
         ) : (
           <>
             <Button variant="secondary" onClick={() => navigate(detailHref("edit"))}>
               <Edit3 size={16} aria-hidden="true" />
-              Edit
+              {t("pages:memory.actions.edit", "Edit")}
             </Button>
             <Button variant="secondary" onClick={() => void copyMemoryCode()}>
               {copied ? <Check size={16} aria-hidden="true" /> : <Copy size={16} aria-hidden="true" />}
-              {copied ? "Copied" : "Copy code"}
+              {copied ? t("pages:memory.actions.copied", "Copied") : t("pages:memory.actions.copyCode", "Copy code")}
             </Button>
             <Button variant="ghost" onClick={() => setConfirmAction("archive")}>
               <Archive size={16} aria-hidden="true" />
-              Archive
+              {t("pages:memory.actions.archive", "Archive")}
             </Button>
             <Button variant="ghost" onClick={() => setConfirmAction("disable")}>
               <Ban size={16} aria-hidden="true" />
-              Disable
+              {t("pages:memory.actions.disable", "Disable")}
             </Button>
           </>
         )}

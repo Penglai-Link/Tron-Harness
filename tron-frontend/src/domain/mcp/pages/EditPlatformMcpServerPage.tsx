@@ -7,6 +7,7 @@ import {
   useNavigate,
   useSearchParams,
 } from "react-router";
+import { useTranslation } from "react-i18next";
 import {
   Save,
   ShieldCheck,
@@ -86,6 +87,7 @@ function VerificationResultCard({
 }
 
 export function EditPlatformMcpServerPage() {
+  const { t } = useTranslation(["pages"]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const toast = useToast();
@@ -124,7 +126,7 @@ export function EditPlatformMcpServerPage() {
         }
       } catch (error) {
         if (active) {
-          toast.error(error instanceof Error ? error.message : "Platform MCP server could not be loaded");
+          toast.error(error instanceof Error ? error.message : t("pages:mcp.errors.load", "Platform MCP server could not be loaded"));
         }
       } finally {
         if (active) {
@@ -161,10 +163,10 @@ export function EditPlatformMcpServerPage() {
           definition: payload,
         });
       setVerificationResult(verified);
-      toast.success(`${verified.name} verified`);
+      toast.success(t("pages:mcp.messages.verified", "{{name}} verified", { name: verified.name }));
     } catch (error) {
       setVerificationResult(null);
-      toast.error(error instanceof Error ? error.message : "Verify failed");
+      toast.error(error instanceof Error ? error.message : t("pages:mcp.errors.verify", "Verify failed"));
     } finally {
       setVerifying(false);
     }
@@ -186,10 +188,10 @@ export function EditPlatformMcpServerPage() {
       setRecord(saved);
       setForm(platformMcpServerFormFromRecord(saved));
       setVerificationResult(null);
-      toast.success(`${saved.name} updated`);
+      toast.success(t("pages:mcp.messages.updated", "{{name}} updated", { name: saved.name }));
       navigate(`/settings/mcp-servers/detail?serverCode=${encodeURIComponent(saved.serverCode)}`, { replace: true });
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Platform MCP server could not be saved");
+      toast.error(error instanceof Error ? error.message : t("pages:mcp.errors.save", "Platform MCP server could not be saved"));
     } finally {
       setSubmitting(false);
     }
@@ -199,10 +201,10 @@ export function EditPlatformMcpServerPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "MCP Servers", href: "/settings/mcp-servers" }, { label: "Loading" }]}
-          title="Edit Platform MCP Server"
+          breadcrumbs={[{ label: t("pages:mcp.title", "MCP Servers"), href: "/settings/mcp-servers" }, { label: t("pages:variables.loading", "Loading") }]}
+          title={t("pages:mcp.editTitle", "Edit Platform MCP Server")}
         />
-        <SurfaceCard>Loading platform MCP server...</SurfaceCard>
+        <SurfaceCard>{t("pages:mcp.loading", "Loading platform MCP server...")}</SurfaceCard>
       </>
     );
   }
@@ -211,10 +213,10 @@ export function EditPlatformMcpServerPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "MCP Servers", href: "/settings/mcp-servers" }, { label: "Not Found" }]}
-          title="Edit Platform MCP Server"
+          breadcrumbs={[{ label: t("pages:mcp.title", "MCP Servers"), href: "/settings/mcp-servers" }, { label: t("pages:variables.notFound", "Not Found") }]}
+          title={t("pages:mcp.editTitle", "Edit Platform MCP Server")}
         />
-        <SurfaceCard>Platform MCP server not found.</SurfaceCard>
+        <SurfaceCard>{t("pages:mcp.notFound", "Platform MCP server not found.")}</SurfaceCard>
       </>
     );
   }
@@ -223,14 +225,14 @@ export function EditPlatformMcpServerPage() {
     <>
       <PageHeader
         breadcrumbs={[
-          { label: "MCP Servers", href: "/settings/mcp-servers" },
+          { label: t("pages:mcp.title", "MCP Servers"), href: "/settings/mcp-servers" },
           { label: record.name, href: `/settings/mcp-servers/edit?serverCode=${encodeURIComponent(record.serverCode)}` },
-          { label: "Edit" },
+          { label: t("pages:mcp.actions.edit", "Edit") },
         ]}
-        title={`Edit ${record.name}`}
+        title={t("pages:mcp.editRecordTitle", "Edit {{name}}", { name: record.name })}
         actions={(
           <>
-            <Button variant="secondary" disabled={submitting || verifying} onClick={() => navigate("/settings/mcp-servers")}>Cancel</Button>
+            <Button variant="secondary" disabled={submitting || verifying} onClick={() => navigate("/settings/mcp-servers")}>{t("pages:mcp.actions.cancel", "Cancel")}</Button>
             <Button
               variant="secondary"
               disabled={submitting || verifying || Boolean(validationError)}
@@ -238,7 +240,7 @@ export function EditPlatformMcpServerPage() {
               onClick={() => void verifyDraft()}
             >
               <ShieldCheck size={16} aria-hidden="true" />
-              {verifying ? "Verifying..." : "Verify"}
+              {verifying ? t("pages:mcp.actions.verifying", "Verifying...") : t("pages:mcp.actions.verify", "Verify")}
             </Button>
             <Button
               disabled={submitting || verifying || Boolean(validationError)}
@@ -246,7 +248,7 @@ export function EditPlatformMcpServerPage() {
               onClick={() => void saveServer()}
             >
               <Save size={16} aria-hidden="true" />
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:mcp.actions.saving", "Saving...") : t("pages:mcp.actions.save", "Save")}
             </Button>
           </>
         )}

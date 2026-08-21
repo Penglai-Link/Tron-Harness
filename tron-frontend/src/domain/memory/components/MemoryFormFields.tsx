@@ -5,6 +5,7 @@ import {
   TextInput,
   ToggleSwitch,
 } from "@/shared";
+import { useTranslation } from "react-i18next";
 
 import type {
   MemoryMetadataItem,
@@ -187,6 +188,8 @@ export function MemoryFormFields({
   state: MemoryFormState;
   targetOptions: MemorySearchTarget[];
 }) {
+  const { t } = useTranslation(["pages"]);
+  const text = (key: string, fallback: string) => t(`pages:memory.form.${key}`, { defaultValue: fallback });
   const selectedTarget = targetOptions.find((target) => target.id === state.targetId);
   const targetValue: MemoryTargetFormValue = selectedTarget?.scope === "domain"
     ? "domain"
@@ -207,7 +210,7 @@ export function MemoryFormFields({
     <div className="grid gap-5">
       {mode === "create" ? (
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Target">
+          <Field label={text("target", "Target")}>
             <SelectInput
               value={targetValue}
               onValueChange={(event) => {
@@ -219,18 +222,18 @@ export function MemoryFormFields({
                 patch("targetId", nextValue);
               }}
             >
-              <SelectItem value="space:current">Current space</SelectItem>
-              <SelectItem value="user:current">Current user</SelectItem>
-              <SelectItem value="domain">Work domain</SelectItem>
+              <SelectItem value="space:current">{text("currentSpace", "Current space")}</SelectItem>
+              <SelectItem value="user:current">{text("currentUser", "Current user")}</SelectItem>
+              <SelectItem value="domain">{text("workDomain", "Work domain")}</SelectItem>
             </SelectInput>
           </Field>
-          <Field label="Work domain">
+          <Field label={text("workDomain", "Work domain")}>
             <SelectInput
               disabled={targetValue !== "domain"}
               value={selectedDomainId}
               onValueChange={(event) => patch("targetId", event!)}
             >
-              <SelectItem value="">Not applicable</SelectItem>
+              <SelectItem value="">{text("notApplicable", "Not applicable")}</SelectItem>
               {domainTargets.map((target) => (
                 <SelectItem key={target.id} value={target.id}>{target.label}</SelectItem>
               ))}
@@ -239,10 +242,10 @@ export function MemoryFormFields({
         </div>
       ) : (
         <div className="grid gap-4 md:grid-cols-2">
-          <Field label="Scope">
+          <Field label={text("scope", "Scope")}>
             <TextInput value={lockedTarget?.scope ?? ""} disabled readOnly />
           </Field>
-          <Field label="Target">
+          <Field label={text("target", "Target")}>
             <TextInput value={lockedTarget?.label ?? ""} disabled readOnly />
           </Field>
         </div>
@@ -250,7 +253,7 @@ export function MemoryFormFields({
 
       <div className="grid gap-4 md:grid-cols-2">
         <div className="md:col-span-2">
-          <Field label="Title">
+          <Field label={text("title", "Title")}>
             <TextInput
               value={state.title}
               onChange={(event) => patch("title", event.target.value)}
@@ -258,7 +261,7 @@ export function MemoryFormFields({
           </Field>
         </div>
         <div className="md:col-span-2">
-          <Field label="Memory text">
+          <Field label={text("text", "Memory text")}>
             <TextArea
               className="min-h-40"
               value={state.text}
@@ -266,7 +269,7 @@ export function MemoryFormFields({
             />
           </Field>
         </div>
-        <Field label="Memory type">
+        <Field label={text("type", "Memory type")}>
           <SelectInput
             value={state.memoryType}
             onValueChange={(event) => patch("memoryType", event as MemoryType)}
@@ -276,7 +279,7 @@ export function MemoryFormFields({
             ))}
           </SelectInput>
         </Field>
-        <Field label="Memory status">
+        <Field label={text("status", "Memory status")}>
           <SelectInput
             value={state.memoryStatus}
             onValueChange={(event) => patch("memoryStatus", event as MemoryStatus)}
@@ -286,7 +289,7 @@ export function MemoryFormFields({
             ))}
           </SelectInput>
         </Field>
-        <Field label="Review status">
+        <Field label={text("reviewStatus", "Review status")}>
           <SelectInput
             value={state.reviewStatus}
             onValueChange={(event) => patch("reviewStatus", event as MemoryReviewStatus)}
@@ -296,28 +299,28 @@ export function MemoryFormFields({
             ))}
           </SelectInput>
         </Field>
-        <Field label="Use">
+        <Field label={text("use", "Use")}>
           <ToggleSwitch
             checked={state.injectable}
-            label={state.injectable ? "Auto context" : "Search only"}
+            label={state.injectable ? text("autoContext", "Auto context") : text("searchOnly", "Search only")}
             onCheckedChange={(checked) => patch("injectable", checked)}
           />
         </Field>
-        <Field label="Source label">
+        <Field label={text("sourceLabel", "Source label")}>
           <TextInput
             value={state.sourceLabel}
             onChange={(event) => patch("sourceLabel", event.target.value)}
           />
         </Field>
-        <Field label="Semantic key">
+        <Field label={text("semanticKey", "Semantic key")}>
           <TextInput
             value={state.semanticKey}
-            placeholder="Optional"
+            placeholder={text("optional", "Optional")}
             onChange={(event) => patch("semanticKey", event.target.value)}
           />
         </Field>
         <div className="md:col-span-2">
-          <Field label="Tags" hint="Comma-separated values.">
+          <Field label={text("tags", "Tags")} hint={text("tagsHint", "Comma-separated values.")}>
             <TextInput
               value={state.tagsText}
               onChange={(event) => patch("tagsText", event.target.value)}
@@ -325,7 +328,7 @@ export function MemoryFormFields({
           </Field>
         </div>
         <div className="md:col-span-2">
-          <Field label="Metadata rows" hint="One key-value pair per line, formatted as Key: Value.">
+          <Field label={text("metadata", "Metadata rows")} hint={text("metadataHint", "One key-value pair per line, formatted as Key: Value.")}>
             <TextArea
               className="min-h-28"
               value={state.metadataText}

@@ -1,5 +1,6 @@
 import type { AppOption } from "@/domain/app/model";
 import { MultiSelectDropdown } from "@/shared";
+import { useTranslation } from "react-i18next";
 
 function LegacyChip({
   code,
@@ -47,6 +48,8 @@ export function TaskAppSelectionField({
   onToggle?: (code: string) => void;
   selectedAppCodes: string[];
 }) {
+  const { t } = useTranslation(["pages"]);
+  const text = (key: string, fallback: string, options?: Record<string, unknown>) => t(`pages:tasks.apps.${key}`, { defaultValue: fallback, ...options });
   const availableCodes = new Set(availableApps.map((app) => app.appCode));
   const selectedKnownCodes = selectedAppCodes.filter((code) => availableCodes.has(code));
   const appOptions = availableApps.map((app) => ({
@@ -58,22 +61,22 @@ export function TaskAppSelectionField({
   return (
     <div className="space-y-3 w-full">
       <MultiSelectDropdown
-        ariaLabel="Task apps"
+        ariaLabel={text("ariaLabel", "Task apps")}
         disabled={disabled}
         emptyMessage={emptyMessage}
         loading={loading}
-        loadingMessage="Loading app options..."
+        loadingMessage={text("loading", "Loading app options...")}
         options={appOptions}
-        placeholder="Select apps"
+        placeholder={text("placeholder", "Select apps")}
         selectedValues={selectedKnownCodes}
         onToggle={onToggle}
       />
       {legacyAppCodes.length ? (
         <div className="space-y-2">
           <p className="text-[12px] text-[var(--color-on-surface-variant)]">
-            Legacy app codes are not registered in the current workspace. They stay visible until you explicitly remove or replace them.
+            {text("legacyHint", "Legacy app codes are not registered in the current workspace. They stay visible until you explicitly remove or replace them.")}
           </p>
-          <div className="flex flex-wrap gap-2" aria-label="Legacy app codes">
+          <div className="flex flex-wrap gap-2" aria-label={text("legacyLabel", "Legacy app codes")}>
             {legacyAppCodes.map((code) => (
               <LegacyChip key={code} code={code} disabled={disabled} onRemove={onRemoveLegacy} />
             ))}

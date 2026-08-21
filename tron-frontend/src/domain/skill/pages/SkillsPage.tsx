@@ -189,6 +189,7 @@ function RagProgressBar() {
 }
 
 function RagStageBadge({ label, status }: { label: string; status: SkillRagIndexStatus }) {
+  const { t } = useTranslation(["pages"]);
   return (
     <span className="inline-flex items-center gap-1 rounded-full bg-[var(--color-surface-container-high)] px-2 py-1 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
       <span>{label}</span>
@@ -199,7 +200,7 @@ function RagStageBadge({ label, status }: { label: string; status: SkillRagIndex
         status === "INDEXED" ? "text-[var(--color-success)]" : null,
       )}
       >
-        {getRagStatusLabel(status)}
+        {t(`pages:skills.rag.status.${status.toLowerCase()}`, { defaultValue: getRagStatusLabel(status) })}
       </span>
     </span>
   );
@@ -228,6 +229,7 @@ function RagStatusCell({
   retryDisabled: boolean;
   onRetry: () => void;
 }) {
+  const { t } = useTranslation(["pages"]);
   const warning = firstRagWarning(ragIndex);
   const canRetry = needsRagRetry(ragIndex, enabled);
 
@@ -235,11 +237,11 @@ function RagStatusCell({
     <div className="min-w-[12rem] space-y-2" title={warning || undefined}>
       <div className="flex flex-wrap items-center gap-2">
         <RagStageBadge
-          label="Vec"
+          label={t("pages:skills.rag.vector", { defaultValue: "Vector" })}
           status={indexing ? "PENDING" : ragStageStatus(ragIndex, "vector", enabled)}
         />
         <RagStageBadge
-          label="Graph"
+          label={t("pages:skills.rag.graph", { defaultValue: "Graph" })}
           status={indexing ? "PENDING" : ragStageStatus(ragIndex, "graph", enabled)}
         />
         {canRetry ? (
@@ -254,7 +256,7 @@ function RagStatusCell({
             }}
           >
             <RotateCcw size={13} aria-hidden="true" />
-            Retry
+            {t("pages:skills.actions.retry", { defaultValue: "Retry" })}
           </Button>
         ) : null}
       </div>
@@ -262,7 +264,7 @@ function RagStatusCell({
         <div className="space-y-1">
           <div className="flex items-center gap-1 text-[11px] text-[var(--color-on-surface-variant)]">
             <LoaderCircle className="animate-spin" size={12} aria-hidden="true" />
-            <span>Indexing</span>
+            <span>{t("pages:skills.status.indexing", { defaultValue: "Indexing" })}</span>
           </div>
           <RagProgressBar />
         </div>
@@ -288,6 +290,7 @@ function RagIndexDetailCard({
   ragIndex?: SkillRagIndexSummary | null;
   retryDisabled: boolean;
 }) {
+  const { t } = useTranslation(["pages"]);
   const status = getRagOverallStatus(ragIndex, enabled);
   const warning = firstRagWarning(ragIndex);
   const canRetry = needsRagRetry(ragIndex, enabled);
@@ -298,13 +301,13 @@ function RagIndexDetailCard({
         <div className="flex items-center gap-2">
           <Database size={16} aria-hidden="true" className="text-[var(--color-on-surface-variant)]" />
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-            RAG Index
+            {t("pages:skills.rag.title", { defaultValue: "RAG Index" })}
           </p>
         </div>
         {indexing ? (
           <Badge tone="info">
             <LoaderCircle className="mr-1 animate-spin" size={13} aria-hidden="true" />
-            Indexing
+            {t("pages:skills.status.indexing", { defaultValue: "Indexing" })}
           </Badge>
         ) : (
           <Badge tone={getRagStatusTone(status)}>{getRagStatusLabel(status)}</Badge>
@@ -315,18 +318,18 @@ function RagIndexDetailCard({
 
       {ragIndex ? (
         <div className="flex flex-wrap gap-2">
-          <RagStageBadge label="Vector" status={ragIndex.vectorStatus} />
-          <RagStageBadge label="Graph" status={ragIndex.graphStatus} />
+          <RagStageBadge label={t("pages:skills.rag.vector", { defaultValue: "Vector" })} status={ragIndex.vectorStatus} />
+          <RagStageBadge label={t("pages:skills.rag.graph", { defaultValue: "Graph" })} status={ragIndex.graphStatus} />
         </div>
       ) : (
         <p className="text-sm text-[var(--color-on-surface-variant)]">
-          No RAG index state has been recorded for this skill.
+          {t("pages:skills.rag.empty", { defaultValue: "No RAG index state has been recorded for this skill." })}
         </p>
       )}
 
       <div className="grid gap-3 sm:grid-cols-2">
-        <DetailField label="Last Indexed" value={lastIndexedLabel} />
-        <DetailField label="Last Attempt" value={lastAttemptLabel} />
+        <DetailField label={t("pages:skills.rag.lastIndexed", { defaultValue: "Last Indexed" })} value={lastIndexedLabel} />
+        <DetailField label={t("pages:skills.rag.lastAttempt", { defaultValue: "Last Attempt" })} value={lastAttemptLabel} />
       </div>
 
       {warning ? (
@@ -347,7 +350,7 @@ function RagIndexDetailCard({
             onClick={onRetry}
           >
             {retryDisabled ? <LoaderCircle className="animate-spin" size={14} aria-hidden="true" /> : <RotateCcw size={14} aria-hidden="true" />}
-            Retry RAG
+            {t("pages:skills.actions.retryRag", { defaultValue: "Retry RAG" })}
           </Button>
         </div>
       ) : null}
@@ -699,24 +702,24 @@ export function SkillsPage() {
           <div className="flex flex-wrap items-center gap-2">
             {selectedSkill.sourceType ? (
               <Badge tone={getSourceTone(selectedSkill.sourceType)}>
-                {selectedSkill.sourceType}
+                {pageT(`source.${selectedSkill.sourceType}`, selectedSkill.sourceType)}
               </Badge>
             ) : null}
             {selectedSkill.updateStatus ? (
               <Badge tone={getUpdateTone(selectedSkill.updateStatus)}>
-                {selectedSkill.updateStatus}
+                {pageT(`update.${selectedSkill.updateStatus}`, selectedSkill.updateStatus)}
               </Badge>
             ) : null}
             {selectedSkill.registryState !== "Present" ? (
               <Badge tone={getRegistryStateTone(selectedSkill.registryState)}>
-                {selectedSkill.registryState}
+                {pageT(`registry.${selectedSkill.registryState}`, selectedSkill.registryState)}
               </Badge>
             ) : null}
             <Badge tone={getWorkspaceSourceTone(selectedSkill.sourceKind)}>
-              {selectedSkill.sourceKind}
+              {pageT(`sourceKind.${selectedSkill.sourceKind}`, selectedSkill.sourceKind)}
             </Badge>
             <Badge tone={selectedSkill.enabled ? "success" : "info"}>
-              {selectedSkill.enabled ? "Enabled" : "Disabled"}
+              {selectedSkill.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}
             </Badge>
           </div>
 
@@ -774,9 +777,9 @@ export function SkillsPage() {
               <div className="flex min-w-0 items-start gap-2">
                 <CircleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
                 <div>
-                  <p className="font-medium">The registry copy for this skill is missing.</p>
+                  <p className="font-medium">{pageT("registryMissing.title", "The registry copy for this skill is missing.")}</p>
                   <p className="mt-1 text-[var(--color-on-error-container)]/90">
-                    Restore it from Skill Center, then return here and click Refresh to recover this workspace binding.
+                    {pageT("registryMissing.description", "Restore it from Skill Center, then return here and click Refresh to recover this workspace binding.")}
                   </p>
                 </div>
               </div>
@@ -788,7 +791,7 @@ export function SkillsPage() {
                   onClick={() => navigate("/settings/skills")}
                 >
                   <Package size={14} aria-hidden="true" />
-                  Skill Center
+                  {pageT("registryMissing.action", "Skill Center")}
                 </Button>
               </div>
             </div>
@@ -963,7 +966,7 @@ export function SkillsPage() {
                 header: pageT("columns.workspace", "Workspace"),
                 render: (row) => (
                   <span className="text-sm text-[var(--color-on-surface)]">
-                    {row.sourceKind}
+                    {pageT(`sourceKind.${row.sourceKind}`, row.sourceKind)}
                   </span>
                 ),
               },
@@ -972,7 +975,7 @@ export function SkillsPage() {
                 header: pageT("columns.update", "Update"),
                 render: (row) => (
                   row.updateStatus ? (
-                    <Badge tone={getUpdateTone(row.updateStatus)}>{row.updateStatus}</Badge>
+                    <Badge tone={getUpdateTone(row.updateStatus)}>{pageT(`update.${row.updateStatus}`, row.updateStatus)}</Badge>
                   ) : (
                     <Badge tone="info">{pageT("status.unknown", "Unknown")}</Badge>
                   )

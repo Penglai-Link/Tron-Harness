@@ -15,6 +15,7 @@ import {
 import {
   useLocation,
 } from "react-router";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -182,6 +183,7 @@ function spaceCodesFromResult(result: ReplaceSpacesResult, fallback: string[]) {
 }
 
 export function UserDetailsPage() {
+  const { t } = useTranslation(["pages"]);
   const users = useUserList({ current: 1, size: 100, status: "All" });
   const toast = useToast();
   const { search } = useLocation();
@@ -259,12 +261,12 @@ export function UserDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: requestedUserCode || "Loading" }]}
-          title="User Detail"
+          breadcrumbs={[{ label: t("pages:admin.users.title", "Users"), href: "/admin/users" }, { label: requestedUserCode || t("pages:admin.loading", "Loading") }]}
+          title={t("pages:admin.users.detailTitle", "User Detail")}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading user detail</h2>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Retrieving {requestedUserCode} from the user detail endpoint.</p>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{t("pages:admin.users.loading", "Loading user detail")}</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{t("pages:admin.users.loadingDescription", "Retrieving {{code}} from the user detail endpoint.", { code: requestedUserCode })}</p>
         </SurfaceCard>
       </>
     );
@@ -273,16 +275,16 @@ export function UserDetailsPage() {
   if (!user) {
     const notFoundMessage = requestedUserCode
       ? `No user record matches ${requestedUserCode}.`
-      : "No user record was requested.";
+      : t("pages:admin.users.notRequested", "No user record was requested.");
 
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Users", href: "/admin/users" }, { label: requestedUserCode || "Not Found" }]}
-          title="User Detail"
+          breadcrumbs={[{ label: t("pages:admin.users.title", "Users"), href: "/admin/users" }, { label: requestedUserCode || t("pages:admin.notFound", "Not Found") }]}
+          title={t("pages:admin.users.detailTitle", "User Detail")}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">User not found</h2>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{t("pages:admin.users.notFound", "User not found")}</h2>
           <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{notFoundMessage}</p>
         </SurfaceCard>
       </>
@@ -294,7 +296,7 @@ export function UserDetailsPage() {
   const currentStatus = user.status;
   const currentResetState = resetState?.userCode === user.userCode ? resetState : null;
   const isEditingProfile = profileForm !== null;
-  const detailBreadcrumbs = [{ label: "Users", href: "/admin/users" }, { label: user.displayName || user.userCode }];
+  const detailBreadcrumbs = [{ label: t("pages:admin.users.title", "Users"), href: "/admin/users" }, { label: user.displayName || user.userCode }];
 
   async function saveProfile() {
     if (!profileForm || !user || savingProfile) return;

@@ -11,6 +11,7 @@ import {
   Save,
   Trash2,
 } from "lucide-react";
+import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/shared/ui/Button";
@@ -265,6 +266,7 @@ function roleSearchText(role: EditableRole) {
 }
 
 export function RoleMatrixPage() {
+  const { t } = useTranslation(["pages"]);
   const toast = useToast();
   const rawRoles = useRoleList();
   const domainsFromHook = usePermissionDomainList();
@@ -553,7 +555,7 @@ export function RoleMatrixPage() {
         const persistedSelected = persistedRoles.find((role) => role.code === selectedRole.code);
         if (persistedSelected) setSelectedRoleId(persistedSelected.id);
       }
-      toast.success("Role matrix draft saved");
+      toast.success(t("pages:admin.roles.messages.saved", "Role matrix draft saved"));
     } catch (error) {
       const message = error instanceof Error ? error.message : "Failed to save role matrix draft";
       toast.error(message);
@@ -566,13 +568,13 @@ export function RoleMatrixPage() {
     setDeleteConfirmRoleId(null);
     setRenameFocusRoleId(null);
     setWorkingRoles(savedRoles.map((role) => cloneRole(role, allDomains)));
-    toast.info("Unsaved changes discarded");
+    toast.info(t("pages:admin.roles.messages.discarded", "Unsaved changes discarded"));
   }
 
   return (
     <>
       <PageHeader
-        title="Users & Roles"
+        title={t("pages:admin.roles.title", "Users & Roles")}
         actions={
           <>
             <Button
@@ -582,7 +584,7 @@ export function RoleMatrixPage() {
               onClick={() => runDebouncedAction("header-add-role", addCustomRole)}
             >
               <Plus size={16} aria-hidden="true" />
-              Add Role
+              {t("pages:admin.roles.actions.add", "Add Role")}
             </Button>
             <Button
               className={HEADER_ACTION_BUTTON_CLASS}
@@ -593,7 +595,7 @@ export function RoleMatrixPage() {
               onClick={() => runDebouncedAction("header-clone-role", cloneSelectedRole)}
             >
               <Copy size={14} aria-hidden="true" />
-              Clone
+              {t("pages:admin.roles.actions.clone", "Clone")}
             </Button>
             <Button
               className={HEADER_ACTION_BUTTON_CLASS}
@@ -604,7 +606,7 @@ export function RoleMatrixPage() {
               onClick={() => runDebouncedAction("header-reset-role", resetSelectedRole)}
             >
               <RotateCcw size={14} aria-hidden="true" />
-              Reset
+              {t("pages:admin.roles.actions.reset", "Reset")}
             </Button>
             <Button
               className={HEADER_ACTION_BUTTON_CLASS}
@@ -614,7 +616,7 @@ export function RoleMatrixPage() {
               onClick={() => runDebouncedAction("header-discard-role-draft", discardChanges)}
             >
               <RotateCcw size={16} aria-hidden="true" />
-              Discard
+              {t("pages:admin.roles.actions.discard", "Discard")}
             </Button>
             <Button
               className={HEADER_ACTION_BUTTON_CLASS}
@@ -627,7 +629,7 @@ export function RoleMatrixPage() {
               })}
             >
               <Save size={16} aria-hidden="true" />
-              {saving ? "Saving..." : "Save"}
+              {saving ? t("pages:admin.roles.actions.saving", "Saving...") : t("pages:admin.roles.actions.save", "Save")}
             </Button>
             <Button
               className={cn(
@@ -647,7 +649,7 @@ export function RoleMatrixPage() {
               )}
             >
               <Trash2 size={14} aria-hidden="true" />
-              {deleteConfirmRoleId === selectedRole?.id ? "Confirm" : "Delete"}
+              {deleteConfirmRoleId === selectedRole?.id ? t("pages:admin.roles.actions.confirm", "Confirm") : t("pages:admin.roles.actions.delete", "Delete")}
             </Button>
           </>
         }
@@ -655,19 +657,19 @@ export function RoleMatrixPage() {
       <SurfaceCard className="overflow-hidden p-0">
         <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-5">
           <div>
-            <h2 className="text-xl font-semibold">Platform Permissions</h2>
-            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">Search roles, focus domains, and edit permission grants directly from the matrix.</p>
+            <h2 className="text-xl font-semibold">{t("pages:admin.roles.matrixTitle", "Platform Permissions")}</h2>
+            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{t("pages:admin.roles.matrixDescription", "Search roles, focus domains, and edit permission grants directly from the matrix.")}</p>
           </div>
           <div className="flex flex-wrap items-center gap-2">
-            <SearchField ariaLabel="Search roles" placeholder="Search roles, codes, or descriptions..." value={query} onChange={setQuery} />
-            <SelectInput aria-label="Filter by role type" className="h-9 min-w-36" value={roleType} onValueChange={(event) => setRoleType(event as RoleTypeFilter)}>
-              {ROLE_TYPE_OPTIONS.map((option) => <SelectItem key={option}>{option}</SelectItem>)}
+            <SearchField ariaLabel={t("pages:admin.roles.search", "Search roles")} placeholder={t("pages:admin.roles.searchPlaceholder", "Search roles, codes, or descriptions...")} value={query} onChange={setQuery} />
+            <SelectInput aria-label={t("pages:admin.roles.roleTypeFilter", "Filter by role type")} className="h-9 min-w-36" value={roleType} onValueChange={(event) => setRoleType(event as RoleTypeFilter)}>
+              {ROLE_TYPE_OPTIONS.map((option) => <SelectItem key={option}>{t(`pages:admin.roles.roleTypes.${option}`, option)}</SelectItem>)}
             </SelectInput>
-            <SelectInput aria-label="Filter by permission domain" className="h-9 min-w-40" value={domainFilter} onValueChange={(event) => setDomainFilter(event!)}>
-              <SelectItem value={ALL_DOMAINS}>{ALL_DOMAINS}</SelectItem>
+            <SelectInput aria-label={t("pages:admin.roles.domainFilter", "Filter by permission domain")} className="h-9 min-w-40" value={domainFilter} onValueChange={(event) => setDomainFilter(event!)}>
+              <SelectItem value={ALL_DOMAINS}>{t("pages:admin.roles.allDomains", ALL_DOMAINS)}</SelectItem>
               {allDomains.map((domain) => <SelectItem key={domain} value={domain}>{domain}</SelectItem>)}
             </SelectInput>
-            <ToggleSwitch checked={showChangedOnly} label="Show changed only" onCheckedChange={setShowChangedOnly} />
+            <ToggleSwitch checked={showChangedOnly} label={t("pages:admin.roles.showChanged", "Show changed only")} onCheckedChange={setShowChangedOnly} />
           </div>
         </div>
         {filteredRoles.length ? (
@@ -675,7 +677,7 @@ export function RoleMatrixPage() {
             <table className="w-full min-w-[1080px] border-collapse text-left text-sm">
               <thead>
                 <tr className="border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]">
-                  <th className="sticky left-0 z-10 min-w-[280px] border-r border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-[11px] uppercase text-[var(--color-on-surface-variant)]">Role</th>
+                  <th className="sticky left-0 z-10 min-w-[280px] border-r border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4 text-[11px] uppercase text-[var(--color-on-surface-variant)]">{t("pages:admin.roles.role", "Role")}</th>
                   {visibleDomains.map((domain) => (
                     <th className="border-r border-[var(--color-outline-variant)] p-4 text-center text-[11px] uppercase text-[var(--color-on-surface-variant)]" key={domain}>
                       {domain}
@@ -726,14 +728,14 @@ export function RoleMatrixPage() {
                           >
                             <Badge tone={role.kind === "System" ? "info" : "outline"}>{role.kind}</Badge>
                           </button>
-                          {dirtyIds.has(role.id) ? <Badge tone="warning">Unsaved</Badge> : null}
+                          {dirtyIds.has(role.id) ? <Badge tone="warning">{t("pages:admin.roles.unsaved", "Unsaved")}</Badge> : null}
                         </div>
                         <button className="mt-2 w-full text-left" type="button" onClick={() => runDebouncedAction(`matrix-select-${role.id}`, () => selectRole(role.id), 180)}>
                           <div className="mt-1 font-mono text-[11px] uppercase text-[var(--color-on-surface-variant)]">{role.code}</div>
                           <div className="mt-2 text-[13px] text-[var(--color-on-surface-variant)]">{role.description}</div>
                           <div className="mt-3 flex flex-wrap items-center gap-3 text-[12px] text-[var(--color-on-surface-variant)]">
-                            <span>{roleMembers.length} users linked</span>
-                            <span>Updated {formatTimestamp(role.updatedAt)}</span>
+                            <span>{t("pages:admin.roles.usersLinked", "{{count}} users linked", { count: roleMembers.length })}</span>
+                            <span>{t("pages:admin.roles.updated", "Updated {{value}}", { value: formatTimestamp(role.updatedAt) })}</span>
                           </div>
                         </button>
                       </td>
@@ -776,14 +778,14 @@ export function RoleMatrixPage() {
           </div>
         ) : (
           <div className="p-10 text-center">
-            <p className="text-sm text-[var(--color-on-surface-variant)]">No roles match the current filters.</p>
+            <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:admin.roles.empty", "No roles match the current filters.")}</p>
             <div className="mt-4 flex justify-center gap-2">
               <Button variant="secondary" onClick={() => runDebouncedAction("empty-clear-role-filters", clearFilters)}>
-                Clear Filters
+                {t("pages:admin.roles.actions.clear", "Clear Filters")}
               </Button>
               <Button onClick={() => runDebouncedAction("empty-add-role", addCustomRole)}>
                 <Plus size={16} aria-hidden="true" />
-                New
+                {t("pages:admin.roles.actions.new", "New")}
               </Button>
             </div>
           </div>
@@ -792,7 +794,7 @@ export function RoleMatrixPage() {
           <div className="flex flex-wrap items-center gap-3">
             {adminPermissionLegend.map((item) => <span key={item}>{item}</span>)}
           </div>
-          <span>{dataSource === "api" ? "Saved drafts persist through the backend role catalog." : "Saved drafts persist in this browser for mock mode."}</span>
+          <span>{dataSource === "api" ? t("pages:admin.roles.persistence.api", "Saved drafts persist through the backend role catalog.") : t("pages:admin.roles.persistence.mock", "Saved drafts persist in this browser for mock mode.")}</span>
         </div>
       </SurfaceCard>
     </>

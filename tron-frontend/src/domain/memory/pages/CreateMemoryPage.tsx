@@ -3,6 +3,7 @@ import {
   useState,
 } from "react";
 import { useNavigate } from "react-router";
+import { useTranslation } from "react-i18next";
 import { Save } from "lucide-react";
 
 import { useAuthSession } from "@/domain/auth";
@@ -57,6 +58,7 @@ function buildDisplayTargets(
 }
 
 export function CreateMemoryPage() {
+  const { t } = useTranslation(["pages"]);
   const navigate = useNavigate();
   const toast = useToast();
   const dataSource = getServiceDataSource("memory");
@@ -91,7 +93,7 @@ export function CreateMemoryPage() {
   const domainTargets = targetOptions.filter((target) => target.scope === "domain");
   const selectedTarget = targetOptions.find((target) => target.id === form.targetId) ?? fallbackTarget;
 
-  useConsoleShellConfig({ searchPlaceholder: "Search memories..." });
+  useConsoleShellConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
 
   async function saveMemory() {
     const validationError = validateMemoryForm(form, selectedTarget);
@@ -106,10 +108,10 @@ export function CreateMemoryPage() {
       const saved = dataSource === "api" && workspaceCode
         ? await createMemoryRecord(workspaceCode, payload)
         : createMemoryFragment(payload);
-      toast.success(`${saved.title} created`);
+      toast.success(t("pages:memory.messages.created", "{{title}} created", { title: saved.title }));
       navigate(`/memory/details?memoryId=${encodeURIComponent(saved.id)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Memory could not be created");
+      toast.error(error instanceof Error ? error.message : t("pages:memory.errors.create", "Memory could not be created"));
     } finally {
       setSubmitting(false);
     }
@@ -118,13 +120,13 @@ export function CreateMemoryPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Memory", href: "/memory" }, { label: "New" }]}
-        title="New Memory"
+        breadcrumbs={[{ label: t("pages:memory.title", "Memory"), href: "/memory" }, { label: t("pages:memory.actions.new", "New") }]}
+        title={t("pages:memory.createTitle", "New Memory")}
         actions={(
           <>
-            <Button size="lg" variant="outline" onClick={() => navigate("/memory")}>Cancel</Button>
+            <Button size="lg" variant="outline" onClick={() => navigate("/memory")}>{t("pages:memory.actions.cancel", "Cancel")}</Button>
             <Button size="lg" disabled={submitting || !form.title.trim() || !form.text.trim()} aria-busy={submitting} onClick={saveMemory}>
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? t("pages:memory.actions.saving", "Saving...") : t("pages:memory.actions.save", "Save")}
             </Button>
           </>
         )}

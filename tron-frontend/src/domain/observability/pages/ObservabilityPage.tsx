@@ -2,6 +2,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   Gauge,
   Pause,
@@ -70,6 +71,10 @@ function InspectorTabs({ tabs, value, onValueChange }: { tabs: readonly string[]
 }
 
 export function ObservabilityPage() {
+  const { t } = useTranslation(["pages"]);
+  const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`observability.${key}`, { defaultValue, ...options })
+  );
   const openRightSidebar = useOpenRightSidebar();
   const data = useObservabilityOverview();
   const [inspectorTab, setInspectorTab] = useState("Details");
@@ -78,31 +83,31 @@ export function ObservabilityPage() {
   const tracePagination = useTablePagination(data.traces);
 
   const rightPanel = useMemo(() => (inspectorOpen ? (
-    <InspectorPanel title="Inspector">
+    <InspectorPanel title={pageT("inspector.title", "Inspector")}>
       <div className="flex items-center justify-between">
         <Badge tone="success">agent-router-04</Badge>
-        <Button size="icon" variant="ghost" aria-label="Close inspector" onClick={() => setInspectorOpen(false)}>
+        <Button size="icon" variant="ghost" aria-label={pageT("aria.closeInspector", "Close inspector")} onClick={() => setInspectorOpen(false)}>
           <X size={16} aria-hidden="true" />
         </Button>
       </div>
       <InspectorTabs tabs={observabilityInspectorTabs} value={inspectorTab} onValueChange={(value) => {
         setInspectorTab(value);
-        setNotice(`${value} inspector selected`);
+        setNotice(pageT("messages.tabSelected", "{{tab}} inspector selected", { tab: value }));
       }} />
       <SurfaceCard className="rounded-xl p-4 shadow-none">
         <p className="text-sm font-semibold">{inspectorTab}</p>
-        <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">Router span route.llm.failover is sampled at 100% while the failover controller is in review.</p>
+        <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">{pageT("inspector.description", "Router span route.llm.failover is sampled at 100% while the failover controller is in review.")}</p>
       </SurfaceCard>
       <div className="grid gap-3 text-sm">
-        <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">Region</span><span>us-east-1</span></div>
-        <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">Budget</span><span>99.95%</span></div>
-        <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">Retries</span><span>12</span></div>
+        <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">{pageT("fields.region", "Region")}</span><span>us-east-1</span></div>
+        <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">{pageT("fields.budget", "Budget")}</span><span>99.95%</span></div>
+        <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">{pageT("fields.retries", "Retries")}</span><span>12</span></div>
       </div>
       <div className="flex gap-2">
-        <Button className="flex-1" size="sm" onClick={() => setNotice("Agent paused")}>
-          Pause Agent
+        <Button className="flex-1" size="sm" onClick={() => setNotice(pageT("messages.agentPaused", "Agent paused"))}>
+          {pageT("actions.pauseAgent", "Pause Agent")}
         </Button>
-        <Button size="sm" variant="secondary" onClick={() => setNotice("Inspector edit opened")}>Edit</Button>
+        <Button size="sm" variant="secondary" onClick={() => setNotice(pageT("messages.editOpened", "Inspector edit opened"))}>{pageT("actions.edit", "Edit")}</Button>
       </div>
       <Notice value={notice} />
     </InspectorPanel>
@@ -118,11 +123,11 @@ export function ObservabilityPage() {
   return (
     <>
       <PageHeader
-        title="Observability Dashboard"
+        title={pageT("title", "Observability Dashboard")}
         actions={
           <>
-            <Button size="lg" variant="outline" onClick={openInspector}>Open Inspector</Button>
-            <Button size="lg" onClick={() => setNotice("Trace export queued")}>Export</Button>
+            <Button size="lg" variant="outline" onClick={openInspector}>{pageT("actions.openInspector", "Open Inspector")}</Button>
+            <Button size="lg" onClick={() => setNotice(pageT("messages.exportQueued", "Trace export queued"))}>{pageT("actions.export", "Export")}</Button>
           </>
         }
       />
@@ -132,18 +137,18 @@ export function ObservabilityPage() {
       <div className="grid mb-6 gap-4 xl:grid-cols-[minmax(0,1fr)_360px]">
         <SurfaceCard>
           <div className="mb-4 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Request Throughput</h2>
-            <Button size="icon" variant="ghost" aria-label="Refresh chart" onClick={() => setNotice("Chart refreshed")}>
+            <h2 className="text-base font-semibold">{pageT("charts.requestThroughput", "Request Throughput")}</h2>
+            <Button size="icon" variant="ghost" aria-label={pageT("aria.refreshChart", "Refresh chart")} onClick={() => setNotice(pageT("messages.chartRefreshed", "Chart refreshed"))}>
               <RefreshCcw size={16} aria-hidden="true" />
             </Button>
           </div>
           <SimpleBarChart data={data.throughput} />
         </SurfaceCard>
         <SurfaceCard>
-          <h2 className="text-base font-semibold">Error Heatmap</h2>
+          <h2 className="text-base font-semibold">{pageT("charts.errorHeatmap", "Error Heatmap")}</h2>
           <div className="mt-4 grid grid-cols-6 gap-2">
             {data.heatmap.map((value, index) => (
-              <button className="aspect-square rounded-md border border-[var(--color-outline-variant)] text-[11px]" style={{ background: `rgba(47,95,159,${0.15 + value / 120})` }} key={`${value}-${index}`} type="button" onClick={() => setNotice(`Heatmap cell ${index + 1}: ${value} events`)}>
+              <button className="aspect-square rounded-md border border-[var(--color-outline-variant)] text-[11px]" style={{ background: `rgba(47,95,159,${0.15 + value / 120})` }} key={`${value}-${index}`} type="button" onClick={() => setNotice(pageT("messages.heatmapCell", "Heatmap cell {{index}}: {{value}} events", { index: index + 1, value }))}>
                 {value}
               </button>
             ))}
@@ -151,17 +156,17 @@ export function ObservabilityPage() {
         </SurfaceCard>
       </div>
       <DataTable
-        title="Recent Traces"
+        title={pageT("traces.title", "Recent Traces")}
         rows={tracePagination.visibleItems}
         rowKey={(row) => row.id}
-        toolbar={<Button size="lg" variant="outline" onClick={() => setNotice("All traces view opened")}>View All</Button>}
-        pagination={<TablePagination itemLabel="traces" {...tracePagination.paginationProps} />}
+        toolbar={<Button size="lg" variant="outline" onClick={() => setNotice(pageT("messages.allTracesOpened", "All traces view opened"))}>{pageT("actions.viewAll", "View All")}</Button>}
+        pagination={<TablePagination itemLabel={pageT("traces.itemLabel", "traces")} {...tracePagination.paginationProps} />}
         columns={[
-          { id: "id", header: "Trace", render: (row) => <span className="font-mono text-[13px]">{row.id}</span> },
-          { id: "agent", header: "Agent", render: (row) => row.agent },
-          { id: "span", header: "Span", render: (row) => <span className="font-mono text-[13px]">{row.span}</span> },
-          { id: "latency", header: "Latency", render: (row) => row.latency },
-          { id: "status", header: "Status", render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
+          { id: "id", header: pageT("columns.trace", "Trace"), render: (row) => <span className="font-mono text-[13px]">{row.id}</span> },
+          { id: "agent", header: pageT("columns.agent", "Agent"), render: (row) => row.agent },
+          { id: "span", header: pageT("columns.span", "Span"), render: (row) => <span className="font-mono text-[13px]">{row.span}</span> },
+          { id: "latency", header: pageT("columns.latency", "Latency"), render: (row) => row.latency },
+          { id: "status", header: pageT("columns.status", "Status"), render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
         ]}
       />
     </>
