@@ -69,6 +69,7 @@ const COMMAND_HISTORY_LIMIT = 100;
 export class LocalEchoAddon implements ITerminalAddon {
   private disposable?: IDisposable;
   private resizeDisposable?: IDisposable;
+  private compositionTextarea?: HTMLTextAreaElement;
   private resizeRedrawTimer?: number;
   private explanationRequestVersion = 0;
   private explanationAbortController?: AbortController;
@@ -90,7 +91,20 @@ export class LocalEchoAddon implements ITerminalAddon {
   private explainDecorations: IDecoration[] = [];
   private currentDialog?: HTMLElement;
   private activeExplainDialog?: ActiveExplainDialog;
+  private isComposing = false;
+  private compositionSpaceCount = 0;
+  private shouldRestoreImeDoubleSpace = false;
   private readonly i18n: ChatTerminalI18n;
+  private readonly handleCompositionStart = () => {
+    this.isComposing = true;
+    this.compositionSpaceCount = 0;
+    this.shouldRestoreImeDoubleSpace = false;
+  };
+  private readonly handleCompositionEnd = () => {
+    this.isComposing = false;
+    this.shouldRestoreImeDoubleSpace = this.compositionSpaceCount >= 2;
+    this.compositionSpaceCount = 0;
+  };
   private readonly handleDocumentPointerDown = (event: PointerEvent) => {
     const target = event.target;
     if (
@@ -122,18 +136,20 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.renderedColumns = terminal.cols;
     this.hasRenderedEditableLine = false;
     this.disposable = terminal.onData((data) => {
+      const input = this.restoreImeDoubleSpace(data);
       if (this.isExecuting) {
         if (this.activeCommand?.interactive) {
-          this.enqueueCommandInput(data);
-        } else if (data === "\u0003") {
+          this.enqueueCommandInput(input);
+        } else if (input === "\u0003") {
           this.cancelCurrentCommand();
         }
         return;
       }
 
-      this.enqueueInput(() => this.echo(terminal, data));
+      this.enqueueInput(() => this.echo(terminal, input));
     });
     this.keyEventHandler = (event) => {
+      this.trackCompositionSpace(event);
       const isClearShortcut =
         event.type === "keydown" &&
         event.metaKey &&
@@ -149,6 +165,17 @@ export class LocalEchoAddon implements ITerminalAddon {
       return false;
     };
     terminal.attachCustomKeyEventHandler(this.keyEventHandler);
+    if (terminal.textarea) {
+      this.compositionTextarea = terminal.textarea;
+      this.compositionTextarea.addEventListener(
+        "compositionstart",
+        this.handleCompositionStart,
+      );
+      this.compositionTextarea.addEventListener(
+        "compositionend",
+        this.handleCompositionEnd,
+      );
+    }
     this.resizeDisposable = terminal.onResize(() => {
       this.scheduleEditableLineRedraw(terminal);
     });
@@ -159,6 +186,18 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.disposable?.dispose();
     this.disposable = undefined;
     this.keyEventHandler = undefined;
+    this.compositionTextarea?.removeEventListener(
+      "compositionstart",
+      this.handleCompositionStart,
+    );
+    this.compositionTextarea?.removeEventListener(
+      "compositionend",
+      this.handleCompositionEnd,
+    );
+    this.compositionTextarea = undefined;
+    this.isComposing = false;
+    this.compositionSpaceCount = 0;
+    this.shouldRestoreImeDoubleSpace = false;
     this.resizeDisposable?.dispose();
     this.resizeDisposable = undefined;
     if (this.resizeRedrawTimer !== undefined) {
@@ -270,8 +309,14 @@ export class LocalEchoAddon implements ITerminalAddon {
       }
 
       this.clearHistoryNavigation();
+      const shouldRedraw = this.currentInput.includes("\n");
       const { input, width } = removeLastGrapheme(this.currentInput);
       this.currentInput = input;
+      if (shouldRedraw) {
+        await this.redrawEditableLine(terminal);
+        this.notifyInputState();
+        return;
+      }
       const span = this.inputCellSpans.pop();
       if (span) {
         await writeTerminalAsync(terminal, eraseTerminalSpan(terminal, span));
@@ -286,7 +331,8 @@ export class LocalEchoAddon implements ITerminalAddon {
       return;
     }
 
-    const graphemes = segmentGraphemes(data);
+    const input = normalizeTerminalInput(data);
+    const graphemes = segmentGraphemes(input);
     this.clearHistoryNavigation();
     const start = getTerminalCursorPosition(terminal);
     this.inputCellSpans.push(
@@ -294,7 +340,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     );
     this.currentInput += graphemes.join("");
     this.notifyInputState();
-    await writeTerminalAsync(terminal, data);
+    await writeTerminalAsync(terminal, normalizeTerminalOutput(input));
     this.renderedColumns = terminal.cols;
   }
 
@@ -492,7 +538,10 @@ export class LocalEchoAddon implements ITerminalAddon {
       segmentGraphemes(this.currentInput),
       terminal.cols,
     );
-    await writeTerminalAsync(terminal, `\r\x1b[2K${prompt}${this.currentInput}`);
+    await writeTerminalAsync(
+      terminal,
+      `\r\x1b[2K${prompt}${normalizeTerminalOutput(this.currentInput)}`,
+    );
     this.hasRenderedEditableLine = true;
     this.renderedColumns = terminal.cols;
     this.notifyInputState();
@@ -566,7 +615,7 @@ export class LocalEchoAddon implements ITerminalAddon {
 
     await writeTerminalAsync(
       terminal,
-      `${eraseTerminalRows(rowsToClear)}${prompt}${this.currentInput}`,
+      `${eraseTerminalRows(rowsToClear)}${prompt}${normalizeTerminalOutput(this.currentInput)}`,
     );
     this.renderedColumns = terminal.cols;
   }
@@ -590,6 +639,30 @@ export class LocalEchoAddon implements ITerminalAddon {
     }
 
     return this.options.prompt ?? "";
+  }
+
+  private trackCompositionSpace(event: KeyboardEvent) {
+    if (event.type !== "keydown" || !this.isComposing) {
+      return;
+    }
+
+    if (event.key === " " || event.code === "Space") {
+      this.compositionSpaceCount += 1;
+      return;
+    }
+
+    if (!event.metaKey && !event.altKey && !event.ctrlKey && event.key !== "Shift") {
+      this.compositionSpaceCount = 0;
+    }
+  }
+
+  private restoreImeDoubleSpace(data: string) {
+    if (!this.shouldRestoreImeDoubleSpace) {
+      return data;
+    }
+
+    this.shouldRestoreImeDoubleSpace = false;
+    return [".", ". ", "。"].includes(data) ? "  " : data;
   }
 
   private createExplainButton(
@@ -1100,6 +1173,13 @@ function advanceTerminalCursor(
   grapheme: string,
   columns: number,
 ) {
+  if (grapheme === "\n") {
+    return {
+      column: 0,
+      row: position.row + 1,
+    };
+  }
+
   if (grapheme === "\t") {
     if (position.column >= columns) {
       return position;
@@ -1127,6 +1207,10 @@ function advanceTerminalCursor(
     column: column + width,
     row,
   };
+}
+
+function normalizeTerminalInput(data: string) {
+  return data.replace(/\r\n?|\n/g, "\n");
 }
 
 function createInputCellSpans(
