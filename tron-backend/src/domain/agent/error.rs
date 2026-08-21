@@ -15,6 +15,7 @@ pub enum AgentError {
     MaxStepsExceeded,
     MaxToolCallsExceeded,
     EventPublishFailed(String),
+    AwaitingUserInput,
 }
 
 impl Display for AgentError {
@@ -28,6 +29,7 @@ impl Display for AgentError {
             Self::MaxStepsExceeded => f.write_str("agent run exceeded max steps"),
             Self::MaxToolCallsExceeded => f.write_str("agent run exceeded max tool calls"),
             Self::EventPublishFailed(message) => write!(f, "event publish failed: {message}"),
+            Self::AwaitingUserInput => f.write_str("agent is waiting for user input"),
         }
     }
 }

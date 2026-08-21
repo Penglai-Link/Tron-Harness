@@ -2,7 +2,9 @@ use serde::Deserialize;
 
 use crate::domain::{
     agent::{AgentRunLimits, EffectiveTool},
-    chat::{ChatMessageAttachment, ChatSessionSourceType},
+    chat::{
+        ChatClientCapabilities, ChatMessageAttachment, ChatSessionSourceType, ChatUserInputAnswer,
+    },
     reasoning::ReasoningEffort,
 };
 
@@ -47,6 +49,8 @@ pub struct OpenApiSendChatMessageRequest {
     pub tools: Vec<EffectiveTool>,
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
+    #[serde(default)]
+    pub client_capabilities: Option<ChatClientCapabilities>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -70,4 +74,10 @@ pub struct OpenApiGetActiveChatRunQuery {
 pub struct OpenApiStopChatRunRequest {
     pub session_code: Option<String>,
     pub expected_run_code: Option<String>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct OpenApiAnswerChatUserInputRequest {
+    pub answers: Vec<ChatUserInputAnswer>,
 }

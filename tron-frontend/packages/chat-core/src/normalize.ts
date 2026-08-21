@@ -5,6 +5,7 @@ import type {
   ChatSendResult,
   ChatSession,
   ChatSteerResult,
+  ChatUserInputRequest,
 } from "./types";
 
 function toScreamingSnakeCase(value: string | null | undefined) {
@@ -15,6 +16,17 @@ function toScreamingSnakeCase(value: string | null | undefined) {
     .replace(/([a-z0-9])([A-Z])/g, "$1_$2")
     .replace(/[\s-]+/g, "_")
     .toUpperCase();
+}
+
+function normalizeUnixMilliseconds(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const numericValue = Number(value);
+    if (Number.isFinite(numericValue) && value.trim() !== "") return numericValue;
+    const parsedValue = Date.parse(value);
+    if (Number.isFinite(parsedValue)) return parsedValue;
+  }
+  return 0;
 }
 
 export function normalizeChatSession(session: ChatSession): ChatSession {
@@ -45,6 +57,28 @@ export function normalizeChatSendResult(result: ChatSendResult): ChatSendResult 
       status: toScreamingSnakeCase(result.run.status) as ChatSendResult["run"]["status"],
     },
     session: normalizeChatSession(result.session),
+    userInputRequest: result.userInputRequest
+      ? normalizeChatUserInputRequest(result.userInputRequest)
+      : result.userInputRequest,
+  };
+}
+
+export function normalizeChatUserInputRequest(
+  request: ChatUserInputRequest,
+): ChatUserInputRequest {
+  const status = String(request.status ?? "").toLowerCase();
+  return {
+    ...request,
+    requestedAt: normalizeUnixMilliseconds(request.requestedAt),
+    answeredAt:
+      request.answeredAt === null || request.answeredAt === undefined
+        ? request.answeredAt
+        : normalizeUnixMilliseconds(request.answeredAt),
+    status: status === "answered" ? "Answered" : "Pending",
+    questions: (request.questions ?? []).map((question) => ({
+      ...question,
+      options: (question.options ?? []).map((option) => ({ ...option })),
+    })),
   };
 }
 

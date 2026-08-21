@@ -64,8 +64,10 @@ import {
   createChatSession,
   deleteChatSession,
   getChatActiveRun,
+  listChatUserInputRequests,
   stopChatRun,
   steerChatMessage,
+  streamChatUserInputAnswer,
   streamChatMessage,
   updateChatSession,
   useChatAguiEvents,
@@ -141,6 +143,8 @@ import type {
   ChatTokenUsage,
   ChatUsageAuditSnapshot,
   SendChatMessageInput,
+  ChatUserInputAnswer,
+  ChatUserInputRequest,
   SetChatSessionGoalInput,
   UpdateChatSessionGoalInput,
 } from "@/domain/chat/model";
@@ -442,6 +446,9 @@ function findSession(groups: ChatSessionGroup[], sessionCode: string) {
 
 function orderSessionGroups(groups: ChatSessionGroup[]) {
   return [...groups].sort((left, right) => {
+    if ((left.pendingUserInputCount ?? 0) !== (right.pendingUserInputCount ?? 0)) {
+      return (right.pendingUserInputCount ?? 0) - (left.pendingUserInputCount ?? 0);
+    }
     if (!left.taskCode && right.taskCode) return -1;
     if (left.taskCode && !right.taskCode) return 1;
     return left.taskTitle.localeCompare(right.taskTitle);
@@ -1858,9 +1865,11 @@ function SessionActionMenu({
 }
 
 function SessionRunIndicator({
+  needsUserInput,
   running,
   unseen,
 }: {
+  needsUserInput: boolean;
   running: boolean;
   unseen: boolean;
 }) {
@@ -1868,6 +1877,14 @@ function SessionRunIndicator({
     return (
       <span className="inline-flex size-5 items-center justify-center" aria-label="Session running" title="Session running">
         <LoaderCircle className="animate-spin text-[var(--color-focus-ring)]" size={15} />
+      </span>
+    );
+  }
+
+  if (needsUserInput) {
+    return (
+      <span className="inline-flex size-5 items-center justify-center" aria-label="Waiting for your answer" title="Waiting for your answer">
+        <CircleAlert className="text-[var(--color-warning)]" size={15} />
       </span>
     );
   }
@@ -3063,6 +3080,7 @@ function SessionSidebar({
   onSourceTabSelect,
   runningSessionCode,
   sessionActionPendingCode,
+  pendingUserInputSessionCodes,
   unseenSessionCodes,
 }: {
   activeSessionCode: string;
@@ -3079,6 +3097,7 @@ function SessionSidebar({
   onSourceTabSelect: (sourceTab: ChatSessionSourceTab) => void;
   runningSessionCode: string;
   sessionActionPendingCode: string;
+  pendingUserInputSessionCodes: Set<string>;
   unseenSessionCodes: Set<string>;
 }) {
   const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set());
@@ -3221,6 +3240,7 @@ function SessionSidebar({
           </button>
         )}
         <SessionRunIndicator
+          needsUserInput={pendingUserInputSessionCodes.has(session.sessionCode)}
           running={runningSessionCode === session.sessionCode}
           unseen={unseenSessionCodes.has(session.sessionCode)}
         />
@@ -3272,7 +3292,11 @@ function SessionSidebar({
                 onFocus={(event) => showCollapsedTooltip(event.currentTarget, session)}
                 onBlur={hideCollapsedTooltip}
               >
-                <MessageSquareText className={sessionAgentIconTone(session.agentCode)} size={17} />
+                {pendingUserInputSessionCodes.has(session.sessionCode) ? (
+                  <CircleAlert className="text-[var(--color-warning)]" size={17} />
+                ) : (
+                  <MessageSquareText className={sessionAgentIconTone(session.agentCode)} size={17} />
+                )}
               </button>
             ))}
           </div>
@@ -3838,6 +3862,12 @@ export function ChatManagementPage() {
   const [shortTermMemoryRefreshKey, setShortTermMemoryRefreshKey] = useState(0);
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
+  const pendingUserInputSessionCodes = useMemo(
+    () => new Set(
+      sessionGroups.flatMap((group) => group.pendingUserInputSessionCodes ?? []),
+    ),
+    [sessionGroups],
+  );
   const [activeSessionCode, setActiveSessionCode] = useState("");
   const [activeSourceTab, setActiveSourceTab] = useState<ChatSessionSourceTab>(() => (
     requestedSourceTab ?? defaultChatSessionSourceTab
@@ -3896,6 +3926,8 @@ export function ChatManagementPage() {
   const [latestRequestEstimatesBySessionCode, setLatestRequestEstimatesBySessionCode] = useState<Record<string, ChatTokenEstimateSnapshot>>({});
   const [latestUsageAuditsBySessionCode, setLatestUsageAuditsBySessionCode] = useState<Record<string, ChatUsageAuditSnapshot>>({});
   const [sending, setSending] = useState(false);
+  const [userInputRequest, setUserInputRequest] = useState<ChatUserInputRequest | null>(null);
+  const [userInputAnswerPending, setUserInputAnswerPending] = useState(false);
   const [steering, setSteering] = useState(false);
   const [activeRunCode, setActiveRunCode] = useState("");
   const [activeRunSupportsSteer, setActiveRunSupportsSteer] = useState<boolean | null>(null);
@@ -3997,6 +4029,32 @@ export function ChatManagementPage() {
   const currentUserDisplayName = authSession?.user.displayName ?? "";
   const { createInspectionAttachmentUpload } = useInspection();
 
+  useEffect(() => {
+    let active = true;
+    const sessionCode = activeSession?.sessionCode ?? "";
+    if (!sessionCode) {
+      setUserInputRequest(null);
+      return () => {
+        active = false;
+      };
+    }
+    void listChatUserInputRequests(sessionCode)
+      .then((requests) => {
+        if (!active || activeSessionCodeRef.current !== sessionCode) return;
+        setUserInputRequest(
+          requests.find((request) => request.status === "Pending") ?? null,
+        );
+      })
+      .catch(() => {
+        if (active && activeSessionCodeRef.current === sessionCode) {
+          setUserInputRequest(null);
+        }
+      });
+    return () => {
+      active = false;
+    };
+  }, [activeChatDataRefreshKey, activeSession?.sessionCode]);
+
   function setSendingState(value: boolean) {
     sendingRef.current = value;
     setSending(value);
@@ -4076,6 +4134,7 @@ export function ChatManagementPage() {
     const input: SendChatMessageInput = {
       agentCode: effectiveAgentCode,
       appCode: session.appCode,
+      clientCapabilities: { userInputRequests: true },
       content,
       taskCode: session.taskCode,
       workspaceCode: session.workspaceCode,
@@ -4609,6 +4668,7 @@ export function ChatManagementPage() {
   const queueDisabled = Boolean(
     !activeSession
     || !selectedModel
+    || userInputRequest
     || (!composer.trim() && !pendingAttachments.length)
     || creatingSession,
   );
@@ -4621,6 +4681,7 @@ export function ChatManagementPage() {
       isRecentPendingUserTurn(visibleMessages)
       || hasOpenReplayRun
       || hasQueuedSubmissionForActiveSession
+      || Boolean(userInputRequest)
     )
   );
   const shouldPollActiveChatReplay = shouldPollChatRunRecovery({
@@ -5189,7 +5250,7 @@ export function ChatManagementPage() {
   }
 
   async function handleSend(contentOverride?: string, attachmentOverride?: ChatMessageAttachment[]) {
-    if (sendingRef.current) return;
+    if (sendingRef.current || userInputRequest || userInputAnswerPending) return;
     if (!activeSession) return;
     const rawContent = contentOverride ?? composer;
     const goalCommand = contentOverride === undefined
@@ -5424,6 +5485,11 @@ export function ChatManagementPage() {
         throw new Error("Chat stream observer closed");
       }
       shouldRestoreSourceSubmission = false;
+      setUserInputRequest(
+        result.userInputRequest?.status === "Pending"
+          ? result.userInputRequest
+          : null,
+      );
       setSessionGroups((current) => replaceSession(current, result.session));
       scheduleSessionTitleRefresh(result.session);
       setLatestRequestEstimatesBySessionCode((current) => {
@@ -5565,7 +5631,7 @@ export function ChatManagementPage() {
   }
 
   async function handleQueueMessage() {
-    if (queueDisabled || !activeSession) return;
+    if (queueDisabled || userInputRequest || userInputAnswerPending || !activeSession) return;
     const content = composer.trim();
     if (!content && !pendingAttachments.length) return;
     const sendInput = createSendInput(
@@ -5583,8 +5649,46 @@ export function ChatManagementPage() {
     await runChatInput(activeSession, sendInput);
   }
 
+  async function handleAnswerUserInput(answers: ChatUserInputAnswer[]) {
+    const targetSession = activeSession;
+    const request = userInputRequest;
+    if (!targetSession || !request || userInputAnswerPending) return;
+    setUserInputAnswerPending(true);
+    try {
+      const result = await streamChatUserInputAnswer(
+        targetSession,
+        request.requestCode,
+        { answers },
+      );
+      if (activeSessionCodeRef.current === targetSession.sessionCode) {
+        setVisibleMessages((current) =>
+          mergeChatMessagesChronologically(current, result.messages),
+        );
+        setUserInputRequest(
+          result.userInputRequest?.status === "Pending"
+            ? result.userInputRequest
+            : null,
+        );
+      }
+      setSessionGroups((current) => replaceSession(current, result.session));
+      setActiveChatDataRefreshKey((current) => current + 1);
+      setActiveRunRefreshKey((current) => current + 1);
+      setActiveChatReplayRefreshKey((current) => current + 1);
+      setShortTermMemoryRefreshKey((current) => current + 1);
+      toast.success("The assistant continued with your answers", {
+        title: "Answer submitted",
+      });
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Answer submission failed", {
+        title: "Answer submission failed",
+      });
+    } finally {
+      setUserInputAnswerPending(false);
+    }
+  }
+
   async function handleSteerMessage() {
-    if (steeringRef.current || steerDisabled || !activeSession) return;
+    if (steeringRef.current || steerDisabled || userInputRequest || userInputAnswerPending || !activeSession) return;
     const content = composer.trim();
     if (!content && !pendingAttachments.length) return;
     const sendInput = createSendInput(
@@ -6005,6 +6109,7 @@ export function ChatManagementPage() {
         collapsed={sidebarCollapsed}
         creatingSession={creatingSession}
         groups={sessionGroups}
+        pendingUserInputSessionCodes={pendingUserInputSessionCodes}
         runningSessionCode={runningSessionCode}
         sessionActionPendingCode={sessionActionPendingCode}
         unseenSessionCodes={unseenSessionCodes}
@@ -6089,6 +6194,7 @@ export function ChatManagementPage() {
           createSessionLabel="Create session"
           currentUserDisplayName={currentUserDisplayName}
           debugOptions={transcriptWorkReplayOptions}
+          disabledInput={Boolean(userInputRequest) || userInputAnswerPending}
           draft={composer}
           emptyDescription={activeWorkspaceCode
             ? "Create a new session or pick one from the left panel to view chat details and start messaging."
@@ -6107,6 +6213,7 @@ export function ChatManagementPage() {
           onEditMessage={setComposer}
           onEditQueuedMessage={handleEditQueuedMessage}
           onRemoveQueuedMessage={handleRemoveQueuedMessage}
+          onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
           onSend={(mode) => {
             void handleSubmit(mode);
           }}
@@ -6117,13 +6224,15 @@ export function ChatManagementPage() {
           queueDisabled={queueDisabled}
           queuedMessages={visibleQueuedSubmissions}
           runningSubmitModes={runningSubmitModes}
-          sendDisabled={!currentSessionRunActive && (sending || !activeSession || !selectedModel)}
+          sendDisabled={Boolean(userInputRequest) || (!currentSessionRunActive && (sending || !activeSession || !selectedModel))}
           sending={currentSessionRunActive}
           session={activeSession}
           showHeader={false}
           showStop={canStopCurrentRun}
           steerDisabled={steerDisabled}
           title={activeSession?.title ?? "Chat Management"}
+          userInputAnswerPending={userInputAnswerPending}
+          userInputRequest={userInputRequest}
         />
       </main>
       <ConfirmDialog

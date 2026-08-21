@@ -211,6 +211,7 @@ async fn run_automation_with_main_agent(
                 limits: None,
                 tools: Vec::new(),
                 attachments: Vec::new(),
+                client_capabilities: None,
             },
             model,
             None,

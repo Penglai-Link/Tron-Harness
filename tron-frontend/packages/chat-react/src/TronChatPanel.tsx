@@ -37,6 +37,8 @@ import {
   type ChatQueuedSubmission,
   type ChatRunningSubmitMode,
   type ChatSession,
+  type ChatUserInputAnswer,
+  type ChatUserInputRequest,
   type ChatSubmitMode,
   type ToolGroupWorkCard,
   type ToolWorkCard,
@@ -55,6 +57,7 @@ import {
 } from "react";
 import "github-markdown-css/github-markdown.css";
 import { ChatHistoryRail } from "./ChatHistoryRail";
+import { ChatUserInputCard } from "./ChatUserInputCard";
 import { buildChatHistoryTurns } from "./chatHistory";
 import { isImageAttachment, useAttachmentImageSource } from "./chatAttachments";
 
@@ -817,6 +820,9 @@ export interface TronChatPanelProps {
   steerDisabled?: boolean;
   stopLabel?: string;
   title?: string;
+  userInputRequest?: ChatUserInputRequest | null;
+  userInputAnswerPending?: boolean;
+  onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;
 }
 
 export function TronChatPanel({
@@ -863,6 +869,9 @@ export function TronChatPanel({
   steerDisabled = false,
   stopLabel = "Stop",
   title,
+  userInputRequest,
+  userInputAnswerPending = false,
+  onAnswerUserInput,
 }: TronChatPanelProps) {
   const transcriptRef = useRef<HTMLElement | null>(null);
   const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1093,6 +1102,13 @@ export function TronChatPanel({
             ) : null}
           </div>
           <footer className="tron-chat__footer">
+            {userInputRequest?.status === "Pending" && onAnswerUserInput ? (
+              <ChatUserInputCard
+                disabled={userInputAnswerPending}
+                onSubmit={onAnswerUserInput}
+                request={userInputRequest}
+              />
+            ) : null}
             {showJumpButton ? (
               <button
                 className="tron-chat__button tron-chat__jump"

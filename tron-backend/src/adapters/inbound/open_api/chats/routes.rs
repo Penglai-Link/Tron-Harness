@@ -6,13 +6,14 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    create_session, delete_session, list_agui_stream_events, list_agui_stream_protocol_events, list_messages,
-    list_session_groups, patch_session, send_message, steer_message, stream_message,
+    create_session, delete_session, list_agui_stream_events, list_agui_stream_protocol_events,
+    list_messages, list_session_groups, patch_session, send_message, steer_message, stream_message,
 };
+use super::run_control::{get_active_run, stop_run};
+use super::user_input::{answer_user_input, list_user_input_requests};
 use crate::adapters::inbound::http::chats::handler::{
     chat_attachment_body_limit, download_session_attachment, upload_session_attachment,
 };
-use super::run_control::{get_active_run, stop_run};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
@@ -37,6 +38,14 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/open-api/v1/chats/sessions/{session_code}/messages",
             get(list_messages).post(send_message),
+        )
+        .route(
+            "/open-api/v1/chats/sessions/{session_code}/user-input-requests",
+            get(list_user_input_requests),
+        )
+        .route(
+            "/open-api/v1/chats/sessions/{session_code}/user-input-requests/{request_code}/answers/stream",
+            post(answer_user_input),
         )
         .route(
             "/open-api/v1/chats/sessions/{session_code}/messages/stream",

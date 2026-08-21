@@ -18,6 +18,8 @@ import {
   type ChatRunningSubmitMode,
   type ChatSession,
   type ChatSubmitMode,
+  type ChatUserInputAnswer,
+  type ChatUserInputRequest,
   type SendChatMessageInput,
   isRecentPendingUserTurn,
   isSteerQueueFallbackCode,
@@ -75,6 +77,8 @@ const normalizedInitialSession = computed(() =>
 );
 const session = ref<ChatSession | null>(normalizedInitialSession.value);
 const messages = ref<ChatMessage[]>([]);
+const userInputRequest = ref<ChatUserInputRequest | null>(null);
+const userInputAnswerPending = ref(false);
 const aguiEvents = ref<ChatAguiEvent[]>([]);
 const protocolEvents = ref<ChatAguiStreamEvent[]>([]);
 const liveAguiEvents = ref<ChatAguiStreamEvent[]>([]);
@@ -268,6 +272,7 @@ function createSendInput(
     appCode: normalizeOptionalValue(
       activeSession.appCode ?? props.config.appCode,
     ),
+    clientCapabilities: { userInputRequests: true },
     content,
     taskCode: normalizeOptionalValue(
       activeSession.taskCode ?? props.config.taskCode,
@@ -451,6 +456,7 @@ watch(
       messages.value = [];
       aguiEvents.value = [];
       protocolEvents.value = [];
+      userInputRequest.value = null;
       remoteActiveRun.value = null;
       pendingProtocolTerminalRun.value = null;
       activeRunStatusPending.value = false;
@@ -467,12 +473,16 @@ watch(
         protocolReplayEnabled.value && activeAdapter.value.loadProtocolEvents
           ? activeAdapter.value.loadProtocolEvents(nextSessionCode)
           : Promise.resolve([]),
+        activeAdapter.value.capabilities.supportsUserInputRequests && activeAdapter.value.loadUserInputRequests
+          ? activeAdapter.value.loadUserInputRequests(nextSessionCode, abortController.signal)
+          : Promise.resolve([]),
       ]).then(
-        ([nextMessages, nextAguiEvents, nextProtocolEvents]) => ({
+        ([nextMessages, nextAguiEvents, nextProtocolEvents, nextUserInputRequests]) => ({
           kind: "success" as const,
           nextAguiEvents,
           nextMessages,
           nextProtocolEvents,
+          nextUserInputRequests,
         }),
         (error: unknown) => ({ error, kind: "failure" as const }),
       ),
@@ -483,6 +493,9 @@ watch(
       messages.value = dataResult.nextMessages;
       aguiEvents.value = dataResult.nextAguiEvents;
       protocolEvents.value = dataResult.nextProtocolEvents;
+      userInputRequest.value = dataResult.nextUserInputRequests.find(
+        (request) => request.status === "Pending",
+      ) ?? null;
     } else {
       const message =
         dataResult.error instanceof Error
@@ -512,6 +525,7 @@ const shouldPollData = computed(() =>
   Boolean(
     session.value?.sessionCode &&
       (isRecentPendingUserTurn(messages.value) ||
+        Boolean(userInputRequest.value) ||
         (protocolReplayEnabled.value &&
           openAguiProtocolRunCodes(
             protocolEvents.value,
@@ -547,12 +561,16 @@ watch(
           protocolReplayEnabled.value && activeAdapter.value.loadProtocolEvents
             ? activeAdapter.value.loadProtocolEvents(sessionCode)
             : Promise.resolve([]),
+          activeAdapter.value.capabilities.supportsUserInputRequests && activeAdapter.value.loadUserInputRequests
+            ? activeAdapter.value.loadUserInputRequests(sessionCode)
+            : Promise.resolve([]),
         ]).then(
-          ([nextMessages, nextAguiEvents, nextProtocolEvents]) => ({
+          ([nextMessages, nextAguiEvents, nextProtocolEvents, nextUserInputRequests]) => ({
             kind: "success" as const,
             nextAguiEvents,
             nextMessages,
             nextProtocolEvents,
+            nextUserInputRequests,
           }),
           () => ({ kind: "failure" as const }),
         ),
@@ -564,6 +582,9 @@ watch(
           messages.value = dataResult.nextMessages;
           aguiEvents.value = dataResult.nextAguiEvents;
           protocolEvents.value = dataResult.nextProtocolEvents;
+          userInputRequest.value = dataResult.nextUserInputRequests.find(
+            (request) => request.status === "Pending",
+          ) ?? null;
           protocolSnapshot = dataResult.nextProtocolEvents;
         }
         if (activeRunResult.kind === "success") {
@@ -590,7 +611,7 @@ watch(
 );
 
 const sendDisabled = computed(() => {
-  if (loading.value || props.config.disabledInput) return true;
+  if (loading.value || props.config.disabledInput || userInputRequest.value) return true;
   if (!draft.value.trim()) return true;
   return !session.value && !props.config.workspaceCode;
 });
@@ -598,6 +619,7 @@ const queueDisabled = computed(
   () =>
     loading.value ||
     Boolean(props.config.disabledInput) ||
+    Boolean(userInputRequest.value) ||
     !draft.value.trim() ||
     !session.value,
 );
@@ -771,6 +793,10 @@ async function runMessage(
       activeSessionCode: activeSessionCodeRef.value,
       observer,
     });
+    userInputRequest.value =
+      result.userInputRequest?.status === "Pending"
+        ? result.userInputRequest
+        : null;
     streamSucceeded = settlement.streamSucceeded;
     shouldRestoreSourceSubmission = settlement.restoreSourceSubmission;
 
@@ -935,7 +961,7 @@ async function runMessage(
 }
 
 async function handleSend() {
-  if (sendDisabled.value) return;
+  if (sendDisabled.value || userInputRequest.value || userInputAnswerPending.value) return;
   const activeSession = await ensureSession();
   if (!activeSession) return;
   const content = draft.value.trim();
@@ -950,7 +976,7 @@ async function handleSend() {
 }
 
 async function handleQueue() {
-  if (queueDisabled.value) return;
+  if (queueDisabled.value || userInputRequest.value || userInputAnswerPending.value) return;
   const activeSession = await ensureSession();
   if (!activeSession) return;
   const content = draft.value.trim();
@@ -965,7 +991,7 @@ async function handleQueue() {
 }
 
 async function handleSteer() {
-  if (steerDisabled.value) return;
+  if (steerDisabled.value || userInputRequest.value || userInputAnswerPending.value) return;
   const activeSession = session.value;
   if (!activeSession) return;
   const content = draft.value.trim();
@@ -1058,6 +1084,48 @@ async function handleSubmit(mode: ChatSubmitMode = "send") {
     return;
   }
   await handleSend();
+}
+
+async function handleAnswerUserInput(answers: ChatUserInputAnswer[]) {
+  const activeSession = session.value;
+  const request = userInputRequest.value;
+  const adapter = activeAdapter.value;
+  if (
+    !activeSession ||
+    !request ||
+    userInputAnswerPending.value ||
+    !adapter.answerUserInputRequestStream
+  ) {
+    return;
+  }
+  userInputAnswerPending.value = true;
+  try {
+    const result = await adapter.answerUserInputRequestStream(
+      activeSession,
+      request.requestCode,
+      { answers },
+      undefined,
+    );
+    if (activeSessionCodeRef.value !== activeSession.sessionCode) return;
+    const nextMessages = await adapter.loadMessages(activeSession.sessionCode).catch(() => null);
+    messages.value = nextMessages
+      ? nextMessages
+      : mergeChatMessagesChronologically(messages.value, result.messages);
+    userInputRequest.value =
+      result.userInputRequest?.status === "Pending"
+        ? result.userInputRequest
+        : null;
+    session.value = result.session;
+    await refreshActiveRun(activeSession.sessionCode, undefined, false).catch(() => undefined);
+    reportInfo("The assistant continued with your answers", "Answer submitted");
+  } catch (error) {
+    reportError(
+      error instanceof Error ? error.message : "Answer submission failed",
+      "Answer submission failed",
+    );
+  } finally {
+    userInputAnswerPending.value = false;
+  }
 }
 
 function handleEditQueuedMessage(id: string, content: string) {
@@ -1156,6 +1224,7 @@ function handleNewSession() {
   stopAbortRef.value?.abort();
   session.value = null;
   messages.value = [];
+  userInputRequest.value = null;
   aguiEvents.value = [];
   protocolEvents.value = [];
   liveAguiEvents.value = [];
@@ -1223,7 +1292,7 @@ const panelCommonProps = computed(() => ({
   createSessionLabel: "Start chat",
   currentUserDisplayName: props.currentUserDisplayName,
   debugOptions: resolvedDebugOptions.value,
-  disabledInput: Boolean(props.config.disabledInput),
+  disabledInput: Boolean(props.config.disabledInput) || Boolean(userInputRequest.value),
   draft: draft.value,
   emptyDescription: props.config.workspaceCode
     ? "Open a session and start talking to your configured agent."
@@ -1241,6 +1310,9 @@ const panelCommonProps = computed(() => ({
   onEditMessage: handleEditMessage,
   onEditQueuedMessage: handleEditQueuedMessage,
   onRemoveQueuedMessage: handleRemoveQueuedMessage,
+  onAnswerUserInput: (answers: ChatUserInputAnswer[]) => {
+    void handleAnswerUserInput(answers);
+  },
   onSend: (mode?: ChatSubmitMode) => {
     void handleSubmit(mode);
   },
@@ -1251,14 +1323,16 @@ const panelCommonProps = computed(() => ({
   queueDisabled: queueDisabled.value,
   queuedMessages: visibleQueuedSubmissions.value,
   runningSubmitModes: runningSubmitModes.value,
-  sendDisabled: sendDisabled.value,
+  sendDisabled: sendDisabled.value || Boolean(userInputRequest.value),
   sending: runActive.value,
   session: session.value,
   showAgui: aguiEnabled.value,
   showStop: canStop.value,
-  steerDisabled: steerDisabled.value,
+  steerDisabled: steerDisabled.value || Boolean(userInputRequest.value),
   stopLabel: "Stop",
   title: props.config.title || props.floatingTitle,
+  userInputAnswerPending: userInputAnswerPending.value,
+  userInputRequest: userInputRequest.value,
 }));
 
 function handleWindowStateChange(state: ChatFloatingState) {

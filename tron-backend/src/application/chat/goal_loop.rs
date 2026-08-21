@@ -10,12 +10,12 @@ use crate::{
     },
     domain::{
         agent::{AgentModelConfig, EffectiveTool},
-        chat::{ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession},
+        chat::{ChatMessageChannel, ChatMessageRole, ChatSession},
     },
     shared::time::current_timestamp,
 };
 
-use super::service::{ChatSendError, ChatService};
+use super::service::{ChatSendError, ChatService, GoalContinuationResult, raw_user_input_request};
 
 impl ChatService {
     #[allow(clippy::too_many_arguments)]
@@ -35,7 +35,8 @@ impl ChatService {
         short_term_memory: ShortTermMemoryService,
         mut last_run: AgentInvocationResult,
         mut runtime_session_id: Option<String>,
-    ) -> Result<Vec<ChatMessage>, ChatSendError> {
+        supports_user_input_requests: bool,
+    ) -> Result<GoalContinuationResult, ChatSendError> {
         let mut messages = Vec::new();
         for _ in 0..20 {
             let judge_input = short_term_memory
@@ -156,6 +157,7 @@ impl ChatService {
                 limits: None,
                 tools: tools.clone(),
                 attachments: Vec::new(),
+                supports_user_input_requests,
                 transcript_input_kind: Some("CONTINUATION".into()),
                 transcript_input_metadata: Some(json!({
                     "goalCode": decision.goal_code,
@@ -168,6 +170,11 @@ impl ChatService {
                 .invoke(invocation, user_code.clone(), locale.clone())
                 .await
                 .map_err(ChatSendError::Agent)?;
+            let raw_user_input_request = if run.status == "AWAITING_USER_INPUT" {
+                Some(raw_user_input_request(&run)?)
+            } else {
+                None
+            };
             let channel = if task_code.is_some() {
                 ChatMessageChannel::TaskAgent
             } else {
@@ -179,10 +186,23 @@ impl ChatService {
                 ChatMessageRole::Assistant,
                 channel,
                 "Assistant",
-                &run.final_output,
+                raw_user_input_request
+                    .as_ref()
+                    .map(|request| request.intro.as_str())
+                    .unwrap_or(run.final_output.as_str()),
                 Vec::new(),
                 run.token_usage,
             )?;
+            let user_input_request = if let Some(raw) = raw_user_input_request {
+                Some(self.persist_user_input_request(
+                    session_code,
+                    &run,
+                    &assistant_message,
+                    raw,
+                )?)
+            } else {
+                None
+            };
             let updated_at = current_timestamp();
             if let Some(next_runtime_session_id) = run.system_agent_session_id.as_deref() {
                 self.repository()
@@ -209,7 +229,16 @@ impl ChatService {
                 .map_err(ChatSendError::Chat)?;
             last_run = run;
             messages.push(assistant_message);
+            if user_input_request.is_some() {
+                return Ok(GoalContinuationResult {
+                    messages,
+                    user_input_request,
+                });
+            }
         }
-        Ok(messages)
+        Ok(GoalContinuationResult {
+            messages,
+            user_input_request: None,
+        })
     }
 }

@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use crate::shared::event_bus::BusOutcome;
 use crate::{
+    application::agent::CHAT_ASK_USER_TOOL,
     application::short_term_memory::ToolTranscriptStatus,
     domain::agent::{
         AgentError, AgentRunContext, ExpandedDomainPersistenceMode, ToolCall, ToolContextDelta,
@@ -21,6 +22,14 @@ impl ReactAgent {
         calls: Vec<ToolCall>,
     ) -> Result<(), AgentError> {
         if calls.len() > 1 {
+            if calls
+                .iter()
+                .any(|call| call.tool_name == CHAT_ASK_USER_TOOL)
+            {
+                return Err(AgentError::InvalidConfiguration(
+                    "chat.ask_user must be the only tool call in a model turn".into(),
+                ));
+            }
             self.execute_tool_call_batches(context, tool_calls, turn_state, calls)
                 .await
         } else {
@@ -110,6 +119,7 @@ impl ReactAgent {
         let execution_result = handle.await.map_err(|error| {
             AgentError::ToolFailure(format!("serial tool execution join failed: {error}"))
         })?;
+        let mut awaiting_user_input = false;
         match execution_result {
             Ok(execution) => {
                 let observation = execution.observation;
@@ -135,6 +145,7 @@ impl ReactAgent {
                 context.messages.push(message);
                 let completed_tool_name = observation.tool_name.clone();
                 context.observations.push(observation);
+                awaiting_user_input = completed_tool_name == CHAT_ASK_USER_TOOL;
                 collapse_ephemeral_expanded_domains(context, completed_tool_name.as_str());
                 self.publish_tool(
                     &context,
@@ -169,6 +180,10 @@ impl ReactAgent {
                     error_message,
                 )?;
             }
+        }
+
+        if awaiting_user_input {
+            return Err(AgentError::AwaitingUserInput);
         }
 
         Ok(())

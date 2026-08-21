@@ -27,8 +27,9 @@ pub use active_run::{
 };
 pub use agui_stream::{AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStreamService};
 pub use business_tools::{
-    DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, build_domain_discovery_guidance,
-    discovery_expand_tool_definition, register_default_agent_tools, tool_record_to_effective_tool,
+    CHAT_ASK_USER_TOOL, DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, ask_user_definition,
+    build_domain_discovery_guidance, discovery_expand_tool_definition,
+    register_default_agent_tools, tool_record_to_effective_tool,
 };
 pub use canonical_event::CanonicalRuntimeEvent;
 pub use dto::{AgentInvocationCommand, AgentInvocationResult};

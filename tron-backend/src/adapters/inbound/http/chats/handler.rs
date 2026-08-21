@@ -41,8 +41,8 @@ use super::error_mapper::{
     steer_chat_message_request_rejection_response,
 };
 use super::protocol_replay::record_protocol_event;
-use super::request::SteerChatMessageRequest;
-use super::response::ChatSteerResultResponse;
+use super::request::{AnswerChatUserInputRequest, SteerChatMessageRequest};
+use super::response::{ChatSteerResultResponse, ChatUserInputRequestResponse};
 use super::stream_live::{SystemAgentLiveEventBuilder, SystemAgentLiveReplayRecorder};
 use super::stream_task::{ChatStreamForwardingGate, ChatStreamLifecycleGuard};
 mod shared;
@@ -195,6 +195,43 @@ pub async fn list_messages(
     }
 }
 
+pub async fn list_user_input_requests(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    Path(session_code): Path<String>,
+) -> Response {
+    match state.chats.list_user_input_requests(&session_code) {
+        Ok(requests) => Json(ApiResponse::success(
+            requests
+                .into_iter()
+                .map(ChatUserInputRequestResponse::from)
+                .collect::<Vec<_>>(),
+        ))
+        .into_response(),
+        Err(error) => chat_error_response(error),
+    }
+}
+
+pub async fn answer_user_input(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path((session_code, request_code)): Path<(String, String)>,
+    request: Result<Json<AnswerChatUserInputRequest>, JsonRejection>,
+) -> Response {
+    let Json(request) = match request {
+        Ok(request) => request,
+        Err(error) => return steer_chat_message_request_rejection_response(error),
+    };
+    let command = match state
+        .chats
+        .answer_user_input(&session_code, &request_code, request.answers)
+    {
+        Ok(command) => command,
+        Err(error) => return chat_error_response(error),
+    };
+    stream_message_command(state, auth, session_code, command).await
+}
+
 pub async fn patch_session(
     State(state): State<AppState>,
     _auth: RequestAuthContext,
@@ -217,6 +254,9 @@ pub async fn send_message(
         return chat_error_response(ChatError::SessionNotFound);
     };
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
+    if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
         return response;
     }
     let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
@@ -299,12 +339,24 @@ pub async fn stream_message(
     State(state): State<AppState>,
     auth: RequestAuthContext,
     Path(session_code): Path<String>,
-    Json(mut request): Json<SendChatMessageCommand>,
+    Json(request): Json<SendChatMessageCommand>,
+) -> Response {
+    stream_message_command(state, auth, session_code, request).await
+}
+
+pub(crate) async fn stream_message_command(
+    state: AppState,
+    auth: RequestAuthContext,
+    session_code: String,
+    mut request: SendChatMessageCommand,
 ) -> Response {
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
     };
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
+    if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
         return response;
     }
     let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
@@ -516,6 +568,23 @@ pub async fn stream_message(
     Sse::new(stream)
         .keep_alive(KeepAlive::default())
         .into_response()
+}
+
+pub(crate) fn ensure_no_pending_user_input(
+    state: &AppState,
+    session_code: &str,
+) -> Result<(), Response> {
+    match state.chats.list_user_input_requests(session_code) {
+        Ok(requests)
+            if requests.iter().any(|request| {
+                request.status == crate::domain::chat::ChatUserInputRequestStatus::Pending
+            }) =>
+        {
+            Err(chat_error_response(ChatError::UserInputPending))
+        }
+        Ok(_) => Ok(()),
+        Err(error) => Err(chat_error_response(error)),
+    }
 }
 
 pub(crate) fn run_started_with_supports_steer(

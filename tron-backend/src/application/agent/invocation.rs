@@ -204,6 +204,10 @@ impl AgentInvocationService {
         match execution {
             Ok(orchestrated) => {
                 let result = orchestrated.run;
+                let awaiting_user_input = result
+                    .observations
+                    .iter()
+                    .any(|observation| observation.tool_name == super::CHAT_ASK_USER_TOOL);
                 let finished_at = current_timestamp();
                 let token_usage = result.token_usage;
                 self.history
@@ -215,10 +219,14 @@ impl AgentInvocationService {
                         user_code,
                         app_code,
                         task_code,
-                        model_code,
+                        model_code: model_code.clone(),
                         reasoning_effort,
                         status: AgentRunStatus::Completed,
-                        outcome: "completed".into(),
+                        outcome: if awaiting_user_input {
+                            "awaiting_user_input".into()
+                        } else {
+                            "completed".into()
+                        },
                         step_count: result.step_count,
                         observation_count: result.observations.len() as u32,
                         input_tokens: token_usage.map(|usage| usage.input_tokens),
@@ -236,15 +244,21 @@ impl AgentInvocationService {
                     run_code: result.run_code,
                     conversation_code: result.conversation_code,
                     workspace_code: result.workspace_code,
+                    model_code,
                     runtime_adapter_key: orchestrated.runtime_adapter_key,
                     reasoning_effort,
-                    status: "COMPLETED",
+                    status: if awaiting_user_input {
+                        "AWAITING_USER_INPUT"
+                    } else {
+                        "COMPLETED"
+                    },
                     final_output: result.final_output,
                     step_count: result.step_count,
                     token_usage,
                     latest_request_estimate: result.latest_request_estimate,
                     latest_usage_audit: result.latest_usage_audit,
                     system_agent_session_id: result.system_agent_session_id,
+                    observations: result.observations,
                 })
             }
             Err(invocation_error) => {

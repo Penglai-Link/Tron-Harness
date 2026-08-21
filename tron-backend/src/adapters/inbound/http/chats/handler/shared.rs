@@ -85,6 +85,16 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "CHAT_SESSION_TITLE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "CHAT_WORKSPACE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => "CHAT_WORKSPACE_FORBIDDEN",
+        ChatSendError::Chat(ChatError::UserInputAlreadyAnswered) => {
+            "CHAT_USER_INPUT_ALREADY_ANSWERED"
+        }
+        ChatSendError::Chat(ChatError::UserInputAnswerInvalid(_)) => {
+            "CHAT_USER_INPUT_ANSWER_INVALID"
+        }
+        ChatSendError::Chat(ChatError::UserInputPending) => "CHAT_USER_INPUT_PENDING",
+        ChatSendError::Chat(ChatError::UserInputRequestNotFound) => {
+            "CHAT_USER_INPUT_REQUEST_NOT_FOUND"
+        }
         ChatSendError::Chat(ChatError::StorageFailure) => "CHAT_STORAGE_FAILED",
         ChatSendError::Agent(error) => error.code(),
         ChatSendError::RunAlreadyActive { .. } => "CHAT_RUN_ALREADY_ACTIVE",
@@ -103,6 +113,16 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "workspaceCode is required".into(),
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => {
             "workspace access is forbidden".into()
+        }
+        ChatSendError::Chat(ChatError::UserInputAlreadyAnswered) => {
+            "chat user input request is already answered".into()
+        }
+        ChatSendError::Chat(ChatError::UserInputAnswerInvalid(message)) => message,
+        ChatSendError::Chat(ChatError::UserInputPending) => {
+            "chat session is waiting for a user answer".into()
+        }
+        ChatSendError::Chat(ChatError::UserInputRequestNotFound) => {
+            "chat user input request was not found".into()
         }
         ChatSendError::Chat(ChatError::StorageFailure) => "chat storage failed".into(),
         ChatSendError::Agent(error) => error.message(),

@@ -7,6 +7,7 @@ import {
   normalizeChatSendResult,
   normalizeChatSession,
   normalizeChatSteerResult,
+  normalizeChatUserInputRequest,
   type ChatAdapter,
   type ChatActiveRunResult,
   type ChatAttachmentUploadInput,
@@ -18,6 +19,8 @@ import {
   type ChatSession,
   type ChatSteerResult,
   type ChatStopResult,
+  type ChatUserInputAnswerInput,
+  type ChatUserInputRequest,
   type CreateChatSessionInput,
   type GenerateTerminalCommandInput,
   type GenerateTerminalCommandResult,
@@ -67,6 +70,7 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
       supportsSteer: true,
       supportsStop: true,
       supportsStreaming: true,
+      supportsUserInputRequests: true,
     },
     createSession(input: CreateChatSessionInput) {
       return transport.requestJson<ChatSession>({
@@ -144,6 +148,13 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         pathParams: { sessionCode },
       }).then((messages) => messages.map(normalizeChatMessage));
     },
+    loadUserInputRequests(sessionCode, signal) {
+      return transport.requestJson<ChatUserInputRequest[]>({
+        path: "/api/v1/chats/sessions/{sessionCode}/user-input-requests",
+        pathParams: { sessionCode },
+        signal,
+      }).then((requests) => requests.map(normalizeChatUserInputRequest));
+    },
     async loadProtocolEvents(sessionCode: string) {
       const payload = await transport.requestJson<AguiProtocolEvent[]>({
         path: "/api/v1/agents/agui/streams/{streamKey}/protocol-events",
@@ -201,7 +212,13 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
     },
     streamMessage(session: ChatSession, input: SendChatMessageInput, handlers, signal) {
       return transport.streamSse<ChatSendResult>({
-        body: input,
+        body: {
+          ...input,
+          clientCapabilities: {
+            ...input.clientCapabilities,
+            userInputRequests: true,
+          },
+        },
         handlers: {
           onFrame: (eventName, payload) => {
             const type = String(payload.type ?? eventName).toUpperCase();
@@ -230,6 +247,37 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         },
         path: "/api/v1/chats/sessions/{sessionCode}/messages/stream",
         pathParams: { sessionCode: session.sessionCode },
+        signal,
+      });
+    },
+    answerUserInputRequestStream(session, requestCode, input: ChatUserInputAnswerInput, handlers, signal) {
+      return transport.streamSse<ChatSendResult>({
+        body: input,
+        handlers: {
+          onFrame: (eventName, payload) => {
+            const type = String(payload.type ?? eventName).toUpperCase();
+            const aguiEvent = { ...payload, type } as ChatAguiStreamEvent;
+            handlers?.onAguiEvent?.(aguiEvent);
+            if (type === "TEXT_MESSAGE_CONTENT" && typeof payload.delta === "string") {
+              handlers?.onDelta?.(payload.delta);
+            }
+          },
+        },
+        onResult: (payload) => {
+          const type = String(payload.type ?? "").toUpperCase();
+          if (type === "RUN_ERROR") {
+            throw new FetchTransportError(String(payload.message ?? payload.code ?? "Chat stream failed"), {
+              code: typeof payload.code === "string" ? payload.code : undefined,
+              data: payload,
+              status: 200,
+            });
+          }
+          return type === "RUN_FINISHED" && payload.result
+            ? normalizeChatSendResult(payload.result as ChatSendResult)
+            : null;
+        },
+        path: "/api/v1/chats/sessions/{sessionCode}/user-input-requests/{requestCode}/answers/stream",
+        pathParams: { requestCode, sessionCode: session.sessionCode },
         signal,
       });
     },

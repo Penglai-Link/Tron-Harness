@@ -237,6 +237,72 @@ describe("createInternalChatAdapter", () => {
       sessionCode: "SESSION-1",
     });
   });
+
+  it("loads user questions and continues the run through the answer stream", async () => {
+    const request = {
+      answeredAt: null,
+      answers: null,
+      intro: "Choose a direction",
+      questions: [],
+      requestCode: "INPUT-1",
+      runCode: "RUN-1",
+      sessionCode: "SESSION-1",
+      status: "Pending",
+      requestedAt: 1_718_100_000_000,
+    };
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+          type: "RUN_FINISHED",
+          result: {
+            messages: [],
+            run: {
+              finalOutput: "continued",
+              runCode: "RUN-2",
+              status: "COMPLETED",
+              stepCount: 1,
+              workspaceCode: "TRON_CORE",
+            },
+            session: sessionFixture(),
+          },
+        })}\n\n`));
+        controller.close();
+      },
+    });
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(new Response(JSON.stringify(successEnvelope([request])), {
+        headers: { "Content-Type": "application/json" },
+        status: 200,
+      }))
+      .mockResolvedValueOnce(new Response(stream, {
+        headers: { "Content-Type": "text/event-stream" },
+        status: 200,
+      }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createInternalChatAdapter({
+      baseUrl: "https://internal.example.com",
+    });
+
+    await expect(adapter.loadUserInputRequests?.("SESSION-1")).resolves.toEqual([request]);
+    await adapter.answerUserInputRequestStream?.(
+      sessionFixture(),
+      "INPUT-1",
+      { answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }] },
+    );
+
+    const [listUrl] = fetchMock.mock.calls[0] ?? [];
+    const [answerUrl, answerInit] = fetchMock.mock.calls[1] ?? [];
+    expect(listUrl).toBe(
+      "https://internal.example.com/api/v1/chats/sessions/SESSION-1/user-input-requests",
+    );
+    expect(answerUrl).toBe(
+      "https://internal.example.com/api/v1/chats/sessions/SESSION-1/user-input-requests/INPUT-1/answers/stream",
+    );
+    expect(JSON.parse(String(answerInit?.body))).toEqual({
+      answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }],
+    });
+  });
 });
 
 describe("createInternalTerminalAdapter", () => {

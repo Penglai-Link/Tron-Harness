@@ -1,3 +1,4 @@
+mod ask_user;
 mod coding_tools;
 mod discovery;
 mod memory_tools;
@@ -29,6 +30,7 @@ use crate::{
     domain::agent::ToolCatalogRecord,
 };
 
+pub use ask_user::{CHAT_ASK_USER_TOOL, ask_user_definition};
 pub use discovery::{
     DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, build_domain_discovery_guidance,
     discovery_expand_tool_definition,
@@ -92,6 +94,7 @@ where
         short_term_memory,
     ));
     tools.push(discovery::discovery_tool());
+    tools.push(ask_user::ask_user_tool());
 
     for tool in tools {
         registry.register(tool)?;

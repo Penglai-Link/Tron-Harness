@@ -114,6 +114,7 @@ impl AgentRunContextBuilder {
             limits: requested_limits,
             tools: requested_tools,
             attachments: requested_attachments,
+            supports_user_input_requests,
             transcript_input_kind,
             transcript_input_metadata,
         } = command;
@@ -290,6 +291,18 @@ impl AgentRunContextBuilder {
             );
             effective_tools.extend(materialization.tools.iter().cloned());
             tools.extend(materialization.tools);
+        }
+
+        if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
+            && requested_conversation_code.is_some()
+            && supports_user_input_requests
+            && tools
+                .iter()
+                .all(|tool| tool.tool_name != crate::application::agent::CHAT_ASK_USER_TOOL)
+        {
+            let ask_user = crate::application::agent::ask_user_definition();
+            tools.push(ask_user.clone());
+            effective_tools.push(ask_user);
         }
 
         let mut messages = Vec::new();

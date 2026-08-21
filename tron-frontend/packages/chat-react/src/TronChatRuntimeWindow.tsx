@@ -25,6 +25,8 @@ import {
   type ChatSession,
   type ChatSendResult,
   type ChatSubmitMode,
+  type ChatUserInputAnswer,
+  type ChatUserInputRequest,
   type SendChatMessageInput,
 } from "@tron/chat-core";
 import { FileText, Paperclip, X } from "lucide-react";
@@ -158,6 +160,8 @@ export function TronChatRuntimeWindow({
   );
   const [session, setSession] = useState<ChatSession | null>(normalizedInitialSession);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [userInputRequest, setUserInputRequest] = useState<ChatUserInputRequest | null>(null);
+  const [userInputAnswerPending, setUserInputAnswerPending] = useState(false);
   const [aguiEvents, setAguiEvents] = useState<ChatAguiEvent[]>([]);
   const [protocolEvents, setProtocolEvents] = useState<ChatAguiStreamEvent[]>([]);
   const [liveAguiEvents, setLiveAguiEvents] = useState<ChatAguiStreamEvent[]>([]);
@@ -349,6 +353,7 @@ export function TronChatRuntimeWindow({
     const input: SendChatMessageInput = {
       agentCode: normalizeOptionalValue(config.agentCode),
       appCode: normalizeOptionalValue(activeSession.appCode ?? config.appCode),
+      clientCapabilities: { userInputRequests: true },
       content,
       taskCode: normalizeOptionalValue(activeSession.taskCode ?? config.taskCode),
       workspaceCode: activeSession.workspaceCode,
@@ -444,7 +449,7 @@ export function TronChatRuntimeWindow({
       }
       setLoading(true);
       try {
-        const [nextMessages, nextAguiEvents, nextProtocolEvents, nextActiveRun] = await Promise.all([
+        const [nextMessages, nextAguiEvents, nextProtocolEvents, nextActiveRun, nextUserInputRequests] = await Promise.all([
           activeAdapter.loadMessages(session.sessionCode),
           aguiEnabled ? activeAdapter.loadAguiEvents(session.sessionCode) : Promise.resolve([]),
           protocolReplayEnabled && activeAdapter.loadProtocolEvents
@@ -452,11 +457,15 @@ export function TronChatRuntimeWindow({
             : Promise.resolve([]),
           loadActiveRunSnapshot(session.sessionCode, abortController.signal)
             .catch(() => undefined),
+          activeAdapter.capabilities.supportsUserInputRequests && activeAdapter.loadUserInputRequests
+            ? activeAdapter.loadUserInputRequests(session.sessionCode, abortController.signal)
+            : Promise.resolve([]),
         ]);
         if (!active) return;
         setMessages(nextMessages);
         setAguiEvents(nextAguiEvents);
         setProtocolEvents(nextProtocolEvents);
+        setUserInputRequest(nextUserInputRequests.find((request) => request.status === "Pending") ?? null);
         if (nextActiveRun !== undefined) {
           replaceRemoteActiveRun(nextActiveRun);
           if (nextActiveRun) {
@@ -503,6 +512,7 @@ export function TronChatRuntimeWindow({
       || activeRunStatusPending
       || awaitingRemoteTerminal
       || isRecentPendingUserTurn(messages)
+      || Boolean(userInputRequest)
       || (protocolReplayEnabled && openAguiProtocolRunCodes(protocolEvents, session.sessionCode).size > 0)
     ),
   );
@@ -512,18 +522,22 @@ export function TronChatRuntimeWindow({
     const intervalId = window.setInterval(async () => {
       if (!session?.sessionCode) return;
       try {
-        const [nextMessages, nextAguiEvents, nextProtocolEvents, nextActiveRun] = await Promise.all([
+        const [nextMessages, nextAguiEvents, nextProtocolEvents, nextActiveRun, nextUserInputRequests] = await Promise.all([
           activeAdapter.loadMessages(session.sessionCode),
           aguiEnabled ? activeAdapter.loadAguiEvents(session.sessionCode) : Promise.resolve([]),
           protocolReplayEnabled && activeAdapter.loadProtocolEvents
             ? activeAdapter.loadProtocolEvents(session.sessionCode)
             : Promise.resolve([]),
           loadActiveRunSnapshot(session.sessionCode).catch(() => undefined),
+          activeAdapter.capabilities.supportsUserInputRequests && activeAdapter.loadUserInputRequests
+            ? activeAdapter.loadUserInputRequests(session.sessionCode)
+            : Promise.resolve([]),
         ]);
         if (activeSessionCodeRef.current !== session.sessionCode) return;
         setMessages(nextMessages);
         setAguiEvents(nextAguiEvents);
         setProtocolEvents(nextProtocolEvents);
+        setUserInputRequest(nextUserInputRequests.find((request) => request.status === "Pending") ?? null);
         if (nextActiveRun !== undefined) {
           replaceRemoteActiveRun(nextActiveRun);
           if (nextActiveRun) {
@@ -550,7 +564,7 @@ export function TronChatRuntimeWindow({
       }
     }, 1000);
     return () => window.clearInterval(intervalId);
-  }, [activeAdapter, aguiEnabled, messages, protocolEvents, protocolReplayEnabled, session?.sessionCode, shouldPollData]);
+  }, [activeAdapter, aguiEnabled, messages, protocolEvents, protocolReplayEnabled, session?.sessionCode, shouldPollData, userInputRequest]);
 
   useEffect(() => {
     const sessionCode = session?.sessionCode;
@@ -598,13 +612,13 @@ export function TronChatRuntimeWindow({
   }, [protocolEvents, protocolReplayEnabled, remoteActiveRun, session]);
 
   const sendDisabled = useMemo(() => {
-    if (loading || config.disabledInput) return true;
+    if (loading || config.disabledInput || userInputRequest || userInputAnswerPending) return true;
     if (!draft.trim() && !pendingAttachments.length) return true;
     return !session && !config.workspaceCode;
-  }, [config.disabledInput, config.workspaceCode, draft, loading, pendingAttachments.length, session]);
+  }, [config.disabledInput, config.workspaceCode, draft, loading, pendingAttachments.length, session, userInputAnswerPending, userInputRequest]);
   const queueDisabled = useMemo(
-    () => loading || Boolean(config.disabledInput) || (!draft.trim() && !pendingAttachments.length) || !session,
-    [config.disabledInput, draft, loading, pendingAttachments.length, session],
+    () => loading || Boolean(config.disabledInput) || Boolean(userInputRequest) || userInputAnswerPending || (!draft.trim() && !pendingAttachments.length) || !session,
+    [config.disabledInput, draft, loading, pendingAttachments.length, session, userInputAnswerPending, userInputRequest],
   );
   const steerDisabled = queueDisabled || steering || !canSteer;
 
@@ -784,6 +798,7 @@ export function TronChatRuntimeWindow({
       streamSucceeded = true;
       shouldRestoreSourceSubmission = false;
       setSession(result.session);
+      setUserInputRequest(result.userInputRequest?.status === "Pending" ? result.userInputRequest : null);
       const nextMessages = await activeAdapter
         .loadMessages(result.session.sessionCode)
         .catch(() => null);
@@ -888,8 +903,36 @@ export function TronChatRuntimeWindow({
     return completed;
   }
 
+  async function handleAnswerUserInput(answers: ChatUserInputAnswer[]) {
+    if (!session || !userInputRequest || !activeAdapter.answerUserInputRequestStream) return;
+    setUserInputAnswerPending(true);
+    setSendingState(true);
+    try {
+      const result = await activeAdapter.answerUserInputRequestStream(
+        session,
+        userInputRequest.requestCode,
+        { answers },
+        {
+          onAguiEvent: (event) => {
+            if (aguiEnabled) setLiveAguiEvents((current) => [...current, event]);
+          },
+        },
+      );
+      setMessages(await activeAdapter.loadMessages(session.sessionCode).catch(() => result.messages));
+      setSession(result.session);
+      setUserInputRequest(result.userInputRequest?.status === "Pending" ? result.userInputRequest : null);
+      setLiveAguiEvents([]);
+      await loadActiveRunSnapshot(session.sessionCode).then(replaceRemoteActiveRun).catch(() => undefined);
+    } catch (error) {
+      onError(error instanceof Error ? error.message : "Chat answer failed", "Chat answer failed");
+    } finally {
+      setSendingState(false);
+      setUserInputAnswerPending(false);
+    }
+  }
+
   async function handleSend() {
-    if (sendingRef.current || sendDisabled) return;
+    if (sendingRef.current || sendDisabled || userInputRequest || userInputAnswerPending) return;
     const activeSession = await ensureSession();
     if (!activeSession) return;
     const content = draft.trim();
@@ -905,7 +948,7 @@ export function TronChatRuntimeWindow({
   }
 
   async function handleQueue() {
-    if (queueDisabled) return;
+    if (queueDisabled || userInputRequest || userInputAnswerPending) return;
     const activeSession = await ensureSession();
     if (!activeSession) return;
     const content = draft.trim();
@@ -921,7 +964,7 @@ export function TronChatRuntimeWindow({
   }
 
   async function handleSteer() {
-    if (steeringRef.current || steerDisabled) return;
+    if (steeringRef.current || steerDisabled || userInputRequest || userInputAnswerPending) return;
     const activeSession = session;
     if (!activeSession) return;
     const content = draft.trim();
@@ -1093,6 +1136,7 @@ export function TronChatRuntimeWindow({
     detachSteerObserver();
     setSession(null);
     setMessages([]);
+    setUserInputRequest(null);
     setAguiEvents([]);
     setProtocolEvents([]);
     setLiveAguiEvents([]);
@@ -1132,12 +1176,13 @@ export function TronChatRuntimeWindow({
       : debugOptions?.debugEventTypes,
   }), [debugOptions, liveAguiEvents, presentationDebugEvents, protocolEvents]);
 
-  const attachmentDownloader = useCallback(
-    session && activeAdapter.downloadAttachment
-      ? (attachment: ChatMessageAttachment) => activeAdapter.downloadAttachment!(session, attachment)
-      : undefined,
-    [activeAdapter, session],
-  );
+  const attachmentDownloader = useMemo<
+    ((attachment: ChatMessageAttachment) => Promise<Blob>) | undefined
+  >(() => {
+    if (!session || !activeAdapter.downloadAttachment) return undefined;
+    return (attachment: ChatMessageAttachment) =>
+      activeAdapter.downloadAttachment!(session, attachment);
+  }, [activeAdapter, session]);
   const pendingAttachmentHeader = pendingAttachments.length ? (
     <div className="tron-chat__runtime-attachments tron-chat__runtime-attachments--pending">
       {pendingAttachments.map((attachment) => (
@@ -1185,7 +1230,7 @@ export function TronChatRuntimeWindow({
       createSessionLabel="Start chat"
       currentUserDisplayName={currentUserDisplayName}
       debugOptions={resolvedDebugOptions}
-      disabledInput={Boolean(config.disabledInput)}
+      disabledInput={Boolean(config.disabledInput) || userInputRequest?.status === "Pending"}
       draft={draft}
       emptyDescription={config.workspaceCode
         ? "Open a session and start talking to your configured agent."
@@ -1208,18 +1253,21 @@ export function TronChatRuntimeWindow({
       onSend={(mode) => { void handleSubmit(mode); }}
       onStop={() => { void handleStop(); }}
       protocolEvents={protocolEvents}
-      queueDisabled={queueDisabled}
+      queueDisabled={queueDisabled || Boolean(userInputRequest)}
       queuedMessages={visibleQueuedSubmissions}
       runningSubmitModes={runningSubmitModes}
-      sendDisabled={sendDisabled}
+      sendDisabled={sendDisabled || Boolean(userInputRequest)}
       sending={runActive}
       session={session}
       showAgui={aguiEnabled}
       showHeader={!config.floating}
       showStop={canStop}
       sidebarContent={sidebarContent}
-      steerDisabled={steerDisabled}
+      steerDisabled={steerDisabled || Boolean(userInputRequest)}
       title={config.title || floatingTitle}
+      userInputAnswerPending={userInputAnswerPending}
+      userInputRequest={userInputRequest}
+      onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
     />
   );
 
@@ -1230,7 +1278,7 @@ export function TronChatRuntimeWindow({
         composerHeader={pendingAttachmentHeader}
         currentUserDisplayName={currentUserDisplayName}
         debugOptions={resolvedDebugOptions}
-        disabledInput={Boolean(config.disabledInput)}
+        disabledInput={Boolean(config.disabledInput) || userInputRequest?.status === "Pending"}
         draft={draft}
         emptyDescription={config.workspaceCode
           ? "Open a session and start talking to your configured agent."
@@ -1250,20 +1298,23 @@ export function TronChatRuntimeWindow({
         onSend={(mode) => { void handleSubmit(mode); }}
         onStop={() => { void handleStop(); }}
         protocolEvents={protocolEvents}
-        queueDisabled={queueDisabled}
+        queueDisabled={queueDisabled || Boolean(userInputRequest)}
         queuedMessages={visibleQueuedSubmissions}
         runningSubmitModes={runningSubmitModes}
-        sendDisabled={sendDisabled}
+        sendDisabled={sendDisabled || Boolean(userInputRequest)}
         sending={runActive}
         session={session}
         showAgui={aguiEnabled}
         showStop={canStop}
         sidebarContent={sidebarContent}
-        steerDisabled={steerDisabled}
+        steerDisabled={steerDisabled || Boolean(userInputRequest)}
         state={windowState}
         storageKey={config.storageKey || "tron.chat.runtime.window"}
         title={floatingTitle}
         titleSubtitle={floatingSubtitle}
+        userInputAnswerPending={userInputAnswerPending}
+        userInputRequest={userInputRequest}
+        onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
         onStateChange={onWindowStateChange}
       />
     );

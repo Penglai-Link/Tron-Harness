@@ -5,7 +5,8 @@ use crate::{
     application::chat::ChatRepository,
     domain::chat::{
         ChatError, ChatMessage, ChatMessageChannel, ChatMessageRole, ChatSession,
-        ChatSessionSourceType, ChatSessionStatus,
+        ChatSessionSourceType, ChatSessionStatus, ChatUserInputAnswer, ChatUserInputRequest,
+        ChatUserInputRequestStatus,
     },
     shared::time::{timestamp_from_millis, timestamp_to_millis},
 };
@@ -16,7 +17,7 @@ use super::migrations::{
     CHAT_MESSAGE_TOKEN_USAGE_MIGRATION, CHAT_SESSION_AGENT_CODE_MIGRATION,
     CHAT_SESSION_LEGACY_SOURCE_MIGRATION, CHAT_SESSION_SOURCE_MIGRATION,
     CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION, CHAT_SESSION_VISIBILITY_MIGRATION,
-    CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
+    CHAT_USER_INPUT_REQUESTS_MIGRATION, CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
 };
 
 pub struct SqliteChatRepository {
@@ -94,6 +95,12 @@ impl SqliteChatRepository {
                 .execute_batch(CHAT_SESSION_SOURCE_MIGRATION)
                 .map_err(storage_error)?;
         }
+        if !table_exists(&repository.connection, "chat_user_input_requests")? {
+            repository
+                .connection
+                .execute_batch(CHAT_USER_INPUT_REQUESTS_MIGRATION)
+                .map_err(storage_error)?;
+        }
         Ok(repository)
     }
 }
@@ -130,6 +137,11 @@ impl ChatRepository for SqliteChatRepository {
     fn delete_session(&mut self, session_code: &str) -> Result<(), ChatError> {
         let tx = self.connection.transaction().map_err(storage_error)?;
         delete_short_term_memory_rows_for_session(&tx, session_code)?;
+        tx.execute(
+            "DELETE FROM chat_user_input_requests WHERE session_code = ?1",
+            [session_code],
+        )
+        .map_err(storage_error)?;
         tx.execute(
             "DELETE FROM chat_messages WHERE session_code = ?1",
             [session_code],
@@ -365,6 +377,118 @@ impl ChatRepository for SqliteChatRepository {
             .collect::<Result<Vec<_>, _>>()
             .map_err(storage_error)
     }
+
+    fn list_user_input_requests(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Vec<ChatUserInputRequest>, ChatError> {
+        let mut statement = self
+            .connection
+            .prepare(
+                "SELECT request_code, session_code, run_code, assistant_message_code, intro,
+                        questions_json, answers_json, model_code, reasoning_effort, status,
+                        requested_at, answered_at
+                 FROM chat_user_input_requests
+                 WHERE session_code = ?1
+                 ORDER BY requested_at ASC, id ASC",
+            )
+            .map_err(storage_error)?;
+        statement
+            .query_map([session_code], row_to_user_input_request)
+            .map_err(storage_error)?
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(storage_error)
+    }
+
+    fn create_user_input_request(
+        &mut self,
+        request: &ChatUserInputRequest,
+    ) -> Result<(), ChatError> {
+        let id = next_id(&self.connection, "chat_user_input_requests")?;
+        self.connection
+            .execute(
+                "INSERT INTO chat_user_input_requests (
+                    id, request_code, session_code, run_code, assistant_message_code, intro,
+                    questions_json, answers_json, model_code, reasoning_effort, status,
+                    requested_at, answered_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)",
+                params![
+                    id,
+                    request.request_code,
+                    request.session_code,
+                    request.run_code,
+                    request.assistant_message_code,
+                    request.intro,
+                    serde_json::to_string(&request.questions)
+                        .map_err(|_| ChatError::StorageFailure)?,
+                    request
+                        .answers
+                        .as_ref()
+                        .map(serde_json::to_string)
+                        .transpose()
+                        .map_err(|_| ChatError::StorageFailure)?,
+                    request.model_code,
+                    request
+                        .reasoning_effort
+                        .map(|value| value.storage_value().to_string()),
+                    user_input_status_to_storage(request.status),
+                    timestamp_to_millis(&request.requested_at),
+                    request.answered_at.as_deref().map(timestamp_to_millis),
+                ],
+            )
+            .map_err(|error| {
+                if matches!(
+                    &error,
+                    rusqlite::Error::SqliteFailure(
+                        failure,
+                        _
+                    ) if failure.code == rusqlite::ErrorCode::ConstraintViolation
+                ) {
+                    ChatError::UserInputPending
+                } else {
+                    storage_error(error)
+                }
+            })?;
+        Ok(())
+    }
+
+    fn answer_user_input_request(
+        &mut self,
+        session_code: &str,
+        request_code: &str,
+        answers: &[ChatUserInputAnswer],
+        answered_at: &str,
+    ) -> Result<ChatUserInputRequest, ChatError> {
+        let answers_json = serde_json::to_string(answers).map_err(|_| ChatError::StorageFailure)?;
+        let changed = self
+            .connection
+            .execute(
+                "UPDATE chat_user_input_requests
+                 SET answers_json = ?3, status = 'ANSWERED', answered_at = ?4
+                 WHERE session_code = ?1 AND request_code = ?2 AND status = 'PENDING'",
+                params![
+                    session_code,
+                    request_code,
+                    answers_json,
+                    timestamp_to_millis(answered_at),
+                ],
+            )
+            .map_err(storage_error)?;
+        if changed == 0 {
+            let request = self
+                .list_user_input_requests(session_code)?
+                .into_iter()
+                .find(|item| item.request_code == request_code);
+            return Err(match request {
+                Some(_) => ChatError::UserInputAlreadyAnswered,
+                None => ChatError::UserInputRequestNotFound,
+            });
+        }
+        self.list_user_input_requests(session_code)?
+            .into_iter()
+            .find(|item| item.request_code == request_code)
+            .ok_or(ChatError::UserInputRequestNotFound)
+    }
 }
 
 fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSession> {
@@ -410,6 +534,52 @@ fn row_to_message(row: &Row<'_>) -> rusqlite::Result<ChatMessage> {
         total_tokens: row.get(11)?,
         created_at: timestamp_from_millis(row.get(12)?),
     })
+}
+
+fn row_to_user_input_request(row: &Row<'_>) -> rusqlite::Result<ChatUserInputRequest> {
+    let questions_json: String = row.get(5)?;
+    let answers_json: Option<String> = row.get(6)?;
+    let reasoning_effort: Option<String> = row.get(8)?;
+    let status: String = row.get(9)?;
+    Ok(ChatUserInputRequest {
+        request_code: row.get(0)?,
+        session_code: row.get(1)?,
+        run_code: row.get(2)?,
+        assistant_message_code: row.get(3)?,
+        intro: row.get(4)?,
+        questions: serde_json::from_str(&questions_json).map_err(storage_mapping_error)?,
+        answers: answers_json
+            .as_deref()
+            .map(serde_json::from_str)
+            .transpose()
+            .map_err(storage_mapping_error)?,
+        model_code: row.get(7)?,
+        reasoning_effort: reasoning_effort
+            .as_deref()
+            .and_then(crate::domain::reasoning::ReasoningEffort::from_storage_value),
+        status: user_input_status_from_storage(&status).map_err(chat_mapping_error)?,
+        requested_at: timestamp_from_millis(row.get(10)?),
+        answered_at: row.get::<_, Option<i64>>(11)?.map(timestamp_from_millis),
+    })
+}
+
+fn user_input_status_to_storage(status: ChatUserInputRequestStatus) -> &'static str {
+    match status {
+        ChatUserInputRequestStatus::Pending => "PENDING",
+        ChatUserInputRequestStatus::Answered => "ANSWERED",
+    }
+}
+
+fn user_input_status_from_storage(value: &str) -> Result<ChatUserInputRequestStatus, ChatError> {
+    match value {
+        "PENDING" => Ok(ChatUserInputRequestStatus::Pending),
+        "ANSWERED" => Ok(ChatUserInputRequestStatus::Answered),
+        _ => Err(ChatError::StorageFailure),
+    }
+}
+
+fn storage_mapping_error(error: impl std::error::Error + Send + Sync + 'static) -> rusqlite::Error {
+    rusqlite::Error::FromSqlConversionFailure(0, rusqlite::types::Type::Text, Box::new(error))
 }
 fn column_exists(
     connection: &Connection,

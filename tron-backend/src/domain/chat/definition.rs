@@ -105,7 +105,73 @@ pub struct ChatSessionGroup {
     pub task_title: String,
     pub source_type: ChatSessionSourceType,
     pub source_code: Option<String>,
+    pub pending_user_input_count: u32,
+    pub pending_user_input_session_codes: Vec<String>,
     pub sessions: Vec<ChatSession>,
+}
+
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatClientCapabilities {
+    #[serde(default)]
+    pub user_input_requests: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ChatUserInputRequestStatus {
+    Pending,
+    Answered,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum ChatUserInputAnswerKind {
+    Option,
+    Other,
+    Skipped,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatUserInputOption {
+    pub option_code: String,
+    pub label: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatUserInputQuestion {
+    pub question_code: String,
+    pub question: String,
+    pub options: Vec<ChatUserInputOption>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatUserInputAnswer {
+    pub question_code: String,
+    pub answer_kind: ChatUserInputAnswerKind,
+    pub option_code: Option<String>,
+    pub other_text: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ChatUserInputRequest {
+    pub request_code: String,
+    pub session_code: String,
+    pub run_code: String,
+    pub assistant_message_code: Option<String>,
+    pub intro: String,
+    pub questions: Vec<ChatUserInputQuestion>,
+    pub answers: Option<Vec<ChatUserInputAnswer>>,
+    pub model_code: Option<String>,
+    pub reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    pub status: ChatUserInputRequestStatus,
+    pub requested_at: String,
+    pub answered_at: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -118,6 +184,10 @@ pub enum ChatError {
     StorageFailure,
     WorkspaceForbidden,
     WorkspaceRequired,
+    UserInputAlreadyAnswered,
+    UserInputAnswerInvalid(String),
+    UserInputPending,
+    UserInputRequestNotFound,
 }
 
 impl Display for ChatError {
@@ -131,6 +201,14 @@ impl Display for ChatError {
             Self::StorageFailure => f.write_str("chat storage failure"),
             Self::WorkspaceForbidden => f.write_str("workspace access is forbidden"),
             Self::WorkspaceRequired => f.write_str("workspaceCode is required"),
+            Self::UserInputAlreadyAnswered => {
+                f.write_str("chat user input request is already answered")
+            }
+            Self::UserInputAnswerInvalid(message) => {
+                write!(f, "chat user input answer is invalid: {message}")
+            }
+            Self::UserInputPending => f.write_str("chat session is waiting for a user answer"),
+            Self::UserInputRequestNotFound => f.write_str("chat user input request was not found"),
         }
     }
 }

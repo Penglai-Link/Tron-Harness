@@ -9,6 +9,8 @@ import type {
   ChatRunningSubmitMode,
   ChatSession,
   ChatSubmitMode,
+  ChatUserInputAnswer,
+  ChatUserInputRequest,
 } from "@tron/chat-core";
 
 export interface TronChatPanelProps {
@@ -47,6 +49,9 @@ export interface TronChatPanelProps {
   steerDisabled?: boolean;
   stopLabel?: string;
   title?: string;
+  userInputRequest?: ChatUserInputRequest | null;
+  userInputAnswerPending?: boolean;
+  onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;
 }
 
 export type ToastLikeCallback = (message: string, title?: string) => void;

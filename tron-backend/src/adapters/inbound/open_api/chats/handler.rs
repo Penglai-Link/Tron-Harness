@@ -21,8 +21,9 @@ use crate::{
         },
         chats::handler::{
             chat_send_error_code, chat_send_error_message, ensure_no_active_run,
-            normalized_required, prepare_send_model, protocol_event_belongs_to_run,
-            resolve_chat_agent_runtime, run_started_with_supports_steer, uses_system_live_stream,
+            ensure_no_pending_user_input, normalized_required, prepare_send_model,
+            protocol_event_belongs_to_run, resolve_chat_agent_runtime,
+            run_started_with_supports_steer, uses_system_live_stream,
         },
         chats::stream_task::{ChatStreamForwardingGate, ChatStreamLifecycleGuard},
     },
@@ -73,6 +74,8 @@ pub async fn list_session_groups(
                     task_code: group.task_code,
                     task_title: group.task_title,
                     sessions: group.sessions.into_iter().map(Into::into).collect(),
+                    pending_user_input_count: group.pending_user_input_count,
+                    pending_user_input_session_codes: group.pending_user_input_session_codes,
                 })
                 .collect::<Vec<_>>(),
         ))
@@ -119,8 +122,10 @@ pub async fn delete_session(
     Path(session_code): Path<String>,
 ) -> Response {
     match state.chats.delete_session(&session_code) {
-        Ok(session) => Json(ApiResponse::success(OpenApiChatSessionResponse::from(session)))
-            .into_response(),
+        Ok(session) => Json(ApiResponse::success(OpenApiChatSessionResponse::from(
+            session,
+        )))
+        .into_response(),
         Err(error) => chat_error_response(error),
     }
 }
@@ -175,6 +180,9 @@ pub async fn send_message(
         return chat_error_response(ChatError::SessionNotFound);
     };
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
+    if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
         return response;
     }
     let request = map_send_request(request);
@@ -258,6 +266,9 @@ pub async fn stream_message(
         return chat_error_response(ChatError::SessionNotFound);
     };
     if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
+    if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
         return response;
     }
     let mut request = map_send_request(request);
@@ -523,6 +534,7 @@ fn map_send_request(
         limits: request.limits,
         tools: request.tools,
         attachments: request.attachments,
+        client_capabilities: request.client_capabilities,
     }
 }
 

@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use crate::domain::chat::ChatMessageAttachment;
+use crate::domain::chat::{ChatMessageAttachment, ChatUserInputAnswer};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
@@ -23,4 +23,10 @@ pub struct SteerChatMessageRequest {
     pub content: Option<String>,
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct AnswerChatUserInputRequest {
+    pub answers: Vec<ChatUserInputAnswer>,
 }

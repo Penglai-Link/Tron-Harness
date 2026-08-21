@@ -1,4 +1,16 @@
-import type { ChatMessageAttachmentKind, ReasoningEffort } from "@tron/chat-core";
+import type {
+  ChatMessageAttachmentKind,
+  ChatUserInputAnswer,
+  ChatUserInputAnswerInput,
+  ChatUserInputRequest,
+  ReasoningEffort,
+} from "@tron/chat-core";
+
+export type {
+  ChatUserInputAnswer,
+  ChatUserInputAnswerInput,
+  ChatUserInputRequest,
+};
 
 export type ChatSessionStatus = "ACTIVE" | "ARCHIVED";
 export type ChatMessageRole = "USER" | "ASSISTANT";
@@ -29,6 +41,8 @@ export interface ChatSessionGroup {
   sourceType?: "Manual" | "Task" | "Automation" | string;
   sourceCode?: string | null;
   sessions: ChatSession[];
+  pendingUserInputCount?: number;
+  pendingUserInputSessionCodes?: string[];
 }
 
 export interface CreateChatSessionInput {
@@ -133,7 +147,7 @@ export interface ChatRunSummary {
   conversationCode?: string | null;
   workspaceCode: string;
   reasoningEffort?: ReasoningEffort | null;
-  status: "COMPLETED";
+  status: "COMPLETED" | "AWAITING_USER_INPUT";
   finalOutput: string;
   stepCount: number;
   tokenUsage?: ChatTokenUsage | null;
@@ -146,6 +160,7 @@ export interface ChatSendResult {
   session: ChatSession;
   run: ChatRunSummary;
   messages: ChatMessage[];
+  userInputRequest?: ChatUserInputRequest | null;
 }
 
 export interface ChatMessageAttachment {
@@ -171,6 +186,9 @@ export interface SendChatMessageInput {
   systemModelId?: string | null;
   reasoningEffort?: ReasoningEffort | null;
   attachments?: ChatMessageAttachment[];
+  clientCapabilities?: {
+    userInputRequests?: boolean;
+  };
 }
 
 export interface SteerChatMessageInput {

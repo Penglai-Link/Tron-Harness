@@ -11,6 +11,7 @@ import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { cx, insertNewlineAtCursor } from "../utils";
 import ChatBubble from "./ChatBubble.vue";
 import WaitingRail from "./WaitingRail.vue";
+import ChatUserInputCard from "./ChatUserInputCard.vue";
 import AguiRunWorkRail from "./AguiRunWorkRail.vue";
 import { TronChatPanelProps } from "../types";
 
@@ -45,6 +46,9 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
   steerDisabled: false,
   stopLabel: "Stop",
   title: "",
+  userInputRequest: null,
+  userInputAnswerPending: false,
+  onAnswerUserInput: undefined,
 });
 
 const emit = defineEmits<{
@@ -261,6 +265,12 @@ onMounted(() => {
       </div>
 
       <footer class="tron-chat__footer">
+        <ChatUserInputCard
+          v-if="props.userInputRequest?.status === 'Pending' && props.onAnswerUserInput"
+          :disabled="props.userInputAnswerPending"
+          :request="props.userInputRequest"
+          @submit="props.onAnswerUserInput"
+        />
         <button
           v-if="showJumpButton"
           aria-label="Jump to latest message"

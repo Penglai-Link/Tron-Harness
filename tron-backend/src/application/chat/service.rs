@@ -12,7 +12,7 @@ use serde_json::{Value, json};
 use crate::{
     application::{
         agent::{
-            ActiveRunRegistry, AgentInvocationCommand, AgentInvocationError,
+            ActiveRunRegistry, AgentInvocationCommand, AgentInvocationError, AgentInvocationResult,
             AgentInvocationService, AgentSteerInput, ModelStreamSink,
         },
         chat::{
@@ -27,6 +27,8 @@ use crate::{
     domain::chat::{
         ChatError, ChatMessage, ChatMessageAttachment, ChatMessageChannel, ChatMessageRole,
         ChatSession, ChatSessionGroup, ChatSessionSourceType, ChatSessionStatus,
+        ChatUserInputAnswer, ChatUserInputAnswerKind, ChatUserInputOption, ChatUserInputQuestion,
+        ChatUserInputRequest, ChatUserInputRequestStatus,
     },
     domain::resource::{ChatSessionAttachmentRecord, ResourceError},
     shared::{
@@ -53,6 +55,11 @@ pub struct ChatService {
     id_provider: Arc<dyn SnowflakeIdProvider>,
     coordinator_namespace: u64,
     pub(super) active_runs: ActiveRunRegistry,
+}
+
+pub(super) struct GoalContinuationResult {
+    pub(super) messages: Vec<ChatMessage>,
+    pub(super) user_input_request: Option<ChatUserInputRequest>,
 }
 
 impl ChatService {
@@ -176,9 +183,27 @@ impl ChatService {
                     task_title,
                     source_type: session.source_type,
                     source_code: session.source_code.clone(),
+                    pending_user_input_count: 0,
+                    pending_user_input_session_codes: Vec::new(),
                     sessions: Vec::new(),
                 });
             group.sessions.push(session);
+        }
+        for group in grouped.values_mut() {
+            for session in &group.sessions {
+                let pending = self
+                    .repository()
+                    .list_user_input_requests(&session.session_code)?
+                    .into_iter()
+                    .filter(|request| request.status == ChatUserInputRequestStatus::Pending)
+                    .count() as u32;
+                if pending > 0 {
+                    group.pending_user_input_count += pending;
+                    group
+                        .pending_user_input_session_codes
+                        .push(session.session_code.clone());
+                }
+            }
         }
         Ok(grouped.into_values().collect())
     }
@@ -286,6 +311,58 @@ impl ChatService {
     pub fn list_messages(&self, session_code: &str) -> Result<Vec<ChatMessage>, ChatError> {
         self.repository().get_session(session_code)?;
         self.repository().list_messages(session_code)
+    }
+
+    pub fn list_user_input_requests(
+        &self,
+        session_code: &str,
+    ) -> Result<Vec<ChatUserInputRequest>, ChatError> {
+        self.repository().get_session(session_code)?;
+        self.repository().list_user_input_requests(session_code)
+    }
+
+    pub fn answer_user_input(
+        &self,
+        session_code: &str,
+        request_code: &str,
+        answers: Vec<ChatUserInputAnswer>,
+    ) -> Result<SendChatMessageCommand, ChatError> {
+        let session = self.repository().get_session(session_code)?;
+        let request = self
+            .repository()
+            .list_user_input_requests(session_code)?
+            .into_iter()
+            .find(|item| item.request_code == request_code)
+            .ok_or(ChatError::UserInputRequestNotFound)?;
+        if request.status != ChatUserInputRequestStatus::Pending {
+            return Err(ChatError::UserInputAlreadyAnswered);
+        }
+        validate_user_input_answers(&request.questions, &answers)?;
+        let answered_at = current_timestamp();
+        let answered = self.repository().answer_user_input_request(
+            session_code,
+            request_code,
+            &answers,
+            &answered_at,
+        )?;
+        let summary = format_user_input_answer_summary(&answered.questions, &answers);
+        Ok(SendChatMessageCommand {
+            run_code: None,
+            content: Some(summary),
+            workspace_code: Some(session.workspace_code),
+            app_code: session.app_code,
+            task_code: session.task_code,
+            agent_code: session.agent_code,
+            model_code: answered.model_code,
+            system_model_id: None,
+            reasoning_effort: answered.reasoning_effort,
+            limits: None,
+            tools: Vec::new(),
+            attachments: Vec::new(),
+            client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
+                user_input_requests: true,
+            }),
+        })
     }
 
     pub fn steer_message(
@@ -486,6 +563,10 @@ impl ChatService {
         }
         let app_code_for_invocation = command.app_code.or(session.app_code.clone());
         let task_code_for_invocation = command.task_code.or(session.task_code.clone());
+        let supports_user_input_requests = command
+            .client_capabilities
+            .as_ref()
+            .is_some_and(|capabilities| capabilities.user_input_requests);
         let system_model_id_for_invocation = command.system_model_id;
         let limits_for_invocation = command.limits;
         let tools_for_invocation = command.tools;
@@ -504,6 +585,7 @@ impl ChatService {
             limits: limits_for_invocation,
             tools: tools_for_invocation.clone(),
             attachments: invocation_attachments,
+            supports_user_input_requests,
             transcript_input_kind: None,
             transcript_input_metadata: None,
         };
@@ -528,17 +610,29 @@ impl ChatService {
                 .await
         }
         .map_err(ChatSendError::Agent)?;
+        let awaiting_user_input = run.status == "AWAITING_USER_INPUT";
+        let (assistant_content, user_input_request) = if awaiting_user_input {
+            let raw = raw_user_input_request(&run)?;
+            (raw.intro.clone(), Some(raw))
+        } else {
+            (run.final_output.clone(), None)
+        };
         let assistant_message = self.create_message(
             session_code,
             Some(run.run_code.clone()),
             ChatMessageRole::Assistant,
             channel,
             "Assistant",
-            &run.final_output,
+            &assistant_content,
             Vec::new(),
             run.token_usage,
         )?;
-        let mut result_messages = vec![user_message, assistant_message];
+        let mut result_messages = vec![user_message, assistant_message.clone()];
+        let mut user_input_request = if let Some(raw) = user_input_request {
+            Some(self.persist_user_input_request(session_code, &run, &assistant_message, raw)?)
+        } else {
+            None
+        };
         let updated_at = current_timestamp();
         if let Some(runtime_session_id) = run.system_agent_session_id.as_deref() {
             self.repository()
@@ -562,8 +656,8 @@ impl ChatService {
                 &updated_at,
             )
             .map_err(ChatSendError::Chat)?;
-        if let Some(short_term_memory) = agent.short_term_memory() {
-            let goal_messages = self
+        if !awaiting_user_input && let Some(short_term_memory) = agent.short_term_memory() {
+            let goal_result = self
                 .run_goal_continuations(
                     session_code,
                     &session,
@@ -579,9 +673,11 @@ impl ChatService {
                     short_term_memory,
                     run.clone(),
                     run.system_agent_session_id.clone(),
+                    supports_user_input_requests,
                 )
                 .await?;
-            result_messages.extend(goal_messages);
+            result_messages.extend(goal_result.messages);
+            user_input_request = user_input_request.or(goal_result.user_input_request);
         }
         let updated_session = self
             .repository()
@@ -591,7 +687,76 @@ impl ChatService {
             session: updated_session,
             run,
             messages: result_messages,
+            user_input_request,
         })
+    }
+
+    pub(super) fn persist_user_input_request(
+        &self,
+        session_code: &str,
+        run: &AgentInvocationResult,
+        assistant_message: &ChatMessage,
+        raw: RawUserInputRequest,
+    ) -> Result<ChatUserInputRequest, ChatSendError> {
+        let id = self
+            .id_provider
+            .next_id()
+            .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
+            .value();
+        let questions = raw
+            .questions
+            .into_iter()
+            .enumerate()
+            .map(|(index, question)| ChatUserInputQuestion {
+                question_code: format!("QUESTION-{id}-{index}"),
+                question: question.question,
+                options: question
+                    .options
+                    .into_iter()
+                    .enumerate()
+                    .map(|(option_index, option)| ChatUserInputOption {
+                        option_code: format!("OPTION-{id}-{index}-{option_index}"),
+                        label: option.label,
+                        description: option.description,
+                    })
+                    .chain([
+                        ChatUserInputOption {
+                            option_code: format!("OTHER-{id}-{index}"),
+                            label: "Other".into(),
+                            description: Some("Provide a custom answer.".into()),
+                        },
+                        ChatUserInputOption {
+                            option_code: format!("SKIP-{id}-{index}"),
+                            label: "Skip".into(),
+                            description: Some("Skip this question.".into()),
+                        },
+                    ])
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+        if questions.is_empty() {
+            return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                "chat.ask_user returned no questions".into(),
+            )));
+        }
+        let request = ChatUserInputRequest {
+            request_code: format!("INPUT-{id}"),
+            session_code: session_code.to_string(),
+            run_code: run.run_code.clone(),
+            assistant_message_code: Some(assistant_message.message_code.clone()),
+            intro: raw.intro,
+            questions,
+            answers: None,
+            model_code: Some(run.model_code.clone()),
+            reasoning_effort: run.reasoning_effort,
+            status: ChatUserInputRequestStatus::Pending,
+            requested_at: current_timestamp(),
+            answered_at: None,
+        };
+        self.repository()
+            .create_user_input_request(&request)
+            .map_err(ChatSendError::Chat)?;
+        Ok(request)
     }
 
     fn prepare_session_attachments(
@@ -856,4 +1021,150 @@ fn normalized_optional(value: Option<String>) -> Option<String> {
 
 fn normalized_required(value: Option<String>) -> Option<String> {
     normalized_optional(value)
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct RawUserInputRequest {
+    pub(super) intro: String,
+    questions: Vec<RawUserInputQuestion>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawUserInputQuestion {
+    question: String,
+    options: Vec<RawUserInputOption>,
+}
+
+#[derive(Debug, Clone, serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct RawUserInputOption {
+    label: String,
+    description: Option<String>,
+}
+
+pub(super) fn raw_user_input_request(
+    run: &AgentInvocationResult,
+) -> Result<RawUserInputRequest, ChatSendError> {
+    run.observations
+        .iter()
+        .rev()
+        .find(|observation| observation.tool_name == crate::application::agent::CHAT_ASK_USER_TOOL)
+        .and_then(|observation| {
+            serde_json::from_str::<RawUserInputRequest>(&observation.output).ok()
+        })
+        .ok_or_else(|| {
+            ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                "chat.ask_user returned an invalid request".into(),
+            ))
+        })
+}
+
+fn validate_user_input_answers(
+    questions: &[ChatUserInputQuestion],
+    answers: &[ChatUserInputAnswer],
+) -> Result<(), ChatError> {
+    if answers.len() != questions.len() {
+        return Err(ChatError::UserInputAnswerInvalid(
+            "one answer is required for every question".into(),
+        ));
+    }
+    for question in questions {
+        let Some(answer) = answers
+            .iter()
+            .find(|answer| answer.question_code == question.question_code)
+        else {
+            return Err(ChatError::UserInputAnswerInvalid(format!(
+                "missing answer for question `{}`",
+                question.question_code
+            )));
+        };
+        match answer.answer_kind {
+            ChatUserInputAnswerKind::Option => {
+                let Some(option_code) = answer.option_code.as_deref() else {
+                    return Err(ChatError::UserInputAnswerInvalid(
+                        "option answer requires optionCode".into(),
+                    ));
+                };
+                if !question
+                    .options
+                    .iter()
+                    .any(|option| option.option_code == option_code)
+                {
+                    return Err(ChatError::UserInputAnswerInvalid(format!(
+                        "option `{option_code}` does not belong to the question"
+                    )));
+                }
+                if answer
+                    .other_text
+                    .as_deref()
+                    .is_some_and(|value| !value.trim().is_empty())
+                {
+                    return Err(ChatError::UserInputAnswerInvalid(
+                        "option answer cannot include otherText".into(),
+                    ));
+                }
+            }
+            ChatUserInputAnswerKind::Other => {
+                let Some(other_text) = answer.other_text.as_deref() else {
+                    return Err(ChatError::UserInputAnswerInvalid(
+                        "other answer requires otherText".into(),
+                    ));
+                };
+                if other_text.trim().is_empty() || other_text.chars().count() > 2_000 {
+                    return Err(ChatError::UserInputAnswerInvalid(
+                        "otherText must contain 1 to 2000 characters".into(),
+                    ));
+                }
+                if answer.option_code.is_some() {
+                    return Err(ChatError::UserInputAnswerInvalid(
+                        "other answer cannot include optionCode".into(),
+                    ));
+                }
+            }
+            ChatUserInputAnswerKind::Skipped => {
+                if answer.option_code.is_some() || answer.other_text.is_some() {
+                    return Err(ChatError::UserInputAnswerInvalid(
+                        "skipped answer cannot include optionCode or otherText".into(),
+                    ));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn format_user_input_answer_summary(
+    questions: &[ChatUserInputQuestion],
+    answers: &[ChatUserInputAnswer],
+) -> String {
+    let lines = questions
+        .iter()
+        .filter_map(|question| {
+            let answer = answers
+                .iter()
+                .find(|answer| answer.question_code == question.question_code)?;
+            let value = match answer.answer_kind {
+                ChatUserInputAnswerKind::Option => question
+                    .options
+                    .iter()
+                    .find(|option| {
+                        answer.option_code.as_deref() == Some(option.option_code.as_str())
+                    })
+                    .map(|option| option.label.clone())
+                    .unwrap_or_else(|| "(invalid option)".into()),
+                ChatUserInputAnswerKind::Other => answer
+                    .other_text
+                    .clone()
+                    .unwrap_or_else(|| "(empty other answer)".into()),
+                ChatUserInputAnswerKind::Skipped => "Skipped".into(),
+            };
+            Some(format!("{}: {}", question.question, value))
+        })
+        .collect::<Vec<_>>();
+    format!(
+        "The user answered the questions you asked:\n{}\nContinue the task using these answers.",
+        lines.join("\n")
+    )
 }

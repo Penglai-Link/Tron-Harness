@@ -4,7 +4,7 @@ use serde_json::Value;
 use crate::domain::{
     agent::{
         AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage, TokenEstimateSnapshot,
-        TokenUsageAuditSnapshot,
+        TokenUsageAuditSnapshot, ToolObservation,
     },
     chat::ChatMessageAttachment,
     reasoning::ReasoningEffort,
@@ -31,6 +31,8 @@ pub struct AgentInvocationCommand {
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
     #[serde(skip)]
+    pub supports_user_input_requests: bool,
+    #[serde(skip)]
     pub transcript_input_kind: Option<String>,
     #[serde(skip)]
     pub transcript_input_metadata: Option<Value>,
@@ -42,6 +44,7 @@ pub struct AgentInvocationResult {
     pub run_code: String,
     pub conversation_code: Option<String>,
     pub workspace_code: String,
+    pub model_code: String,
     pub runtime_adapter_key: String,
     pub reasoning_effort: Option<ReasoningEffort>,
     pub status: &'static str,
@@ -51,4 +54,6 @@ pub struct AgentInvocationResult {
     pub latest_request_estimate: Option<TokenEstimateSnapshot>,
     pub latest_usage_audit: Option<TokenUsageAuditSnapshot>,
     pub system_agent_session_id: Option<String>,
+    #[serde(skip)]
+    pub observations: Vec<ToolObservation>,
 }

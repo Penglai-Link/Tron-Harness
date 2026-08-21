@@ -11,7 +11,7 @@ use crate::{
     },
     domain::{
         agent::{AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent},
-        chat::{ChatMessage, ChatSession},
+        chat::{ChatMessage, ChatSession, ChatUserInputRequest},
     },
 };
 
@@ -81,6 +81,42 @@ pub struct OpenApiChatSessionGroupResponse {
     pub task_code: Option<String>,
     pub task_title: String,
     pub sessions: Vec<OpenApiChatSessionResponse>,
+    pub pending_user_input_count: u32,
+    pub pending_user_input_session_codes: Vec<String>,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenApiChatUserInputRequestResponse {
+    pub request_code: String,
+    pub session_code: String,
+    pub run_code: String,
+    pub assistant_message_code: Option<String>,
+    pub intro: String,
+    pub questions: Vec<crate::domain::chat::ChatUserInputQuestion>,
+    pub answers: Option<Vec<crate::domain::chat::ChatUserInputAnswer>>,
+    pub status: crate::domain::chat::ChatUserInputRequestStatus,
+    pub requested_at: i64,
+    pub answered_at: Option<i64>,
+}
+
+impl From<ChatUserInputRequest> for OpenApiChatUserInputRequestResponse {
+    fn from(value: ChatUserInputRequest) -> Self {
+        Self {
+            request_code: value.request_code,
+            session_code: value.session_code,
+            run_code: value.run_code,
+            assistant_message_code: value.assistant_message_code,
+            intro: value.intro,
+            questions: value.questions,
+            answers: value.answers,
+            status: value.status,
+            requested_at: crate::shared::time::timestamp_to_millis(&value.requested_at),
+            answered_at: crate::shared::time::option_timestamp_to_millis(
+                value.answered_at.as_deref(),
+            ),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -182,6 +218,7 @@ pub struct OpenApiChatSendResultResponse {
     pub session: OpenApiChatSessionResponse,
     pub run: OpenApiChatRunSummaryResponse,
     pub messages: Vec<OpenApiChatMessageResponse>,
+    pub user_input_request: Option<OpenApiChatUserInputRequestResponse>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -302,6 +339,7 @@ impl From<ChatSendResult> for OpenApiChatSendResultResponse {
             session: value.session.into(),
             run: value.run.into(),
             messages: value.messages.into_iter().map(Into::into).collect(),
+            user_input_request: value.user_input_request.map(Into::into),
         }
     }
 }

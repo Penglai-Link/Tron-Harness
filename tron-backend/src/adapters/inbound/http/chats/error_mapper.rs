@@ -49,6 +49,26 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_WORKSPACE_FORBIDDEN",
             "workspace access is forbidden".to_string(),
         ),
+        ChatError::UserInputAlreadyAnswered => (
+            StatusCode::CONFLICT,
+            "CHAT_USER_INPUT_ALREADY_ANSWERED",
+            "chat user input request is already answered".to_string(),
+        ),
+        ChatError::UserInputAnswerInvalid(message) => (
+            StatusCode::BAD_REQUEST,
+            "CHAT_USER_INPUT_ANSWER_INVALID",
+            message,
+        ),
+        ChatError::UserInputPending => (
+            StatusCode::CONFLICT,
+            "CHAT_USER_INPUT_PENDING",
+            "chat session is waiting for a user answer".to_string(),
+        ),
+        ChatError::UserInputRequestNotFound => (
+            StatusCode::NOT_FOUND,
+            "CHAT_USER_INPUT_REQUEST_NOT_FOUND",
+            "chat user input request was not found".to_string(),
+        ),
         ChatError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "CHAT_STORAGE_FAILED",

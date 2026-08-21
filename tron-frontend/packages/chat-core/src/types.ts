@@ -36,6 +36,8 @@ export interface ChatSessionGroup {
   taskCode?: string | null;
   taskTitle: string;
   sessions: ChatSession[];
+  pendingUserInputCount?: number;
+  pendingUserInputSessionCodes?: string[];
 }
 
 export interface CreateChatSessionInput {
@@ -100,7 +102,7 @@ export interface ChatRunSummary {
   conversationCode?: string | null;
   workspaceCode: string;
   reasoningEffort?: ReasoningEffort | null;
-  status: "COMPLETED";
+  status: "COMPLETED" | "AWAITING_USER_INPUT";
   finalOutput: string;
   stepCount: number;
   tokenUsage?: ChatTokenUsage | null;
@@ -111,6 +113,45 @@ export interface ChatSendResult {
   session: ChatSession;
   run: ChatRunSummary;
   messages: ChatMessage[];
+  userInputRequest?: ChatUserInputRequest | null;
+}
+
+export type ChatUserInputAnswerKind = "Option" | "Other" | "Skipped";
+
+export interface ChatUserInputOption {
+  optionCode: string;
+  label: string;
+  description?: string | null;
+}
+
+export interface ChatUserInputQuestion {
+  questionCode: string;
+  question: string;
+  options: ChatUserInputOption[];
+}
+
+export interface ChatUserInputAnswer {
+  questionCode: string;
+  answerKind: ChatUserInputAnswerKind;
+  optionCode?: string | null;
+  otherText?: string | null;
+}
+
+export interface ChatUserInputRequest {
+  requestCode: string;
+  sessionCode: string;
+  runCode: string;
+  assistantMessageCode?: string | null;
+  intro: string;
+  questions: ChatUserInputQuestion[];
+  answers?: ChatUserInputAnswer[] | null;
+  status: "Pending" | "Answered";
+  requestedAt: number;
+  answeredAt?: number | null;
+}
+
+export interface ChatUserInputAnswerInput {
+  answers: ChatUserInputAnswer[];
 }
 
 export interface SendChatMessageInput {
@@ -123,6 +164,9 @@ export interface SendChatMessageInput {
   systemModelId?: string | null;
   reasoningEffort?: ReasoningEffort | null;
   attachments?: ChatMessageAttachment[];
+  clientCapabilities?: {
+    userInputRequests?: boolean;
+  };
 }
 
 export interface ChatQueuedSubmission {
@@ -231,6 +275,7 @@ export interface ChatAdapterCapabilities {
   supportsSteer?: boolean;
   supportsStop?: boolean;
   supportsStreaming: boolean;
+  supportsUserInputRequests?: boolean;
 }
 
 export interface ChatAdapter {
@@ -248,6 +293,17 @@ export interface ChatAdapter {
   ) => Promise<ChatActiveRunResult>;
   loadAguiEvents: (sessionCode: string) => Promise<ChatAguiEvent[]>;
   loadMessages: (sessionCode: string) => Promise<ChatMessage[]>;
+  loadUserInputRequests?: (
+    sessionCode: string,
+    signal?: AbortSignal,
+  ) => Promise<ChatUserInputRequest[]>;
+  answerUserInputRequestStream?: (
+    session: ChatSession,
+    requestCode: string,
+    input: ChatUserInputAnswerInput,
+    handlers?: ChatStreamHandlers,
+    signal?: AbortSignal,
+  ) => Promise<ChatSendResult>;
   loadProtocolEvents?: (sessionCode: string) => Promise<ChatAguiStreamEvent[]>;
   steerMessage?: (
     session: ChatSession,

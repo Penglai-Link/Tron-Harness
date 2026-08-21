@@ -217,6 +217,57 @@ describe("createOpenApiChatAdapter", () => {
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("signs the user-input answer stream and uses the dedicated endpoint", async () => {
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`data: ${JSON.stringify({
+          type: "RUN_FINISHED",
+          result: {
+            messages: [],
+            run: {
+              finalOutput: "continued",
+              runCode: "RUN-2",
+              status: "COMPLETED",
+              stepCount: 1,
+              workspaceCode: "TRON_CORE",
+            },
+            session: sessionFixture(),
+          },
+        })}\n\n`));
+        controller.close();
+      },
+    });
+    const fetchMock = vi.fn(async () => new Response(stream, {
+      headers: { "Content-Type": "text/event-stream" },
+      status: 200,
+    }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createOpenApiChatAdapter({
+      appKey: "secret-key-123",
+      baseUrl: "https://openapi.example.com",
+      nonceFactory: () => "answernonce1",
+      openAppCode: "OPENAPP-TEST-0001",
+      timestampFactory: () => 1718100005,
+      userCode: "USR-0001",
+    });
+
+    await adapter.answerUserInputRequestStream?.(
+      sessionFixture(),
+      "INPUT-1",
+      { answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }] },
+    );
+
+    const [url, init] = fetchMock.mock.calls[0] ?? [];
+    const headers = new Headers(init?.headers);
+    expect(url).toBe(
+      "https://openapi.example.com/open-api/v1/chats/sessions/SESSION-1/user-input-requests/INPUT-1/answers/stream",
+    );
+    expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
+    expect(JSON.parse(String(init?.body))).toEqual({
+      answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }],
+    });
+  });
+
   it("signs multipart attachment uploads and attachment downloads", async () => {
     const attachment = {
       byteSize: 7,

@@ -413,6 +413,36 @@ impl ReactAgent {
                         .execute_tool_calls(context, &mut tool_calls, &mut turn_state, calls)
                         .await
                     {
+                        if matches!(error, AgentError::AwaitingUserInput) {
+                            self.publish(
+                                &context,
+                                "agent.run.completed",
+                                BusOutcome::Completed,
+                                Some("awaiting_user_input"),
+                            )?;
+                            if let Some(short_term_memory) = self.short_term_memory.as_ref() {
+                                record_failure_on_short_term_memory_error(
+                                    short_term_memory,
+                                    context,
+                                    "run_waiting_for_user_input_persist_failed",
+                                    short_term_memory.record_run_completed(context),
+                                )?;
+                            }
+                            return Ok(AgentRunResult {
+                                run_code: context.run_code.clone(),
+                                conversation_code: context.conversation_code.clone(),
+                                workspace_code: context.workspace_code.clone(),
+                                final_output,
+                                step_count,
+                                token_usage,
+                                latest_request_estimate: Some(request_estimate),
+                                latest_usage_audit: Some(usage_audit),
+                                system_agent_session_id: response
+                                    .system_agent_session_id()
+                                    .map(str::to_string),
+                                observations: context.observations.clone(),
+                            });
+                        }
                         self.record_short_term_memory_failure(context, "tool_failure")?;
                         return Err(error);
                     }

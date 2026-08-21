@@ -7,12 +7,15 @@ import type {
   ChatSendResult,
   ChatSession,
   ChatSteerResult,
+  ChatUserInputAnswerInput,
+  ChatUserInputRequest,
   GetActiveChatRunResult,
   SendChatMessageInput,
   SteerChatMessageInput,
   StopChatRunInput,
   StopChatRunResult,
 } from "@/domain/chat/model";
+import { normalizeChatUserInputRequest } from "@tron/chat-core";
 import {
   ApiError,
   buildApiUrl,
@@ -124,6 +127,18 @@ export async function getChatActiveRun(
     pathParams: { sessionCode },
     signal,
   });
+}
+
+export async function listChatUserInputRequests(
+  sessionCode: string,
+  signal?: AbortSignal,
+): Promise<ChatUserInputRequest[]> {
+  if (getServiceDataSource("chat") === "mock") return [];
+  const requests = await requestApi<ChatUserInputRequest[]>(
+    chatApiEndpoints.listChatUserInputRequests,
+    { pathParams: { sessionCode }, signal },
+  );
+  return requests.map(normalizeChatUserInputRequest);
 }
 
 export async function sendChatMessage(session: ChatSession, input: SendChatMessageInput): Promise<ChatSendResult> {
@@ -358,13 +373,50 @@ export async function streamChatMessage(
     return result;
   }
 
-  const { path } = parseEndpoint(chatApiEndpoints.streamChatMessage);
+  return streamChatSse(
+    chatApiEndpoints.streamChatMessage,
+    session.sessionCode,
+    input,
+    handlers,
+    signal,
+  );
+}
+
+export function streamChatUserInputAnswer(
+  session: ChatSession,
+  requestCode: string,
+  input: ChatUserInputAnswerInput,
+  handlers: StreamChatMessageHandlers = {},
+  signal?: AbortSignal,
+): Promise<ChatSendResult> {
+  if (getServiceDataSource("chat") === "mock") {
+    return Promise.reject(new Error("User input answers are not available in mock mode"));
+  }
+  return streamChatSse(
+    chatApiEndpoints.answerChatUserInput,
+    session.sessionCode,
+    input,
+    handlers,
+    signal,
+    { requestCode },
+  );
+}
+
+async function streamChatSse(
+  endpoint: string,
+  sessionCode: string,
+  body: unknown,
+  handlers: StreamChatMessageHandlers,
+  signal?: AbortSignal,
+  extraPathParams: Record<string, string> = {},
+): Promise<ChatSendResult> {
+  const { path } = parseEndpoint(endpoint);
   const headers = new Headers({ "Content-Type": "application/json" });
   const accessToken = getApiAccessToken();
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 
-  const response = await fetch(buildApiUrl(path, { sessionCode: session.sessionCode }), {
-    body: JSON.stringify(input),
+  const response = await fetch(buildApiUrl(path, { sessionCode, ...extraPathParams }), {
+    body: JSON.stringify(body),
     credentials: "include",
     headers,
     method: "POST",

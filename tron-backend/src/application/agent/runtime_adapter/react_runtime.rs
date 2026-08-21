@@ -177,5 +177,8 @@ fn map_agent_error(error: AgentError) -> AgentInvocationError {
         AgentError::InvalidConfiguration(message) | AgentError::EventPublishFailed(message) => {
             AgentInvocationError::RuntimeFailed(message)
         }
+        AgentError::AwaitingUserInput => AgentInvocationError::RuntimeFailed(
+            "agent unexpectedly returned an awaiting-user-input error".into(),
+        ),
     }
 }

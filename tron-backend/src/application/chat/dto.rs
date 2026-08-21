@@ -5,7 +5,10 @@ use crate::{
     application::agent::AgentInvocationResult,
     domain::{
         agent::{AgentRunLimits, EffectiveTool},
-        chat::{ChatMessage, ChatMessageAttachment, ChatSession, ChatSessionSourceType},
+        chat::{
+            ChatClientCapabilities, ChatMessage, ChatMessageAttachment, ChatSession,
+            ChatSessionSourceType,
+        },
         reasoning::ReasoningEffort,
     },
 };
@@ -52,6 +55,8 @@ pub struct SendChatMessageCommand {
     pub tools: Vec<EffectiveTool>,
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
+    #[serde(default)]
+    pub client_capabilities: Option<ChatClientCapabilities>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -79,6 +84,7 @@ pub struct ChatSendResult {
     pub session: ChatSession,
     pub run: AgentInvocationResult,
     pub messages: Vec<ChatMessage>,
+    pub user_input_request: Option<crate::domain::chat::ChatUserInputRequest>,
 }
 
 #[derive(Debug, Clone, Serialize)]
