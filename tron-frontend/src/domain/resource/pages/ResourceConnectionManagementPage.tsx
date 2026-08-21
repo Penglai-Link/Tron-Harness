@@ -3,14 +3,11 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   MoreHorizontal,
-  Pencil,
   Plus,
   RefreshCcw,
-  Search,
   Trash2,
 } from "lucide-react";
 
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DataTable as TanStackDataTable,
@@ -25,7 +22,6 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
 import { toastManager } from "@/components/ui/toast";
 import {
@@ -42,21 +38,19 @@ import {
   useManagedResourceRecords,
 } from "@/domain/resource/hooks";
 import {
-  Field,
   PageHeader,
-  SurfaceCard,
-  TextInput,
+  SearchField,
   useLocaleFormatters,
   useWorkspaceSpaces,
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { Badge } from "@/shared/ui/Badge";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
   DropdownMenuContent,
   DropdownMenuItem,
 } from "@/components/ui/dropdown-menu";
-import { profile } from "console";
 
 type ResourceConnectionKind = "dataSource" | "server" | "serverAccount";
 
@@ -189,11 +183,14 @@ export function ResourceConnectionManagementPage({
         accessorKey: "name",
         cell: ({ row }) => (
           <div className="min-w-0">
-            <p className="truncate font-medium" title={row.original.name}>
+            <p
+              className="truncate font-medium text-[var(--color-primary)]"
+              title={row.original.name}
+            >
               {row.original.name}
             </p>
             <p
-              className="mt-1 truncate font-mono text-xs text-muted-foreground"
+              className="mt-1 truncate font-mono text-[12px] text-[var(--color-on-surface-variant)]"
               title={row.original.resourceCode}
             >
               {row.original.resourceCode}
@@ -206,7 +203,7 @@ export function ResourceConnectionManagementPage({
       },
       {
         cell: ({ row }) => (
-          <span className="font-mono text-xs">
+          <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
             {connectionLabel(row.original)}
           </span>
         ),
@@ -219,7 +216,7 @@ export function ResourceConnectionManagementPage({
       },
       {
         cell: ({ row }) => (
-          <Badge variant="outline">{secondaryLabel(row.original)}</Badge>
+          <Badge tone="outline">{secondaryLabel(row.original)}</Badge>
         ),
         header: pageT(
           kind === "dataSource"
@@ -233,8 +230,14 @@ export function ResourceConnectionManagementPage({
       {
         cell: ({ row }) => (
           <Badge
-            variant={
-              row.original.sourceKind === "LOCAL" ? "secondary" : "outline"
+            tone={
+              row.original.sourceKind === "LOCAL"
+                ? "success"
+                : row.original.sourceKind === "INHERITED"
+                ? "info"
+                : row.original.sourceKind === "OVERRIDE"
+                ? "warning"
+                : "outline"
             }
           >
             {pageT(`source.${row.original.sourceKind.toLowerCase()}`)}
@@ -245,7 +248,7 @@ export function ResourceConnectionManagementPage({
       },
       {
         cell: ({ row }) => (
-          <span className="text-xs text-muted-foreground">
+          <span className="text-[12px] text-[var(--color-on-surface-variant)]">
             {formatDateTime(row.original.updatedAt, {
               dateStyle: "medium",
               timeStyle: "short",
@@ -259,14 +262,20 @@ export function ResourceConnectionManagementPage({
         cell: ({ row }) =>
           row.original.sourceKind !== "INHERITED" ? (
             <DropdownMenu>
-              <DropdownMenuTrigger>
-                <MoreHorizontal
-                  onClick={(e) => e.stopPropagation()}
-                  size={16}
-                  aria-hidden="true"
-                />
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-40" align="start">
+              <DropdownMenuTrigger
+                render={(
+                  <Button
+                    aria-label={pageT("columns.actions")}
+                    size="icon"
+                    variant="ghost"
+                    onClick={(event) => event.stopPropagation()}
+                    onKeyDown={(event) => event.stopPropagation()}
+                  >
+                    <MoreHorizontal aria-hidden="true" size={16} />
+                  </Button>
+                )}
+              />
+              <DropdownMenuContent align="end">
                 <DropdownMenuItem
                   onClick={(event) => {
                     event.stopPropagation();
@@ -282,12 +291,13 @@ export function ResourceConnectionManagementPage({
                   {pageT("actions.edit")}
                 </DropdownMenuItem>
                 <DropdownMenuItem
-                  className="text-red-500"
+                  variant="destructive"
                   onClick={(event) => {
                     event.stopPropagation();
                     setDeleteTarget(row.original);
                   }}
                 >
+                  <Trash2 aria-hidden="true" />
                   {pageT("actions.delete")}
                 </DropdownMenuItem>
               </DropdownMenuContent>
@@ -361,50 +371,69 @@ export function ResourceConnectionManagementPage({
 
   return (
     <>
-      <TanStackDataTable<ResourceRecord>
-        variant="embedded"
-        emptyState={
-          workspace ? pageT(`${kind}.empty`) : pageT("workspaceRequired")
-        }
+      <PageHeader
         title={title}
-        toolbar={
-          <div className="flex gap-2">
-            <TextInput
-              className="w-full"
-              placeholder={pageT(`${kind}.searchPlaceholder`)}
-              type="search"
-              value={search}
-              onChange={(event) => {
-                setSearch(event.target.value);
+        actions={(
+          <>
+            <Button
+              aria-label={pageT("actions.refresh")}
+              size="lg"
+              variant="outline"
+              onClick={() => {
+                void resourceTable.refresh();
               }}
-            />
-            <Button size="lg" disabled={!workspace} onClick={() => setCreateOpen(true)}>
+            >
+              <RefreshCcw aria-hidden="true" size={15} />
+            </Button>
+            <Button
+              disabled={!workspace}
+              size="lg"
+              onClick={() => setCreateOpen(true)}
+            >
+              <Plus aria-hidden="true" size={15} />
               {pageT(`${kind}.createAction`)}
             </Button>
-          </div>
-        }
-        error={resourceTable.error}
-        loading={resourceTable.isLoading}
-        pagination={
-          <TanStackTablePagination
-            itemLabel={pageT("pagination.itemLabel", {
-              defaultValue: "records",
-            })}
-            pageSizeOptions={[15, 25, 50]}
-            table={resourceTable.table}
-            totalItems={resourceTable.data.total}
-          />
-        }
-        table={resourceTable.table}
-        tableClassName="min-w-[900px]"
-        onRowClick={(row) =>
-          navigate(
-            `${config.basePath}/detail?resourceCode=${encodeURIComponent(
-              row.resourceCode,
-            )}`,
-          )
-        }
+          </>
+        )}
       />
+      <div className="mt-5">
+        <TanStackDataTable<ResourceRecord>
+          variant="default"
+          emptyState={
+            workspace ? pageT(`${kind}.empty`) : pageT("workspaceRequired")
+          }
+          toolbar={(
+            <SearchField
+              ariaLabel={pageT("search.label")}
+              className="w-full sm:w-72"
+              placeholder={pageT(`${kind}.searchPlaceholder`)}
+              value={search}
+              onChange={setSearch}
+            />
+          )}
+          error={resourceTable.error}
+          loading={resourceTable.isLoading}
+          pagination={
+            <TanStackTablePagination
+              itemLabel={pageT("pagination.itemLabel", {
+                defaultValue: "records",
+              })}
+              pageSizeOptions={[15, 25, 50]}
+              table={resourceTable.table}
+              totalItems={resourceTable.data.total}
+            />
+          }
+          table={resourceTable.table}
+          tableClassName="min-w-[900px]"
+          onRowClick={(row) =>
+            navigate(
+              `${config.basePath}/detail?resourceCode=${encodeURIComponent(
+                row.resourceCode,
+              )}`,
+            )
+          }
+        />
+      </div>
 
       {kind === "dataSource" ? (
         <DataSourceCreateDialog

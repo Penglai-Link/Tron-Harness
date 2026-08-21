@@ -287,6 +287,7 @@ export const pages = {
     actions: {
       new: "新建资源",
       quickUpload: "快捷上传",
+      refresh: "刷新",
     },
     columns: {
       fileSize: "文件大小",
@@ -400,10 +401,12 @@ export const pages = {
     emptyWorkspace: "请选择空间后管理资源。",
     fields: {
       code: "资源编码",
+      codePlaceholder: "resource-code",
       description: "描述",
       descriptionPlaceholder: "说明 Agent 和应用应在什么场景使用该资源",
       name: "资源名称",
       namePlaceholder: "资源名称",
+      type: "资源类型",
     },
     file: {
       chooseFile: "选择文件",
@@ -431,6 +434,10 @@ export const pages = {
     status: { inheritance: "允许继承" },
     tabs: {
       data: "资源信息",
+    },
+    titles: {
+      create: "新建资源",
+      detail: "资源详情",
     },
   },
   knowledgeGraph: {

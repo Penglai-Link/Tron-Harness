@@ -287,6 +287,7 @@ export const pages = {
     actions: {
       new: "New Resource",
       quickUpload: "Quick Upload",
+      refresh: "Refresh",
     },
     columns: {
       fileSize: "File Size",
@@ -400,10 +401,12 @@ export const pages = {
     emptyWorkspace: "Select a workspace to manage resources.",
     fields: {
       code: "Resource code",
+      codePlaceholder: "resource-code",
       description: "Description",
       descriptionPlaceholder: "Describe when agents and applications should use this resource",
       name: "Resource name",
       namePlaceholder: "Resource name",
+      type: "Resource type",
     },
     file: {
       chooseFile: "Choose a file",
@@ -431,6 +434,10 @@ export const pages = {
     status: { inheritance: "Allow inheritance" },
     tabs: {
       data: "Resource information",
+    },
+    titles: {
+      create: "New Resource",
+      detail: "Resource Details",
     },
   },
   knowledgeGraph: {

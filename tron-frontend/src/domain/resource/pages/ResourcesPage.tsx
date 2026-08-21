@@ -30,11 +30,9 @@ import type {
 } from "@/domain/resource/model";
 import { useQuickResourceUploadHandoffStore } from "@/domain/resource/model";
 import {
-  Field,
   PageHeader,
+  SearchField,
   SelectInput,
-  SurfaceCard,
-  TextInput,
   useLocaleFormatters,
   useToast,
   useWorkspaceSpaces,
@@ -327,37 +325,61 @@ export function ResourcesPage() {
     );
   }
 
+  const title = isFileManagement
+    ? t("pages:resourceConnections.file.title", {
+        defaultValue: "File Management",
+      })
+    : isPlatformResources
+    ? pageT("title.platform", { defaultValue: "Platform Resources" })
+    : pageT("title.workspace");
+
   return (
-    <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
-      <div className="space-y-5">
+    <>
+      <PageHeader
+        title={title}
+        actions={(
+          <>
+            <Button
+              aria-label={pageT("actions.refresh")}
+              size="lg"
+              variant="outline"
+              onClick={() => {
+                void resourceTable.refresh();
+              }}
+            >
+              <RefreshCcw aria-hidden="true" size={15} />
+            </Button>
+            <Button
+              disabled={!activeWorkspace}
+              size="lg"
+              onClick={() => setQuickUploadOpen(true)}
+            >
+              <Upload aria-hidden="true" size={15} />
+              {pageT("actions.quickUpload")}
+            </Button>
+          </>
+        )}
+      />
+      <div className="mt-5">
         <TanStackDataTable<ResourceRecord>
-          variant="embedded"
+          variant="default"
           table={resourceTable.table}
           loading={resourceTable.isLoading}
           error={resourceTable.error}
-          title={
-            isFileManagement
-              ? t("pages:resourceConnections.file.title", {
-                  defaultValue: "File Management",
-                })
-              : isPlatformResources
-              ? pageT("title.platform", { defaultValue: "Platform Resources" })
-              : pageT("title.workspace")
-          }
           toolbar={
-            <div className="flex gap-2">
-              <TextInput
-                className="w-full"
+            <>
+              <SearchField
+                ariaLabel={pageT("search.label")}
+                className="w-full sm:w-72"
                 placeholder={pageT("search.placeholder")}
-                type="search"
                 value={query}
-                onChange={(event) => {
-                  setQuery(event.target.value);
+                onChange={(value) => {
+                  setQuery(value);
                 }}
               />
               <SelectInput
                 aria-label={pageT("filters.kindAria")}
-                className="w-full"
+                className="w-full sm:w-44"
                 value={kindFilter}
                 onValueChange={(value) => {
                   setKindFilter(value ?? "ALL");
@@ -375,7 +397,7 @@ export function ResourcesPage() {
               {!isPlatformResources ? (
                 <SelectInput
                   aria-label={pageT("filters.sourceAria")}
-                  className="w-full"
+                  className="w-full sm:w-44"
                   value={contextFilter}
                   onValueChange={(value) => {
                     setContextFilter(value as ResourceSourceKind | "ALL");
@@ -392,15 +414,7 @@ export function ResourcesPage() {
                   )}
                 </SelectInput>
               ) : null}
-              <Button
-                size="lg"
-                disabled={!activeWorkspace}
-                variant="default"
-                onClick={() => setQuickUploadOpen(true)}
-              >
-                {pageT("actions.quickUpload")}
-              </Button>
-            </div>
+            </>
           }
           pagination={
             <TanStackTablePagination
@@ -428,6 +442,6 @@ export function ResourcesPage() {
         onCreate={createQuickResource}
         onCreated={openQuickResource}
       />
-    </div>
+    </>
   );
 }

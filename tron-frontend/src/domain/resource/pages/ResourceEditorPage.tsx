@@ -14,7 +14,6 @@ import {
   Trash2,
 } from "lucide-react";
 import {
-  Link,
   useLocation,
   useNavigate,
   useSearchParams,
@@ -43,7 +42,9 @@ import {
 } from "@/domain/resource/model";
 import {
   ConfirmDialog,
+  Field,
   PageHeader,
+  SurfaceCard,
   TextArea,
   TextInput,
   ToggleSwitch,
@@ -144,6 +145,19 @@ export function ResourceEditorPage() {
   const editorT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:resourceEditor.${key}`, { defaultValue, ...options })
   );
+  const listLabel = resourceManagementBasePath === "/resource-management/files"
+    ? t("pages:resourceConnections.file.title", { defaultValue: "File Management" })
+    : resourceManagementBasePath === "/resource-management/data-sources"
+    ? t("pages:resourceConnections.dataSource.title", { defaultValue: "Data Source Management" })
+    : resourceManagementBasePath === "/resource-management/servers"
+    ? t("pages:resourceConnections.server.title", { defaultValue: "Server Management" })
+    : resourceManagementBasePath === "/resource-management/server-accounts"
+    ? t("pages:resourceConnections.serverAccount.title", { defaultValue: "Server Account Management" })
+    : settingsScope.isSettings
+    ? t("pages:resources.title.platform", { defaultValue: "Platform Resources" })
+    : editorT("breadcrumb.resources", "Resources");
+  const newResourceTitle = editorT("titles.create", "New Resource");
+  const resourceDetailTitle = editorT("titles.detail", "Resource Details");
 
   const detailQuery = useResourceDetail({
     resourceCode: isNew ? "" : requestedResourceCode,
@@ -408,11 +422,28 @@ export function ResourceEditorPage() {
   }
 
   if (!scopeReady) {
-    return <p className="text-sm text-[var(--color-on-surface-variant)]">{editorT("emptyWorkspace", "Select a workspace to manage resources.")}</p>;
+    return (
+      <>
+        <PageHeader title={isNew ? newResourceTitle : listLabel} />
+        <SurfaceCard className="max-w-5xl text-sm text-[var(--color-on-surface-variant)]">
+          {editorT("emptyWorkspace", "Select a workspace to manage resources.")}
+        </SurfaceCard>
+      </>
+    );
   }
 
   if (!isNew && requestedResourceCode && !detailQuery.loading && !loadedResource) {
-    return <p className="text-sm text-[var(--color-on-surface-variant)]">{editorT("notFound", "Resource not found.")}</p>;
+    return (
+      <>
+        <PageHeader
+          breadcrumbs={[{ href: basePath, label: listLabel }, { label: resourceDetailTitle }]}
+          title={resourceDetailTitle}
+        />
+        <SurfaceCard className="max-w-5xl text-sm text-[var(--color-on-surface-variant)]">
+          {editorT("notFound", "Resource not found.")}
+        </SurfaceCard>
+      </>
+    );
   }
 
   const readOnly = inherited || (!isNew && !editing);
@@ -422,7 +453,7 @@ export function ResourceEditorPage() {
       <>
         <PageHeader
           breadcrumbs={[
-            { href: basePath, label: editorT("breadcrumb.resources", "Resources") },
+            { href: basePath, label: listLabel },
             { label: loadedResource.resourceCode },
           ]}
           title={loadedResource.name}
@@ -432,7 +463,8 @@ export function ResourceEditorPage() {
                 <>
                   <Button
                     disabled={saving}
-                    variant="secondary"
+                    size="lg"
+                    variant="outline"
                     onClick={() => {
                       setEditing(false);
                       setAllowInheritance(loadedResource.allowInheritance);
@@ -442,18 +474,18 @@ export function ResourceEditorPage() {
                   >
                     {editorT("actions.cancel", "Cancel")}
                   </Button>
-                  <Button disabled={saving || !name.trim()} onClick={() => { void save(); }}>
+                  <Button disabled={saving || !name.trim()} size="lg" onClick={() => { void save(); }}>
                     <Save aria-hidden="true" size={15} />
                     {editorT("actions.saveActive", "Save")}
                   </Button>
                 </>
               ) : inherited ? null : (
                 <>
-                  <Button variant="secondary" onClick={() => setEditing(true)}>
+                  <Button size="lg" variant="outline" onClick={() => setEditing(true)}>
                     <Pencil aria-hidden="true" size={15} />
                     {editorT("actions.edit", "Edit")}
                   </Button>
-                  <Button variant="outline" onClick={() => setDeleteOpen(true)}>
+                  <Button size="lg" variant="outline" onClick={() => setDeleteOpen(true)}>
                     <Trash2 aria-hidden="true" size={15} />
                     {editorT("actions.delete", "Delete resource")}
                   </Button>
@@ -463,8 +495,8 @@ export function ResourceEditorPage() {
           )}
         />
 
-        <div className="max-w-5xl space-y-8">
-          <section className="border-y border-[var(--color-outline-variant)] py-5">
+        <SurfaceCard className="max-w-5xl space-y-5">
+          <section className="border-b border-[var(--color-outline-variant)] pb-5">
             <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">
               {editorT("sections.basic", "Basic information")}
             </h2>
@@ -525,7 +557,7 @@ export function ResourceEditorPage() {
             </dl>
           </section>
 
-          <section className="border-b border-[var(--color-outline-variant)] pb-5">
+          <section>
             <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">
               {editorT("sections.connection", "Connection")}
             </h2>
@@ -544,7 +576,7 @@ export function ResourceEditorPage() {
               />
             </dl>
           </section>
-        </div>
+        </SurfaceCard>
 
         <ConfirmDialog
           cancelText={editorT("actions.cancel", "Cancel")}
@@ -561,67 +593,26 @@ export function ResourceEditorPage() {
   }
 
   return (
-    <div className="min-w-0">
-      <nav aria-label={editorT("breadcrumb.aria", "Breadcrumb")} className="mb-3 flex flex-wrap items-center gap-1 text-[12px] text-[var(--color-on-surface-variant)]">
-        <Link className="hover:text-[var(--color-on-surface)]" to={basePath}>
-          {editorT("breadcrumb.resources", "Resources")}
-        </Link>
-        {!isNew ? <><span aria-hidden="true">/</span><span className="font-mono">{resourceCode}</span></> : null}
-      </nav>
-
-      <header className="mb-4 border-b border-[var(--color-outline-variant)] pb-4">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-          <div className="min-w-0 flex-1">
-            <div className="min-w-0 max-w-3xl">
-              <TextInput
-                aria-label={editorT("fields.name", "Resource name")}
-                className="h-11 text-xl font-semibold"
-                disabled={readOnly || saving}
-                placeholder={editorT("fields.namePlaceholder", "Resource name")}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-              />
-            </div>
-
-            <div className="mt-2 max-w-3xl">
-              <TextArea
-                aria-label={editorT("fields.description", "Description")}
-                className="min-h-16"
-                disabled={readOnly || saving}
-                placeholder={editorT("fields.descriptionPlaceholder", "Describe when agents and applications should use this resource")}
-                value={description}
-                onChange={(event) => setDescription(event.target.value)}
-              />
-            </div>
-
-            <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-[12px] text-[var(--color-on-surface-variant)]">
-              {isNew ? (
-                <TextInput
-                  aria-label={editorT("fields.code", "Resource code")}
-                  className="h-8 w-56 font-mono text-[12px]"
-                  disabled={saving}
-                  placeholder="resource-code"
-                  value={resourceCode}
-                  onChange={(event) => setResourceCode(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
-                />
-              ) : <span className="font-mono font-medium text-[var(--color-on-surface)]">{resourceCode}</span>}
-              <Badge tone="outline">{t(`pages:resources.kind.${kind.toLowerCase()}`, { defaultValue: kind })}</Badge>
-              <ToggleSwitch
-                checked={allowInheritance}
-                disabled={readOnly || saving}
-                label={editorT("status.inheritance", "Allow inheritance")}
-                onCheckedChange={setAllowInheritance}
-              />
-            </div>
-          </div>
-
-          <div className="flex shrink-0 flex-wrap items-center gap-2">
+    <>
+      <PageHeader
+        breadcrumbs={[
+          { href: basePath, label: listLabel },
+          ...(isNew ? [] : [{ label: resourceCode || requestedResourceCode }]),
+        ]}
+        title={isNew ? newResourceTitle : loadedResource?.name ?? resourceDetailTitle}
+        actions={(
+          <>
             {isNew ? (
               <>
-                <Button disabled={saving} variant="outline" onClick={() => navigate(basePath)}>
+                <Button
+                  disabled={saving}
+                  size="lg"
+                  variant="outline"
+                  onClick={() => navigate(basePath)}
+                >
                   {editorT("actions.cancel", "Cancel")}
                 </Button>
-                <Button disabled={saveDisabled} onClick={() => { void save(); }}>
+                <Button disabled={saveDisabled} size="lg" onClick={() => { void save(); }}>
                   <Save aria-hidden="true" size={15} />
                   {editorT("actions.create", "Create")}
                 </Button>
@@ -630,6 +621,7 @@ export function ResourceEditorPage() {
               <>
                 <Button
                   disabled={saving}
+                  size="lg"
                   variant="outline"
                   onClick={() => {
                     if (!loadedResource) return;
@@ -641,30 +633,94 @@ export function ResourceEditorPage() {
                 >
                   {editorT("actions.cancel", "Cancel")}
                 </Button>
-                <Button disabled={saving || !name.trim()} onClick={() => { void save(); }}>
+                <Button disabled={saving || !name.trim()} size="lg" onClick={() => { void save(); }}>
                   <Save aria-hidden="true" size={15} />
                   {editorT("actions.saveActive", "Save")}
                 </Button>
               </>
             ) : inherited ? null : (
               <>
-                <Button onClick={() => setEditing(true)}>
+                <Button size="lg" variant="outline" onClick={() => setEditing(true)}>
                   <Pencil aria-hidden="true" size={15} />
                   {editorT("actions.edit", "Edit")}
                 </Button>
-                <Button variant="outline" onClick={() => setDeleteOpen(true)}>
+                <Button size="lg" variant="outline" onClick={() => setDeleteOpen(true)}>
                   <Trash2 aria-hidden="true" size={15} />
                   {editorT("actions.delete", "Delete resource")}
                 </Button>
               </>
             )}
+          </>
+        )}
+      />
+
+      <SurfaceCard className="max-w-5xl space-y-5">
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={editorT("fields.name", "Resource name")}>
+            <TextInput
+              aria-label={editorT("fields.name", "Resource name")}
+              disabled={readOnly || saving}
+              placeholder={editorT("fields.namePlaceholder", "Resource name")}
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </Field>
+          <Field label={editorT("fields.code", "Resource code")}>
+            {isNew ? (
+              <TextInput
+                aria-label={editorT("fields.code", "Resource code")}
+                className="font-mono"
+                disabled={saving}
+                placeholder={editorT("fields.codePlaceholder", "resource-code")}
+                value={resourceCode}
+                onChange={(event) => setResourceCode(event.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, ""))}
+              />
+            ) : (
+              <TextInput
+                aria-label={editorT("fields.code", "Resource code")}
+                className="font-mono"
+                readOnly
+                value={resourceCode || requestedResourceCode}
+              />
+            )}
+          </Field>
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <Field label={editorT("fields.type", "Resource type")}>
+            <div className="flex h-10 items-center">
+              <Badge tone="outline">
+                {t(`pages:resources.kind.${kind.toLowerCase()}`, {
+                  defaultValue: kind,
+                })}
+              </Badge>
+            </div>
+          </Field>
+          <div className="flex min-h-10 items-end">
+            <ToggleSwitch
+              checked={allowInheritance}
+              disabled={readOnly || saving}
+              label={editorT("status.inheritance", "Allow inheritance")}
+              onCheckedChange={setAllowInheritance}
+            />
           </div>
         </div>
-      </header>
 
-      <div className="max-w-5xl space-y-8">
-        <section className="min-w-0 border-y border-[var(--color-outline-variant)] py-5">
-          <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">{editorT("tabs.data", "Resource information")}</h2>
+        <Field label={editorT("fields.description", "Description")}>
+          <TextArea
+            aria-label={editorT("fields.description", "Description")}
+            className="min-h-24 resize-y"
+            disabled={readOnly || saving}
+            placeholder={editorT("fields.descriptionPlaceholder", "Describe when agents and applications should use this resource")}
+            value={description}
+            onChange={(event) => setDescription(event.target.value)}
+          />
+        </Field>
+
+        <section className="border-t border-[var(--color-outline-variant)] pt-5">
+          <h2 className="mb-4 text-base font-semibold text-[var(--color-on-surface)]">
+            {editorT("tabs.data", "Resource information")}
+          </h2>
           {isFileKind && isNew ? (
             <div className="space-y-3">
               <input
@@ -680,20 +736,28 @@ export function ResourceEditorPage() {
                   if (file) setStagedFile(file);
                 }}
               />
-              <Button disabled={saving} type="button" variant="outline" onClick={() => fileInputRef.current?.click()}>
+              <Button
+                disabled={saving}
+                type="button"
+                variant="outline"
+                onClick={() => fileInputRef.current?.click()}
+              >
                 <FileUp aria-hidden="true" size={15} />
                 {editorT("file.chooseFile", "Choose a file")}
               </Button>
               {stagedFile ? (
-                <p className="text-[12px] text-[var(--color-on-surface-variant)]">
-                  {stagedFile.name} · {formatByteSize(stagedFile.size)}
-                </p>
+                <div className="flex min-w-0 items-center justify-between gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-2.5">
+                  <span className="min-w-0 truncate text-sm font-medium">{stagedFile.name}</span>
+                  <span className="shrink-0 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
+                    {formatByteSize(stagedFile.size)}
+                  </span>
+                </div>
               ) : null}
             </div>
           ) : loadedResource && isFileKind ? (
             <div className="space-y-3">
               {loadedResource.file ? (
-                <div className="flex flex-wrap items-center gap-3 border-y border-[var(--color-outline-variant)] py-3">
+                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-2.5">
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{loadedResource.file.fileName}</span>
                   <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">{formatByteSize(loadedResource.file.byteSize)}</span>
                   <Button size="sm" type="button" variant="outline" onClick={() => { void downloadCurrentFile(); }}>
@@ -734,14 +798,14 @@ export function ResourceEditorPage() {
               </p>
             </div>
           ) : loadedResource && loadedResource.attributes ? (
-            <pre className="overflow-x-auto border-y border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-3 font-mono text-[12px] leading-5">
+            <pre className="overflow-x-auto rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-3 font-mono text-[12px] leading-5">
               {JSON.stringify(loadedResource.attributes, null, 2)}
             </pre>
           ) : (
             <p className="text-sm text-[var(--color-on-surface-variant)]">{editorT("emptyAttributes", "This resource has no attributes.")}</p>
           )}
         </section>
-      </div>
+      </SurfaceCard>
 
       <ConfirmDialog
         cancelText={editorT("actions.cancel", "Cancel")}
@@ -753,6 +817,6 @@ export function ResourceEditorPage() {
         onCancel={() => setDeleteOpen(false)}
         onConfirm={() => { void deleteCurrentResource(); }}
       />
-    </div>
+    </>
   );
 }
