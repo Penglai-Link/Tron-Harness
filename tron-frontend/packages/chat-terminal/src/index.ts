@@ -15,6 +15,7 @@ import {
   type ChatTerminalMessageOverrides,
 } from "./terminal/i18n";
 import {
+  type AIStreamEvent,
   type AITransport,
   type TerminalTransport,
 } from "./transport";
@@ -93,13 +94,12 @@ export function initTerminal(options: ChatTerminalOptions) {
 
   const commandChat = aiTransport
     ? async (command: string) => {
-        let requestId = "default";
+        const requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
         try {
-          const result = await aiTransport.stream(
+          await aiTransport.stream(
             normalizeOptions.prompts?.chat?.(command) ?? command,
             {
-              onChunk: ({ delta, requestId: chunkRequestId }) => {
-                requestId = chunkRequestId;
+              onChunk: ({ delta }) => {
                 if (disposed) return;
                 termInstance.modelSessionAddon?.appendMessageChunk({
                   conversationId: "default",
@@ -107,9 +107,16 @@ export function initTerminal(options: ChatTerminalOptions) {
                   response: delta,
                 });
               },
+              onEvent: (event) => {
+                if (disposed || !isAgentActivityEvent(event)) return;
+                termInstance.modelSessionAddon?.appendActivityEvent({
+                  conversationId: "default",
+                  event,
+                  requestId,
+                });
+              },
             },
           );
-          requestId = result.requestId;
         } finally {
           if (!disposed) {
             await (
@@ -312,6 +319,15 @@ export function initTerminal(options: ChatTerminalOptions) {
       termInstance.refreshLocale();
     },
   };
+}
+
+function isAgentActivityEvent(event: AIStreamEvent) {
+  const type = event.type.toUpperCase();
+  return (
+    type.startsWith("REASONING_") ||
+    type.startsWith("TOOL_CALL_") ||
+    type === "ACTIVITY_DELTA"
+  );
 }
 
 function getTerminalBufferContent(

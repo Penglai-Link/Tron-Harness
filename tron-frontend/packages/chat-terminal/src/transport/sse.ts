@@ -1,6 +1,6 @@
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 
-import { parseTerminalMessage } from "./protocol";
+import { parseAIStreamEvent, parseTerminalMessage } from "./protocol";
 import type {
   AIRequestOptions,
   AIStreamOptions,
@@ -72,9 +72,20 @@ export class SseAITransport implements AITransport {
               return;
             }
 
+            const event = parseAIStreamEvent(payload);
+            if (!event) {
+              rejectOnce(new Error("AI 流式响应格式错误"));
+              return;
+            }
+
+            options.onEvent?.(event);
             const message = parseTerminalMessage(payload);
             if (!message) {
-              rejectOnce(new Error("AI 流式响应格式错误"));
+              if (event.type === "RUN_ERROR") {
+                rejectOnce(new Error(event.message || "AI 流式请求失败"));
+              } else if (event.type === "RUN_FINISHED") {
+                resolveOnce();
+              }
               return;
             }
 

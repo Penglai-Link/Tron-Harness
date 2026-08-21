@@ -1,5 +1,6 @@
 import type { MaybePromise } from "./common";
 import type { ChatTerminalI18n, ChatTerminalMessageKey } from "../i18n";
+import type { AIStreamEvent } from "../../transport/types";
 
 export type ModelSessionCommandStatus =
   | "pending"
@@ -30,6 +31,12 @@ export interface ModelSessionMessageChunk {
   requestId: string;
   conversationId: string;
   response: string;
+}
+
+export interface ModelSessionActivityEvent {
+  requestId: string;
+  conversationId: string;
+  event: AIStreamEvent;
 }
 
 export interface ModelSessionCommandActionPayload {
@@ -70,6 +77,7 @@ export interface ModelSessionAddonOptions {
 
 export interface ModelSessionRenderState {
   tokens: ModelSessionToken[];
+  activityEvents: readonly AIStreamEvent[];
   commandStates: ReadonlyMap<string, ModelSessionCommandCardState>;
   i18n: ChatTerminalI18n;
 }

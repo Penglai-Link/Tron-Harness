@@ -41,8 +41,26 @@ export interface AIStreamChunk {
   requestId: string;
 }
 
+export interface AIStreamEvent {
+  type: string;
+  threadId?: string;
+  runId?: string;
+  messageId?: string;
+  delta?: string | unknown[];
+  content?: string;
+  message?: string;
+  toolCallId?: string;
+  toolCallName?: string;
+  toolCallArgs?: unknown;
+  parentMessageId?: string;
+  timestamp?: number;
+  [key: string]: unknown;
+}
+
 export interface AIStreamOptions {
   onChunk: (chunk: AIStreamChunk) => void;
+  /** Receives structured agent activity without changing text-stream behavior. */
+  onEvent?: (event: AIStreamEvent) => void;
   signal?: AbortSignal;
 }
 

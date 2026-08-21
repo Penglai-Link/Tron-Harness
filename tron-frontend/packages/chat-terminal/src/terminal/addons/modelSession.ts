@@ -14,6 +14,7 @@ import { createModelSessionHost, renderModelSession } from "../ui/modelSession";
 import { getTerminalCellMetrics, writeTerminalAsync } from "../utils";
 import { createChatTerminalI18n, type ChatTerminalI18n } from "../i18n";
 import type {
+  ModelSessionActivityEvent,
   ModelSessionAddonOptions,
   ModelSessionCommandActionPayload,
   ModelSessionCommandCardState,
@@ -22,6 +23,7 @@ import type {
   ModelSessionRenderActions,
   ModelSessionToken,
 } from "../types/modelSession";
+import type { AIStreamEvent } from "../../transport/types";
 
 interface ParsedSsePayload {
   requestId: string;
@@ -45,6 +47,7 @@ interface ModelSessionInstance {
   requestId: string;
   conversationId: string;
   rawMessage: Signal<string>;
+  activityEvents: Signal<readonly AIStreamEvent[]>;
   tokens: ReadonlySignal<ModelSessionToken[]>;
   anchorRow: number;
   reservedRows: number;
@@ -165,6 +168,14 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.show();
   }
 
+  appendActivityEvent(chunk: ModelSessionActivityEvent) {
+    const session = this.getOrCreateSession({ ...chunk, response: "" });
+    if (!session) return;
+
+    session.activityEvents.value = [...session.activityEvents.peek(), chunk.event];
+    this.show();
+  }
+
   async complete(requestId?: string) {
     const completedSessions: ModelSessionInstance[] = [];
 
@@ -266,6 +277,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     const buffer = this.terminal.buffer.active;
     const host = createModelSessionHost();
     const rawMessage = signal("");
+    const activityEvents = signal<readonly AIStreamEvent[]>([]);
     const commandStates = signal<
       ReadonlyMap<string, ModelSessionCommandCardState>
     >(new Map());
@@ -303,6 +315,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       requestId: chunk.requestId,
       conversationId: chunk.conversationId,
       rawMessage,
+      activityEvents,
       tokens,
       anchorRow: buffer.baseY + buffer.cursorY,
       reservedRows: 0,
@@ -319,6 +332,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.activeSessionKey = key;
     session.disposeRenderEffect = effect(() => {
       tokens.value;
+      activityEvents.value;
       commandStates.value;
       this.scheduleSessionRender(session);
     });
@@ -352,6 +366,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       session.host,
       {
         tokens: session.tokens.peek(),
+        activityEvents: session.activityEvents.peek(),
         commandStates: session.commandStates.peek(),
         i18n: this.i18n,
       },

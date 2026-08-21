@@ -55,6 +55,36 @@ describe("SseAITransport", () => {
     );
   });
 
+  it("forwards structured agent activity alongside text chunks", async () => {
+    const activity = {
+      runId: "run-1",
+      timestamp: 1,
+      type: "TOOL_CALL_START",
+      toolCallArgs: { path: "/workspace" },
+      toolCallId: "tool-1",
+      toolCallName: "workspace.inspect",
+    };
+    sseHarness.fetchEventSource.mockImplementation(
+      async (_url: string, options: Record<string, unknown>) => {
+        const onmessage = options.onmessage as (event: { data: string }) => void;
+        onmessage({ data: JSON.stringify(activity) });
+        onmessage({
+          data: JSON.stringify(message("TEXT_MESSAGE_CONTENT", "hello")),
+        });
+        onmessage({ data: JSON.stringify(message("TEXT_MESSAGE_END", "")) });
+      },
+    );
+    const onEvent = vi.fn();
+    const transport = new SseAITransport({ url: "http://terminal.test/chat" });
+
+    await transport.stream("question", { onChunk: vi.fn(), onEvent });
+
+    expect(onEvent).toHaveBeenCalledWith(activity);
+    expect(onEvent).toHaveBeenCalledWith(
+      expect.objectContaining({ type: "TEXT_MESSAGE_CONTENT" }),
+    );
+  });
+
   it("uses body to create the request payload", async () => {
     sseHarness.fetchEventSource.mockImplementation(
       async (_url: string, options: Record<string, unknown>) => {

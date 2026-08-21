@@ -1,3 +1,5 @@
+import type { AIStreamEvent } from "./types";
+
 export type TerminalMessageType =
   | "TEXT_MESSAGE_START"
   | "TEXT_MESSAGE_CONTENT"
@@ -40,6 +42,20 @@ export function parseTerminalMessage(
   }
 
   return value as unknown as TerminalMessage;
+}
+
+export function parseAIStreamEvent(
+  value: unknown,
+): AIStreamEvent | undefined {
+  if (
+    !isRecord(value) ||
+    typeof value.type !== "string" ||
+    !value.type.trim()
+  ) {
+    return undefined;
+  }
+
+  return value as AIStreamEvent;
 }
 
 export type TerminalSessionResponse =

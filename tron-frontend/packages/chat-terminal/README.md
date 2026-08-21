@@ -101,10 +101,11 @@ const terminal = initTerminal({
       },
     }),
     ai: {
-      async stream(content, { onChunk, signal }) {
+      async stream(content, { onChunk, onEvent, signal }) {
         const requestId = crypto.randomUUID();
         await chatAdapter.streamMessage(session, { content, workspaceCode }, {
           onDelta: (delta) => onChunk({ delta, requestId }),
+          onAguiEvent: onEvent,
         }, signal);
         return { requestId };
       },
