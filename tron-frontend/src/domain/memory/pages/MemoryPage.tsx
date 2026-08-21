@@ -594,7 +594,7 @@ function MemoryRepository() {
           onOpen={openMemory}
           title="Memory"
           toolbar={
-            <>
+            <div className="flex gap-2">
               <SelectInput
                 aria-label="Filter memories by status"
                 className="w-full"
@@ -604,7 +604,7 @@ function MemoryRepository() {
                 }}
               >
                 {targets.map((option) => (
-                  <SelectItem key={option.id} value={option.label}>
+                  <SelectItem key={option.id} value={option.id}>
                     {option.label}
                   </SelectItem>
                 ))}
@@ -628,7 +628,7 @@ function MemoryRepository() {
               <Button size="lg" onClick={() => navigate("/memory/new")}>
                 New
               </Button>
-            </>
+            </div>
           }
         />
       </div>
