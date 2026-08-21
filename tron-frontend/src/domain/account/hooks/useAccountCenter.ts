@@ -9,6 +9,15 @@ import {
   fetchAccountProfile,
   updateAccountProfile,
 } from "@/domain/account/api";
+import {
+  createResource,
+  uploadResourceBinary,
+} from "@/domain/resource/api";
+import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import {
+  buildAvatarResourceReference,
+  parseAvatarResourceReference,
+} from "@/shared/lib/avatarResource";
 import type {
   AccountProfile,
   ChangeAccountPasswordPayload,
@@ -52,12 +61,58 @@ export function useAccountCenter() {
     setRefreshKey((value) => value + 1);
   }, []);
 
-  const saveProfile = useCallback(async (payload: UpdateAccountProfilePayload) => {
+  const saveProfile = useCallback(async (
+    payload: UpdateAccountProfilePayload,
+    avatarFile?: File,
+    avatarWorkspaceCode?: string,
+  ) => {
     setSavingProfile(true);
     try {
-      const updated = await updateAccountProfile(payload);
+      let avatarUrl = payload.avatarUrl;
+      if (avatarFile) {
+        if (getServiceDataSource("resource") !== "api") {
+          avatarUrl = URL.createObjectURL(avatarFile);
+        } else {
+          if (!avatarWorkspaceCode?.trim()) {
+            throw new Error("Select a workspace before uploading an avatar.");
+          }
+
+          const previousReference = parseAvatarResourceReference(profile?.avatarUrl);
+          const nextReference = previousReference?.workspaceCode === avatarWorkspaceCode
+            ? previousReference
+            : {
+                resourceCode: `avatar-${profile?.userCode ?? "user"}-${Date.now()}`
+                  .replace(/[^A-Za-z0-9_.-]/g, "-")
+                  .slice(0, 64),
+                workspaceCode: avatarWorkspaceCode,
+              };
+
+          if (previousReference && previousReference.workspaceCode === avatarWorkspaceCode) {
+            await uploadResourceBinary({
+              file: avatarFile,
+              resourceCode: nextReference.resourceCode,
+              workspaceCode: nextReference.workspaceCode,
+            });
+          } else {
+            await createResource({
+              allowInheritance: false,
+              description: "Managed account avatar",
+              file: avatarFile,
+              kind: "IMAGE",
+              name: `Avatar ${profile?.displayName ?? "User"}`,
+              resourceCode: nextReference.resourceCode,
+              workspaceCode: nextReference.workspaceCode,
+            });
+          }
+
+          avatarUrl = buildAvatarResourceReference(nextReference);
+        }
+      }
+
+      const updated = await updateAccountProfile({ ...payload, avatarUrl });
       setProfile(updated);
       updateSessionUser({
+        avatarUrl: updated.avatarUrl,
         displayName: updated.displayName,
         email: updated.email,
         passwordResetRequired: updated.passwordResetRequired,
@@ -66,7 +121,7 @@ export function useAccountCenter() {
     } finally {
       setSavingProfile(false);
     }
-  }, [updateSessionUser]);
+  }, [profile, updateSessionUser]);
 
   const savePassword = useCallback(async (payload: ChangeAccountPasswordPayload) => {
     setChangingPassword(true);

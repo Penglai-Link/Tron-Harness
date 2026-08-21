@@ -15,6 +15,7 @@ export const account = {
       archived: "Archived",
     },
     fields: {
+      avatar: "Avatar",
       avatarUrl: "Avatar URL",
       displayName: "Display name",
       email: "Email",
@@ -30,6 +31,7 @@ export const account = {
       phoneCode: "+86",
       phoneNumber: "13800138000",
     },
+    avatarHint: "PNG, JPEG, WEBP, or GIF up to {{size}}. The avatar is stored in file management.",
   },
   security: {
     currentPassword: "Current password",
@@ -75,6 +77,8 @@ export const account = {
     required: "This field is required.",
     phoneIncomplete: "Enter both country code and phone number.",
     invalidAvatarUrl: "Enter a valid http or https URL.",
+    invalidAvatarFile: "Choose a PNG, JPEG, WEBP, or GIF image.",
+    avatarFileTooLarge: "The avatar file must be no larger than 2 MB.",
     passwordMismatch: "The new passwords do not match.",
     passwordWeak: "The new password does not meet every requirement.",
     currentPasswordIncorrect: "The current password is incorrect.",

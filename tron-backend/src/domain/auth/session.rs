@@ -56,6 +56,7 @@ pub struct AuthProviderDescriptor {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AuthenticatedUser {
+    pub avatar_url: Option<String>,
     pub user_code: String,
     pub username: String,
     pub display_name: String,
@@ -69,6 +70,7 @@ pub struct AuthenticatedUser {
 impl From<&User> for AuthenticatedUser {
     fn from(user: &User) -> Self {
         Self {
+            avatar_url: user.avatar_url.clone(),
             user_code: user.user_code.clone(),
             username: user.username.clone(),
             display_name: user.display_name.clone(),

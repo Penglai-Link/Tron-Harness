@@ -14,6 +14,7 @@ export interface AuthProvidersPayload {
 }
 
 export interface AuthenticatedUser {
+  avatarUrl: string | null;
   displayName: string;
   email: string;
   passwordResetRequired: boolean;

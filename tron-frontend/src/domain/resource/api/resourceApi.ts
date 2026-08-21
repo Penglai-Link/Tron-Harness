@@ -72,6 +72,7 @@ export function uploadResourceBinary(request: ResourceBinaryUploadApiRequest) {
 
 export function downloadResourceBinary(
   request: ResourceBinaryDownloadApiRequest,
+  signal?: AbortSignal,
 ): Promise<ApiBlobResponse> {
-  return requestApiBlob(resourceApiEndpoints.downloadBinary, { body: request });
+  return requestApiBlob(resourceApiEndpoints.downloadBinary, { body: request, signal });
 }

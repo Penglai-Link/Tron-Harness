@@ -37,6 +37,7 @@ const mockProviders: AuthProvider[] = [
 ];
 
 const defaultMockUser: AuthenticatedUser = {
+  avatarUrl: null,
   displayName: "Auth Operator",
   email: "auth.operator@tron.ai",
   passwordResetRequired: false,

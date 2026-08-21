@@ -63,6 +63,7 @@ import { cn } from "@/shared/lib/utils";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/shared/ui/Forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
+import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useTabStore } from "@/store/tabStore";
 import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
@@ -188,6 +189,7 @@ export function TronShell({
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
   const { setTheme, theme, themes } = useTheme();
   const { session: authSession } = useAuthSession();
+  const { src: avatarSrc } = useManagedAvatar(authSession?.user.avatarUrl);
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const shellFrameMounted = useContext(TronShellFrameContext);
@@ -811,8 +813,8 @@ export function TronShell({
           aria-haspopup="dialog"
           onClick={() => handleUtilityPanelClick("user")}
         >
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
-            {initial}
+          <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
+            {avatarSrc ? <img alt="" className="size-full object-cover" src={avatarSrc} /> : initial}
           </span>
           {compact ? null : (
             <span className="min-w-0 flex-1">

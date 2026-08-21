@@ -15,6 +15,7 @@ export const account = {
       archived: "已归档",
     },
     fields: {
+      avatar: "头像",
       avatarUrl: "头像地址",
       displayName: "显示名称",
       email: "邮箱",
@@ -30,6 +31,7 @@ export const account = {
       phoneCode: "+86",
       phoneNumber: "13800138000",
     },
+    avatarHint: "支持 PNG、JPEG、WEBP、GIF，文件不超过 {{size}}。头像会保存到文件管理。",
   },
   security: {
     currentPassword: "当前密码",
@@ -75,6 +77,8 @@ export const account = {
     required: "此项不能为空。",
     phoneIncomplete: "请同时填写国家或地区代码和手机号。",
     invalidAvatarUrl: "请输入有效的 http 或 https 地址。",
+    invalidAvatarFile: "请选择 PNG、JPEG、WEBP 或 GIF 图片。",
+    avatarFileTooLarge: "头像文件不能超过 2 MB。",
     passwordMismatch: "两次输入的新密码不一致。",
     passwordWeak: "新密码未满足全部密码要求。",
     currentPasswordIncorrect: "当前密码不正确。",

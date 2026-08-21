@@ -2,6 +2,7 @@ import {
   useEffect,
   useMemo,
   useState,
+  type ChangeEvent,
   type FormEvent,
   type ReactNode,
 } from "react";
@@ -36,6 +37,8 @@ import {
   useLocaleFormatters,
   useTheme,
   useToast,
+  useManagedAvatar,
+  useWorkspaceSpaces,
 } from "@/shared";
 import { isApiError } from "@/shared/api/httpClient";
 import { cn } from "@/shared/lib/utils";
@@ -48,6 +51,14 @@ const timezoneSuggestions = [
   "America/New_York",
   "America/Los_Angeles",
 ];
+
+const AVATAR_MAX_FILE_BYTES = 2 * 1024 * 1024;
+const AVATAR_FILE_TYPES = new Set([
+  "image/gif",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+]);
 
 export function AccountCenter() {
   const { t } = useTranslation("account");
@@ -62,6 +73,7 @@ export function AccountCenter() {
     savingProfile,
   } = useAccountCenter();
   const { session } = useAuthSession();
+  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
 
   if (loading) {
     return <AccountLoading title={t("title")} />;
@@ -90,6 +102,9 @@ export function AccountCenter() {
       ? t("source.ldap")
       : t("source.internal");
   const providerName = session?.provider?.name ?? sourceLabel;
+  const avatarWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode
+    ?? profile.spaceCodes[0]
+    ?? "";
 
   return (
     <>
@@ -106,6 +121,7 @@ export function AccountCenter() {
               <ProfileSection
                 profile={profile}
                 saving={savingProfile}
+                avatarWorkspaceCode={avatarWorkspaceCode}
                 onSave={saveProfile}
               />
             </div>
@@ -184,6 +200,7 @@ function AccountIdentity({ profile, sourceLabel }: { profile: AccountProfile; so
 
 function Avatar({ profile }: { profile: AccountProfile }) {
   const [imageFailed, setImageFailed] = useState(false);
+  const { src } = useManagedAvatar(profile.avatarUrl);
   const initials = useMemo(() => profile.displayName
     .split(/\s+/)
     .filter(Boolean)
@@ -197,11 +214,11 @@ function Avatar({ profile }: { profile: AccountProfile }) {
 
   return (
     <div className="flex size-14 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-base font-semibold text-[var(--color-on-primary)] ring-4 ring-[var(--color-elevated-surface)]">
-      {profile.avatarUrl && !imageFailed ? (
+      {src && !imageFailed ? (
         <img
           alt={profile.displayName}
           className="size-full object-cover"
-          src={profile.avatarUrl}
+          src={src}
           onError={() => setImageFailed(true)}
         />
       ) : initials}
@@ -236,17 +253,25 @@ function profileToForm(profile: AccountProfile): ProfileFormState {
 function ProfileSection({
   profile,
   saving,
+  avatarWorkspaceCode,
   onSave,
 }: {
   profile: AccountProfile;
   saving: boolean;
-  onSave: (payload: UpdateAccountProfilePayload) => Promise<AccountProfile>;
+  avatarWorkspaceCode: string;
+  onSave: (
+    payload: UpdateAccountProfilePayload,
+    avatarFile?: File,
+    avatarWorkspaceCode?: string,
+  ) => Promise<AccountProfile>;
 }) {
   const { t } = useTranslation("account");
   const toast = useToast();
   const { formatDateTime } = useLocaleFormatters();
   const [form, setForm] = useState<ProfileFormState>(() => profileToForm(profile));
   const [errors, setErrors] = useState<ProfileFormErrors>({});
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
+  const [avatarFileError, setAvatarFileError] = useState("");
 
   useEffect(() => {
     setForm(profileToForm(profile));
@@ -255,6 +280,25 @@ function ProfileSection({
   function updateField(field: keyof ProfileFormState, value: string) {
     setForm((current) => ({ ...current, [field]: value }));
     setErrors((current) => ({ ...current, [field]: undefined }));
+  }
+
+  function handleAvatarFileChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.target.files?.[0] ?? null;
+    if (!file) return;
+
+    if (!AVATAR_FILE_TYPES.has(file.type)) {
+      setAvatarFile(null);
+      setAvatarFileError(t("validation.invalidAvatarFile"));
+      return;
+    }
+    if (file.size > AVATAR_MAX_FILE_BYTES) {
+      setAvatarFile(null);
+      setAvatarFileError(t("validation.avatarFileTooLarge"));
+      return;
+    }
+
+    setAvatarFile(file);
+    setAvatarFileError("");
   }
 
   function validate() {
@@ -267,19 +311,8 @@ function ProfileSection({
       nextErrors.phoneNumber = t("validation.phoneIncomplete");
     }
 
-    if (form.avatarUrl.trim()) {
-      try {
-        const url = new URL(form.avatarUrl.trim());
-        if (url.protocol !== "http:" && url.protocol !== "https:") {
-          nextErrors.avatarUrl = t("validation.invalidAvatarUrl");
-        }
-      } catch {
-        nextErrors.avatarUrl = t("validation.invalidAvatarUrl");
-      }
-    }
-
     setErrors(nextErrors);
-    return Object.keys(nextErrors).length === 0;
+    return Object.keys(nextErrors).length === 0 && !avatarFileError;
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -297,7 +330,8 @@ function ProfileSection({
           number: form.phoneNumber.trim(),
         } : null,
         timezone: form.timezone.trim(),
-      });
+      }, avatarFile ?? undefined, avatarWorkspaceCode);
+      setAvatarFile(null);
       toast.success(t("messages.profileSaved"));
     } catch (error) {
       toast.error(resolveAccountError(error, t("messages.saveFailed"), {
@@ -385,13 +419,16 @@ function ProfileSection({
               {timezoneSuggestions.map((timezone) => <option key={timezone} value={timezone} />)}
             </datalist>
           </Field>
-          <Field error={errors.avatarUrl} label={t("profile.fields.avatarUrl")}>
-            <TextInput
-              inputMode="url"
-              placeholder={t("profile.placeholders.avatarUrl")}
-              value={form.avatarUrl}
-              onChange={(event) => updateField("avatarUrl", event.target.value)}
+          <Field error={avatarFileError || errors.avatarUrl} label={t("profile.fields.avatar")}>
+            <input
+              accept="image/png,image/jpeg,image/webp,image/gif"
+              className="block w-full rounded-lg border border-[var(--color-outline)] bg-[var(--color-surface)] px-3 py-2 text-sm text-[var(--color-on-surface)] file:mr-3 file:rounded-md file:border-0 file:bg-[var(--color-surface-container-high)] file:px-3 file:py-1.5 file:text-sm file:font-medium"
+              onChange={handleAvatarFileChange}
+              type="file"
             />
+            <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">
+              {t("profile.avatarHint", { size: "2 MB" })}
+            </p>
           </Field>
         </div>
 

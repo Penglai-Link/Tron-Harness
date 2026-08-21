@@ -7,6 +7,7 @@ export * from "./layout/SettingsShell";
 export * from "./layout/Shell";
 export * from "./layout/SurfaceCard";
 export * from "./hooks/useWorkspaceSpaces";
+export * from "./hooks/useManagedAvatar";
 export * from "./hooks/useTablePagination";
 export * from "./hooks/useDismissibleLayer";
 export * from "./hooks/useLocaleFormatters";
