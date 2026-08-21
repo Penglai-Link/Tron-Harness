@@ -10,8 +10,8 @@ describe("getTerminalAnsiTheme", () => {
     expect(theme.brightWhite).toBe("#242424");
   });
 
-  it("keeps ANSI white bright in the matrix-dark application theme", () => {
-    const theme = getTerminalAnsiTheme("matrix-dark");
+  it("keeps ANSI white bright in the dark application theme", () => {
+    const theme = getTerminalAnsiTheme("dark");
 
     expect(theme.white).toBe("#d6f5dc");
     expect(theme.brightWhite).toBe("#ffffff");
