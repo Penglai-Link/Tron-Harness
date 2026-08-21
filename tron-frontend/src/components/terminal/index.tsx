@@ -1,6 +1,6 @@
 import { createInternalChatAdapter, createInternalTerminalAdapter } from "@tron/chat-internal-adapter";
 import { type AITransport, createTerminalTransport, initTerminal } from "@tron/chat-terminal";
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import { useLocale } from "@/i18n";
 import { buildApiUrl, getApiBaseUrl } from "@/shared/api/httpClient";
@@ -16,16 +16,79 @@ const TERMINAL_APP_CODE = import.meta.env.VITE_TRON_TERMINAL_APP_CODE?.trim() ||
 const TERMINAL_MODEL_CODE = import.meta.env.VITE_TRON_TERMINAL_MODEL_CODE?.trim() || null;
 const TERMINAL_API_BASE_URL = getApiBaseUrl();
 
+type TerminalChatContext = Awaited<ReturnType<typeof createTerminalChatContext>>;
+type TerminalChatContextCache = {
+  context: Promise<TerminalChatContext>;
+  releaseTimer: ReturnType<typeof setTimeout> | null;
+  retainCount: number;
+  workspaceCode: string;
+};
+
+type TerminalChatContextLease = {
+  context: Promise<TerminalChatContext>;
+  release: () => void;
+};
+
 const Terminal = () => {
   const { theme } = useTheme();
   const { currentLocale } = useLocale();
   const { selectedPrimarySpaceId, selectedSecondarySpaceId } = useWorkspaceSpaces();
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<ReturnType<typeof initTerminal> | null>(null);
+  const terminalChatContextRef = useRef<TerminalChatContextCache | null>(null);
   const currentLocaleRef = useRef(currentLocale);
   const workspaceCode = CONFIGURED_TERMINAL_WORKSPACE_CODE
     || selectedSecondarySpaceId
     || selectedPrimarySpaceId;
+
+  const acquireTerminalChatContext = useCallback((targetWorkspaceCode: string): TerminalChatContextLease => {
+    const cached = terminalChatContextRef.current;
+    const cache = cached?.workspaceCode === targetWorkspaceCode
+      ? cached
+      : (() => {
+        const context = createTerminalChatContext(targetWorkspaceCode);
+        const nextCache: TerminalChatContextCache = {
+          context,
+          releaseTimer: null,
+          retainCount: 0,
+          workspaceCode: targetWorkspaceCode,
+        };
+        terminalChatContextRef.current = nextCache;
+        void context.catch(() => {
+          if (terminalChatContextRef.current === nextCache) {
+            terminalChatContextRef.current = null;
+          }
+        });
+        return nextCache;
+      })();
+    if (cache.releaseTimer) {
+      clearTimeout(cache.releaseTimer);
+      cache.releaseTimer = null;
+    }
+    cache.retainCount += 1;
+
+    let released = false;
+    return {
+      context: cache.context,
+      release: () => {
+        if (released) return;
+        released = true;
+        cache.retainCount -= 1;
+        if (cache.retainCount !== 0) return;
+
+        // StrictMode re-runs effects synchronously, so the next mount retains this cache first.
+        cache.releaseTimer = setTimeout(() => {
+          cache.releaseTimer = null;
+          if (cache.retainCount !== 0) return;
+
+          if (terminalChatContextRef.current === cache) {
+            terminalChatContextRef.current = null;
+          }
+          void disposeTerminalChatSession(cache.context);
+        }, 0);
+      },
+    };
+  }, []);
 
   useEffect(() => {
     const container = terminalRef.current;
@@ -33,40 +96,12 @@ const Terminal = () => {
 
     let disposed = false;
     let terminalInstance: ReturnType<typeof initTerminal> | null = null;
-    let releaseSession: (() => void) | undefined;
     let activeChatAbortController: AbortController | null = null;
+    const terminalChatLease = acquireTerminalChatContext(workspaceCode);
 
     void (async () => {
-      // Do not cache this context across effect lifecycles. The app runs in
-      // React StrictMode, whose setup/cleanup probe can otherwise share one
-      // session and let the first cleanup delete the session used by the
-      // second setup.
-      const { chatAdapter, session, terminalAdapter } =
-        await createTerminalChatContext(workspaceCode);
-      let sessionReleased = false;
-      releaseSession = () => {
-        if (sessionReleased) return;
-        sessionReleased = true;
-        activeChatAbortController?.abort();
-        void (async () => {
-          try {
-            const activeRun = await chatAdapter.getActiveRun?.(session.sessionCode);
-            if (activeRun?.activeRun) {
-              await chatAdapter.stopRun?.(session, {
-                expectedRunCode: activeRun.activeRun.runCode,
-              });
-            }
-          } catch (error) {
-            console.warn("Terminal chat run cleanup failed", error);
-          } finally {
-            await chatAdapter.deleteSession(session.sessionCode).catch((error: unknown) => {
-              console.warn("Terminal chat session cleanup failed", error);
-            });
-          }
-        })();
-      };
+      const { chatAdapter, session, terminalAdapter } = await terminalChatLease.context;
       if (disposed) {
-        releaseSession();
         return;
       }
       const socketConnection = await terminalAdapter.createSocketTicket({
@@ -155,19 +190,20 @@ const Terminal = () => {
       terminalInstance.refreshTheme();
       terminalInstance.setLocale(currentLocaleRef.current);
     })().catch((error: unknown) => {
-      releaseSession?.();
+      terminalChatLease.release();
       if (!disposed) console.error("Terminal initialization failed", error);
     });
 
     return () => {
       disposed = true;
       terminalInstance?.dispose();
+      activeChatAbortController?.abort();
       if (terminalInstanceRef.current === terminalInstance) {
         terminalInstanceRef.current = null;
       }
-      releaseSession?.();
+      terminalChatLease.release();
     };
-  }, [workspaceCode]);
+  }, [acquireTerminalChatContext, workspaceCode]);
 
   useEffect(() => {
     terminalInstanceRef.current?.refreshTheme();
@@ -209,4 +245,30 @@ async function createTerminalChatContext(workspaceCode: string) {
     workspaceCode,
   });
   return { chatAdapter, session, terminalAdapter };
+}
+
+async function disposeTerminalChatSession(context: Promise<TerminalChatContext>) {
+  let terminalChatContext: TerminalChatContext;
+  try {
+    terminalChatContext = await context;
+  } catch (error) {
+    console.warn("Terminal chat session cleanup failed", error);
+    return;
+  }
+
+  const { chatAdapter, session } = terminalChatContext;
+  try {
+    const activeRun = await chatAdapter.getActiveRun?.(session.sessionCode);
+    if (activeRun?.activeRun) {
+      await chatAdapter.stopRun?.(session, {
+        expectedRunCode: activeRun.activeRun.runCode,
+      });
+    }
+  } catch (error) {
+    console.warn("Terminal chat run cleanup failed", error);
+  } finally {
+    await chatAdapter.deleteSession(session.sessionCode).catch((error: unknown) => {
+      console.warn("Terminal chat session cleanup failed", error);
+    });
+  }
 }
