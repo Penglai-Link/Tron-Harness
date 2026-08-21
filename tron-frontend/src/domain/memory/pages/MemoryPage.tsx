@@ -1,11 +1,4 @@
-import {
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  type ReactNode,
-} from "react";
-import { createPortal } from "react-dom";
+import { useEffect, useMemo, useState } from "react";
 import {
   Boxes,
   Check,
@@ -17,6 +10,7 @@ import {
   UserRound,
 } from "lucide-react";
 import { useNavigate } from "react-router";
+import { getCoreRowModel, useReactTable } from "@tanstack/react-table";
 
 import { useAuthSession } from "@/domain/auth";
 import { MemoryRecordSummary } from "@/domain/memory/components";
@@ -27,7 +21,11 @@ import {
   memoryStatusOptions,
   type MemoryFilterState,
 } from "@/domain/memory/constants";
-import { archiveMemoryRecord, useMemoryFragmentList, useMemoryTargets } from "@/domain/memory";
+import {
+  archiveMemoryRecord,
+  useMemoryFragmentList,
+  useMemoryTargets,
+} from "@/domain/memory";
 import type {
   MemoryRecord,
   MemoryScopeKind,
@@ -43,9 +41,19 @@ import {
   SelectInput,
   SurfaceCard,
   useConsoleShellConfig,
-  useDismissibleLayer,
 } from "@/shared";
-import { Button } from "@/components/ui/button"
+import { Button } from "@/components/ui/button";
+import {
+  DataTable,
+  DataTableProps,
+  type TableColumnDef,
+} from "@/components/table";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { cn } from "@/shared/lib/utils";
@@ -101,15 +109,28 @@ function recordMatchesQuery(memory: MemoryRecord, query: string) {
   ].some((value) => value.toLowerCase().includes(normalizedQuery));
 }
 
-function recordMatchesFilters(memory: MemoryRecord, filters: MemoryFilterState) {
-  if (filters.status !== "all" && memory.memoryStatus !== filters.status) return false;
-  if (filters.reviewStatus !== "all" && memory.reviewStatus !== filters.reviewStatus) return false;
+function recordMatchesFilters(
+  memory: MemoryRecord,
+  filters: MemoryFilterState,
+) {
+  if (filters.status !== "all" && memory.memoryStatus !== filters.status)
+    return false;
+  if (
+    filters.reviewStatus !== "all" &&
+    memory.reviewStatus !== filters.reviewStatus
+  )
+    return false;
   if (filters.injectable === "injectable" && !memory.injectable) return false;
-  if (filters.injectable === "not-injectable" && memory.injectable) return false;
+  if (filters.injectable === "not-injectable" && memory.injectable)
+    return false;
   return true;
 }
 
-function getVisibleTargets(targets: MemorySearchTarget[], activeTargetId: string, limit: number) {
+function getVisibleTargets(
+  targets: MemorySearchTarget[],
+  activeTargetId: string,
+  limit: number,
+) {
   const pinnedTargets = targets.slice(0, limit);
   if (pinnedTargets.some((target) => target.id === activeTargetId)) {
     return pinnedTargets;
@@ -163,34 +184,6 @@ function buildDisplayTargets(
   });
 }
 
-function SearchTargetButton({
-  active,
-  onClick,
-  target,
-}: {
-  active: boolean;
-  onClick: () => void;
-  target: MemorySearchTarget;
-}) {
-  return (
-    <button
-      aria-current={active ? "page" : undefined}
-      className={cn(
-        "inline-flex h-[46px] max-w-[220px] flex-none items-center gap-2 border-b-[3px] px-0 text-sm tracking-normal transition-colors",
-        active
-          ? "border-[var(--color-on-surface)] font-semibold text-[var(--color-on-surface)]"
-          : "border-transparent text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]",
-      )}
-      title={`${getScopeLabel(target.scope)}: ${target.label}`}
-      type="button"
-      onClick={onClick}
-    >
-      <MemoryTargetIcon scope={target.scope} />
-      <span className="min-w-0 truncate">{target.label}</span>
-    </button>
-  );
-}
-
 function MemoryFilterControls({
   filters,
   onFiltersChange,
@@ -203,128 +196,66 @@ function MemoryFilterControls({
   query: string;
 }) {
   return (
-    <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-      <div className="min-w-0">
-        <Field label="Search">
-          <SearchField
-            ariaLabel="Search memories"
-            className="w-full"
-            placeholder="Search memories"
-            value={query}
-            onChange={onSearchChange}
-          />
-        </Field>
-      </div>
-      <Field label="Status">
-        <SelectInput
-          aria-label="Filter memories by status"
-          className="w-full"
-          value={filters.status}
-          onValueChange={(event) => onFiltersChange({ ...filters, status: event as MemoryFilterState["status"] })}
-        >
-          {memoryStatusOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-          ))}
-        </SelectInput>
-      </Field>
-      <Field label="Review">
-        <SelectInput
-          aria-label="Filter memories by review status"
-          className="w-full"
-          value={filters.reviewStatus}
-          onValueChange={(event) => onFiltersChange({ ...filters, reviewStatus: event as MemoryFilterState["reviewStatus"] })}
-        >
-          {memoryReviewOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-          ))}
-        </SelectInput>
-      </Field>
-      <Field label="Use">
-        <SelectInput
-          aria-label="Filter memories by context use"
-          className="w-full"
-          value={filters.injectable}
-          onValueChange={(event) => onFiltersChange({ ...filters, injectable: event as MemoryFilterState["injectable"] })}
-        >
-          {memoryInjectableOptions.map((option) => (
-            <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>
-          ))}
-        </SelectInput>
-      </Field>
-    </div>
-  );
-}
-
-function SearchTargetNav({
-  activeTargetId,
-  onTargetChange,
-  targets,
-}: {
-  activeTargetId: string;
-  onTargetChange: (targetId: string) => void;
-  targets: MemorySearchTarget[];
-}) {
-  const [moreOpen, setMoreOpen] = useState(false);
-  const compactTargetNav = useCompactTargetNav();
-  const visibleTargets = getVisibleTargets(targets, activeTargetId, compactTargetNav ? 1 : visibleTargetLimit);
-  const visibleTargetIds = new Set(visibleTargets.map((target) => target.id));
-  const overflowTargets = targets.filter((target) => !visibleTargetIds.has(target.id));
-
-  return (
-    <div className="mt-2 flex min-h-[46px] items-end gap-5 border-b border-[var(--color-outline-variant)]">
-      <nav
-        aria-label="Search targets"
-        className="flex min-w-0 flex-1 items-end gap-5 overflow-x-auto overflow-y-hidden"
+    <>
+      <SearchField
+        ariaLabel="Search memories"
+        className="w-full"
+        placeholder="Search memories"
+        value={query}
+        onChange={onSearchChange}
+      />
+      <SelectInput
+        aria-label="Filter memories by status"
+        className="w-full"
+        value={filters.status}
+        onValueChange={(event) =>
+          onFiltersChange({
+            ...filters,
+            status: event as MemoryFilterState["status"],
+          })
+        }
       >
-        {visibleTargets.map((target) => (
-          <SearchTargetButton
-            key={target.id}
-            active={target.id === activeTargetId}
-            target={target}
-            onClick={() => {
-              setMoreOpen(false);
-              onTargetChange(target.id);
-            }}
-          />
+        {memoryStatusOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
         ))}
-      </nav>
-      <div className="flex flex-none items-end gap-4">
-        <div className="relative">
-          <button
-            className="inline-flex h-[46px] items-center gap-1 border-b-[3px] border-transparent text-sm text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]"
-            type="button"
-            onClick={() => {
-              setMoreOpen((open) => !open);
-            }}
-          >
-            More
-            <ChevronDown size={14} aria-hidden="true" />
-          </button>
-          {moreOpen ? (
-            <div className="absolute right-0 top-full z-20 mt-2 w-56 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] py-2 text-left shadow-lg">
-              {overflowTargets.length > 0 ? overflowTargets.map((target) => (
-                <button
-                  key={target.id}
-                  className="flex w-full items-center gap-2 px-3 py-2 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
-                  title={`${getScopeLabel(target.scope)}: ${target.label}`}
-                  type="button"
-                  onClick={() => {
-                    onTargetChange(target.id);
-                    setMoreOpen(false);
-                  }}
-                >
-                  <MemoryTargetIcon scope={target.scope} />
-                  <span className="min-w-0 flex-1 truncate">{target.label}</span>
-                  {target.id === activeTargetId ? <Check size={15} aria-hidden="true" /> : null}
-                </button>
-              )) : (
-                <p className="px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">All targets are shown</p>
-              )}
-            </div>
-          ) : null}
-        </div>
-      </div>
-    </div>
+      </SelectInput>
+      <SelectInput
+        aria-label="Filter memories by review status"
+        className="w-full"
+        value={filters.reviewStatus}
+        onValueChange={(event) =>
+          onFiltersChange({
+            ...filters,
+            reviewStatus: event as MemoryFilterState["reviewStatus"],
+          })
+        }
+      >
+        {memoryReviewOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectInput>
+      <SelectInput
+        aria-label="Filter memories by context use"
+        className="w-full"
+        value={filters.injectable}
+        onValueChange={(event) =>
+          onFiltersChange({
+            ...filters,
+            injectable: event as MemoryFilterState["injectable"],
+          })
+        }
+      >
+        {memoryInjectableOptions.map((option) => (
+          <SelectItem key={option.value} value={option.value}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectInput>
+    </>
   );
 }
 
@@ -339,43 +270,15 @@ function EmptyResults({
 
   return (
     <section className="rounded-xl border border-dashed border-[var(--color-outline-variant)] px-5 py-8 text-sm leading-6 text-[var(--color-on-surface-variant)]">
-      <p className="font-medium text-[var(--color-on-surface)]">No memories found</p>
+      <p className="font-medium text-[var(--color-on-surface)]">
+        No memories found
+      </p>
       <p className="mt-1">
         {trimmedQuery
           ? `No memories in ${activeTarget.label} match "${trimmedQuery}".`
           : `No memories in ${activeTarget.label} match the current filters.`}
       </p>
     </section>
-  );
-}
-
-interface MemoryRowMenuState {
-  left: number;
-  memoryId: string;
-  top: number;
-  triggerElement: HTMLButtonElement;
-}
-
-function MobileLabel({ children }: { children: string }) {
-  return (
-    <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] lg:hidden">
-      {children}
-    </span>
-  );
-}
-
-function MemoryCell({
-  children,
-  label,
-}: {
-  children: ReactNode;
-  label: string;
-}) {
-  return (
-    <div className="mt-3 flex min-w-0 items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] pt-3 text-[13px] text-[var(--color-on-surface)] lg:mt-0 lg:block lg:border-t-0 lg:px-5 lg:py-4 lg:pt-4">
-      <MobileLabel>{label}</MobileLabel>
-      <div className="min-w-0 text-right lg:text-left">{children}</div>
-    </div>
   );
 }
 
@@ -406,6 +309,8 @@ function MemoryRecordsTable({
   onEdit,
   onOpen,
   query,
+  title,
+  toolbar,
 }: {
   activeTarget: MemorySearchTarget;
   memories: MemoryRecord[];
@@ -413,178 +318,157 @@ function MemoryRecordsTable({
   onEdit: (memory: MemoryRecord) => void;
   onOpen: (memory: MemoryRecord) => void;
   query: string;
-}) {
-  const [rowMenu, setRowMenu] = useState<MemoryRowMenuState | null>(null);
-  const rowMenuRef = useRef<HTMLDivElement | null>(null);
-  const openMenuMemory = rowMenu
-    ? memories.find((memory) => memory.id === rowMenu.memoryId) ?? null
-    : null;
-
-  useDismissibleLayer({
-    open: rowMenu !== null,
-    onDismiss: () => setRowMenu(null),
-    popupRef: rowMenuRef,
-    triggerElement: rowMenu?.triggerElement,
+} & Pick<DataTableProps<MemoryRecord>, "title" | "toolbar">) {
+  const columns = useMemo<TableColumnDef<MemoryRecord>[]>(
+    () => [
+      {
+        accessorKey: "title",
+        cell: ({ row }) => (
+          <MemoryRecordSummary
+            memory={row.original}
+            onOpen={() => onOpen(row.original)}
+          />
+        ),
+        header: "Memory",
+        id: "memory",
+        meta: {
+          cellClassName: "min-w-0 py-4",
+          width: "330px",
+        },
+      },
+      {
+        cell: ({ row }) => (
+          <Badge
+            className="w-fit max-w-full font-bold"
+            tone={getTypeTone(row.original)}
+          >
+            {row.original.memoryType}
+          </Badge>
+        ),
+        header: "Type",
+        id: "type",
+        meta: {
+          cellClassName: "py-4",
+          width: "170px",
+        },
+      },
+      {
+        cell: ({ row }) => (
+          <div className="flex gap-1">
+            <Badge
+              tone={row.original.memoryStatus === "ACTIVE" ? "success" : "info"}
+            >
+              {row.original.memoryStatus}
+            </Badge>
+            <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
+              {formatReviewStatus(row.original.reviewStatus)}
+            </span>
+          </div>
+        ),
+        header: "Status",
+        id: "status",
+        meta: {
+          cellClassName: "py-4",
+          width: "150px",
+        },
+      },
+      {
+        cell: ({ row }) => {
+          const useSummary = getUseSummary(row.original);
+          return (
+            <div className="flex gap-1">
+              <Badge tone={useSummary.tone}>{useSummary.label}</Badge>
+              <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
+                {useSummary.detail}
+              </span>
+            </div>
+          );
+        },
+        header: "Use",
+        id: "use",
+        meta: {
+          cellClassName: "py-4",
+          width: "150px",
+        },
+      },
+      {
+        cell: ({ row }) => row.original.updatedAt.split(" ")[0],
+        header: "Updated",
+        id: "updatedAt",
+        meta: {
+          width: "130px",
+        },
+      },
+      {
+        cell: ({ row }) => (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  aria-label={`Open actions for ${row.original.title}`}
+                  size="icon"
+                  variant="ghost"
+                  onClick={(event) => event.stopPropagation()}
+                  onKeyDown={(event) => event.stopPropagation()}
+                >
+                  <MoreHorizontal size={16} aria-hidden="true" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" className="w-44">
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpen(row.original);
+                }}
+              >
+                Open details
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onEdit(row.original);
+                }}
+              >
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                variant="destructive"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onArchive(row.original);
+                }}
+              >
+                Archive
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        ),
+        header: "Actions",
+        id: "actions",
+        meta: {
+          align: "right",
+          width: "100px",
+        },
+      },
+    ],
+    [onArchive, onEdit, onOpen],
+  );
+  const table = useReactTable({
+    columns,
+    data: memories,
+    getCoreRowModel: getCoreRowModel(),
+    getRowId: (row) => row.id,
   });
 
-  function toggleRowMenu(memory: MemoryRecord, triggerElement: HTMLButtonElement) {
-    if (rowMenu?.memoryId === memory.id) {
-      setRowMenu(null);
-      return;
-    }
-
-    const menuWidth = 176;
-    const estimatedMenuHeight = 152;
-    const rect = triggerElement.getBoundingClientRect();
-    setRowMenu({
-      memoryId: memory.id,
-      triggerElement,
-      left: Math.min(
-        Math.max(12, rect.right - menuWidth),
-        window.innerWidth - menuWidth - 12,
-      ),
-      top: Math.min(
-        Math.max(12, rect.bottom + 8),
-        window.innerHeight - estimatedMenuHeight - 12,
-      ),
-    });
-  }
-
-  function handleMenuAction(memory: MemoryRecord, action: string) {
-    setRowMenu(null);
-    if (action === "open") {
-      onOpen(memory);
-      return;
-    }
-    if (action === "edit") {
-      onEdit(memory);
-      return;
-    }
-    if (action === "archive") {
-      onArchive(memory);
-    }
-  }
-
   return (
-    <section className="overflow-hidden rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]">
-      {memories.length > 0 ? (
-        <>
-          <div className="overflow-x-visible lg:overflow-x-auto">
-            <div className="hidden min-w-[1018px] grid-cols-[minmax(330px,1fr)_170px_150px_150px_118px_100px] border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] lg:grid">
-              <span className="px-5 py-3">Memory</span>
-              <span className="px-5 py-3">Type</span>
-              <span className="px-5 py-3">Status</span>
-              <span className="px-5 py-3">Use</span>
-              <span className="px-5 py-3">Updated</span>
-              <span className="sticky right-0 z-20 border-l border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-5 py-3 text-right shadow-[-8px_0_12px_rgba(0,0,0,0.04)]">Actions</span>
-            </div>
-
-            <div className="divide-y divide-[var(--color-outline-variant)]">
-              {memories.map((memory) => {
-                const useSummary = getUseSummary(memory);
-
-                return (
-                  <article
-                    className="group grid p-4 hover:bg-[var(--color-hover-surface)] lg:min-w-[1018px] lg:grid-cols-[minmax(330px,1fr)_170px_150px_150px_118px_100px] lg:p-0"
-                    key={memory.id}
-                  >
-                    <div className="min-w-0 lg:px-5 lg:py-4">
-                      <MemoryRecordSummary
-                        memory={memory}
-                        onOpen={() => onOpen(memory)}
-                      />
-                    </div>
-                    <MemoryCell label="Type">
-                      <Badge className="w-fit max-w-full font-bold" tone={getTypeTone(memory)}>{memory.memoryType}</Badge>
-                    </MemoryCell>
-                    <MemoryCell label="Status">
-                      <div className="grid justify-items-end gap-1 lg:justify-items-start">
-                        <Badge className="w-fit max-w-full font-bold" tone={memory.memoryStatus === "ACTIVE" ? "success" : "info"}>
-                          {memory.memoryStatus}
-                        </Badge>
-                        <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
-                          {formatReviewStatus(memory.reviewStatus)}
-                        </span>
-                      </div>
-                    </MemoryCell>
-                    <MemoryCell label="Use">
-                      <div className="grid justify-items-end gap-1 lg:justify-items-start">
-                        <Badge className="w-fit max-w-full font-bold" tone={useSummary.tone}>
-                          {useSummary.label}
-                        </Badge>
-                        <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
-                          {useSummary.detail}
-                        </span>
-                      </div>
-                    </MemoryCell>
-                    <MemoryCell label="Updated">{memory.updatedAt.split(" ")[0]}</MemoryCell>
-                    <div className="relative mt-3 flex min-w-0 items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] pt-3 lg:sticky lg:right-0 lg:z-10 lg:mt-0 lg:justify-end lg:border-l lg:border-t-0 lg:bg-[var(--color-elevated-surface)] lg:px-5 lg:py-3 lg:pt-3 lg:shadow-[-8px_0_12px_rgba(0,0,0,0.04)] lg:group-hover:bg-[var(--color-hover-surface)]">
-                      <MobileLabel>Actions</MobileLabel>
-                      <Button
-                        aria-expanded={rowMenu?.memoryId === memory.id}
-                        aria-label={`Open actions for ${memory.title}`}
-                        size="icon"
-                        variant="ghost"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          toggleRowMenu(memory, event.currentTarget);
-                        }}
-                      >
-                        <MoreHorizontal size={16} aria-hidden="true" />
-                      </Button>
-                    </div>
-                  </article>
-                );
-              })}
-            </div>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--color-outline-variant)] px-5 py-3 text-[13px] text-[var(--color-on-surface-variant)]">
-            <span>{memories.length} memories shown</span>
-            <span className="truncate">Target: {activeTarget.label}</span>
-          </div>
-        </>
-      ) : (
-        <div className="p-5">
-          <EmptyResults activeTarget={activeTarget} query={query} />
-        </div>
-      )}
-
-      {rowMenu && openMenuMemory ? createPortal(
-        <div
-          ref={rowMenuRef}
-          className="fixed z-[80] w-44 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-2 text-left text-sm shadow-[0_12px_28px_rgba(0,0,0,0.22)]"
-          role="menu"
-          aria-label={`Actions for ${openMenuMemory.title}`}
-          style={{ left: rowMenu.left, top: rowMenu.top }}
-        >
-          <button
-            className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
-            role="menuitem"
-            type="button"
-            onClick={() => handleMenuAction(openMenuMemory, "open")}
-          >
-            Open details
-          </button>
-          <button
-            className="block w-full rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)]"
-            role="menuitem"
-            type="button"
-            onClick={() => handleMenuAction(openMenuMemory, "edit")}
-          >
-            Edit
-          </button>
-          <button
-            className="block w-full rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)]"
-            role="menuitem"
-            type="button"
-            onClick={() => handleMenuAction(openMenuMemory, "archive")}
-          >
-            Archive
-          </button>
-        </div>,
-        document.body,
-      ) : null}
-    </section>
+    <DataTable<MemoryRecord>
+      title={title}
+      toolbar={toolbar}
+      emptyState={<EmptyResults activeTarget={activeTarget} query={query} />}
+      table={table}
+      tableClassName="table-fixed min-w-[1018px]"
+    />
   );
 }
 
@@ -601,32 +485,46 @@ function MemoryRepository() {
   } = useWorkspaceSpaces();
   const [activeTargetId, setActiveTargetId] = useState("space:current");
   const [query, setQuery] = useState("");
-  const [filters, setFilters] = useState<MemoryFilterState>(defaultMemoryFilters);
+  const [filters, setFilters] =
+    useState<MemoryFilterState>(defaultMemoryFilters);
   const [notice, setNotice] = useState("");
   const [archiveTarget, setArchiveTarget] = useState<MemoryRecord | null>(null);
 
   useConsoleShellConfig({ searchPlaceholder: "Search memories..." });
 
-  const workspaceLabel = selectedSecondarySpace?.name ?? selectedPrimarySpace?.name;
+  const workspaceLabel =
+    selectedSecondarySpace?.name ?? selectedPrimarySpace?.name;
   const workspaceCode = selectedSecondarySpaceId || selectedPrimarySpaceId;
   const userLabel = session?.user.username || session?.user.displayName;
   const userCode = session?.user.userCode;
   const rawTargets = useMemoryTargets(workspaceCode, refreshKey);
   const safeTargets = Array.isArray(rawTargets) ? rawTargets : [];
   const targets = useMemo(
-    () => buildDisplayTargets(safeTargets, workspaceLabel, workspaceCode, userLabel, userCode),
+    () =>
+      buildDisplayTargets(
+        safeTargets,
+        workspaceLabel,
+        workspaceCode,
+        userLabel,
+        userCode,
+      ),
     [safeTargets, userCode, userLabel, workspaceCode, workspaceLabel],
   );
-  const fallbackTarget = useMemo<MemorySearchTarget>(() => ({
-    code: workspaceCode || "space:current",
-    description: "Current space",
-    id: "space:current",
-    label: workspaceLabel || "Current space",
-    resultCount: 0,
-    scope: "space",
-  }), [workspaceCode, workspaceLabel]);
+  const fallbackTarget = useMemo<MemorySearchTarget>(
+    () => ({
+      code: workspaceCode || "space:current",
+      description: "Current space",
+      id: "space:current",
+      label: workspaceLabel || "Current space",
+      resultCount: 0,
+      scope: "space",
+    }),
+    [workspaceCode, workspaceLabel],
+  );
   const displayTargets = targets.length ? targets : [fallbackTarget];
-  const activeTarget = displayTargets.find((target) => target.id === activeTargetId) ?? displayTargets[0];
+  const activeTarget =
+    displayTargets.find((target) => target.id === activeTargetId) ??
+    displayTargets[0];
   const memories = useMemoryFragmentList({
     activeTarget,
     filters,
@@ -636,11 +534,15 @@ function MemoryRepository() {
   });
   const safeMemories = Array.isArray(memories) ? memories : [];
   const visibleMemories = useMemo(
-    () => activeTarget ? safeMemories.filter((memory) => (
-      memory.targetId === activeTarget.id
-      && recordMatchesQuery(memory, query)
-      && recordMatchesFilters(memory, filters)
-    )) : [],
+    () =>
+      activeTarget
+        ? safeMemories.filter(
+            (memory) =>
+              memory.targetId === activeTarget.id &&
+              recordMatchesQuery(memory, query) &&
+              recordMatchesFilters(memory, filters),
+          )
+        : [],
     [activeTarget, filters, query, safeMemories],
   );
 
@@ -649,63 +551,40 @@ function MemoryRepository() {
   }
 
   function editMemory(memory: MemoryRecord) {
-    navigate(`/memory/details?memoryId=${encodeURIComponent(memory.id)}&mode=edit`);
+    navigate(
+      `/memory/details?memoryId=${encodeURIComponent(memory.id)}&mode=edit`,
+    );
   }
 
   async function confirmArchive() {
     if (!archiveTarget) return;
     try {
-      const archived = dataSource === "api" && workspaceCode
-        ? await archiveMemoryRecord(workspaceCode, archiveTarget.memoryCode)
-        : archiveMemoryFragment(archiveTarget.id);
+      const archived =
+        dataSource === "api" && workspaceCode
+          ? await archiveMemoryRecord(workspaceCode, archiveTarget.memoryCode)
+          : archiveMemoryFragment(archiveTarget.id);
       setNotice(`${archived.title} archived.`);
       setRefreshKey((value) => value + 1);
     } catch (error) {
-      setNotice(error instanceof Error ? error.message : "Memory could not be archived.");
+      setNotice(
+        error instanceof Error
+          ? error.message
+          : "Memory could not be archived.",
+      );
     } finally {
       setArchiveTarget(null);
     }
   }
 
+  const activeTargets = getVisibleTargets(
+    targets,
+    activeTargetId,
+    useCompactTargetNav() ? 1 : visibleTargetLimit,
+  );
+
   return (
     <main className="text-[var(--color-on-surface)]">
-      <PageHeader
-        title="Memory"
-        actions={(
-          <>
-            <Button
-              size="lg"
-              variant="outline"
-              onClick={() => {
-                setRefreshKey((value) => value + 1);
-                setNotice("Memory refreshed.");
-              }}
-            >
-              Refresh
-            </Button>
-            <Button size="lg" onClick={() => navigate("/memory/new")}>
-              New
-            </Button>
-          </>
-        )}
-      />
-      {notice ? <p className="sr-only" aria-live="polite">{notice}</p> : null}
-
       <div className="space-y-5">
-        <SurfaceCard className="space-y-3">
-          <MemoryFilterControls
-            filters={filters}
-            query={query}
-            onFiltersChange={setFilters}
-            onSearchChange={setQuery}
-          />
-          <SearchTargetNav
-            activeTargetId={activeTarget.id}
-            targets={displayTargets}
-            onTargetChange={setActiveTargetId}
-          />
-        </SurfaceCard>
-
         <MemoryRecordsTable
           activeTarget={activeTarget}
           memories={visibleMemories}
@@ -713,13 +592,55 @@ function MemoryRepository() {
           onArchive={setArchiveTarget}
           onEdit={editMemory}
           onOpen={openMemory}
+          title="Memory"
+          toolbar={
+            <>
+              <SelectInput
+                aria-label="Filter memories by status"
+                className="w-full"
+                value={activeTargetId}
+                onValueChange={(event) => {
+                  setActiveTargetId(event!);
+                }}
+              >
+                {targets.map((option) => (
+                  <SelectItem key={option.id} value={option.label}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectInput>
+              <MemoryFilterControls
+                filters={filters}
+                query={query}
+                onFiltersChange={setFilters}
+                onSearchChange={setQuery}
+              />
+              <Button
+                size="lg"
+                variant="outline"
+                onClick={() => {
+                  setRefreshKey((value) => value + 1);
+                  setNotice("Memory refreshed.");
+                }}
+              >
+                Refresh
+              </Button>
+              <Button size="lg" onClick={() => navigate("/memory/new")}>
+                New
+              </Button>
+            </>
+          }
         />
       </div>
 
       <ConfirmDialog
         open={archiveTarget !== null}
         title="Archive memory?"
-        description={archiveTarget ? `${archiveTarget.title} will stay available for later review.` : undefined}
+        description={
+          archiveTarget
+            ? `${archiveTarget.title} will stay available for later review.`
+            : undefined
+        }
         confirmText="Archive"
         onCancel={() => setArchiveTarget(null)}
         onConfirm={confirmArchive}

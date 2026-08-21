@@ -162,8 +162,6 @@ export function RagPage() {
 
   return (
     <>
-      <PageHeader title={pageT("title", "RAG Management")} />
-
       <div className="grid gap-6">
         <RagCorporaTab
           corpusPagination={corpusPagination}
