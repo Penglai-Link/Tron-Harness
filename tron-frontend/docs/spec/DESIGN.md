@@ -169,7 +169,7 @@ To maintain an organized feel in dense data views, use **Tabular Figures** for a
 
 ## Layout & Spacing
 
-The layout philosophy follows a **Fluid Grid with strict 4px/8px increments**. This "soft grid" ensures consistency while allowing the workspace to adapt to the multi-pane nature of agent dashboards.
+The layout philosophy follows a **Fluid Grid with strict 4px/8px increments**. This "soft grid" ensures consistency while allowing the workspace to adapt to the multi-pane nature of agent operations.
 
 - **Agent Sidebar:** Fixed at 280px to provide a stable anchor.
 - **Main Canvas:** Fluid, utilizing a 12-column system with 16px gutters.

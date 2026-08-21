@@ -288,7 +288,6 @@ test.beforeAll(async () => {
         VITE_TRON_APP_DATA_SOURCE: "mock",
         VITE_TRON_AUTOMATION_DATA_SOURCE: "mock",
         VITE_TRON_CHAT_DATA_SOURCE: "mock",
-        VITE_TRON_DASHBOARD_DATA_SOURCE: "mock",
         VITE_TRON_KNOWLEDGE_GRAPH_DATA_SOURCE: "mock",
         VITE_TRON_MCP_DATA_SOURCE: "mock",
         VITE_TRON_MEMORY_DATA_SOURCE: "mock",
@@ -382,8 +381,8 @@ test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all requir
 
   await drawerToggle.click();
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toBeVisible();
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page.getByRole("heading", { name: "Workspace Overview" })).toBeVisible();
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page.getByRole("heading", { name: "App Management" })).toBeVisible();
   await expect(page.getByTestId("tron-mobile-right-sidebar")).toHaveCount(0);
 });
 
@@ -410,8 +409,8 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
   await openRightSidebar(page);
   await expect(rightSidebar(page).getByText("Resource Pattern")).toBeVisible();
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page.getByRole("heading", { name: "Workspace Overview" })).toBeVisible();
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page.getByRole("heading", { name: "App Management" })).toBeVisible();
   await expectNoRightSidebarControls(page);
 
   await page.goto(`${frontendBaseUrl}/settings/general`);

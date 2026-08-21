@@ -71,7 +71,7 @@ export interface ServerCreateApiRequest {
   host: string;
   port: number;
   allowInheritance: boolean;
-  initialAccount: ServerAccountCreateInputApiRequest;
+  initialAccount?: ServerAccountCreateInputApiRequest;
 }
 
 export interface ServerAccountCreateApiRequest {
@@ -82,6 +82,6 @@ export interface ServerAccountCreateApiRequest {
 
 export interface ServerCreateApiResult {
   server: ConnectionCommitApiResult;
-  initialAccount: ConnectionCommitApiResult;
+  initialAccount?: ConnectionCommitApiResult | null;
   connectivityVerified: boolean;
 }

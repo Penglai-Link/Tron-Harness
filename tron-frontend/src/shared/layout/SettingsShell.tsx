@@ -58,7 +58,7 @@ function resolveReturnTo(state: unknown) {
     }
   }
 
-  return "/dashboard";
+  return "/apps";
 }
 
 export function SettingsShell({ activeItem, children, contentClassName, items, roleCodes }: SettingsShellProps) {
@@ -91,7 +91,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
   const previousActiveGroupKeyRef = useRef(activeGroupKey);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && returnTo !== "/dashboard") {
+    if (typeof window !== "undefined" && returnTo !== "/apps") {
       window.sessionStorage.setItem(settingsReturnToStorageKey, returnTo);
     }
   }, [returnTo]);

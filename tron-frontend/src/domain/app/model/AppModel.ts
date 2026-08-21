@@ -81,9 +81,9 @@ export function appRuntimeRoleTone(runtimeRole: AppRuntimeRole): BadgeProps["var
   return "outline";
 }
 
-export function formatAppTimestamp(value: string | null) {
-  if (!value) return "Not archived";
-  return new Intl.DateTimeFormat("en-US", {
+export function formatAppTimestamp(value: string | null, locale = "en-US", emptyLabel = "Not archived") {
+  if (!value) return emptyLabel;
+  return new Intl.DateTimeFormat(locale, {
     dateStyle: "medium",
     timeStyle: "short",
   }).format(new Date(value));

@@ -3,6 +3,7 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -42,6 +43,7 @@ import {
 } from "@/domain/resource/model";
 import {
   ConfirmDialog,
+  PageHeader,
   TextArea,
   TextInput,
   ToggleSwitch,
@@ -93,6 +95,22 @@ function downloadFile(blob: Blob, fallbackName: string, contentDisposition: stri
 
 function requestErrorMessage(cause: unknown) {
   return cause instanceof Error ? cause.message : "Resource request failed";
+}
+
+function ResourceDetailItem({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="min-w-0 border-b border-[var(--color-outline-variant)] pb-3 last:border-b-0 sm:last:border-b">
+      <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">{label}</dt>
+      <dd className="mt-1 min-h-6 break-words text-sm leading-6 text-[var(--color-on-surface)]">
+        {value || <span className="text-[var(--color-on-surface-variant)]">—</span>}
+      </dd>
+    </div>
+  );
+}
+
+function displayResourceAttribute(attributes: Record<string, unknown> | null | undefined, key: string) {
+  const value = attributes?.[key];
+  return typeof value === "string" || typeof value === "number" ? String(value) : "—";
 }
 
 export function ResourceEditorPage() {
@@ -212,6 +230,7 @@ export function ResourceEditorPage() {
 
   const isFileKind = fileKinds.includes(kind);
   const isDataSource = dataSourceKinds.includes(kind);
+  const isServerKind = kind === "SERVER_CONNECTION";
   const loadedResource = isNew ? null : record;
   const inherited = loadedResource?.sourceKind === "INHERITED";
   const saveDisabled = saving || inherited || !name.trim() || (isNew && (!resourceCode.trim() || !stagedFile));
@@ -398,6 +417,149 @@ export function ResourceEditorPage() {
 
   const readOnly = inherited || (!isNew && !editing);
 
+  if (!isNew && isServerKind && loadedResource) {
+    return (
+      <>
+        <PageHeader
+          breadcrumbs={[
+            { href: basePath, label: editorT("breadcrumb.resources", "Resources") },
+            { label: loadedResource.resourceCode },
+          ]}
+          title={loadedResource.name}
+          actions={(
+            <>
+              {editing ? (
+                <>
+                  <Button
+                    disabled={saving}
+                    variant="secondary"
+                    onClick={() => {
+                      setEditing(false);
+                      setAllowInheritance(loadedResource.allowInheritance);
+                      setDescription(loadedResource.description);
+                      setName(loadedResource.name);
+                    }}
+                  >
+                    {editorT("actions.cancel", "Cancel")}
+                  </Button>
+                  <Button disabled={saving || !name.trim()} onClick={() => { void save(); }}>
+                    <Save aria-hidden="true" size={15} />
+                    {editorT("actions.saveActive", "Save")}
+                  </Button>
+                </>
+              ) : inherited ? null : (
+                <>
+                  <Button variant="secondary" onClick={() => setEditing(true)}>
+                    <Pencil aria-hidden="true" size={15} />
+                    {editorT("actions.edit", "Edit")}
+                  </Button>
+                  <Button variant="outline" onClick={() => setDeleteOpen(true)}>
+                    <Trash2 aria-hidden="true" size={15} />
+                    {editorT("actions.delete", "Delete resource")}
+                  </Button>
+                </>
+              )}
+            </>
+          )}
+        />
+
+        <div className="max-w-5xl space-y-8">
+          <section className="border-y border-[var(--color-outline-variant)] py-5">
+            <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">
+              {editorT("sections.basic", "Basic information")}
+            </h2>
+            <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-2">
+              <ResourceDetailItem
+                label={editorT("fields.code", "Resource code")}
+                value={<span className="font-mono">{loadedResource.resourceCode}</span>}
+              />
+              <ResourceDetailItem
+                label={t("pages:resources.kind.server_connection", "Server connection")}
+                value={t("pages:resources.source." + loadedResource.sourceKind.toLowerCase(), loadedResource.sourceKind)}
+              />
+              <div className="min-w-0 border-b border-[var(--color-outline-variant)] pb-3 sm:col-span-2">
+                <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">
+                  {editorT("fields.name", "Resource name")}
+                </dt>
+                <dd className="mt-1">
+                  {editing ? (
+                    <TextInput
+                      aria-label={editorT("fields.name", "Resource name")}
+                      disabled={saving}
+                      value={name}
+                      onChange={(event) => setName(event.target.value)}
+                    />
+                  ) : (
+                    <span className="text-sm leading-6 text-[var(--color-on-surface)]">{loadedResource.name}</span>
+                  )}
+                </dd>
+              </div>
+              <div className="min-w-0 border-b border-[var(--color-outline-variant)] pb-3 sm:col-span-2">
+                <dt className="text-xs font-medium text-[var(--color-on-surface-variant)]">
+                  {editorT("fields.description", "Description")}
+                </dt>
+                <dd className="mt-1">
+                  {editing ? (
+                    <TextArea
+                      aria-label={editorT("fields.description", "Description")}
+                      className="min-h-20"
+                      disabled={saving}
+                      value={description}
+                      onChange={(event) => setDescription(event.target.value)}
+                    />
+                  ) : (
+                    <span className="whitespace-pre-wrap text-sm leading-6 text-[var(--color-on-surface)]">
+                      {loadedResource.description || "—"}
+                    </span>
+                  )}
+                </dd>
+              </div>
+              <div className="sm:col-span-2">
+                <ToggleSwitch
+                  checked={allowInheritance}
+                  disabled={readOnly || saving}
+                  label={editorT("status.inheritance", "Allow inheritance")}
+                  onCheckedChange={setAllowInheritance}
+                />
+              </div>
+            </dl>
+          </section>
+
+          <section className="border-b border-[var(--color-outline-variant)] pb-5">
+            <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">
+              {editorT("sections.connection", "Connection")}
+            </h2>
+            <dl className="grid gap-x-8 gap-y-4 sm:grid-cols-3">
+              <ResourceDetailItem
+                label={t("pages:resourceConnections.fields.host", "Host")}
+                value={<span className="font-mono">{displayResourceAttribute(loadedResource.attributes, "host")}</span>}
+              />
+              <ResourceDetailItem
+                label={t("pages:resourceConnections.fields.port", "Port")}
+                value={<span className="font-mono">{displayResourceAttribute(loadedResource.attributes, "port")}</span>}
+              />
+              <ResourceDetailItem
+                label={t("pages:resourceConnections.columns.protocol", "Protocol")}
+                value={displayResourceAttribute(loadedResource.attributes, "protocol")}
+              />
+            </dl>
+          </section>
+        </div>
+
+        <ConfirmDialog
+          cancelText={editorT("actions.cancel", "Cancel")}
+          confirmText={editorT("actions.delete", "Delete resource")}
+          description={editorT("messages.deleteDescription", "Delete this resource and its files. This cannot be undone.")}
+          open={deleteOpen}
+          pending={deleting}
+          title={editorT("messages.deleteTitle", "Delete {{name}}?", { name: name })}
+          onCancel={() => setDeleteOpen(false)}
+          onConfirm={() => { void deleteCurrentResource(); }}
+        />
+      </>
+    );
+  }
+
   return (
     <div className="min-w-0">
       <nav aria-label={editorT("breadcrumb.aria", "Breadcrumb")} className="mb-3 flex flex-wrap items-center gap-1 text-[12px] text-[var(--color-on-surface-variant)]">
@@ -500,9 +662,9 @@ export function ResourceEditorPage() {
         </div>
       </header>
 
-      <div className="grid min-w-0 items-start gap-4 xl:grid-cols-[minmax(0,1.55fr)_minmax(320px,0.75fr)]">
-        <section className="min-w-0 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-4 sm:p-5">
-          <h2 className="mb-3 text-sm font-semibold">{editorT("tabs.data", "Resource information")}</h2>
+      <div className="max-w-5xl space-y-8">
+        <section className="min-w-0 border-y border-[var(--color-outline-variant)] py-5">
+          <h2 className="mb-5 text-base font-semibold text-[var(--color-on-surface)]">{editorT("tabs.data", "Resource information")}</h2>
           {isFileKind && isNew ? (
             <div className="space-y-3">
               <input
@@ -531,7 +693,7 @@ export function ResourceEditorPage() {
           ) : loadedResource && isFileKind ? (
             <div className="space-y-3">
               {loadedResource.file ? (
-                <div className="flex flex-wrap items-center gap-3 rounded-lg border border-[var(--color-outline-variant)] px-3 py-2.5">
+                <div className="flex flex-wrap items-center gap-3 border-y border-[var(--color-outline-variant)] py-3">
                   <span className="min-w-0 flex-1 truncate text-sm font-medium">{loadedResource.file.fileName}</span>
                   <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">{formatByteSize(loadedResource.file.byteSize)}</span>
                   <Button size="sm" type="button" variant="outline" onClick={() => { void downloadCurrentFile(); }}>
@@ -572,7 +734,7 @@ export function ResourceEditorPage() {
               </p>
             </div>
           ) : loadedResource && loadedResource.attributes ? (
-            <pre className="overflow-x-auto rounded-lg bg-[var(--color-surface-container-low)] p-3 font-mono text-[12px] leading-5">
+            <pre className="overflow-x-auto border-y border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-3 py-3 font-mono text-[12px] leading-5">
               {JSON.stringify(loadedResource.attributes, null, 2)}
             </pre>
           ) : (

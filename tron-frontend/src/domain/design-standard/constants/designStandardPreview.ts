@@ -1,4 +1,4 @@
-export const designStandardSidebarItems = ["Dashboard", "Apps", "Tasks", "Agents", "Data", "Security"] as const;
+export const designStandardSidebarItems = ["Apps", "Tasks", "Agents", "Data", "Security"] as const;
 
 export const designStandardTableRows = [
   { workspace: "Core Platform", source: "Local", model: "GPT-5.4", usage: "284k", status: "Healthy" },

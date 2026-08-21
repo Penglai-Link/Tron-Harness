@@ -23,7 +23,7 @@ async fn backend_serves_spa_entry_for_root_and_client_routes() {
     let frontend_dir = write_frontend_fixture("spa-entry");
     let app = app_with_frontend_dir(&frontend_dir);
 
-    for path in ["/", "/dashboard", "/settings/models"] {
+    for path in ["/", "/apps", "/settings/models"] {
         let response = request(&app, Method::GET, path, None, None).await;
 
         assert_eq!(response.status(), StatusCode::OK);
@@ -44,7 +44,7 @@ async fn backend_serves_spa_entry_for_head_routes_without_body() {
     let frontend_dir = write_frontend_fixture("spa-head");
     let app = app_with_frontend_dir(&frontend_dir);
 
-    let response = request(&app, Method::HEAD, "/dashboard", None, None).await;
+    let response = request(&app, Method::HEAD, "/apps", None, None).await;
 
     assert_eq!(response.status(), StatusCode::OK);
     assert_content_type(response.headers(), "text/html");
@@ -75,7 +75,7 @@ async fn non_get_frontend_routes_return_405_instead_of_spa_html() {
     let frontend_dir = write_frontend_fixture("spa-method-guard");
     let app = app_with_frontend_dir(&frontend_dir);
 
-    let response = request(&app, Method::POST, "/dashboard", None, None).await;
+    let response = request(&app, Method::POST, "/apps", None, None).await;
 
     assert_eq!(response.status(), StatusCode::METHOD_NOT_ALLOWED);
     assert_content_type(response.headers(), "text/plain");

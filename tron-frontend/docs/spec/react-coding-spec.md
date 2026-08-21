@@ -180,7 +180,7 @@ The frontend must support internationalization from the first implementation pas
 
 - **Translation structure**
   - Translation resources live under `src/i18n/locales/<locale>/`
-  - Namespaces are organized by stable product areas, such as `common`, `shell`, `auth`, `dashboard`, `tasks`, `apps`, `models`, `memory`, `prompts`, `skills`, `resources`, `admin`, and `errors`
+  - Namespaces are organized by stable product areas, such as `common`, `shell`, `auth`, `tasks`, `apps`, `models`, `memory`, `prompts`, `skills`, `resources`, `admin`, and `errors`
   - Route metadata, navigation labels, page headers, form labels, validation text, table headers, action labels, dialogs, empty states, toast messages, and error messages all use translation keys
   - Domain terminology is centralized in a shared glossary namespace to keep terms such as Workspace, Agent, Task, Memory, Skill, Model, Prompt, Resource, Inherited, Local, and Override consistent
 

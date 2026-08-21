@@ -340,7 +340,8 @@ pub struct ServerCreateRequest {
     pub host: String,
     pub port: u16,
     pub allow_inheritance: bool,
-    pub initial_account: ServerAccountCreateInputRequest,
+    #[serde(default)]
+    pub initial_account: Option<ServerAccountCreateInputRequest>,
 }
 
 impl TryFrom<ServerCreateRequest> for ServerCreateCommand {
@@ -351,12 +352,15 @@ impl TryFrom<ServerCreateRequest> for ServerCreateCommand {
         validate_code(&value.server_code, "serverCode")?;
         validate_non_blank(&value.name, "name")?;
         validate_non_blank(&value.host, "host")?;
-        validate_code(
-            &value.initial_account.account_code,
-            "initialAccount.accountCode",
-        )?;
-        validate_non_blank(&value.initial_account.name, "initialAccount.name")?;
-        validate_non_blank(&value.initial_account.username, "initialAccount.username")?;
+        let initial_account = value
+            .initial_account
+            .map(|initial_account| {
+                validate_code(&initial_account.account_code, "initialAccount.accountCode")?;
+                validate_non_blank(&initial_account.name, "initialAccount.name")?;
+                validate_non_blank(&initial_account.username, "initialAccount.username")?;
+                Ok(initial_account.into())
+            })
+            .transpose()?;
         Ok(Self {
             workspace_code: value.workspace_code,
             server_code: value.server_code,
@@ -365,7 +369,7 @@ impl TryFrom<ServerCreateRequest> for ServerCreateCommand {
             host: value.host,
             port: value.port,
             allow_inheritance: value.allow_inheritance,
-            initial_account: value.initial_account.into(),
+            initial_account,
         })
     }
 }

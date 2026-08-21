@@ -24,7 +24,6 @@ export type ServiceDomain =
   | "app"
   | "automation"
   | "chat"
-  | "dashboard"
   | "knowledge-graph"
   | "mcp"
   | "memory"
@@ -63,7 +62,6 @@ const domainEnvKeys: Record<ServiceDomain, string> = {
   app: "APP",
   automation: "AUTOMATION",
   chat: "CHAT",
-  dashboard: "DASHBOARD",
   "knowledge-graph": "KNOWLEDGE_GRAPH",
   mcp: "MCP",
   memory: "MEMORY",

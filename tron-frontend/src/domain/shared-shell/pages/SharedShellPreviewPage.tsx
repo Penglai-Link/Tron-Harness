@@ -82,7 +82,7 @@ export function SharedShellPreviewPage() {
     >
       <PageHeader
         breadcrumbs={[
-          { label: "Tron", href: "/dashboard" },
+          { label: "Tron", href: "/apps" },
           { label: "Shared Shell Preview" },
         ]}
         title="Workspace console foundation"

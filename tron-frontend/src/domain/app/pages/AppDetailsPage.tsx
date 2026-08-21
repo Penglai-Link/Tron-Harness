@@ -2,6 +2,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   useNavigate,
   useSearchParams,
@@ -12,6 +13,7 @@ import {
   InspectorPanel,
   PageHeader,
   SurfaceCard,
+  useLocaleFormatters,
   useConsoleShellConfig,
   useToast,
 } from "@/shared";
@@ -38,34 +40,37 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 export function AppDetailsPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useTranslation("pages");
+  const pageT = (key: string, options?: Record<string, unknown>) => t(`apps.${key}`, options);
   const toast = useToast();
+  const { currentLocale } = useLocaleFormatters();
   const dataSource = getServiceDataSource("app");
   const appCode = searchParams.get("appCode") ?? "";
   const { app, loading, refresh } = useAppDetail(appCode);
   const [updatingLifecycle, setUpdatingLifecycle] = useState(false);
   const rightPanel = useMemo(() => (app ? (
-    <InspectorPanel title="App Metadata">
+    <InspectorPanel title={pageT("detail.metadata")}>
       <div className="space-y-5">
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Metadata</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("detail.metadata")}</p>
           <div className="mt-2 space-y-3 text-sm">
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Created</span><span className="font-medium">{formatAppTimestamp(app.createdAt)}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Updated</span><span className="font-medium">{formatAppTimestamp(app.updatedAt)}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Archived At</span><span className="font-medium">{appArchivedLabel(app.archivedAt)}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Identifier</span><span className="font-medium">{app.id}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.created")}</span><span className="font-medium">{formatAppTimestamp(app.createdAt, currentLocale)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.updated")}</span><span className="font-medium">{formatAppTimestamp(app.updatedAt, currentLocale)}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.archivedAt")}</span><span className="font-medium">{appArchivedLabel(app.archivedAt, currentLocale, pageT("detail.notArchived"))}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.identifier")}</span><span className="font-medium">{app.id}</span></div>
           </div>
         </div>
         <div>
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Local Repository</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("detail.localRepository")}</p>
           <div className="mt-2 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-3 text-sm">
             <p>{app.localDirectory}</p>
-            <p className="mt-2 text-[var(--color-on-surface-variant)]">{app.repositoryUrl ?? "Not set"}</p>
-            <p className="mt-2 text-[var(--color-on-surface-variant)]">{app.defaultBranch ?? "Not set"}</p>
+            <p className="mt-2 text-[var(--color-on-surface-variant)]">{app.repositoryUrl ?? pageT("detail.notSet")}</p>
+            <p className="mt-2 text-[var(--color-on-surface-variant)]">{app.defaultBranch ?? pageT("detail.notSet")}</p>
           </div>
         </div>
       </div>
     </InspectorPanel>
-  ) : undefined), [app]);
+  ) : undefined), [app, currentLocale]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -79,18 +84,18 @@ export function AppDetailsPage() {
         } else {
           archiveMockApp(app.appCode);
         }
-        toast.success(`${app.name} archived`);
+        toast.success(pageT("messages.archived", { name: app.name }));
       } else {
         if (dataSource === "api") {
           await restoreApp(app.appCode);
         } else {
           restoreMockApp(app.appCode);
         }
-        toast.success(`${app.name} restored`);
+        toast.success(pageT("messages.restored", { name: app.name }));
       }
       refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "App lifecycle update failed");
+      toast.error(error instanceof Error ? error.message : pageT("messages.lifecycleUpdateFailed"));
     } finally {
       setUpdatingLifecycle(false);
     }
@@ -100,12 +105,12 @@ export function AppDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Loading" }]}
-          title="App Detail"
+          breadcrumbs={[{ label: pageT("breadcrumbs.apps"), href: "/apps" }, { label: appCode || pageT("breadcrumbs.loading") }]}
+          title={pageT("detail.title")}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading app detail</h2>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Retrieving {appCode} from the app detail endpoint.</p>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("detail.loadingTitle")}</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{pageT("detail.loadingDescription", { code: appCode })}</p>
         </SurfaceCard>
       </>
     );
@@ -115,12 +120,12 @@ export function AppDetailsPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Not Found" }]}
-          title="App Detail"
+          breadcrumbs={[{ label: pageT("breadcrumbs.apps"), href: "/apps" }, { label: appCode || pageT("breadcrumbs.notFound") }]}
+          title={pageT("detail.title")}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">App not found</h2>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{appCode ? `No app matches ${appCode}.` : "No app was requested."}</p>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("detail.notFoundTitle")}</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{appCode ? pageT("detail.noAppMatches", { code: appCode }) : pageT("detail.noAppRequested")}</p>
         </SurfaceCard>
       </>
     );
@@ -129,18 +134,18 @@ export function AppDetailsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: app.appCode }]}
+        breadcrumbs={[{ label: pageT("breadcrumbs.apps"), href: "/apps" }, { label: app.appCode }]}
         title={app.name}
         actions={(
           <>
-            <Button type="button" size="lg" variant="outline" onClick={() => navigate(`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`)}>Edit</Button>
+            <Button type="button" size="lg" variant="outline" onClick={() => navigate(`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`)}>{pageT("actions.edit")}</Button>
             {app.status === "Archived" ? (
               <Button size="lg" type="button" disabled={updatingLifecycle} variant="destructive" onClick={() => void handleLifecycle("restore")}>
-                Restore
+                {pageT("actions.restore")}
               </Button>
             ) : (
               <Button size="lg" type="button" disabled={updatingLifecycle} onClick={() => void handleLifecycle("archive")}>
-                Archive
+                {pageT("actions.archive")}
               </Button>
             )}
           </>
@@ -152,17 +157,17 @@ export function AppDetailsPage() {
           <AppStatusBadge status={app.status} />
         </div>
         <div className="grid gap-4 md:grid-cols-2">
-          <AppDetailField label="App Code" value={app.appCode} />
-          <AppDetailField label="Local Directory" value={app.localDirectory} />
-          <AppDetailField label="Repository URL" value={app.repositoryUrl ?? "Not set"} />
-          <AppDetailField label="Default Branch" value={app.defaultBranch ?? "Not set"} />
+          <AppDetailField label={pageT("detail.appCode")} value={app.appCode} />
+          <AppDetailField label={pageT("detail.localDirectory")} value={app.localDirectory} />
+          <AppDetailField label={pageT("detail.repositoryUrl")} value={app.repositoryUrl ?? pageT("detail.notSet")} />
+          <AppDetailField label={pageT("detail.defaultBranch")} value={app.defaultBranch ?? pageT("detail.notSet")} />
         </div>
         <div className="mt-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</p>
-          <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--color-on-surface)]">{app.description ?? "No description provided."}</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("detail.description")}</p>
+          <p className="mt-2 whitespace-pre-wrap text-sm text-[var(--color-on-surface)]">{app.description ?? pageT("detail.noDescription")}</p>
         </div>
         <div className="mt-5">
-          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Tags</p>
+          <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("detail.tags")}</p>
           <div className="mt-2">
             <AppTagList tags={app.tags} />
           </div>

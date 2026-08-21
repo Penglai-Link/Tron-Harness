@@ -1,5 +1,6 @@
 import { adaptResourceRecord } from "@/domain/resource/adapters";
 import {
+  pageConnections,
   pageResources,
   toResourceKindCode,
   toResourceSourceCode,
@@ -66,6 +67,24 @@ export async function queryResourcePage(query: ResourcePageQuery): Promise<Resou
   if (getServiceDataSource("resource") === "mock") return mockPage(query);
 
   const page = await pageResources(toApiRequest(query));
+  return {
+    current: page.current,
+    records: page.records.map(adaptResourceRecord),
+    size: page.size,
+    total: page.total,
+  };
+}
+
+export async function queryResourceConnectionPage(
+  query: ResourcePageQuery,
+): Promise<ResourcePageResult> {
+  const page = await pageConnections({
+    current: query.current,
+    kinds: query.kinds.map(toResourceKindCode),
+    search: query.search.trim() || null,
+    size: query.size,
+    workspaceCode: query.workspaceCode ?? "",
+  });
   return {
     current: page.current,
     records: page.records.map(adaptResourceRecord),

@@ -20,7 +20,6 @@ use crate::adapters::{
         auth::require_auth,
         automations::routes as automation_routes,
         chats::routes::routes as chat_routes,
-        dashboard::routes as dashboard_routes,
         knowledge_graph::routes as knowledge_graph_routes,
         mcp::routes::management_routes as mcp_management_routes,
         memory::routes as memory_routes,
@@ -55,7 +54,6 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(workspace_routes())
         .merge(automation_routes())
         .merge(chat_routes())
-        .merge(dashboard_routes())
         .merge(app_routes())
         .merge(agent_routes())
         .merge(mcp_management_routes())

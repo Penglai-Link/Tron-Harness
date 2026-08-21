@@ -170,7 +170,7 @@ pub async fn oauth2_callback(
         .await
     {
         Ok(session) => {
-            let redirect_target = session.redirect_path.unwrap_or_else(|| "/dashboard".into());
+            let redirect_target = session.redirect_path.unwrap_or_else(|| "/apps".into());
             let mut response = StatusCode::SEE_OTHER.into_response();
             response.headers_mut().insert(
                 header::LOCATION,

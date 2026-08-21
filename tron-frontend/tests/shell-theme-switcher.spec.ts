@@ -198,21 +198,6 @@ async function routeThemeApi(
     await fulfillJson(route, successEnvelope(workspaceSwitcherData));
   });
 
-  await page.route("**/api/v1/dashboard/overview", async (route) => {
-    if (
-      !currentSession
-      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
-    ) {
-      await fulfillJson(route, unauthorizedEnvelope(), 401);
-      return;
-    }
-
-    await fulfillJson(route, successEnvelope({
-      activities: [],
-      metrics: [],
-    }));
-  });
-
   await page.route("**/api/v1/admin/platform/models", async (route) => {
     if (
       !currentSession
@@ -227,13 +212,13 @@ async function routeThemeApi(
 }
 
 async function signIn(page: Page) {
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await page.getByRole("button", { name: /sign in/i }).click({ force: true });
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
 }
 
 test.beforeAll(async () => {
@@ -373,7 +358,7 @@ test("loads workspace selector data from api after sign in", async ({ page }) =>
   await expect(workspaceTrigger).toContainText("工业互联网/璀璨工坊");
 });
 
-test("dashboard inheritance map keeps descendant workspaces nested under their direct parent", async ({ page }) => {
+test("workspace inheritance map keeps descendant workspaces nested under their direct parent", async ({ page }) => {
   const workspaceSwitcherData = {
     primarySpaces: [
       {
@@ -476,10 +461,9 @@ test("sidebar navigation still works after entering chats", async ({ page }) => 
   await expect(page).toHaveURL(/\/chats$/);
   await expect(page.getByRole("button", { name: "New session" }).first()).toBeVisible();
 
-  await page.getByRole("link", { name: "Dashboard" }).click();
-  await expect(page).toHaveURL(/\/dashboard$/);
-  await expect(page.getByRole("heading", { name: "Workspace Overview" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Primary Investigation" })).toHaveCount(0);
+  await page.getByRole("link", { name: "Apps" }).click();
+  await expect(page).toHaveURL(/\/apps$/);
+  await expect(page.getByRole("heading", { name: "App Management" })).toBeVisible();
 
   const dataToggle = page.getByRole("button", { name: "Data" });
   const resourcesLink = page.getByRole("link", { name: "Resources" });

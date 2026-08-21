@@ -24,11 +24,6 @@ import {
   ConnectionTextField,
 } from "./ConnectionFormFields";
 import { generateConnectionResourceCode } from "./connectionResourceCode";
-import {
-  emptyServerAccount,
-  ServerAccountFields,
-  type ServerAccountFormValue,
-} from "./ServerAccountFields";
 
 interface ServerCreateDialogProps {
   onCreated: () => void;
@@ -44,14 +39,12 @@ export function ServerCreateDialog({ onCreated, onOpenChange, open, workspaceCod
   const [description, setDescription] = useState("");
   const [host, setHost] = useState("");
   const [port, setPort] = useState("22");
-  const [account, setAccount] = useState<ServerAccountFormValue>({ ...emptyServerAccount });
   const [submitting, setSubmitting] = useState(false);
   const pageT = (key: string) => t(`resourceConnections.${key}`);
 
   useEffect(() => {
     if (!open) return;
     setServerCode(generateConnectionResourceCode("SERVER"));
-    setAccount({ ...emptyServerAccount, accountCode: generateConnectionResourceCode("SERVER_ACCOUNT") });
   }, [open]);
 
   async function submit(event: FormEvent<HTMLFormElement>) {
@@ -62,31 +55,13 @@ export function ServerCreateDialog({ onCreated, onOpenChange, open, workspaceCod
         allowInheritance: false,
         description: description.trim() || null,
         host: host.trim(),
-        initialAccount: {
-          accountCode: account.accountCode.trim(),
-          allowInheritance: false,
-          authenticationType: account.authenticationType,
-          description: account.description.trim() || null,
-          name: account.name.trim(),
-          ...(account.authenticationType === "Password"
-            ? { passwordVariableKey: account.passwordVariableKey.trim() }
-            : {
-                privateKeyVariableKey: account.privateKeyVariableKey.trim(),
-                ...(account.privateKeyPassphraseVariableKey.trim()
-                  ? { privateKeyPassphraseVariableKey: account.privateKeyPassphraseVariableKey.trim() }
-                  : {}),
-              }),
-          username: account.username.trim(),
-        },
         name: name.trim(),
         port: Number(port),
         serverCode: serverCode.trim(),
         workspaceCode,
       };
       const isApi = getServiceDataSource("resource") === "api";
-      const connectivityVerified = isApi
-        ? (await createServerConnection(request)).connectivityVerified
-        : true;
+      if (isApi) await createServerConnection(request);
       if (!isApi) {
         createMockManagedResource({
           allowInheritance: false,
@@ -98,27 +73,10 @@ export function ServerCreateDialog({ onCreated, onOpenChange, open, workspaceCod
           resourceCode: request.serverCode,
           workspaceCode,
         });
-        createMockManagedResource({
-          allowInheritance: false,
-          attributes: {
-            authenticationType: request.initialAccount.authenticationType,
-            serverCode: request.serverCode,
-            serverWorkspaceCode: workspaceCode,
-            username: request.initialAccount.username,
-          },
-          description: request.initialAccount.description ?? "",
-          file: null,
-          kind: "SERVER_ACCOUNT",
-          name: request.initialAccount.name,
-          resourceCode: request.initialAccount.accountCode,
-          workspaceCode,
-        });
       }
       toastManager.add({
         description: pageT("messages.serverCreated"),
-        title: connectivityVerified
-          ? pageT("messages.connectionVerified")
-          : pageT("messages.created"),
+        title: pageT("messages.created"),
         type: "success",
       });
       onOpenChange(false);
@@ -126,7 +84,7 @@ export function ServerCreateDialog({ onCreated, onOpenChange, open, workspaceCod
     } catch (cause) {
       toastManager.add({
         description: cause instanceof Error ? cause.message : pageT("messages.createFailed"),
-        title: pageT("messages.connectionFailed"),
+        title: pageT("messages.createFailed"),
         type: "error",
       });
     } finally {
@@ -149,16 +107,12 @@ export function ServerCreateDialog({ onCreated, onOpenChange, open, workspaceCod
             <div className="sm:col-span-2">
               <ConnectionTextareaField id="server-description" label={pageT("fields.description")} onChange={setDescription} value={description} />
             </div>
-            <div className="sm:col-span-2 border-t pt-4">
-              <h3 className="font-medium">{pageT("server.initialAccount")}</h3>
-            </div>
-            <ServerAccountFields idPrefix="initial-account" onChange={setAccount} value={account} />
           </div>
           <DialogFooter>
             <Button disabled={submitting} type="button" variant="outline" onClick={() => onOpenChange(false)}>{pageT("actions.cancel")}</Button>
             <Button disabled={submitting} type="submit">
               {submitting ? <Spinner /> : null}
-              {submitting ? pageT("actions.verifying") : pageT("actions.createAndVerify")}
+              {submitting ? pageT("actions.creating") : pageT("actions.create")}
             </Button>
           </DialogFooter>
         </form>

@@ -172,7 +172,7 @@ async fn dev_oauth2_callback_auto_provisions_and_authenticates_session() {
     let authorize_response = request(
         &app,
         Method::GET,
-        "/api/v1/auth/oauth2/authorize/dev?redirect=%2Fdashboard",
+        "/api/v1/auth/oauth2/authorize/dev?redirect=%2Fapps",
         None,
         None,
     )
@@ -253,7 +253,7 @@ async fn oauth2_callback_reuses_existing_subject_link_when_github_email_changes(
 
     let first_session_json = oauth2_session_json(
         &first_app,
-        "/api/v1/auth/oauth2/authorize/github?redirect=%2Fdashboard",
+        "/api/v1/auth/oauth2/authorize/github?redirect=%2Fapps",
     )
     .await;
     let first_user_code = first_session_json["data"]["user"]["userCode"]
@@ -280,7 +280,7 @@ async fn oauth2_callback_reuses_existing_subject_link_when_github_email_changes(
 
     let second_session_json = oauth2_session_json(
         &second_app,
-        "/api/v1/auth/oauth2/authorize/github?redirect=%2Fdashboard",
+        "/api/v1/auth/oauth2/authorize/github?redirect=%2Fapps",
     )
     .await;
     assert_eq!(

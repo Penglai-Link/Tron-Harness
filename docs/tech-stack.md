@@ -41,7 +41,7 @@ The project is designed to produce a single backend-driven runtime artifact.
   - `VITE_TRON_<DOMAIN>_DATA_SOURCE=mock|api` overrides one route domain, for example `VITE_TRON_VARIABLE_DATA_SOURCE=api`
   - `VITE_TRON_API_BASE_URL` configures the backend API origin when API mode is enabled
   - Page components must import route-domain data hooks from `src/domain/<domain>/hooks`; endpoint contracts stay isolated under `src/domain/<domain>/api`, and static fixtures stay isolated under `src/domain/<domain>/mock/data.ts`
-  - Data hook names must describe result shape or access pattern, for example `useModelList`, `useTaskDetail`, `useDashboardOverview`, `useImportApplicationDefaultsBySource`; use `Page` for paginated results and `By<Condition>` for conditional reads instead of generic `Query` suffixes
+  - Data hook names must describe result shape or access pattern, for example `useModelList`, `useTaskDetail`, `useAppList`, `useImportApplicationDefaultsBySource`; use `Page` for paginated results and `By<Condition>` for conditional reads instead of generic `Query` suffixes
 
 ### Production Mode
 

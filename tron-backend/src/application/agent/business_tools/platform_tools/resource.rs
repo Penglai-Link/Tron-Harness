@@ -476,7 +476,7 @@ impl Tool for ServerCreateTool {
                         host: input.host,
                         port: input.port,
                         allow_inheritance: input.allow_inheritance,
-                        initial_account: input.initial_account.into_command(),
+                        initial_account: Some(input.initial_account.into_command()),
                     },
                 )
                 .await

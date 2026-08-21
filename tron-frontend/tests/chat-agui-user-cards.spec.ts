@@ -238,7 +238,7 @@ test.afterAll(async () => {
   }
 });
 
-test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards are off", async ({ context, page }) => {
+test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await context.grantPermissions(["clipboard-read", "clipboard-write"], { origin: frontendBaseUrl });
   await routeAuthApi(page);
@@ -254,15 +254,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
       version: 4,
     }));
   }, getWorkspaceSwitcherMock());
-  await signIn(page, "/settings/general");
-
-  const eventCardVisibility = page.getByRole("combobox", { name: "AG-UI event card visibility" });
-  await eventCardVisibility.click();
-  await expect(page.getByRole("option", { name: "Core cards", exact: true })).toHaveCount(0);
-  await page.getByRole("option", { name: "Off", exact: true }).click();
-  await expect(page.getByText("Hide low-level AG-UI debug event cards")).toBeVisible();
-
-  await page.goto(`${frontendBaseUrl}/chats`);
+  await signIn(page, "/chats");
   const workspaceTrigger = page.locator("#tron-workspace-trigger");
   await expect(workspaceTrigger).toHaveAttribute("aria-busy", "false");
   await workspaceTrigger.click();
@@ -435,20 +427,4 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards while debug cards ar
     runningLogContainer.evaluate((node) => Math.round(node.scrollHeight - node.clientHeight - node.scrollTop))
   )).toBeLessThanOrEqual(2);
 
-  await page.goto(`${frontendBaseUrl}/settings/general`);
-  await chooseSelectOption(page, "AG-UI event card visibility", "All cards");
-  await page.goto(`${frontendBaseUrl}/chats`);
-  await page.getByRole("button", { name: "New session" }).first().click();
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show debug and user cards");
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
-
-  const debugRunWork = page.getByLabel("AG-UI run work");
-  const debugRunSummary = debugRunWork.getByRole("button", { name: /Worked for/ });
-  await expect(debugRunSummary).toHaveCount(1);
-  await expect(debugRunSummary).toHaveAttribute("aria-expanded", "false");
-  await expect(page.getByLabel("Agent work rail")).toHaveCount(0);
-  await expect(page.getByLabel("AG-UI debug event cards")).toHaveCount(0);
-  await debugRunSummary.click();
-  await expect(page.getByLabel("Agent work rail")).toBeVisible();
-  await expect(page.getByLabel("AG-UI debug event cards")).toBeVisible();
 });

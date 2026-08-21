@@ -5,7 +5,6 @@ pub mod apps;
 pub mod auth;
 pub mod automations;
 pub mod chats;
-pub mod dashboard;
 pub mod frontend;
 pub mod knowledge_graph;
 pub mod mcp;

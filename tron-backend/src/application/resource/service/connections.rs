@@ -121,32 +121,12 @@ impl ResourceService {
         command: ServerCreateCommand,
     ) -> Result<ServerCreateResult, ResourceError> {
         validate_resource_code(&command.server_code)?;
-        validate_resource_code(&command.initial_account.account_code)?;
-        if command.server_code == command.initial_account.account_code {
-            return Err(ResourceError::InvalidInput);
-        }
-        if command.name.trim().is_empty()
-            || command.host.trim().is_empty()
-            || command.port == 0
-            || command.initial_account.name.trim().is_empty()
-        {
+        if command.name.trim().is_empty() || command.host.trim().is_empty() || command.port == 0 {
             return Err(ResourceError::InvalidInput);
         }
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
         self.ensure_resource_create_is_available(&workspace_code, &command.server_code)?;
-        self.ensure_resource_create_is_available(
-            &workspace_code,
-            &command.initial_account.account_code,
-        )?;
-        validate_account_credentials(&command.initial_account)?;
-        let target = self.ssh_connection_target(
-            &workspace_code,
-            command.host.clone(),
-            command.port,
-            &command.initial_account,
-        )?;
-        self.connection_verifier.verify(target).await?;
         let now = current_timestamp();
         let server = ServerRecord {
             workspace_code: workspace_code.clone(),
@@ -160,36 +140,69 @@ impl ResourceService {
             created_at: now.clone(),
             updated_at: now.clone(),
         };
-        let account = server_account_record(
-            &workspace_code,
-            &server.workspace_code,
-            &command.server_code,
-            &command.initial_account,
-            &now,
-        )?;
-        self.repository(|repository| repository.insert_server_bundle(&server, &account))?;
+        let account = match command.initial_account {
+            Some(initial_account) => {
+                validate_resource_code(&initial_account.account_code)?;
+                if command.server_code == initial_account.account_code {
+                    return Err(ResourceError::InvalidInput);
+                }
+                if initial_account.name.trim().is_empty() {
+                    return Err(ResourceError::InvalidInput);
+                }
+                self.ensure_resource_create_is_available(
+                    &workspace_code,
+                    &initial_account.account_code,
+                )?;
+                validate_account_credentials(&initial_account)?;
+                let target = self.ssh_connection_target(
+                    &workspace_code,
+                    command.host.clone(),
+                    command.port,
+                    &initial_account,
+                )?;
+                self.connection_verifier.verify(target).await?;
+                Some(server_account_record(
+                    &workspace_code,
+                    &server.workspace_code,
+                    &command.server_code,
+                    &initial_account,
+                    &now,
+                )?)
+            }
+            None => None,
+        };
+        if let Some(account) = account.as_ref() {
+            self.repository(|repository| repository.insert_server_bundle(&server, account))?;
+        } else {
+            self.repository(|repository| repository.insert_server(&server))?;
+        }
         self.publish_resource_audit(
             actor_user_code,
             &ManagedResource::Server(server.clone()),
             "resource.created",
         );
-        self.publish_resource_audit(
-            actor_user_code,
-            &ManagedResource::ServerAccount(account.clone()),
-            "resource.created",
-        );
+        if let Some(account) = account.as_ref() {
+            self.publish_resource_audit(
+                actor_user_code,
+                &ManagedResource::ServerAccount(account.clone()),
+                "resource.created",
+            );
+        }
+        let connectivity_verified = account.is_some();
         Ok(ServerCreateResult {
             server: commit_outcome(
                 &workspace_code,
                 &server.resource_code,
                 crate::domain::resource::ResourceKind::ServerConnection,
             ),
-            initial_account: commit_outcome(
-                &workspace_code,
-                &account.resource_code,
-                crate::domain::resource::ResourceKind::ServerAccount,
-            ),
-            connectivity_verified: true,
+            initial_account: account.map(|account| {
+                commit_outcome(
+                    &workspace_code,
+                    &account.resource_code,
+                    crate::domain::resource::ResourceKind::ServerAccount,
+                )
+            }),
+            connectivity_verified,
         })
     }
 

@@ -16,10 +16,8 @@ import {
   type ChatFloatingState,
 } from "@tron/chat-core";
 import {
-  Bell,
   Bot,
   ChevronDown,
-  CircleUserRound,
   MoreHorizontal,
   PanelBottomClose,
   PanelBottomOpen,
@@ -171,7 +169,7 @@ function compactWorkspacePath(label: string) {
 }
 
 export function TronShell({
-  activeItem = "Dashboard",
+  activeItem = "Apps",
   children,
   contentClassName,
   rightPanel,
@@ -223,8 +221,7 @@ export function TronShell({
   const workspaceSwitcherRequestSequenceRef = useRef(0);
   const utilityPanelRef = useRef<HTMLDivElement | null>(null);
   const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null);
-  const notificationsTriggerRef = useRef<HTMLDivElement | null>(null);
-  const userMenuTriggerRef = useRef<HTMLDivElement | null>(null);
+  const userMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const topbarToolsMenuRef = useRef<HTMLDivElement | null>(null);
   const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
@@ -475,11 +472,9 @@ export function TronShell({
     triggerElement:
       utilityPanel === "workspace"
         ? workspaceTriggerRef.current
-        : utilityPanel === "notifications"
-          ? notificationsTriggerRef.current
-          : utilityPanel === "user"
-            ? userMenuTriggerRef.current
-            : null,
+        : utilityPanel === "user"
+          ? userMenuTriggerRef.current
+          : null,
   });
 
   useDismissibleLayer({
@@ -651,6 +646,100 @@ export function TronShell({
     );
   }
 
+  function renderUserPanelContent() {
+    return (
+      <>
+        {userMenuContent}
+        <div className={cn("grid grid-cols-2 gap-3", userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
+          <div className="min-w-0">
+            <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
+              {t("shell:theme.label")}
+            </label>
+            <SelectInput
+              className="w-full"
+              id="tron-theme-select"
+              value={theme}
+              onValueChange={(event) => {
+                setTheme(event! === "matrix-dark" ? "matrix-dark" : "light");
+              }}
+            >
+              {themes.map((themeOption) => (
+                <SelectItem key={themeOption.value} value={themeOption.value}>
+                  {t(themeOption.labelKey)}
+                </SelectItem>
+              ))}
+            </SelectInput>
+          </div>
+          <div className="min-w-0">
+            <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
+              {t("common:locale.label")}
+            </label>
+            <SelectInput
+              className="w-full"
+              id="tron-locale-select"
+              value={currentLocale}
+              onValueChange={(event) => void changeLocale(event as typeof currentLocale)}
+            >
+              {locales.map((locale) => (
+                <SelectItem key={locale.code} value={locale.code}>
+                  {t(locale.labelKey)}
+                </SelectItem>
+              ))}
+            </SelectInput>
+          </div>
+        </div>
+      </>
+    );
+  }
+
+  function renderSidebarUserSection(mobile = false) {
+    const compact = mobile ? false : sidebarCollapsed;
+    const displayName = authSession?.user.displayName || t("shell:utilityPanel.user");
+    const email = authSession?.user.email ?? "";
+    const initial = displayName.trim().charAt(0).toUpperCase() || "U";
+
+    return (
+      <div className={cn("relative shrink-0 border-t border-[var(--color-outline-variant)]", mobile ? "pt-3" : "py-2")}>
+        <button
+          ref={userMenuTriggerRef}
+          className={cn(
+            "flex min-w-0 w-full items-center rounded-xl text-left transition-colors hover:bg-[var(--color-hover-surface)]",
+            compact ? "justify-center px-2 py-2" : "gap-3 px-2 py-2",
+          )}
+          type="button"
+          aria-label={t("shell:aria.openUserMenu")}
+          aria-expanded={utilityPanel === "user"}
+          aria-haspopup="dialog"
+          onClick={() => handleUtilityPanelClick("user")}
+        >
+          <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
+            {initial}
+          </span>
+          {compact ? null : (
+            <span className="min-w-0 flex-1">
+              <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
+              {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
+            </span>
+          )}
+        </button>
+        {utilityPanel === "user" ? (
+          <div
+            ref={utilityPanelRef}
+            className={cn(
+              "absolute bottom-[calc(100%+8px)] z-[70] max-h-[min(70vh,36rem)] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              compact ? "left-[calc(100%+8px)] w-[min(360px,calc(100vw-1rem))]" : "left-0 w-[min(360px,calc(100vw-1rem))]",
+            )}
+            role="dialog"
+            aria-label={t("shell:utilityPanel.user")}
+          >
+            <p className="font-medium">{t("shell:utilityPanel.user")}</p>
+            <div className="mt-3 space-y-4">{renderUserPanelContent()}</div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
   function renderSidebarContent(mobile = false) {
     const compact = mobile ? false : sidebarCollapsed;
 
@@ -809,16 +898,6 @@ export function TronShell({
                 >
                   <Settings2 size={17} aria-hidden="true" />
                 </Button>
-                <div ref={notificationsTriggerRef} className="hidden min-[900px]:contents">
-                  <Button className="hidden min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.viewNotifications")} aria-pressed={utilityPanel === "notifications"} onClick={() => handleUtilityPanelClick("notifications")}>
-                    <Bell size={17} aria-hidden="true" />
-                  </Button>
-                </div>
-                <div ref={userMenuTriggerRef} className="hidden min-[900px]:contents">
-                  <Button className="hidden rounded-full hover:bg-transparent min-[900px]:inline-flex" size="icon" variant="ghost" aria-label={t("shell:aria.openUserMenu")} aria-pressed={utilityPanel === "user"} onClick={() => handleUtilityPanelClick("user")}>
-                    <CircleUserRound size={18} aria-hidden="true" />
-                  </Button>
-                </div>
                 <Button className={cn("hidden min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
                   <Bot size={17} aria-hidden="true" />
                 </Button>
@@ -839,14 +918,6 @@ export function TronShell({
                       <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
                         <Settings2 size={16} aria-hidden="true" />
                         {t("shell:utilityPanel.settings")}
-                      </button>
-                      <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => handleUtilityPanelClick("notifications")}>
-                        <Bell size={16} aria-hidden="true" />
-                        {t("shell:utilityPanel.notifications")}
-                      </button>
-                      <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => handleUtilityPanelClick("user")}>
-                        <CircleUserRound size={16} aria-hidden="true" />
-                        {t("shell:utilityPanel.user")}
                       </button>
                       <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
                         <Bot size={16} aria-hidden="true" />
@@ -891,69 +962,15 @@ export function TronShell({
                 </Button>
               </div>
             </div>
-            {utilityPanel ? (
+            {utilityPanel === "workspace" ? (
               <div
                 ref={utilityPanelRef}
-                id={utilityPanel === "workspace" ? "tron-workspace-selector-panel" : undefined}
-                className={cn(
-                  "absolute top-[calc(100%+8px)] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-                  utilityPanel === "workspace"
-                    ? "left-4 w-[min(360px,calc(100vw-2rem))] sm:left-6"
-                    : "right-4 w-[min(360px,calc(100vw-2rem))] sm:right-6",
-                )}
-                role={utilityPanel === "workspace" ? "dialog" : undefined}
-                aria-label={utilityPanel === "workspace" ? t("shell:workspace.selectorTitle") : undefined}
+                id="tron-workspace-selector-panel"
+                className="absolute left-4 top-[calc(100%+8px)] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
+                role="dialog"
+                aria-label={t("shell:workspace.selectorTitle")}
               >
-                {utilityPanel === "workspace" ? null : <p className="font-medium">{t(`shell:utilityPanel.${utilityPanel}`)}</p>}
-                {utilityPanel === "workspace" ? (
-                  <div>
-                    {renderWorkspaceSwitcherContent()}
-                  </div>
-                ) : utilityPanel === "user" ? (
-                  <div className="mt-3 space-y-4">
-                    {userMenuContent}
-                    <div className={cn("grid grid-cols-2 gap-3", userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
-                      <div className="min-w-0">
-                        <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
-                          {t("shell:theme.label")}
-                        </label>
-                        <SelectInput
-                          className="w-full"
-                          id="tron-theme-select"
-                          value={theme}
-                          onValueChange={(event) => {
-                            setTheme(event! === "matrix-dark" ? "matrix-dark" : "light");
-                          }}
-                        >
-                          {themes.map((themeOption) => (
-                            <SelectItem key={themeOption.value} value={themeOption.value}>
-                              {t(themeOption.labelKey)}
-                            </SelectItem>
-                          ))}
-                        </SelectInput>
-                      </div>
-                      <div className="min-w-0">
-                        <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
-                          {t("common:locale.label")}
-                        </label>
-                        <SelectInput
-                          className="w-full"
-                          id="tron-locale-select"
-                          value={currentLocale}
-                          onValueChange={(event) => void changeLocale(event as typeof currentLocale)}
-                        >
-                          {locales.map((locale) => (
-                            <SelectItem key={locale.code} value={locale.code}>
-                              {t(locale.labelKey)}
-                            </SelectItem>
-                          ))}
-                        </SelectInput>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">{t("shell:utilityPanel.sharedState")}</p>
-                )}
+                {renderWorkspaceSwitcherContent()}
               </div>
             ) : null}
           </header>
@@ -976,10 +993,15 @@ export function TronShell({
                 onClick={closeMobileSidebar}
               />
               <aside
-                className="fixed bottom-0 left-0 top-14 z-50 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
+                className="fixed bottom-0 left-0 top-14 z-50 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-visible bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
                 id="tron-mobile-sidebar"
               >
-                {renderSidebarContent(true)}
+                <div className="flex min-h-0 flex-1 flex-col">
+                  <div className="min-h-0 flex-1 overflow-y-auto">
+                    {renderSidebarContent(true)}
+                  </div>
+                  {renderSidebarUserSection(true)}
+                </div>
               </aside>
             </>
           ) : null}
@@ -1021,8 +1043,11 @@ export function TronShell({
             )}
             data-collapsed={sidebarCollapsed}
           >
-            <div className={cn("h-full overflow-y-auto px-2 pt-2")}>
-              {renderSidebarContent()}
+            <div className="flex h-full min-h-0 flex-col px-2 pt-2">
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                {renderSidebarContent()}
+              </div>
+              {renderSidebarUserSection()}
             </div>
           </aside>
 

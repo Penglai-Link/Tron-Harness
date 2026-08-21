@@ -4,6 +4,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import {
   Archive,
@@ -28,6 +29,7 @@ import {
   TablePagination,
   TextInput,
   useToast,
+  useLocaleFormatters,
   useWorkspaceSpaces,
 } from "@/shared";
 
@@ -75,12 +77,14 @@ function AppActions({
   pendingLifecycle: boolean;
 }) {
   const navigate = useNavigate();
+  const { t } = useTranslation("pages");
+  const pageT = (key: string, options?: Record<string, unknown>) => t(`apps.${key}`, options);
 
   return (
     <DropdownMenu>
       <DropdownMenuTrigger>
         <Button
-          aria-label={`Open actions for ${app.name}`}
+          aria-label={pageT("aria.actionsFor", { name: app.name })}
           size="icon"
           type="button"
           variant="ghost"
@@ -96,7 +100,7 @@ function AppActions({
             navigate(`/apps/edit?appCode=${encodeURIComponent(app.appCode)}`);
           }}
         >
-          Edit
+          {pageT("actions.edit")}
         </DropdownMenuItem>
         {app.status === "Archived" ? (
           <DropdownMenuItem
@@ -106,7 +110,7 @@ function AppActions({
               onRestore();
             }}
           >
-            Restore
+            {pageT("actions.restore")}
           </DropdownMenuItem>
         ) : (
           <DropdownMenuItem
@@ -116,7 +120,7 @@ function AppActions({
               onArchive();
             }}
           >
-            Archive
+            {pageT("actions.archive")}
           </DropdownMenuItem>
         )}
         <DropdownMenuSeparator />
@@ -129,10 +133,10 @@ function AppActions({
             }
           }}
         >
-          Gitlab
+          {pageT("actions.gitlab")}
         </DropdownMenuItem>
         <DropdownMenuItem disabled>
-          Poseidon
+          {pageT("actions.poseidon")}
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
@@ -141,7 +145,10 @@ function AppActions({
 
 export function AppsPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation("pages");
+  const pageT = (key: string, options?: Record<string, unknown>) => t(`apps.${key}`, options);
   const toast = useToast();
+  const { currentLocale } = useLocaleFormatters();
   const dataSource = getServiceDataSource("app");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
@@ -191,18 +198,18 @@ export function AppsPage() {
         } else {
           archiveMockApp(app.appCode);
         }
-        toast.success(`${app.name} archived`);
+        toast.success(pageT("messages.archived", { name: app.name }));
       } else {
         if (dataSource === "api") {
           await restoreApp(app.appCode);
         } else {
           restoreMockApp(app.appCode);
         }
-        toast.success(`${app.name} restored`);
+        toast.success(pageT("messages.restored", { name: app.name }));
       }
       refresh();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : `App lifecycle update failed for ${app.appCode}`);
+      toast.error(error instanceof Error ? error.message : pageT("messages.lifecycleUpdateFailed"));
     } finally {
       setPendingLifecycleCode(null);
     }
@@ -211,7 +218,7 @@ export function AppsPage() {
   return (
     <>
       <PageHeader
-        title="App Management"
+        title={pageT("title")}
         actions={(
           <>
             <Button
@@ -221,13 +228,13 @@ export function AppsPage() {
               disabled={loading}
               onClick={() => {
                 refresh();
-                toast.success("App registry refreshed");
+                toast.success(pageT("messages.refreshed"));
               }}
             >
-              Refresh
+              {pageT("actions.refresh")}
             </Button>
             <Button size="lg" type="button" disabled={!activeWorkspaceCode} onClick={() => navigate("/apps/new")}>
-              New
+              {pageT("actions.new")}
             </Button>
           </>
         )}
@@ -237,33 +244,33 @@ export function AppsPage() {
         rowKey={(row) => row.appCode}
         onRowClick={(app) => navigate(`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`)}
         emptyState={activeWorkspaceCode
-          ? "No apps match the current filters."
-          : "Select a workspace in the shell header to load apps."}
+          ? pageT("empty.noMatch")
+          : pageT("empty.workspace")}
         toolbar={(
           <div className="w-full grid gap-4 lg:grid-cols-3 sm:grid-cols-1">
             <TextInput
-              aria-label="Search apps"
-              placeholder="Search apps, repos, branches, or tags..."
+              aria-label={pageT("aria.search")}
+              placeholder={pageT("placeholders.search")}
               type="search"
               value={searchInput}
               onChange={(event) => setSearchInput(event.target.value)}
             />
-            <SelectInput aria-label="Runtime role filter" value={runtimeRole} onValueChange={(event) => setRuntimeRole(event as "" | AppRuntimeRole)}>
-              <SelectItem value="">All roles</SelectItem>
-              <SelectItem value="Frontend">Frontend</SelectItem>
-              <SelectItem value="Backend">Backend</SelectItem>
-              <SelectItem value="Mono">Mono</SelectItem>
+            <SelectInput aria-label={pageT("aria.runtimeRole")} value={runtimeRole} onValueChange={(event) => setRuntimeRole(event as "" | AppRuntimeRole)}>
+              <SelectItem value="">{pageT("filters.allRoles")}</SelectItem>
+              <SelectItem value="Frontend">{pageT("runtimeRole.Frontend")}</SelectItem>
+              <SelectItem value="Backend">{pageT("runtimeRole.Backend")}</SelectItem>
+              <SelectItem value="Mono">{pageT("runtimeRole.Mono")}</SelectItem>
             </SelectInput>
-            <SelectInput aria-label="App status filter" value={status} onValueChange={(event) => setStatus(event as StatusFilter)}>
-              <SelectItem value="Active">Active</SelectItem>
-              <SelectItem value="Archived">Archived</SelectItem>
-              <SelectItem value="All">All</SelectItem>
+            <SelectInput aria-label={pageT("aria.status")} value={status} onValueChange={(event) => setStatus(event as StatusFilter)}>
+              <SelectItem value="Active">{pageT("filters.active")}</SelectItem>
+              <SelectItem value="Archived">{pageT("filters.archived")}</SelectItem>
+              <SelectItem value="All">{pageT("filters.allStatuses")}</SelectItem>
             </SelectInput>
           </div>
         )}
         pagination={(
           <TablePagination
-            itemLabel="apps"
+            itemLabel={pageT("pagination.itemLabel")}
             endItem={Math.min(page.total, (page.current - 1) * page.size + page.records.length)}
             page={page.current}
             pageCount={pageCount}
@@ -280,7 +287,7 @@ export function AppsPage() {
         columns={[
           {
             id: "name",
-            header: "Name",
+            header: pageT("columns.name"),
             render: (app) => (
               <div>
                 <p className="text-sm font-semibold text-[var(--color-on-surface)]">{app.name}</p>
@@ -290,21 +297,21 @@ export function AppsPage() {
           },
           {
             id: "description",
-            header: "Description",
+            header: pageT("columns.description"),
             render: (app) => (
               <p className="max-w-72 text-sm leading-5 text-[var(--color-on-surface-variant)]">
-                {app.description ?? "-"}
+                {app.description ?? pageT("detail.notSet")}
               </p>
             ),
           },
           {
             id: "runtimeRole",
-            header: "Runtime",
+            header: pageT("columns.runtime"),
             render: (app) => <AppRuntimeRoleBadge runtimeRole={app.runtimeRole} />,
           },
           {
             id: "repository",
-            header: "Repository",
+            header: pageT("columns.repository"),
             render: (app) => (
               <div className="space-y-1">
                 {app.repositoryUrl ? (
@@ -332,30 +339,30 @@ export function AppsPage() {
                     <ExternalLink className="mt-0.5 shrink-0" size={12} aria-hidden="true" />
                   </a>
                 ) : (
-                  <p className="break-all text-sm text-[var(--color-on-surface)]">Not set</p>
+                  <p className="break-all text-sm text-[var(--color-on-surface)]">{pageT("detail.notSet")}</p>
                 )}
               </div>
             ),
           },
           {
             id: "tags",
-            header: "Tags",
+            header: pageT("columns.tags"),
             render: (app) => <AppTagList tags={app.tags} />,
           },
           {
             id: "status",
-            header: "Status",
+            header: pageT("columns.status"),
             render: (app) => <AppStatusBadge status={app.status} />,
           },
           {
             id: "updatedAt",
-            header: "Updated",
-            render: (app) => <span>{formatAppTimestamp(app.updatedAt)}</span>,
+            header: pageT("columns.updated"),
+            render: (app) => <span>{formatAppTimestamp(app.updatedAt, currentLocale)}</span>,
           },
           {
             id: "actions",
             align: "right",
-            header: "Actions",
+            header: pageT("columns.actions"),
             render: (app) => (
               <AppActions
                 app={app}

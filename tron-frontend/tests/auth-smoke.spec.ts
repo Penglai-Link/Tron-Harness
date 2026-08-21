@@ -286,7 +286,7 @@ async function routeAuthApi(
     hasRefreshSession = true;
     currentAccessToken = "";
     const url = new URL(route.request().url());
-    const redirect = url.searchParams.get("redirect") ?? "/dashboard";
+    const redirect = url.searchParams.get("redirect") ?? "/apps";
     await route.fulfill({
       status: 302,
       headers: {
@@ -499,8 +499,8 @@ test.afterAll(async () => {
 test("redirects anonymous users to login, signs in, reaches user management, and returns to login after logout", async ({ page }) => {
   await routeAuthApi(page);
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
 
   const loginInput = page.getByLabel(/operator id|username|email/i);
   const passwordInput = page.getByLabel(/passkey|password/i);
@@ -512,7 +512,7 @@ test("redirects anonymous users to login, signs in, reaches user management, and
   await passwordInput.fill("TronAuthPass123!");
   await submitLogin(page);
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
   await page.goto(`${frontendBaseUrl}/admin/users`);
   await expect(page).toHaveURL(/\/admin\/users$/);
   await page.reload();
@@ -543,11 +543,11 @@ test("redirects anonymous users to login, signs in, reaches user management, and
 test("opens personal center from the user summary and updates profile, password, and theme", async ({ page }) => {
   await routeAuthApi(page);
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await page.goto(`${frontendBaseUrl}/apps`);
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await submitLogin(page);
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
 
   await page.getByRole("button", { name: /open user menu/i }).click();
   await page.getByRole("link", { name: /personal center/i }).click();
@@ -575,14 +575,14 @@ test("opens personal center from the user summary and updates profile, password,
 test("shows workspace guidance after closing the final tab", async ({ page }) => {
   await routeAuthApi(page);
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
+  await page.goto(`${frontendBaseUrl}/apps`);
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await submitLogin(page);
 
   const tabList = page.getByRole("tablist");
   await expect(tabList).toBeVisible();
-  await tabList.getByRole("button", { name: "Close Dashboard" }).click();
+  await tabList.getByRole("button", { name: "Close App Management" }).click();
 
   const emptyWorkspace = page.getByTestId("tron-empty-tab-workspace");
   await expect(emptyWorkspace).toBeVisible();
@@ -595,14 +595,14 @@ test("blocks authenticated users without assigned spaces on an authorization req
     loginSession: unassignedSpaceUser,
   });
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await submitLogin(page);
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
   await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toBeVisible();
   await expect(page.getByText("Unassigned Operator")).toBeVisible();
   await expect(page.getByRole("navigation", { name: /tron primary navigation/i })).toHaveCount(0);
@@ -621,14 +621,14 @@ test("allows platform admins to bypass the no-space authorization page", async (
     loginSession: unassignedPlatformAdminUser,
   });
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await submitLogin(page);
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
   await expect(page.getByRole("heading", { name: /workspace authorization required/i })).toHaveCount(0);
   await expect(page.getByRole("navigation", { name: /tron primary navigation/i })).toBeVisible();
   await expect(page.getByRole("button", { name: /open workspace selector/i })).toBeVisible();
@@ -639,17 +639,17 @@ test("hides administration navigation for non-admin users", async ({ page }) => 
     loginSession: nonAdminUser,
   });
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await submitLogin(page);
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
   const primaryNavigation = page.getByRole("navigation", { name: /tron primary navigation/i });
   await expect(primaryNavigation).toBeVisible();
-  await expect(primaryNavigation.getByRole("link", { name: /^Dashboard$/i })).toBeVisible();
+  await expect(primaryNavigation.getByRole("link", { name: /^Apps$/i })).toBeVisible();
   await expect(primaryNavigation.getByRole("button", { name: /administration/i })).toHaveCount(0);
   await expect(primaryNavigation.getByRole("link", { name: /^Users$/i })).toHaveCount(0);
   await expect(primaryNavigation.getByRole("link", { name: /^Roles$/i })).toHaveCount(0);
@@ -657,7 +657,7 @@ test("hides administration navigation for non-admin users", async ({ page }) => 
   await expect(primaryNavigation.getByRole("link", { name: /^Workspace$/i })).toHaveCount(0);
 
   await page.goto(`${frontendBaseUrl}/admin/users`);
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
   await expect(page.getByRole("status").filter({ hasText: /access restricted/i })).toBeVisible();
   await expect(page.getByRole("heading", { name: /users/i })).toHaveCount(0);
 });
@@ -717,14 +717,14 @@ test("refreshes the access token before it expires while the operator stays idle
     },
   });
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await page.getByRole("button", { name: /sign in/i }).click();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
   await expect.poll(() => refreshGrantCount, { timeout: 6_000 }).toBe(1);
 
   await page.goto(`${frontendBaseUrl}/admin/users`);
@@ -742,14 +742,14 @@ test("refreshes and retries a protected request after the first 401 instead of r
     },
   });
 
-  await page.goto(`${frontendBaseUrl}/dashboard`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fdashboard$/);
+  await page.goto(`${frontendBaseUrl}/apps`);
+  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
 
   await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
   await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
   await page.getByRole("button", { name: /sign in/i }).click();
 
-  await expect(page).toHaveURL(/\/dashboard$/);
+  await expect(page).toHaveURL(/\/apps$/);
   await page.goto(`${frontendBaseUrl}/admin/users`);
 
   await expect.poll(() => refreshGrantCount > 0).toBe(true);

@@ -1,6 +1,6 @@
 import { createInternalChatAdapter, createInternalTerminalAdapter } from "@tron/chat-internal-adapter";
 import { type AITransport, createTerminalTransport, initTerminal } from "@tron/chat-terminal";
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 
 import { useLocale } from "@/i18n";
 import { buildApiUrl, getApiBaseUrl } from "@/shared/api/httpClient";
@@ -16,38 +16,16 @@ const TERMINAL_APP_CODE = import.meta.env.VITE_TRON_TERMINAL_APP_CODE?.trim() ||
 const TERMINAL_MODEL_CODE = import.meta.env.VITE_TRON_TERMINAL_MODEL_CODE?.trim() || null;
 const TERMINAL_API_BASE_URL = getApiBaseUrl();
 
-type TerminalChatContext = Awaited<ReturnType<typeof createTerminalChatContext>>;
-type TerminalChatContextCache = {
-  context: Promise<TerminalChatContext>;
-  workspaceCode: string;
-};
-
 const Terminal = () => {
   const { theme } = useTheme();
   const { currentLocale } = useLocale();
   const { selectedPrimarySpaceId, selectedSecondarySpaceId } = useWorkspaceSpaces();
   const terminalRef = useRef<HTMLDivElement>(null);
   const terminalInstanceRef = useRef<ReturnType<typeof initTerminal> | null>(null);
-  const terminalChatContextRef = useRef<TerminalChatContextCache | null>(null);
   const currentLocaleRef = useRef(currentLocale);
   const workspaceCode = CONFIGURED_TERMINAL_WORKSPACE_CODE
     || selectedSecondarySpaceId
     || selectedPrimarySpaceId;
-
-  const terminalChatContext = useCallback((targetWorkspaceCode: string) => {
-    const cached = terminalChatContextRef.current;
-    if (cached?.workspaceCode === targetWorkspaceCode) return cached.context;
-
-    const context = createTerminalChatContext(targetWorkspaceCode);
-    const nextCache = { context, workspaceCode: targetWorkspaceCode };
-    terminalChatContextRef.current = nextCache;
-    void context.catch(() => {
-      if (terminalChatContextRef.current === nextCache) {
-        terminalChatContextRef.current = null;
-      }
-    });
-    return context;
-  }, []);
 
   useEffect(() => {
     const container = terminalRef.current;
@@ -59,12 +37,16 @@ const Terminal = () => {
     let activeChatAbortController: AbortController | null = null;
 
     void (async () => {
-      const { chatAdapter, session, terminalAdapter } = await terminalChatContext(workspaceCode);
+      // Do not cache this context across effect lifecycles. The app runs in
+      // React StrictMode, whose setup/cleanup probe can otherwise share one
+      // session and let the first cleanup delete the session used by the
+      // second setup.
+      const { chatAdapter, session, terminalAdapter } =
+        await createTerminalChatContext(workspaceCode);
       let sessionReleased = false;
       releaseSession = () => {
         if (sessionReleased) return;
         sessionReleased = true;
-        terminalChatContextRef.current = null;
         activeChatAbortController?.abort();
         void (async () => {
           try {
@@ -185,7 +167,7 @@ const Terminal = () => {
       }
       releaseSession?.();
     };
-  }, [terminalChatContext, workspaceCode]);
+  }, [workspaceCode]);
 
   useEffect(() => {
     terminalInstanceRef.current?.refreshTheme();

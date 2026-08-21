@@ -9,7 +9,6 @@ import {
   FolderGit2,
   Gauge,
   KeyRound,
-  LayoutDashboard,
   MessageSquareText,
   Network,
   ListTodo,
@@ -29,7 +28,6 @@ export const tronNavigation: TronNavSection[] = [
     label: "Core",
     translationKey: "shell:nav.sections.core",
     items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, translationKey: "shell:nav.items.dashboard" },
       { label: "Apps", href: "/apps", icon: FolderGit2, translationKey: "shell:nav.items.apps" },
       { label: "Tasks", href: "/tasks", icon: ListTodo, translationKey: "shell:nav.items.tasks" },
       { label: "Automations", href: "/automations", icon: AlarmClock, translationKey: "shell:nav.items.automations" },

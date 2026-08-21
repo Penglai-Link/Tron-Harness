@@ -518,6 +518,49 @@ async fn oversized_upload_control_fields_are_rejected_before_resource_lookup() {
     assert_storage_root_is_empty(&storage_root);
 }
 
+#[tokio::test]
+async fn server_create_can_defer_account_creation_to_the_account_endpoint() {
+    let (app, _) = resource_app("server-create-without-account");
+    let token = authenticated_bearer_token(&app).await;
+    let response = authenticated_json_response(
+        &app,
+        &token,
+        "/api/v1/resource-connections/servers",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "serverCode": "server-without-account",
+            "name": "Server without account",
+            "description": "Create the account separately.",
+            "host": "server.internal",
+            "port": 22,
+            "allowInheritance": false
+        }),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["data"]["server"]["kind"], "ServerConnection");
+    assert!(body["data"]["initialAccount"].is_null());
+    assert_eq!(body["data"]["connectivityVerified"], false);
+
+    let page = api_json(
+        &app,
+        &token,
+        "/api/v1/resource-connections/page",
+        json!({
+            "workspaceCode": WORKSPACE,
+            "kinds": ["ServerConnection"],
+            "search": null,
+            "current": 1,
+            "size": 50
+        }),
+    )
+    .await;
+    assert_eq!(page["data"]["total"], 1);
+    assert_eq!(page["data"]["records"][0]["attributes"]["host"], "server.internal");
+    assert_eq!(page["data"]["records"][0]["attributes"]["port"], 22);
+}
+
 async fn create_file_resource(
     app: &Router,
     token: &str,

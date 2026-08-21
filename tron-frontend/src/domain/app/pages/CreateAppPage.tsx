@@ -2,6 +2,7 @@ import {
   type FormEvent,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
@@ -25,6 +26,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 export function CreateAppPage() {
   const navigate = useNavigate();
+  const { t } = useTranslation("pages");
+  const pageT = (key: string, options?: Record<string, unknown>) => t(`apps.${key}`, options);
   const toast = useToast();
   const dataSource = getServiceDataSource("app");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -39,7 +42,7 @@ export function CreateAppPage() {
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     if (!activeWorkspaceCode) {
-      toast.error("Select a workspace in the shell header before creating an app");
+      toast.error(pageT("messages.workspaceRequired"));
       return;
     }
 
@@ -48,10 +51,10 @@ export function CreateAppPage() {
       const created = dataSource === "api"
         ? await createApp(activeWorkspaceCode, buildAppPayload(form))
         : createMockApp(activeWorkspaceCode, buildAppPayload(form));
-      toast.success(`${created.name} created`);
+      toast.success(pageT("messages.created", { name: created.name }));
       navigate(`/apps/detail?appCode=${encodeURIComponent(created.appCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "App could not be created");
+      toast.error(error instanceof Error ? error.message : pageT("messages.createFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -60,16 +63,16 @@ export function CreateAppPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: "New" }]}
-        title="Create App"
+        breadcrumbs={[{ label: pageT("breadcrumbs.apps"), href: "/apps" }, { label: pageT("breadcrumbs.new") }]}
+        title={pageT("createTitle")}
       />
       <SurfaceCard>
         <form className="space-y-6" onSubmit={handleSubmit}>
           <AppFormFields disabled={submitting} form={form} onChange={updateForm} />
           <div className="flex flex-wrap justify-end gap-2">
-            <Button size="lg" type="button" variant="outline" onClick={() => navigate("/apps")}>Cancel</Button>
+            <Button size="lg" type="button" variant="outline" onClick={() => navigate("/apps")}>{pageT("actions.cancel")}</Button>
             <Button size="lg" type="submit" disabled={submitting || !activeWorkspaceCode || !canSubmitAppForm(form)}>
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving") : pageT("actions.save")}
             </Button>
           </div>
         </form>

@@ -21,6 +21,7 @@ export function SystemConfigTable() {
   const { document, error, loading, refresh, save, saving } = useSystemConfig();
   const [changes, setChanges] = useState<Record<string, SystemConfigValue>>({});
   const [confirmMigration, setConfirmMigration] = useState(false);
+  const [expanded, setExpanded] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const groups = useMemo(() => {
     const grouped = new Map<string, SystemConfigItem[]>();
@@ -68,9 +69,18 @@ export function SystemConfigTable() {
   return (
     <SurfaceCard className="space-y-4 xl:col-span-2">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">{t("settingsGeneral.systemConfig.title")}</h2>
-          <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{t("settingsGeneral.systemConfig.description")}</p>
+        <div className="flex items-center gap-1.5">
+          <button
+            aria-controls="system-config-groups"
+            aria-expanded={expanded}
+            className="flex items-center gap-1.5 text-left text-sm font-semibold text-[var(--color-on-surface)]"
+            type="button"
+            onClick={() => setExpanded((current) => !current)}
+          >
+            <ChevronRight className={`size-4 transition-transform ${expanded ? "rotate-90" : ""}`} />
+            <span>{t("settingsGeneral.systemConfig.title")}</span>
+          </button>
+          <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.help")}>{t("settingsGeneral.systemConfig.description")}</InfoTooltip>
         </div>
         <div className="flex gap-2">
           <Button disabled={loading || saving} onClick={refresh} variant="secondary">{t("settingsGeneral.systemConfig.actions.refresh")}</Button>
@@ -80,64 +90,68 @@ export function SystemConfigTable() {
         </div>
       </div>
 
-      {loading && <p className="text-sm text-[var(--color-on-surface-variant)]">{t("settingsGeneral.systemConfig.loading")}</p>}
-      {Boolean(error) && !loading && <p className="rounded-lg bg-[var(--color-error-container)] p-3 text-sm text-[var(--color-on-error-container)]">{error instanceof Error ? error.message : t("settingsGeneral.systemConfig.messages.loadFailed")}</p>}
+      {expanded && (
+        <div id="system-config-groups">
+          {loading && <p className="text-sm text-[var(--color-on-surface-variant)]">{t("settingsGeneral.systemConfig.loading")}</p>}
+          {Boolean(error) && !loading && <p className="rounded-lg bg-[var(--color-error-container)] p-3 text-sm text-[var(--color-on-error-container)]">{error instanceof Error ? error.message : t("settingsGeneral.systemConfig.messages.loadFailed")}</p>}
 
-      {!loading && groups.map(([group, items]) => (
-        <section className="overflow-hidden rounded-xl border border-[var(--color-outline-variant)]" key={group}>
-          <h3>
-            <button
-              aria-controls={`system-config-group-${group}`}
-              aria-expanded={expandedGroups.has(group)}
-              className="flex w-full items-center justify-between gap-3 bg-[var(--color-surface-container)] px-4 py-3 text-left text-sm font-semibold text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)]"
-              type="button"
-              onClick={() => toggleGroup(group)}
-            >
-              <span>{t(`settingsGeneral.systemConfig.categories.${group}.label`, { defaultValue: group })}</span>
-              <span className="flex items-center gap-2 text-xs font-normal text-[var(--color-on-surface-variant)]">
-                {t("settingsGeneral.systemConfig.itemCount", { count: items.length })}
-                <ChevronRight className={`size-4 transition-transform ${expandedGroups.has(group) ? "rotate-90" : ""}`} />
-              </span>
-            </button>
-          </h3>
-          {expandedGroups.has(group) && <div className="divide-y divide-[var(--color-outline-variant)]" id={`system-config-group-${group}`}>
-            {items.map((item) => {
-              const value = Object.hasOwn(changes, item.path) ? changes[item.path] : item.value;
-              return (
-                <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(300px,1fr)_minmax(260px,1.5fr)] lg:items-center" key={item.path}>
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-1.5">
-                      <span className="text-xs text-[var(--color-on-surface-variant)]">{item.valueType}</span>
-                      <code className="break-all text-xs text-[var(--color-on-surface)]">{item.path}</code>
-                      <Badge tone={item.effect === "migration" ? "warning" : item.effect === "hotUpdate" ? "success" : "info"}>
-                        {t(`settingsGeneral.systemConfig.effects.${item.effect}`)}
-                      </Badge>
-                      {item.overriddenByEnvironment && <Badge tone="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
-                      <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
-                        {fieldDescription(item)}
-                      </InfoTooltip>
+          {!loading && groups.map(([group, items]) => (
+            <section className="mt-4 overflow-hidden rounded-xl border border-[var(--color-outline-variant)] first:mt-0" key={group}>
+              <h3>
+                <button
+                  aria-controls={`system-config-group-${group}`}
+                  aria-expanded={expandedGroups.has(group)}
+                  className="flex w-full items-center justify-between gap-3 bg-[var(--color-surface-container)] px-4 py-3 text-left text-sm font-semibold text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)]"
+                  type="button"
+                  onClick={() => toggleGroup(group)}
+                >
+                  <span>{t(`settingsGeneral.systemConfig.categories.${group}.label`, { defaultValue: group })}</span>
+                  <span className="flex items-center gap-2 text-xs font-normal text-[var(--color-on-surface-variant)]">
+                    {t("settingsGeneral.systemConfig.itemCount", { count: items.length })}
+                    <ChevronRight className={`size-4 transition-transform ${expandedGroups.has(group) ? "rotate-90" : ""}`} />
+                  </span>
+                </button>
+              </h3>
+              {expandedGroups.has(group) && <div className="divide-y divide-[var(--color-outline-variant)]" id={`system-config-group-${group}`}>
+                {items.map((item) => {
+                  const value = Object.hasOwn(changes, item.path) ? changes[item.path] : item.value;
+                  return (
+                    <div className="grid gap-3 px-4 py-3 lg:grid-cols-[minmax(300px,1fr)_minmax(260px,1.5fr)] lg:items-center" key={item.path}>
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-1.5">
+                          <span className="text-xs text-[var(--color-on-surface-variant)]">{t(`settingsGeneral.systemConfig.valueTypes.${item.valueType}`)}</span>
+                          <code className="break-all text-xs text-[var(--color-on-surface)]">{item.path}</code>
+                          <Badge tone={item.effect === "migration" ? "warning" : item.effect === "hotUpdate" ? "success" : "info"}>
+                            {t(`settingsGeneral.systemConfig.effects.${item.effect}`)}
+                          </Badge>
+                          {item.overriddenByEnvironment && <Badge tone="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
+                          <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
+                            {fieldDescription(item)}
+                          </InfoTooltip>
+                        </div>
+                      </div>
+                      {item.valueType === "boolean" ? (
+                        <SelectInput value={String(value)} onValueChange={(next) => update(item.path, next === "true")}>
+                          <SelectItem value="true">{t("settingsGeneral.systemConfig.values.true")}</SelectItem>
+                          <SelectItem value="false">{t("settingsGeneral.systemConfig.values.false")}</SelectItem>
+                        </SelectInput>
+                      ) : (
+                        <TextInput
+                          aria-label={item.path}
+                          placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : undefined}
+                          type={item.sensitive ? "password" : item.valueType === "number" ? "number" : "text"}
+                          value={value === null ? "" : String(value)}
+                          onChange={(event) => update(item.path, item.valueType === "number" ? Number(event.target.value) : event.target.value)}
+                        />
+                      )}
                     </div>
-                  </div>
-                  {item.valueType === "boolean" ? (
-                    <SelectInput value={String(value)} onValueChange={(next) => update(item.path, next === "true")}>
-                      <SelectItem value="true">{t("settingsGeneral.systemConfig.values.true")}</SelectItem>
-                      <SelectItem value="false">{t("settingsGeneral.systemConfig.values.false")}</SelectItem>
-                    </SelectInput>
-                  ) : (
-                    <TextInput
-                      aria-label={item.path}
-                      placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : undefined}
-                      type={item.sensitive ? "password" : item.valueType === "number" ? "number" : "text"}
-                      value={value === null ? "" : String(value)}
-                      onChange={(event) => update(item.path, item.valueType === "number" ? Number(event.target.value) : event.target.value)}
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </div>}
-        </section>
-      ))}
+                  );
+                })}
+              </div>}
+            </section>
+          ))}
+        </div>
+      )}
 
       {hasMigration && (
         <label className="flex items-start gap-3 rounded-lg bg-[var(--color-warning-container)] p-3 text-sm text-[var(--color-on-warning-container)]">

@@ -97,12 +97,6 @@ import {
 } from "@/domain/model/constants/modelPageOptions";
 import { isApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import {
-  resolveAguiDebugEventTypes,
-  shouldShowAguiEventType,
-  useAguiDebugPreferences,
-  type AguiDebugPreferences,
-} from "@/domain/settings/model/aguiDebugPreferences";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { TronChatPanel } from "@tron/chat-react";
 import {
@@ -927,29 +921,6 @@ function aguiEventSummary(event: TranscriptAguiEvent) {
     return metadata.summary ?? metadata.skillName ?? ("outcome" in event && typeof event.outcome === "string" ? event.outcome : "event received");
   }
   return "event received";
-}
-
-function aguiEventTitle(type: string) {
-  const normalized = type.toUpperCase();
-  if (normalized.includes("REASONING")) return "Thinking";
-  if (normalized.includes("TEXT_MESSAGE")) return "Text message";
-  if (normalized.includes("TOOL")) return "Tool call";
-  if (normalized.includes("LOG") || normalized.includes("STEP") || normalized.includes("ACTIVITY")) return "Tool log";
-  if (normalized.includes("RUN")) return "Run lifecycle";
-  return "AG-UI event";
-}
-
-function aguiEventIcon(type: string) {
-  const normalized = type.toUpperCase();
-  if (normalized.includes("REASONING")) return <BrainCircuit size={16} />;
-  if (normalized.includes("TEXT_MESSAGE")) return <MessageSquareText size={16} />;
-  if (normalized.includes("TOOL_CALL")) return <Hammer size={16} />;
-  if (normalized.includes("LOG") || normalized.includes("STEP") || normalized.includes("ACTIVITY")) return <Terminal size={16} />;
-  if (normalized.includes("RUN_ERROR")) return <CircleAlert size={16} />;
-  if (normalized.includes("RUN_FINISHED")) return <CheckCircle2 size={16} />;
-  if (normalized.includes("RUN_STARTED")) return <LoaderCircle size={16} />;
-  if (normalized.includes("RUN")) return <CircleDot size={16} />;
-  return <CircleDot size={16} />;
 }
 
 function aguiEventMillis(event: TranscriptAguiEvent) {
@@ -3826,52 +3797,6 @@ function AguiUserWorkRail({ cards }: { cards: AguiUserWorkCard[] }) {
   );
 }
 
-function AguiEventCard({ event }: { event: TranscriptAguiEvent }) {
-  const type = aguiEventType(event);
-  const summary = aguiEventSummary(event);
-
-  return (
-    <article className="rounded-md bg-white px-3 py-2 text-sm shadow-[0_8px_22px_rgba(15,23,42,0.06)]">
-      <div className="flex items-start justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="inline-flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container-low)] text-[var(--color-on-surface-variant)]">
-            {aguiEventIcon(type)}
-          </span>
-          <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
-              <span className="truncate font-semibold">{aguiEventTitle(type)}</span>
-              <Badge tone="info">{type}</Badge>
-            </div>
-            <p className="mt-1 line-clamp-2 text-[var(--color-on-surface-variant)]">{summary}</p>
-          </div>
-        </div>
-        <span className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface-variant)]">
-          {formatTime(aguiEventTime(event))}
-        </span>
-      </div>
-      <div className="mt-2 flex flex-wrap gap-2 font-mono text-[11px] text-[var(--color-on-surface-variant)]">
-        <span>run {aguiEventRunCode(event)}</span>
-        {"toolCallId" in event && typeof event.toolCallId === "string" ? <span>tool {event.toolCallId}</span> : null}
-      </div>
-    </article>
-  );
-}
-
-function AguiEventRail({ events }: { events: TranscriptAguiEvent[] }) {
-  if (!events.length) return null;
-
-  return (
-    <section className="space-y-2" aria-label="AG-UI debug event cards">
-      {events.map((event, index) => (
-        <AguiEventCard
-          key={`${aguiEventType(event)}-${aguiEventRunCode(event)}-${aguiEventTime(event)}-${index}`}
-          event={event}
-        />
-      ))}
-    </section>
-  );
-}
-
 function AguiWaitingForModelRail() {
   return (
     <section className="max-w-[920px]" aria-label="Waiting for model">
@@ -3883,60 +3808,6 @@ function AguiWaitingForModelRail() {
         </span>
         <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
       </div>
-    </section>
-  );
-}
-
-function AguiRunWorkRail({
-  events,
-  preferences,
-}: {
-  events: TranscriptAguiEvent[];
-  preferences: AguiDebugPreferences;
-}) {
-  const userCards = buildAguiUserWorkCards(events);
-  const displayUserCards = userCards;
-  const debugEvents = events.filter((event) => shouldShowAguiEventType(aguiEventType(event), preferences));
-  const terminalEvent = terminalAguiEvent(events);
-  const terminalRunCode = terminalEvent ? aguiEventRunCode(terminalEvent) : "";
-  const currentRunCode = latestAguiRunCode(events);
-  const collapsedTerminalRunCodeRef = useRef(terminalRunCode);
-  const [expanded, setExpanded] = useState(() => !terminalRunCode);
-
-  useEffect(() => {
-    if (!currentRunCode) return;
-    if (terminalRunCode) {
-      if (collapsedTerminalRunCodeRef.current === terminalRunCode) return;
-      collapsedTerminalRunCodeRef.current = terminalRunCode;
-      setExpanded(false);
-      return;
-    }
-    if (collapsedTerminalRunCodeRef.current === currentRunCode) return;
-    collapsedTerminalRunCodeRef.current = "";
-    setExpanded(true);
-  }, [currentRunCode, terminalRunCode]);
-
-  if (!terminalEvent && !displayUserCards.length && !debugEvents.length) return null;
-
-  return (
-    <section className="max-w-[920px] space-y-2" aria-label="AG-UI run work">
-      {terminalEvent ? (
-        <button
-          aria-expanded={expanded}
-          className="flex w-full items-center gap-1.5 border-b border-[var(--color-outline-variant)] py-1.5 text-sm font-medium text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
-          type="button"
-          onClick={() => setExpanded((current) => !current)}
-        >
-          <span className="whitespace-nowrap">Worked for {aguiWorkDuration(events)}</span>
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
-      ) : null}
-      {expanded ? (
-        <>
-          <AguiUserWorkRail cards={displayUserCards} />
-          <AguiEventRail events={debugEvents} />
-        </>
-      ) : null}
     </section>
   );
 }
@@ -3957,7 +3828,6 @@ export function ChatManagementPage() {
   const openRightSidebar = useOpenRightSidebar();
   const { t } = useTranslation("pages");
   const { session: authSession } = useAuthSession();
-  const { preferences: aguiDebugPreferences } = useAguiDebugPreferences();
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
@@ -4885,10 +4755,6 @@ export function ChatManagementPage() {
     visibleMessages,
     workspaceGoalRunning,
   ]);
-  const transcriptDebugOptions = useMemo(() => ({
-    debugEventTypes: resolveAguiDebugEventTypes(aguiDebugPreferences),
-    recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
-  }), [aguiDebugPreferences, aguiWorkReplayPreferences.recentTurnLimit]);
   const downloadPendingAttachment = useCallback(
     (attachment: ChatMessageAttachment) => {
       if (!activeSession) return Promise.reject(new Error("No active chat session"));
@@ -4896,6 +4762,9 @@ export function ChatManagementPage() {
     },
     [activeSession],
   );
+  const transcriptWorkReplayOptions = useMemo(() => ({
+    recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
+  }), [aguiWorkReplayPreferences.recentTurnLimit]);
   const transcriptAttachmentHeader = pendingAttachments.length ? (
     <div className="flex max-w-full flex-wrap gap-2">
       {pendingAttachments.map((attachment) => (
@@ -6206,7 +6075,7 @@ export function ChatManagementPage() {
           composerHeader={transcriptAttachmentHeader}
           createSessionLabel="Create session"
           currentUserDisplayName={currentUserDisplayName}
-          debugOptions={transcriptDebugOptions}
+          debugOptions={transcriptWorkReplayOptions}
           draft={composer}
           emptyDescription={activeWorkspaceCode
             ? "Create a new session or pick one from the left panel to view chat details and start messaging."

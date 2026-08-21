@@ -38,6 +38,7 @@ import { deleteMockResource } from "@/domain/resource/mock";
 import type { ResourceKind, ResourceRecord } from "@/domain/resource/model";
 import {
   queryResourcePage,
+  queryResourceConnectionPage,
   useManagedResourceRecords,
 } from "@/domain/resource/hooks";
 import {
@@ -307,12 +308,16 @@ export function ResourceConnectionManagementPage({
     getRowId: (row) => `${row.workspaceCode}:${row.resourceCode}`,
     initialPageSize: PAGE_SIZE,
     params: resourceQueryParams,
-    queryFn: ({ pageIndex, pageSize, params }) =>
-      queryResourcePage({
+    queryFn: ({ pageIndex, pageSize, params }) => {
+      const query = {
         ...params,
         current: pageIndex + 1,
         size: pageSize,
-      }),
+      };
+      return getServiceDataSource("resource") === "api"
+        ? queryResourceConnectionPage(query)
+        : queryResourcePage(query);
+    },
     resource: `resource-connections:${kind}`,
   });
 
@@ -357,6 +362,7 @@ export function ResourceConnectionManagementPage({
   return (
     <>
       <TanStackDataTable<ResourceRecord>
+        variant="embedded"
         emptyState={
           workspace ? pageT(`${kind}.empty`) : pageT("workspaceRequired")
         }

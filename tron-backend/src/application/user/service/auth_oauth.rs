@@ -476,7 +476,7 @@ fn split_display_name(display_name: &str) -> (String, String) {
 fn normalize_redirect_path(value: Option<&str>) -> String {
     match value.map(str::trim) {
         Some(path) if path.starts_with('/') && !path.starts_with("//") => path.to_owned(),
-        _ => "/dashboard".into(),
+        _ => "/apps".into(),
     }
 }
 

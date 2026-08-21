@@ -1,5 +1,4 @@
 import {
-  Bell,
   Bot,
   ChevronDown,
   Command,
@@ -40,12 +39,12 @@ export function DesignStandardPage() {
             {designStandardSidebarItems.map((item) => (
               <a
                 className="flex h-9 items-center justify-between rounded-lg px-3 text-sm text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] data-[active=true]:bg-[var(--color-surface-container-high)] data-[active=true]:text-[var(--color-on-surface)]"
-                data-active={item === "Dashboard"}
+                data-active={item === "Apps"}
                 href="#canvas"
                 key={item}
               >
                 {item}
-                {item === "Dashboard" ? <ChevronDown size={15} aria-hidden="true" /> : null}
+                {item === "Apps" ? <ChevronDown size={15} aria-hidden="true" /> : null}
               </a>
             ))}
           </nav>
@@ -63,9 +62,6 @@ export function DesignStandardPage() {
               <div className="flex items-center gap-2">
                 <Button size="icon" variant="secondary" aria-label="Search design standard">
                   <Search size={17} aria-hidden="true" />
-                </Button>
-                <Button size="icon" variant="secondary" aria-label="View notifications">
-                  <Bell size={17} aria-hidden="true" />
                 </Button>
                 <Button>
                   <ShieldCheck size={16} aria-hidden="true" />

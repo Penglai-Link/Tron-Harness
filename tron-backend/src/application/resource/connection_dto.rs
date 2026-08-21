@@ -46,7 +46,11 @@ pub struct ServerCreateCommand {
     pub host: String,
     pub port: u16,
     pub allow_inheritance: bool,
-    pub initial_account: ServerAccountCreateInput,
+    /// Optional for the HTTP resource flow. Server accounts are managed as a
+    /// separate resource and can be added after the server exists. Agent
+    /// tools may still provide this value to keep the atomic create-and-verify
+    /// workflow.
+    pub initial_account: Option<ServerAccountCreateInput>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,6 +72,6 @@ pub struct ResourceCommitOutcome {
 #[serde(rename_all = "camelCase")]
 pub struct ServerCreateResult {
     pub server: ResourceCommitOutcome,
-    pub initial_account: ResourceCommitOutcome,
+    pub initial_account: Option<ResourceCommitOutcome>,
     pub connectivity_verified: bool,
 }

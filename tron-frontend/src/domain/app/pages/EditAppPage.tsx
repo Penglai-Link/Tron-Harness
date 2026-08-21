@@ -3,6 +3,7 @@ import {
   useEffect,
   useState,
 } from "react";
+import { useTranslation } from "react-i18next";
 import {
   useNavigate,
   useSearchParams,
@@ -33,6 +34,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 export function EditAppPage() {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const { t } = useTranslation("pages");
+  const pageT = (key: string, options?: Record<string, unknown>) => t(`apps.${key}`, options);
   const toast = useToast();
   const dataSource = getServiceDataSource("app");
   const appCode = searchParams.get("appCode") ?? "";
@@ -53,7 +56,7 @@ export function EditAppPage() {
     event.preventDefault();
     if (!app) return;
     if (app.status === "Archived") {
-      toast.error("Restore this app before editing");
+      toast.error(pageT("messages.restoreBeforeEdit"));
       return;
     }
 
@@ -63,10 +66,10 @@ export function EditAppPage() {
         ? await updateApp(app.appCode, buildAppPayload(form))
         : updateMockApp(app.appCode, buildAppPayload(form));
       setApp(updated);
-      toast.success(`${updated.name} updated`);
+      toast.success(pageT("messages.updated", { name: updated.name }));
       navigate(`/apps/detail?appCode=${encodeURIComponent(updated.appCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "App could not be updated");
+      toast.error(error instanceof Error ? error.message : pageT("messages.updateFailed"));
     } finally {
       setSubmitting(false);
     }
@@ -76,12 +79,12 @@ export function EditAppPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Edit" }]}
-          title="Edit App"
+          breadcrumbs={[{ label: pageT("breadcrumbs.apps"), href: "/apps" }, { label: appCode || pageT("breadcrumbs.edit") }]}
+          title={pageT("editTitle")}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Loading app detail</h2>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">Preparing the app editor for {appCode}.</p>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("detail.loadingTitle")}</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{pageT("detail.loadingDescription", { code: appCode })}</p>
         </SurfaceCard>
       </>
     );
@@ -91,12 +94,12 @@ export function EditAppPage() {
     return (
       <>
         <PageHeader
-          breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: appCode || "Not Found" }]}
-          title="Edit App"
+          breadcrumbs={[{ label: pageT("breadcrumbs.apps"), href: "/apps" }, { label: appCode || pageT("breadcrumbs.notFound") }]}
+          title={pageT("editTitle")}
         />
         <SurfaceCard>
-          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">App not found</h2>
-          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{appCode ? `No app matches ${appCode}.` : "No app was requested."}</p>
+          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("detail.notFoundTitle")}</h2>
+          <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">{appCode ? pageT("detail.noAppMatches", { code: appCode }) : pageT("detail.noAppRequested")}</p>
         </SurfaceCard>
       </>
     );
@@ -105,13 +108,13 @@ export function EditAppPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Apps", href: "/apps" }, { label: app.appCode, href: `/apps/detail?appCode=${encodeURIComponent(app.appCode)}` }, { label: "Edit" }]}
-        title={`Edit ${app.name}`}
+        breadcrumbs={[{ label: pageT("breadcrumbs.apps"), href: "/apps" }, { label: app.appCode, href: `/apps/detail?appCode=${encodeURIComponent(app.appCode)}` }, { label: pageT("breadcrumbs.edit") }]}
+        title={`${pageT("breadcrumbs.edit")} ${app.name}`}
         actions={(
           <>
-            <Button type="button" variant="outline" size="lg" onClick={() => navigate(`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`)}>Cancel</Button>
+            <Button type="button" variant="outline" size="lg" onClick={() => navigate(`/apps/detail?appCode=${encodeURIComponent(app.appCode)}`)}>{pageT("actions.cancel")}</Button>
             <Button type="submit" form="edit-app-form" size="lg" disabled={submitting || !canSubmitAppForm(form) || app.status === "Archived"}>
-              {submitting ? "Saving..." : "Save"}
+              {submitting ? pageT("actions.saving") : pageT("actions.save")}
             </Button>
           </>
         )}

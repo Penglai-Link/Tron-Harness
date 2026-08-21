@@ -31,7 +31,7 @@ export function TabBar({ className }: TabBarProps) {
 
     removeTab(tabId);
     if (closingActiveTab) {
-      navigate(nextTab?.path ?? "/dashboard");
+      navigate(nextTab?.path ?? "/apps");
     }
   };
 

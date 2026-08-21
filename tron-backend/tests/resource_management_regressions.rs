@@ -267,7 +267,7 @@ fn server_account_authentication_constraints_are_enforced() {
                     host: "server.internal".to_string(),
                     port: 22,
                     allow_inheritance: false,
-                    initial_account:
+                    initial_account: Some(
                         tron_backend::application::resource::ServerAccountCreateInput {
                             account_code: "SERVER_INVALID_ACCOUNT".to_string(),
                             name: "Broken".to_string(),
@@ -279,6 +279,7 @@ fn server_account_authentication_constraints_are_enforced() {
                             private_key_passphrase_variable_key: None,
                             allow_inheritance: false,
                         },
+                    ),
                 },
             )
             .await

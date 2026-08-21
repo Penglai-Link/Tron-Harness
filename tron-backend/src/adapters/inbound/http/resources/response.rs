@@ -261,7 +261,7 @@ impl From<crate::application::resource::ResourceCommitOutcome> for ResourceCommi
 #[serde(rename_all = "camelCase")]
 pub struct ServerCreateResponse {
     pub server: ResourceCommitOutcomeResponse,
-    pub initial_account: ResourceCommitOutcomeResponse,
+    pub initial_account: Option<ResourceCommitOutcomeResponse>,
     pub connectivity_verified: bool,
 }
 
@@ -269,7 +269,7 @@ impl From<ServerCreateResult> for ServerCreateResponse {
     fn from(value: ServerCreateResult) -> Self {
         Self {
             server: value.server.into(),
-            initial_account: value.initial_account.into(),
+            initial_account: value.initial_account.map(Into::into),
             connectivity_verified: value.connectivity_verified,
         }
     }

@@ -296,14 +296,17 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
                 host: "server.internal".to_string(),
                 port: 22,
                 allow_inheritance: false,
-                initial_account: password_account("SERVER_PROD_1_ROOT", "root"),
+                initial_account: Some(password_account("SERVER_PROD_1_ROOT", "root")),
             },
         )
         .await
         .expect("verified server and first account should persist atomically");
     assert!(created.connectivity_verified);
     assert_eq!(created.server.kind, ResourceKind::ServerConnection);
-    assert_eq!(created.initial_account.kind, ResourceKind::ServerAccount);
+    assert_eq!(
+        created.initial_account.as_ref().map(|account| account.kind),
+        Some(ResourceKind::ServerAccount)
+    );
     assert_eq!(calls.load(Ordering::SeqCst), 1);
 
     let second = state
@@ -387,6 +390,37 @@ async fn server_creation_is_atomic_and_one_server_accepts_multiple_accounts() {
 }
 
 #[tokio::test]
+async fn server_creation_can_defer_accounts_to_server_account_management() {
+    let (state, calls) = resource_state("server-without-account", false);
+    let created = state
+        .resources
+        .create_server_for_http(
+            ACTOR,
+            ServerCreateCommand {
+                workspace_code: WORKSPACE.to_string(),
+                server_code: "SERVER_NO_ACCOUNT".to_string(),
+                name: "Server without account".to_string(),
+                description: String::new(),
+                host: "server.internal".to_string(),
+                port: 22,
+                allow_inheritance: false,
+                initial_account: None,
+            },
+        )
+        .await
+        .expect("server should be created before its account");
+
+    assert!(!created.connectivity_verified);
+    assert!(created.initial_account.is_none());
+    assert_eq!(calls.load(Ordering::SeqCst), 0);
+    assert_eq!(resources(&state, Some("SERVER_NO_ACCOUNT")).total, 1);
+    assert_eq!(
+        resources(&state, Some("SERVER_NO_ACCOUNT")).records.len(),
+        1
+    );
+}
+
+#[tokio::test]
 async fn server_with_accounts_cannot_be_deleted() {
     let (state, _) = resource_state("server-delete-guard", false);
     state
@@ -401,7 +435,7 @@ async fn server_with_accounts_cannot_be_deleted() {
                 host: "server.internal".to_string(),
                 port: 22,
                 allow_inheritance: false,
-                initial_account: password_account("SERVER_GUARDED_ROOT", "root"),
+                initial_account: Some(password_account("SERVER_GUARDED_ROOT", "root")),
             },
         )
         .await
@@ -439,7 +473,7 @@ async fn failed_ssh_probe_persists_neither_server_nor_initial_account() {
                 host: "server.internal".to_string(),
                 port: 22,
                 allow_inheritance: false,
-                initial_account: password_account("SERVER_FAILED_ROOT", "root"),
+                initial_account: Some(password_account("SERVER_FAILED_ROOT", "root")),
             },
         )
         .await;
@@ -466,11 +500,11 @@ async fn inherited_server_accepts_a_local_workspace_account() {
                 host: "server.internal".to_string(),
                 port: 22,
                 allow_inheritance: true,
-                initial_account: password_account_with_variable(
+                initial_account: Some(password_account_with_variable(
                     "PLATFORM_SHARED_SERVER_ROOT",
                     "root",
                     "ROUTER_TIMEOUT_MS",
-                ),
+                )),
             },
         )
         .await
@@ -512,7 +546,7 @@ async fn server_account_rejects_unknown_or_blank_variable_references() {
                 host: "server.internal".to_string(),
                 port: 22,
                 allow_inheritance: false,
-                initial_account: password_account("VARIABLE_CHECK_ROOT", "root"),
+                initial_account: Some(password_account("VARIABLE_CHECK_ROOT", "root")),
             },
         )
         .await

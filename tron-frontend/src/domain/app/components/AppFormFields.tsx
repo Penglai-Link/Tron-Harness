@@ -11,6 +11,7 @@ import type {
   AppRuntimeRole,
   CreateAppPayload,
 } from "@/domain/app/model";
+import { useTranslation } from "react-i18next";
 import {
   appRuntimeRoleTone,
   appStatusTone,
@@ -84,16 +85,19 @@ export function canSubmitAppForm(form: AppFormState) {
 }
 
 export function AppStatusBadge({ status }: { status: AppDetailData["status"] }) {
-  return <Badge tone={appStatusTone(status)}>{status}</Badge>;
+  const { t } = useTranslation("pages");
+  return <Badge tone={appStatusTone(status)}>{t(`apps.status.${status}`)}</Badge>;
 }
 
 export function AppRuntimeRoleBadge({ runtimeRole }: { runtimeRole: AppRuntimeRole }) {
-  return <Badge tone={appRuntimeRoleTone(runtimeRole)}>{runtimeRole}</Badge>;
+  const { t } = useTranslation("pages");
+  return <Badge tone={appRuntimeRoleTone(runtimeRole)}>{t(`apps.runtimeRole.${runtimeRole}`)}</Badge>;
 }
 
 export function AppTagList({ tags }: { tags: string[] }) {
+  const { t } = useTranslation("pages");
   if (!tags.length) {
-    return <span className="text-sm text-[var(--color-on-surface-variant)]">No tags</span>;
+    return <span className="text-sm text-[var(--color-on-surface-variant)]">{t("apps.tags.none")}</span>;
   }
 
   return (
@@ -116,76 +120,78 @@ export function AppFormFields({
   form: AppFormState;
   onChange: <K extends keyof AppFormState>(key: K, value: AppFormState[K]) => void;
 }) {
-  const repositoryHint = "Optional repository metadata for this app.";
-  const localDirectoryHint = "Absolute path where this app is stored on this machine.";
+  const { t } = useTranslation("pages");
+  const pageT = (key: string) => t(`apps.${key}`);
+  const repositoryHint = pageT("form.repositoryHint");
+  const localDirectoryHint = pageT("form.localDirectoryHint");
 
   return (
     <div className="grid gap-4 md:grid-cols-2">
-      <Field label="App Name">
+      <Field label={pageT("fields.appName")}>
         <TextInput
-          aria-label="App name"
+          aria-label={pageT("aria.appName")}
           disabled={disabled}
           required
           value={form.name}
           onChange={(event) => onChange("name", event.target.value)}
         />
       </Field>
-      <Field label="Runtime Role">
+      <Field label={pageT("fields.runtimeRole")}>
         <SelectInput
-          aria-label="Runtime role"
+          aria-label={pageT("aria.runtimeRole")}
           disabled={disabled}
           value={form.runtimeRole}
           onValueChange={(event) => onChange("runtimeRole", event as AppRuntimeRole)}
         >
-          <SelectItem value="Frontend">Frontend</SelectItem>
-          <SelectItem value="Backend">Backend</SelectItem>
-          <SelectItem value="Mono">Mono</SelectItem>
+          <SelectItem value="Frontend">{t("apps.runtimeRole.Frontend")}</SelectItem>
+          <SelectItem value="Backend">{t("apps.runtimeRole.Backend")}</SelectItem>
+          <SelectItem value="Mono">{t("apps.runtimeRole.Mono")}</SelectItem>
         </SelectInput>
       </Field>
-      <Field label="Local Directory" hint={localDirectoryHint}>
+      <Field label={pageT("fields.localDirectory")} hint={localDirectoryHint}>
         <TextInput
-          aria-label="Local directory"
+          aria-label={pageT("aria.localDirectory")}
           disabled={disabled}
-          placeholder="/workspace/tron/tron-backend"
+          placeholder={pageT("form.localDirectoryPlaceholder")}
           required
           value={form.localDirectory}
           onChange={(event) => onChange("localDirectory", event.target.value)}
         />
       </Field>
-      <Field label="Repository URL" hint={repositoryHint}>
+      <Field label={pageT("fields.repositoryUrl")} hint={repositoryHint}>
         <TextInput
-          aria-label="Repository URL"
+          aria-label={pageT("aria.repositoryUrl")}
           disabled={disabled}
-          placeholder="https://github.com/clouds3n/tron-console"
+          placeholder={pageT("form.repositoryPlaceholder")}
           value={form.repositoryUrl}
           onChange={(event) => onChange("repositoryUrl", event.target.value)}
         />
       </Field>
-      <Field label="Default Branch">
+      <Field label={pageT("fields.defaultBranch")}>
         <TextInput
-          aria-label="Default branch"
+          aria-label={pageT("aria.defaultBranch")}
           disabled={disabled}
           placeholder="master"
           value={form.defaultBranch}
           onChange={(event) => onChange("defaultBranch", event.target.value)}
         />
       </Field>
-      <Field label="Tags" hint="Comma-separated tags used for filtering and task selection context.">
+      <Field label={pageT("fields.tags")} hint={pageT("form.tagsHint")}>
         <TextInput
-          aria-label="App tags"
+          aria-label={pageT("aria.appTags")}
           disabled={disabled}
-          placeholder="React, Operator"
+          placeholder={pageT("form.tagsPlaceholder")}
           value={form.tagsInput}
           onChange={(event) => onChange("tagsInput", event.target.value)}
         />
       </Field>
       <div className="md:col-span-2">
-        <Field label="Description">
+        <Field label={pageT("fields.description")}>
           <TextArea
-            aria-label="App description"
+            aria-label={pageT("aria.appDescription")}
             className="min-h-32"
             disabled={disabled}
-            placeholder="Describe the ownership boundary, runtime purpose, and operator context."
+            placeholder={pageT("form.descriptionPlaceholder")}
             value={form.description}
             onChange={(event) => onChange("description", event.target.value)}
           />
@@ -204,6 +210,6 @@ export function AppDetailField({ label, value }: { label: string; value: string 
   );
 }
 
-export function appArchivedLabel(value: string | null) {
-  return formatAppTimestamp(value);
+export function appArchivedLabel(value: string | null, locale: string, emptyLabel: string) {
+  return formatAppTimestamp(value, locale, emptyLabel);
 }

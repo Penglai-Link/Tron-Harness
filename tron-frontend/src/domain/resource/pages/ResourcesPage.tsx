@@ -90,9 +90,7 @@ export function ResourcesPage() {
   const activeWorkspaceName = activeWorkspace?.name ?? "";
   const isApi = getServiceDataSource("resource") === "api";
   const [query, setQuery] = useState("");
-  const [kindFilter, setKindFilter] = useState<string>(
-    isFileManagement ? "FILE" : "ALL",
-  );
+  const [kindFilter, setKindFilter] = useState<string>("ALL");
   const [contextFilter, setContextFilter] = useState<
     ResourceSourceKind | "ALL"
   >("ALL");
@@ -333,6 +331,7 @@ export function ResourcesPage() {
     <div className="flex min-h-[calc(100vh-3.5rem)] flex-col">
       <div className="space-y-5">
         <TanStackDataTable<ResourceRecord>
+          variant="embedded"
           table={resourceTable.table}
           loading={resourceTable.isLoading}
           error={resourceTable.error}
@@ -364,11 +363,9 @@ export function ResourcesPage() {
                   setKindFilter(value ?? "ALL");
                 }}
               >
-                {!isFileManagement ? (
-                  <SelectItem value="ALL">
-                    {pageT("filters.allKinds")}
-                  </SelectItem>
-                ) : null}
+                <SelectItem value="ALL">
+                  {pageT("filters.allKinds")}
+                </SelectItem>
                 {kindOptions.map((kind) => (
                   <SelectItem key={kind} value={kind}>
                     {pageT(`kind.${kind.toLowerCase()}`)}

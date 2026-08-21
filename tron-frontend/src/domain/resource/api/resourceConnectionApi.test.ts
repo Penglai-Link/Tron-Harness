@@ -94,7 +94,6 @@ describe("Resource connection API client", () => {
       allowInheritance: false,
       description: null,
       host: "10.20.0.12",
-      initialAccount: account,
       name: "Production Server",
       port: 22,
       serverCode: "production-server",

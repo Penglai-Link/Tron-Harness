@@ -10,7 +10,7 @@ import {
 } from "react";
 import {
   ArrowRight,
-  LayoutDashboard,
+  Command,
 } from "lucide-react";
 
 import { useTranslation } from "react-i18next";
@@ -135,7 +135,7 @@ function HomePage() {
       <section className="mx-auto flex min-h-[calc(100vh-4rem)] max-w-6xl flex-col justify-center gap-8">
         <div className="max-w-3xl">
           <div className="mb-4 inline-flex items-center gap-2 rounded-full border border-[var(--color-outline-variant)] bg-white px-3 py-1 text-sm text-[var(--color-on-surface-variant)] shadow-sm">
-            <LayoutDashboard size={16} aria-hidden="true" />
+            <Command size={16} aria-hidden="true" />
             {t("badge")}
           </div>
           <h1 className="text-4xl font-semibold leading-tight tracking-normal text-[var(--color-on-surface)]">
@@ -365,7 +365,7 @@ function AppRoutePage() {
   }, [blocksAdministrationRoute, pathname, toast]);
 
   if (blocksAdministrationRoute) {
-    return <Navigate replace to="/dashboard" />;
+    return <Navigate replace to="/apps" />;
   }
 
   if (resolved) {
@@ -407,7 +407,7 @@ function AppRoutePage() {
   }
 
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Dashboard"}>
+    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Apps"}>
       <ConsoleFallbackPage />
     </TronShell>
   );
@@ -418,7 +418,7 @@ function ConsoleFallbackRoutePage() {
   const { session } = useAuthSession();
 
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Dashboard"} roleCodes={session?.user.roleCodes} userMenuContent={<AuthUserMenuPanel />}>
+    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Apps"} roleCodes={session?.user.roleCodes} userMenuContent={<AuthUserMenuPanel />}>
       <ConsoleFallbackPage />
     </TronShell>
   );
