@@ -38,7 +38,6 @@ import {
   useTheme,
   useToast,
   useManagedAvatar,
-  useWorkspaceSpaces,
 } from "@/shared";
 import { isApiError } from "@/shared/api/httpClient";
 import { cn } from "@/shared/lib/utils";
@@ -73,7 +72,6 @@ export function AccountCenter() {
     savingProfile,
   } = useAccountCenter();
   const { session } = useAuthSession();
-  const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
 
   if (loading) {
     return <AccountLoading title={t("title")} />;
@@ -102,10 +100,6 @@ export function AccountCenter() {
       ? t("source.ldap")
       : t("source.internal");
   const providerName = session?.provider?.name ?? sourceLabel;
-  const avatarWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode
-    ?? profile.spaceCodes[0]
-    ?? "";
-
   return (
     <>
       <PageHeader title={t("title")} />
@@ -121,7 +115,6 @@ export function AccountCenter() {
               <ProfileSection
                 profile={profile}
                 saving={savingProfile}
-                avatarWorkspaceCode={avatarWorkspaceCode}
                 onSave={saveProfile}
               />
             </div>
@@ -253,16 +246,13 @@ function profileToForm(profile: AccountProfile): ProfileFormState {
 function ProfileSection({
   profile,
   saving,
-  avatarWorkspaceCode,
   onSave,
 }: {
   profile: AccountProfile;
   saving: boolean;
-  avatarWorkspaceCode: string;
   onSave: (
     payload: UpdateAccountProfilePayload,
     avatarFile?: File,
-    avatarWorkspaceCode?: string,
   ) => Promise<AccountProfile>;
 }) {
   const { t } = useTranslation("account");
@@ -330,7 +320,7 @@ function ProfileSection({
           number: form.phoneNumber.trim(),
         } : null,
         timezone: form.timezone.trim(),
-      }, avatarFile ?? undefined, avatarWorkspaceCode);
+      }, avatarFile ?? undefined);
       setAvatarFile(null);
       toast.success(t("messages.profileSaved"));
     } catch (error) {

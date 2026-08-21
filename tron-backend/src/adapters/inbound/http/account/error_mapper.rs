@@ -1,10 +1,18 @@
 use axum::{
-    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
+    Json,
 };
 
 use crate::{application::user::AccountError, domain::user::UserError, response::ApiResponse};
+
+pub fn avatar_error_response(
+    status: StatusCode,
+    code: &'static str,
+    message: &'static str,
+) -> Response {
+    (status, Json(ApiResponse::error(code, message))).into_response()
+}
 
 pub fn account_error_response(error: AccountError) -> Response {
     let (status, code, message) = match error {

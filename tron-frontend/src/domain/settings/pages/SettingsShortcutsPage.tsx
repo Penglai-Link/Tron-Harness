@@ -5,6 +5,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import {
   formatShortcut,
+  beginKeyboardShortcutCapture,
   shellShortcutActions,
   shortcutEquals,
   shortcutFromKeyboardEvent,
@@ -30,6 +31,8 @@ export function SettingsShortcutsPage() {
 
   useEffect(() => {
     if (!capturingAction) return;
+
+    const endKeyboardCapture = beginKeyboardShortcutCapture();
 
     const handleKeyDown = (event: KeyboardEvent) => {
       event.preventDefault();
@@ -78,7 +81,10 @@ export function SettingsShortcutsPage() {
     };
 
     window.addEventListener("keydown", handleKeyDown, true);
-    return () => window.removeEventListener("keydown", handleKeyDown, true);
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, true);
+      endKeyboardCapture();
+    };
   }, [capturingAction, pageT, setShortcutBinding, shortcutBindings]);
 
   function beginCapture(action: ShellShortcutAction) {

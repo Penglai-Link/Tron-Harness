@@ -1949,7 +1949,7 @@ export const pages = {
       description: "说明",
       shortcut: "快捷键",
     },
-    configureHint: "点击快捷键后按下组合键；按 Esc 取消，按 Backspace 删除。配置仅保存在当前浏览器。",
+    configureHint: "点击快捷键后按下组合键；按 Esc 取消，按 Backspace 删除。支持的应用容器会尝试捕获浏览器保留快捷键，普通浏览器仍可能优先执行自身快捷键。",
     messages: {
       conflict: "该组合键已分配给“{{action}}”。",
       modifierRequired: "请至少按住一个修饰键（⌘/Ctrl、Alt 或 Shift）。",

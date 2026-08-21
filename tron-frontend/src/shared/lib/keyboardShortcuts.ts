@@ -24,6 +24,11 @@ export const CREATE_CHAT_SESSION_SHORTCUT_EVENT = "tron:create-chat-session";
 
 const modifierKeys = new Set(["Alt", "Control", "Meta", "Shift"]);
 
+interface KeyboardLockController {
+  lock: (codes?: string[]) => Promise<void>;
+  unlock: () => void;
+}
+
 const keyLabels: Record<string, string> = {
   " ": "Space",
   ArrowDown: "↓",
@@ -138,6 +143,31 @@ export function findMatchingShellShortcutAction(
   return shellShortcutActions.find((action) => (
     shortcutMatchesKeyboardEvent(bindings[action], event)
   )) ?? null;
+}
+
+/**
+ * Browser-reserved combinations such as Cmd+T are normally consumed before a
+ * page receives keydown. Keyboard Lock can opt into receiving those events in
+ * supported app containers/fullscreen contexts. Unsupported browsers simply
+ * keep the normal page-level capture behavior.
+ */
+export function beginKeyboardShortcutCapture() {
+  if (typeof navigator === "undefined") return () => undefined;
+  const keyboard = (navigator as Navigator & { keyboard?: KeyboardLockController }).keyboard;
+  if (!keyboard?.lock) return () => undefined;
+
+  try {
+    void keyboard.lock().catch(() => undefined);
+  } catch {
+    return () => undefined;
+  }
+  return () => {
+    try {
+      keyboard.unlock();
+    } catch {
+      // Ignore browsers that revoke keyboard lock when the page loses focus.
+    }
+  };
 }
 
 export function formatShortcutKeys(binding: ShellShortcutBinding | null, useMacSymbols = false) {

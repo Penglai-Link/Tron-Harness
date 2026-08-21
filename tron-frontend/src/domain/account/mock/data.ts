@@ -38,6 +38,18 @@ export function updateMockAccountProfile(payload: UpdateAccountProfilePayload) {
   return Promise.resolve({ ...mockAccountProfile });
 }
 
+export function uploadMockAccountAvatar(file: File) {
+  if (mockAccountProfile.avatarUrl?.startsWith("blob:")) {
+    URL.revokeObjectURL(mockAccountProfile.avatarUrl);
+  }
+  mockAccountProfile = {
+    ...mockAccountProfile,
+    avatarUrl: URL.createObjectURL(file),
+    updatedAt: new Date().toISOString(),
+  };
+  return Promise.resolve({ ...mockAccountProfile });
+}
+
 export function changeMockAccountPassword(
   _payload: ChangeAccountPasswordPayload,
 ): Promise<ChangeAccountPasswordResult> {

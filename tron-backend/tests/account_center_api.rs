@@ -1,7 +1,11 @@
 mod common;
 
-use axum::http::{Method, StatusCode};
+use axum::{
+    body::{Body, to_bytes},
+    http::{Method, Request, StatusCode, header},
+};
 use serde_json::json;
+use tower::ServiceExt;
 
 use common::{
     AUTH_LOGIN, AUTH_PASSWORD, app, authenticated_bearer_token, request, request_with_headers,
@@ -127,6 +131,41 @@ async fn account_password_change_validates_current_password_and_rotates_credenti
     assert_eq!(new_login.status(), StatusCode::OK);
 }
 
+#[tokio::test]
+async fn account_avatar_is_system_scoped_replaced_and_downloadable() {
+    let router = app();
+    let authorization = authorization_header(&router).await;
+
+    let first = upload_avatar(&router, &authorization, "first.png", b"first-avatar").await;
+    assert_eq!(first.status(), StatusCode::OK);
+    let first_payload = response_json(first).await;
+    assert_eq!(first_payload["data"]["avatarUrl"], "system://avatar");
+
+    let first_download = download_avatar(&router, &authorization).await;
+    assert_eq!(first_download.status(), StatusCode::OK);
+    assert_eq!(first_download.headers()[header::CONTENT_TYPE], "image/png");
+    assert_eq!(to_bytes(first_download.into_body(), usize::MAX).await.unwrap(), &b"first-avatar"[..]);
+
+    let second = upload_avatar(&router, &authorization, "second.jpg", b"second-avatar").await;
+    assert_eq!(second.status(), StatusCode::OK);
+    let second_download = download_avatar(&router, &authorization).await;
+    assert_eq!(second_download.status(), StatusCode::OK);
+    assert_eq!(second_download.headers()[header::CONTENT_TYPE], "image/jpeg");
+    assert_eq!(to_bytes(second_download.into_body(), usize::MAX).await.unwrap(), &b"second-avatar"[..]);
+
+    let profile = request_with_headers(
+        &router,
+        Method::GET,
+        "/api/v1/account/get-profile",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let profile_payload = response_json(profile).await;
+    assert_eq!(profile_payload["data"]["avatarUrl"], "system://avatar");
+}
+
 async fn authorization_header(router: &axum::Router) -> String {
     format!("Bearer {}", authenticated_bearer_token(router).await)
 }
@@ -163,4 +202,48 @@ async fn login(router: &axum::Router, password: &str) -> axum::response::Respons
         None,
     )
     .await
+}
+
+async fn upload_avatar(
+    router: &axum::Router,
+    authorization: &str,
+    file_name: &str,
+    content: &[u8],
+) -> axum::response::Response {
+    let boundary = "avatar-test-boundary";
+    let content_type = match file_name.rsplit('.').next().unwrap_or("png") {
+        "jpg" | "jpeg" => "jpeg",
+        extension => extension,
+    };
+    let mut body = format!(
+        "--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{file_name}\"\r\nContent-Type: image/{}\r\n\r\n",
+        content_type
+    )
+    .into_bytes();
+    body.extend_from_slice(content);
+    body.extend_from_slice(format!("\r\n--{boundary}--\r\n").as_bytes());
+    let request = Request::builder()
+        .method(Method::POST)
+        .uri("/api/v1/account/upload-avatar")
+        .header(header::AUTHORIZATION, authorization)
+        .header(
+            header::CONTENT_TYPE,
+            format!("multipart/form-data; boundary={boundary}"),
+        )
+        .body(Body::from(body))
+        .unwrap();
+    router.clone().oneshot(request).await.unwrap()
+}
+
+async fn download_avatar(
+    router: &axum::Router,
+    authorization: &str,
+) -> axum::response::Response {
+    let request = Request::builder()
+        .method(Method::GET)
+        .uri("/api/v1/account/download-avatar")
+        .header(header::AUTHORIZATION, authorization)
+        .body(Body::empty())
+        .unwrap();
+    router.clone().oneshot(request).await.unwrap()
 }

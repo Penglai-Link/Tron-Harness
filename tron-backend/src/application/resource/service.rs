@@ -6,6 +6,7 @@ mod projection;
 mod resources;
 mod session_attachments;
 mod storage;
+mod system;
 
 use std::{
     path::PathBuf,
@@ -29,6 +30,11 @@ pub use storage::StorageRouter;
 /// The platform settings resource scope has no workspace record or upstream
 /// workspace inheritance.
 const PLATFORM_RESOURCE_SCOPE: &str = "PLATFORM";
+
+/// System-managed resources are persisted separately from workspace resources
+/// and are intentionally excluded from the public resource projections.
+pub const SYSTEM_RESOURCE_SCOPE: &str = "SYSTEM";
+pub const SYSTEM_AVATAR_REFERENCE: &str = "system://avatar";
 
 #[derive(Clone)]
 pub struct ResourceService {

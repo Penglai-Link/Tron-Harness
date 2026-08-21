@@ -14,6 +14,7 @@ export function TabBar({ className }: TabBarProps) {
   const activeTabId = useTabStore((state) => state.activeTabId);
   const removeTab = useTabStore((state) => state.removeTab);
   const setActiveTab = useTabStore((state) => state.setActiveTab);
+  const suppressNextTab = useTabStore((state) => state.suppressNextTab);
 
   const handleTabClick = (tab: TabItem) => {
     setActiveTab(tab.id);
@@ -31,6 +32,9 @@ export function TabBar({ className }: TabBarProps) {
 
     removeTab(tabId);
     if (closingActiveTab) {
+      if (!nextTab) {
+        suppressNextTab();
+      }
       navigate(nextTab?.path ?? "/apps");
     }
   };

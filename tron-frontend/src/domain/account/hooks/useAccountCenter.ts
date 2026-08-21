@@ -7,17 +7,9 @@ import {
 import {
   changeAccountPassword,
   fetchAccountProfile,
+  uploadAccountAvatar,
   updateAccountProfile,
 } from "@/domain/account/api";
-import {
-  createResource,
-  uploadResourceBinary,
-} from "@/domain/resource/api";
-import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import {
-  buildAvatarResourceReference,
-  parseAvatarResourceReference,
-} from "@/shared/lib/avatarResource";
 import type {
   AccountProfile,
   ChangeAccountPasswordPayload,
@@ -42,6 +34,12 @@ export function useAccountCenter() {
     void fetchAccountProfile(controller.signal)
       .then((nextProfile) => {
         setProfile(nextProfile);
+        updateSessionUser({
+          avatarUrl: nextProfile.avatarUrl,
+          displayName: nextProfile.displayName,
+          email: nextProfile.email,
+          passwordResetRequired: nextProfile.passwordResetRequired,
+        });
       })
       .catch((error: unknown) => {
         if (!controller.signal.aborted) {
@@ -55,7 +53,7 @@ export function useAccountCenter() {
       });
 
     return () => controller.abort();
-  }, [refreshKey]);
+  }, [refreshKey, updateSessionUser]);
 
   const refresh = useCallback(() => {
     setRefreshKey((value) => value + 1);
@@ -64,49 +62,13 @@ export function useAccountCenter() {
   const saveProfile = useCallback(async (
     payload: UpdateAccountProfilePayload,
     avatarFile?: File,
-    avatarWorkspaceCode?: string,
   ) => {
     setSavingProfile(true);
     try {
       let avatarUrl = payload.avatarUrl;
       if (avatarFile) {
-        if (getServiceDataSource("resource") !== "api") {
-          avatarUrl = URL.createObjectURL(avatarFile);
-        } else {
-          if (!avatarWorkspaceCode?.trim()) {
-            throw new Error("Select a workspace before uploading an avatar.");
-          }
-
-          const previousReference = parseAvatarResourceReference(profile?.avatarUrl);
-          const nextReference = previousReference?.workspaceCode === avatarWorkspaceCode
-            ? previousReference
-            : {
-                resourceCode: `avatar-${profile?.userCode ?? "user"}-${Date.now()}`
-                  .replace(/[^A-Za-z0-9_.-]/g, "-")
-                  .slice(0, 64),
-                workspaceCode: avatarWorkspaceCode,
-              };
-
-          if (previousReference && previousReference.workspaceCode === avatarWorkspaceCode) {
-            await uploadResourceBinary({
-              file: avatarFile,
-              resourceCode: nextReference.resourceCode,
-              workspaceCode: nextReference.workspaceCode,
-            });
-          } else {
-            await createResource({
-              allowInheritance: false,
-              description: "Managed account avatar",
-              file: avatarFile,
-              kind: "IMAGE",
-              name: `Avatar ${profile?.displayName ?? "User"}`,
-              resourceCode: nextReference.resourceCode,
-              workspaceCode: nextReference.workspaceCode,
-            });
-          }
-
-          avatarUrl = buildAvatarResourceReference(nextReference);
-        }
+        const updatedAvatar = await uploadAccountAvatar(avatarFile);
+        avatarUrl = updatedAvatar.avatarUrl;
       }
 
       const updated = await updateAccountProfile({ ...payload, avatarUrl });

@@ -1905,7 +1905,7 @@ export const pages = {
       description: "Description",
       shortcut: "Shortcut",
     },
-    configureHint: "Select a shortcut, then press the key combination. Press Esc to cancel or Backspace to clear. Shortcuts are stored in this browser.",
+    configureHint: "Select a shortcut, then press the key combination. Press Esc to cancel or Backspace to clear. Supported app containers also try to capture browser-reserved shortcuts; regular browsers may still handle them first.",
     messages: {
       conflict: "This shortcut is already assigned to {{action}}.",
       modifierRequired: "Use at least one modifier key (Cmd/Ctrl, Alt, or Shift).",

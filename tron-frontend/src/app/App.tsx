@@ -240,6 +240,8 @@ function AppRoutePage() {
   const addToCache = useTabStore((state) => state.addToCache);
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
   const activeTabId = useTabStore((state) => state.activeTabId);
+  const suppressNextTabCreation = useTabStore((state) => state.suppressNextTabCreation);
+  const clearTabCreationSuppression = useTabStore((state) => state.clearTabCreationSuppression);
   const resolved = resolveAppRoute(pathname, search);
   const routeRenderKey = routeRenderKeyForLocation(pathname, search, resolved?.route.pageId);
   const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
@@ -292,6 +294,12 @@ function AppRoutePage() {
 
   useEffect(() => {
     if (resolved && resolved.route.layout !== "settings") {
+      if (suppressNextTabCreation) {
+        if (pathname === "/apps") {
+          return;
+        }
+        clearTabCreationSuppression();
+      }
       const currentPath = `${pathname}${search}`;
       const navItem = resolveActiveItem(pathname) ?? resolveActiveItemByLabel(resolved.route.activeNav);
       const tabTitle = navItem
@@ -342,7 +350,7 @@ function AppRoutePage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pathname, search, resolved?.route.pageId]);
+  }, [clearTabCreationSuppression, pathname, search, resolved?.route.pageId, suppressNextTabCreation]);
 
   useEffect(() => {
     setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));

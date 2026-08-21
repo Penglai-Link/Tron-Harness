@@ -19,6 +19,7 @@ export interface CachedTabInfo {
 interface TabState {
   tabs: TabItem[];
   activeTabId: string | null;
+  suppressNextTabCreation: boolean;
   cachedTabsMap: Map<string, CachedTabInfo>; // key: tabId, value: 缓存信息
   cachedTabsList: CachedTabInfo[]; // 缓存的 tab 列表，用于渲染
   maxCachedTabs: number; // 最大缓存数量
@@ -27,6 +28,8 @@ interface TabState {
   setActiveTab: (tabId: string) => void;
   updateTab: (tabId: string, updates: Partial<Omit<TabItem, "id">>) => void;
   clearAllTabs: () => void;
+  clearTabCreationSuppression: () => void;
+  suppressNextTab: () => void;
   getTabByPath: (path: string) => TabItem | undefined;
   getTabByActiveNav: (activeNav: string) => TabItem | undefined;
   addToCache: (tabId: string, path: string, pageId: string) => void;
@@ -41,6 +44,7 @@ function generateTabId(): string {
 export const useTabStore = create<TabState>()((set, get) => ({
   tabs: [],
   activeTabId: null,
+  suppressNextTabCreation: false,
   cachedTabsMap: new Map(),
   cachedTabsList: [],
   maxCachedTabs: 10, // 最多缓存 10 个 tab
@@ -129,6 +133,9 @@ export const useTabStore = create<TabState>()((set, get) => ({
   clearAllTabs: () => {
     set({ tabs: [], activeTabId: null, cachedTabsMap: new Map(), cachedTabsList: [] });
   },
+
+  clearTabCreationSuppression: () => set({ suppressNextTabCreation: false }),
+  suppressNextTab: () => set({ suppressNextTabCreation: true }),
 
   getTabByPath: (path) => {
     return get().tabs.find(t => t.path === path);

@@ -36,6 +36,7 @@ import {
 } from "react-router";
 
 import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
+import { fetchAccountProfile } from "@/domain/account/api";
 import { useAuthSession } from "@/domain/auth";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
@@ -65,6 +66,7 @@ import { SelectInput } from "@/shared/ui/Forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useTabStore } from "@/store/tabStore";
+import { useAuthStore } from "@/store/authStore";
 import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
   WorkspaceSpacesContextValue,
@@ -189,6 +191,7 @@ export function TronShell({
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
   const { setTheme, theme, themes } = useTheme();
   const { session: authSession } = useAuthSession();
+  const updateSessionUser = useAuthStore((state) => state.updateSessionUser);
   const { src: avatarSrc } = useManagedAvatar(authSession?.user.avatarUrl);
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
@@ -235,6 +238,19 @@ export function TronShell({
   const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
   const [showBottomPanel, setBottomPanel] = useState(false)
+
+  useEffect(() => {
+    if (!authSession) return;
+
+    const controller = new AbortController();
+    void fetchAccountProfile(controller.signal)
+      .then((profile) => {
+        updateSessionUser({ avatarUrl: profile.avatarUrl });
+      })
+      .catch(() => undefined);
+
+    return () => controller.abort();
+  }, [authSession?.user.userCode, updateSessionUser]);
 
   const visibleNavigation = useMemo(
     () => tronNavigation.filter((section) => {
@@ -544,7 +560,7 @@ export function TronShell({
   }
 
   function closeCurrentWorkspaceTab() {
-    const { activeTabId, removeTab, tabs } = useTabStore.getState();
+    const { activeTabId, removeTab, suppressNextTab, tabs } = useTabStore.getState();
     const activeTab = tabs.find((tab) => tab.id === activeTabId);
     if (!activeTab?.closable) return false;
 
@@ -553,6 +569,9 @@ export function TronShell({
     const nextTab = remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)];
 
     removeTab(activeTab.id);
+    if (!nextTab) {
+      suppressNextTab();
+    }
     navigate(nextTab?.path ?? "/apps");
     return true;
   }
@@ -750,8 +769,7 @@ export function TronShell({
   function renderUserPanelContent() {
     return (
       <>
-        {userMenuContent}
-        <div className={cn("grid grid-cols-2 gap-3", userMenuContent ? "border-t border-[var(--color-outline-variant)] pt-4" : "")}>
+        <div className="space-y-3">
           <div className="min-w-0">
             <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
               {t("shell:theme.label")}
@@ -789,6 +807,11 @@ export function TronShell({
             </SelectInput>
           </div>
         </div>
+        {userMenuContent ? (
+          <div className="border-t border-[var(--color-outline-variant)] pt-3">
+            {userMenuContent}
+          </div>
+        ) : null}
       </>
     );
   }
@@ -828,13 +851,12 @@ export function TronShell({
             ref={utilityPanelRef}
             className={cn(
               "absolute bottom-[calc(100%+8px)] z-[70] max-h-[min(70vh,36rem)] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-              compact ? "left-[calc(100%+8px)] w-[min(360px,calc(100vw-1rem))]" : "left-0 w-[min(360px,calc(100vw-1rem))]",
+              compact ? "left-[calc(100%+8px)] w-[min(320px,calc(100vw-1rem))]" : "left-0 w-[min(320px,calc(100vw-1rem))]",
             )}
             role="dialog"
             aria-label={t("shell:utilityPanel.user")}
           >
-            <p className="font-medium">{t("shell:utilityPanel.user")}</p>
-            <div className="mt-3 space-y-4">{renderUserPanelContent()}</div>
+            <div className="space-y-3">{renderUserPanelContent()}</div>
           </div>
         ) : null}
       </div>
