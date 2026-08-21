@@ -1,5 +1,5 @@
 import { useTranslation } from "react-i18next";
-import { MousePointerClick, PanelsTopLeft, X } from "lucide-react";
+import { Command } from "lucide-react";
 import type { ReactNode } from "react";
 import { useLocation } from "react-router";
 
@@ -9,8 +9,13 @@ import {
   ResizablePanelGroup,
 } from "@/components/ui/resizable";
 import { usePanel } from "@/shared/hooks/usePanel";
+import {
+  formatShortcutKeys,
+  shellShortcutActions,
+} from "@/shared/lib/keyboardShortcuts";
 import { cn } from "@/shared/lib/utils";
 import { TabBar } from "@/shared/ui/TabBar";
+import { useAppShellStore } from "@/store/appShellStore";
 import { useTabStore } from "@/store/tabStore";
 
 interface IPanelProps {
@@ -21,65 +26,48 @@ interface IPanelProps {
 }
 
 function EmptyTabWorkspace() {
-  const { t } = useTranslation("shell");
-  const guides = [
-    {
-      description: t("emptyWorkspace.guides.open.description"),
-      icon: MousePointerClick,
-      label: t("emptyWorkspace.guides.open.label"),
-      marker: t("emptyWorkspace.guides.open.marker"),
-    },
-    {
-      description: t("emptyWorkspace.guides.switch.description"),
-      icon: PanelsTopLeft,
-      label: t("emptyWorkspace.guides.switch.label"),
-      marker: t("emptyWorkspace.guides.switch.marker"),
-    },
-    {
-      description: t("emptyWorkspace.guides.close.description"),
-      icon: X,
-      label: t("emptyWorkspace.guides.close.label"),
-      marker: t("emptyWorkspace.guides.close.marker"),
-    },
-  ];
+  const { t: pageT } = useTranslation("pages");
+  const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
+  const useMacSymbols = typeof navigator !== "undefined"
+    && /Mac|iPhone|iPad/i.test(navigator.userAgent);
+  const shortcuts = shellShortcutActions.flatMap((action) => {
+    const binding = shortcutBindings[action];
+    if (!binding) return [];
+
+    return [{
+      action,
+      keys: formatShortcutKeys(binding, useMacSymbols),
+    }];
+  });
 
   return (
     <section
-      aria-labelledby="empty-tab-workspace-heading"
-      className="flex min-h-full items-center justify-center px-2 py-10 sm:px-8"
+      aria-label={pageT("settingsShortcuts.title")}
+      className="flex min-h-full items-center justify-center overflow-hidden px-6 py-10"
       data-testid="tron-empty-tab-workspace"
     >
-      <div className="w-full max-w-xl animate-in fade-in-0 duration-300">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">
-          {t("emptyWorkspace.eyebrow")}
-        </p>
-        <h1
-          className="mt-3 text-2xl font-semibold text-[var(--color-on-surface)]"
-          id="empty-tab-workspace-heading"
-        >
-          {t("emptyWorkspace.title")}
-        </h1>
-        <p className="mt-3 max-w-lg text-sm leading-6 text-[var(--color-on-surface-variant)]">
-          {t("emptyWorkspace.description")}
-        </p>
-
-        <div className="mt-9 border-y border-[var(--color-outline-variant)]">
-          {guides.map(({ description, icon: Icon, label, marker }) => (
-            <div className="flex items-center gap-4 py-4" key={label}>
-              <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">
-                <Icon size={17} aria-hidden="true" />
+      <div className="flex w-full max-w-md flex-col items-center animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
+        <Command
+          aria-hidden="true"
+          className="mb-10 size-40 text-[var(--color-surface-container)] sm:size-52"
+          strokeWidth={1}
+        />
+        <div className="w-full space-y-2.5" data-testid="tron-empty-tab-shortcuts">
+          {shortcuts.map(({ action, keys }) => (
+            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-5" key={action}>
+              <span className="text-sm text-[var(--color-on-surface-variant)]">
+                {pageT(`settingsShortcuts.shortcuts.${action}.label`)}
               </span>
-              <div className="min-w-0 flex-1">
-                <p className="text-sm font-medium text-[var(--color-on-surface)]">
-                  {label}
-                </p>
-                <p className="mt-0.5 text-xs leading-5 text-[var(--color-on-surface-variant)]">
-                  {description}
-                </p>
-              </div>
-              <kbd className="shrink-0 rounded border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-2 py-1 text-xs font-medium text-[var(--color-on-surface-variant)]">
-                {marker}
-              </kbd>
+              <span className="flex items-center gap-1" aria-label={keys.join(" ")}>
+                {keys.map((key, index) => (
+                  <kbd
+                    className="min-w-6 rounded border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-1.5 py-0.5 text-center text-xs font-medium text-[var(--color-on-surface-variant)] shadow-[0_1px_0_rgba(15,23,42,0.05)]"
+                    key={`${key}-${index}`}
+                  >
+                    {key}
+                  </kbd>
+                ))}
+              </span>
             </div>
           ))}
         </div>

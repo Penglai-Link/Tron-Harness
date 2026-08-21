@@ -285,11 +285,16 @@ export const pages = {
   },
   resources: {
     actions: {
+      cancel: "取消",
+      delete: "删除",
+      edit: "编辑",
+      forResource: "{{name}} 的操作",
       new: "新建资源",
       quickUpload: "快捷上传",
       refresh: "刷新",
     },
     columns: {
+      actions: "操作",
       fileSize: "文件大小",
       kind: "资源类型",
       resource: "资源",
@@ -322,6 +327,10 @@ export const pages = {
       server_account: "服务器账号",
     },
     messages: {
+      deleted: "{{name}} 已删除。",
+      deleteDescription: "删除后无法恢复。",
+      deleteFailed: "资源删除失败。",
+      deleteTitle: "删除 {{name}}？",
       refreshed: "资源已刷新",
     },
     pagination: {
@@ -1930,10 +1939,20 @@ export const pages = {
     },
   },
   settingsShortcuts: {
+    actions: {
+      clear: "清除 {{label}} 的快捷键",
+      configure: "配置 {{label}} 的快捷键",
+    },
+    capturing: "请按组合键",
     columns: {
       action: "操作",
       description: "说明",
       shortcut: "快捷键",
+    },
+    configureHint: "点击快捷键后按下组合键；按 Esc 取消，按 Backspace 删除。配置仅保存在当前浏览器。",
+    messages: {
+      conflict: "该组合键已分配给“{{action}}”。",
+      modifierRequired: "请至少按住一个修饰键（⌘/Ctrl、Alt 或 Shift）。",
     },
     shortcuts: {
       closeCurrentTab: {
@@ -1944,9 +1963,17 @@ export const pages = {
         description: "新建一个聊天会话。",
         label: "新建会话",
       },
-      openTerminal: {
-        description: "打开底部终端面板。",
-        label: "打开终端",
+      toggleBottomPanel: {
+        description: "收起或展开下方面板。",
+        label: "收起/展开下方面板",
+      },
+      toggleLeftSidebar: {
+        description: "收起或展开左侧导航面板。",
+        label: "收起/展开左侧面板",
+      },
+      toggleRightSidebar: {
+        description: "收起或展开右侧上下文面板。",
+        label: "收起/展开右侧面板",
       },
     },
     supportedTitle: "平台支持的操作",

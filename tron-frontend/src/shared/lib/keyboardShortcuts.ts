@@ -1,0 +1,171 @@
+export const shellShortcutActions = [
+  "newSession",
+  "closeCurrentTab",
+  "toggleLeftSidebar",
+  "toggleRightSidebar",
+  "toggleBottomPanel",
+] as const;
+
+export type ShellShortcutAction = (typeof shellShortcutActions)[number];
+
+export interface ShellShortcutBinding {
+  altKey: boolean;
+  key: string;
+  modKey: boolean;
+  shiftKey: boolean;
+}
+
+export type ShellShortcutBindings = Record<
+  ShellShortcutAction,
+  ShellShortcutBinding | null
+>;
+
+export const CREATE_CHAT_SESSION_SHORTCUT_EVENT = "tron:create-chat-session";
+
+const modifierKeys = new Set(["Alt", "Control", "Meta", "Shift"]);
+
+const keyLabels: Record<string, string> = {
+  " ": "Space",
+  ArrowDown: "↓",
+  ArrowLeft: "←",
+  ArrowRight: "→",
+  ArrowUp: "↑",
+  Backspace: "Backspace",
+  Delete: "Delete",
+  Enter: "Enter",
+  Escape: "Esc",
+  Tab: "Tab",
+};
+
+function normalizeKey(key: string) {
+  if (key.length === 1) return key.toUpperCase();
+  return key;
+}
+
+function isShortcutBinding(value: unknown): value is ShellShortcutBinding {
+  if (!value || typeof value !== "object") return false;
+  const binding = value as Partial<ShellShortcutBinding>;
+  return typeof binding.key === "string"
+    && Boolean(binding.key)
+    && typeof binding.altKey === "boolean"
+    && typeof binding.modKey === "boolean"
+    && typeof binding.shiftKey === "boolean"
+    && (binding.altKey || binding.modKey || binding.shiftKey);
+}
+
+export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
+  return {
+    closeCurrentTab: null,
+    newSession: null,
+    toggleBottomPanel: {
+      altKey: true,
+      key: "J",
+      modKey: true,
+      shiftKey: false,
+    },
+    toggleLeftSidebar: {
+      altKey: true,
+      key: "[",
+      modKey: true,
+      shiftKey: false,
+    },
+    toggleRightSidebar: {
+      altKey: true,
+      key: "]",
+      modKey: true,
+      shiftKey: false,
+    },
+  };
+}
+
+export function normalizeShellShortcutBindings(value: unknown): ShellShortcutBindings {
+  const defaults = createDefaultShellShortcutBindings();
+  if (!value || typeof value !== "object") return defaults;
+  const persisted = value as Partial<ShellShortcutBindings>;
+
+  return shellShortcutActions.reduce<ShellShortcutBindings>((bindings, action) => {
+    const binding = persisted[action];
+    bindings[action] = isShortcutBinding(binding)
+      ? {
+          ...binding,
+          key: normalizeKey(binding.key),
+        }
+      : defaults[action];
+    return bindings;
+  }, defaults);
+}
+
+export function shortcutFromKeyboardEvent(
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
+): ShellShortcutBinding | null {
+  if (modifierKeys.has(event.key)) return null;
+  const modKey = event.metaKey || event.ctrlKey;
+  if (!modKey && !event.altKey && !event.shiftKey) return null;
+
+  return {
+    altKey: event.altKey,
+    key: normalizeKey(event.key),
+    modKey,
+    shiftKey: event.shiftKey,
+  };
+}
+
+export function shortcutEquals(
+  left: ShellShortcutBinding | null,
+  right: ShellShortcutBinding | null,
+) {
+  return left?.altKey === right?.altKey
+    && left?.key === right?.key
+    && left?.modKey === right?.modKey
+    && left?.shiftKey === right?.shiftKey;
+}
+
+export function shortcutMatchesKeyboardEvent(
+  binding: ShellShortcutBinding | null,
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
+) {
+  if (!binding) return false;
+  return binding.altKey === event.altKey
+    && binding.key === normalizeKey(event.key)
+    && binding.modKey === (event.metaKey || event.ctrlKey)
+    && binding.shiftKey === event.shiftKey;
+}
+
+export function findMatchingShellShortcutAction(
+  bindings: ShellShortcutBindings,
+  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
+) {
+  return shellShortcutActions.find((action) => (
+    shortcutMatchesKeyboardEvent(bindings[action], event)
+  )) ?? null;
+}
+
+export function formatShortcutKeys(binding: ShellShortcutBinding | null, useMacSymbols = false) {
+  if (!binding) return [];
+  const modifiers = useMacSymbols
+    ? [
+        ...(binding.modKey ? ["⌘"] : []),
+        ...(binding.altKey ? ["⌥"] : []),
+        ...(binding.shiftKey ? ["⇧"] : []),
+      ]
+    : [
+        ...(binding.modKey ? ["Ctrl"] : []),
+        ...(binding.altKey ? ["Alt"] : []),
+        ...(binding.shiftKey ? ["Shift"] : []),
+      ];
+  const key = keyLabels[binding.key] ?? binding.key;
+  return [...modifiers, key];
+}
+
+export function formatShortcut(binding: ShellShortcutBinding | null, useMacSymbols = false) {
+  return formatShortcutKeys(binding, useMacSymbols).join(useMacSymbols ? "" : " + ");
+}
+
+export function isEditableShortcutTarget(target: EventTarget | null) {
+  if (typeof Element === "undefined" || !(target instanceof Element)) {
+    return false;
+  }
+  return Boolean(
+    target.closest("input, textarea, select, [contenteditable='true'], [role='textbox']"),
+  );
+}

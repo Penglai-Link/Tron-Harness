@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router";
-import { RefreshCcw, Upload } from "lucide-react";
+import { MoreHorizontal, RefreshCcw, Trash2, Upload } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { SelectItem } from "@/components/ui/select";
 
 import { Button } from "@/components/ui/button";
@@ -15,13 +21,20 @@ import {
   QuickResourceUploadDialog,
   type QuickResourceCreateCommand,
 } from "@/domain/resource/features/quick-upload";
-import { createResource, fromResourceKindCode } from "@/domain/resource/api";
+import {
+  createResource,
+  deleteResource,
+  fromResourceKindCode,
+} from "@/domain/resource/api";
 import { resourceFileKinds } from "@/domain/resource/constants";
 import {
   queryResourcePage,
   useSettingsResourceScope,
 } from "@/domain/resource/hooks";
-import { createMockQuickResource } from "@/domain/resource/mock";
+import {
+  createMockQuickResource,
+  deleteMockResource,
+} from "@/domain/resource/mock";
 import type {
   QuickResourceUploadHandoffPayload,
   ResourceKind,
@@ -30,6 +43,7 @@ import type {
 } from "@/domain/resource/model";
 import { useQuickResourceUploadHandoffStore } from "@/domain/resource/model";
 import {
+  ConfirmDialog,
   PageHeader,
   SearchField,
   SelectInput,
@@ -93,6 +107,8 @@ export function ResourcesPage() {
     ResourceSourceKind | "ALL"
   >("ALL");
   const [quickUploadOpen, setQuickUploadOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<ResourceRecord | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const kindOptions = isFileManagement ? resourceFileKinds : allResourceKinds;
   const resourceQueryParams = useMemo(
     () => ({
@@ -221,7 +237,7 @@ export function ResourcesPage() {
                 headerClassName: "hidden px-4 sm:table-cell",
                 width: "13%",
               },
-            },
+            } satisfies TableColumnDef<ResourceRecord>,
           ]
         : []),
       {
@@ -239,15 +255,71 @@ export function ResourcesPage() {
         header: pageT("columns.updatedAt"),
         id: "updatedAt",
         meta: {
-          align: "right",
+          align: "right" as const,
           cellClassName: "hidden whitespace-nowrap px-4 py-2.5 xl:table-cell",
           colClassName: "hidden xl:table-column",
           headerClassName: "hidden px-4 xl:table-cell",
           width: "14%",
         },
       },
+      ...(isFileManagement
+        ? [
+            {
+              cell: ({ row }: { row: { original: ResourceRecord } }) => (
+                <DropdownMenu>
+                  <DropdownMenuTrigger
+                    render={(
+                      <Button
+                        aria-label={pageT("actions.forResource", {
+                          name: row.original.name,
+                        })}
+                        size="icon"
+                        variant="ghost"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
+                        <MoreHorizontal aria-hidden="true" size={16} />
+                      </Button>
+                    )}
+                  />
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        openResource(row.original);
+                      }}
+                    >
+                      {pageT("actions.edit")}
+                    </DropdownMenuItem>
+                    {row.original.sourceKind === "LOCAL" ? (
+                      <DropdownMenuItem
+                        variant="destructive"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDeleteTarget(row.original);
+                        }}
+                      >
+                        <Trash2 aria-hidden="true" size={16} />
+                        {pageT("actions.delete")}
+                      </DropdownMenuItem>
+                    ) : null}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              ),
+              header: pageT("columns.actions"),
+              id: "actions",
+              meta: {
+                align: "right",
+                cellClassName: "px-4 py-2.5",
+                headerClassName: "px-4",
+                width: "80px",
+              },
+              size: 80,
+            } satisfies TableColumnDef<ResourceRecord>,
+          ]
+        : []),
     ],
-    [formatDateTime, isPlatformResources, t],
+    [basePath, formatDateTime, isFileManagement, isPlatformResources, navigate, t],
   );
 
   const resourceTable = useServerTable({
@@ -263,6 +335,39 @@ export function ResourcesPage() {
       }),
     resource: "resources",
   });
+
+  async function confirmDelete() {
+    if (!deleteTarget) return;
+    setDeleting(true);
+    try {
+      if (isApi) {
+        const result = await deleteResource({
+          resourceCode: deleteTarget.resourceCode,
+          workspaceCode: activeWorkspaceCode,
+        });
+        if (!result.deleted) {
+          throw new Error(pageT("messages.deleteFailed"));
+        }
+      } else if (
+        !deleteMockResource(activeWorkspaceCode, deleteTarget.resourceCode)
+      ) {
+        throw new Error(pageT("messages.deleteFailed"));
+      }
+      toast.success(
+        pageT("messages.deleted", { name: deleteTarget.name }),
+      );
+      setDeleteTarget(null);
+      await resourceTable.refresh();
+    } catch (cause) {
+      toast.error(
+        cause instanceof Error
+          ? cause.message
+          : pageT("messages.deleteFailed"),
+      );
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   function openResource(record: ResourceRecord) {
     navigate(
@@ -432,6 +537,20 @@ export function ResourcesPage() {
           tableClassName="min-w-full table-fixed max-sm:w-[calc(100%-1px)] max-sm:min-w-0 max-sm:[&>colgroup]:hidden xl:min-w-[900px]"
         />
       </div>
+      <ConfirmDialog
+        cancelText={pageT("actions.cancel")}
+        confirmText={pageT("actions.delete")}
+        description={pageT("messages.deleteDescription")}
+        open={deleteTarget !== null}
+        pending={deleting}
+        title={pageT("messages.deleteTitle", {
+          name: deleteTarget?.name ?? "",
+        })}
+        onCancel={() => setDeleteTarget(null)}
+        onConfirm={() => {
+          void confirmDelete();
+        }}
+      />
       <QuickResourceUploadDialog
         open={quickUploadOpen}
         workspaceCode={activeWorkspaceCode}

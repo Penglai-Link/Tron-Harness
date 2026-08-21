@@ -7,6 +7,13 @@ import {
 import {
   getEmptyWorkspaceSwitcher,
 } from "@/shared/constants/workspaceSpaces";
+import {
+  createDefaultShellShortcutBindings,
+  normalizeShellShortcutBindings,
+  type ShellShortcutAction,
+  type ShellShortcutBinding,
+  type ShellShortcutBindings,
+} from "@/shared/lib/keyboardShortcuts";
 import type { WorkspaceSwitcherData } from "@/shared/types/WorkspaceSpace";
 
 interface AppShellState {
@@ -15,6 +22,7 @@ interface AppShellState {
   selectedPrimarySpaceId: string;
   selectedSecondarySpaceId: string;
   rightSidebarCollapsed: boolean;
+  shortcutBindings: ShellShortcutBindings;
   sidebarCollapsed: boolean;
   utilityPanel: string | null;
   workspaceSwitcherSnapshot: WorkspaceSwitcherData;
@@ -25,6 +33,10 @@ interface AppShellState {
   setAgentOpen: (open: boolean) => void;
   setRightSidebarCollapsed: (collapsed: boolean) => void;
   setSidebarCollapsed: (collapsed: boolean) => void;
+  setShortcutBinding: (
+    action: ShellShortcutAction,
+    binding: ShellShortcutBinding | null,
+  ) => void;
   setWorkspaceSwitcherSnapshot: (snapshot: WorkspaceSwitcherData) => void;
   toggleAgent: () => void;
   toggleSection: (sectionLabel: string) => void;
@@ -37,12 +49,14 @@ function migrateAppShellState(persistedState: unknown) {
   if (!persistedState || typeof persistedState !== "object") {
     return persistedState;
   }
+  const state = persistedState as Partial<AppShellState>;
 
   return {
-    ...persistedState,
+    ...state,
     rightSidebarCollapsed: true,
     selectedPrimarySpaceId: "",
     selectedSecondarySpaceId: "",
+    shortcutBindings: normalizeShellShortcutBindings(state.shortcutBindings),
     workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
   };
 }
@@ -55,6 +69,7 @@ export const useAppShellStore = create<AppShellState>()(
       selectedPrimarySpaceId: "",
       selectedSecondarySpaceId: "",
       rightSidebarCollapsed: true,
+      shortcutBindings: createDefaultShellShortcutBindings(),
       sidebarCollapsed: false,
       utilityPanel: null,
       workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
@@ -86,6 +101,13 @@ export const useAppShellStore = create<AppShellState>()(
       setAgentOpen: (agentOpen) => set({ agentOpen }),
       setRightSidebarCollapsed: (rightSidebarCollapsed) => set({ rightSidebarCollapsed }),
       setSidebarCollapsed: (sidebarCollapsed) => set({ sidebarCollapsed }),
+      setShortcutBinding: (action, binding) =>
+        set((state) => ({
+          shortcutBindings: {
+            ...state.shortcutBindings,
+            [action]: binding,
+          },
+        })),
       setWorkspaceSwitcherSnapshot: (workspaceSwitcherSnapshot) => set({ workspaceSwitcherSnapshot }),
       toggleAgent: () => set((state) => ({ agentOpen: !state.agentOpen })),
       toggleSection: (sectionLabel) =>
@@ -101,7 +123,7 @@ export const useAppShellStore = create<AppShellState>()(
         })),
     }),
     {
-      version: 4,
+      version: 6,
       name: "tron-app-shell",
       migrate: migrateAppShellState,
       partialize: (state) => ({
@@ -109,6 +131,7 @@ export const useAppShellStore = create<AppShellState>()(
         selectedPrimarySpaceId: state.selectedPrimarySpaceId,
         selectedSecondarySpaceId: state.selectedSecondarySpaceId,
         sidebarCollapsed: state.sidebarCollapsed,
+        shortcutBindings: state.shortcutBindings,
         workspaceSwitcherSnapshot: state.workspaceSwitcherSnapshot,
       }),
       storage: createJSONStorage(() => localStorage),

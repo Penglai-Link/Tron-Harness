@@ -58,6 +58,7 @@ import {
   type TargetPageFrameInspectionResult,
 } from "@/shared";
 import { cn } from "@/shared/lib/utils";
+import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
   archiveChatSession,
   createChatSession,
@@ -5852,6 +5853,18 @@ export function ChatManagementPage() {
       setCreatingSession(false);
     }
   }
+
+  useEffect(() => {
+    const handleShortcut = () => {
+      void handleCreateSession();
+    };
+
+    window.addEventListener(CREATE_CHAT_SESSION_SHORTCUT_EVENT, handleShortcut);
+    return () => window.removeEventListener(
+      CREATE_CHAT_SESSION_SHORTCUT_EVENT,
+      handleShortcut,
+    );
+  }, [handleCreateSession]);
 
   async function handleArchiveSession(session: ChatSession) {
     const returnSourceTab = requestedSourceTab ?? activeSourceTab;

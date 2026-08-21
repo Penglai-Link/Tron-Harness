@@ -54,10 +54,16 @@ import {
   findWorkspaceNodePath,
   type WorkspaceTreeNode,
 } from "@/shared/lib/workspaceTree";
+import {
+  CREATE_CHAT_SESSION_SHORTCUT_EVENT,
+  findMatchingShellShortcutAction,
+  isEditableShortcutTarget,
+} from "@/shared/lib/keyboardShortcuts";
 import { cn } from "@/shared/lib/utils";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/shared/ui/Forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
+import { useTabStore } from "@/store/tabStore";
 import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
   WorkspaceSpacesContextValue,
@@ -193,6 +199,7 @@ export function TronShell({
   const selectedPrimarySpaceId = useAppShellStore((state) => state.selectedPrimarySpaceId);
   const selectedSecondarySpaceId = useAppShellStore((state) => state.selectedSecondarySpaceId);
   const rightSidebarCollapsed = useAppShellStore((state) => state.rightSidebarCollapsed);
+  const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
   const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
   const setRightSidebarCollapsed = useAppShellStore((state) => state.setRightSidebarCollapsed);
   const setSidebarCollapsed = useAppShellStore((state) => state.setSidebarCollapsed);
@@ -508,6 +515,98 @@ export function TronShell({
   function closeRightDrawer() {
     setRightDrawerOpen(false);
   }
+
+  function toggleSidebarPanel() {
+    if (window.innerWidth < 1024) {
+      toggleMobileSidebar();
+      return;
+    }
+    setSidebarCollapsed(!sidebarCollapsed);
+  }
+
+  function toggleRightSidebarPanel() {
+    if (!hasRightPanel) return;
+    if (window.innerWidth < 1024) {
+      if (rightDrawerOpen) {
+        closeRightDrawer();
+      } else {
+        openRightDrawer();
+      }
+      return;
+    }
+    window.dispatchEvent(new Event("tron:toggle-right-sidebar"));
+  }
+
+  function toggleBottomPanel() {
+    setBottomPanel((open) => !open);
+  }
+
+  function closeCurrentWorkspaceTab() {
+    const { activeTabId, removeTab, tabs } = useTabStore.getState();
+    const activeTab = tabs.find((tab) => tab.id === activeTabId);
+    if (!activeTab?.closable) return false;
+
+    const closingIndex = tabs.findIndex((tab) => tab.id === activeTab.id);
+    const remainingTabs = tabs.filter((tab) => tab.id !== activeTab.id);
+    const nextTab = remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)];
+
+    removeTab(activeTab.id);
+    navigate(nextTab?.path ?? "/apps");
+    return true;
+  }
+
+  useEffect(() => {
+    const handleShortcut = (event: KeyboardEvent) => {
+      if (
+        event.defaultPrevented
+        || event.isComposing
+        || event.repeat
+        || isEditableShortcutTarget(event.target)
+      ) {
+        return;
+      }
+
+      const action = findMatchingShellShortcutAction(shortcutBindings, event);
+      if (!action) return;
+
+      if (action === "toggleLeftSidebar") {
+        event.preventDefault();
+        toggleSidebarPanel();
+        return;
+      }
+      if (action === "toggleRightSidebar") {
+        if (!hasRightPanel) return;
+        event.preventDefault();
+        toggleRightSidebarPanel();
+        return;
+      }
+      if (action === "toggleBottomPanel") {
+        event.preventDefault();
+        toggleBottomPanel();
+        return;
+      }
+      if (action === "newSession") {
+        if (pathname !== "/chats" && !pathname.startsWith("/chats/")) return;
+        event.preventDefault();
+        window.dispatchEvent(new Event(CREATE_CHAT_SESSION_SHORTCUT_EVENT));
+        return;
+      }
+      if (action === "closeCurrentTab" && closeCurrentWorkspaceTab()) {
+        event.preventDefault();
+      }
+    };
+
+    window.addEventListener("keydown", handleShortcut);
+    return () => window.removeEventListener("keydown", handleShortcut);
+  }, [
+    hasRightPanel,
+    mobileSidebarOpen,
+    navigate,
+    pathname,
+    rightDrawerOpen,
+    shortcutBindings,
+    sidebarCollapsed,
+  ]);
 
   function handleSidebarNavigationClick() {
     closeFloatingPanels();
@@ -856,7 +955,7 @@ export function TronShell({
                   aria-controls="tron-mobile-sidebar"
                   aria-expanded={mobileSidebarOpen}
                   aria-label={mobileSidebarOpen ? t("shell:aria.closeNavigation") : t("shell:aria.openNavigation")}
-                  onClick={toggleMobileSidebar}
+                  onClick={toggleSidebarPanel}
                 >
                   {mobileSidebarOpen ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
                 </Button>
@@ -865,9 +964,7 @@ export function TronShell({
                   size="icon"
                   type="button"
                   variant="ghost"
-                  onClick={() => {
-                    setSidebarCollapsed(!sidebarCollapsed)
-                  }}
+                  onClick={toggleSidebarPanel}
                 >
                   {sidebarCollapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
                 </Button>
@@ -926,6 +1023,20 @@ export function TronShell({
                     </div>
                   ) : null}
                 </div>
+                <Button
+                  className={cn(
+                    "hidden min-[900px]:inline-flex",
+                    showBottomPanel
+                      ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]"
+                      : "",
+                  )}
+                  size="icon"
+                  type="button"
+                  variant="ghost"
+                  onClick={toggleBottomPanel}
+                >
+                  {showBottomPanel ? <PanelBottomClose size={17} /> : <PanelBottomOpen size={17} />}
+                </Button>
                 {hasRightPanel ? (
                   <>
                     <Button
@@ -937,7 +1048,7 @@ export function TronShell({
                       aria-expanded={rightDrawerOpen}
                       aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
                       data-testid="tron-mobile-right-sidebar-toggle"
-                      onClick={rightDrawerOpen ? closeRightDrawer : openRightDrawer}
+                      onClick={toggleRightSidebarPanel}
                     >
                       {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
                     </Button>
@@ -950,16 +1061,12 @@ export function TronShell({
                       aria-expanded={rightDragglePanelOpen}
                       aria-label={rightDragglePanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
                       data-testid="tron-mobile-right-sidebar-toggle"
-                      onClick={() => window.dispatchEvent(new Event("tron:toggle-right-sidebar"))}
+                      onClick={toggleRightSidebarPanel}
                     >
                       {rightDragglePanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
                     </Button>
                   </>
                 ) : null}
-
-                <Button className={cn("hidden min-[900px]:inline-flex",showBottomPanel ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" onClick={() => setBottomPanel(!showBottomPanel)}>
-                  {showBottomPanel ?  <PanelBottomClose size={17} /> : <PanelBottomOpen size={17} />}
-                </Button>
               </div>
             </div>
             {utilityPanel === "workspace" ? (

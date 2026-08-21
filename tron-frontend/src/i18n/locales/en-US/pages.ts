@@ -285,11 +285,16 @@ export const pages = {
   },
   resources: {
     actions: {
+      cancel: "Cancel",
+      delete: "Delete",
+      edit: "Edit",
+      forResource: "Actions for {{name}}",
       new: "New Resource",
       quickUpload: "Quick Upload",
       refresh: "Refresh",
     },
     columns: {
+      actions: "Actions",
       fileSize: "File Size",
       kind: "Resource Type",
       resource: "Resource",
@@ -322,6 +327,10 @@ export const pages = {
       server_account: "Server Account",
     },
     messages: {
+      deleted: "{{name}} deleted.",
+      deleteDescription: "This cannot be undone.",
+      deleteFailed: "Resource could not be deleted.",
+      deleteTitle: "Delete {{name}}?",
       refreshed: "Resources refreshed",
     },
     pagination: {
@@ -1886,10 +1895,20 @@ export const pages = {
     },
   },
   settingsShortcuts: {
+    actions: {
+      clear: "Clear shortcut for {{label}}",
+      configure: "Configure shortcut for {{label}}",
+    },
+    capturing: "Press a shortcut",
     columns: {
       action: "Action",
       description: "Description",
       shortcut: "Shortcut",
+    },
+    configureHint: "Select a shortcut, then press the key combination. Press Esc to cancel or Backspace to clear. Shortcuts are stored in this browser.",
+    messages: {
+      conflict: "This shortcut is already assigned to {{action}}.",
+      modifierRequired: "Use at least one modifier key (Cmd/Ctrl, Alt, or Shift).",
     },
     shortcuts: {
       closeCurrentTab: {
@@ -1900,9 +1919,17 @@ export const pages = {
         description: "Create a new chat session.",
         label: "New session",
       },
-      openTerminal: {
-        description: "Open the bottom terminal panel.",
-        label: "Open terminal",
+      toggleBottomPanel: {
+        description: "Collapse or expand the bottom panel.",
+        label: "Toggle bottom panel",
+      },
+      toggleLeftSidebar: {
+        description: "Collapse or expand the left navigation panel.",
+        label: "Toggle left panel",
+      },
+      toggleRightSidebar: {
+        description: "Collapse or expand the right context panel.",
+        label: "Toggle right panel",
       },
     },
     supportedTitle: "Supported platform actions",
