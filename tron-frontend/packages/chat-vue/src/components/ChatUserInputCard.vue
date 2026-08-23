@@ -62,7 +62,7 @@ function goBack() {
     <section class="tron-chat__user-input-card" :aria-label="labels.ariaLabel">
       <p class="tron-chat__user-input-intro">{{ request.intro }}</p>
     <div class="tron-chat__user-input-progress" aria-live="polite">{{ labels.progress(currentIndex + 1, request.questions.length) }}</div>
-    <fieldset v-if="currentQuestion" class="tron-chat__user-input-question">
+    <fieldset v-if="currentQuestion" :key="currentQuestion.questionCode" class="tron-chat__user-input-question">
       <legend>{{ currentIndex + 1 }}. {{ currentQuestion.question }}</legend>
       <div class="tron-chat__user-input-options">
         <label v-for="option in currentQuestion.options" :key="option.optionCode" class="tron-chat__user-input-option">

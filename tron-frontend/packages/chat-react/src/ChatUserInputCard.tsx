@@ -107,7 +107,7 @@ export function ChatUserInputCard({
       <div className="tron-chat__user-input-progress" aria-live="polite">
         {labels.progress(currentIndex + 1, request.questions.length)}
       </div>
-      <fieldset className="tron-chat__user-input-question">
+      <fieldset className="tron-chat__user-input-question" key={question.questionCode}>
         <legend>{currentIndex + 1}. {question.question}</legend>
         <div className="tron-chat__user-input-options">
           {question.options.map((option) => (

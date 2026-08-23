@@ -188,6 +188,7 @@
 
 .tron-chat__footer {
   position: relative;
+  z-index: 10;
   background: var(--tron-chat-surface);
   padding: 12px 16px;
   box-shadow: 0 -10px 28px rgba(15, 23, 42, 0.04);
@@ -1038,10 +1039,10 @@
     min-width: 0;
   }
 }
-.tron-chat__user-input-card { display: grid; gap: .75rem; margin: .75rem 0; padding: 1rem; border: 1px solid var(--color-outline-variant, #cbd5e1); border-radius: .75rem; background: var(--color-surface-container-low, #f8fafc); }
+.tron-chat__user-input-card { position: absolute; right: 16px; bottom: calc(100% + 10px); z-index: 20; display: grid; gap: .75rem; width: min(680px, calc(100% - 32px)); max-height: min(72vh, 640px); overflow-y: auto; margin: 0; padding: 1rem 1rem .9rem; border: 1px solid color-mix(in srgb, var(--tron-chat-border) 82%, white 18%); border-radius: 1rem; background: color-mix(in srgb, var(--tron-chat-surface-strong) 94%, transparent); box-shadow: 0 20px 54px rgba(15, 23, 42, .2), 0 4px 16px rgba(15, 23, 42, .08); backdrop-filter: blur(16px); animation: tron-chat-user-input-pop 180ms ease-out both; }
 .tron-chat__user-input-intro { margin: 0; color: var(--color-on-surface, #0f172a); font-size: .875rem; line-height: 1.4; }
 .tron-chat__user-input-progress { color: var(--color-on-surface-variant, #64748b); font-size: .75rem; font-weight: 600; }
-.tron-chat__user-input-question { display: grid; gap: .5rem; border: 0; padding: 0; margin: 0; }
+.tron-chat__user-input-question { display: grid; gap: .5rem; border: 0; padding: 0; margin: 0; animation: tron-chat-user-input-question-in 160ms ease-out both; }
 .tron-chat__user-input-question legend { font-size: .875rem; font-weight: 600; color: var(--color-on-surface, #0f172a); }
 .tron-chat__user-input-options { display: grid; gap: .4rem; }
 .tron-chat__user-input-option { display: flex; gap: .5rem; align-items: flex-start; padding: .5rem; border-radius: .5rem; background: var(--color-surface, #fff); cursor: pointer; }
@@ -1053,3 +1054,18 @@
 .tron-chat__user-input-submit { justify-self: start; border-radius: .5rem; padding: .5rem .75rem; background: var(--color-primary, #2563eb); color: white; font-size: .875rem; font-weight: 600; }
 .tron-chat__user-input-back:disabled,
 .tron-chat__user-input-submit:disabled { cursor: not-allowed; opacity: .5; }
+
+@keyframes tron-chat-user-input-pop {
+  from { opacity: 0; transform: translateY(8px) scale(.985); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+@keyframes tron-chat-user-input-question-in {
+  from { opacity: 0; transform: translateX(6px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .tron-chat__user-input-card,
+  .tron-chat__user-input-question { animation: none; }
+}
