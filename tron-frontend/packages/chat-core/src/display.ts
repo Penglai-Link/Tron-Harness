@@ -30,7 +30,7 @@ function normalizeReasoningText(value: string) {
     .trim();
   if (!normalized) return "";
   return normalized
-    .replace(/^the user (?:wants|asked|is asking)[^.?!。！？]*[.?!。！？]\s*/i, "")
+    .replace(/^(?:but )?the user (?:wants|asked|is asking|is saying|said|has asked|is requesting)[^.?!。！？]*[.?!。！？]\s*/i, "")
     .replace(/^i should\s+/i, "")
     .replace(/^i need to\s+/i, "")
     .replace(/^let me\s+/i, "");
@@ -57,4 +57,19 @@ export function deriveReasoningPreview(detail: string, toolCount = 0) {
   const detailBudget = Math.max(0, 120 - toolSummary.length - separator.length);
   const detailPreview = detailBudget > 0 ? reasoningPreviewLabel(previewSource, detailBudget) : "";
   return `${detailPreview}${separator}${toolSummary}`.trim();
+}
+
+/**
+ * Returns one immutable preview for a single reasoning turn. Raw reasoning
+ * deltas arrive token-by-token, so using the newest partial sentence causes
+ * the work rail to visibly rewrite itself on every stream event.
+ */
+export function reasoningCheckpointPreview(detail: string) {
+  const normalized = normalizeReasoningText(detail);
+  if (!normalized) return "";
+
+  const sentence = splitReasoningSentences(normalized).find((candidate) => (
+    /[.?!。！？]$/.test(candidate) && candidate.length >= 12
+  ));
+  return sentence ? reasoningPreviewLabel(sentence, 120) : "";
 }

@@ -129,7 +129,7 @@ describe("aguiReasoningEffort", () => {
 });
 
 describe("AG-UI current work activity", () => {
-  it("uses stable activity snapshots instead of reasoning deltas", () => {
+  it("uses a structured activity snapshot when one is available", () => {
     const events = [
       event({ type: "RUN_STARTED", timestamp: 1_000 }),
       event({ activity: "PREPARING", type: "ACTIVITY_SNAPSHOT", timestamp: 1_001 }),
@@ -157,6 +157,56 @@ describe("AG-UI current work activity", () => {
     const finished = [...events, event({ type: "RUN_FINISHED", timestamp: 3_500 })];
     expect(aguiWorkElapsedMilliseconds(finished, 9_000)).toBe(2_500);
     expect(isAguiRunTerminal(finished)).toBe(true);
+  });
+
+  it("derives one stable checkpoint from raw reasoning when no summary snapshot exists", () => {
+    const events = [
+      event({ type: "RUN_STARTED", timestamp: 1_000 }),
+      event({ activity: "THINKING", type: "ACTIVITY_SNAPSHOT", timestamp: 1_001 }),
+      event({ type: "REASONING_START", timestamp: 1_002 }),
+      event({ type: "REASONING_TEXT_CONTENT", delta: "Inspecting the source code.", timestamp: 1_003 }),
+      event({ type: "REASONING_TEXT_CONTENT", delta: " The next sentence is still streaming", timestamp: 1_004 }),
+    ];
+
+    expect(currentAguiWorkSnapshot(events)).toEqual({
+      activity: "THINKING",
+      summary: "Inspecting the source code.",
+    });
+  });
+
+  it("omits a raw user-request restatement from the checkpoint", () => {
+    const events = [
+      event({ type: "REASONING_START", timestamp: 1_000 }),
+      event({
+        type: "REASONING_TEXT_CONTENT",
+        delta: "The user is saying the task needs to continue. Reviewing the incomplete files.",
+        timestamp: 1_001,
+      }),
+    ];
+
+    expect(currentAguiWorkSnapshot(events)).toEqual({
+      activity: "THINKING",
+      summary: "Reviewing the incomplete files.",
+    });
+  });
+
+  it("replaces the raw checkpoint only when a new reasoning turn begins", () => {
+    const firstTurn = [
+      event({ type: "REASONING_START", timestamp: 1_000 }),
+      event({ type: "REASONING_TEXT_CONTENT", delta: "Inspecting the source code.", timestamp: 1_001 }),
+      event({ type: "REASONING_END", timestamp: 1_002 }),
+    ];
+    const secondTurn = [
+      ...firstTurn,
+      event({ type: "REASONING_START", timestamp: 1_003 }),
+      event({ type: "REASONING_TEXT_CONTENT", delta: "Planning", timestamp: 1_004 }),
+    ];
+
+    expect(currentAguiWorkSnapshot(firstTurn)).toEqual({
+      activity: "THINKING",
+      summary: "Inspecting the source code.",
+    });
+    expect(currentAguiWorkSnapshot(secondTurn)).toBeNull();
   });
 });
 

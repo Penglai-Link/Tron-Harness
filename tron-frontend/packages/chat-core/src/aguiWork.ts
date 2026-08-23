@@ -1,6 +1,8 @@
+import { reasoningCheckpointPreview } from "./display";
 import {
   aguiEventMillis,
   aguiEventType,
+  buildAguiUserWorkCards,
 } from "./transcript";
 import type { TranscriptAguiEvent } from "./types";
 
@@ -33,6 +35,13 @@ export interface AguiWorkSnapshot {
   summary: string | null;
 }
 
+function currentReasoningCheckpoint(events: TranscriptAguiEvent[]) {
+  const reasoningCards = buildAguiUserWorkCards(events)
+    .filter((card) => card.kind === "reasoning");
+  const latestReasoning = reasoningCards.at(-1)?.value;
+  return reasoningCheckpointPreview(latestReasoning?.content ?? "");
+}
+
 export function currentAguiWorkSnapshot(events: TranscriptAguiEvent[]): AguiWorkSnapshot | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
@@ -42,10 +51,15 @@ export function currentAguiWorkSnapshot(events: TranscriptAguiEvent[]): AguiWork
       const summary = "summary" in event && typeof event.summary === "string"
         ? event.summary.trim()
         : "";
-      return { activity, summary: summary || null };
+      if (summary) return { activity, summary };
+      if (activity === "THINKING") {
+        return { activity, summary: currentReasoningCheckpoint(events) || null };
+      }
+      return { activity, summary: null };
     }
   }
-  return null;
+  const summary = currentReasoningCheckpoint(events);
+  return summary ? { activity: "THINKING", summary } : null;
 }
 
 export function currentAguiWorkActivity(events: TranscriptAguiEvent[]) {

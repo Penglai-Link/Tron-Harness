@@ -936,6 +936,7 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  animation: tron-chat-pulse 1.6s ease-in-out infinite;
 }
 
 .tron-chat__rail-stack {
@@ -1481,5 +1482,6 @@
 
 @media (prefers-reduced-motion: reduce) {
   .tron-chat__user-input-card,
-  .tron-chat__user-input-question { animation: none; }
+  .tron-chat__user-input-question,
+  .tron-chat__rail-current-text { animation: none; }
 }
