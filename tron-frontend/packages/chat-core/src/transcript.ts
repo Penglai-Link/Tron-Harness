@@ -478,7 +478,19 @@ export function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserW
       return;
     }
     if (type === "REASONING_MESSAGE_START") {
-      ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
+      const activeCard = activeReasoningCard(
+        reasoningCards,
+        activeReasoningCardIdsByRun,
+        event,
+      );
+      ensureReasoningCard(
+        reasoningCards,
+        activeReasoningCardIdsByRun,
+        latestReasoningCardIdsByRun,
+        reasoningSequenceByRun,
+        event,
+        { forceNew: Boolean(activeCard?.ended || activeCard?.content.trim()) },
+      );
       return;
     }
     if (type === "REASONING_MESSAGE_CONTENT") {

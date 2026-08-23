@@ -1332,6 +1332,7 @@ const panelCommonProps = computed(() => ({
   stopLabel: "Stop",
   title: props.config.title || props.floatingTitle,
   userInputLabels: props.config.userInputLabels,
+  workRailLabels: props.config.workRailLabels,
   userInputAnswerPending: userInputAnswerPending.value,
   userInputRequest: userInputRequest.value,
 }));

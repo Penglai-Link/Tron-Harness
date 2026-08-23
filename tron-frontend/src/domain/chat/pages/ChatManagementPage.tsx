@@ -111,6 +111,7 @@ import {
   type ChatQueuedSubmission,
   type ChatSubmitMode,
   type ChatUserInputLabels,
+  type ChatWorkRailLabels,
 } from "@tron/chat-core";
 import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
 import {
@@ -3867,6 +3868,12 @@ export function ChatManagementPage() {
     otherAnswerPlaceholder: t("chat.userInput.otherAnswerPlaceholder"),
     otherAnswerAriaLabel: (index) => t("chat.userInput.otherAnswerAriaLabel", { index }),
   }), [i18n.language, t]);
+  const workRailLabels = useMemo<ChatWorkRailLabels>(() => ({
+    ariaLabel: t("chat.workRail.ariaLabel"),
+    thinking: t("chat.workRail.thinking"),
+    workedFor: (duration) => t("chat.workRail.workedFor", { duration }),
+    workingFor: (duration) => t("chat.workRail.workingFor", { duration }),
+  }), [i18n.language, t]);
   const { session: authSession } = useAuthSession();
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -6247,6 +6254,7 @@ export function ChatManagementPage() {
           steerDisabled={steerDisabled}
           title={activeSession?.title ?? "Chat Management"}
           userInputLabels={userInputLabels}
+          workRailLabels={workRailLabels}
           userInputAnswerPending={userInputAnswerPending}
           userInputRequest={userInputRequest}
         />

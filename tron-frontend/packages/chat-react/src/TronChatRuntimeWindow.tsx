@@ -1266,6 +1266,7 @@ export function TronChatRuntimeWindow({
       steerDisabled={steerDisabled || Boolean(userInputRequest)}
       title={config.title || floatingTitle}
       userInputLabels={config.userInputLabels}
+      workRailLabels={config.workRailLabels}
       userInputAnswerPending={userInputAnswerPending}
       userInputRequest={userInputRequest}
       onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
@@ -1314,6 +1315,7 @@ export function TronChatRuntimeWindow({
         title={floatingTitle}
         titleSubtitle={floatingSubtitle}
         userInputLabels={config.userInputLabels}
+        workRailLabels={config.workRailLabels}
         userInputAnswerPending={userInputAnswerPending}
         userInputRequest={userInputRequest}
         onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}

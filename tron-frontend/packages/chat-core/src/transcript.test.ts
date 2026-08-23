@@ -7,6 +7,11 @@ import {
   isRecentPendingUserTurn,
   openAguiProtocolRunCodes,
 } from "./transcript";
+import {
+  aguiWorkElapsedMilliseconds,
+  currentAguiWorkSummary,
+  isAguiRunTerminal,
+} from "./aguiWork";
 import type {
   ChatAguiStreamEvent,
   ChatMessage,
@@ -119,6 +124,35 @@ describe("aguiReasoningEffort", () => {
 
   it("does not invent an effort for legacy runs", () => {
     expect(aguiReasoningEffort([event({ type: "RUN_STARTED" })])).toBeNull();
+  });
+});
+
+describe("AG-UI current work summary", () => {
+  it("refreshes one summary slot and replaces it for a new reasoning message", () => {
+    const events = [
+      event({ type: "RUN_STARTED", timestamp: 1_000 }),
+      event({ type: "REASONING_MESSAGE_START", messageId: "reasoning-1", timestamp: 1_001 }),
+      event({ type: "REASONING_MESSAGE_CONTENT", delta: "Reviewing the repository.", messageId: "reasoning-1", timestamp: 1_002 }),
+      event({ type: "REASONING_MESSAGE_END", messageId: "reasoning-1", timestamp: 1_003 }),
+      event({ type: "REASONING_MESSAGE_START", messageId: "reasoning-2", timestamp: 1_004 }),
+      event({ type: "REASONING_MESSAGE_CONTENT", delta: "Preparing the implementation plan.", messageId: "reasoning-2", timestamp: 1_005 }),
+    ];
+
+    expect(currentAguiWorkSummary(events)).toBe("Preparing the implementation plan.");
+    expect(
+      buildAguiUserWorkCards(events)
+        .filter((card) => card.kind === "reasoning")
+        .map((card) => card.value.content),
+    ).toEqual([
+      "Reviewing the repository.",
+      "Preparing the implementation plan.",
+    ]);
+    expect(aguiWorkElapsedMilliseconds(events, 3_005)).toBe(2_005);
+    expect(isAguiRunTerminal(events)).toBe(false);
+
+    const finished = [...events, event({ type: "RUN_FINISHED", timestamp: 3_500 })];
+    expect(aguiWorkElapsedMilliseconds(finished, 9_000)).toBe(2_500);
+    expect(isAguiRunTerminal(finished)).toBe(true);
   });
 });
 

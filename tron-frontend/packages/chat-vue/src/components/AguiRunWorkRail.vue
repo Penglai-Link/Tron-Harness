@@ -1,10 +1,14 @@
 <script setup lang="ts">
-import { ChevronDown, ChevronRight } from "lucide-vue-next";
-import { computed, ref, watch } from "vue";
+import { BrainCircuit, ChevronDown, ChevronRight } from "lucide-vue-next";
+import { computed, onBeforeUnmount, ref, watch } from "vue";
 import {
+  aguiWorkElapsedMilliseconds,
   aguiReasoningEffort,
   buildAguiUserWorkCards,
+  currentAguiWorkSummary,
+  isAguiRunTerminal,
   type TranscriptAguiEvent,
+  type ChatWorkRailLabels,
 } from "@tron/chat-core";
 import ReasoningCard from "./ReasoningCard.vue";
 import ToolGroupCard from "./ToolGroupCard.vue";
@@ -13,10 +17,19 @@ import ToolCard from "./ToolCard.vue";
 const props = withDefaults(defineProps<{
   debugEvents?: string[];
   events?: TranscriptAguiEvent[];
+  labels?: ChatWorkRailLabels;
 }>(), {
   debugEvents: () => [],
   events: () => [],
+  labels: undefined,
 });
+
+const defaultLabels: ChatWorkRailLabels = {
+  ariaLabel: "Agent work",
+  thinking: "Thinking…",
+  workedFor: (duration) => `Worked for ${duration}`,
+  workingFor: (duration) => `Working for ${duration}`,
+};
 
 function formatAguiDuration(milliseconds: number) {
   if (milliseconds < 1000) return "<1s";
@@ -30,52 +43,60 @@ function formatAguiDuration(milliseconds: number) {
   return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
-function aguiWorkDuration(events: TranscriptAguiEvent[]) {
-  const times = events
-    .map((ev) => ("timestamp" in ev && typeof ev.timestamp === "number" ? ev.timestamp : null))
-    .filter((v): v is number => typeof v === "number");
-  if (times.length < 2) return "<1s";
-  return formatAguiDuration(Math.max(...times) - Math.min(...times));
-}
-
-function terminalAguiEvent(events: TranscriptAguiEvent[]) {
-  for (let i = events.length - 1; i >= 0; i -= 1) {
-    const normalized = String(events[i]?.type ?? "").toUpperCase();
-    if (normalized.includes("RUN_FINISHED") || normalized.includes("RUN_ERROR")) return events[i];
-  }
-  return null;
-}
-
 const userCards = computed(() => buildAguiUserWorkCards(props.events));
 const reasoningEffort = computed(() => aguiReasoningEffort(props.events));
-const terminalEvent = computed(() => terminalAguiEvent(props.events));
+const terminalEvent = computed(() => isAguiRunTerminal(props.events));
 const expanded = ref(false);
+const now = ref(Date.now());
+const labels = computed(() => props.labels ?? defaultLabels);
+const duration = computed(() => formatAguiDuration(aguiWorkElapsedMilliseconds(props.events, now.value)));
+const currentSummary = computed(() => currentAguiWorkSummary(props.events) || labels.value.thinking);
+let timer: ReturnType<typeof setInterval> | undefined;
+
+watch(terminalEvent, (completed) => {
+  if (timer) clearInterval(timer);
+  if (completed) {
+    expanded.value = false;
+    return;
+  }
+  now.value = Date.now();
+  timer = setInterval(() => {
+    now.value = Date.now();
+  }, 1_000);
+}, { immediate: true });
+
+onBeforeUnmount(() => {
+  if (timer) clearInterval(timer);
+});
 </script>
 
 <template>
   <section
-    v-if="userCards.length || props.debugEvents.length"
-    aria-label="AG-UI run work"
+    v-if="props.events.length || userCards.length || props.debugEvents.length"
+    :aria-label="labels.ariaLabel"
     class="tron-chat__rail"
   >
     <button
-      v-if="terminalEvent"
       :aria-expanded="expanded"
       class="tron-chat__rail-summary"
       type="button"
       @click="expanded = !expanded"
     >
       <span class="tron-chat__rail-summary-label">
-        Worked for {{ aguiWorkDuration(props.events) }}
+        {{ terminalEvent ? labels.workedFor(duration) : labels.workingFor(duration) }}
         <span v-if="reasoningEffort"> · {{ reasoningEffort }}</span>
       </span>
       <ChevronDown v-if="expanded" :size="14" />
       <ChevronRight v-else :size="14" />
     </button>
+    <div v-if="!terminalEvent" aria-live="polite" class="tron-chat__rail-current">
+      <BrainCircuit class="tron-chat__rail-current-icon animate-pulse" :size="15" />
+      <span class="tron-chat__rail-current-text">{{ currentSummary }}</span>
+    </div>
     <div
-      v-if="!terminalEvent || expanded"
+      v-if="expanded"
       class="tron-chat__rail-stack"
-      :style="{ marginTop: terminalEvent ? '8px' : '0' }"
+      :style="{ marginTop: '8px' }"
     >
       <section
         v-if="userCards.length"

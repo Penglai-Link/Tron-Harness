@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import type {
+  ChatAguiStreamEvent,
   ChatQueuedSubmission,
   ChatSession,
 } from "@tron/chat-core";
@@ -72,6 +73,55 @@ function queuedSubmission(
 }
 
 describe("TronChatPanel submit controls", () => {
+  it("shows one refreshing work summary while running and auto-collapses when complete", () => {
+    const startedAt = Date.now() - 2_000;
+    const messages = [{
+      actor: "User",
+      channel: "MAIN_AGENT",
+      content: "Inspect the implementation",
+      createdAt: new Date(startedAt).toISOString(),
+      id: 1,
+      messageCode: "MSG-USER",
+      role: "USER" as const,
+      sessionCode: "SESSION-1",
+    }];
+    const activeEvents: ChatAguiStreamEvent[] = [
+      { runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt, type: "RUN_STARTED" },
+      { messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 1, type: "REASONING_MESSAGE_START" },
+      { delta: "Inspecting the implementation.", messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 2, type: "REASONING_MESSAGE_CONTENT" },
+    ];
+    const panelProps = {
+      draft: "Follow up",
+      messages,
+      onDraftChange: () => undefined,
+      onSend: () => undefined,
+      session: activeSession(),
+      showHeader: false,
+    };
+    const { rerender } = render(<TronChatPanel {...panelProps} protocolEvents={activeEvents} />);
+
+    const summaryButton = screen.getByRole("button", { name: /Working for/ });
+    expect(screen.getByText("Inspecting the implementation.")).toBeTruthy();
+    fireEvent.click(summaryButton);
+    expect(summaryButton.getAttribute("aria-expanded")).toBe("true");
+
+    rerender(
+      <TronChatPanel
+        {...panelProps}
+        protocolEvents={[
+          ...activeEvents,
+          { runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 3_000, type: "RUN_FINISHED" },
+        ]}
+      />,
+    );
+
+    const completedButton = screen.getByRole("button", { name: /Worked for/ });
+    expect(completedButton.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByText("Inspecting the implementation.")).toBeNull();
+    fireEvent.click(completedButton);
+    expect(completedButton.getAttribute("aria-expanded")).toBe("true");
+  });
+
   it("submits the idle draft while preserving Shift+Enter and IME composition", () => {
     const onDraftChange = vi.fn();
     const onSend = vi.fn();

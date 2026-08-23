@@ -169,6 +169,13 @@ export interface ChatUserInputLabels {
   otherAnswerAriaLabel: (index: number) => string;
 }
 
+export interface ChatWorkRailLabels {
+  ariaLabel: string;
+  thinking: string;
+  workedFor: (duration: string) => string;
+  workingFor: (duration: string) => string;
+}
+
 export interface SendChatMessageInput {
   content: string;
   workspaceCode: string;
@@ -383,6 +390,7 @@ export interface ChatClientConfig {
   userCode?: string;
   userId?: string;
   variables?: unknown;
+  workRailLabels?: ChatWorkRailLabels;
   workspaceCode?: string;
 }
 

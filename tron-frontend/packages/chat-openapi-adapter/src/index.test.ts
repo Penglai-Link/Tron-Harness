@@ -217,6 +217,65 @@ describe("createOpenApiChatAdapter", () => {
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
   });
 
+  it("forwards reasoning summary deltas to AG-UI consumers", async () => {
+    const streamPayload = [
+      {
+        delta: "Inspecting the current implementation.",
+        messageId: "reasoning-1",
+        runId: "RUN-1",
+        threadId: "SESSION-1",
+        type: "REASONING_MESSAGE_CONTENT",
+      },
+      {
+        result: {
+          messages: [],
+          run: {
+            finalOutput: "done",
+            runCode: "RUN-1",
+            status: "COMPLETED",
+            stepCount: 1,
+            workspaceCode: "TRON_CORE",
+          },
+          session: sessionFixture(),
+        } satisfies ChatSendResult,
+        type: "RUN_FINISHED",
+      },
+    ];
+    const stream = new ReadableStream({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(
+          streamPayload.map((payload) => `data: ${JSON.stringify(payload)}\n\n`).join(""),
+        ));
+        controller.close();
+      },
+    });
+    globalThis.fetch = vi.fn(async () => new Response(stream, {
+      headers: { "Content-Type": "text/event-stream" },
+      status: 200,
+    })) as typeof fetch;
+    const onAguiEvent = vi.fn();
+    const adapter = createOpenApiChatAdapter({
+      appKey: "secret-key-123",
+      baseUrl: "https://openapi.example.com",
+      nonceFactory: () => "summarynonce",
+      openAppCode: "OPENAPP-TEST-0001",
+      timestampFactory: () => 1718100006,
+      userCode: "USR-0001",
+    });
+
+    await adapter.streamMessage(
+      sessionFixture(),
+      { content: "hello", workspaceCode: "TRON_CORE" },
+      { onAguiEvent },
+    );
+
+    expect(onAguiEvent).toHaveBeenCalledWith(expect.objectContaining({
+      delta: "Inspecting the current implementation.",
+      messageId: "reasoning-1",
+      type: "REASONING_MESSAGE_CONTENT",
+    }));
+  });
+
   it("signs the user-input answer stream and uses the dedicated endpoint", async () => {
     const stream = new ReadableStream({
       start(controller) {

@@ -589,6 +589,12 @@ export const pages = {
       otherAnswerPlaceholder: "输入你的答案",
       otherAnswerAriaLabel: "第 {{index}} 题的其他答案",
     },
+    workRail: {
+      ariaLabel: "智能体工作过程",
+      thinking: "正在思考…",
+      workedFor: "已工作 {{duration}}",
+      workingFor: "正在工作 {{duration}}",
+    },
     shortTermMemory: {
       workspace: "执行",
       context: "上下文",

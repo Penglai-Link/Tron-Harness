@@ -12,6 +12,7 @@ import type {
   ChatUserInputAnswer,
   ChatUserInputLabels,
   ChatUserInputRequest,
+  ChatWorkRailLabels,
 } from "@tron/chat-core";
 
 export interface TronChatPanelProps {
@@ -51,6 +52,7 @@ export interface TronChatPanelProps {
   stopLabel?: string;
   title?: string;
   userInputLabels?: ChatUserInputLabels;
+  workRailLabels?: ChatWorkRailLabels;
   userInputRequest?: ChatUserInputRequest | null;
   userInputAnswerPending?: boolean;
   onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;

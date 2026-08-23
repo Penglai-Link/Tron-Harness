@@ -589,6 +589,12 @@ export const pages = {
       otherAnswerPlaceholder: "Type your answer",
       otherAnswerAriaLabel: "Other answer for question {{index}}",
     },
+    workRail: {
+      ariaLabel: "Agent work",
+      thinking: "Thinking…",
+      workedFor: "Worked for {{duration}}",
+      workingFor: "Working for {{duration}}",
+    },
     shortTermMemory: {
       workspace: "Execution",
       context: "Context",

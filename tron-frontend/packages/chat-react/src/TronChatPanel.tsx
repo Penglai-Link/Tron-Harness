@@ -17,12 +17,12 @@ import {
   X,
 } from "lucide-react";
 import {
-  aguiEventMillis,
   aguiEventRunCode,
-  aguiEventType,
+  aguiWorkElapsedMilliseconds,
   aguiReasoningEffort,
   buildAguiUserWorkCards,
   buildTranscriptPresentation,
+  currentAguiWorkSummary,
   describeDebugEvent,
   deriveReasoningPreview,
   formatJsonBlockValue,
@@ -40,6 +40,7 @@ import {
   type ChatUserInputAnswer,
   type ChatUserInputLabels,
   type ChatUserInputRequest,
+  type ChatWorkRailLabels,
   type ChatSubmitMode,
   type ToolGroupWorkCard,
   type ToolWorkCard,
@@ -323,23 +324,6 @@ function formatAguiDuration(milliseconds: number) {
   return minutes ? `${hours}h ${minutes}m` : `${hours}h`;
 }
 
-function aguiWorkDuration(events: ChatAguiStreamEvent[]) {
-  const times = events
-    .map(aguiEventMillis)
-    .filter((value): value is number => typeof value === "number");
-  if (times.length < 2) return "<1s";
-  return formatAguiDuration(Math.max(...times) - Math.min(...times));
-}
-
-function terminalAguiEvent(events: ChatAguiStreamEvent[]) {
-  for (let index = events.length - 1; index >= 0; index -= 1) {
-    const normalized = aguiEventType(events[index]).toUpperCase();
-    if (normalized.includes("RUN_FINISHED") || normalized.includes("RUN_ERROR"))
-      return events[index];
-  }
-  return null;
-}
-
 function latestAguiRunCode(events: ChatAguiStreamEvent[]) {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const runCode = aguiEventRunCode(events[index]);
@@ -347,6 +331,13 @@ function latestAguiRunCode(events: ChatAguiStreamEvent[]) {
   }
   return "";
 }
+
+const defaultWorkRailLabels: ChatWorkRailLabels = {
+  ariaLabel: "Agent work",
+  thinking: "Thinking…",
+  workedFor: (duration) => `Worked for ${duration}`,
+  workingFor: (duration) => `Working for ${duration}`,
+};
 
 interface TerminalWorkSummary {
   duration: string;
@@ -673,17 +664,22 @@ function ReasoningCard({
 function AguiRunWorkRail({
   debugEvents,
   events,
+  labels = defaultWorkRailLabels,
 }: {
   debugEvents: string[];
   events: ChatAguiStreamEvent[];
+  labels?: ChatWorkRailLabels;
 }) {
   const userCards = useMemo(() => buildAguiUserWorkCards(events), [events]);
   const reasoningEffort = useMemo(() => aguiReasoningEffort(events), [events]);
-  const terminalEvent = useMemo(() => terminalAguiEvent(events), [events]);
+  const terminalEvent = useMemo(() => events.findLast((event) => {
+    const type = String(event.type ?? "").toUpperCase();
+    return type.includes("RUN_FINISHED") || type.includes("RUN_ERROR");
+  }) ?? null, [events]);
   const terminalSummary = useMemo<TerminalWorkSummary | null>(() => {
     if (!terminalEvent) return null;
     return {
-      duration: aguiWorkDuration(events),
+      duration: formatAguiDuration(aguiWorkElapsedMilliseconds(events)),
       runCode: aguiEventRunCode(terminalEvent),
     };
   }, [events, terminalEvent]);
@@ -695,29 +691,53 @@ function AguiRunWorkRail({
       ? latestTerminalSummaryRef.current
       : null);
   const [expanded, setExpanded] = useState(false);
+  const [now, setNow] = useState(() => Date.now());
+  const completed = Boolean(displayedTerminalSummary);
+  const duration = completed
+    ? displayedTerminalSummary?.duration ?? "<1s"
+    : formatAguiDuration(aguiWorkElapsedMilliseconds(events, now));
+  const currentSummary = useMemo(
+    () => currentAguiWorkSummary(events) || labels.thinking,
+    [events, labels.thinking],
+  );
 
-  if (!displayedTerminalSummary && !userCards.length && !debugEvents.length)
+  useEffect(() => {
+    if (completed) return;
+    setNow(Date.now());
+    const timer = window.setInterval(() => setNow(Date.now()), 1_000);
+    return () => window.clearInterval(timer);
+  }, [completed]);
+
+  useEffect(() => {
+    if (completed) setExpanded(false);
+  }, [completed]);
+
+  if (!displayedTerminalSummary && !events.length && !userCards.length && !debugEvents.length)
     return null;
   return (
-    <section className="tron-chat__rail" aria-label="AG-UI run work">
-      {displayedTerminalSummary || userCards.length || debugEvents.length ? (
-        <button
-          className="tron-chat__rail-summary"
-          type="button"
-          aria-expanded={expanded}
-          onClick={() => setExpanded((value) => !value)}
-        >
-          <span className="tron-chat__rail-summary-label">
-            <span>{`Worked for ${aguiWorkDuration(events)}`}</span>
-            {reasoningEffort ? <span>{` · ${reasoningEffort}`}</span> : null}
-          </span>
-          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-        </button>
+    <section className="tron-chat__rail" aria-label={labels.ariaLabel}>
+      <button
+        className="tron-chat__rail-summary"
+        type="button"
+        aria-expanded={expanded}
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span className="tron-chat__rail-summary-label">
+          <span>{completed ? labels.workedFor(duration) : labels.workingFor(duration)}</span>
+          {reasoningEffort ? <span>{` · ${reasoningEffort}`}</span> : null}
+        </span>
+        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+      </button>
+      {!completed ? (
+        <div className="tron-chat__rail-current" aria-live="polite">
+          <BrainCircuit className="tron-chat__rail-current-icon animate-pulse" size={15} />
+          <span className="tron-chat__rail-current-text">{currentSummary}</span>
+        </div>
       ) : null}
       {expanded ? (
         <div
           className="tron-chat__rail-stack"
-          style={{ marginTop: displayedTerminalSummary || userCards.length || debugEvents.length ? 8 : 0 }}
+          style={{ marginTop: 8 }}
         >
           {userCards.length ? (
             <section
@@ -822,6 +842,7 @@ export interface TronChatPanelProps {
   stopLabel?: string;
   title?: string;
   userInputLabels?: ChatUserInputLabels;
+  workRailLabels?: ChatWorkRailLabels;
   userInputRequest?: ChatUserInputRequest | null;
   userInputAnswerPending?: boolean;
   onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;
@@ -872,6 +893,7 @@ export function TronChatPanel({
   stopLabel = "Stop",
   title,
   userInputLabels,
+  workRailLabels,
   userInputRequest,
   userInputAnswerPending = false,
   onAnswerUserInput,
@@ -1084,6 +1106,7 @@ export function TronChatPanel({
                                 ).map(describeDebugEvent)}
                                 events={run.events as ChatAguiStreamEvent[]}
                                 key={run.runCode}
+                                labels={workRailLabels}
                               />
                             ))
                             : null}

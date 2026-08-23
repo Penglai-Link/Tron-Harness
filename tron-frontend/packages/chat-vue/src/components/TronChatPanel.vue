@@ -47,6 +47,7 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
   stopLabel: "Stop",
   title: "",
   userInputLabels: undefined,
+  workRailLabels: undefined,
   userInputRequest: null,
   userInputAnswerPending: false,
   onAnswerUserInput: undefined,
@@ -249,6 +250,7 @@ onMounted(() => {
                   :key="run.runCode"
                   :debug-events="debugEventsForRun(run.runCode)"
                   :events="run.events"
+                  :labels="props.workRailLabels"
                 />
               </template>
             </template>
