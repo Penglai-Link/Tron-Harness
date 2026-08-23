@@ -22,7 +22,7 @@ import {
   aguiReasoningEffort,
   buildAguiUserWorkCards,
   buildTranscriptPresentation,
-  currentAguiWorkActivity,
+  currentAguiWorkSnapshot,
   describeDebugEvent,
   deriveReasoningPreview,
   formatJsonBlockValue,
@@ -699,7 +699,9 @@ function AguiRunWorkRail({
     ? displayedTerminalSummary?.duration ?? "<1s"
     : formatAguiDuration(aguiWorkElapsedMilliseconds(events, now));
   const currentSummary = useMemo(() => {
-    const activity = currentAguiWorkActivity(events);
+    const snapshot = currentAguiWorkSnapshot(events);
+    if (snapshot?.summary) return snapshot.summary;
+    const activity = snapshot?.activity;
     if (activity === "PREPARING") return labels.preparing;
     if (activity === "RESPONDING") return labels.responding;
     return labels.thinking;

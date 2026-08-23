@@ -87,7 +87,7 @@ describe("TronChatPanel submit controls", () => {
     }];
     const activeEvents: ChatAguiStreamEvent[] = [
       { runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt, type: "RUN_STARTED" },
-      { activity: "THINKING", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 1, type: "ACTIVITY_SNAPSHOT" },
+      { activity: "THINKING", runId: "RUN-1", summary: "Inspecting the implementation plan.", threadId: "SESSION-1", timestamp: startedAt + 1, type: "ACTIVITY_SNAPSHOT" },
       { messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 2, type: "REASONING_MESSAGE_START" },
       { delta: "Inspecting the implementation.", messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 3, type: "REASONING_MESSAGE_CONTENT" },
     ];
@@ -102,7 +102,7 @@ describe("TronChatPanel submit controls", () => {
     const { rerender } = render(<TronChatPanel {...panelProps} protocolEvents={activeEvents} />);
 
     const summaryButton = screen.getByRole("button", { name: /Working for/ });
-    expect(screen.getByText("Thinking…")).toBeTruthy();
+    expect(screen.getByText("Inspecting the implementation plan.")).toBeTruthy();
     fireEvent.click(summaryButton);
     expect(summaryButton.getAttribute("aria-expanded")).toBe("true");
 
@@ -118,7 +118,7 @@ describe("TronChatPanel submit controls", () => {
 
     const completedButton = screen.getByRole("button", { name: /Worked for/ });
     expect(completedButton.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByText("Thinking…")).toBeNull();
+    expect(screen.queryByText("Inspecting the implementation plan.")).toBeNull();
     fireEvent.click(completedButton);
     expect(completedButton.getAttribute("aria-expanded")).toBe("true");
   });

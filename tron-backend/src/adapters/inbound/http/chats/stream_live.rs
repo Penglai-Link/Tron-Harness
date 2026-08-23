@@ -105,6 +105,9 @@ pub(crate) struct SystemAgentLiveEventBuilder {
     text_started: bool,
     reasoning_message_id: String,
     reasoning_raw_message_id: String,
+    reasoning_fallback: String,
+    reasoning_summary: String,
+    reasoning_summary_snapshot: String,
     run_code: String,
     text_message_id: String,
 }
@@ -122,6 +125,9 @@ impl SystemAgentLiveEventBuilder {
             text_started: false,
             reasoning_message_id: format!("{run_code}-reasoning"),
             reasoning_raw_message_id: format!("{run_code}-reasoning-raw"),
+            reasoning_fallback: String::new(),
+            reasoning_summary: String::new(),
+            reasoning_summary_snapshot: String::new(),
             run_code: run_code.to_string(),
             text_message_id: format!("{run_code}-assistant"),
         }
@@ -146,7 +152,7 @@ impl SystemAgentLiveEventBuilder {
                     "timestamp": current_stream_timestamp(),
                 }),
             ),
-            self.activity_snapshot_payload("PREPARING"),
+            self.activity_snapshot_payload("PREPARING", None),
         ]
     }
 
@@ -196,7 +202,7 @@ impl SystemAgentLiveEventBuilder {
         if !self.reasoning_started {
             self.reasoning_started = true;
             payloads.extend(self.start());
-            payloads.push(self.activity_snapshot_payload("THINKING"));
+            payloads.push(self.activity_snapshot_payload("THINKING", None));
             payloads.push(SystemAgentLiveProtocolEvent::new(
                 "REASONING_START",
                 json!({
@@ -238,6 +244,14 @@ impl SystemAgentLiveEventBuilder {
                         "timestamp": current_stream_timestamp(),
                     }),
                 ));
+                self.reasoning_fallback.push_str(&delta);
+                if self.reasoning_summary.trim().is_empty()
+                    && let Some(summary) = stable_reasoning_summary(&self.reasoning_fallback)
+                    && summary != self.reasoning_summary_snapshot
+                {
+                    self.reasoning_summary_snapshot = summary.clone();
+                    payloads.push(self.activity_snapshot_payload("THINKING", Some(&summary)));
+                }
             }
             ModelStreamEventKind::ReasoningSummary => {
                 payloads.push(SystemAgentLiveProtocolEvent::new(
@@ -251,6 +265,13 @@ impl SystemAgentLiveEventBuilder {
                         "timestamp": current_stream_timestamp(),
                     }),
                 ));
+                self.reasoning_summary.push_str(&delta);
+                if let Some(summary) = stable_reasoning_summary(&self.reasoning_summary)
+                    && summary != self.reasoning_summary_snapshot
+                {
+                    self.reasoning_summary_snapshot = summary.clone();
+                    payloads.push(self.activity_snapshot_payload("THINKING", Some(&summary)));
+                }
             }
             ModelStreamEventKind::Text => {}
         }
@@ -265,7 +286,7 @@ impl SystemAgentLiveEventBuilder {
         if !self.text_started {
             self.text_started = true;
             payloads.extend(self.start());
-            payloads.push(self.activity_snapshot_payload("RESPONDING"));
+            payloads.push(self.activity_snapshot_payload("RESPONDING", None));
             payloads.push(SystemAgentLiveProtocolEvent::new(
                 "TEXT_MESSAGE_START",
                 json!({
@@ -295,7 +316,11 @@ impl SystemAgentLiveEventBuilder {
         payloads
     }
 
-    fn activity_snapshot_payload(&self, activity: &str) -> SystemAgentLiveProtocolEvent {
+    fn activity_snapshot_payload(
+        &self,
+        activity: &str,
+        summary: Option<&str>,
+    ) -> SystemAgentLiveProtocolEvent {
         SystemAgentLiveProtocolEvent::new(
             "ACTIVITY_SNAPSHOT",
             json!({
@@ -303,6 +328,7 @@ impl SystemAgentLiveEventBuilder {
                 "threadId": self.stream_key,
                 "runId": self.run_code,
                 "activity": activity,
+                "summary": summary,
                 "timestamp": current_stream_timestamp(),
             }),
         )
@@ -339,8 +365,46 @@ fn current_stream_timestamp() -> i64 {
     chrono::Utc::now().timestamp_millis()
 }
 
+fn stable_reasoning_summary(content: &str) -> Option<String> {
+    let content = content.trim();
+    if content.is_empty() {
+        return None;
+    }
+
+    let latest_complete_sentence = content
+        .char_indices()
+        .rev()
+        .find(|(_, character)| matches!(character, '.' | '!' | '?' | '。' | '！' | '？'))
+        .map(|(end, _)| {
+            let complete = &content[..=end];
+            let start = complete
+                .char_indices()
+                .rev()
+                .skip(1)
+                .find(|(_, character)| matches!(character, '.' | '!' | '?' | '。' | '！' | '？'))
+                .map_or(0, |(index, character)| index + character.len_utf8());
+            complete[start..].trim()
+        })
+        .filter(|sentence| sentence.chars().count() >= 12)
+        .map(compact_reasoning_summary);
+
+    latest_complete_sentence
+        .or_else(|| (content.chars().count() >= 72).then(|| compact_reasoning_summary(content)))
+}
+
+fn compact_reasoning_summary(content: &str) -> String {
+    const MAX_SUMMARY_CHARS: usize = 160;
+    let mut summary = content.chars().take(MAX_SUMMARY_CHARS).collect::<String>();
+    if content.chars().count() > MAX_SUMMARY_CHARS {
+        summary.push('…');
+    }
+    summary.trim().to_string()
+}
+
 #[cfg(test)]
 mod tests {
+    use crate::domain::agent::{ModelStreamEvent, ModelStreamEventKind};
+
     use super::SystemAgentLiveEventBuilder;
 
     #[test]
@@ -356,5 +420,47 @@ mod tests {
         assert_eq!(text[0].sse_event, "ACTIVITY_SNAPSHOT");
         assert_eq!(text[0].data["activity"], "RESPONDING");
         assert_eq!(text[1].sse_event, "TEXT_MESSAGE_START");
+    }
+
+    #[test]
+    fn snapshots_structured_reasoning_only_after_a_stable_summary_is_available() {
+        let mut builder = SystemAgentLiveEventBuilder::new("SESSION-1", "RUN-1", true);
+        let events = builder.ingest(ModelStreamEvent {
+            kind: ModelStreamEventKind::ReasoningSummary,
+            delta: "Reviewing the implementation plan and its dependencies.".to_string(),
+        });
+
+        let snapshot = events
+            .iter()
+            .find(|event| {
+                event.sse_event == "ACTIVITY_SNAPSHOT" && event.data["summary"].is_string()
+            })
+            .expect("expected a stable reasoning summary snapshot");
+        assert_eq!(snapshot.data["activity"], "THINKING");
+        assert_eq!(
+            snapshot.data["summary"],
+            "Reviewing the implementation plan and its dependencies."
+        );
+    }
+
+    #[test]
+    fn snapshots_raw_reasoning_when_no_structured_summary_is_available() {
+        let mut builder = SystemAgentLiveEventBuilder::new("SESSION-1", "RUN-1", true);
+        let events = builder.ingest(ModelStreamEvent {
+            kind: ModelStreamEventKind::Reasoning,
+            delta: "Checking the required dependencies before implementation.".to_string(),
+        });
+
+        let snapshot = events
+            .iter()
+            .find(|event| {
+                event.sse_event == "ACTIVITY_SNAPSHOT" && event.data["summary"].is_string()
+            })
+            .expect("expected a fallback reasoning summary snapshot");
+        assert_eq!(snapshot.data["activity"], "THINKING");
+        assert_eq!(
+            snapshot.data["summary"],
+            "Checking the required dependencies before implementation."
+        );
     }
 }

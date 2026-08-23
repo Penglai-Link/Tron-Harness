@@ -28,14 +28,26 @@ export function aguiWorkElapsedMilliseconds(
 
 export type AguiWorkActivity = "PREPARING" | "THINKING" | "RESPONDING";
 
-export function currentAguiWorkActivity(events: TranscriptAguiEvent[]): AguiWorkActivity | null {
+export interface AguiWorkSnapshot {
+  activity: AguiWorkActivity;
+  summary: string | null;
+}
+
+export function currentAguiWorkSnapshot(events: TranscriptAguiEvent[]): AguiWorkSnapshot | null {
   for (let index = events.length - 1; index >= 0; index -= 1) {
     const event = events[index];
     if (!event || aguiEventType(event).toUpperCase() !== "ACTIVITY_SNAPSHOT") continue;
     const activity = String(("activity" in event ? event.activity : "") ?? "").toUpperCase();
     if (activity === "PREPARING" || activity === "THINKING" || activity === "RESPONDING") {
-      return activity;
+      const summary = "summary" in event && typeof event.summary === "string"
+        ? event.summary.trim()
+        : "";
+      return { activity, summary: summary || null };
     }
   }
   return null;
+}
+
+export function currentAguiWorkActivity(events: TranscriptAguiEvent[]) {
+  return currentAguiWorkSnapshot(events)?.activity ?? null;
 }

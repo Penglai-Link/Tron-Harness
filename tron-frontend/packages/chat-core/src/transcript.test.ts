@@ -10,6 +10,7 @@ import {
 import {
   aguiWorkElapsedMilliseconds,
   currentAguiWorkActivity,
+  currentAguiWorkSnapshot,
   isAguiRunTerminal,
 } from "./aguiWork";
 import type {
@@ -135,10 +136,14 @@ describe("AG-UI current work activity", () => {
       event({ type: "REASONING_MESSAGE_START", messageId: "reasoning-1", timestamp: 1_002 }),
       event({ type: "REASONING_MESSAGE_CONTENT", delta: "Reviewing the repository.", messageId: "reasoning-1", timestamp: 1_003 }),
       event({ type: "REASONING_MESSAGE_CONTENT", delta: "Preparing the implementation plan.", messageId: "reasoning-1", timestamp: 1_004 }),
-      event({ activity: "THINKING", type: "ACTIVITY_SNAPSHOT", timestamp: 1_005 }),
+      event({ activity: "THINKING", summary: "Preparing the implementation plan.", type: "ACTIVITY_SNAPSHOT", timestamp: 1_005 }),
     ];
 
     expect(currentAguiWorkActivity(events)).toBe("THINKING");
+    expect(currentAguiWorkSnapshot(events)).toEqual({
+      activity: "THINKING",
+      summary: "Preparing the implementation plan.",
+    });
     expect(
       buildAguiUserWorkCards(events)
         .filter((card) => card.kind === "reasoning")

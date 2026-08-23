@@ -5,7 +5,7 @@ import {
   aguiWorkElapsedMilliseconds,
   aguiReasoningEffort,
   buildAguiUserWorkCards,
-  currentAguiWorkActivity,
+  currentAguiWorkSnapshot,
   isAguiRunTerminal,
   type TranscriptAguiEvent,
   type ChatWorkRailLabels,
@@ -53,7 +53,9 @@ const now = ref(Date.now());
 const labels = computed(() => props.labels ?? defaultLabels);
 const duration = computed(() => formatAguiDuration(aguiWorkElapsedMilliseconds(props.events, now.value)));
 const currentSummary = computed(() => {
-  const activity = currentAguiWorkActivity(props.events);
+  const snapshot = currentAguiWorkSnapshot(props.events);
+  if (snapshot?.summary) return snapshot.summary;
+  const activity = snapshot?.activity;
   if (activity === "PREPARING") return labels.value.preparing;
   if (activity === "RESPONDING") return labels.value.responding;
   return labels.value.thinking;
