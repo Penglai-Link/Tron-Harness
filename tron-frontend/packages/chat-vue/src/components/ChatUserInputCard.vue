@@ -60,18 +60,20 @@ function goBack() {
 
 <template>
     <section class="tron-chat__user-input-card" :aria-label="labels.ariaLabel">
+    <div class="tron-chat__user-input-body">
       <p class="tron-chat__user-input-intro">{{ request.intro }}</p>
-    <div class="tron-chat__user-input-progress" aria-live="polite">{{ labels.progress(currentIndex + 1, request.questions.length) }}</div>
-    <fieldset v-if="currentQuestion" :key="currentQuestion.questionCode" class="tron-chat__user-input-question">
-      <legend>{{ currentIndex + 1 }}. {{ currentQuestion.question }}</legend>
-      <div class="tron-chat__user-input-options">
-        <label v-for="option in currentQuestion.options" :key="option.optionCode" class="tron-chat__user-input-option">
-          <input v-model="selected[currentQuestion.questionCode]" :disabled="disabled" :name="currentQuestion.questionCode" type="radio" :value="option.optionCode" />
-          <span><strong>{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionLabel : option.optionCode.startsWith('SKIP-') ? labels.skipOptionLabel : option.label }}</strong><small v-if="option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description">{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description }}</small></span>
-        </label>
-      </div>
-      <textarea v-if="otherSelected" v-model="otherText[currentQuestion.questionCode]" :disabled="disabled" :aria-label="labels.otherAnswerAriaLabel(currentIndex + 1)" maxlength="2000" :placeholder="labels.otherAnswerPlaceholder" />
-    </fieldset>
+      <div class="tron-chat__user-input-progress" aria-live="polite">{{ labels.progress(currentIndex + 1, request.questions.length) }}</div>
+      <fieldset v-if="currentQuestion" :key="currentQuestion.questionCode" class="tron-chat__user-input-question">
+        <legend>{{ currentIndex + 1 }}. {{ currentQuestion.question }}</legend>
+        <div class="tron-chat__user-input-options">
+          <label v-for="option in currentQuestion.options" :key="option.optionCode" class="tron-chat__user-input-option">
+            <input v-model="selected[currentQuestion.questionCode]" :disabled="disabled" :name="currentQuestion.questionCode" type="radio" :value="option.optionCode" />
+            <span><strong>{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionLabel : option.optionCode.startsWith('SKIP-') ? labels.skipOptionLabel : option.label }}</strong><small v-if="option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description">{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description }}</small></span>
+          </label>
+        </div>
+        <textarea v-if="otherSelected" v-model="otherText[currentQuestion.questionCode]" :disabled="disabled" :aria-label="labels.otherAnswerAriaLabel(currentIndex + 1)" maxlength="2000" :placeholder="labels.otherAnswerPlaceholder" />
+      </fieldset>
+    </div>
     <div class="tron-chat__user-input-actions">
       <button class="tron-chat__user-input-back" :disabled="disabled || currentIndex === 0" type="button" @click="goBack">{{ labels.back }}</button>
       <button class="tron-chat__user-input-submit" :disabled="disabled || !complete" type="button" @click="submit">{{ disabled ? labels.continuing : isLastQuestion ? labels.continue : labels.next }}</button>
