@@ -1,13 +1,29 @@
 <script setup lang="ts">
 import { computed, reactive, ref, watch } from "vue";
-import type { ChatUserInputAnswer, ChatUserInputRequest } from "@tron/chat-core";
+import type { ChatUserInputAnswer, ChatUserInputLabels, ChatUserInputRequest } from "@tron/chat-core";
 
-const props = withDefaults(defineProps<{ request: ChatUserInputRequest; disabled?: boolean }>(), { disabled: false });
+const defaultLabels: ChatUserInputLabels = {
+  ariaLabel: "Assistant questions",
+  progress: (current, total) => `Question ${current} of ${total}`,
+  back: "Back",
+  next: "Next",
+  continue: "Continue",
+  continuing: "Continuing…",
+  otherOptionLabel: "Other",
+  otherOptionDescription: "Provide a custom answer.",
+  skipOptionLabel: "Skip",
+  skipOptionDescription: "Skip this question.",
+  otherAnswerPlaceholder: "Type your answer",
+  otherAnswerAriaLabel: (index) => `Other answer for question ${index}`,
+};
+
+const props = withDefaults(defineProps<{ request: ChatUserInputRequest; disabled?: boolean; labels?: ChatUserInputLabels }>(), { disabled: false, labels: undefined });
 const emit = defineEmits<{ submit: [answers: ChatUserInputAnswer[]] }>();
 const currentIndex = ref(0);
 const selected = reactive<Record<string, string>>({});
 const otherText = reactive<Record<string, string>>({});
 const currentQuestion = computed(() => props.request.questions[currentIndex.value]);
+const labels = computed(() => props.labels ?? defaultLabels);
 const selectedCode = computed(() => currentQuestion.value ? selected[currentQuestion.value.questionCode] ?? "" : "");
 const otherSelected = computed(() => selectedCode.value.startsWith("OTHER-"));
 const complete = computed(() => Boolean(selectedCode.value)
@@ -43,22 +59,22 @@ function goBack() {
 </script>
 
 <template>
-  <section class="tron-chat__user-input-card" aria-label="Assistant questions">
-    <p class="tron-chat__user-input-intro">{{ request.intro }}</p>
-    <div class="tron-chat__user-input-progress" aria-live="polite">Question {{ currentIndex + 1 }} of {{ request.questions.length }}</div>
+    <section class="tron-chat__user-input-card" :aria-label="labels.ariaLabel">
+      <p class="tron-chat__user-input-intro">{{ request.intro }}</p>
+    <div class="tron-chat__user-input-progress" aria-live="polite">{{ labels.progress(currentIndex + 1, request.questions.length) }}</div>
     <fieldset v-if="currentQuestion" class="tron-chat__user-input-question">
       <legend>{{ currentIndex + 1 }}. {{ currentQuestion.question }}</legend>
       <div class="tron-chat__user-input-options">
         <label v-for="option in currentQuestion.options" :key="option.optionCode" class="tron-chat__user-input-option">
           <input v-model="selected[currentQuestion.questionCode]" :disabled="disabled" :name="currentQuestion.questionCode" type="radio" :value="option.optionCode" />
-          <span><strong>{{ option.label }}</strong><small v-if="option.description">{{ option.description }}</small></span>
+          <span><strong>{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionLabel : option.optionCode.startsWith('SKIP-') ? labels.skipOptionLabel : option.label }}</strong><small v-if="option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description">{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description }}</small></span>
         </label>
       </div>
-      <textarea v-if="otherSelected" v-model="otherText[currentQuestion.questionCode]" :disabled="disabled" :aria-label="`Other answer for question ${currentIndex + 1}`" maxlength="2000" placeholder="Type your answer" />
+      <textarea v-if="otherSelected" v-model="otherText[currentQuestion.questionCode]" :disabled="disabled" :aria-label="labels.otherAnswerAriaLabel(currentIndex + 1)" maxlength="2000" :placeholder="labels.otherAnswerPlaceholder" />
     </fieldset>
     <div class="tron-chat__user-input-actions">
-      <button class="tron-chat__user-input-back" :disabled="disabled || currentIndex === 0" type="button" @click="goBack">Back</button>
-      <button class="tron-chat__user-input-submit" :disabled="disabled || !complete" type="button" @click="submit">{{ disabled ? "Continuing…" : isLastQuestion ? "Continue" : "Next" }}</button>
+      <button class="tron-chat__user-input-back" :disabled="disabled || currentIndex === 0" type="button" @click="goBack">{{ labels.back }}</button>
+      <button class="tron-chat__user-input-submit" :disabled="disabled || !complete" type="button" @click="submit">{{ disabled ? labels.continuing : isLastQuestion ? labels.continue : labels.next }}</button>
     </div>
   </section>
 </template>

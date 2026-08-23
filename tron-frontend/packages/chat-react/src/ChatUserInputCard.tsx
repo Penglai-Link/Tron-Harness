@@ -1,15 +1,33 @@
 import { useEffect, useState } from "react";
 import type {
   ChatUserInputAnswer,
+  ChatUserInputLabels,
   ChatUserInputRequest,
 } from "@tron/chat-core";
 
+const defaultLabels: ChatUserInputLabels = {
+  ariaLabel: "Assistant questions",
+  progress: (current, total) => `Question ${current} of ${total}`,
+  back: "Back",
+  next: "Next",
+  continue: "Continue",
+  continuing: "Continuing…",
+  otherOptionLabel: "Other",
+  otherOptionDescription: "Provide a custom answer.",
+  skipOptionLabel: "Skip",
+  skipOptionDescription: "Skip this question.",
+  otherAnswerPlaceholder: "Type your answer",
+  otherAnswerAriaLabel: (index) => `Other answer for question ${index}`,
+};
+
 export function ChatUserInputCard({
   disabled = false,
+  labels = defaultLabels,
   onSubmit,
   request,
 }: {
   disabled?: boolean;
+  labels?: ChatUserInputLabels;
   onSubmit: (answers: ChatUserInputAnswer[]) => void;
   request: ChatUserInputRequest;
 }) {
@@ -71,11 +89,23 @@ export function ChatUserInputCard({
 
   if (!question) return null;
 
+  function optionLabel(option: (typeof question.options)[number]) {
+    if (option.optionCode.startsWith("OTHER-")) return labels.otherOptionLabel;
+    if (option.optionCode.startsWith("SKIP-")) return labels.skipOptionLabel;
+    return option.label;
+  }
+
+  function optionDescription(option: (typeof question.options)[number]) {
+    if (option.optionCode.startsWith("OTHER-")) return labels.otherOptionDescription;
+    if (option.optionCode.startsWith("SKIP-")) return labels.skipOptionDescription;
+    return option.description;
+  }
+
   return (
-    <section className="tron-chat__user-input-card" aria-label="Assistant questions">
+    <section className="tron-chat__user-input-card" aria-label={labels.ariaLabel}>
       <p className="tron-chat__user-input-intro">{request.intro}</p>
       <div className="tron-chat__user-input-progress" aria-live="polite">
-        Question {currentIndex + 1} of {request.questions.length}
+        {labels.progress(currentIndex + 1, request.questions.length)}
       </div>
       <fieldset className="tron-chat__user-input-question">
         <legend>{currentIndex + 1}. {question.question}</legend>
@@ -91,18 +121,18 @@ export function ChatUserInputCard({
                 onChange={() => setSelected((current) => ({ ...current, [question.questionCode]: option.optionCode }))}
               />
               <span>
-                <strong>{option.label}</strong>
-                {option.description ? <small>{option.description}</small> : null}
+                <strong>{optionLabel(option)}</strong>
+                {optionDescription(option) ? <small>{optionDescription(option)}</small> : null}
               </span>
             </label>
           ))}
         </div>
         {otherSelected ? (
           <textarea
-            aria-label={`Other answer for question ${currentIndex + 1}`}
+            aria-label={labels.otherAnswerAriaLabel(currentIndex + 1)}
             disabled={disabled}
             maxLength={2000}
-            placeholder="Type your answer"
+            placeholder={labels.otherAnswerPlaceholder}
             value={otherText[question.questionCode] ?? ""}
             onChange={(event) => setOtherText((current) => ({
               ...current,
@@ -118,7 +148,7 @@ export function ChatUserInputCard({
           type="button"
           onClick={goBack}
         >
-          Back
+          {labels.back}
         </button>
         <button
           className="tron-chat__user-input-submit"
@@ -126,7 +156,7 @@ export function ChatUserInputCard({
           type="button"
           onClick={submit}
         >
-          {disabled ? "Continuing…" : isLastQuestion ? "Continue" : "Next"}
+          {disabled ? labels.continuing : isLastQuestion ? labels.continue : labels.next}
         </button>
       </div>
     </section>

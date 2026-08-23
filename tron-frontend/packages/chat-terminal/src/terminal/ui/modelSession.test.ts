@@ -55,6 +55,7 @@ describe("renderModelSession agent activity", () => {
       {
         onDraftCommandChange: vi.fn(),
         onExecuteCommand: vi.fn(),
+        onCancelCommandEdit: vi.fn(),
         onRejectCommand: vi.fn(),
         onSaveCommandEdit: vi.fn(),
         onStartEditCommand: vi.fn(),

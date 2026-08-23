@@ -38,6 +38,7 @@ import {
   type ChatRunningSubmitMode,
   type ChatSession,
   type ChatUserInputAnswer,
+  type ChatUserInputLabels,
   type ChatUserInputRequest,
   type ChatSubmitMode,
   type ToolGroupWorkCard,
@@ -820,6 +821,7 @@ export interface TronChatPanelProps {
   steerDisabled?: boolean;
   stopLabel?: string;
   title?: string;
+  userInputLabels?: ChatUserInputLabels;
   userInputRequest?: ChatUserInputRequest | null;
   userInputAnswerPending?: boolean;
   onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;
@@ -869,6 +871,7 @@ export function TronChatPanel({
   steerDisabled = false,
   stopLabel = "Stop",
   title,
+  userInputLabels,
   userInputRequest,
   userInputAnswerPending = false,
   onAnswerUserInput,
@@ -1105,6 +1108,7 @@ export function TronChatPanel({
             {userInputRequest?.status === "Pending" && onAnswerUserInput ? (
               <ChatUserInputCard
                 disabled={userInputAnswerPending}
+                labels={userInputLabels}
                 onSubmit={onAnswerUserInput}
                 request={userInputRequest}
               />

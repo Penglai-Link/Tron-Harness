@@ -154,6 +154,21 @@ export interface ChatUserInputAnswerInput {
   answers: ChatUserInputAnswer[];
 }
 
+export interface ChatUserInputLabels {
+  ariaLabel: string;
+  progress: (current: number, total: number) => string;
+  back: string;
+  next: string;
+  continue: string;
+  continuing: string;
+  otherOptionLabel: string;
+  otherOptionDescription: string;
+  skipOptionLabel: string;
+  skipOptionDescription: string;
+  otherAnswerPlaceholder: string;
+  otherAnswerAriaLabel: (index: number) => string;
+}
+
 export interface SendChatMessageInput {
   content: string;
   workspaceCode: string;
@@ -364,6 +379,7 @@ export interface ChatClientConfig {
   taskCode?: string;
   title?: string;
   tokenPrefix?: string;
+  userInputLabels?: ChatUserInputLabels;
   userCode?: string;
   userId?: string;
   variables?: unknown;

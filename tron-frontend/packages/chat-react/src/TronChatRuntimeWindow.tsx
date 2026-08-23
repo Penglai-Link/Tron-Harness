@@ -1265,6 +1265,7 @@ export function TronChatRuntimeWindow({
       sidebarContent={sidebarContent}
       steerDisabled={steerDisabled || Boolean(userInputRequest)}
       title={config.title || floatingTitle}
+      userInputLabels={config.userInputLabels}
       userInputAnswerPending={userInputAnswerPending}
       userInputRequest={userInputRequest}
       onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
@@ -1312,6 +1313,7 @@ export function TronChatRuntimeWindow({
         storageKey={config.storageKey || "tron.chat.runtime.window"}
         title={floatingTitle}
         titleSubtitle={floatingSubtitle}
+        userInputLabels={config.userInputLabels}
         userInputAnswerPending={userInputAnswerPending}
         userInputRequest={userInputRequest}
         onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}

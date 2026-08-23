@@ -372,6 +372,7 @@ function endResize(event: PointerEvent) {
           :steer-disabled="steerDisabled"
           :stop-label="stopLabel"
           :title="title"
+          :user-input-labels="userInputLabels"
           @create-session="emit('create-session')"
           @new-session="emit('new-session')"
           @draft-change="(v: string) => emit('draft-change', v)"

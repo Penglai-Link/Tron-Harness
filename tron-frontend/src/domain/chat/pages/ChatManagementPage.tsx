@@ -110,6 +110,7 @@ import {
   takeNextQueuedChatSubmission,
   type ChatQueuedSubmission,
   type ChatSubmitMode,
+  type ChatUserInputLabels,
 } from "@tron/chat-core";
 import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
 import {
@@ -3851,7 +3852,21 @@ export function ChatManagementPage() {
   const requestedSourceTab = parseChatSessionSourceTab(currentSearchParams.get("sourceTab"));
   const toast = useToast();
   const openRightSidebar = useOpenRightSidebar();
-  const { t } = useTranslation("pages");
+  const { i18n, t } = useTranslation("pages");
+  const userInputLabels = useMemo<ChatUserInputLabels>(() => ({
+    ariaLabel: t("chat.userInput.ariaLabel"),
+    progress: (current, total) => t("chat.userInput.progress", { current, total }),
+    back: t("chat.userInput.back"),
+    next: t("chat.userInput.next"),
+    continue: t("chat.userInput.continue"),
+    continuing: t("chat.userInput.continuing"),
+    otherOptionLabel: t("chat.userInput.otherOptionLabel"),
+    otherOptionDescription: t("chat.userInput.otherOptionDescription"),
+    skipOptionLabel: t("chat.userInput.skipOptionLabel"),
+    skipOptionDescription: t("chat.userInput.skipOptionDescription"),
+    otherAnswerPlaceholder: t("chat.userInput.otherAnswerPlaceholder"),
+    otherAnswerAriaLabel: (index) => t("chat.userInput.otherAnswerAriaLabel", { index }),
+  }), [i18n.language, t]);
   const { session: authSession } = useAuthSession();
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -6231,6 +6246,7 @@ export function ChatManagementPage() {
           showStop={canStopCurrentRun}
           steerDisabled={steerDisabled}
           title={activeSession?.title ?? "Chat Management"}
+          userInputLabels={userInputLabels}
           userInputAnswerPending={userInputAnswerPending}
           userInputRequest={userInputRequest}
         />

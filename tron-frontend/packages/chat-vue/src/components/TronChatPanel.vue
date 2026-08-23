@@ -46,6 +46,7 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
   steerDisabled: false,
   stopLabel: "Stop",
   title: "",
+  userInputLabels: undefined,
   userInputRequest: null,
   userInputAnswerPending: false,
   onAnswerUserInput: undefined,
@@ -268,6 +269,7 @@ onMounted(() => {
         <ChatUserInputCard
           v-if="props.userInputRequest?.status === 'Pending' && props.onAnswerUserInput"
           :disabled="props.userInputAnswerPending"
+          :labels="props.userInputLabels"
           :request="props.userInputRequest"
           @submit="props.onAnswerUserInput"
         />

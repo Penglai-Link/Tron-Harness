@@ -82,4 +82,31 @@ describe("ChatUserInputCard", () => {
       },
     ]);
   });
+
+  it("uses host-provided labels for localized cards", () => {
+    render(
+      <ChatUserInputCard
+        labels={{
+          ariaLabel: "助手问题",
+          progress: (current, total) => `第 ${current} / ${total} 题`,
+          back: "上一步",
+          next: "下一步",
+          continue: "继续",
+          continuing: "正在继续…",
+          otherOptionLabel: "其他",
+          otherOptionDescription: "提供自定义答案。",
+          skipOptionLabel: "跳过",
+          skipOptionDescription: "跳过此问题。",
+          otherAnswerPlaceholder: "输入你的答案",
+          otherAnswerAriaLabel: (index) => `第 ${index} 题的其他答案`,
+        }}
+        onSubmit={() => undefined}
+        request={request}
+      />,
+    );
+
+    expect(screen.getByRole("region", { name: "助手问题" })).toBeTruthy();
+    expect(screen.getByText("第 1 / 2 题")).toBeTruthy();
+    expect(screen.getByRole("button", { name: "下一步" })).toBeTruthy();
+  });
 });

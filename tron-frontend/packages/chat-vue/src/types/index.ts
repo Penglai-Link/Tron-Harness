@@ -10,6 +10,7 @@ import type {
   ChatSession,
   ChatSubmitMode,
   ChatUserInputAnswer,
+  ChatUserInputLabels,
   ChatUserInputRequest,
 } from "@tron/chat-core";
 
@@ -49,6 +50,7 @@ export interface TronChatPanelProps {
   steerDisabled?: boolean;
   stopLabel?: string;
   title?: string;
+  userInputLabels?: ChatUserInputLabels;
   userInputRequest?: ChatUserInputRequest | null;
   userInputAnswerPending?: boolean;
   onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;

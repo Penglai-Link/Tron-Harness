@@ -1331,6 +1331,7 @@ const panelCommonProps = computed(() => ({
   steerDisabled: steerDisabled.value || Boolean(userInputRequest.value),
   stopLabel: "Stop",
   title: props.config.title || props.floatingTitle,
+  userInputLabels: props.config.userInputLabels,
   userInputAnswerPending: userInputAnswerPending.value,
   userInputRequest: userInputRequest.value,
 }));
