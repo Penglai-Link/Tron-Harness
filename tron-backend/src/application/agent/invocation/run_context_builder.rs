@@ -40,6 +40,11 @@ const MAIN_AGENT_FINAL_OUTPUT_GUIDANCE: &str = r#"Final assistant output contrac
 - Do not repeat reasoning summaries, tool-progress narration, or step-by-step progress in the final answer.
 - Answer with only the final result, concise conclusion, and necessary user-facing evidence such as command results or artifact paths.
 - Do not expose chain-of-thought."#;
+const CHAT_ASK_USER_GUIDANCE: &str = r#"Interactive user-input contract:
+- When the user's answer materially changes the task or a small set of decisions is required before useful work can continue, call `chat.ask_user`.
+- Ask at most three concise questions, each with two to five concrete options. Include an `Other` option only when a free-form answer is useful.
+- After calling `chat.ask_user`, stop the turn and do not continue the work.
+- Do not put those questions in ordinary Markdown as a substitute for the tool call. If no material clarification is needed, answer normally."#;
 
 pub(crate) struct PreparedAgentRun {
     pub run_code: String,
@@ -313,6 +318,12 @@ impl AgentRunContextBuilder {
                 messages.push(AgentMessage::system(guidance));
             }
             messages.push(AgentMessage::system(MAIN_AGENT_FINAL_OUTPUT_GUIDANCE));
+        }
+        if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
+            && requested_conversation_code.is_some()
+            && supports_user_input_requests
+        {
+            messages.push(AgentMessage::system(CHAT_ASK_USER_GUIDANCE));
         }
         if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
             && !tool_exposure.visible_domains.is_empty()
