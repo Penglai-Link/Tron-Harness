@@ -22,10 +22,11 @@ use tron_backend::{
     },
     domain::{
         agent::{
-            AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig, AgentModelProtocol,
-            AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext, EffectiveSkill,
-            EffectiveTool, EffectiveVariable, InProcessTool, ModelRequest, ModelResponse, Tool,
-            ToolCall, ToolError, ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
+            AgentError, AgentExecutionScope, AgentKind, AgentMessage, AgentModelConfig,
+            AgentModelProtocol, AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext,
+            EffectiveSkill, EffectiveTool, EffectiveVariable, InProcessTool, ModelRequest,
+            ModelResponse, Tool, ToolCall, ToolError, ToolExecutionResult, ToolObservation,
+            ToolRegistry, ToolRequest,
         },
         short_term_memory::{
             ShortTermMemoryCompaction, ShortTermMemoryContextEpoch, ShortTermMemoryError,
@@ -1209,6 +1210,101 @@ async fn react_agent_continues_after_tool_execution_failure() {
 }
 
 #[tokio::test]
+async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response() {
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "agent-runtime-empty-final-output",
+        BusRouteClass::Agui,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(102)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::from_tool_calls(vec![ToolCall {
+                call_id: Some("call-write".into()),
+                tool_name: "fs.write_text".into(),
+                input: serde_json::Value::Null,
+                input_error: Some("function arguments are missing".into()),
+            }]),
+            ModelResponse::final_output(""),
+        ])),
+        Arc::new(ToolRegistry::default()),
+        event_bus,
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let error = agent
+        .run(base_context("RUN-EMPTY-FINAL-OUTPUT"))
+        .await
+        .expect_err("an empty final response must fail the run");
+
+    assert!(matches!(
+        error,
+        AgentError::EmptyFinalOutput(message)
+            if message.contains("fs.write_text: tool input is invalid: function arguments are missing")
+    ));
+    assert!(sink.wait_for_len(11, Duration::from_secs(2)));
+    let event_names = sink
+        .events()
+        .into_iter()
+        .map(|event| event.event_name)
+        .collect::<Vec<_>>();
+    assert!(event_names.contains(&"agent.tool.failed".to_string()));
+    assert!(event_names.contains(&"agent.run.failed".to_string()));
+    assert!(!event_names.contains(&"agent.run.completed".to_string()));
+}
+
+#[tokio::test]
+async fn react_agent_allows_empty_successful_tool_observations() {
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new(
+            "query",
+            |request: ToolRequest| {
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: String::new(),
+                })
+            },
+        )))
+        .expect("tool should register");
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_call("query", json!({"keyword": "missing"})),
+            ModelResponse::final_output("No records were found."),
+        ])),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .expect("agent builder should succeed");
+
+    let result = agent
+        .run({
+            let mut context = base_context("RUN-EMPTY-QUERY-RESULT");
+            context.tools.push(EffectiveTool {
+                tool_name: "query".into(),
+                domain_code: None,
+                description: "Query records".into(),
+                input_schema: json!({"type": "object"}),
+                skill_name: Some("planner".into()),
+                required_variable_keys: vec![],
+            });
+            context
+        })
+        .await
+        .expect("an empty successful query result must not fail the run");
+
+    assert_eq!(result.final_output, "No records were found.");
+    assert_eq!(result.observations.len(), 1);
+    assert!(result.observations[0].output.is_empty());
+}
+
+#[tokio::test]
 async fn react_agent_persists_failed_tool_observation_in_short_term_memory() {
     let database_url = temp_database_url("agent-runtime-failed-stm");
     let chat_repository =
@@ -1340,11 +1436,13 @@ async fn react_agent_executes_multiple_tool_calls_in_one_model_turn() {
                     call_id: Some("call-1".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "a"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-2".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "b"}),
+                    input_error: None,
                 },
             ]),
             ModelResponse::final_output("after-tool"),
@@ -1408,11 +1506,13 @@ async fn react_agent_executes_multiple_tool_calls_concurrently_by_default() {
                     call_id: Some("call-1".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "a"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-2".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "b"}),
+                    input_error: None,
                 },
             ]),
             ModelResponse::final_output("after-tool"),
@@ -1472,11 +1572,13 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
                     call_id: Some("call-allowed".into()),
                     tool_name: "echo".into(),
                     input: json!({}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-unauthorized".into()),
                     tool_name: "hidden.tool".into(),
                     input: json!({}),
+                    input_error: None,
                 },
             ]),
             ModelResponse::final_output("recovered after parallel rejection"),
@@ -1538,6 +1640,7 @@ async fn react_agent_executes_single_tool_call_without_parallel_batching() {
                 call_id: Some("call-1".into()),
                 tool_name: "echo".into(),
                 input: json!({"value": "a"}),
+                input_error: None,
             }]),
             ModelResponse::final_output("after-tool"),
         ])),
@@ -1600,21 +1703,25 @@ async fn react_agent_batches_parallel_tool_calls_by_parallel_limit() {
                     call_id: Some("call-1".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "a"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-2".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "b"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-3".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "c"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-4".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "d"}),
+                    input_error: None,
                 },
             ]),
             ModelResponse::final_output("after-tool"),
@@ -1707,11 +1814,13 @@ async fn react_agent_externalizes_parallel_tool_outputs_with_unique_sequences() 
                     call_id: Some("call-1".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "a"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-2".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "b"}),
+                    input_error: None,
                 },
             ]),
             ModelResponse::final_output("after-tool"),
@@ -1819,21 +1928,25 @@ async fn react_agent_executes_remaining_parallel_budget_before_failing() {
                     call_id: Some("call-1".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "a"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-2".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "b"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-3".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "c"}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-4".into()),
                     tool_name: "echo".into(),
                     input: json!({"value": "d"}),
+                    input_error: None,
                 },
             ]),
         ])),
@@ -2033,11 +2146,13 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
                     call_id: Some("call-1".into()),
                     tool_name: "progress".into(),
                     input: json!({"index": 1}),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-2".into()),
                     tool_name: "progress".into(),
                     input: json!({"index": 2}),
+                    input_error: None,
                 },
             ]),
             ModelResponse::final_output("after-progress"),

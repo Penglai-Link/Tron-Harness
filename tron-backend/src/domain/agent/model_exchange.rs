@@ -26,6 +26,8 @@ pub struct ToolCall {
     pub call_id: Option<String>,
     pub tool_name: String,
     pub input: Value,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub input_error: Option<String>,
 }
 
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
@@ -218,6 +220,7 @@ impl ModelResponse {
                 call_id: Some(call_id.into()),
                 tool_name: tool_name.into(),
                 input,
+                input_error: None,
             }],
             None,
             None,
@@ -241,10 +244,17 @@ impl ModelResponse {
         response_id: Option<String>,
     ) -> Self {
         Self::from_assistant(
-            AgentMessage::assistant_tool_calls(
+            AgentMessage::new(
+                "assistant",
                 calls
                     .into_iter()
-                    .map(|call| (call.call_id, call.tool_name, call.input)),
+                    .map(|call| AgentMessagePart::ToolCall {
+                        call_id: call.call_id,
+                        tool_name: call.tool_name,
+                        input: call.input,
+                        input_error: call.input_error,
+                    })
+                    .collect(),
             ),
             ModelFinish::ToolCalls,
             token_usage,
@@ -272,6 +282,7 @@ impl ModelResponse {
                 call_id: None,
                 tool_name: tool_name.into(),
                 input,
+                input_error: None,
             }],
             token_usage,
             response_id,
@@ -303,10 +314,12 @@ impl ModelResponse {
                     call_id,
                     tool_name,
                     input,
+                    input_error,
                 } => Some(ToolCall {
                     call_id: call_id.clone(),
                     tool_name: tool_name.clone(),
                     input: input.clone(),
+                    input_error: input_error.clone(),
                 }),
                 _ => None,
             })
@@ -321,6 +334,7 @@ fn ensure_tool_call_ids(assistant: &mut AgentMessage) {
             call_id,
             tool_name,
             input,
+            ..
         } = part
         {
             let missing = call_id
@@ -451,6 +465,7 @@ pub(crate) fn responses_function_call_item_json(part: &AgentMessagePart) -> Opti
             call_id,
             tool_name,
             input,
+            ..
         } => Some(json!({
             "type": "function_call",
             "call_id": call_id,

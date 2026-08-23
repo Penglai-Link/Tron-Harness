@@ -170,6 +170,7 @@ fn parse_responses_response(body: &Value) -> Option<ModelResponse> {
                     call_id: tool_call.call_id,
                     tool_name: tool_call.tool_name,
                     input: tool_call.input,
+                    input_error: tool_call.input_error,
                 });
                 continue;
             }
@@ -229,19 +230,35 @@ fn parse_responses_tool_call(item: &Value) -> Option<ToolCall> {
                 .or_else(|| item.get("id"))
                 .and_then(Value::as_str)
                 .map(|value| value.to_owned());
-            let raw_arguments = item
-                .get("arguments")
-                .or_else(|| item.get("input"))
-                .and_then(Value::as_str)
-                .unwrap_or("{}");
-            let input = serde_json::from_str(raw_arguments).unwrap_or_else(|_| json!({}));
+            let (input, input_error) = parse_tool_call_arguments(item);
             Some(ToolCall {
                 call_id,
                 tool_name: name,
                 input,
+                input_error,
             })
         }
         _ => None,
+    }
+}
+
+fn parse_tool_call_arguments(item: &Value) -> (Value, Option<String>) {
+    let Some(raw_arguments) = item
+        .get("arguments")
+        .or_else(|| item.get("input"))
+        .and_then(Value::as_str)
+    else {
+        return (
+            Value::Null,
+            Some("function arguments are missing or are not a JSON string".into()),
+        );
+    };
+    match serde_json::from_str(raw_arguments) {
+        Ok(input) => (input, None),
+        Err(error) => (
+            Value::Null,
+            Some(format!("function arguments are invalid JSON: {error}")),
+        ),
     }
 }
 

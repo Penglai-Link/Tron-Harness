@@ -14,6 +14,8 @@ mod responses_stateful_tests;
 #[cfg(test)]
 mod tests;
 #[cfg(test)]
+mod tool_call_argument_tests;
+#[cfg(test)]
 mod tool_call_id_tests;
 mod usage;
 #[cfg(test)]

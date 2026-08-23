@@ -13,13 +13,17 @@ const md = new MarkdownIt({
 const props = withDefaults(
   defineProps<{
     content?: string;
+    emptyMessage?: string;
   }>(),
   {
     content: "",
+    emptyMessage: "No assistant response was produced.",
   },
 );
 
-const compiledMarkdown = computed(() => md.render(props.content));
+const compiledMarkdown = computed(() =>
+  md.render(props.content || props.emptyMessage),
+);
 </script>
 
 <template>

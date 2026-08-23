@@ -346,11 +346,13 @@ mod tests {
                     call_id: Some("call_123".into()),
                     tool_name: "lookup".into(),
                     input: json!({ "query": "status" }),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call_456".into()),
                     tool_name: "lookup".into(),
                     input: json!({ "query": "health" }),
+                    input_error: None,
                 },
             ])
         );
@@ -446,6 +448,7 @@ mod tests {
                 call_id: Some("call_chat_1".into()),
                 tool_name: "lookup".into(),
                 input: json!({ "query": "status" }),
+                input_error: None,
             }]
         );
         assert_eq!(

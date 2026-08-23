@@ -9,6 +9,7 @@ import CopyValueButton from "./CopyValueButton.vue";
 
 const props = defineProps<{
   currentUserDisplayName?: string;
+  emptyAssistantMessage?: string;
   message: ChatMessage;
 }>();
 
@@ -53,6 +54,10 @@ const actorName = computed(() =>
     <div v-if="isUser" class="tron-chat__message-body">
       {{ props.message.content }}
     </div>
-    <MarkdownBlock v-else :content="props.message.content" />
+    <MarkdownBlock
+      v-else
+      :content="props.message.content"
+      :empty-message="props.emptyAssistantMessage"
+    />
   </article>
 </template>

@@ -92,6 +92,17 @@ const primarySubmitDisabled = computed(() => {
   if (primarySubmitMode.value === "queue") return props.queueDisabled;
   return props.sendDisabled;
 });
+const pendingAssistantMessageCode = computed(() => {
+  if (!props.sending) return undefined;
+  const latestMessage = props.messages[props.messages.length - 1];
+  if (
+    latestMessage?.role !== "ASSISTANT" ||
+    latestMessage.content.trim()
+  ) {
+    return undefined;
+  }
+  return latestMessage.messageCode;
+});
 
 const presentation = computed(() =>
   buildTranscriptPresentation({
@@ -232,6 +243,11 @@ onMounted(() => {
             <template v-for="message in messages" :key="message.messageCode">
               <ChatBubble
                 :current-user-display-name="currentUserDisplayName"
+                :empty-assistant-message="
+                  message.messageCode === pendingAssistantMessageCode
+                    ? 'Waiting for assistant output...'
+                    : undefined
+                "
                 :message="message"
                 @edit-message="
                   (content: string) => emit('edit-message', content)

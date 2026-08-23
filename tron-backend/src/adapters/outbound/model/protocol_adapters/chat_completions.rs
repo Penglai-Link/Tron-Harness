@@ -163,29 +163,23 @@ fn parse_chat_tool_call(call: &Value) -> Option<ToolCall> {
         .or_else(|| call.get("id"))
         .and_then(Value::as_str)
         .map(str::to_owned);
-    let arguments = function
-        .get("arguments")
-        .and_then(Value::as_str)
-        .and_then(|raw| serde_json::from_str(raw).ok())
-        .unwrap_or_else(|| json!({}));
+    let (input, input_error) = parse_chat_tool_call_arguments(function);
     Some(ToolCall {
         call_id,
         tool_name: name,
-        input: arguments,
+        input,
+        input_error,
     })
 }
 
 fn parse_chat_legacy_function_call(function_call: &Value) -> Option<ToolCall> {
     let name = function_call.get("name")?.as_str()?;
-    let arguments = function_call
-        .get("arguments")
-        .and_then(Value::as_str)
-        .and_then(|raw| serde_json::from_str(raw).ok())
-        .unwrap_or_else(|| json!({}));
+    let (input, input_error) = parse_chat_tool_call_arguments(function_call);
     Some(ToolCall {
         call_id: None,
         tool_name: name.to_owned(),
-        input: arguments,
+        input,
+        input_error,
     })
 }
 
@@ -194,6 +188,23 @@ fn tool_call_part(call: ToolCall) -> AgentMessagePart {
         call_id: call.call_id,
         tool_name: call.tool_name,
         input: call.input,
+        input_error: call.input_error,
+    }
+}
+
+fn parse_chat_tool_call_arguments(function: &Value) -> (Value, Option<String>) {
+    let Some(raw_arguments) = function.get("arguments").and_then(Value::as_str) else {
+        return (
+            Value::Null,
+            Some("function arguments are missing or are not a JSON string".into()),
+        );
+    };
+    match serde_json::from_str(raw_arguments) {
+        Ok(input) => (input, None),
+        Err(error) => (
+            Value::Null,
+            Some(format!("function arguments are invalid JSON: {error}")),
+        ),
     }
 }
 

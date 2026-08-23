@@ -375,6 +375,10 @@ fn transcript_part_to_agent_part(
                     .unwrap_or("unknown")
                     .to_string(),
                 input: content.get("input").cloned().unwrap_or_default(),
+                input_error: content
+                    .get("inputError")
+                    .and_then(|value| value.as_str())
+                    .map(str::to_string),
             })
         }
         "tool_result" => {

@@ -24,6 +24,8 @@ pub enum AgentMessagePart {
         call_id: Option<String>,
         tool_name: String,
         input: Value,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        input_error: Option<String>,
     },
     ToolResult {
         call_id: Option<String>,
@@ -136,6 +138,7 @@ impl AgentMessage {
                     call_id,
                     tool_name,
                     input,
+                    input_error: None,
                 })
                 .collect(),
         )

@@ -86,11 +86,13 @@ fn chat_response_parses_multiple_tool_calls_without_parallel_flag_dependency() {
                 call_id: Some("call_123".into()),
                 tool_name: "lookup".into(),
                 input: json!({ "query": "status" }),
+                input_error: None,
             },
             ToolCall {
                 call_id: Some("call_456".into()),
                 tool_name: "lookup".into(),
                 input: json!({ "query": "health" }),
+                input_error: None,
             },
         ])
     );
@@ -475,6 +477,7 @@ fn responses_response_parses_function_call_with_call_id() {
                 call_id: Some("call_123".into()),
                 tool_name: "lookup".into(),
                 input: json!({ "query": "status" }),
+                input_error: None,
             }],
             None,
             Some("resp_123".into()),
@@ -516,11 +519,13 @@ fn responses_response_parses_multiple_function_calls() {
                     call_id: Some("call_123".into()),
                     tool_name: "lookup".into(),
                     input: json!({ "query": "status" }),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call_456".into()),
                     tool_name: "lookup".into(),
                     input: json!({ "query": "health" }),
+                    input_error: None,
                 },
             ],
             None,

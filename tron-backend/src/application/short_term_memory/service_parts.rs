@@ -113,6 +113,7 @@ pub(super) fn transcript_part_from_agent_part(
             call_id,
             tool_name,
             input,
+            input_error,
         } => Some(ShortTermMemoryPart {
             id: 0,
             part_code: String::new(),
@@ -127,6 +128,7 @@ pub(super) fn transcript_part_from_agent_part(
                 "callId": call_id,
                 "toolName": tool_name,
                 "input": input,
+                "inputError": input_error,
             })),
             provider_metadata_json: None,
             visibility: "model".into(),

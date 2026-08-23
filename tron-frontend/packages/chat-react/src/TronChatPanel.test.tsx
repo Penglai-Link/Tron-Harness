@@ -123,6 +123,72 @@ describe("TronChatPanel submit controls", () => {
     expect(completedButton.getAttribute("aria-expanded")).toBe("true");
   });
 
+  it("only labels an active empty assistant message as waiting", () => {
+    const userMessage = {
+      actor: "User",
+      channel: "MAIN_AGENT",
+      content: "Create the document",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      id: 1,
+      messageCode: "MSG-USER",
+      role: "USER" as const,
+      sessionCode: "SESSION-1",
+    };
+    const emptyAssistant = {
+      actor: "Assistant",
+      channel: "MAIN_AGENT",
+      content: "",
+      createdAt: "2026-07-16T00:00:00.000Z",
+      id: 2,
+      messageCode: "MSG-ASSISTANT",
+      role: "ASSISTANT" as const,
+      sessionCode: "SESSION-1",
+    };
+    const messages = [userMessage, emptyAssistant];
+    const { rerender } = renderPanel({ messages });
+
+    expect(screen.getByText("No assistant response was produced.")).toBeTruthy();
+    expect(screen.queryByText("Waiting for assistant output...")).toBeNull();
+
+    rerender(
+      <TronChatPanel
+        draft="Follow up"
+        messages={[
+          ...messages,
+          {
+            ...userMessage,
+            content: "Try again",
+            id: 3,
+            messageCode: "MSG-USER-RETRY",
+          },
+        ]}
+        onDraftChange={() => undefined}
+        onSend={() => undefined}
+        sending
+        session={activeSession()}
+        showHeader={false}
+      />,
+    );
+
+    expect(screen.getByText("No assistant response was produced.")).toBeTruthy();
+    expect(screen.queryByText("Waiting for assistant output...")).toBeNull();
+
+    rerender(
+      <TronChatPanel
+        draft="Follow up"
+        messages={messages}
+        onDraftChange={() => undefined}
+        onSend={() => undefined}
+        sending
+        session={activeSession()}
+        showHeader={false}
+      />,
+    );
+
+    expect(screen.getByText("Waiting for assistant output...")).toBeTruthy();
+    expect(screen.queryByText("No assistant response was produced.")).toBeNull();
+  });
+
   it("submits the idle draft while preserving Shift+Enter and IME composition", () => {
     const onDraftChange = vi.fn();
     const onSend = vi.fn();

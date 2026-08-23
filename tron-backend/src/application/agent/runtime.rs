@@ -159,6 +159,7 @@ impl ReactAgent {
         let mut token_usage: Option<ModelTokenUsage> = None;
         let mut overflow_retries = 0;
         let mut final_output = String::new();
+        let mut last_tool_failure = None;
         loop {
             if step_count >= context.limits.max_steps {
                 self.publish(
@@ -372,6 +373,17 @@ impl ReactAgent {
                     )? {
                         continue;
                     }
+                    if final_output.trim().is_empty() {
+                        let message = empty_final_output_message(last_tool_failure.as_deref());
+                        self.publish(
+                            &context,
+                            "agent.run.failed",
+                            BusOutcome::Failure,
+                            Some("empty_final_output"),
+                        )?;
+                        self.record_short_term_memory_failure(context, "empty_final_output")?;
+                        return Err(AgentError::EmptyFinalOutput(message));
+                    }
                     self.publish(
                         &context,
                         "agent.output.created",
@@ -410,7 +422,13 @@ impl ReactAgent {
                 crate::domain::agent::ModelFinish::ToolCalls => {
                     let calls = response.tool_calls();
                     if let Err(error) = self
-                        .execute_tool_calls(context, &mut tool_calls, &mut turn_state, calls)
+                        .execute_tool_calls(
+                            context,
+                            &mut tool_calls,
+                            &mut turn_state,
+                            &mut last_tool_failure,
+                            calls,
+                        )
                         .await
                     {
                         if matches!(error, AgentError::AwaitingUserInput) {
@@ -631,5 +649,14 @@ impl ReactAgent {
             }
             sink(event);
         })
+    }
+}
+
+fn empty_final_output_message(last_tool_failure: Option<&str>) -> String {
+    match last_tool_failure {
+        Some(last_tool_failure) => format!(
+            "agent completed without an assistant response; last tool failure: {last_tool_failure}"
+        ),
+        None => "agent completed without an assistant response".into(),
     }
 }

@@ -172,6 +172,7 @@ fn map_agent_error(error: AgentError) -> AgentInvocationError {
         AgentError::ToolFailure(message)
         | AgentError::MissingTool(message)
         | AgentError::UnauthorizedTool(message) => AgentInvocationError::ToolFailed(message),
+        AgentError::EmptyFinalOutput(message) => AgentInvocationError::EmptyFinalOutput(message),
         AgentError::MaxStepsExceeded => AgentInvocationError::MaxStepsExceeded,
         AgentError::MaxToolCallsExceeded => AgentInvocationError::MaxToolCallsExceeded,
         AgentError::InvalidConfiguration(message) | AgentError::EventPublishFailed(message) => {

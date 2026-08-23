@@ -93,11 +93,17 @@ async function copyPlainText(value: string) {
   document.body.removeChild(textarea);
 }
 
-function MarkdownBlock({ content }: { content: string }) {
+function MarkdownBlock({
+  content,
+  emptyMessage,
+}: {
+  content: string;
+  emptyMessage: string;
+}) {
   return (
     <div className="markdown-body">
       <ReactMarkdown remarkPlugins={[remarkGfm]} >
-        {content || "Waiting for assistant output..."}
+        {content || emptyMessage}
       </ReactMarkdown>
     </div>
   );
@@ -261,10 +267,12 @@ function CopyValueButton({
 
 function ChatBubble({
   currentUserDisplayName,
+  emptyAssistantMessage = "No assistant response was produced.",
   message,
   onEditMessage,
 }: {
   currentUserDisplayName?: string;
+  emptyAssistantMessage?: string;
   message: ChatMessage;
   onEditMessage?: (content: string) => void;
 }) {
@@ -305,7 +313,10 @@ function ChatBubble({
       {isUser ? (
         <div className="tron-chat__message-body">{message.content}</div>
       ) : (
-        <MarkdownBlock content={message.content} />
+        <MarkdownBlock
+          content={message.content}
+          emptyMessage={emptyAssistantMessage}
+        />
       )}
     </article>
   );
@@ -924,6 +935,17 @@ export function TronChatPanel({
     || (primarySubmitMode === "queue"
         ? queueDisabled
         : Boolean(sendDisabled));
+  const pendingAssistantMessageCode = useMemo(() => {
+    if (!sending) return undefined;
+    const latestMessage = messages[messages.length - 1];
+    if (
+      latestMessage?.role !== "ASSISTANT" ||
+      latestMessage.content.trim()
+    ) {
+      return undefined;
+    }
+    return latestMessage.messageCode;
+  }, [messages, sending]);
   const presentation = useMemo(
     () =>
       buildTranscriptPresentation({
@@ -1082,6 +1104,12 @@ export function TronChatPanel({
                               />
                               <ChatBubble
                                 currentUserDisplayName={currentUserDisplayName}
+                                emptyAssistantMessage={
+                                  message.messageCode ===
+                                  pendingAssistantMessageCode
+                                    ? "Waiting for assistant output..."
+                                    : undefined
+                                }
                                 message={message}
                                 onEditMessage={onEditMessage}
                               />
@@ -1089,6 +1117,12 @@ export function TronChatPanel({
                           ) : (
                             <ChatBubble
                               currentUserDisplayName={currentUserDisplayName}
+                              emptyAssistantMessage={
+                                message.messageCode ===
+                                pendingAssistantMessageCode
+                                  ? "Waiting for assistant output..."
+                                  : undefined
+                              }
                               message={message}
                               onEditMessage={onEditMessage}
                             />

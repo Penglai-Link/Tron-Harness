@@ -19,6 +19,7 @@ impl ReactAgent {
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
         turn_state: &mut TurnStateAdapter,
+        last_tool_failure: &mut Option<String>,
         calls: Vec<ToolCall>,
     ) -> Result<(), AgentError> {
         if calls.len() > 1 {
@@ -30,15 +31,21 @@ impl ReactAgent {
                     "chat.ask_user must be the only tool call in a model turn".into(),
                 ));
             }
-            self.execute_tool_call_batches(context, tool_calls, turn_state, calls)
-                .await
+            self.execute_tool_call_batches(
+                context,
+                tool_calls,
+                turn_state,
+                last_tool_failure,
+                calls,
+            )
+            .await
         } else {
             for call in calls {
                 if *tool_calls >= context.limits.max_tool_calls {
                     self.fail_max_tool_calls(context)?;
                     return Err(AgentError::MaxToolCallsExceeded);
                 }
-                self.execute_tool_call(context, tool_calls, turn_state, call)
+                self.execute_tool_call(context, tool_calls, turn_state, last_tool_failure, call)
                     .await?;
             }
 
@@ -51,6 +58,7 @@ impl ReactAgent {
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
         turn_state: &mut TurnStateAdapter,
+        last_tool_failure: &mut Option<String>,
         call: ToolCall,
     ) -> Result<(), AgentError> {
         *tool_calls += 1;
@@ -59,6 +67,7 @@ impl ReactAgent {
         let model_call_id = call.call_id.clone();
         let tool_name = call.tool_name.clone();
         let tool_input = call.input.clone();
+        let input_error = call.input_error.clone();
         self.publish_tool(
             &context,
             "agent.tool.selected",
@@ -83,6 +92,19 @@ impl ReactAgent {
             short_term_memory
                 .record_tool_started(context, &tool_name, model_call_id.as_deref(), sequence)
                 .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
+        }
+        if let Some(input_error) = input_error {
+            self.record_recoverable_tool_failure(
+                context,
+                &tool_call_id,
+                &tool_name,
+                model_call_id,
+                turn_state,
+                sequence,
+                format!("tool input is invalid: {input_error}"),
+                last_tool_failure,
+            )?;
+            return Ok(());
         }
         let registry = Arc::clone(&self.tool_registry);
         let context_snapshot = context.clone();
@@ -160,17 +182,7 @@ impl ReactAgent {
             }
             Err(error) => {
                 let error_message = error.to_string();
-                self.publish_tool(
-                    &context,
-                    "agent.tool.failed",
-                    BusOutcome::Failure,
-                    Some("tool_failed"),
-                    &tool_call_id,
-                    &tool_name,
-                    None,
-                    Some(error_message.as_str()),
-                )?;
-                self.record_tool_failure_observation(
+                self.record_recoverable_tool_failure(
                     context,
                     &tool_call_id,
                     &tool_name,
@@ -178,6 +190,7 @@ impl ReactAgent {
                     turn_state,
                     sequence,
                     error_message,
+                    last_tool_failure,
                 )?;
             }
         }
@@ -194,6 +207,7 @@ impl ReactAgent {
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
         turn_state: &mut TurnStateAdapter,
+        last_tool_failure: &mut Option<String>,
         calls: Vec<ToolCall>,
     ) -> Result<(), AgentError> {
         let mut remaining_calls = calls;
@@ -209,8 +223,14 @@ impl ReactAgent {
                 .min(context.limits.max_parallel_tool_calls as usize)
                 .min(remaining_budget as usize);
             let batch_calls = remaining_calls.drain(..batch_size).collect::<Vec<_>>();
-            self.execute_tool_calls_parallel_batch(context, tool_calls, turn_state, batch_calls)
-                .await?;
+            self.execute_tool_calls_parallel_batch(
+                context,
+                tool_calls,
+                turn_state,
+                last_tool_failure,
+                batch_calls,
+            )
+            .await?;
         }
 
         Ok(())
@@ -221,6 +241,7 @@ impl ReactAgent {
         context: &mut AgentRunContext,
         tool_calls: &mut u32,
         turn_state: &mut TurnStateAdapter,
+        last_tool_failure: &mut Option<String>,
         calls: Vec<ToolCall>,
     ) -> Result<(), AgentError> {
         let context_snapshot = Arc::new(context.clone());
@@ -233,6 +254,7 @@ impl ReactAgent {
             let model_call_id = call.call_id.clone();
             let tool_name = call.tool_name.clone();
             let tool_input = call.input.clone();
+            let input_error = call.input_error.clone();
 
             self.publish_tool(
                 &context,
@@ -258,6 +280,19 @@ impl ReactAgent {
                 short_term_memory
                     .record_tool_started(context, &tool_name, model_call_id.as_deref(), sequence)
                     .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
+            }
+            if let Some(input_error) = input_error {
+                self.record_recoverable_tool_failure(
+                    context,
+                    &tool_call_id,
+                    &tool_name,
+                    model_call_id,
+                    turn_state,
+                    sequence,
+                    format!("tool input is invalid: {input_error}"),
+                    last_tool_failure,
+                )?;
+                continue;
             }
 
             let registry = Arc::clone(&self.tool_registry);
@@ -327,17 +362,7 @@ impl ReactAgent {
                 }
                 Err(error) => {
                     let error_message = error.to_string();
-                    self.publish_tool(
-                        &context,
-                        "agent.tool.failed",
-                        BusOutcome::Failure,
-                        Some("tool_failed"),
-                        &tool_call_id,
-                        &tool_name,
-                        None,
-                        Some(error_message.as_str()),
-                    )?;
-                    self.record_tool_failure_observation(
+                    self.record_recoverable_tool_failure(
                         context,
                         &tool_call_id,
                         &tool_name,
@@ -345,6 +370,7 @@ impl ReactAgent {
                         turn_state,
                         sequence,
                         error_message,
+                        last_tool_failure,
                     )?;
                 }
             }
@@ -410,7 +436,7 @@ impl ReactAgent {
         Ok(())
     }
 
-    fn record_tool_failure_observation(
+    fn record_recoverable_tool_failure(
         &self,
         context: &mut AgentRunContext,
         tool_call_id: &str,
@@ -419,7 +445,19 @@ impl ReactAgent {
         turn_state: &mut TurnStateAdapter,
         sequence: u32,
         error_message: String,
+        last_tool_failure: &mut Option<String>,
     ) -> Result<(), AgentError> {
+        self.publish_tool(
+            &context,
+            "agent.tool.failed",
+            BusOutcome::Failure,
+            Some("tool_failed"),
+            tool_call_id,
+            tool_name,
+            None,
+            Some(error_message.as_str()),
+        )?;
+        *last_tool_failure = Some(format!("{tool_name}: {error_message}"));
         let observation = ToolObservation {
             tool_name: tool_name.to_string(),
             output: error_message,

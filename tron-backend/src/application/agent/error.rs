@@ -10,6 +10,7 @@ pub enum AgentInvocationError {
     RuntimeSecretDeliveryUntrusted,
     ModelFailed(String),
     ToolFailed(String),
+    EmptyFinalOutput(String),
     MaxStepsExceeded,
     MaxToolCallsExceeded,
 }
@@ -27,6 +28,7 @@ impl AgentInvocationError {
             Self::RuntimeSecretDeliveryUntrusted => "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
             Self::ModelFailed(_) => "AGENT_MODEL_FAILED",
             Self::ToolFailed(_) => "AGENT_TOOL_FAILED",
+            Self::EmptyFinalOutput(_) => "AGENT_EMPTY_FINAL_OUTPUT",
             Self::MaxStepsExceeded => "AGENT_MAX_STEPS_EXCEEDED",
             Self::MaxToolCallsExceeded => "AGENT_MAX_TOOL_CALLS_EXCEEDED",
         }
@@ -42,7 +44,8 @@ impl AgentInvocationError {
             Self::RunStopped => "agent run was stopped".into(),
             Self::RuntimeFailed(message)
             | Self::ModelFailed(message)
-            | Self::ToolFailed(message) => message.clone(),
+            | Self::ToolFailed(message)
+            | Self::EmptyFinalOutput(message) => message.clone(),
             Self::RuntimeSecretDeliveryUntrusted => {
                 "Sensitive runtime variable delivery is not trusted".into()
             }

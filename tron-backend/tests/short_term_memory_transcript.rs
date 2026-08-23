@@ -84,11 +84,13 @@ fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
                         "relativeTo": "workspaceRoot",
                         "text": "echo test"
                     }),
+                    input_error: None,
                 },
                 ToolCall {
                     call_id: Some("call-discovery".into()),
                     tool_name: "discovery.expand_tool_domain".into(),
                     input: json!({"domainCode": "fs"}),
+                    input_error: None,
                 },
             ]),
         )
@@ -229,6 +231,7 @@ fn transcript_service_records_todos_and_compaction() {
                 call_id: Some("call-1".into()),
                 tool_name: "todo.update".into(),
                 input: json!({"todos": []}),
+                input_error: None,
             }]),
         )
         .expect("tool call response should be recorded");
@@ -3337,6 +3340,7 @@ fn prepared_context_hash_includes_recent_transcript_delta_for_stateful_responses
                 call_id: Some("call-hash".into()),
                 tool_name: "workspace.lookup".into(),
                 input: json!({"workspaceCode": "TRON_CORE"}),
+                input_error: None,
             }]),
         )
         .expect("assistant tool call should be recorded");
@@ -3459,6 +3463,7 @@ fn full_context_preserves_tool_call_result_structure_when_single_turn_exceeds_bu
                 call_id: Some("call-structured".into()),
                 tool_name: "shell.exec".into(),
                 input: json!({"cmd": "printf structured"}),
+                input_error: None,
             }]),
         )
         .expect("tool call response should be recorded");
@@ -3559,6 +3564,7 @@ fn model_compaction_keeps_current_tool_pair_as_raw_tail() {
                 call_id: Some("call-pinned-tool".into()),
                 tool_name: "shell.exec".into(),
                 input: json!({"cmd": "printf pinned"}),
+                input_error: None,
             }]),
         )
         .expect("tool call should be recorded");
@@ -3683,6 +3689,7 @@ fn auto_compaction_can_compress_same_run_early_tool_chain() {
                     call_id: Some(call_id.clone()),
                     tool_name: "bash.exec".into(),
                     input: json!({"command": format!("bad shell pipeline {index}")}),
+                    input_error: None,
                 }]),
             )
             .expect("tool call should be recorded");
@@ -5722,6 +5729,7 @@ fn reasoning_tool_response() -> ModelResponse {
                     call_id: Some("call-reasoning-summary".into()),
                     tool_name: "shell.exec".into(),
                     input: json!({"cmd": "printf replay"}),
+                    input_error: None,
                 },
             ],
         ),

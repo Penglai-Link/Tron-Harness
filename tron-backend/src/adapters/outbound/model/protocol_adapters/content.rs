@@ -105,6 +105,7 @@ fn chat_tool_call_json(part: &AgentMessagePart) -> Option<Value> {
         call_id,
         tool_name,
         input,
+        ..
     } = part
     else {
         return None;

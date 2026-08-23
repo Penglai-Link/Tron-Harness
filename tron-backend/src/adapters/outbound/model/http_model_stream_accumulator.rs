@@ -1,6 +1,6 @@
 use std::collections::BTreeMap;
 
-use serde_json::{Value, json};
+use serde_json::Value;
 
 use crate::domain::agent::{
     AgentMessage, AgentMessagePart, AgentModelProtocol, ModelFinish, ModelResponse,
@@ -75,6 +75,7 @@ impl StreamAccumulator {
                         call_id: call.call_id,
                         tool_name: call.tool_name,
                         input: call.input,
+                        input_error: call.input_error,
                     }),
             );
             return Some(ModelResponse::from_assistant(
@@ -149,14 +150,27 @@ impl StreamAccumulator {
                 if call.tool_name.trim().is_empty() {
                     return None;
                 }
-                let input =
-                    serde_json::from_str(call.arguments.trim()).unwrap_or_else(|_| json!({}));
+                let (input, input_error) = parse_stream_tool_call_arguments(call.arguments.trim());
                 Some(ToolCall {
                     call_id: call.call_id.clone(),
                     tool_name: call.tool_name.clone(),
                     input,
+                    input_error,
                 })
             })
             .collect()
+    }
+}
+
+fn parse_stream_tool_call_arguments(raw_arguments: &str) -> (Value, Option<String>) {
+    if raw_arguments.is_empty() {
+        return (Value::Null, Some("function arguments are missing".into()));
+    }
+    match serde_json::from_str(raw_arguments) {
+        Ok(input) => (input, None),
+        Err(error) => (
+            Value::Null,
+            Some(format!("function arguments are invalid JSON: {error}")),
+        ),
     }
 }

@@ -56,6 +56,9 @@ pub fn agent_error_response(error: AgentInvocationError) -> Response {
         AgentInvocationError::ToolFailed(message) => {
             (StatusCode::BAD_GATEWAY, "AGENT_TOOL_FAILED", message)
         }
+        AgentInvocationError::EmptyFinalOutput(message) => {
+            (StatusCode::BAD_GATEWAY, "AGENT_EMPTY_FINAL_OUTPUT", message)
+        }
         AgentInvocationError::MaxStepsExceeded => (
             StatusCode::BAD_REQUEST,
             "AGENT_MAX_STEPS_EXCEEDED",
