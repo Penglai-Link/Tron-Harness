@@ -22,7 +22,7 @@ import {
   aguiReasoningEffort,
   buildAguiUserWorkCards,
   buildTranscriptPresentation,
-  currentAguiWorkSummary,
+  currentAguiWorkActivity,
   describeDebugEvent,
   deriveReasoningPreview,
   formatJsonBlockValue,
@@ -334,6 +334,8 @@ function latestAguiRunCode(events: ChatAguiStreamEvent[]) {
 
 const defaultWorkRailLabels: ChatWorkRailLabels = {
   ariaLabel: "Agent work",
+  preparing: "Preparing request…",
+  responding: "Drafting response…",
   thinking: "Thinking…",
   workedFor: (duration) => `Worked for ${duration}`,
   workingFor: (duration) => `Working for ${duration}`,
@@ -672,7 +674,7 @@ function AguiRunWorkRail({
 }) {
   const userCards = useMemo(() => buildAguiUserWorkCards(events), [events]);
   const reasoningEffort = useMemo(() => aguiReasoningEffort(events), [events]);
-  const terminalEvent = useMemo(() => events.findLast((event) => {
+  const terminalEvent = useMemo(() => [...events].reverse().find((event) => {
     const type = String(event.type ?? "").toUpperCase();
     return type.includes("RUN_FINISHED") || type.includes("RUN_ERROR");
   }) ?? null, [events]);
@@ -696,10 +698,12 @@ function AguiRunWorkRail({
   const duration = completed
     ? displayedTerminalSummary?.duration ?? "<1s"
     : formatAguiDuration(aguiWorkElapsedMilliseconds(events, now));
-  const currentSummary = useMemo(
-    () => currentAguiWorkSummary(events) || labels.thinking,
-    [events, labels.thinking],
-  );
+  const currentSummary = useMemo(() => {
+    const activity = currentAguiWorkActivity(events);
+    if (activity === "PREPARING") return labels.preparing;
+    if (activity === "RESPONDING") return labels.responding;
+    return labels.thinking;
+  }, [events, labels.preparing, labels.responding, labels.thinking]);
 
   useEffect(() => {
     if (completed) return;

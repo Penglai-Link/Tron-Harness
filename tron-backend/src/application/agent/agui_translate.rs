@@ -85,17 +85,21 @@ pub fn translate_protocol_events(
 
     match canonical_event {
         CanonicalRuntimeEvent::RunRequested => Vec::new(),
-        CanonicalRuntimeEvent::RunStarted => vec![protocol_event(
-            "RUN_STARTED",
-            json!({
-                "type": "RUN_STARTED",
-                "threadId": stream_key,
-                "runId": run_code,
-                "reasoningEffort": payload_value(event, "reasoning_effort"),
-                "timestamp": timestamp,
-            }),
-        )],
+        CanonicalRuntimeEvent::RunStarted => vec![
+            protocol_event(
+                "RUN_STARTED",
+                json!({
+                    "type": "RUN_STARTED",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "reasoningEffort": payload_value(event, "reasoning_effort"),
+                    "timestamp": timestamp,
+                }),
+            ),
+            activity_snapshot(stream_key, &run_code, "PREPARING", timestamp),
+        ],
         CanonicalRuntimeEvent::ModelRequested => vec![
+            activity_snapshot(stream_key, &run_code, "THINKING", timestamp),
             protocol_event(
                 "REASONING_START",
                 json!({
@@ -167,17 +171,20 @@ pub fn translate_protocol_events(
                 }),
             ),
         ],
-        CanonicalRuntimeEvent::OutputStarted => vec![protocol_event(
-            "TEXT_MESSAGE_START",
-            json!({
-                "type": "TEXT_MESSAGE_START",
-                "threadId": stream_key,
-                "runId": run_code,
-                "messageId": assistant_message_id,
-                "role": "assistant",
-                "timestamp": timestamp,
-            }),
-        )],
+        CanonicalRuntimeEvent::OutputStarted => vec![
+            activity_snapshot(stream_key, &run_code, "RESPONDING", timestamp),
+            protocol_event(
+                "TEXT_MESSAGE_START",
+                json!({
+                    "type": "TEXT_MESSAGE_START",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "messageId": assistant_message_id,
+                    "role": "assistant",
+                    "timestamp": timestamp,
+                }),
+            ),
+        ],
         CanonicalRuntimeEvent::OutputDelta => payload_delta(event)
             .map(|delta| {
                 vec![protocol_event(
@@ -423,6 +430,8 @@ mod tests {
 
         let protocol_events = translate_protocol_events("SESSION-1", &event);
         assert_eq!(protocol_events[0].data["reasoningEffort"], "High");
+        assert_eq!(protocol_events[1].sse_event, "ACTIVITY_SNAPSHOT");
+        assert_eq!(protocol_events[1].data["activity"], "PREPARING");
     }
 }
 
@@ -431,6 +440,24 @@ fn protocol_event(sse_event: &str, data: Value) -> AgentAguiProtocolEvent {
         sse_event: sse_event.into(),
         data,
     }
+}
+
+fn activity_snapshot(
+    stream_key: &str,
+    run_code: &str,
+    activity: &str,
+    timestamp: i64,
+) -> AgentAguiProtocolEvent {
+    protocol_event(
+        "ACTIVITY_SNAPSHOT",
+        json!({
+            "type": "ACTIVITY_SNAPSHOT",
+            "threadId": stream_key,
+            "runId": run_code,
+            "activity": activity,
+            "timestamp": timestamp,
+        }),
+    )
 }
 
 fn payload_value(event: &BusEvent, key: &str) -> Option<String> {

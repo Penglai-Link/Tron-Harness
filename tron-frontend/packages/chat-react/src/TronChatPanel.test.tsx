@@ -73,7 +73,7 @@ function queuedSubmission(
 }
 
 describe("TronChatPanel submit controls", () => {
-  it("shows one refreshing work summary while running and auto-collapses when complete", () => {
+  it("shows a stable activity stage while running and auto-collapses when complete", () => {
     const startedAt = Date.now() - 2_000;
     const messages = [{
       actor: "User",
@@ -87,8 +87,9 @@ describe("TronChatPanel submit controls", () => {
     }];
     const activeEvents: ChatAguiStreamEvent[] = [
       { runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt, type: "RUN_STARTED" },
-      { messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 1, type: "REASONING_MESSAGE_START" },
-      { delta: "Inspecting the implementation.", messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 2, type: "REASONING_MESSAGE_CONTENT" },
+      { activity: "THINKING", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 1, type: "ACTIVITY_SNAPSHOT" },
+      { messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 2, type: "REASONING_MESSAGE_START" },
+      { delta: "Inspecting the implementation.", messageId: "reasoning-1", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 3, type: "REASONING_MESSAGE_CONTENT" },
     ];
     const panelProps = {
       draft: "Follow up",
@@ -101,7 +102,7 @@ describe("TronChatPanel submit controls", () => {
     const { rerender } = render(<TronChatPanel {...panelProps} protocolEvents={activeEvents} />);
 
     const summaryButton = screen.getByRole("button", { name: /Working for/ });
-    expect(screen.getByText("Inspecting the implementation.")).toBeTruthy();
+    expect(screen.getByText("Thinking…")).toBeTruthy();
     fireEvent.click(summaryButton);
     expect(summaryButton.getAttribute("aria-expanded")).toBe("true");
 
@@ -117,7 +118,7 @@ describe("TronChatPanel submit controls", () => {
 
     const completedButton = screen.getByRole("button", { name: /Worked for/ });
     expect(completedButton.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByText("Inspecting the implementation.")).toBeNull();
+    expect(screen.queryByText("Thinking…")).toBeNull();
     fireEvent.click(completedButton);
     expect(completedButton.getAttribute("aria-expanded")).toBe("true");
   });

@@ -3870,6 +3870,8 @@ export function ChatManagementPage() {
   }), [i18n.language, t]);
   const workRailLabels = useMemo<ChatWorkRailLabels>(() => ({
     ariaLabel: t("chat.workRail.ariaLabel"),
+    preparing: t("chat.workRail.preparing"),
+    responding: t("chat.workRail.responding"),
     thinking: t("chat.workRail.thinking"),
     workedFor: (duration) => t("chat.workRail.workedFor", { duration }),
     workingFor: (duration) => t("chat.workRail.workingFor", { duration }),

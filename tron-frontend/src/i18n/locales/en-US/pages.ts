@@ -591,6 +591,8 @@ export const pages = {
     },
     workRail: {
       ariaLabel: "Agent work",
+      preparing: "Preparing request…",
+      responding: "Drafting response…",
       thinking: "Thinking…",
       workedFor: "Worked for {{duration}}",
       workingFor: "Working for {{duration}}",

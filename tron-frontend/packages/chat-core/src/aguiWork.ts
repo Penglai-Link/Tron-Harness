@@ -1,9 +1,6 @@
-import { deriveReasoningPreview } from "./display";
 import {
   aguiEventMillis,
   aguiEventType,
-  buildAguiUserWorkCards,
-  toolSummaryLabel,
 } from "./transcript";
 import type { TranscriptAguiEvent } from "./types";
 
@@ -29,29 +26,16 @@ export function aguiWorkElapsedMilliseconds(
   return Math.max(0, end - first);
 }
 
-export function currentAguiWorkSummary(events: TranscriptAguiEvent[]) {
-  const cards = buildAguiUserWorkCards(events);
-  const reasoningCards = cards.filter((card) => card.kind === "reasoning");
-  const latestReasoning = reasoningCards.at(-1)?.value;
-  if (latestReasoning && !latestReasoning.ended) {
-    return deriveReasoningPreview(latestReasoning.content);
-  }
+export type AguiWorkActivity = "PREPARING" | "THINKING" | "RESPONDING";
 
-  for (let index = reasoningCards.length - 1; index >= 0; index -= 1) {
-    const summary = deriveReasoningPreview(reasoningCards[index]?.value.content ?? "");
-    if (summary) return summary;
+export function currentAguiWorkActivity(events: TranscriptAguiEvent[]): AguiWorkActivity | null {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const event = events[index];
+    if (!event || aguiEventType(event).toUpperCase() !== "ACTIVITY_SNAPSHOT") continue;
+    const activity = String(("activity" in event ? event.activity : "") ?? "").toUpperCase();
+    if (activity === "PREPARING" || activity === "THINKING" || activity === "RESPONDING") {
+      return activity;
+    }
   }
-
-  const tools = cards.flatMap((card) => (
-    card.kind === "reasoning"
-      ? card.value.toolCards
-      : card.kind === "toolGroup"
-        ? card.value.toolCards
-        : [card.value]
-  ));
-  const latestTool = tools.reduce<typeof tools[number] | null>(
-    (latest, tool) => (!latest || tool.firstMillis > latest.firstMillis ? tool : latest),
-    null,
-  );
-  return latestTool ? toolSummaryLabel(latestTool.toolName, latestTool.args) : "";
+  return null;
 }

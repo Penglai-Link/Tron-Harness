@@ -217,8 +217,14 @@ describe("createOpenApiChatAdapter", () => {
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
   });
 
-  it("forwards reasoning summary deltas to AG-UI consumers", async () => {
+  it("forwards stable activity snapshots and reasoning deltas to AG-UI consumers", async () => {
     const streamPayload = [
+      {
+        activity: "THINKING",
+        runId: "RUN-1",
+        threadId: "SESSION-1",
+        type: "ACTIVITY_SNAPSHOT",
+      },
       {
         delta: "Inspecting the current implementation.",
         messageId: "reasoning-1",
@@ -269,6 +275,10 @@ describe("createOpenApiChatAdapter", () => {
       { onAguiEvent },
     );
 
+    expect(onAguiEvent).toHaveBeenCalledWith(expect.objectContaining({
+      activity: "THINKING",
+      type: "ACTIVITY_SNAPSHOT",
+    }));
     expect(onAguiEvent).toHaveBeenCalledWith(expect.objectContaining({
       delta: "Inspecting the current implementation.",
       messageId: "reasoning-1",

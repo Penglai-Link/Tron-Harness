@@ -171,6 +171,8 @@ export interface ChatUserInputLabels {
 
 export interface ChatWorkRailLabels {
   ariaLabel: string;
+  preparing: string;
+  responding: string;
   thinking: string;
   workedFor: (duration: string) => string;
   workingFor: (duration: string) => string;
@@ -258,6 +260,7 @@ export type ChatAguiStreamEventType =
   | "TOOL_CALL_ARGS"
   | "TOOL_CALL_END"
   | "TOOL_CALL_RESULT"
+  | "ACTIVITY_SNAPSHOT"
   | "ACTIVITY_DELTA"
   | string;
 
@@ -266,6 +269,7 @@ export interface ChatAguiStreamEvent {
   threadId?: string;
   runId?: string;
   supportsSteer?: boolean;
+  activity?: string;
   reasoningEffort?: ReasoningEffort | null;
   messageId?: string;
   role?: string;

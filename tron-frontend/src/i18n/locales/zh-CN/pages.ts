@@ -591,6 +591,8 @@ export const pages = {
     },
     workRail: {
       ariaLabel: "智能体工作过程",
+      preparing: "正在准备请求…",
+      responding: "正在生成回复…",
       thinking: "正在思考…",
       workedFor: "已工作 {{duration}}",
       workingFor: "正在工作 {{duration}}",

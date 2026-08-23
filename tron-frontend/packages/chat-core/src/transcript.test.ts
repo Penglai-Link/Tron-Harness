@@ -9,7 +9,7 @@ import {
 } from "./transcript";
 import {
   aguiWorkElapsedMilliseconds,
-  currentAguiWorkSummary,
+  currentAguiWorkActivity,
   isAguiRunTerminal,
 } from "./aguiWork";
 import type {
@@ -127,25 +127,24 @@ describe("aguiReasoningEffort", () => {
   });
 });
 
-describe("AG-UI current work summary", () => {
-  it("refreshes one summary slot and replaces it for a new reasoning message", () => {
+describe("AG-UI current work activity", () => {
+  it("uses stable activity snapshots instead of reasoning deltas", () => {
     const events = [
       event({ type: "RUN_STARTED", timestamp: 1_000 }),
-      event({ type: "REASONING_MESSAGE_START", messageId: "reasoning-1", timestamp: 1_001 }),
-      event({ type: "REASONING_MESSAGE_CONTENT", delta: "Reviewing the repository.", messageId: "reasoning-1", timestamp: 1_002 }),
-      event({ type: "REASONING_MESSAGE_END", messageId: "reasoning-1", timestamp: 1_003 }),
-      event({ type: "REASONING_MESSAGE_START", messageId: "reasoning-2", timestamp: 1_004 }),
-      event({ type: "REASONING_MESSAGE_CONTENT", delta: "Preparing the implementation plan.", messageId: "reasoning-2", timestamp: 1_005 }),
+      event({ activity: "PREPARING", type: "ACTIVITY_SNAPSHOT", timestamp: 1_001 }),
+      event({ type: "REASONING_MESSAGE_START", messageId: "reasoning-1", timestamp: 1_002 }),
+      event({ type: "REASONING_MESSAGE_CONTENT", delta: "Reviewing the repository.", messageId: "reasoning-1", timestamp: 1_003 }),
+      event({ type: "REASONING_MESSAGE_CONTENT", delta: "Preparing the implementation plan.", messageId: "reasoning-1", timestamp: 1_004 }),
+      event({ activity: "THINKING", type: "ACTIVITY_SNAPSHOT", timestamp: 1_005 }),
     ];
 
-    expect(currentAguiWorkSummary(events)).toBe("Preparing the implementation plan.");
+    expect(currentAguiWorkActivity(events)).toBe("THINKING");
     expect(
       buildAguiUserWorkCards(events)
         .filter((card) => card.kind === "reasoning")
         .map((card) => card.value.content),
     ).toEqual([
-      "Reviewing the repository.",
-      "Preparing the implementation plan.",
+      "Reviewing the repository. Preparing the implementation plan.",
     ]);
     expect(aguiWorkElapsedMilliseconds(events, 3_005)).toBe(2_005);
     expect(isAguiRunTerminal(events)).toBe(false);

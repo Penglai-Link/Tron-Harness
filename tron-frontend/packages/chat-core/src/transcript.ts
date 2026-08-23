@@ -599,7 +599,13 @@ function aguiRunsWithWorkDetails(events: TranscriptAguiEvent[], limit: number) {
   });
 
   return Array.from(runs.values())
-    .filter((run) => buildAguiUserWorkCards(run.events).length > 0)
+    .filter((run) => (
+      buildAguiUserWorkCards(run.events).length > 0
+      || !run.events.some((event) => {
+        const type = aguiEventType(event).toUpperCase();
+        return type.includes("RUN_FINISHED") || type.includes("RUN_ERROR");
+      })
+    ))
     .sort((left, right) => left.firstMillis - right.firstMillis)
     .slice(-limit);
 }
@@ -660,7 +666,7 @@ export function buildTranscriptPresentation(args: {
   const protocolEvents = args.protocolEvents ?? [];
   const recentTurnLimit = args.debugOptions?.recentTurnLimit ?? 5;
   const debugEventTypes = args.debugOptions?.debugEventTypes ?? [];
-  const transcriptAguiEvents = args.liveAguiPending && !protocolEvents.length
+  const transcriptAguiEvents = args.liveAguiPending && !protocolEvents.length && !liveEvents.length
     ? []
     : filterTranscriptAguiEventsForSession(
       mergeTranscriptAguiEvents(protocolEvents, liveEvents),
@@ -670,6 +676,9 @@ export function buildTranscriptPresentation(args: {
     );
   const waitingForModelAnchorMessageCode = (() => {
     if (!args.liveAguiPending || !args.sessionCode) return "";
+    if (transcriptAguiEvents.some((event) => aguiEventType(event).toUpperCase() === "RUN_STARTED")) {
+      return "";
+    }
     for (let index = args.messages.length - 1; index >= 0; index -= 1) {
       const message = args.messages[index];
       if (message.sessionCode === args.sessionCode && message.role === "USER") {

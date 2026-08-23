@@ -389,6 +389,7 @@ pub(crate) async fn stream_message_command(
         &run_code,
         system_agent_live_stream,
     );
+    live_replay_recorder.start();
     let chats = state.chats.clone();
     let session_code_for_task = session_code.clone();
     let run_code_for_task = run_code.clone();
@@ -475,6 +476,18 @@ pub(crate) async fn stream_message_command(
             system_agent_live_stream,
         );
 
+        for payload in live_event_builder.start() {
+            let data = run_started_with_supports_steer(
+                &payload.sse_event,
+                payload.data,
+                supports_steer,
+            );
+            let key = format!("{}:{}", payload.sse_event, data);
+            if seen.insert(key) {
+                yield Ok::<Event, Infallible>(ChatSsePayload::agui(payload.sse_event, data).event());
+            }
+        }
+
         loop {
             interval.tick().await;
 
@@ -513,6 +526,7 @@ pub(crate) async fn stream_message_command(
                         && matches!(
                             event.sse_event.as_str(),
                             "RUN_STARTED"
+                                | "ACTIVITY_SNAPSHOT"
                                 | "REASONING_START"
                                 | "REASONING_MESSAGE_START"
                                 | "REASONING_MESSAGE_CONTENT"

@@ -5,7 +5,7 @@ import {
   aguiWorkElapsedMilliseconds,
   aguiReasoningEffort,
   buildAguiUserWorkCards,
-  currentAguiWorkSummary,
+  currentAguiWorkActivity,
   isAguiRunTerminal,
   type TranscriptAguiEvent,
   type ChatWorkRailLabels,
@@ -26,6 +26,8 @@ const props = withDefaults(defineProps<{
 
 const defaultLabels: ChatWorkRailLabels = {
   ariaLabel: "Agent work",
+  preparing: "Preparing request…",
+  responding: "Drafting response…",
   thinking: "Thinking…",
   workedFor: (duration) => `Worked for ${duration}`,
   workingFor: (duration) => `Working for ${duration}`,
@@ -50,7 +52,12 @@ const expanded = ref(false);
 const now = ref(Date.now());
 const labels = computed(() => props.labels ?? defaultLabels);
 const duration = computed(() => formatAguiDuration(aguiWorkElapsedMilliseconds(props.events, now.value)));
-const currentSummary = computed(() => currentAguiWorkSummary(props.events) || labels.value.thinking);
+const currentSummary = computed(() => {
+  const activity = currentAguiWorkActivity(props.events);
+  if (activity === "PREPARING") return labels.value.preparing;
+  if (activity === "RESPONDING") return labels.value.responding;
+  return labels.value.thinking;
+});
 let timer: ReturnType<typeof setInterval> | undefined;
 
 watch(terminalEvent, (completed) => {

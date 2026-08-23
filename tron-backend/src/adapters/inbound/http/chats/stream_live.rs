@@ -58,6 +58,18 @@ impl SystemAgentLiveReplayRecorder {
         self.record(payloads);
     }
 
+    pub(crate) fn start(&self) {
+        if !self.enabled {
+            return;
+        }
+        let payloads = self
+            .builder
+            .lock()
+            .map(|mut builder| builder.start())
+            .unwrap_or_default();
+        self.record(payloads);
+    }
+
     pub(crate) fn finalize(&self) {
         if !self.enabled {
             return;
@@ -84,6 +96,7 @@ impl SystemAgentLiveReplayRecorder {
 
 pub(crate) struct SystemAgentLiveEventBuilder {
     enabled: bool,
+    run_started: bool,
     reasoning_started: bool,
     reasoning_message_started: bool,
     reasoning_ended: bool,
@@ -100,6 +113,7 @@ impl SystemAgentLiveEventBuilder {
     pub(crate) fn new(stream_key: &str, run_code: &str, enabled: bool) -> Self {
         Self {
             enabled,
+            run_started: false,
             reasoning_started: false,
             reasoning_message_started: false,
             reasoning_ended: false,
@@ -115,6 +129,25 @@ impl SystemAgentLiveEventBuilder {
 
     pub(crate) fn enabled(&self) -> bool {
         self.enabled
+    }
+
+    pub(crate) fn start(&mut self) -> Vec<SystemAgentLiveProtocolEvent> {
+        if !self.enabled || self.run_started {
+            return Vec::new();
+        }
+        self.run_started = true;
+        vec![
+            SystemAgentLiveProtocolEvent::new(
+                "RUN_STARTED",
+                json!({
+                    "type": "RUN_STARTED",
+                    "threadId": self.stream_key,
+                    "runId": self.run_code,
+                    "timestamp": current_stream_timestamp(),
+                }),
+            ),
+            self.activity_snapshot_payload("PREPARING"),
+        ]
     }
 
     pub(crate) fn ingest(&mut self, event: ModelStreamEvent) -> Vec<SystemAgentLiveProtocolEvent> {
@@ -162,15 +195,8 @@ impl SystemAgentLiveEventBuilder {
         let mut payloads = Vec::new();
         if !self.reasoning_started {
             self.reasoning_started = true;
-            payloads.push(SystemAgentLiveProtocolEvent::new(
-                "RUN_STARTED",
-                json!({
-                    "type": "RUN_STARTED",
-                    "threadId": self.stream_key,
-                    "runId": self.run_code,
-                    "timestamp": current_stream_timestamp(),
-                }),
-            ));
+            payloads.extend(self.start());
+            payloads.push(self.activity_snapshot_payload("THINKING"));
             payloads.push(SystemAgentLiveProtocolEvent::new(
                 "REASONING_START",
                 json!({
@@ -238,15 +264,8 @@ impl SystemAgentLiveEventBuilder {
         }
         if !self.text_started {
             self.text_started = true;
-            payloads.push(SystemAgentLiveProtocolEvent::new(
-                "RUN_STARTED",
-                json!({
-                    "type": "RUN_STARTED",
-                    "threadId": self.stream_key,
-                    "runId": self.run_code,
-                    "timestamp": current_stream_timestamp(),
-                }),
-            ));
+            payloads.extend(self.start());
+            payloads.push(self.activity_snapshot_payload("RESPONDING"));
             payloads.push(SystemAgentLiveProtocolEvent::new(
                 "TEXT_MESSAGE_START",
                 json!({
@@ -274,6 +293,19 @@ impl SystemAgentLiveEventBuilder {
             }),
         ));
         payloads
+    }
+
+    fn activity_snapshot_payload(&self, activity: &str) -> SystemAgentLiveProtocolEvent {
+        SystemAgentLiveProtocolEvent::new(
+            "ACTIVITY_SNAPSHOT",
+            json!({
+                "type": "ACTIVITY_SNAPSHOT",
+                "threadId": self.stream_key,
+                "runId": self.run_code,
+                "activity": activity,
+                "timestamp": current_stream_timestamp(),
+            }),
+        )
     }
 
     fn close_reasoning_payloads(&mut self) -> Vec<SystemAgentLiveProtocolEvent> {
@@ -305,4 +337,24 @@ impl SystemAgentLiveEventBuilder {
 
 fn current_stream_timestamp() -> i64 {
     chrono::Utc::now().timestamp_millis()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::SystemAgentLiveEventBuilder;
+
+    #[test]
+    fn starts_immediately_and_emits_stable_activity_stages() {
+        let mut builder = SystemAgentLiveEventBuilder::new("SESSION-1", "RUN-1", true);
+
+        let start = builder.start();
+        assert_eq!(start.len(), 2);
+        assert_eq!(start[0].sse_event, "RUN_STARTED");
+        assert_eq!(start[1].data["activity"], "PREPARING");
+
+        let text = builder.text_event_payloads("Hello".to_string());
+        assert_eq!(text[0].sse_event, "ACTIVITY_SNAPSHOT");
+        assert_eq!(text[0].data["activity"], "RESPONDING");
+        assert_eq!(text[1].sse_event, "TEXT_MESSAGE_START");
+    }
 }
