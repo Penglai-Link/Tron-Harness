@@ -45,7 +45,8 @@ pub use model_exchange::{
     ModelTokenUsage, TokenEstimateSnapshot, TokenUsageAuditSnapshot, ToolCall,
 };
 pub(crate) use model_exchange::{
-    is_generated_tool_call_id, responses_function_call_item_json, responses_input_item_json,
+    function_call_arguments_json, is_generated_tool_call_id, responses_function_call_item_json,
+    responses_input_item_json,
 };
 pub use run::{AgentRunResult, AgentRunStatus};
 pub use tool::{

@@ -470,7 +470,7 @@ pub(crate) fn responses_function_call_item_json(part: &AgentMessagePart) -> Opti
             "type": "function_call",
             "call_id": call_id,
             "name": tool_name,
-            "arguments": input.to_string(),
+            "arguments": function_call_arguments_json(input),
         })),
         AgentMessagePart::ToolResult {
             call_id: Some(call_id),
@@ -482,5 +482,17 @@ pub(crate) fn responses_function_call_item_json(part: &AgentMessagePart) -> Opti
             "output": output,
         })),
         _ => None,
+    }
+}
+
+/// A malformed provider tool call is retained in the transcript so that the
+/// model can receive its failed observation and recover. Some OpenAI-compatible
+/// providers reject `"null"` for function arguments, even though it is valid
+/// JSON, so replay it as an empty object instead.
+pub(crate) fn function_call_arguments_json(input: &Value) -> String {
+    if input.is_null() {
+        "{}".into()
+    } else {
+        input.to_string()
     }
 }

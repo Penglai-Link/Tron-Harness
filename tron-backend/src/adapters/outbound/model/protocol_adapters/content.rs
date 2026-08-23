@@ -1,6 +1,8 @@
 use serde_json::{Value, json};
 
-use crate::domain::agent::{AgentMessage, AgentMessagePart, is_generated_tool_call_id};
+use crate::domain::agent::{
+    AgentMessage, AgentMessagePart, function_call_arguments_json, is_generated_tool_call_id,
+};
 
 pub(super) fn chat_message_json(message: &AgentMessage) -> Value {
     let content = if message.role == "tool" {
@@ -115,7 +117,7 @@ fn chat_tool_call_json(part: &AgentMessagePart) -> Option<Value> {
         "type": "function",
         "function": {
             "name": tool_name,
-            "arguments": input.to_string(),
+            "arguments": function_call_arguments_json(input),
         },
     }))
 }

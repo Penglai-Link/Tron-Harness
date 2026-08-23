@@ -97,3 +97,27 @@ fn chat_request_downgrades_tool_observations_without_call_id_to_user_text() {
         json!("tool:workspace.page\nresult:\n[]")
     );
 }
+
+#[test]
+fn request_builders_replay_invalid_tool_arguments_as_an_empty_json_object() {
+    let request = ModelRequest {
+        messages: vec![AgentMessage::assistant_tool_calls(vec![(
+            Some("call-invalid".into()),
+            "fs.write_text".into(),
+            Value::Null,
+        )])],
+        tools: vec![],
+        system_agent_session_id: None,
+        response_input_items: None,
+        previous_response_id: None,
+    };
+
+    let chat = chat_completions_request(&chat_config(), &request);
+    assert_eq!(
+        chat["messages"][0]["tool_calls"][0]["function"]["arguments"],
+        json!("{}")
+    );
+
+    let responses = responses_request(&chat_config(), &request);
+    assert_eq!(responses["input"][0]["arguments"], json!("{}"));
+}
