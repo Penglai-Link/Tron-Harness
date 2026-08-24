@@ -18,6 +18,7 @@ import {
 import {
   Bot,
   ChevronDown,
+  ChevronRight,
   MoreHorizontal,
   PanelBottomClose,
   PanelBottomOpen,
@@ -943,7 +944,7 @@ export function TronShell({
                     onClick={() => toggleSection(section.label)}
                   >
                     {t(section.translationKey)}
-                    <ChevronDown className={cn("transition-transform", open ? "rotate-180" : "")} size={14} aria-hidden="true" />
+                    <ChevronRight className={cn("transition-transform", open ? "rotate-90" : "")} size={14} aria-hidden="true" />
                   </button>
                 )}
                 {open || compact ? (
