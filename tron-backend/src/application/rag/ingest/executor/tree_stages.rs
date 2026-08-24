@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
 
 use tokio::time::timeout;
 
@@ -135,8 +135,12 @@ where
                 })
                 .collect::<Vec<_>>();
             let direct_text_units = direct_text_units(prepared, tree_node, children_by_parent);
-            let prompt =
-                llm_tree_summary_prompt(&tree_node.title, &child_summaries, &direct_text_units);
+            let prompt = self.tree_summary_prompt(
+                &request.workspace_code,
+                &tree_node.title,
+                &child_summaries,
+                &direct_text_units,
+            )?;
             let prompt = truncate_tree_summary_prompt(prompt, summary_config.max_prompt_chars);
             let summary_call = tree_summary_runtime.summarize_tree(RagTreeSummaryCall {
                 workspace_code: request.workspace_code.clone(),
@@ -220,6 +224,58 @@ where
                 .collect(),
             warnings,
         ))
+    }
+
+    fn tree_summary_prompt(
+        &self,
+        workspace_code: &str,
+        title: &str,
+        child_summaries: &[(&str, &str)],
+        direct_text_units: &[String],
+    ) -> Result<String, RagError> {
+        let Some(prompt_service) = &self.prompt_service else {
+            return Ok(llm_tree_summary_prompt(
+                title,
+                child_summaries,
+                direct_text_units,
+            ));
+        };
+        let source_text = direct_text_units
+            .iter()
+            .map(|text| text.trim())
+            .filter(|text| !text.is_empty())
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let child_summaries = child_summaries
+            .iter()
+            .map(|(child_title, child_summary)| {
+                format!("- Child title: {}\n{}", child_title.trim(), child_summary.trim())
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
+        let runtime_values = HashMap::from([
+            (
+                crate::domain::prompt::PromptRuntimeProvider::RagTreeTitle,
+                serde_json::Value::String(title.to_string()),
+            ),
+            (
+                crate::domain::prompt::PromptRuntimeProvider::RagTreeSourceText,
+                serde_json::Value::String(source_text),
+            ),
+            (
+                crate::domain::prompt::PromptRuntimeProvider::RagTreeChildSummaries,
+                serde_json::Value::String(child_summaries),
+            ),
+        ]);
+        prompt_service
+            .runtime_prompt_text(
+                Some(workspace_code),
+                "rag.tree-summary",
+                "en-US",
+                &runtime_values,
+            )
+            .map_err(|_| RagError::IngestStageFailed)?
+            .ok_or(RagError::IngestStageFailed)
     }
 
     fn execute_tree_fulltext_index_stage(

@@ -8,7 +8,9 @@ import type {
   PromptPageQuery,
   PromptRecord,
   PromptTranslation,
+  PromptTranslationPayload,
   PromptVariable,
+  PromptRuntimeProvider,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
 } from "@/domain/prompt/model";
@@ -20,6 +22,20 @@ import {
 
 const seedTimestamp = "2026-07-13T02:00:00.000Z";
 let nextPromptSequence = 1000;
+
+const runtimeVariableProviders: Record<string, PromptRuntimeProvider> = {
+  child_summaries: "RAG_TREE_CHILD_SUMMARIES",
+  command: "TERMINAL_EXPLAIN_COMMAND",
+  current_command: "TERMINAL_CURRENT_COMMAND",
+  output: "TERMINAL_EXPLAIN_OUTPUT",
+  persistence_mode: "AGENT_DOMAIN_PERSISTENCE_MODE",
+  source_text: "RAG_TREE_SOURCE_TEXT",
+  task_context: "TASK_CONTEXT",
+  title: "RAG_TREE_TITLE",
+  user_message: "CHAT_USER_MESSAGE",
+  user_request: "TERMINAL_USER_REQUEST",
+  visible_domains: "AGENT_VISIBLE_DOMAINS",
+};
 
 function platformPrompt(
   promptCode: string,
@@ -149,6 +165,17 @@ function seedPromptVariables(promptBody: string) {
   return reconcilePromptVariables(promptBody, []).map((variable) => ({
     ...variable,
     description: `Variable ${variable.name}`,
+    ...(runtimeVariableProviders[variable.name]
+      ? {
+        sourceKind: "RUNTIME" as const,
+        managedVariableKey: null,
+        runtimeProvider: runtimeVariableProviders[variable.name],
+      }
+      : {
+        sourceKind: "MANAGED" as const,
+        managedVariableKey: null,
+        runtimeProvider: null,
+      }),
   }));
 }
 
@@ -236,6 +263,7 @@ export function createWorkspacePromptMock(payload: WorkspacePromptCreatePayload)
     sourceWorkspaceCode: payload.workspaceCode,
     sourceWorkspaceName: payload.workspaceCode,
     sourceWorkspacePath: [{ workspaceCode: payload.workspaceCode, name: payload.workspaceCode }],
+    translations: materializeTranslations(payload.translations, timestamp, 1),
     variables: promptVariables(payload.promptBody, payload.variables),
     version: 1,
     createdAt: timestamp,
@@ -258,6 +286,7 @@ export function createPlatformPromptMock(payload: PlatformPromptCreatePayload) {
     sourceWorkspaceName: null,
     sourceWorkspacePath: [],
     allowInheritance: null,
+    translations: materializeTranslations(payload.translations, timestamp, 1),
     variables: promptVariables(payload.promptBody, payload.variables),
     version: 1,
     createdAt: timestamp,
@@ -274,6 +303,7 @@ function updateRecord(
   if (payload.expectedVersion !== record.version) {
     throw new Error("prompt version conflict");
   }
+  const updatedAt = now();
   return {
     ...record,
     allowInheritance: record.sourceKind === "LOCAL" && "allowInheritance" in payload
@@ -284,10 +314,24 @@ function updateRecord(
     enabled: payload.enabled,
     promptBody: payload.promptBody,
     variables: promptVariables(payload.promptBody, payload.variables),
-    translations: payload.translations?.length ? payload.translations : record.translations,
+    translations: payload.translations?.length
+      ? materializeTranslations(payload.translations, updatedAt, record.version + 1)
+      : record.translations,
     version: record.version + 1,
-    updatedAt: now(),
+    updatedAt,
   };
+}
+
+function materializeTranslations(
+  translations: PromptTranslationPayload[] | undefined,
+  updatedAt: string,
+  sourceVersion: number,
+): PromptTranslation[] {
+  return (translations ?? []).map((translation) => ({
+    ...translation,
+    sourceVersion,
+    updatedAt,
+  }));
 }
 
 export function updateWorkspacePromptMock(payload: WorkspacePromptUpdatePayload) {

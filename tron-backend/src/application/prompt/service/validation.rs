@@ -1,10 +1,13 @@
 use std::collections::HashMap;
 
 use crate::domain::prompt::{
-    PromptError, PromptTranslation, PromptTranslationStatus, PromptVariable, analyze_template,
+    PromptError, PromptTranslation, PromptTranslationStatus, PromptVariable,
+    PromptVariableSourceKind, analyze_template, registered_runtime_prompt_variable,
 };
 
-use super::super::{PromptSpecCommand, PromptVariableSpecCommand};
+use super::super::{
+    PromptSpecCommand, PromptTranslationSpecCommand, PromptVariableSpecCommand,
+};
 
 pub(super) fn normalize_spec(
     mut spec: PromptSpecCommand,
@@ -96,6 +99,54 @@ pub(super) fn translation_models(
         .collect()
 }
 
+pub(super) fn synchronize_translation_statuses(
+    previous: &[PromptTranslation],
+    spec: &mut PromptSpecCommand,
+) {
+    let base_locale = spec
+        .translations
+        .iter()
+        .find(|translation| {
+            translation.display_name == spec.display_name
+                && translation.prompt_body == spec.prompt_body
+                && translation.description == spec.description
+        })
+        .map(|translation| translation.locale.clone());
+    let base_changed = base_locale.as_deref().is_some_and(|locale| {
+        let current = spec
+            .translations
+            .iter()
+            .find(|translation| translation.locale == locale);
+        let previous = previous.iter().find(|translation| translation.locale == locale);
+        match (current, previous) {
+            (Some(current), Some(previous)) => translation_content_changed(current, previous),
+            (Some(_), None) => true,
+            _ => false,
+        }
+    });
+
+    for translation in &mut spec.translations {
+        let changed = previous
+            .iter()
+            .find(|item| item.locale == translation.locale)
+            .is_none_or(|previous| translation_content_changed(translation, previous));
+        if changed {
+            translation.status = PromptTranslationStatus::Draft;
+        } else if base_changed && base_locale.as_deref() != Some(translation.locale.as_str()) {
+            translation.status = PromptTranslationStatus::UpdateAvailable;
+        }
+    }
+}
+
+fn translation_content_changed(
+    current: &PromptTranslationSpecCommand,
+    previous: &PromptTranslation,
+) -> bool {
+    current.display_name != previous.display_name
+        || current.prompt_body != previous.prompt_body
+        || current.description != previous.description
+}
+
 fn normalize_variables(
     prompt_body: &str,
     variables: Vec<PromptVariableSpecCommand>,
@@ -127,10 +178,49 @@ fn normalize_variables(
                 "variable description must not exceed 200 characters: {name}"
             )));
         }
+        let (managed_variable_key, runtime_provider) = match variable.source_kind {
+            PromptVariableSourceKind::Managed => {
+                let managed_variable_key = required_optional(
+                    variable.managed_variable_key,
+                    "variable.managedVariableKey",
+                )?;
+                if variable.runtime_provider.is_some() {
+                    return Err(PromptError::InvalidInput(format!(
+                        "runtimeProvider is not allowed for managed variable: {name}"
+                    )));
+                }
+                (Some(managed_variable_key), None)
+            }
+            PromptVariableSourceKind::Runtime => {
+                let runtime_provider = variable.runtime_provider.ok_or_else(|| {
+                    PromptError::InvalidInput("variable.runtimeProvider is required".into())
+                })?;
+                if optional(variable.managed_variable_key).is_some() {
+                    return Err(PromptError::InvalidInput(format!(
+                        "managedVariableKey is not allowed for runtime variable: {name}"
+                    )));
+                }
+                let Some(registered) = registered_runtime_prompt_variable(&name, runtime_provider)
+                else {
+                    return Err(PromptError::InvalidInput(format!(
+                        "unsupported runtimeProvider for variable: {name}"
+                    )));
+                };
+                if registered.variable_type != variable.variable_type {
+                    return Err(PromptError::InvalidInput(format!(
+                        "runtime variable type does not match provider: {name}"
+                    )));
+                }
+                (None, Some(runtime_provider))
+            }
+        };
         normalized.push(PromptVariable {
             name,
             variable_type: variable.variable_type,
             description: description.to_string(),
+            source_kind: variable.source_kind,
+            managed_variable_key,
+            runtime_provider,
         });
     }
     if !by_name.is_empty() {
@@ -165,4 +255,13 @@ fn optional(value: Option<String>) -> Option<String> {
         let value = value.trim();
         (!value.is_empty()).then(|| value.to_string())
     })
+}
+
+fn required_optional(value: Option<String>, field: &str) -> Result<String, PromptError> {
+    value
+        .and_then(|value| {
+            let value = value.trim();
+            (!value.is_empty()).then(|| value.to_string())
+        })
+        .ok_or_else(|| PromptError::InvalidInput(format!("{field} is required")))
 }

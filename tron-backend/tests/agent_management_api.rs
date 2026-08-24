@@ -903,7 +903,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         message["role"] == json!("system")
             && message["content"]
                 .as_str()
-                .is_some_and(|content| content.contains("\"domainCode\": \"workspace\""))
+                .is_some_and(|content| content.contains("\"domainCode\":\"workspace\""))
     }));
 
     let second_tools = recorded_requests[1]["tools"]

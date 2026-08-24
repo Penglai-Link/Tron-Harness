@@ -1,5 +1,6 @@
 import type {
   PlatformVariableRecord,
+  PromptVariableOption,
   VariableValueMode,
   VariableRecord,
   VariableSourceKind,
@@ -19,6 +20,29 @@ interface VariableSeed {
 }
 
 const now = "2026-05-18T00:00:00Z";
+
+const runtimePromptVariableOptions: PromptVariableOption[] = [
+  ["visible_domains", "JSON", "Visible tool domains and their operations.", "AGENT_VISIBLE_DOMAINS", "Agent tool domains"],
+  ["persistence_mode", "STRING", "How expanded domain tools are persisted.", "AGENT_DOMAIN_PERSISTENCE_MODE", "Agent domain persistence mode"],
+  ["user_message", "STRING", "The first user message.", "CHAT_USER_MESSAGE", "Chat user message"],
+  ["command", "STRING", "Command being analyzed.", "TERMINAL_EXPLAIN_COMMAND", "Terminal command"],
+  ["output", "STRING", "Command output being analyzed.", "TERMINAL_EXPLAIN_OUTPUT", "Terminal output"],
+  ["current_command", "STRING", "Current command intent.", "TERMINAL_CURRENT_COMMAND", "Terminal current command"],
+  ["user_request", "STRING", "User request for a command.", "TERMINAL_USER_REQUEST", "Terminal user request"],
+  ["task_context", "STRING", "Structured task metadata and description.", "TASK_CONTEXT", "Task context"],
+  ["title", "STRING", "Tree node title.", "RAG_TREE_TITLE", "RAG tree title"],
+  ["source_text", "STRING", "Text covered by the node.", "RAG_TREE_SOURCE_TEXT", "RAG tree source text"],
+  ["child_summaries", "STRING", "Summaries generated for child nodes.", "RAG_TREE_CHILD_SUMMARIES", "RAG tree child summaries"],
+].map(([key, type, description, runtimeProvider, sourceLabel]) => ({
+  id: `RUNTIME:${runtimeProvider}:${key}`,
+  key,
+  type: type as PromptVariableOption["type"],
+  description,
+  sourceKind: "RUNTIME" as const,
+  sourceLabel,
+  managedVariableKey: null,
+  runtimeProvider: runtimeProvider as NonNullable<PromptVariableOption["runtimeProvider"]>,
+}));
 
 const mockVariables: VariableSeed[] = [
   {
@@ -197,6 +221,55 @@ export function listPlatformVariableRecords() {
   return mockPlatformVariables
     .map((variable) => ({ ...variable }))
     .sort((left, right) => left.key.localeCompare(right.key));
+}
+
+function matchesPromptVariableOption(
+  option: PromptVariableOption,
+  search: string,
+) {
+  const normalizedSearch = search.trim().toLowerCase();
+  if (!normalizedSearch) return true;
+  return [option.key, option.description ?? "", option.sourceLabel, option.runtimeProvider ?? ""]
+    .join(" ")
+    .toLowerCase()
+    .includes(normalizedSearch);
+}
+
+export function listWorkspacePromptVariableOptions(
+  workspaceCode: string,
+  search = "",
+): PromptVariableOption[] {
+  const managed = listVariableCatalog(workspaceCode)
+    .filter((variable) => !variable.isSensitive && variable.hasValue)
+    .map((variable) => ({
+      id: `MANAGED:${variable.key}`,
+      key: variable.key,
+      type: "STRING" as const,
+      description: variable.description,
+      sourceKind: "MANAGED" as const,
+      sourceLabel: variable.sourceLabel,
+      managedVariableKey: variable.key,
+      runtimeProvider: null,
+    }));
+  return [...managed, ...runtimePromptVariableOptions]
+    .filter((variable) => matchesPromptVariableOption(variable, search));
+}
+
+export function listPlatformPromptVariableOptions(search = ""): PromptVariableOption[] {
+  const managed = listPlatformVariableRecords()
+    .filter((variable) => !variable.isSensitive && variable.hasValue)
+    .map((variable) => ({
+      id: `MANAGED:${variable.key}`,
+      key: variable.key,
+      type: "STRING" as const,
+      description: variable.description,
+      sourceKind: "MANAGED" as const,
+      sourceLabel: "Platform Configuration",
+      managedVariableKey: variable.key,
+      runtimeProvider: null,
+    }));
+  return [...managed, ...runtimePromptVariableOptions]
+    .filter((variable) => matchesPromptVariableOption(variable, search));
 }
 
 export function createPlatformVariableRecord(payload: VariableWritePayload) {

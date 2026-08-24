@@ -177,11 +177,12 @@ fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> Mode
 fn build_prompt_service(
     database_url: &str,
     workspaces: WorkspaceService,
+    variables: VariableService,
     id_provider: Arc<dyn IdGenerator>,
 ) -> PromptService {
     let repository = SqlitePromptRepository::connect(database_url)
         .expect("prompt SQLite repository should initialize");
-    let service = PromptService::new(repository, workspaces, id_provider);
+    let service = PromptService::new(repository, workspaces, variables, id_provider);
     if should_seed_builtin_prompts(database_url) {
         service
             .bootstrap_builtins()

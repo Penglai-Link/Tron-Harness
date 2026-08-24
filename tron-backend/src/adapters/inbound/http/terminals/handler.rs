@@ -10,8 +10,8 @@ use crate::{
     application::{
         llm::LlmTextGenerationCallCommand,
         terminal::{
-            IssueTerminalSocketTicketCommand, build_terminal_command_generation_prompt,
-            normalize_terminal_command,
+            IssueTerminalSocketTicketCommand, normalize_terminal_command,
+            terminal_command_runtime_values,
         },
     },
     response::ApiResponse,
@@ -20,6 +20,7 @@ use crate::{
 use super::{
     error_mapper::{
         invalid_terminal_request_response, llm_runtime_error_response, terminal_error_response,
+        prompt_render_error_response,
     },
     request::{GenerateTerminalCommandRequest, IssueTerminalSocketTicketRequest},
     response::{GenerateTerminalCommandResponse, IssueTerminalSocketTicketResponse},
@@ -46,12 +47,22 @@ pub async fn generate_command(
     {
         return terminal_error_response(error);
     }
+    let runtime_values = terminal_command_runtime_values(&request.prompt);
+    let prompt = match state.prompts.runtime_prompt_text(
+        Some(&request.workspace_code),
+        "terminal.command-exact",
+        "en-US",
+        &runtime_values,
+    ) {
+        Ok(Some(prompt)) => prompt,
+        Ok(None) | Err(_) => return prompt_render_error_response(),
+    };
     match state
         .llm_runtime
         .text_generation_call(LlmTextGenerationCallCommand {
             workspace_code: request.workspace_code,
             model_code: request.model_code,
-            prompt: build_terminal_command_generation_prompt(request.prompt),
+            prompt,
         })
         .await
     {

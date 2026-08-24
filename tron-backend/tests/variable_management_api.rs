@@ -13,6 +13,99 @@ use common::{
 };
 
 #[tokio::test]
+async fn prompt_variable_options_combine_safe_managed_and_registered_runtime_variables() {
+    let router = app();
+
+    let sensitive_create = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/variables/workspaces/TRON_CORE",
+        Some(json!({
+            "key": "PROMPT_OPTION_SECRET",
+            "value": "never-expose-this",
+            "description": "Sensitive prompt option fixture",
+            "isSensitive": true,
+            "valueMode": "REPLACE"
+        })),
+    )
+    .await;
+    assert_eq!(sensitive_create.status(), StatusCode::CREATED);
+
+    let runtime_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/variables/workspaces/TRON_CORE/prompt-options?search=visible_domains",
+        None,
+    )
+    .await;
+    assert_eq!(runtime_response.status(), StatusCode::OK);
+    let runtime_json = response_json(runtime_response).await;
+    let runtime_options = runtime_json["data"]
+        .as_array()
+        .expect("runtime prompt options should be an array");
+    let visible_domains = runtime_options
+        .iter()
+        .find(|option| option["key"] == json!("visible_domains"))
+        .expect("global runtime catalog should expose visible_domains");
+    assert_eq!(visible_domains["sourceKind"], json!("RUNTIME"));
+    assert_eq!(
+        visible_domains["runtimeProvider"],
+        json!("AGENT_VISIBLE_DOMAINS")
+    );
+    assert_eq!(visible_domains["managedVariableKey"], serde_json::Value::Null);
+
+    let managed_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/variables/workspaces/TRON_CORE/prompt-options?search=ROUTER_TIMEOUT_MS",
+        None,
+    )
+    .await;
+    assert_eq!(managed_response.status(), StatusCode::OK);
+    let managed_json = response_json(managed_response).await;
+    let managed_options = managed_json["data"]
+        .as_array()
+        .expect("managed prompt options should be an array");
+    let timeout = managed_options
+        .iter()
+        .find(|option| option["key"] == json!("ROUTER_TIMEOUT_MS"))
+        .expect("effective workspace variable should be selectable");
+    assert_eq!(timeout["sourceKind"], json!("MANAGED"));
+    assert_eq!(timeout["managedVariableKey"], json!("ROUTER_TIMEOUT_MS"));
+    assert_eq!(timeout["runtimeProvider"], serde_json::Value::Null);
+
+    let sensitive_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/variables/workspaces/TRON_CORE/prompt-options?search=PROMPT_OPTION_SECRET",
+        None,
+    )
+    .await;
+    assert_eq!(sensitive_response.status(), StatusCode::OK);
+    assert!(response_json(sensitive_response).await["data"]
+        .as_array()
+        .expect("sensitive prompt options should be an array")
+        .is_empty());
+
+    let platform_runtime_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/admin/platform/variables/prompt-options?search=visible_domains",
+        None,
+    )
+    .await;
+    assert_eq!(platform_runtime_response.status(), StatusCode::OK);
+    assert!(response_json(platform_runtime_response).await["data"]
+        .as_array()
+        .expect("platform runtime prompt options should be an array")
+        .iter()
+        .any(|option| {
+            option["key"] == json!("visible_domains")
+                && option["sourceKind"] == json!("RUNTIME")
+        }));
+}
+
+#[tokio::test]
 async fn list_variables_returns_effective_catalog_with_inherited_and_override_sources() {
     let router = app();
 

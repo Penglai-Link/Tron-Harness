@@ -1,12 +1,15 @@
 use std::{fs, path::Path, time::Duration};
 
-use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior, params};
+use rusqlite::{
+    Connection, OpenFlags, OptionalExtension, Transaction, TransactionBehavior, params,
+};
 
 use crate::{
     application::prompt::PromptRepository,
     domain::prompt::{
         Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptTranslation,
-        PromptTranslationStatus, PromptVariable, PromptVariableType,
+        PromptRuntimeProvider, PromptTranslationStatus, PromptVariable, PromptVariableSourceKind,
+        PromptVariableType,
     },
     shared::{
         id::SnowflakeId,
@@ -15,7 +18,8 @@ use crate::{
 };
 
 use super::migrations::{
-    PROMPT_CATALOG_MIGRATION, PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION,
+    PROMPT_ACTION_CATEGORY_MIGRATION, PROMPT_CATALOG_MIGRATION, PROMPT_VARIABLE_BINDINGS_MIGRATION,
+    PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION,
 };
 
 pub struct SqlitePromptRepository {
@@ -44,6 +48,8 @@ impl SqlitePromptRepository {
             .map_err(storage_error)?;
         migrate_prompt_variable_metadata(&mut connection)?;
         migrate_prompt_catalog(&mut connection)?;
+        migrate_prompt_category(&mut connection)?;
+        migrate_prompt_variable_bindings(&mut connection)?;
         Ok(Self { connection })
     }
 }
@@ -175,13 +181,17 @@ fn replace_variables(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(
         transaction
             .execute(
                 "INSERT INTO prompt_variables (
-                    prompt_code, variable_name, variable_type, description, position
-                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                    prompt_code, variable_name, variable_type, description, source_kind,
+                    managed_variable_key, runtime_provider, position
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
                 params![
                     prompt.prompt_code,
                     variable.name,
                     variable.variable_type.code(),
                     variable.description,
+                    variable.source_kind.code(),
+                    variable.managed_variable_key,
+                    variable.runtime_provider.map(PromptRuntimeProvider::code),
                     position
                 ],
             )
@@ -240,7 +250,8 @@ fn load_variables(
 ) -> Result<Vec<PromptVariable>, PromptError> {
     let mut statement = connection
         .prepare(
-            "SELECT variable_name, variable_type, description FROM prompt_variables
+            "SELECT variable_name, variable_type, description, source_kind,
+                    managed_variable_key, runtime_provider FROM prompt_variables
          WHERE prompt_code = ?1 ORDER BY position",
         )
         .map_err(storage_error)?;
@@ -250,6 +261,12 @@ fn load_variables(
                 name: row.get(0)?,
                 variable_type: variable_type_from_storage(&row.get::<_, String>(1)?)?,
                 description: row.get(2)?,
+                source_kind: variable_source_kind_from_storage(&row.get::<_, String>(3)?)?,
+                managed_variable_key: row.get(4)?,
+                runtime_provider: row
+                    .get::<_, Option<String>>(5)?
+                    .map(|value| runtime_provider_from_storage(&value))
+                    .transpose()?,
             })
         })
         .map_err(storage_error)?
@@ -331,6 +348,7 @@ fn category_to_storage(value: PromptCategory) -> &'static str {
         PromptCategory::Persona => "PERSONA",
         PromptCategory::Tool => "TOOL",
         PromptCategory::Template => "TEMPLATE",
+        PromptCategory::Action => "ACTION",
     }
 }
 
@@ -340,6 +358,7 @@ fn category_from_storage(value: &str) -> rusqlite::Result<PromptCategory> {
         "PERSONA" => Ok(PromptCategory::Persona),
         "TOOL" => Ok(PromptCategory::Tool),
         "TEMPLATE" => Ok(PromptCategory::Template),
+        "ACTION" => Ok(PromptCategory::Action),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -352,6 +371,20 @@ fn variable_type_from_storage(value: &str) -> rusqlite::Result<PromptVariableTyp
         "JSON" => Ok(PromptVariableType::Json),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
+}
+
+fn variable_source_kind_from_storage(
+    value: &str,
+) -> rusqlite::Result<PromptVariableSourceKind> {
+    match value {
+        "MANAGED" => Ok(PromptVariableSourceKind::Managed),
+        "RUNTIME" => Ok(PromptVariableSourceKind::Runtime),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn runtime_provider_from_storage(value: &str) -> rusqlite::Result<PromptRuntimeProvider> {
+    PromptRuntimeProvider::from_code(value).ok_or(rusqlite::Error::InvalidQuery)
 }
 
 fn translation_status_to_storage(value: PromptTranslationStatus) -> &'static str {
@@ -480,6 +513,93 @@ fn migrate_prompt_catalog(connection: &mut Connection) -> Result<(), PromptError
     transaction.commit().map_err(storage_error)
 }
 
+fn migrate_prompt_category(connection: &mut Connection) -> Result<(), PromptError> {
+    let schema = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'prompts'",
+            [],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(storage_error)?;
+    if schema
+        .as_deref()
+        .is_some_and(|sql| sql.contains("'ACTION'"))
+    {
+        return Ok(());
+    }
+    connection
+        .execute_batch(PROMPT_ACTION_CATEGORY_MIGRATION)
+        .map_err(storage_error)
+}
+
+fn migrate_prompt_variable_bindings(connection: &mut Connection) -> Result<(), PromptError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(storage_error)?;
+    if !column_exists(&transaction, "prompt_variables", "source_kind")? {
+        transaction
+            .execute_batch(PROMPT_VARIABLE_BINDINGS_MIGRATION)
+            .map_err(storage_error)?;
+    }
+    repair_prompt_variable_bindings(&transaction)?;
+    transaction.commit().map_err(storage_error)
+}
+
+fn repair_prompt_variable_bindings(transaction: &Transaction<'_>) -> Result<(), PromptError> {
+    for definition in crate::domain::prompt::builtin_prompts() {
+        for parameter in &definition.parameters {
+            transaction
+                .execute(
+                    "UPDATE prompt_variables
+                     SET source_kind = 'RUNTIME', managed_variable_key = NULL,
+                         runtime_provider = ?3
+                     WHERE prompt_code = ?1 AND variable_name = ?2",
+                    rusqlite::params![
+                        definition.prompt_code,
+                        parameter.name,
+                        parameter.runtime_provider.code(),
+                    ],
+                )
+                .map_err(storage_error)?;
+        }
+    }
+
+    if column_exists(transaction, "platform_variables", "is_sensitive")?
+        && column_exists(transaction, "workspace_variables", "is_sensitive")?
+    {
+        transaction
+            .execute(
+                "UPDATE prompt_variables
+                 SET source_kind = 'MANAGED', managed_variable_key = variable_name,
+                     runtime_provider = NULL
+                 WHERE source_kind = 'MANAGED'
+                   AND managed_variable_key IS NULL
+                   AND runtime_provider IS NULL
+                   AND (
+                       EXISTS (
+                           SELECT 1 FROM platform_variables
+                           WHERE variable_key = prompt_variables.variable_name
+                             AND is_sensitive = 0
+                             AND trim(variable_value) <> ''
+                       )
+                       OR EXISTS (
+                           SELECT 1
+                           FROM workspace_variables
+                           JOIN prompts ON prompts.workspace_code = workspace_variables.workspace_code
+                           WHERE prompts.prompt_code = prompt_variables.prompt_code
+                             AND workspace_variables.variable_key = prompt_variables.variable_name
+                             AND workspace_variables.is_sensitive = 0
+                             AND trim(workspace_variables.variable_value) <> ''
+                       )
+                   )",
+                [],
+            )
+            .map_err(storage_error)?;
+    }
+    Ok(())
+}
+
 fn storage_error(_: impl std::fmt::Debug) -> PromptError {
     PromptError::StorageFailure
 }
@@ -488,7 +608,7 @@ fn storage_error(_: impl std::fmt::Debug) -> PromptError {
 mod tests {
     use rusqlite::{Connection, params};
 
-    use super::migrate_prompt_variable_metadata;
+    use super::{SqlitePromptRepository, migrate_prompt_variable_metadata};
 
     #[test]
     fn legacy_prompt_variables_are_migrated_to_typed_metadata() {
@@ -550,5 +670,34 @@ mod tests {
             )
             .expect("reapplied migration should preserve typed metadata");
         assert_eq!(preserved, ("NUMBER".to_string(), "Item count".to_string()));
+    }
+
+    #[test]
+    fn action_category_is_supported_by_the_prompt_schema() {
+        let repository =
+            SqlitePromptRepository::connect(":memory:").expect("prompt schema should migrate");
+        repository
+            .connection
+            .execute(
+                "INSERT INTO prompts (
+                    id, scope_kind, workspace_code, prompt_code, display_name, category,
+                    prompt_body, description, enabled, source_kind, source_prompt_code,
+                    allow_inheritance, version, created_at, updated_at, built_in,
+                    runtime_required, catalog_key
+                ) VALUES (1, 'PLATFORM', NULL, 'PROMPT-ACTION', 'Action prompt', 'ACTION',
+                    'Run {{command}}', NULL, 1, 'PLATFORM', NULL, NULL, 1, 1, 1, 0, 0, NULL)",
+                [],
+            )
+            .expect("action prompt category should satisfy the schema");
+
+        let category = repository
+            .connection
+            .query_row(
+                "SELECT category FROM prompts WHERE prompt_code = 'PROMPT-ACTION'",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .expect("action prompt should be readable");
+        assert_eq!(category, "ACTION");
     }
 }

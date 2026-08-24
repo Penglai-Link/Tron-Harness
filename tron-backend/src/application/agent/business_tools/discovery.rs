@@ -1,12 +1,15 @@
-use std::sync::Arc;
+use std::{collections::HashMap, sync::Arc};
 
 use serde::Deserialize;
-use serde_json::json;
+use serde_json::{Value, json};
 
 use crate::{
-    domain::agent::{
+    domain::{
+        agent::{
         AgentRunContext, EffectiveTool, ExpandedDomainPersistenceMode, Tool, ToolContextDelta,
         ToolError, ToolExecutionResult, ToolObservation, ToolRequest,
+        },
+        prompt::PromptRuntimeProvider,
     },
     shared::locale::SupportedLocale,
 };
@@ -51,18 +54,7 @@ pub fn build_domain_discovery_guidance(
     locale: &str,
 ) -> String {
     let locale = SupportedLocale::from_raw(locale);
-    let persistence_label = match (locale, persistence_mode) {
-        (SupportedLocale::ZhCn, ExpandedDomainPersistenceMode::StickyExpanded) => {
-            "sticky_expanded（持续保留）"
-        }
-        (SupportedLocale::ZhCn, ExpandedDomainPersistenceMode::EphemeralExpanded) => {
-            "ephemeral_expanded（执行后收起）"
-        }
-        (SupportedLocale::EnUs, ExpandedDomainPersistenceMode::StickyExpanded) => "sticky_expanded",
-        (SupportedLocale::EnUs, ExpandedDomainPersistenceMode::EphemeralExpanded) => {
-            "ephemeral_expanded"
-        }
-    };
+    let persistence_label = domain_persistence_label(locale, persistence_mode);
     let catalog = serde_json::to_string_pretty(visible_domains).unwrap_or_else(|_| "[]".into());
     let template = crate::domain::prompt::builtin_prompt_text(
         "agent.domain-discovery",
@@ -76,6 +68,42 @@ pub fn build_domain_discovery_guidance(
             "{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL}",
             DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL,
         )
+}
+
+pub fn domain_discovery_runtime_values(
+    visible_domains: &[crate::domain::agent::ToolDomainRecord],
+    persistence_mode: ExpandedDomainPersistenceMode,
+    locale: &str,
+) -> HashMap<PromptRuntimeProvider, Value> {
+    let locale = SupportedLocale::from_raw(locale);
+    HashMap::from([
+        (
+            PromptRuntimeProvider::AgentVisibleDomains,
+            serde_json::to_value(visible_domains).unwrap_or_else(|_| json!([])),
+        ),
+        (
+            PromptRuntimeProvider::AgentDomainPersistenceMode,
+            Value::String(domain_persistence_label(locale, persistence_mode).to_string()),
+        ),
+    ])
+}
+
+fn domain_persistence_label(
+    locale: SupportedLocale,
+    persistence_mode: ExpandedDomainPersistenceMode,
+) -> &'static str {
+    match (locale, persistence_mode) {
+        (SupportedLocale::ZhCn, ExpandedDomainPersistenceMode::StickyExpanded) => {
+            "sticky_expanded（持续保留）"
+        }
+        (SupportedLocale::ZhCn, ExpandedDomainPersistenceMode::EphemeralExpanded) => {
+            "ephemeral_expanded（执行后收起）"
+        }
+        (SupportedLocale::EnUs, ExpandedDomainPersistenceMode::StickyExpanded) => "sticky_expanded",
+        (SupportedLocale::EnUs, ExpandedDomainPersistenceMode::EphemeralExpanded) => {
+            "ephemeral_expanded"
+        }
+    }
 }
 
 pub(super) fn discovery_tool() -> Arc<dyn Tool> {

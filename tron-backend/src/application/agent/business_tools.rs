@@ -33,7 +33,7 @@ use crate::{
 pub use ask_user::{CHAT_ASK_USER_TOOL, ask_user_definition};
 pub use discovery::{
     DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, build_domain_discovery_guidance,
-    discovery_expand_tool_definition,
+    discovery_expand_tool_definition, domain_discovery_runtime_values,
 };
 
 pub fn tool_record_to_effective_tool(record: ToolCatalogRecord) -> EffectiveTool {

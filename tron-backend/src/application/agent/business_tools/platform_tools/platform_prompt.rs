@@ -9,7 +9,9 @@ use crate::{
     },
     domain::{
         agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest},
-        prompt::{PromptCategory, PromptVariableType},
+        prompt::{
+            PromptCategory, PromptRuntimeProvider, PromptVariableSourceKind, PromptVariableType,
+        },
     },
 };
 
@@ -223,13 +225,14 @@ impl Tool for PlatformPromptDeleteTool {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct PlatformPromptVariableInput {
     name: String,
-    #[serde(rename = "type", default = "default_prompt_variable_type")]
+    #[serde(rename = "type")]
     variable_type: PromptVariableType,
     description: String,
-}
-
-fn default_prompt_variable_type() -> PromptVariableType {
-    PromptVariableType::String
+    source_kind: PromptVariableSourceKind,
+    #[serde(default)]
+    managed_variable_key: Option<String>,
+    #[serde(default)]
+    runtime_provider: Option<PromptRuntimeProvider>,
 }
 
 impl PlatformPromptCreateInput {
@@ -255,6 +258,9 @@ impl PlatformPromptVariableInput {
             name: self.name,
             variable_type: self.variable_type,
             description: self.description,
+            source_kind: self.source_kind,
+            managed_variable_key: self.managed_variable_key,
+            runtime_provider: self.runtime_provider,
         }
     }
 }

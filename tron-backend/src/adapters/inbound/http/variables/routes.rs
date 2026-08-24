@@ -6,7 +6,8 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    create_variable, delete_variable, list_variables, patch_variable, reveal_workspace_variable,
+    create_variable, delete_variable, list_variables, list_workspace_prompt_variable_options,
+    patch_variable, reveal_workspace_variable,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -14,6 +15,10 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/variables/workspaces/{workspace_code}",
             get(list_variables).post(create_variable),
+        )
+        .route(
+            "/api/v1/variables/workspaces/{workspace_code}/prompt-options",
+            get(list_workspace_prompt_variable_options),
         )
         .route(
             "/api/v1/variables/workspaces/{workspace_code}/{variable_key}",

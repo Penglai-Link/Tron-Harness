@@ -65,6 +65,17 @@ pub fn invalid_terminal_request_response(
         .into_response()
 }
 
+pub fn prompt_render_error_response() -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiResponse::error(
+            "TERMINAL_PROMPT_RENDER_FAILED",
+            "terminal command prompt could not be rendered",
+        )),
+    )
+        .into_response()
+}
+
 pub fn terminal_error_response(error: TerminalError) -> Response {
     let (status, code, message) = match error {
         TerminalError::WorkspaceRequired => (

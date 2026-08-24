@@ -85,11 +85,16 @@ function sourceTone(sourceKind: PromptSourceKind) {
   return "info" as const;
 }
 
+function localizedPromptName(record: PromptRecord, locale: string) {
+  const translation = record.translations?.find((item) => item.locale === locale);
+  return translation?.displayName.trim() || record.displayName;
+}
+
 export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind }) {
   const navigate = useNavigate();
   const pt = usePromptTranslation();
   const toast = useToast();
-  const { formatDateTime } = useLocaleFormatters();
+  const { currentLocale, formatDateTime } = useLocaleFormatters();
   const dataSource = getServiceDataSource("prompt");
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
@@ -133,8 +138,12 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       : `/settings/prompts/detail?${params.toString()}`;
   }
 
-  function editorHref(record: PromptRecord) {
-    return detailHref(record, scopeKind === "WORKSPACE" && record.sourceKind === "INHERITED" ? "override" : undefined);
+  function editHref(record: PromptRecord, mode?: "override") {
+    const params = new URLSearchParams({ promptCode: record.promptCode });
+    if (mode) params.set("mode", mode);
+    return scopeKind === "WORKSPACE"
+      ? `/prompts/edit?${params.toString()}`
+      : `/settings/prompts/edit?${params.toString()}`;
   }
 
   async function toggleEnabled(record: PromptRecord) {
@@ -238,7 +247,7 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
       .filter((action) => !(action === "SET_ENABLED" && record.runtimeRequired))
       .map((action) => {
       if (action === "EDIT" || action === "OVERRIDE") {
-        return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); navigate(detailHref(record, action === "OVERRIDE" ? "override" : undefined)); }}>{action === "OVERRIDE" ? pt("actions.createOverride", "Create override") : pt("actions.edit", "Edit")}</DropdownMenuItem>;
+        return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); navigate(editHref(record, action === "OVERRIDE" ? "override" : undefined)); }}>{action === "OVERRIDE" ? pt("actions.createOverride", "Create override") : pt("actions.edit", "Edit")}</DropdownMenuItem>;
       }
       if (action === "DUPLICATE") {
         return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); void duplicatePrompt(record); }}>{pt("actions.duplicate", "Duplicate")}</DropdownMenuItem>;
@@ -293,15 +302,15 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
                   variant="embedded"
                   rows={page.records}
                   rowKey={(record) => record.promptCode}
-                  onRowClick={(record) => navigate(editorHref(record))}
+                  onRowClick={(record) => navigate(detailHref(record))}
                   pagination={<TablePagination {...bounds} itemLabel={pt("pagination.itemLabel", "prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
                   columns={[
-                    { id: "name", header: pt("fields.name", "Name"), render: (record) => <span className="font-medium text-[var(--color-primary)]">{record.displayName}</span> },
+                    { id: "name", header: pt("fields.name", "Name"), render: (record) => <span className="font-medium text-[var(--color-primary)]">{localizedPromptName(record, currentLocale)}</span> },
                     { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
                     { id: "inheritance", header: pt("fields.inheritance", "Inheritance"), render: (record) => record.sourceLabel },
                     { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
                     { id: "updated", header: pt("fields.lastUpdated", "Last Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-                    { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+                    { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
                   ]}
                 />
               )}
@@ -338,16 +347,16 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
               variant="embedded"
               rows={page.records}
               rowKey={(record) => record.promptCode}
-              onRowClick={(record) => navigate(editorHref(record))}
+                  onRowClick={(record) => navigate(detailHref(record))}
               pagination={<TablePagination {...bounds} itemLabel={pt("pagination.itemLabel", "prompts")} page={page.current} pageCount={pageCount} pageSize={page.size} totalItems={page.total} onPageChange={setCurrent} onPageSizeChange={(nextSize) => { setSize(nextSize); setCurrent(1); }} />}
               columns={[
-                { id: "name", header: pt("fields.name", "Name"), render: (record) => <div className="text-left font-medium text-[var(--color-primary)]">{record.displayName}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></div> },
+                { id: "name", header: pt("fields.name", "Name"), render: (record) => <div className="text-left font-medium text-[var(--color-primary)]">{localizedPromptName(record, currentLocale)}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></div> },
                 { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
                 { id: "source", header: pt("fields.source", "Source"), render: (record) => <div><Badge tone={sourceTone(record.sourceKind)}>{record.sourceKind}</Badge><span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{record.sourceLabel}</span></div> },
                 { id: "variables", header: pt("fields.variables", "Variables"), render: (record) => <Badge tone="info">{record.variables.length}</Badge> },
                 { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
                 { id: "updated", header: pt("fields.updated", "Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
-                { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: record.displayName })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
+                { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
               ]}
             />
           </SurfaceCard>
@@ -359,7 +368,7 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
         title={confirmTarget?.action === "REVERT"
           ? pt("confirm.revertTitle", "Revert override?")
           : pt("confirm.deleteTitle", "Delete prompt?")}
-        description={confirmTarget?.record.displayName}
+        description={confirmTarget ? localizedPromptName(confirmTarget.record, currentLocale) : undefined}
         confirmText={confirmTarget?.action === "REVERT"
           ? pt("actions.revert", "Revert")
           : pt("actions.delete", "Delete")}

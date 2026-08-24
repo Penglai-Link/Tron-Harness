@@ -3,6 +3,17 @@ import { analyzePromptTemplate } from "./promptTemplate";
 
 export const promptVariableDescriptionMaxLength = 200;
 
+export function managedPromptVariable(name: string): PromptVariable {
+  return {
+    description: "",
+    name,
+    type: "STRING",
+    sourceKind: "MANAGED",
+    managedVariableKey: null,
+    runtimeProvider: null,
+  };
+}
+
 export function reconcilePromptVariables(
   promptBody: string,
   currentVariables: PromptVariable[],
@@ -10,7 +21,7 @@ export function reconcilePromptVariables(
   const currentByName = new Map(currentVariables.map((variable) => [variable.name, variable]));
   return analyzePromptTemplate(promptBody).variables.map((name) => {
     const current = currentByName.get(name);
-    return current ? { ...current } : { description: "", name, type: "STRING" };
+    return current ?? managedPromptVariable(name);
   });
 }
 
@@ -22,9 +33,15 @@ export function promptVariablesAreReady(promptBody: string, variables: PromptVar
   if (actualNames.size !== variables.length || expectedNames.size !== actualNames.size) return false;
   return variables.every((variable) => {
     const descriptionLength = Array.from(variable.description.trim()).length;
+    const bindingReady = variable.sourceKind === "MANAGED"
+      ? Boolean(variable.managedVariableKey?.trim()) && !variable.runtimeProvider
+      : variable.sourceKind === "RUNTIME"
+        ? Boolean(variable.runtimeProvider) && !variable.managedVariableKey
+        : false;
     return expectedNames.has(variable.name)
       && descriptionLength >= 1
-      && descriptionLength <= promptVariableDescriptionMaxLength;
+      && descriptionLength <= promptVariableDescriptionMaxLength
+      && bindingReady;
   });
 }
 
@@ -35,6 +52,15 @@ export function normalizePromptVariables(promptBody: string, variables: PromptVa
   const byName = new Map(variables.map((variable) => [variable.name, variable]));
   return analyzePromptTemplate(promptBody).variables.map((name) => {
     const variable = byName.get(name)!;
-    return { ...variable, description: variable.description.trim() };
+    return {
+      ...variable,
+      description: variable.description.trim(),
+      managedVariableKey: variable.sourceKind === "MANAGED"
+        ? variable.managedVariableKey!.trim()
+        : null,
+      runtimeProvider: variable.sourceKind === "RUNTIME"
+        ? variable.runtimeProvider!
+        : null,
+    };
   });
 }

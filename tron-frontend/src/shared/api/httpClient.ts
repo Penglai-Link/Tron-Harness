@@ -4,6 +4,7 @@ export type EndpointParams = Record<string, string | number | boolean | null | u
 
 export interface ApiRequestOptions {
   body?: BodyInit | object | unknown[];
+  cache?: RequestCache;
   credentials?: RequestCredentials;
   headers?: HeadersInit;
   pathParams?: EndpointParams;
@@ -162,6 +163,7 @@ export async function requestApi<T>(endpoint: string, options: ApiRequestOptions
   const headers = resolveHeaders(options.body, options.headers);
   const response = await fetch(buildApiUrl(path, options.pathParams, options.queryParams), {
     body: resolveRequestBody(options.body),
+    cache: options.cache,
     credentials: options.credentials ?? "include",
     headers,
     method,

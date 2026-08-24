@@ -12,6 +12,7 @@ use crate::{
             AgentRuntimeType, AgentToolExposureState, EffectiveSkill, EffectiveVariable,
             ToolAvailabilityState, ToolExposureMode, ToolRegistry,
         },
+        prompt::PromptRuntimeProvider,
         skill::WorkspaceSkillListQuery,
         workspace::WorkspaceStatus,
     },
@@ -20,8 +21,8 @@ use crate::{
 
 use crate::application::agent::{
     AgentInvocationCommand, AgentInvocationError, AgentManagementService, BusinessToolCatalog,
-    ResolvedAgentRuntime, RuntimeAdapterSelection, build_domain_discovery_guidance,
-    discovery_expand_tool_definition, tool_record_to_effective_tool,
+    ResolvedAgentRuntime, RuntimeAdapterSelection, discovery_expand_tool_definition,
+    domain_discovery_runtime_values, tool_record_to_effective_tool,
 };
 
 use super::{
@@ -42,19 +43,27 @@ fn managed_system_prompt(
     workspace_code: &str,
     catalog_key: &str,
     locale: &str,
-) -> String {
-    if let Some(prompt_service) = prompt_service
-        && let Ok(Some(prompt)) = prompt_service.runtime_prompt_text(
+    runtime_values: &HashMap<PromptRuntimeProvider, serde_json::Value>,
+) -> Result<String, AgentInvocationError> {
+    if let Some(prompt_service) = prompt_service {
+        match prompt_service.runtime_prompt_text(
             Some(workspace_code),
             catalog_key,
             locale,
-        )
-    {
-        return prompt;
+            runtime_values,
+        ) {
+            Ok(Some(prompt)) => return Ok(prompt),
+            Ok(None) => {}
+            Err(error) => {
+                return Err(AgentInvocationError::RuntimeFailed(format!(
+                    "managed system prompt could not be resolved: {error}"
+                )));
+            }
+        }
     }
-    crate::domain::prompt::builtin_prompt_text(catalog_key, locale)
+    Ok(crate::domain::prompt::builtin_prompt_text(catalog_key, locale)
         .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"))
-        .to_string()
+        .to_string())
 }
 
 pub(crate) struct PreparedAgentRun {
@@ -325,6 +334,7 @@ impl AgentRunContextBuilder {
         }
 
         let mut messages = Vec::new();
+        let empty_runtime_prompt_values = HashMap::new();
         if requested_task_code.is_none() && is_main_agent(&resolved_agent.agent_code) {
             if let Some(guidance) = self.management.current_main_agent_guidance().map_err(|_| {
                 AgentInvocationError::RuntimeFailed("main agent config load failed".into())
@@ -336,7 +346,8 @@ impl AgentRunContextBuilder {
                 &workspace.workspace_code,
                 "agent.final-output",
                 &locale,
-            )));
+                &empty_runtime_prompt_values,
+            )?));
         }
         if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
             && requested_conversation_code.is_some()
@@ -347,7 +358,8 @@ impl AgentRunContextBuilder {
                 &workspace.workspace_code,
                 "chat.ask-user",
                 &locale,
-            )));
+                &empty_runtime_prompt_values,
+            )?));
         }
         if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
             && !tool_exposure.visible_domains.is_empty()
@@ -355,11 +367,18 @@ impl AgentRunContextBuilder {
             let persistence_mode = tool_exposure
                 .expanded_domain_persistence_mode
                 .expect("domain discovery mode should include persistence mode");
-            messages.push(AgentMessage::system(build_domain_discovery_guidance(
+            let runtime_values = domain_discovery_runtime_values(
                 &tool_exposure.visible_domains,
                 persistence_mode,
                 &locale,
-            )));
+            );
+            messages.push(AgentMessage::system(managed_system_prompt(
+                self.prompt_service.as_ref(),
+                &workspace.workspace_code,
+                "agent.domain-discovery",
+                &locale,
+                &runtime_values,
+            )?));
         }
         let prompt_prefix_messages = messages.clone();
         let user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);

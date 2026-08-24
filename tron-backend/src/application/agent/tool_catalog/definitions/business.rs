@@ -712,7 +712,7 @@ fn platform_prompt_page_definition() -> ToolCatalogDefinition {
                     "current": { "type": "integer", "minimum": 1, "default": 1 },
                     "size": { "type": "integer", "minimum": 1, "maximum": 100, "default": 20 },
                     "search": { "type": "string" },
-                    "category": { "type": "string", "enum": ["SYSTEM", "PERSONA", "TOOL", "TEMPLATE"] },
+                    "category": { "type": "string", "enum": ["SYSTEM", "PERSONA", "TOOL", "TEMPLATE", "ACTION"] },
                     "enabled": { "type": "boolean" }
                 },
                 "additionalProperties": false
@@ -770,7 +770,7 @@ fn platform_prompt_delete_definition() -> ToolCatalogDefinition {
 fn platform_prompt_mutation_schema(create: bool) -> serde_json::Value {
     let mut properties = json!({
         "displayName": { "type": "string", "minLength": 1 },
-        "category": { "type": "string", "enum": ["SYSTEM", "PERSONA", "TOOL", "TEMPLATE"] },
+        "category": { "type": "string", "enum": ["SYSTEM", "PERSONA", "TOOL", "TEMPLATE", "ACTION"] },
         "promptBody": { "type": "string" },
         "description": { "type": "string" },
         "enabled": { "type": "boolean", "default": true },

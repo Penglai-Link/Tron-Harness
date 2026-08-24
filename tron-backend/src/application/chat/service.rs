@@ -21,6 +21,7 @@ use crate::{
             SteerChatMessageCommand, UpdateChatSessionCommand,
         },
         llm::LlmRuntimeService,
+        prompt::PromptService,
         resource::{ChatSessionAttachmentCreateCommand, ResourceService},
     },
     domain::agent::{AgentModelConfig, ModelTokenUsage},
@@ -51,6 +52,7 @@ static CHAT_SERVICE_COORDINATOR_NAMESPACE: AtomicU64 = AtomicU64::new(1);
 #[derive(Clone)]
 pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
+    pub(super) prompt_service: Option<PromptService>,
     resources: Option<ResourceService>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
     coordinator_namespace: u64,
@@ -76,6 +78,7 @@ impl ChatService {
     ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
+            prompt_service: None,
             resources: None,
             id_provider,
             coordinator_namespace: CHAT_SERVICE_COORDINATOR_NAMESPACE
@@ -87,6 +90,7 @@ impl ChatService {
     pub fn clone_with_id_provider(&self, id_provider: Arc<dyn SnowflakeIdProvider>) -> Self {
         Self {
             repository: self.repository.clone(),
+            prompt_service: self.prompt_service.clone(),
             resources: self.resources.clone(),
             id_provider,
             coordinator_namespace: self.coordinator_namespace,
@@ -101,6 +105,11 @@ impl ChatService {
 
     pub fn with_resources(mut self, resources: ResourceService) -> Self {
         self.resources = Some(resources);
+        self
+    }
+
+    pub fn with_prompt_service(mut self, prompt_service: PromptService) -> Self {
+        self.prompt_service = Some(prompt_service);
         self
     }
 

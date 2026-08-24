@@ -51,9 +51,12 @@ pub(super) const PROMPTS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260713_0001_create_prompt_management.sql");
 pub(super) const PROMPT_VARIABLE_METADATA_MIGRATION: &str =
     include_str!("../../../../../migrations/20260713_0002_add_prompt_variable_metadata.sql");
-pub(super) const PROMPT_CATALOG_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260823_0001_prompt_catalog_i18n.sql"
-);
+pub(super) const PROMPT_CATALOG_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260823_0001_prompt_catalog_i18n.sql");
+pub(super) const PROMPT_ACTION_CATEGORY_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260824_0001_add_action_prompt_category.sql");
+pub(super) const PROMPT_VARIABLE_BINDINGS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260824_0002_add_prompt_variable_bindings.sql");
 pub(super) const MODEL_CAPABILITIES_MIGRATION: &str =
     include_str!("../../../../../migrations/20260522_0013_add_model_capabilities_to_models.sql");
 pub(super) const MODEL_REMOVE_EXPLICIT_PLATFORM_RESTORE_MIGRATION: &str = include_str!(

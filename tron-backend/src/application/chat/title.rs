@@ -1,8 +1,16 @@
-use std::time::Duration;
+use std::{collections::HashMap, time::Duration};
+
+use serde_json::Value;
 
 use crate::{
-    application::llm::{LlmRuntimeService, LlmTextGenerationCallCommand},
-    domain::chat::{ChatSession, ChatSessionSourceType},
+    application::{
+        llm::{LlmRuntimeService, LlmTextGenerationCallCommand},
+        prompt::PromptService,
+    },
+    domain::{
+        chat::{ChatSession, ChatSessionSourceType},
+        prompt::PromptRuntimeProvider,
+    },
     shared::time::current_timestamp,
 };
 
@@ -21,7 +29,13 @@ impl ChatService {
         user_message: &str,
         llm_runtime: LlmRuntimeService,
     ) {
-        let prompt = manual_session_title_prompt(user_message);
+        let Some(prompt) = manual_session_title_prompt(
+            self.prompt_service.as_ref(),
+            workspace_code,
+            user_message,
+        ) else {
+            return;
+        };
         let result = tokio::time::timeout(
             TITLE_GENERATION_TIMEOUT,
             llm_runtime.text_generation_call(LlmTextGenerationCallCommand {
@@ -63,10 +77,23 @@ pub(super) fn should_generate_manual_session_title(session: &ChatSession) -> boo
                 .eq_ignore_ascii_case(DEFAULT_MAIN_AGENT_SESSION_TITLE))
 }
 
-fn manual_session_title_prompt(user_message: &str) -> String {
-    crate::domain::prompt::builtin_prompt_text("chat.session-title", "en-US")
-        .expect("chat title prompt must be bundled")
-        .replace("{{user_message}}", user_message)
+fn manual_session_title_prompt(
+    prompt_service: Option<&PromptService>,
+    workspace_code: &str,
+    user_message: &str,
+) -> Option<String> {
+    let runtime_values = HashMap::from([(
+        PromptRuntimeProvider::ChatUserMessage,
+        Value::String(user_message.to_string()),
+    )]);
+    prompt_service?
+        .runtime_prompt_text(
+            Some(workspace_code),
+            "chat.session-title",
+            "en-US",
+            &runtime_values,
+        )
+        .ok()?
 }
 
 fn normalize_generated_session_title(value: &str) -> Option<String> {

@@ -1,5 +1,8 @@
-use crate::domain::rag::{RagError, RagStorageBinding};
-use crate::shared::event_bus::EventBusHandle;
+use crate::{
+    application::prompt::PromptService,
+    domain::rag::{RagError, RagStorageBinding},
+    shared::event_bus::EventBusHandle,
+};
 
 use super::{
     RagConfigRepository, RagConfigService, RagCorpusCatalogView, RagCorpusDeleteResult,
@@ -23,6 +26,7 @@ pub struct RagService<R, S, E> {
     strategy_registry: S,
     runtime: E,
     event_bus: EventBusHandle,
+    prompt_service: Option<PromptService>,
 }
 
 impl<R, S, E> RagService<R, S, E>
@@ -51,11 +55,17 @@ where
             strategy_registry,
             runtime,
             event_bus: EventBusHandle::disabled(),
+            prompt_service: None,
         }
     }
 
     pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
         self.event_bus = event_bus;
+        self
+    }
+
+    pub fn with_prompt_service(mut self, prompt_service: PromptService) -> Self {
+        self.prompt_service = Some(prompt_service);
         self
     }
 }
@@ -226,14 +236,17 @@ where
     E: RagEmbeddingRuntime + RagDocumentSourceRuntime,
 {
     pub async fn ingest(&self, request: RagIngestRequest) -> Result<RagIngestResult, RagError> {
-        RagIngestService::new(
+        let service = RagIngestService::new(
             self.repository.clone(),
             self.strategy_registry.clone(),
             self.runtime.clone(),
         )
-        .with_event_bus(self.event_bus.clone())
-        .ingest(request)
-        .await
+        .with_event_bus(self.event_bus.clone());
+        let service = match &self.prompt_service {
+            Some(prompt_service) => service.with_prompt_service(prompt_service.clone()),
+            None => service,
+        };
+        service.ingest(request).await
     }
 }
 

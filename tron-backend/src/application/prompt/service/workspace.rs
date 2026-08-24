@@ -12,7 +12,9 @@ use crate::{
 
 use super::{
     PromptService,
-    validation::{ensure_version, normalize_spec, translation_models},
+    validation::{
+        ensure_version, normalize_spec, synchronize_translation_statuses, translation_models,
+    },
 };
 
 impl PromptService {
@@ -68,6 +70,7 @@ impl PromptService {
     ) -> Result<PromptView, PromptError> {
         let workspace = self.active_workspace(workspace_code)?;
         let (spec, variables) = normalize_spec(command.spec)?;
+        self.validate_workspace_managed_variables(&workspace.workspace_code, &variables)?;
         ensure_display_name_unique(
             &self.resolve_workspace(&workspace)?,
             &spec.display_name,
@@ -100,7 +103,8 @@ impl PromptService {
             self.resolve_workspace_prompt(workspace_code, &command.prompt_code)?;
         ensure_version(resolved.view.version, Some(command.expected_version))?;
         let requested_allow_inheritance = command.allow_inheritance;
-        let (spec, variables) = normalize_spec(command.spec)?;
+        let (mut spec, variables) = normalize_spec(command.spec)?;
+        self.validate_workspace_managed_variables(&workspace.workspace_code, &variables)?;
         if requested_allow_inheritance.is_some()
             && resolved.view.source_kind != PromptViewSourceKind::Local
         {
@@ -112,6 +116,9 @@ impl PromptService {
             &spec.display_name,
             Some(&resolved.view.prompt_code),
         )?;
+        if let Some(current_owned) = resolved.current_owned.as_ref() {
+            synchronize_translation_statuses(&current_owned.translations, &mut spec);
+        }
         match resolved.view.source_kind {
             PromptViewSourceKind::Local | PromptViewSourceKind::Override => {
                 let mut owned = resolved.current_owned.ok_or(PromptError::StorageFailure)?;
@@ -203,6 +210,9 @@ impl PromptService {
                             name: variable.name,
                             variable_type: variable.variable_type,
                             description: variable.description,
+                            source_kind: variable.source_kind,
+                            managed_variable_key: variable.managed_variable_key,
+                            runtime_provider: variable.runtime_provider,
                         })
                         .collect(),
                 },

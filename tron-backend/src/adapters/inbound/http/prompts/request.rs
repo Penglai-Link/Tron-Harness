@@ -11,7 +11,10 @@ use crate::{
         CreatePromptCommand, PromptPageQuery, PromptSpecCommand, PromptTranslationSpecCommand,
         PromptVariableSpecCommand, UpdatePromptCommand,
     },
-    domain::prompt::{PromptCategory, PromptVariableType, PromptViewSourceKind},
+    domain::prompt::{
+        PromptCategory, PromptRuntimeProvider, PromptVariableSourceKind, PromptVariableType,
+        PromptViewSourceKind,
+    },
 };
 
 use super::response::PromptApiResponse;
@@ -193,6 +196,7 @@ pub struct AnalyzeTemplateRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct TranslateDraftRequest {
     pub prompt_code: Option<String>,
+    pub workspace_code: Option<String>,
     pub source_locale: String,
     pub target_locale: String,
     pub display_name: String,
@@ -204,9 +208,14 @@ pub struct TranslateDraftRequest {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PromptVariableRequest {
     pub name: String,
-    #[serde(rename = "type", default = "default_prompt_variable_type")]
+    #[serde(rename = "type")]
     pub variable_type: PromptVariableType,
     pub description: String,
+    pub source_kind: PromptVariableSourceKind,
+    #[serde(default)]
+    pub managed_variable_key: Option<String>,
+    #[serde(default)]
+    pub runtime_provider: Option<PromptRuntimeProvider>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -224,10 +233,6 @@ fn default_translation_status() -> crate::domain::prompt::PromptTranslationStatu
     crate::domain::prompt::PromptTranslationStatus::Published
 }
 
-fn default_prompt_variable_type() -> PromptVariableType {
-    PromptVariableType::String
-}
-
 fn variable_commands(variables: Vec<PromptVariableRequest>) -> Vec<PromptVariableSpecCommand> {
     variables
         .into_iter()
@@ -235,6 +240,9 @@ fn variable_commands(variables: Vec<PromptVariableRequest>) -> Vec<PromptVariabl
             name: variable.name,
             variable_type: variable.variable_type,
             description: variable.description,
+            source_kind: variable.source_kind,
+            managed_variable_key: variable.managed_variable_key,
+            runtime_provider: variable.runtime_provider,
         })
         .collect()
 }

@@ -11,7 +11,10 @@ use serde_json::{Value, json};
 mod executor;
 
 use crate::{
-    application::llm::{LlmEmbeddingCallCommand, LlmRuntimeService},
+    application::{
+        llm::{LlmEmbeddingCallCommand, LlmRuntimeService},
+        prompt::PromptService,
+    },
     domain::rag::{RagError, RagStatus},
     shared::event_bus::{BusOutcome, EventBusHandle},
 };
@@ -231,6 +234,7 @@ pub struct RagIngestService<R, S, E> {
     embedding_runtime: E,
     tree_summary_runtime: Option<Arc<dyn RagTreeSummaryRuntime>>,
     event_bus: EventBusHandle,
+    prompt_service: Option<PromptService>,
 }
 
 impl<R, S, E> RagIngestService<R, S, E>
@@ -247,6 +251,7 @@ where
             embedding_runtime,
             tree_summary_runtime,
             event_bus: EventBusHandle::disabled(),
+            prompt_service: None,
         }
     }
 
@@ -260,6 +265,11 @@ where
 
     pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
         self.event_bus = event_bus;
+        self
+    }
+
+    pub fn with_prompt_service(mut self, prompt_service: PromptService) -> Self {
+        self.prompt_service = Some(prompt_service);
         self
     }
 

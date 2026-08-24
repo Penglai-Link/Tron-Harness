@@ -44,8 +44,8 @@
     "category": "SYSTEM",
     "runtimeRequired": true,
     "parameters": [
-      { "name": "visible_domains", "type": "JSON", "description": "Visible tool domains and their operations." },
-      { "name": "persistence_mode", "type": "STRING", "description": "How expanded domain tools are persisted." }
+      { "name": "visible_domains", "type": "JSON", "description": "Visible tool domains and their operations.", "runtimeProvider": "AGENT_VISIBLE_DOMAINS" },
+      { "name": "persistence_mode", "type": "STRING", "description": "How expanded domain tools are persisted.", "runtimeProvider": "AGENT_DOMAIN_PERSISTENCE_MODE" }
     ],
     "translations": {
       "en-US": {
@@ -143,7 +143,7 @@
     "category": "TEMPLATE",
     "runtimeRequired": true,
     "parameters": [
-      { "name": "user_message", "type": "STRING", "description": "The first user message." }
+      { "name": "user_message", "type": "STRING", "description": "The first user message.", "runtimeProvider": "CHAT_USER_MESSAGE" }
     ],
     "translations": {
       "en-US": {
@@ -184,8 +184,8 @@
     "category": "SYSTEM",
     "runtimeRequired": false,
     "parameters": [
-      { "name": "command", "type": "STRING", "description": "Command being analyzed." },
-      { "name": "output", "type": "STRING", "description": "Command output being analyzed." }
+      { "name": "command", "type": "STRING", "description": "Command being analyzed.", "runtimeProvider": "TERMINAL_EXPLAIN_COMMAND" },
+      { "name": "output", "type": "STRING", "description": "Command output being analyzed.", "runtimeProvider": "TERMINAL_EXPLAIN_OUTPUT" }
     ],
     "translations": {
       "en-US": {
@@ -207,7 +207,7 @@
     "category": "SYSTEM",
     "runtimeRequired": false,
     "parameters": [
-      { "name": "current_command", "type": "STRING", "description": "Current command intent." }
+      { "name": "current_command", "type": "STRING", "description": "Current command intent.", "runtimeProvider": "TERMINAL_CURRENT_COMMAND" }
     ],
     "translations": {
       "en-US": {
@@ -229,7 +229,7 @@
     "category": "SYSTEM",
     "runtimeRequired": false,
     "parameters": [
-      { "name": "user_request", "type": "STRING", "description": "User request for a command." }
+      { "name": "user_request", "type": "STRING", "description": "User request for a command.", "runtimeProvider": "TERMINAL_USER_REQUEST" }
     ],
     "translations": {
       "en-US": {
@@ -251,7 +251,7 @@
     "category": "TEMPLATE",
     "runtimeRequired": true,
     "parameters": [
-      { "name": "task_context", "type": "STRING", "description": "Structured task metadata and description." }
+      { "name": "task_context", "type": "STRING", "description": "Structured task metadata and description.", "runtimeProvider": "TASK_CONTEXT" }
     ],
     "translations": {
       "en-US": {
@@ -273,9 +273,9 @@
     "category": "TEMPLATE",
     "runtimeRequired": true,
     "parameters": [
-      { "name": "title", "type": "STRING", "description": "Tree node title." },
-      { "name": "source_text", "type": "STRING", "description": "Text covered by the node." },
-      { "name": "child_summaries", "type": "STRING", "description": "Summaries generated for child nodes." }
+      { "name": "title", "type": "STRING", "description": "Tree node title.", "runtimeProvider": "RAG_TREE_TITLE" },
+      { "name": "source_text", "type": "STRING", "description": "Text covered by the node.", "runtimeProvider": "RAG_TREE_SOURCE_TEXT" },
+      { "name": "child_summaries", "type": "STRING", "description": "Summaries generated for child nodes.", "runtimeProvider": "RAG_TREE_CHILD_SUMMARIES" }
     ],
     "translations": {
       "en-US": {

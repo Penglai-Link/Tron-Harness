@@ -1,9 +1,13 @@
+use std::collections::HashMap;
+
 use axum::{
     Json,
     extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+
+use serde_json::Value;
 
 use crate::{
     adapters::inbound::http::{
@@ -21,13 +25,14 @@ use crate::{
     },
     domain::{
         chat::ChatSessionSourceType,
+        prompt::PromptRuntimeProvider,
         task::{TaskError, TaskExecutionResult, TaskListQuery},
     },
     response::ApiResponse,
 };
 
 use super::{
-    error_mapper::task_error_response,
+    error_mapper::{task_error_response, task_prompt_render_error_response},
     request::{CreateTaskRequest, UpdateTaskRequest, UpdateTaskStatusRequest},
 };
 
@@ -106,6 +111,15 @@ pub async fn execute_task(
     if task.archived_at.is_some() || task.status == crate::domain::task::TaskStatus::Archived {
         return task_error_response(TaskError::ArchivedMutationDenied);
     }
+    let prompt = match state.prompts.runtime_prompt_text(
+        Some(&task.workspace_code),
+        "task.execution",
+        &auth.locale,
+        &task_execution_runtime_values(&task),
+    ) {
+        Ok(Some(prompt)) => prompt,
+        Ok(None) | Err(_) => return task_prompt_render_error_response(),
+    };
 
     let session = match state.chats.create_session(
         CreateChatSessionCommand {
@@ -128,7 +142,7 @@ pub async fn execute_task(
     let run_code = generate_agent_run_code();
     let request = SendChatMessageCommand {
         run_code: Some(run_code.clone()),
-        content: Some(task_execution_prompt(&task)),
+        content: Some(prompt),
         workspace_code: Some(task.workspace_code.clone()),
         app_code: None,
         task_code: Some(task.task_code.clone()),
@@ -224,7 +238,9 @@ pub async fn archive_task(
     }
 }
 
-fn task_execution_prompt(task: &crate::domain::task::TaskDetail) -> String {
+fn task_execution_runtime_values(
+    task: &crate::domain::task::TaskDetail,
+) -> HashMap<PromptRuntimeProvider, Value> {
     let description = task
         .description
         .as_deref()
@@ -255,9 +271,10 @@ fn task_execution_prompt(task: &crate::domain::task::TaskDetail) -> String {
         apps,
         description,
     );
-    crate::domain::prompt::builtin_prompt_text("task.execution", "en-US")
-        .expect("task execution prompt must be bundled")
-        .replace("{{task_context}}", &task_context)
+    HashMap::from([(
+        PromptRuntimeProvider::TaskContext,
+        Value::String(task_context),
+    )])
 }
 
 pub async fn restore_task(

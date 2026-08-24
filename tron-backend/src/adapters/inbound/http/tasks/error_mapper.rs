@@ -66,3 +66,14 @@ pub fn task_error_response(error: TaskError) -> Response {
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
 }
+
+pub fn task_prompt_render_error_response() -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiResponse::error(
+            "TASK_PROMPT_RENDER_FAILED",
+            "task execution prompt could not be rendered",
+        )),
+    )
+        .into_response()
+}

@@ -12,6 +12,7 @@ use crate::{
     application::{
         graph::{GraphExplorerService, GraphService, OntologyService, ScopeResolver},
         llm::LlmRuntimeService,
+        prompt::PromptService,
         rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
         workspace::WorkspaceService,
     },
@@ -128,6 +129,7 @@ pub(super) fn build_rag_service(
     graph_core: GrafeoStoreCore,
     workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
+    prompt_service: PromptService,
     project_doc_root: &str,
     mineru: MineruConfig,
     document_parsing_client: reqwest::Client,
@@ -150,7 +152,8 @@ pub(super) fn build_rag_service(
         DefaultRagRuntime::new(llm_runtime, project_doc_root)
             .with_document_parser(mineru, document_parsing_client),
     )
-    .with_event_bus(event_bus))
+    .with_event_bus(event_bus)
+    .with_prompt_service(prompt_service))
 }
 
 pub(super) fn build_graph_core(

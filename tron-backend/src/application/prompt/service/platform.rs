@@ -12,7 +12,9 @@ use crate::{
 
 use super::{
     PromptService,
-    validation::{ensure_version, normalize_spec, translation_models},
+    validation::{
+        ensure_version, normalize_spec, synchronize_translation_statuses, translation_models,
+    },
 };
 
 impl PromptService {
@@ -39,6 +41,7 @@ impl PromptService {
         command: CreatePromptCommand,
     ) -> Result<PromptView, PromptError> {
         let (spec, variables) = normalize_spec(command.spec)?;
+        self.validate_platform_managed_variables(&variables)?;
         ensure_platform_display_name_unique(&self.platform_prompts()?, &spec.display_name, None)?;
         let prompt =
             new_platform_prompt(self.next_platform_id()?, command.category, spec, variables);
@@ -55,12 +58,14 @@ impl PromptService {
     ) -> Result<PromptView, PromptError> {
         let mut prompt = self.platform_prompt(&command.prompt_code)?;
         ensure_version(prompt.version, Some(command.expected_version))?;
-        let (spec, variables) = normalize_spec(command.spec)?;
+        let (mut spec, variables) = normalize_spec(command.spec)?;
+        self.validate_platform_managed_variables(&variables)?;
         ensure_platform_display_name_unique(
             &self.platform_prompts()?,
             &spec.display_name,
             Some(&prompt.prompt_code),
         )?;
+        synchronize_translation_statuses(&prompt.translations, &mut spec);
         let expected = prompt.version;
         apply_platform_spec(&mut prompt, spec, variables);
         prompt.version += 1;
@@ -106,11 +111,14 @@ impl PromptService {
                 variables: source
                     .variables
                     .into_iter()
-                    .map(|variable| PromptVariableSpecCommand {
-                        name: variable.name,
-                        variable_type: variable.variable_type,
-                        description: variable.description,
-                    })
+                        .map(|variable| PromptVariableSpecCommand {
+                            name: variable.name,
+                            variable_type: variable.variable_type,
+                            description: variable.description,
+                            source_kind: variable.source_kind,
+                            managed_variable_key: variable.managed_variable_key,
+                            runtime_provider: variable.runtime_provider,
+                        })
                     .collect(),
             },
             allow_inheritance: None,

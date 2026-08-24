@@ -325,12 +325,14 @@ impl AppState {
         let prompts = build_prompt_service(
             &config.database_url,
             workspaces.clone(),
+            variables.clone(),
             id_provider.clone(),
         );
         let llm_runtime = LlmRuntimeService::new(
             Arc::new(models.clone()),
             Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
         );
+        let prompts = prompts.with_llm_runtime(llm_runtime.clone());
         let graph_core = if config.graph_storage_path == ":memory:" {
             if let Some(core) = GLOBAL_GRAPH_CORE.get() {
                 core.clone()
@@ -347,6 +349,7 @@ impl AppState {
             graph_core.clone(),
             workspaces.clone(),
             llm_runtime.clone(),
+            prompts.clone(),
             &config.project_doc_root,
             config.mineru.clone(),
             document_parsing_client,
@@ -422,7 +425,8 @@ impl AppState {
             build_chat_service_with_id_provider(&config.database_url, id_provider)
         }
         .with_active_runs(active_runs.clone())
-        .with_resources(resources.clone());
+        .with_resources(resources.clone())
+        .with_prompt_service(prompts.clone());
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
             automations.clone(),
             chats.clone(),

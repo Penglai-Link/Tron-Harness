@@ -53,6 +53,14 @@ describe("prompt API", () => {
   });
 
   it("keeps create and update payload boundaries exact", async () => {
+    const variable = {
+      description: "Routing request",
+      managedVariableKey: "routing_request",
+      name: "request",
+      runtimeProvider: null,
+      sourceKind: "MANAGED" as const,
+      type: "JSON" as const,
+    };
     await createWorkspacePrompt({
       allowInheritance: true,
       category: "SYSTEM",
@@ -60,7 +68,7 @@ describe("prompt API", () => {
       displayName: "Router",
       enabled: true,
       promptBody: "Route {{request}}",
-      variables: [{ description: "Routing request", name: "request", type: "JSON" }],
+      variables: [variable],
       workspaceCode: "WORKSPACE-1",
     });
     await updateWorkspacePrompt({
@@ -70,13 +78,13 @@ describe("prompt API", () => {
       promptBody: "Route {{request}}",
       promptCode: "PROMPT-1",
       expectedVersion: 3,
-      variables: [{ description: "Routing request", name: "request", type: "JSON" }],
+      variables: [variable],
       workspaceCode: "WORKSPACE-1",
     });
 
     expect(requestApi).toHaveBeenNthCalledWith(1, promptApiEndpoints.createWorkspace, {
       body: expect.objectContaining({
-        variables: [{ description: "Routing request", name: "request", type: "JSON" }],
+        variables: [variable],
       }),
     });
     expect(requestApi).toHaveBeenNthCalledWith(2, promptApiEndpoints.updateWorkspace, {

@@ -1,7 +1,16 @@
-pub fn build_terminal_command_generation_prompt(prompt: String) -> String {
-    crate::domain::prompt::builtin_prompt_text("terminal.command-exact", "en-US")
-        .expect("terminal command prompt must be bundled")
-        .replace("{{user_request}}", &prompt)
+use std::collections::HashMap;
+
+use serde_json::Value;
+
+use crate::domain::prompt::PromptRuntimeProvider;
+
+pub fn terminal_command_runtime_values(
+    user_request: &str,
+) -> HashMap<PromptRuntimeProvider, Value> {
+    HashMap::from([(
+        PromptRuntimeProvider::TerminalUserRequest,
+        Value::String(user_request.to_string()),
+    )])
 }
 
 pub fn normalize_terminal_command(output: String) -> String {
@@ -27,9 +36,11 @@ mod tests {
     }
 
     #[test]
-    fn instruction_requires_exactly_one_shell_command() {
-        let prompt = build_terminal_command_generation_prompt("list files".into());
-        assert!(prompt.contains("exactly one executable shell command"));
-        assert!(prompt.ends_with("User request:\nlist files"));
+    fn supplies_the_terminal_user_request_runtime_value() {
+        let values = terminal_command_runtime_values("list files");
+        assert_eq!(
+            values.get(&PromptRuntimeProvider::TerminalUserRequest),
+            Some(&Value::String("list files".into())),
+        );
     }
 }

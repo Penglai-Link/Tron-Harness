@@ -3,7 +3,10 @@ use std::sync::OnceLock;
 
 use serde::Deserialize;
 
-use super::{PromptCategory, PromptVariableType};
+use super::{
+    PromptCategory, PromptRuntimeProvider, PromptVariable, PromptVariableSourceKind,
+    PromptVariableType,
+};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -26,6 +29,7 @@ pub struct BuiltinPromptParameter {
     #[serde(rename = "type")]
     pub variable_type: PromptVariableType,
     pub description: String,
+    pub runtime_provider: PromptRuntimeProvider,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -62,4 +66,36 @@ pub fn builtin_prompt_text(catalog_key: &str, locale: &str) -> Option<&'static s
         .get(locale)
         .or_else(|| prompt.translations.get("en-US"))
         .map(|translation| translation.prompt_body.as_str())
+}
+
+pub fn builtin_prompt_variables(catalog_key: &str) -> Option<Vec<PromptVariable>> {
+    Some(
+        builtin_prompt(catalog_key)?
+            .parameters
+            .iter()
+            .map(|parameter| PromptVariable {
+                name: parameter.name.clone(),
+                variable_type: parameter.variable_type,
+                description: parameter.description.clone(),
+                source_kind: PromptVariableSourceKind::Runtime,
+                managed_variable_key: None,
+                runtime_provider: Some(parameter.runtime_provider),
+            })
+            .collect(),
+    )
+}
+
+pub fn registered_runtime_prompt_variables() -> impl Iterator<Item = &'static BuiltinPromptParameter> {
+    builtin_prompts()
+        .iter()
+        .flat_map(|definition| definition.parameters.iter())
+}
+
+pub fn registered_runtime_prompt_variable(
+    name: &str,
+    provider: PromptRuntimeProvider,
+) -> Option<&'static BuiltinPromptParameter> {
+    registered_runtime_prompt_variables().find(|parameter| {
+        parameter.name == name && parameter.runtime_provider == provider
+    })
 }

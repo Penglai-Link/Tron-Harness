@@ -3,7 +3,7 @@ mod dto;
 mod error;
 mod service;
 
-pub use command::{build_terminal_command_generation_prompt, normalize_terminal_command};
+pub use command::{normalize_terminal_command, terminal_command_runtime_values};
 pub use dto::{
     IssueTerminalSocketTicketCommand, TerminalSessionAuthorization, TerminalSocketTicket,
 };

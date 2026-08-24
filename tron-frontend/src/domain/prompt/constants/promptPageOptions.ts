@@ -9,6 +9,7 @@ export const promptCategoryOptions: Array<{ label: string; value: PromptCategory
   { label: "Persona", value: "PERSONA" },
   { label: "Tool", value: "TOOL" },
   { label: "Template", value: "TEMPLATE" },
+  { label: "Action", value: "ACTION" },
 ];
 
 export const promptSourceOptions: Array<{ label: string; value: PromptSourceKind }> = [

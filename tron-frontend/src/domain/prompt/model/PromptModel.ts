@@ -1,13 +1,29 @@
-export type PromptCategory = "SYSTEM" | "PERSONA" | "TOOL" | "TEMPLATE";
+export type PromptCategory = "SYSTEM" | "PERSONA" | "TOOL" | "TEMPLATE" | "ACTION";
 export type PromptScopeKind = "PLATFORM" | "WORKSPACE";
 export type PromptSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
 export type PromptVariableType = "STRING" | "NUMBER" | "BOOLEAN" | "JSON";
+export type PromptVariableSourceKind = "MANAGED" | "RUNTIME";
+export type PromptRuntimeProvider =
+  | "AGENT_VISIBLE_DOMAINS"
+  | "AGENT_DOMAIN_PERSISTENCE_MODE"
+  | "CHAT_USER_MESSAGE"
+  | "TERMINAL_EXPLAIN_COMMAND"
+  | "TERMINAL_EXPLAIN_OUTPUT"
+  | "TERMINAL_CURRENT_COMMAND"
+  | "TERMINAL_USER_REQUEST"
+  | "TASK_CONTEXT"
+  | "RAG_TREE_TITLE"
+  | "RAG_TREE_SOURCE_TEXT"
+  | "RAG_TREE_CHILD_SUMMARIES";
 export type PromptTranslationStatus = "PUBLISHED" | "DRAFT" | "UPDATE_AVAILABLE";
 
 export interface PromptVariable {
   name: string;
   type: PromptVariableType;
   description: string;
+  sourceKind: PromptVariableSourceKind;
+  managedVariableKey: string | null;
+  runtimeProvider: PromptRuntimeProvider | null;
 }
 
 export type PromptParameter = PromptVariable;
@@ -20,6 +36,14 @@ export interface PromptTranslation {
   status: PromptTranslationStatus;
   sourceVersion: number;
   updatedAt: string;
+}
+
+export interface PromptTranslationPayload {
+  locale: "en-US" | "zh-CN";
+  displayName: string;
+  promptBody: string;
+  description: string | null;
+  status: PromptTranslationStatus;
 }
 
 export interface PromptAnalyzedVariable {
@@ -81,7 +105,7 @@ export interface PromptCreateFields {
   description: string;
   enabled: boolean;
   variables: PromptVariable[];
-  translations?: PromptTranslation[];
+  translations?: PromptTranslationPayload[];
 }
 
 export interface WorkspacePromptCreatePayload extends PromptCreateFields {
@@ -99,7 +123,7 @@ export interface PromptUpdateFields {
   description: string;
   enabled: boolean;
   variables: PromptVariable[];
-  translations?: PromptTranslation[];
+  translations?: PromptTranslationPayload[];
 }
 
 export interface WorkspacePromptUpdatePayload extends PromptUpdateFields {
@@ -125,6 +149,7 @@ export interface PromptAnalyzeResult {
 
 export interface PromptTranslationDraftPayload {
   promptCode?: string;
+  workspaceCode?: string;
   sourceLocale: "en-US" | "zh-CN";
   targetLocale: "en-US" | "zh-CN";
   displayName: string;

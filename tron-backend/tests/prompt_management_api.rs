@@ -9,8 +9,13 @@ use std::{
 use axum::http::{Method, StatusCode};
 use rusqlite::{Connection, params};
 use serde_json::{Value, json};
-use tron_backend::config::AppConfig;
-use tron_backend::domain::prompt::analyze_template;
+use tron_backend::{
+    adapters::outbound::persistence::SqliteVariableRepository,
+    application::variable::VariableRepository,
+    config::AppConfig,
+    domain::{prompt::analyze_template, variable::{PlatformVariable, Variable}},
+    shared::id::SnowflakeId,
+};
 
 use common::{app_with_config, authenticated_request, response_json};
 
@@ -39,10 +44,7 @@ async fn workspace_create_page_and_detail_return_consensus_envelopes() {
     assert_eq!(created["data"]["allowInheritance"], json!(true));
     assert_eq!(
         created["data"]["variables"],
-        json!([
-            { "name": "release_name", "type": "STRING", "description": "Variable release_name" },
-            { "name": "audience", "type": "STRING", "description": "Variable audience" }
-        ])
+        variable_metadata("Summarize {{release_name}} for {{audience}}.")
     );
     assert_envelope_only(&created);
 
@@ -88,6 +90,11 @@ async fn workspace_create_page_and_detail_return_consensus_envelopes() {
 #[tokio::test]
 async fn prompt_variables_require_matching_descriptions_and_supported_types() {
     let (router, _) = prompt_app("prompt-variable-metadata-contract");
+    let typed_variables = Value::Array(vec![
+        managed_variable("task", "STRING", "Task description"),
+        managed_variable("attempts", "NUMBER", "Retry count"),
+        managed_variable("options", "JSON", "Runtime options object"),
+    ]);
     let valid_response = authenticated_request(
         &router,
         Method::POST,
@@ -100,11 +107,7 @@ async fn prompt_variables_require_matching_descriptions_and_supported_types() {
             "description": null,
             "enabled": true,
             "allowInheritance": true,
-            "variables": [
-                { "name": "task", "type": "STRING", "description": "Task description" },
-                { "name": "attempts", "type": "NUMBER", "description": "Retry count" },
-                { "name": "options", "type": "JSON", "description": "Runtime options object" }
-            ]
+            "variables": typed_variables
         })),
     )
     .await;
@@ -112,21 +115,17 @@ async fn prompt_variables_require_matching_descriptions_and_supported_types() {
     let valid = response_json(valid_response).await;
     assert_eq!(
         valid["data"]["variables"],
-        json!([
-            { "name": "task", "type": "STRING", "description": "Task description" },
-            { "name": "attempts", "type": "NUMBER", "description": "Retry count" },
-            { "name": "options", "type": "JSON", "description": "Runtime options object" }
-        ])
+        typed_variables
     );
 
     for (name, variables) in [
         (
             "Missing variable description",
-            json!([{ "name": "name", "type": "STRING", "description": "" }]),
+            Value::Array(vec![managed_variable("name", "STRING", "")]),
         ),
         (
             "Mismatched variable name",
-            json!([{ "name": "other", "type": "STRING", "description": "Other value" }]),
+            Value::Array(vec![managed_variable("other", "STRING", "Other value")]),
         ),
     ] {
         let response = authenticated_request(
@@ -152,11 +151,89 @@ async fn prompt_variables_require_matching_descriptions_and_supported_types() {
 }
 
 #[tokio::test]
+async fn runtime_prompt_variables_must_match_the_global_runtime_catalog() {
+    let (router, _) = prompt_app("prompt-runtime-variable-contract");
+    let valid = authenticated_request(
+        &router,
+        Method::POST,
+        "/api/v1/prompts/workspace-create",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "displayName": "Runtime variable prompt",
+            "category": "SYSTEM",
+            "promptBody": "Visible domains: {{visible_domains}}",
+            "description": null,
+            "enabled": true,
+            "allowInheritance": true,
+            "variables": [{
+                "name": "visible_domains",
+                "type": "JSON",
+                "description": "Visible tool domains",
+                "sourceKind": "RUNTIME",
+                "runtimeProvider": "AGENT_VISIBLE_DOMAINS"
+            }]
+        })),
+    )
+    .await;
+    assert_eq!(valid.status(), StatusCode::OK);
+    let valid = response_json(valid).await;
+    assert_eq!(valid["data"]["variables"][0]["sourceKind"], json!("RUNTIME"));
+    assert_eq!(
+        valid["data"]["variables"][0]["runtimeProvider"],
+        json!("AGENT_VISIBLE_DOMAINS")
+    );
+
+    for (name, variable) in [
+        (
+            "Mismatched runtime provider",
+            json!({
+                "name": "visible_domains",
+                "type": "JSON",
+                "description": "Visible tool domains",
+                "sourceKind": "RUNTIME",
+                "runtimeProvider": "TASK_CONTEXT"
+            }),
+        ),
+        (
+            "Mismatched runtime type",
+            json!({
+                "name": "visible_domains",
+                "type": "STRING",
+                "description": "Visible tool domains",
+                "sourceKind": "RUNTIME",
+                "runtimeProvider": "AGENT_VISIBLE_DOMAINS"
+            }),
+        ),
+    ] {
+        let response = authenticated_request(
+            &router,
+            Method::POST,
+            "/api/v1/prompts/workspace-create",
+            Some(json!({
+                "workspaceCode": "TRON_CORE",
+                "displayName": name,
+                "category": "SYSTEM",
+                "promptBody": "Visible domains: {{visible_domains}}",
+                "description": null,
+                "enabled": true,
+                "allowInheritance": true,
+                "variables": [variable]
+            })),
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{name}");
+        assert_eq!(response_json(response).await["code"], json!("PROMPT_INPUT_INVALID"));
+    }
+}
+
+#[tokio::test]
 async fn workspace_update_creates_isolated_override_and_revert_restores_upstream() {
     let (router, _) = prompt_app("prompt-workspace-override-revert");
-    let parent_variables = json!([
-        { "name": "topic", "type": "NUMBER", "description": "Parent topic number" }
-    ]);
+    let parent_variables = Value::Array(vec![managed_variable(
+        "topic",
+        "NUMBER",
+        "Parent topic number",
+    )]);
     let parent = post_json(
         &router,
         "/api/v1/prompts/workspace-create",
@@ -185,9 +262,9 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
         .as_u64()
         .expect("inherited prompt should return version");
 
-    let override_variables = json!([
-        { "name": "topic", "type": "JSON", "description": "Override topic payload" },
-        { "name": "audience", "type": "BOOLEAN", "description": "Audience feature flag" }
+    let override_variables = Value::Array(vec![
+        managed_variable("topic", "JSON", "Override topic payload"),
+        managed_variable("audience", "BOOLEAN", "Audience feature flag"),
     ]);
     let update_response = authenticated_request(
         &router,
@@ -410,9 +487,9 @@ async fn database_and_http_prevent_prompt_code_and_category_updates() {
 #[tokio::test]
 async fn workspace_secondary_commands_follow_the_frozen_contract() {
     let (router, _) = prompt_app("prompt-workspace-secondary-commands");
-    let variables = json!([
-        { "name": "name", "type": "STRING", "description": "Recipient name" },
-        { "name": "attempts", "type": "NUMBER", "description": "Retry attempts" }
+    let variables = Value::Array(vec![
+        managed_variable("name", "STRING", "Recipient name"),
+        managed_variable("attempts", "NUMBER", "Retry attempts"),
     ]);
     let created = post_json(
         &router,
@@ -546,16 +623,14 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
             "promptBody": "Updated {{topic}}",
             "description": null,
             "enabled": true,
-            "variables": [
-                { "name": "topic", "type": "JSON", "description": "Updated topic payload" }
-            ]
+            "variables": [managed_variable("topic", "JSON", "Updated topic payload")]
         }),
     )
     .await;
     assert_eq!(updated["data"]["category"], json!("PERSONA"));
     assert_eq!(
         updated["data"]["variables"],
-        json!([{ "name": "topic", "type": "JSON", "description": "Updated topic payload" }])
+        Value::Array(vec![managed_variable("topic", "JSON", "Updated topic payload")])
     );
 
     let disabled = post_json(
@@ -804,15 +879,26 @@ fn variable_metadata(body: &str) -> Value {
         analyze_template(body)
             .expect("test prompt body should contain valid variables")
             .into_iter()
-            .map(|name| {
-                json!({
-                    "description": format!("Variable {name}"),
-                    "name": name,
-                    "type": "STRING"
-                })
-            })
+            .map(|name| managed_variable(&name, "STRING", &format!("Variable {name}")))
             .collect(),
     )
+}
+
+fn managed_variable(name: &str, variable_type: &str, description: &str) -> Value {
+    let managed_variable_key = match variable_type {
+        "STRING" => "PROMPT_TEST_STRING",
+        "NUMBER" => "PROMPT_TEST_NUMBER",
+        "BOOLEAN" => "PROMPT_TEST_BOOLEAN",
+        "JSON" => "PROMPT_TEST_JSON",
+        _ => panic!("unsupported prompt test variable type: {variable_type}"),
+    };
+    json!({
+        "description": description,
+        "managedVariableKey": managed_variable_key,
+        "name": name,
+        "sourceKind": "MANAGED",
+        "type": variable_type
+    })
 }
 
 async fn workspace_detail(router: &axum::Router, workspace_code: &str, prompt_code: &str) -> Value {
@@ -850,7 +936,55 @@ fn prompt_app(test_name: &str) -> (axum::Router, PathBuf) {
         database_url: database_url.to_string_lossy().into_owned(),
         ..AppConfig::default()
     };
-    (app_with_config(config), database_url)
+    let router = app_with_config(config);
+    seed_prompt_managed_variables(&database_url);
+    (router, database_url)
+}
+
+fn seed_prompt_managed_variables(database_url: &PathBuf) {
+    let values = [
+        ("PROMPT_TEST_STRING", "prompt test value"),
+        ("PROMPT_TEST_NUMBER", "3"),
+        ("PROMPT_TEST_BOOLEAN", "true"),
+        ("PROMPT_TEST_JSON", r#"{"mode":"test"}"#),
+    ];
+    let mut repository = SqliteVariableRepository::connect(&database_url.to_string_lossy())
+        .expect("prompt test variables should initialize");
+    for (index, (key, value)) in values.into_iter().enumerate() {
+        let id = 734_500_000_000_001_000_i64 + index as i64;
+        let description = Some(format!("Prompt test {key}"));
+        repository
+            .create_platform_variable(&PlatformVariable {
+                id: SnowflakeId::new(id),
+                key: key.into(),
+                value: value.into(),
+                description: description.clone(),
+                is_sensitive: false,
+                value_nonce: None,
+                value_tag: None,
+                value_algorithm: None,
+                value_key_version: None,
+                created_at: "2026-08-24T00:00:00Z".into(),
+                updated_at: "2026-08-24T00:00:00Z".into(),
+            })
+            .expect("prompt platform test variable should create");
+        repository
+            .create_variable(&Variable {
+                id: SnowflakeId::new(id + 10),
+                workspace_code: "TRON_CORE".into(),
+                key: key.into(),
+                value: value.into(),
+                description,
+                is_sensitive: false,
+                value_nonce: None,
+                value_tag: None,
+                value_algorithm: None,
+                value_key_version: None,
+                created_at: "2026-08-24T00:00:00Z".into(),
+                updated_at: "2026-08-24T00:00:00Z".into(),
+            })
+            .expect("prompt workspace test variable should create");
+    }
 }
 
 fn temp_database_url(test_name: &str) -> PathBuf {

@@ -2,8 +2,8 @@ use std::collections::HashMap;
 
 use serde_json::json;
 use tron_backend::domain::prompt::{
-    PromptVariable, PromptVariableType, TemplateError, analyze_template, render_template,
-    render_typed_template,
+    PromptRuntimeProvider, PromptVariable, PromptVariableSourceKind, PromptVariableType,
+    TemplateError, analyze_template, render_template, render_typed_template,
 };
 
 #[test]
@@ -71,21 +71,33 @@ fn typed_template_rendering_validates_and_serializes_declared_types() {
             name: "name".to_string(),
             variable_type: PromptVariableType::String,
             description: "Display name".to_string(),
+            source_kind: PromptVariableSourceKind::Runtime,
+            managed_variable_key: None,
+            runtime_provider: Some(PromptRuntimeProvider::ChatUserMessage),
         },
         PromptVariable {
             name: "attempts".to_string(),
             variable_type: PromptVariableType::Number,
             description: "Retry count".to_string(),
+            source_kind: PromptVariableSourceKind::Runtime,
+            managed_variable_key: None,
+            runtime_provider: Some(PromptRuntimeProvider::ChatUserMessage),
         },
         PromptVariable {
             name: "enabled".to_string(),
             variable_type: PromptVariableType::Boolean,
             description: "Feature flag".to_string(),
+            source_kind: PromptVariableSourceKind::Runtime,
+            managed_variable_key: None,
+            runtime_provider: Some(PromptRuntimeProvider::ChatUserMessage),
         },
         PromptVariable {
             name: "options".to_string(),
             variable_type: PromptVariableType::Json,
             description: "Runtime options".to_string(),
+            source_kind: PromptVariableSourceKind::Runtime,
+            managed_variable_key: None,
+            runtime_provider: Some(PromptRuntimeProvider::ChatUserMessage),
         },
     ];
     let values = HashMap::from([

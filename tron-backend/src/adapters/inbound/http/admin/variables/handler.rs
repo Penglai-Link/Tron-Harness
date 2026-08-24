@@ -1,6 +1,6 @@
 use axum::{
     Json,
-    extract::{Path, State},
+    extract::{Path, Query, State},
     http::StatusCode,
     response::{IntoResponse, Response},
 };
@@ -10,6 +10,7 @@ use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     adapters::inbound::http::variables::{
         error_mapper::variable_error_response,
+        handler::{PromptVariableOptionsQuery, prompt_variable_options},
         request::{CreateVariableRequest, RevealPlatformVariableRequest, UpdateVariableRequest},
     },
     app::AppState,
@@ -42,6 +43,24 @@ fn platform_variable_error_response(error: VariableError) -> Response {
 pub async fn list_platform_variables(State(variables): State<VariableService>) -> Response {
     match variables.list_platform_variables() {
         Ok(records) => Json(ApiResponse::success(records)).into_response(),
+        Err(error) => platform_variable_error_response(error),
+    }
+}
+
+pub async fn list_platform_prompt_variable_options(
+    State(state): State<AppState>,
+    Query(query): Query<PromptVariableOptionsQuery>,
+) -> Response {
+    match state.variables.list_platform_prompt_variable_options(
+        crate::domain::variable::VariableCatalogQuery {
+            search: query.search.clone(),
+        },
+    ) {
+        Ok(records) => Json(ApiResponse::success(prompt_variable_options(
+            records,
+            query.search.as_deref(),
+        )))
+        .into_response(),
         Err(error) => platform_variable_error_response(error),
     }
 }

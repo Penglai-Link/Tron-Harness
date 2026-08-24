@@ -38,6 +38,16 @@ pub struct UpdateVariableCommand {
     pub value_mode: Option<VariableValueMode>,
 }
 
+/// Metadata safe to expose to the prompt editor when selecting a managed
+/// placeholder binding. Values and sensitive variables are intentionally
+/// excluded.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PromptVariableOption {
+    pub key: String,
+    pub description: Option<String>,
+    pub source_label: String,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum VariableValueMode {
     Replace,
