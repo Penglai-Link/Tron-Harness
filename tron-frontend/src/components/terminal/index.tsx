@@ -7,6 +7,7 @@ import { buildApiUrl, getApiBaseUrl } from "@/shared/api/httpClient";
 import { useTheme, useWorkspaceSpaces } from "@/shared";
 
 import { explainResultMessage, generateAiChatMessage, generateCommandMessage } from "./prompt";
+import { getTerminalAnsiTheme } from "./terminalTheme";
 
 import "@tron/chat-terminal/styles.css";
 import "@xterm/xterm/css/xterm.css";
@@ -37,6 +38,7 @@ const Terminal = () => {
   const terminalInstanceRef = useRef<ReturnType<typeof initTerminal> | null>(null);
   const terminalChatContextRef = useRef<TerminalChatContextCache | null>(null);
   const currentLocaleRef = useRef(currentLocale);
+  const currentThemeRef = useRef(theme);
   const workspaceCode = CONFIGURED_TERMINAL_WORKSPACE_CODE
     || selectedSecondarySpaceId
     || selectedPrimarySpaceId;
@@ -170,6 +172,7 @@ const Terminal = () => {
         },
         terminalOptions: {
           themeTokens: {
+            ansi: getTerminalAnsiTheme(currentThemeRef.current),
             border: "var(--color-card-border, gray)",
             cardBackground: "var(--color-elevated-surface, white)",
             primary: "var(--color-on-surface, black)",
@@ -206,7 +209,10 @@ const Terminal = () => {
   }, [acquireTerminalChatContext, workspaceCode]);
 
   useEffect(() => {
-    terminalInstanceRef.current?.refreshTheme();
+    currentThemeRef.current = theme;
+    terminalInstanceRef.current?.setThemeTokens({
+      ansi: getTerminalAnsiTheme(theme),
+    });
   }, [theme]);
 
   useEffect(() => {

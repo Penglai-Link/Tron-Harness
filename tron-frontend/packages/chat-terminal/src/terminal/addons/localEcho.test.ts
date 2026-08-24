@@ -15,6 +15,7 @@ class TerminalStub {
     },
   };
   readonly element = document.createElement("div");
+  readonly textarea = document.createElement("textarea");
   readonly writes: string[] = [];
   clearCount = 0;
   cols: number;
@@ -113,6 +114,11 @@ class TerminalStub {
 
       if (character === "\r") {
         this.buffer.active.cursorX = 0;
+        continue;
+      }
+
+      if (character === "\n") {
+        this.buffer.active.cursorY += 1;
         continue;
       }
 
@@ -286,6 +292,56 @@ describe("LocalEchoAddon command cancellation", () => {
 });
 
 describe("LocalEchoAddon input cursor tracking", () => {
+  it("restores two spaces when a macOS IME commits a period", async () => {
+    const terminal = new TerminalStub();
+    const inputStates: string[] = [];
+    const addon = new LocalEchoAddon(
+      { enabled: true },
+      (_enabled, input) => inputStates.push(input),
+    );
+    addon.activate(terminal as unknown as XTerminal);
+
+    terminal.textarea.dispatchEvent(new Event("compositionstart"));
+    terminal.emitKeyEvent(new KeyboardEvent("keydown", { key: " " }));
+    terminal.emitKeyEvent(new KeyboardEvent("keydown", { key: " " }));
+    terminal.textarea.dispatchEvent(new Event("compositionend"));
+    terminal.emitData("。");
+    await flushTasks();
+
+    expect(inputStates.at(-1)).toBe("  ");
+    expect(terminal.writes).toEqual(["  "]);
+  });
+
+  it("renders multiline pasted input below the prompt", async () => {
+    const terminal = new TerminalStub();
+    const inputStates: string[] = [];
+    const firstLine = "Sq90MosMh3TsyYt8";
+    const secondLine = "10.106.251.86";
+    const addon = new LocalEchoAddon(
+      { enabled: true, prompt: "$ " },
+      (_enabled, input) => inputStates.push(input),
+    );
+    addon.activate(terminal as unknown as XTerminal);
+    terminal.write("$ ");
+    addon.markPromptRendered();
+
+    terminal.emitData(`${firstLine}\r${secondLine}`);
+    await flushTasks();
+
+    expect(inputStates.at(-1)).toBe(`${firstLine}\n${secondLine}`);
+    expect(terminal.writes.at(-1)).toBe(`${firstLine}\r\n${secondLine}`);
+    expect(terminal.buffer.active.cursorY).toBe(1);
+    expect(terminal.buffer.active.cursorX).toBe(13);
+
+    terminal.emitData("\u007f");
+    await flushTasks();
+
+    expect(inputStates.at(-1)).toBe(`${firstLine}\n10.106.251.8`);
+    expect(terminal.writes.at(-1)).toBe(
+      `\r\x1b[2K\x1b[1A\r\x1b[2K$ ${firstLine}\r\n10.106.251.8`,
+    );
+  });
+
   it("clears the terminal with Command+K while preserving the current input", async () => {
     const terminal = new TerminalStub();
     const inputStates: string[] = [];

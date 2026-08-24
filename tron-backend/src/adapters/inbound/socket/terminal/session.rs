@@ -117,7 +117,9 @@ impl PtySession {
             self.clear_active_command(&message_id);
             return Err(TerminalSocketGatewayError::SessionNotFound);
         }
-        if let Err(error) = write_to_terminal(&self.writer, framed_command(command, token)) {
+        if let Err(error) =
+            write_to_terminal(&self.writer, framed_command(command, token, interactive))
+        {
             self.clear_active_command(&message_id);
             return Err(error);
         }
@@ -254,7 +256,7 @@ fn flush_command_output(
 ) -> (Vec<TerminalSocketMessage>, bool) {
     let marker_start = find_bytes(&command.output_buffer, &command.marker_prefix);
     let Some(marker_start) = marker_start else {
-        let retained = command.marker_prefix.len().saturating_sub(1);
+        let retained = longest_suffix_prefix_length(&command.output_buffer, &command.marker_prefix);
         let output_length = command.output_buffer.len().saturating_sub(retained);
         if output_length == 0 {
             return (Vec::new(), false);
@@ -336,6 +338,14 @@ fn find_bytes(haystack: &[u8], needle: &[u8]) -> Option<usize> {
         .position(|candidate| candidate == needle)
 }
 
+fn longest_suffix_prefix_length(output: &[u8], marker_prefix: &[u8]) -> usize {
+    let max_length = output.len().min(marker_prefix.len().saturating_sub(1));
+    (1..=max_length)
+        .rev()
+        .find(|length| output.ends_with(&marker_prefix[..*length]))
+        .unwrap_or(0)
+}
+
 #[cfg(not(windows))]
 fn terminal_shell_command() -> CommandBuilder {
     let mut command = CommandBuilder::new("/bin/sh");
@@ -361,16 +371,26 @@ fn initialize_terminal(writer: &mut Box<dyn Write + Send>) -> std::io::Result<()
 }
 
 #[cfg(not(windows))]
-fn framed_command(command: &str, token: &str) -> Vec<u8> {
+fn framed_command(command: &str, token: &str, interactive: bool) -> Vec<u8> {
     let command = shell_single_quote(command);
+    let terminal_mode = if interactive {
+        "stty echo -echoctl; "
+    } else {
+        ""
+    };
+    let restore_terminal_mode = if interactive {
+        "stty -echo echoctl; "
+    } else {
+        ""
+    };
     format!(
-        "eval {command}; tron_command_status=$?; printf '\\036TRON_COMMAND_END:{token}:%s:%s\\037\\n' \"$tron_command_status\" \"$PWD\"\r"
+        "{terminal_mode}eval {command}; tron_command_status=$?; {restore_terminal_mode}printf '\\036TRON_COMMAND_END:{token}:%s:%s\\037\\n' \"$tron_command_status\" \"$PWD\"\r"
     )
     .into_bytes()
 }
 
 #[cfg(windows)]
-fn framed_command(command: &str, token: &str) -> Vec<u8> {
+fn framed_command(command: &str, token: &str, _interactive: bool) -> Vec<u8> {
     format!(
         "{command} & set tron_command_status=%ERRORLEVEL% & <nul set /p =\x1eTRON_COMMAND_END:{token}:%tron_command_status%:%cd%\x1f\r\n"
     )
@@ -445,13 +465,38 @@ mod tests {
         assert_eq!(command.output_buffer, b"\x1eTRON_COMMAND_END:TOK".to_vec());
     }
 
+    #[test]
+    fn terminal_output_is_forwarded_without_waiting_for_marker_length() {
+        let mut command = active_command("TOKEN-3");
+        command.output_buffer.extend_from_slice(b"\x1b[1;1Hh");
+        let mut current_directory = "/workspace/tron".into();
+
+        let (events, completed) = flush_command_output(&mut command, &mut current_directory);
+
+        assert!(!completed);
+        assert_eq!(events.len(), 1);
+        assert_eq!(events[0].delta, "\x1b[1;1Hh");
+        assert!(command.output_buffer.is_empty());
+    }
+
     #[cfg(not(windows))]
     #[test]
     fn framed_command_preserves_single_quoted_shell_input() {
-        let frame = String::from_utf8(framed_command("printf 'hello'", "TOKEN-3"))
+        let frame = String::from_utf8(framed_command("printf 'hello'", "TOKEN-4", false))
             .expect("command frame should be UTF-8");
 
         assert!(frame.starts_with("eval 'printf '\"'\"'hello'\"'\"'';"));
-        assert!(frame.contains("TRON_COMMAND_END:TOKEN-3"));
+        assert!(frame.contains("TRON_COMMAND_END:TOKEN-4"));
+    }
+
+    #[cfg(not(windows))]
+    #[test]
+    fn interactive_framed_command_restores_terminal_echo_after_exit() {
+        let frame = String::from_utf8(framed_command("vim edit.txt", "TOKEN-5", true))
+            .expect("command frame should be UTF-8");
+
+        assert!(frame.starts_with("stty echo -echoctl; eval 'vim edit.txt';"));
+        assert!(frame.contains("tron_command_status=$?; stty -echo echoctl; printf"));
+        assert!(frame.contains("TRON_COMMAND_END:TOKEN-5"));
     }
 }
