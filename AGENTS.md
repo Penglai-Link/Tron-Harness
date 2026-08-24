@@ -47,3 +47,4 @@ Pagable response body format:
 <!-- The Knowledge Base page is backed by the RAG corpus management API because the backend has no separate knowledge-base endpoint; API mode must never fall back to the fixture catalog. -->
 <!-- `rust_coding_spec_architecture` currently fails on the gh/master baseline because of pre-existing over-limit facade and implementation files; keep new modules within its 80/600-line limits. -->
 <!-- Concurrent frontend checks can transiently show a staged terminal-theme test file; verify the index hash before treating it as a user change. -->
+<!-- Base UI menu typeahead captures key events from embedded search inputs; stop propagation on the input to preserve text entry. -->

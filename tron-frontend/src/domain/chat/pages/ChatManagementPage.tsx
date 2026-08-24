@@ -2962,6 +2962,7 @@ function ChatModelSelector({
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
+                event.stopPropagation();
                 if (event.key !== "Enter") return;
                 const firstModel = filteredModels[0];
                 if (!firstModel) return;
