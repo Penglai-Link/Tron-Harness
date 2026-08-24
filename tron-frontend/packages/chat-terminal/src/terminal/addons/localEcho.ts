@@ -62,6 +62,7 @@ const EXPLAIN_DIALOG_WIDTH = 400;
 const EXPLAIN_DIALOG_MAX_HEIGHT = 180;
 const EXPLAIN_DIALOG_MARGIN = 12;
 const EXPLAIN_DIALOG_ANCHOR_OFFSET_Y = 8;
+const EXPLAIN_BUTTON_GAP = 10;
 const EXPLAIN_RENDER_INTERVAL_MS = 50;
 const EDITABLE_LINE_RESIZE_DEBOUNCE_MS = 100;
 const COMMAND_HISTORY_LIMIT = 100;
@@ -359,6 +360,9 @@ export class LocalEchoAddon implements ITerminalAddon {
     options: { checkBeforeCommand: boolean; echoCommand: boolean },
   ) {
     const { checkBeforeCommand, echoCommand } = options;
+    const submittedCommandEnd = echoCommand
+      ? undefined
+      : getTerminalCursorPosition(terminal);
     const interactive = Boolean(
       this.options.onCommandInput &&
         (this.options.isCommandInputEnabled?.(command) ?? true),
@@ -389,6 +393,9 @@ export class LocalEchoAddon implements ITerminalAddon {
         await writeTerminalAsync(terminal, command);
       }
 
+      const commandEnd =
+        submittedCommandEnd ?? getTerminalCursorPosition(terminal);
+
       await writeTerminalAsync(
         terminal,
         interactive ? "\r\n\x1b[?25h" : "\r\n\x1b[?25l",
@@ -408,8 +415,6 @@ export class LocalEchoAddon implements ITerminalAddon {
 
       this.recordCommand(command);
 
-      const firstOutputRow =
-        terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
       let output = "";
       const onOutput = (chunk: string) => {
         if (!chunk || activeCommand.cancelled) {
@@ -443,7 +448,7 @@ export class LocalEchoAddon implements ITerminalAddon {
       }
 
       if (!activeCommand.preserveRawOutput && hasVisibleTerminalOutput(output)) {
-        this.createExplainButton(command, output, firstOutputRow);
+        this.createExplainButton(command, output, commandEnd);
         if (terminal.buffer.active.cursorX !== 0) {
           await writeTerminalAsync(terminal, "\r\n");
         }
@@ -668,13 +673,13 @@ export class LocalEchoAddon implements ITerminalAddon {
   private createExplainButton(
     command: string,
     output: string,
-    firstOutputRow: number,
+    commandEnd: TerminalCursorPosition,
   ) {
     if (!this.options.onExplain || !this.terminal?.element) {
       return;
     }
 
-    const anchor = this.getExplainButtonAnchor(firstOutputRow);
+    const anchor = this.getExplainButtonAnchor(commandEnd);
     const terminal = this.terminal;
     const currentRow =
       terminal.buffer.active.baseY + terminal.buffer.active.cursorY;
@@ -694,7 +699,7 @@ export class LocalEchoAddon implements ITerminalAddon {
     }
 
     const host = createExplainButton({
-      left: 0,
+      left: EXPLAIN_BUTTON_GAP,
       top: 1,
       size: Math.max(14, getTerminalCellMetrics(terminal).height - 2),
       onClick: () => {
@@ -704,7 +709,7 @@ export class LocalEchoAddon implements ITerminalAddon {
           this.getExplainButtonViewportAnchor({
             column: anchor.column,
             row: decoration.marker.line,
-          }),
+          }, EXPLAIN_BUTTON_GAP),
         );
       },
     });
@@ -731,42 +736,15 @@ export class LocalEchoAddon implements ITerminalAddon {
     this.explainDecorations.push(decoration);
   }
 
-  private getExplainButtonAnchor(firstOutputRow: number): ExplainButtonAnchor {
-    if (!this.terminal) {
-      return { column: 0, row: firstOutputRow };
-    }
-
-    const buffer = this.terminal.buffer.active;
-    const cursorRow = buffer.baseY + buffer.cursorY;
-
-    if (buffer.cursorX > 0) {
-      return { column: buffer.cursorX + 1, row: cursorRow };
-    }
-
-    for (let row = cursorRow - 1; row >= firstOutputRow; row -= 1) {
-      const line = buffer.getLine(row);
-      if (!line) {
-        continue;
-      }
-
-      for (let column = line.length - 1; column >= 0; column -= 1) {
-        const cell = line.getCell(column);
-        if (!cell?.getChars()) {
-          continue;
-        }
-
-        return {
-          column: column + Math.max(1, cell.getWidth()) + 1,
-          row,
-        };
-      }
-    }
-
-    return { column: 1, row: cursorRow };
+  private getExplainButtonAnchor(
+    commandEnd: TerminalCursorPosition,
+  ): ExplainButtonAnchor {
+    return { column: commandEnd.column, row: commandEnd.row };
   }
 
   private getExplainButtonViewportAnchor(
     anchor: ExplainButtonAnchor,
+    horizontalOffset = 0,
   ): ExplainButtonViewportAnchor {
     if (!this.terminal) {
       return {
@@ -782,7 +760,7 @@ export class LocalEchoAddon implements ITerminalAddon {
       (anchor.row - this.terminal.buffer.active.viewportY) * cell.height + 1;
 
     return {
-      left: anchor.column * cell.width,
+      left: anchor.column * cell.width + horizontalOffset,
       row: anchor.row,
       top,
       size: Math.max(14, cell.height - 2),
