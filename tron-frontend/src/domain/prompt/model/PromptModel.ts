@@ -2,11 +2,24 @@ export type PromptCategory = "SYSTEM" | "PERSONA" | "TOOL" | "TEMPLATE";
 export type PromptScopeKind = "PLATFORM" | "WORKSPACE";
 export type PromptSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
 export type PromptVariableType = "STRING" | "NUMBER" | "BOOLEAN" | "JSON";
+export type PromptTranslationStatus = "PUBLISHED" | "DRAFT" | "UPDATE_AVAILABLE";
 
 export interface PromptVariable {
   name: string;
   type: PromptVariableType;
   description: string;
+}
+
+export type PromptParameter = PromptVariable;
+
+export interface PromptTranslation {
+  locale: "en-US" | "zh-CN";
+  displayName: string;
+  promptBody: string;
+  description: string | null;
+  status: PromptTranslationStatus;
+  sourceVersion: number;
+  updatedAt: string;
 }
 
 export interface PromptAnalyzedVariable {
@@ -35,6 +48,10 @@ export interface PromptRecord {
   sourceWorkspacePath: PromptWorkspacePathItem[];
   allowInheritance: boolean | null;
   variables: PromptVariable[];
+  translations?: PromptTranslation[];
+  builtIn?: boolean;
+  runtimeRequired?: boolean;
+  catalogKey?: string | null;
   version: number;
   createdAt: string;
   updatedAt: string;
@@ -64,6 +81,7 @@ export interface PromptCreateFields {
   description: string;
   enabled: boolean;
   variables: PromptVariable[];
+  translations?: PromptTranslation[];
 }
 
 export interface WorkspacePromptCreatePayload extends PromptCreateFields {
@@ -81,6 +99,7 @@ export interface PromptUpdateFields {
   description: string;
   enabled: boolean;
   variables: PromptVariable[];
+  translations?: PromptTranslation[];
 }
 
 export interface WorkspacePromptUpdatePayload extends PromptUpdateFields {
@@ -102,6 +121,15 @@ export interface PromptDuplicatePayload extends PromptDetailPayload {
 export interface PromptAnalyzeResult {
   variables: PromptAnalyzedVariable[];
   invalidVariables: string[];
+}
+
+export interface PromptTranslationDraftPayload {
+  promptCode?: string;
+  sourceLocale: "en-US" | "zh-CN";
+  targetLocale: "en-US" | "zh-CN";
+  displayName: string;
+  promptBody: string;
+  description?: string | null;
 }
 
 export interface PromptExportResult {

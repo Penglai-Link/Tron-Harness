@@ -1,7 +1,7 @@
-const TERMINAL_COMMAND_GENERATION_INSTRUCTION: &str = "Return exactly one executable shell command. Do not include Markdown fences, explanations, or line breaks.";
-
 pub fn build_terminal_command_generation_prompt(prompt: String) -> String {
-    format!("{TERMINAL_COMMAND_GENERATION_INSTRUCTION}\n\nUser request:\n{prompt}")
+    crate::domain::prompt::builtin_prompt_text("terminal.command-exact", "en-US")
+        .expect("terminal command prompt must be bundled")
+        .replace("{{user_request}}", &prompt)
 }
 
 pub fn normalize_terminal_command(output: String) -> String {

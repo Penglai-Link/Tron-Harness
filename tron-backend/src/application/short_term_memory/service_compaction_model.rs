@@ -276,7 +276,11 @@ impl ShortTermMemoryService {
         ModelRequest {
             messages: vec![
                 AgentMessage::system(
-                    "Generate a short-term memory compaction checkpoint. Return final text only.",
+                    crate::domain::prompt::builtin_prompt_text(
+                        "memory.compaction-system",
+                        "en-US",
+                    )
+                    .expect("compaction prompt must be bundled"),
                 ),
                 AgentMessage::user(input.prompt.clone()),
             ],

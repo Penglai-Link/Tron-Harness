@@ -38,6 +38,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   deletePlatformPrompt,
   deleteWorkspacePrompt,
+  duplicatePlatformPrompt,
+  duplicateWorkspacePrompt,
   exportWorkspacePrompts,
   revertWorkspacePrompt,
   setPlatformPromptEnabled,
@@ -55,6 +57,8 @@ import {
 import {
   deletePlatformPromptMock,
   deleteWorkspacePromptMock,
+  duplicatePlatformPromptMock,
+  duplicateWorkspacePromptMock,
   exportWorkspacePromptsMock,
   revertWorkspacePromptMock,
   setPlatformPromptEnabledMock,
@@ -182,6 +186,29 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
     }
   }
 
+  async function duplicatePrompt(record: PromptRecord) {
+    if (busyCode) return;
+    setBusyCode(record.promptCode);
+    try {
+      const payload = { promptCode: record.promptCode, targetCategory: record.category };
+      if (scopeKind === "WORKSPACE") {
+        await (dataSource === "api"
+          ? duplicateWorkspacePrompt({ ...payload, workspaceCode })
+          : duplicateWorkspacePromptMock({ ...payload, workspaceCode }));
+      } else {
+        await (dataSource === "api"
+          ? duplicatePlatformPrompt(payload)
+          : duplicatePlatformPromptMock(payload));
+      }
+      toast.success(pt("messages.duplicated", "Prompt duplicated"));
+      refresh();
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : pt("errors.action", "Action failed"));
+    } finally {
+      setBusyCode("");
+    }
+  }
+
   async function exportPrompts() {
     if (!workspaceCode) return;
     try {
@@ -204,10 +231,17 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
   function actionItems(record: PromptRecord) {
     const workspaceActions = scopeKind === "WORKSPACE"
       ? getWorkspacePromptActions(record.sourceKind)
-      : (["EDIT", "SET_ENABLED", "DELETE"] as const);
-    return workspaceActions.map((action) => {
+      : (record.builtIn
+        ? (record.runtimeRequired ? (["EDIT"] as const) : (["EDIT", "SET_ENABLED"] as const))
+        : (["EDIT", "DUPLICATE", "SET_ENABLED", "DELETE"] as const));
+    return workspaceActions
+      .filter((action) => !(action === "SET_ENABLED" && record.runtimeRequired))
+      .map((action) => {
       if (action === "EDIT" || action === "OVERRIDE") {
         return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); navigate(detailHref(record, action === "OVERRIDE" ? "override" : undefined)); }}>{action === "OVERRIDE" ? pt("actions.createOverride", "Create override") : pt("actions.edit", "Edit")}</DropdownMenuItem>;
+      }
+      if (action === "DUPLICATE") {
+        return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); void duplicatePrompt(record); }}>{pt("actions.duplicate", "Duplicate")}</DropdownMenuItem>;
       }
       if (action === "SET_ENABLED") {
         return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); void toggleEnabled(record); }}>{record.enabled ? pt("actions.disable", "Disable") : pt("actions.enable", "Enable")}</DropdownMenuItem>;
@@ -216,7 +250,7 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
         return <DropdownMenuItem key={action} onClick={(event) => { event.stopPropagation(); setConfirmTarget({ action, record }); }}><RotateCcw aria-hidden="true" />{pt("actions.revert", "Revert")}</DropdownMenuItem>;
       }
       return <DropdownMenuItem key={action} variant="destructive" onClick={(event) => { event.stopPropagation(); setConfirmTarget({ action: "DELETE", record }); }}><Trash2 aria-hidden="true" />{pt("actions.delete", "Delete")}</DropdownMenuItem>;
-    });
+      });
   }
 
   return (

@@ -7,6 +7,7 @@ import type {
   PromptPage,
   PromptPageQuery,
   PromptRecord,
+  PromptTranslation,
   PromptVariable,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
@@ -25,7 +26,10 @@ function platformPrompt(
   displayName: string,
   category: PromptCategory,
   promptBody: string,
+  builtIn = false,
+  runtimeRequired = builtIn,
 ): PromptRecord {
+  const timestamp = seedTimestamp;
   return {
     promptCode,
     scopeKind: "PLATFORM",
@@ -42,6 +46,29 @@ function platformPrompt(
     sourceWorkspacePath: [],
     allowInheritance: null,
     variables: seedPromptVariables(promptBody),
+    translations: [
+      {
+        locale: "en-US",
+        displayName,
+        promptBody,
+        description: `${displayName} shared platform prompt.`,
+        status: "PUBLISHED",
+        sourceVersion: 1,
+        updatedAt: timestamp,
+      },
+      {
+        locale: "zh-CN",
+        displayName: `${displayName}（中文）`,
+        promptBody,
+        description: `${displayName} 的中文提示词。`,
+        status: "PUBLISHED",
+        sourceVersion: 1,
+        updatedAt: timestamp,
+      },
+    ],
+    builtIn,
+    runtimeRequired,
+    catalogKey: builtIn ? promptCode : null,
     version: 1,
     createdAt: seedTimestamp,
     updatedAt: seedTimestamp,
@@ -49,7 +76,7 @@ function platformPrompt(
 }
 
 function initialPlatformPrompts() {
-  return [
+  const prompts = [
     platformPrompt(
       "PROMPT-734600000000000001",
       "Workspace Router",
@@ -62,6 +89,26 @@ function initialPlatformPrompts() {
       "PERSONA",
       "Review {{change_summary}} for correctness, regressions, and missing tests.",
     ),
+  ];
+  const builtinSeeds: Array<[string, string, PromptCategory, string, boolean]> = [
+    ["SYS_AGENT_FINAL_OUTPUT", "Agent final output guidance", "SYSTEM", "Final assistant output contract: answer with only the final result and do not expose chain-of-thought.", true],
+    ["SYS_CHAT_ASK_USER", "Interactive user input contract", "SYSTEM", "When material clarification is required, call chat.ask_user and stop the turn.", true],
+    ["SYS_AGENT_DOMAIN_DISCOVERY", "Domain discovery guidance", "SYSTEM", "Tool domain discovery is enabled. Visible domains: {{visible_domains}}. Persistence mode: {{persistence_mode}}.", true],
+    ["SYS_AGENT_STEER_CONTINUITY", "Steer continuity guidance", "SYSTEM", "Preserve unresolved earlier requests when steering messages arrive during a run.", true],
+    ["SYS_MEMORY_COMPACTION", "Short-term memory compaction", "SYSTEM", "Generate a short-term memory compaction checkpoint. Return final text only.", true],
+    ["SYS_MEMORY_GOAL_JUDGE", "Goal judge system prompt", "SYSTEM", "Judge whether the active session goal should continue and return valid JSON.", true],
+    ["SYS_MEMORY_GOAL_JUDGE_RETRY", "Goal judge retry prompt", "SYSTEM", "Re-evaluate the same goal judge input and return only valid JSON.", true],
+    ["SYS_CHAT_SESSION_TITLE", "Chat title generation", "TEMPLATE", "Generate a concise chat title from the user's first message. {{user_message}}", false],
+    ["SYS_TERMINAL_CHAT", "Terminal chat assistant", "SYSTEM", "You are a terminal assistant. Emit safe executable command blocks only when needed.", false],
+    ["SYS_TERMINAL_EXPLAIN", "Terminal output explanation", "TEMPLATE", "Explain command {{command}} and output {{output}} without executing it.", false],
+    ["SYS_TERMINAL_COMMAND_GENERATE", "Terminal command rewrite", "TEMPLATE", "Generate one safe Shell command from {{current_command}}.", false],
+    ["SYS_TERMINAL_COMMAND_EXACT", "Exact terminal command instruction", "TEMPLATE", "Return exactly one executable shell command for {{user_request}}.", false],
+    ["SYS_TASK_EXECUTION", "Task execution instruction", "TEMPLATE", "Execute the following task and provide the final result: {{task_context}}", true],
+    ["SYS_RAG_TREE_SUMMARY", "RAG tree summary", "TEMPLATE", "Summarize {{title}} from {{source_text}} and {{child_summaries}}.", true],
+  ];
+  return [
+    ...prompts,
+    ...builtinSeeds.map(([code, name, category, body, runtimeRequired]) => platformPrompt(code, name, category, body, true, runtimeRequired)),
   ];
 }
 
@@ -237,6 +284,7 @@ function updateRecord(
     enabled: payload.enabled,
     promptBody: payload.promptBody,
     variables: promptVariables(payload.promptBody, payload.variables),
+    translations: payload.translations?.length ? payload.translations : record.translations,
     version: record.version + 1,
     updatedAt: now(),
   };
@@ -340,6 +388,25 @@ export function setWorkspacePromptEnabledMock(payload: PromptDetailPayload & { w
     variables: current.variables,
     workspaceCode: payload.workspaceCode,
   });
+}
+
+export function translatePromptDraftMock(payload: {
+  sourceLocale: "en-US" | "zh-CN";
+  targetLocale: "en-US" | "zh-CN";
+  displayName: string;
+  promptBody: string;
+  description?: string | null;
+}): PromptTranslation {
+  const marker = payload.targetLocale === "zh-CN" ? "中文翻译草稿" : "English translation draft";
+  return {
+    locale: payload.targetLocale,
+    displayName: `${payload.displayName} · ${marker}`,
+    promptBody: `${payload.promptBody}\n\n[${marker}]`,
+    description: payload.description ?? null,
+    status: "DRAFT",
+    sourceVersion: 1,
+    updatedAt: now(),
+  };
 }
 
 export function setPlatformPromptEnabledMock(payload: PromptDetailPayload & { enabled: boolean; expectedVersion: number }) {

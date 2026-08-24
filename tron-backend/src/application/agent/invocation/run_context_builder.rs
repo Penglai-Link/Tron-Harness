@@ -2,7 +2,8 @@ use std::{collections::HashMap, sync::Arc};
 
 use crate::{
     application::{
-        app::AppService, mcp::McpService, short_term_memory::ShortTermMemoryService,
+        app::AppService, mcp::McpService, prompt::PromptService,
+        short_term_memory::ShortTermMemoryService,
         skill::SkillRegistryService, variable::VariableService, workspace::WorkspaceService,
     },
     domain::{
@@ -35,16 +36,26 @@ use super::{
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
-const MAIN_AGENT_FINAL_OUTPUT_GUIDANCE: &str = r#"Final assistant output contract:
-- The UI already renders Thinking and tool progress separately.
-- Do not repeat reasoning summaries, tool-progress narration, or step-by-step progress in the final answer.
-- Answer with only the final result, concise conclusion, and necessary user-facing evidence such as command results or artifact paths.
-- Do not expose chain-of-thought."#;
-const CHAT_ASK_USER_GUIDANCE: &str = r#"Interactive user-input contract:
-- When the user's answer materially changes the task or a small set of decisions is required before useful work can continue, call `chat.ask_user`.
-- Ask at most three concise questions, each with two to five concrete options. Include an `Other` option only when a free-form answer is useful.
-- After calling `chat.ask_user`, stop the turn and do not continue the work.
-- Do not put those questions in ordinary Markdown as a substitute for the tool call. If no material clarification is needed, answer normally."#;
+
+fn managed_system_prompt(
+    prompt_service: Option<&PromptService>,
+    workspace_code: &str,
+    catalog_key: &str,
+    locale: &str,
+) -> String {
+    if let Some(prompt_service) = prompt_service
+        && let Ok(Some(prompt)) = prompt_service.runtime_prompt_text(
+            Some(workspace_code),
+            catalog_key,
+            locale,
+        )
+    {
+        return prompt;
+    }
+    crate::domain::prompt::builtin_prompt_text(catalog_key, locale)
+        .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"))
+        .to_string()
+}
 
 pub(crate) struct PreparedAgentRun {
     pub run_code: String,
@@ -72,6 +83,7 @@ pub(crate) struct AgentRunContextBuilder {
     event_bus: EventBusHandle,
     tool_registry: Arc<ToolRegistry>,
     short_term_memory: Option<ShortTermMemoryService>,
+    prompt_service: Option<PromptService>,
 }
 
 impl AgentRunContextBuilder {
@@ -85,6 +97,7 @@ impl AgentRunContextBuilder {
         event_bus: EventBusHandle,
         tool_registry: Arc<ToolRegistry>,
         short_term_memory: Option<ShortTermMemoryService>,
+        prompt_service: Option<PromptService>,
     ) -> Self {
         Self {
             workspaces,
@@ -96,6 +109,7 @@ impl AgentRunContextBuilder {
             event_bus,
             tool_registry,
             short_term_memory,
+            prompt_service,
         }
     }
 
@@ -317,13 +331,23 @@ impl AgentRunContextBuilder {
             })? {
                 messages.push(AgentMessage::system(guidance));
             }
-            messages.push(AgentMessage::system(MAIN_AGENT_FINAL_OUTPUT_GUIDANCE));
+            messages.push(AgentMessage::system(managed_system_prompt(
+                self.prompt_service.as_ref(),
+                &workspace.workspace_code,
+                "agent.final-output",
+                &locale,
+            )));
         }
         if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
             && requested_conversation_code.is_some()
             && supports_user_input_requests
         {
-            messages.push(AgentMessage::system(CHAT_ASK_USER_GUIDANCE));
+            messages.push(AgentMessage::system(managed_system_prompt(
+                self.prompt_service.as_ref(),
+                &workspace.workspace_code,
+                "chat.ask-user",
+                &locale,
+            )));
         }
         if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
             && !tool_exposure.visible_domains.is_empty()

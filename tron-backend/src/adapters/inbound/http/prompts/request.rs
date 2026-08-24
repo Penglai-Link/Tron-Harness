@@ -8,8 +8,8 @@ use serde::{Deserialize, de::DeserializeOwned};
 
 use crate::{
     application::prompt::{
-        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, PromptVariableSpecCommand,
-        UpdatePromptCommand,
+        CreatePromptCommand, PromptPageQuery, PromptSpecCommand, PromptTranslationSpecCommand,
+        PromptVariableSpecCommand, UpdatePromptCommand,
     },
     domain::prompt::{PromptCategory, PromptVariableType, PromptViewSourceKind},
 };
@@ -86,6 +86,8 @@ pub struct WorkspaceCreateRequest {
     pub enabled: bool,
     pub allow_inheritance: bool,
     pub variables: Vec<PromptVariableRequest>,
+    #[serde(default)]
+    pub translations: Vec<PromptTranslationRequest>,
 }
 
 impl WorkspaceCreateRequest {
@@ -98,6 +100,7 @@ impl WorkspaceCreateRequest {
                 description: self.description,
                 enabled: self.enabled,
                 variables: variable_commands(self.variables),
+                translations: translation_commands(self.translations),
             },
             allow_inheritance: Some(self.allow_inheritance),
         };
@@ -117,6 +120,8 @@ pub struct WorkspaceUpdateRequest {
     pub description: Option<String>,
     pub enabled: bool,
     pub variables: Vec<PromptVariableRequest>,
+    #[serde(default)]
+    pub translations: Vec<PromptTranslationRequest>,
 }
 
 impl WorkspaceUpdateRequest {
@@ -131,6 +136,7 @@ impl WorkspaceUpdateRequest {
                 description: self.description,
                 enabled: self.enabled,
                 variables: variable_commands(self.variables),
+                translations: translation_commands(self.translations),
             },
         };
         (self.workspace_code, command)
@@ -185,11 +191,37 @@ pub struct AnalyzeTemplateRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TranslateDraftRequest {
+    pub prompt_code: Option<String>,
+    pub source_locale: String,
+    pub target_locale: String,
+    pub display_name: String,
+    pub prompt_body: String,
+    pub description: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PromptVariableRequest {
     pub name: String,
     #[serde(rename = "type", default = "default_prompt_variable_type")]
     pub variable_type: PromptVariableType,
     pub description: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct PromptTranslationRequest {
+    pub locale: String,
+    pub display_name: String,
+    pub prompt_body: String,
+    pub description: Option<String>,
+    #[serde(default = "default_translation_status")]
+    pub status: crate::domain::prompt::PromptTranslationStatus,
+}
+
+fn default_translation_status() -> crate::domain::prompt::PromptTranslationStatus {
+    crate::domain::prompt::PromptTranslationStatus::Published
 }
 
 fn default_prompt_variable_type() -> PromptVariableType {
@@ -203,6 +235,21 @@ fn variable_commands(variables: Vec<PromptVariableRequest>) -> Vec<PromptVariabl
             name: variable.name,
             variable_type: variable.variable_type,
             description: variable.description,
+        })
+        .collect()
+}
+
+fn translation_commands(
+    translations: Vec<PromptTranslationRequest>,
+) -> Vec<PromptTranslationSpecCommand> {
+    translations
+        .into_iter()
+        .map(|translation| PromptTranslationSpecCommand {
+            locale: translation.locale,
+            display_name: translation.display_name,
+            prompt_body: translation.prompt_body,
+            description: translation.description,
+            status: translation.status,
         })
         .collect()
 }
@@ -272,6 +319,8 @@ pub struct PlatformCreateRequest {
     pub description: Option<String>,
     pub enabled: bool,
     pub variables: Vec<PromptVariableRequest>,
+    #[serde(default)]
+    pub translations: Vec<PromptTranslationRequest>,
 }
 
 impl From<PlatformCreateRequest> for CreatePromptCommand {
@@ -284,6 +333,7 @@ impl From<PlatformCreateRequest> for CreatePromptCommand {
                 description: request.description,
                 enabled: request.enabled,
                 variables: variable_commands(request.variables),
+                translations: translation_commands(request.translations),
             },
             allow_inheritance: None,
         }
@@ -300,6 +350,8 @@ pub struct PlatformUpdateRequest {
     pub description: Option<String>,
     pub enabled: bool,
     pub variables: Vec<PromptVariableRequest>,
+    #[serde(default)]
+    pub translations: Vec<PromptTranslationRequest>,
 }
 
 impl From<PlatformUpdateRequest> for UpdatePromptCommand {
@@ -314,6 +366,7 @@ impl From<PlatformUpdateRequest> for UpdatePromptCommand {
                 description: request.description,
                 enabled: request.enabled,
                 variables: variable_commands(request.variables),
+                translations: translation_commands(request.translations),
             },
         }
     }

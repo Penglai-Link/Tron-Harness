@@ -12,7 +12,8 @@ use rand::RngCore;
 
 use crate::{
     application::{
-        app::AppService, mcp::McpService, short_term_memory::ShortTermMemoryService,
+        app::AppService, mcp::McpService, prompt::PromptService,
+        short_term_memory::ShortTermMemoryService,
         skill::SkillRegistryService, variable::VariableService, workspace::WorkspaceService,
     },
     domain::agent::{
@@ -45,6 +46,7 @@ pub struct AgentInvocationService {
     tool_registry: Arc<ToolRegistry>,
     runtime_http_client: reqwest::Client,
     short_term_memory: Option<ShortTermMemoryService>,
+    prompt_service: Option<PromptService>,
     active_runs: ActiveRunRegistry,
 }
 
@@ -75,12 +77,18 @@ impl AgentInvocationService {
             tool_registry,
             runtime_http_client,
             short_term_memory: None,
+            prompt_service: None,
             active_runs: ActiveRunRegistry::new(),
         }
     }
 
     pub fn with_short_term_memory(mut self, service: ShortTermMemoryService) -> Self {
         self.short_term_memory = Some(service);
+        self
+    }
+
+    pub fn with_prompt_service(mut self, service: PromptService) -> Self {
+        self.prompt_service = Some(service);
         self
     }
 
@@ -104,6 +112,7 @@ impl AgentInvocationService {
             self.event_bus.clone(),
             self.tool_registry.clone(),
             self.short_term_memory.clone(),
+            self.prompt_service.clone(),
         )
     }
 

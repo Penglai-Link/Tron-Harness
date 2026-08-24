@@ -10,6 +10,8 @@ import type {
   PromptPage,
   PromptPageQuery,
   PromptRecord,
+  PromptTranslation,
+  PromptTranslationDraftPayload,
   WorkspacePromptCreatePayload,
   WorkspacePromptUpdatePayload,
 } from "@/domain/prompt/model";
@@ -33,6 +35,7 @@ export const promptApiEndpoints = {
   updatePlatform: "POST /api/v1/admin/platform/prompts/update",
   updateWorkspace: "POST /api/v1/prompts/workspace-update",
   workspaceExport: "POST /api/v1/prompts/workspace-export",
+  translateDraft: "POST /api/v1/prompts/translate-draft",
 } as const;
 
 export function fetchWorkspacePromptPage(payload: PromptPageQuery & { workspaceCode: string }, signal?: AbortSignal) {
@@ -105,4 +108,8 @@ export function analyzePromptTemplateApi(promptBody: string, signal?: AbortSigna
 
 export function exportWorkspacePrompts(payload: PromptPageQuery & { workspaceCode: string }) {
   return requestApi<PromptExportResult>(promptApiEndpoints.workspaceExport, { body: payload });
+}
+
+export function translatePromptDraft(payload: PromptTranslationDraftPayload) {
+  return requestApi<PromptTranslation>(promptApiEndpoints.translateDraft, { body: payload });
 }

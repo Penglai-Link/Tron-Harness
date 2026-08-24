@@ -1,7 +1,7 @@
 use crate::{
     application::prompt::{
         CreatePromptCommand, PromptDeleteResult, PromptPage, PromptPageQuery, PromptSpecCommand,
-        PromptVariableSpecCommand, UpdatePromptCommand,
+        PromptTranslationSpecCommand, PromptVariableSpecCommand, UpdatePromptCommand,
     },
     domain::prompt::{
         Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptView,
@@ -12,7 +12,7 @@ use crate::{
 
 use super::{
     PromptService,
-    validation::{ensure_version, normalize_spec},
+    validation::{ensure_version, normalize_spec, translation_models},
 };
 
 impl PromptService {
@@ -92,6 +92,17 @@ impl PromptService {
                 prompt_body: source.prompt_body,
                 description: source.description,
                 enabled: source.enabled,
+                translations: source
+                    .translations
+                    .into_iter()
+                    .map(|translation| PromptTranslationSpecCommand {
+                        locale: translation.locale,
+                        display_name: translation.display_name,
+                        prompt_body: translation.prompt_body,
+                        description: translation.description,
+                        status: translation.status,
+                    })
+                    .collect(),
                 variables: source
                     .variables
                     .into_iter()
@@ -111,6 +122,9 @@ impl PromptService {
         prompt_code: &str,
     ) -> Result<PromptDeleteResult, PromptError> {
         let prompt = self.platform_prompt(prompt_code)?;
+        if prompt.built_in {
+            return Err(PromptError::BuiltinMutationDenied);
+        }
         if !self
             .repository
             .lock()
@@ -132,6 +146,9 @@ impl PromptService {
         expected_version: u64,
     ) -> Result<PromptView, PromptError> {
         let mut prompt = self.platform_prompt(prompt_code)?;
+        if prompt.runtime_required && !enabled {
+            return Err(PromptError::RuntimeRequired);
+        }
         ensure_version(prompt.version, Some(expected_version))?;
         let expected = prompt.version;
         prompt.enabled = enabled;
@@ -175,6 +192,7 @@ fn new_platform_prompt(
     variables: Vec<crate::domain::prompt::PromptVariable>,
 ) -> Prompt {
     let now = current_timestamp();
+    let translations = translation_models(&spec, &now, 1);
     Prompt {
         id: SnowflakeId::new(id),
         scope_kind: PromptScopeKind::Platform,
@@ -190,6 +208,10 @@ fn new_platform_prompt(
         allow_inheritance: None,
         version: 1,
         variables,
+        translations,
+        built_in: false,
+        runtime_required: false,
+        catalog_key: None,
         created_at: now.clone(),
         updated_at: now,
     }
@@ -214,6 +236,10 @@ fn platform_view(prompt: Prompt) -> PromptView {
         allow_inheritance: None,
         version: prompt.version,
         variables: prompt.variables,
+        translations: prompt.translations,
+        built_in: prompt.built_in,
+        runtime_required: prompt.runtime_required,
+        catalog_key: prompt.catalog_key,
         created_at: prompt.created_at,
         updated_at: prompt.updated_at,
     }
@@ -224,12 +250,15 @@ fn apply_platform_spec(
     spec: PromptSpecCommand,
     variables: Vec<crate::domain::prompt::PromptVariable>,
 ) {
+    let updated_at = current_timestamp();
+    let translations = translation_models(&spec, &updated_at, prompt.version + 1);
     prompt.display_name = spec.display_name;
     prompt.prompt_body = spec.prompt_body;
     prompt.description = spec.description;
     prompt.enabled = spec.enabled;
     prompt.variables = variables;
-    prompt.updated_at = current_timestamp();
+    prompt.translations = translations;
+    prompt.updated_at = updated_at;
 }
 
 fn ensure_platform_display_name_unique(

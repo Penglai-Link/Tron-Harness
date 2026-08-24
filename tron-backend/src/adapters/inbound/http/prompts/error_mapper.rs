@@ -33,6 +33,16 @@ pub fn prompt_error_response(error: PromptError) -> Response {
             "PROMPT_DISPLAY_NAME_DUPLICATE",
             "displayName already exists in prompt scope".into(),
         ),
+        PromptError::BuiltinMutationDenied => (
+            StatusCode::BAD_REQUEST,
+            "PROMPT_BUILTIN_MUTATION_INVALID",
+            "built-in prompts cannot be deleted".into(),
+        ),
+        PromptError::RuntimeRequired => (
+            StatusCode::BAD_REQUEST,
+            "PROMPT_RUNTIME_REQUIRED",
+            "runtime-required prompts cannot be disabled".into(),
+        ),
         PromptError::InheritedMutationDenied => (
             StatusCode::BAD_REQUEST,
             "PROMPT_INHERITED_MUTATION_INVALID",

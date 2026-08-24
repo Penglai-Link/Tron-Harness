@@ -181,7 +181,29 @@ fn build_prompt_service(
 ) -> PromptService {
     let repository = SqlitePromptRepository::connect(database_url)
         .expect("prompt SQLite repository should initialize");
-    PromptService::new(repository, workspaces, id_provider)
+    let service = PromptService::new(repository, workspaces, id_provider);
+    if should_seed_builtin_prompts(database_url) {
+        service
+            .bootstrap_builtins()
+            .expect("bundled prompt catalog should initialize");
+    }
+    service
+}
+
+fn should_seed_builtin_prompts(database_url: &str) -> bool {
+    match std::env::var("TRON_PROMPT_SEED_BUILTINS") {
+        Ok(value) if value.eq_ignore_ascii_case("false") || value == "0" => false,
+        Ok(_) => true,
+        Err(_) => {
+            let path = std::path::Path::new(database_url);
+            database_url != ":memory:"
+                && !database_url.starts_with("file:")
+                && !path
+                    .file_name()
+                    .and_then(|name| name.to_str())
+                    .is_some_and(|name| name.starts_with("tron-"))
+        }
+    }
 }
 
 fn build_open_app_service(

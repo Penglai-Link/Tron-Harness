@@ -208,7 +208,8 @@ pub async fn send_message(
         state.runtime_http_client.clone(),
     )
     .with_short_term_memory(state.short_term_memory.clone())
-    .with_active_runs(state.active_runs.clone());
+    .with_active_runs(state.active_runs.clone())
+    .with_prompt_service(state.prompts.clone());
     match state
         .chats
         .send_message(
@@ -321,7 +322,8 @@ pub async fn stream_message(
         state.runtime_http_client.clone(),
     )
     .with_short_term_memory(state.short_term_memory.clone())
-    .with_active_runs(state.active_runs.clone());
+    .with_active_runs(state.active_runs.clone())
+    .with_prompt_service(state.prompts.clone());
     let live_replay_recorder_for_sink = live_replay_recorder.clone();
     let forwarding_gate = ChatStreamForwardingGate::new();
     let forwarding_gate_for_sink = forwarding_gate.clone();

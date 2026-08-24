@@ -1,6 +1,8 @@
 use serde::Serialize;
 
-use crate::domain::prompt::{PromptCategory, PromptVariableType, PromptView, PromptViewSourceKind};
+use crate::domain::prompt::{
+    PromptCategory, PromptTranslationStatus, PromptVariableType, PromptView, PromptViewSourceKind,
+};
 
 #[derive(Debug, Clone)]
 pub struct PromptVariableSpecCommand {
@@ -16,6 +18,16 @@ pub struct PromptSpecCommand {
     pub description: Option<String>,
     pub enabled: bool,
     pub variables: Vec<PromptVariableSpecCommand>,
+    pub translations: Vec<PromptTranslationSpecCommand>,
+}
+
+#[derive(Debug, Clone)]
+pub struct PromptTranslationSpecCommand {
+    pub locale: String,
+    pub display_name: String,
+    pub prompt_body: String,
+    pub description: Option<String>,
+    pub status: PromptTranslationStatus,
 }
 
 #[derive(Debug, Clone)]

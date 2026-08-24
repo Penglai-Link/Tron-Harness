@@ -299,7 +299,10 @@ export function AppsPage() {
             id: "description",
             header: pageT("columns.description"),
             render: (app) => (
-              <p className="max-w-72 text-sm leading-5 text-[var(--color-on-surface-variant)]">
+              <p
+                className="max-w-72 line-clamp-3 whitespace-normal break-words text-sm leading-5 text-[var(--color-on-surface-variant)]"
+                title={app.description ?? undefined}
+              >
                 {app.description ?? pageT("detail.notSet")}
               </p>
             ),
@@ -326,7 +329,7 @@ export function AppsPage() {
                     title={app.repositoryUrl}
                   >
                     <span
-                      className="min-w-0 break-all leading-5"
+                      className="min-w-0 whitespace-normal break-all leading-5"
                       style={{
                         WebkitBoxOrient: "vertical",
                         WebkitLineClamp: 2,

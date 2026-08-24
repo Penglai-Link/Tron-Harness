@@ -64,20 +64,18 @@ pub fn build_domain_discovery_guidance(
         }
     };
     let catalog = serde_json::to_string_pretty(visible_domains).unwrap_or_else(|_| "[]".into());
-    match locale {
-        SupportedLocale::ZhCn => format!(
-            "当前 tool exposure mode 为 domain_discovery。\n\
-下面以 JSON 给出当前可见的全部 tool domain 列表。当你需要某个 domain 里的具体工具时，请调用 `{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL}` 并传入 `domainCode`。\n\
-expanded domain persistence mode：{persistence_label}。\n\
-Visible domains:\n{catalog}"
-        ),
-        SupportedLocale::EnUs => format!(
-            "Tool exposure mode is domain_discovery.\n\
-Visible tool domains are listed below as JSON. When you need concrete tools from a domain, call `{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL}` with `domainCode`.\n\
-Expanded domain persistence mode: {persistence_label}.\n\
-Visible domains:\n{catalog}"
-        ),
-    }
+    let template = crate::domain::prompt::builtin_prompt_text(
+        "agent.domain-discovery",
+        locale.as_str(),
+    )
+    .expect("domain discovery prompt must be bundled");
+    template
+        .replace("{{visible_domains}}", &catalog)
+        .replace("{{persistence_mode}}", persistence_label)
+        .replace(
+            "{DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL}",
+            DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL,
+        )
 }
 
 pub(super) fn discovery_tool() -> Arc<dyn Tool> {

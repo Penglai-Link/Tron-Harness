@@ -182,6 +182,7 @@ impl Tool for PlatformPromptUpdateTool {
                     prompt_body: input.prompt_body,
                     description: input.description,
                     enabled: input.enabled.unwrap_or(true),
+                    translations: Vec::new(),
                     variables: input
                         .variables
                         .into_iter()
@@ -238,6 +239,7 @@ impl PlatformPromptCreateInput {
             prompt_body: self.prompt_body,
             description: self.description,
             enabled: self.enabled.unwrap_or(true),
+            translations: Vec::new(),
             variables: self
                 .variables
                 .into_iter()

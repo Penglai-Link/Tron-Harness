@@ -1,7 +1,8 @@
 use crate::{
     application::prompt::{
         CreatePromptCommand, PromptDeleteResult, PromptExportResult, PromptPage, PromptPageQuery,
-        PromptSpecCommand, PromptVariableSpecCommand, UpdatePromptCommand,
+        PromptSpecCommand, PromptTranslationSpecCommand, PromptVariableSpecCommand,
+        UpdatePromptCommand,
     },
     domain::prompt::{
         Prompt, PromptError, PromptScopeKind, PromptSourceKind, PromptView, PromptViewSourceKind,
@@ -11,7 +12,7 @@ use crate::{
 
 use super::{
     PromptService,
-    validation::{ensure_version, normalize_spec},
+    validation::{ensure_version, normalize_spec, translation_models},
 };
 
 impl PromptService {
@@ -182,6 +183,18 @@ impl PromptService {
                     prompt_body: resolved.view.prompt_body,
                     description: resolved.view.description,
                     enabled: resolved.view.enabled,
+                    translations: resolved
+                        .view
+                        .translations
+                        .into_iter()
+                        .map(|translation| PromptTranslationSpecCommand {
+                            locale: translation.locale,
+                            display_name: translation.display_name,
+                            prompt_body: translation.prompt_body,
+                            description: translation.description,
+                            status: translation.status,
+                        })
+                        .collect(),
                     variables: resolved
                         .view
                         .variables
@@ -280,6 +293,9 @@ impl PromptService {
         expected_version: u64,
     ) -> Result<PromptView, PromptError> {
         let (workspace, resolved) = self.resolve_workspace_prompt(workspace_code, prompt_code)?;
+        if resolved.view.runtime_required && !enabled {
+            return Err(PromptError::RuntimeRequired);
+        }
         ensure_version(resolved.view.version, Some(expected_version))?;
         match resolved.view.source_kind {
             PromptViewSourceKind::Local | PromptViewSourceKind::Override => {
@@ -359,6 +375,7 @@ fn new_prompt(
     allow_inheritance: Option<bool>,
 ) -> Prompt {
     let now = current_timestamp();
+    let translations = translation_models(&spec, &now, 1);
     Prompt {
         id: SnowflakeId::new(id),
         scope_kind,
@@ -374,6 +391,10 @@ fn new_prompt(
         allow_inheritance,
         version: 1,
         variables,
+        translations,
+        built_in: false,
+        runtime_required: false,
+        catalog_key: None,
         created_at: now.clone(),
         updated_at: now,
     }
@@ -384,12 +405,15 @@ fn apply_spec(
     spec: PromptSpecCommand,
     variables: Vec<crate::domain::prompt::PromptVariable>,
 ) {
+    let updated_at = current_timestamp();
+    let translations = translation_models(&spec, &updated_at, prompt.version + 1);
     prompt.display_name = spec.display_name;
     prompt.prompt_body = spec.prompt_body;
     prompt.description = spec.description;
     prompt.enabled = spec.enabled;
     prompt.variables = variables;
-    prompt.updated_at = current_timestamp();
+    prompt.translations = translations;
+    prompt.updated_at = updated_at;
 }
 
 fn ensure_display_name_unique(

@@ -64,15 +64,9 @@ pub(super) fn should_generate_manual_session_title(session: &ChatSession) -> boo
 }
 
 fn manual_session_title_prompt(user_message: &str) -> String {
-    format!(
-        "Generate a concise chat title from the user's first message.\n\
-        Rules:\n\
-        - Return only the title.\n\
-        - Use 3 to 8 words.\n\
-        - No quotes, punctuation-only decorations, markdown, or prefixes.\n\
-        - Preserve product names and technical terms.\n\n\
-        User message:\n{user_message}"
-    )
+    crate::domain::prompt::builtin_prompt_text("chat.session-title", "en-US")
+        .expect("chat title prompt must be bundled")
+        .replace("{{user_message}}", user_message)
 }
 
 fn normalize_generated_session_title(value: &str) -> Option<String> {

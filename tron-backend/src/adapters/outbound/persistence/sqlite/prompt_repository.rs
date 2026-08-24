@@ -5,8 +5,8 @@ use rusqlite::{Connection, OpenFlags, Transaction, TransactionBehavior, params};
 use crate::{
     application::prompt::PromptRepository,
     domain::prompt::{
-        Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptVariable,
-        PromptVariableType,
+        Prompt, PromptCategory, PromptError, PromptScopeKind, PromptSourceKind, PromptTranslation,
+        PromptTranslationStatus, PromptVariable, PromptVariableType,
     },
     shared::{
         id::SnowflakeId,
@@ -14,7 +14,9 @@ use crate::{
     },
 };
 
-use super::migrations::{PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION};
+use super::migrations::{
+    PROMPT_CATALOG_MIGRATION, PROMPT_VARIABLE_METADATA_MIGRATION, PROMPTS_MIGRATION,
+};
 
 pub struct SqlitePromptRepository {
     connection: Connection,
@@ -41,6 +43,7 @@ impl SqlitePromptRepository {
             .execute_batch(PROMPTS_MIGRATION)
             .map_err(storage_error)?;
         migrate_prompt_variable_metadata(&mut connection)?;
+        migrate_prompt_catalog(&mut connection)?;
         Ok(Self { connection })
     }
 }
@@ -53,7 +56,7 @@ impl PromptRepository for SqlitePromptRepository {
                 "SELECT id, scope_kind, workspace_code, prompt_code, display_name, category,
                         prompt_body, description, enabled, source_kind, source_prompt_code,
                         allow_inheritance, version,
-                        created_at, updated_at
+                        created_at, updated_at, built_in, runtime_required, catalog_key
                  FROM prompts
                  ORDER BY scope_kind, workspace_code, display_name, prompt_code",
             ).map_err(storage_error)?;
@@ -65,6 +68,7 @@ impl PromptRepository for SqlitePromptRepository {
             };
         for prompt in &mut prompts {
             prompt.variables = load_variables(&self.connection, &prompt.prompt_code)?;
+            prompt.translations = load_translations(&self.connection, &prompt.prompt_code)?;
         }
         Ok(prompts)
     }
@@ -73,6 +77,7 @@ impl PromptRepository for SqlitePromptRepository {
         let transaction = self.connection.transaction().map_err(storage_error)?;
         insert_prompt(&transaction, prompt)?;
         replace_variables(&transaction, prompt)?;
+        replace_translations(&transaction, prompt)?;
         transaction.commit().map_err(storage_error)
     }
 
@@ -104,6 +109,7 @@ impl PromptRepository for SqlitePromptRepository {
             return Err(PromptError::VersionConflict);
         }
         replace_variables(&transaction, prompt)?;
+        replace_translations(&transaction, prompt)?;
         transaction.commit().map_err(storage_error)
     }
 
@@ -124,8 +130,9 @@ fn insert_prompt(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), P
             "INSERT INTO prompts (
             id, scope_kind, workspace_code, prompt_code, display_name, category, prompt_body,
             description, enabled, source_kind,
-            source_prompt_code, allow_inheritance, version, created_at, updated_at
-         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15)",
+            source_prompt_code, allow_inheritance, version, created_at, updated_at,
+            built_in, runtime_required, catalog_key
+         ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17, ?18)",
             params![
                 prompt.id.value(),
                 scope_kind_to_storage(prompt.scope_kind),
@@ -142,6 +149,9 @@ fn insert_prompt(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), P
                 prompt.version,
                 timestamp_to_millis(&prompt.created_at),
                 timestamp_to_millis(&prompt.updated_at),
+                bool_to_int(prompt.built_in),
+                bool_to_int(prompt.runtime_required),
+                prompt.catalog_key,
             ],
         )
         .map_err(storage_error)?;
@@ -152,6 +162,12 @@ fn replace_variables(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(
     transaction
         .execute(
             "DELETE FROM prompt_variables WHERE prompt_code = ?1",
+            params![prompt.prompt_code],
+        )
+        .map_err(storage_error)?;
+    transaction
+        .execute(
+            "DELETE FROM prompt_parameters WHERE prompt_code = ?1",
             params![prompt.prompt_code],
         )
         .map_err(storage_error)?;
@@ -167,6 +183,50 @@ fn replace_variables(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(
                     variable.variable_type.code(),
                     variable.description,
                     position
+                ],
+            )
+            .map_err(storage_error)?;
+        transaction
+            .execute(
+                "INSERT INTO prompt_parameters (
+                    prompt_code, parameter_name, parameter_type, description, position
+                 ) VALUES (?1, ?2, ?3, ?4, ?5)",
+                params![
+                    prompt.prompt_code,
+                    variable.name,
+                    variable.variable_type.code(),
+                    variable.description,
+                    position
+                ],
+            )
+            .map_err(storage_error)?;
+    }
+    Ok(())
+}
+
+fn replace_translations(transaction: &Transaction<'_>, prompt: &Prompt) -> Result<(), PromptError> {
+    transaction
+        .execute(
+            "DELETE FROM prompt_translations WHERE prompt_code = ?1",
+            params![prompt.prompt_code],
+        )
+        .map_err(storage_error)?;
+    for translation in &prompt.translations {
+        transaction
+            .execute(
+                "INSERT INTO prompt_translations (
+                    prompt_code, locale, display_name, prompt_body, description,
+                    translation_status, source_version, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                params![
+                    prompt.prompt_code,
+                    translation.locale,
+                    translation.display_name,
+                    translation.prompt_body,
+                    translation.description,
+                    translation_status_to_storage(translation.status),
+                    translation.source_version,
+                    timestamp_to_millis(&translation.updated_at),
                 ],
             )
             .map_err(storage_error)?;
@@ -197,6 +257,34 @@ fn load_variables(
         .map_err(storage_error)
 }
 
+fn load_translations(
+    connection: &Connection,
+    prompt_code: &str,
+) -> Result<Vec<PromptTranslation>, PromptError> {
+    let mut statement = connection
+        .prepare(
+            "SELECT locale, display_name, prompt_body, description,
+                    translation_status, source_version, updated_at
+             FROM prompt_translations WHERE prompt_code = ?1 ORDER BY locale",
+        )
+        .map_err(storage_error)?;
+    statement
+        .query_map(params![prompt_code], |row| {
+            Ok(PromptTranslation {
+                locale: row.get(0)?,
+                display_name: row.get(1)?,
+                prompt_body: row.get(2)?,
+                description: row.get(3)?,
+                status: translation_status_from_storage(&row.get::<_, String>(4)?)?,
+                source_version: row.get(5)?,
+                updated_at: timestamp_from_millis(row.get(6)?),
+            })
+        })
+        .map_err(storage_error)?
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(storage_error)
+}
+
 fn decode_prompt(row: &rusqlite::Row<'_>) -> rusqlite::Result<Prompt> {
     Ok(Prompt {
         id: SnowflakeId::new(row.get(0)?),
@@ -213,6 +301,10 @@ fn decode_prompt(row: &rusqlite::Row<'_>) -> rusqlite::Result<Prompt> {
         allow_inheritance: row.get::<_, Option<i64>>(11)?.map(|value| value != 0),
         version: row.get(12)?,
         variables: Vec::new(),
+        translations: Vec::new(),
+        built_in: row.get::<_, i64>(15)? != 0,
+        runtime_required: row.get::<_, i64>(16)? != 0,
+        catalog_key: row.get(17)?,
         created_at: timestamp_from_millis(row.get(13)?),
         updated_at: timestamp_from_millis(row.get(14)?),
     })
@@ -258,6 +350,23 @@ fn variable_type_from_storage(value: &str) -> rusqlite::Result<PromptVariableTyp
         "NUMBER" => Ok(PromptVariableType::Number),
         "BOOLEAN" => Ok(PromptVariableType::Boolean),
         "JSON" => Ok(PromptVariableType::Json),
+        _ => Err(rusqlite::Error::InvalidQuery),
+    }
+}
+
+fn translation_status_to_storage(value: PromptTranslationStatus) -> &'static str {
+    match value {
+        PromptTranslationStatus::Published => "PUBLISHED",
+        PromptTranslationStatus::Draft => "DRAFT",
+        PromptTranslationStatus::UpdateAvailable => "UPDATE_AVAILABLE",
+    }
+}
+
+fn translation_status_from_storage(value: &str) -> rusqlite::Result<PromptTranslationStatus> {
+    match value {
+        "PUBLISHED" => Ok(PromptTranslationStatus::Published),
+        "DRAFT" => Ok(PromptTranslationStatus::Draft),
+        "UPDATE_AVAILABLE" => Ok(PromptTranslationStatus::UpdateAvailable),
         _ => Err(rusqlite::Error::InvalidQuery),
     }
 }
@@ -321,6 +430,52 @@ fn migrate_prompt_variable_metadata(connection: &mut Connection) -> Result<(), P
     }
     transaction
         .execute_batch(PROMPT_VARIABLE_METADATA_MIGRATION)
+        .map_err(storage_error)?;
+    transaction.commit().map_err(storage_error)
+}
+
+fn migrate_prompt_catalog(connection: &mut Connection) -> Result<(), PromptError> {
+    let transaction = connection
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .map_err(storage_error)?;
+    if !column_exists(&transaction, "prompts", "built_in")? {
+        transaction
+            .execute_batch(
+                "ALTER TABLE prompts ADD COLUMN built_in INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE prompts ADD COLUMN runtime_required INTEGER NOT NULL DEFAULT 0;
+                 ALTER TABLE prompts ADD COLUMN catalog_key TEXT;
+                 CREATE UNIQUE INDEX IF NOT EXISTS idx_prompts_catalog_key
+                     ON prompts(catalog_key) WHERE catalog_key IS NOT NULL;",
+            )
+            .map_err(storage_error)?;
+    }
+    transaction
+        .execute_batch(PROMPT_CATALOG_MIGRATION)
+        .map_err(storage_error)?;
+    transaction
+        .execute_batch(
+            "CREATE UNIQUE INDEX IF NOT EXISTS idx_prompts_catalog_key
+                 ON prompts(catalog_key) WHERE catalog_key IS NOT NULL;
+             INSERT OR IGNORE INTO prompt_parameters (
+                 prompt_code, parameter_name, parameter_type, description, position
+             )
+             SELECT prompt_code, variable_name, variable_type, description, position
+             FROM prompt_variables;
+             INSERT OR IGNORE INTO prompt_translations (
+                 prompt_code, locale, display_name, prompt_body, description,
+                 translation_status, source_version, updated_at
+             )
+             SELECT prompt_code, 'en-US', display_name, prompt_body, description,
+                    'PUBLISHED', version, updated_at
+             FROM prompts;
+             INSERT OR IGNORE INTO prompt_translations (
+                 prompt_code, locale, display_name, prompt_body, description,
+                 translation_status, source_version, updated_at
+             )
+             SELECT prompt_code, 'zh-CN', display_name, prompt_body, description,
+                    'DRAFT', version, updated_at
+             FROM prompts;",
+        )
         .map_err(storage_error)?;
     transaction.commit().map_err(storage_error)
 }

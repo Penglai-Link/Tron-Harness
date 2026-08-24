@@ -2340,6 +2340,7 @@ export const pages = {
       bulkExport: "批量导出",
       cancel: "取消",
       createOverride: "创建覆盖",
+      duplicate: "复制",
       delete: "删除",
       disable: "禁用",
       edit: "编辑",
@@ -2383,6 +2384,8 @@ export const pages = {
       save: "提示词保存失败",
       statusUpdate: "状态更新失败",
       workspaceRequiredForSave: "请先选择工作空间再保存",
+      translation: "翻译失败",
+      translationExists: "已有翻译未被覆盖；如需重新翻译，请先清空目标语言内容。",
     },
     fields: {
       actions: "操作",
@@ -2400,6 +2403,7 @@ export const pages = {
       updated: "更新时间",
       variable: "变量名",
       variables: "变量",
+      translations: "多语言内容",
     },
     filters: {
       allCategories: "全部分类",
@@ -2416,12 +2420,17 @@ export const pages = {
       overrideReverted: "覆盖配置已还原",
       overrideSaved: "覆盖配置已保存",
       saved: "提示词已保存",
+      duplicated: "提示词已复制",
+      translationDraftCreated: "翻译草稿已生成，请审核后保存",
     },
     pagination: {
       itemLabel: "提示词",
     },
     shell: {
       searchPlaceholder: "搜索提示词...",
+    },
+    hints: {
+      translationReview: "一次编辑一种语言；翻译只会填充草稿。",
     },
     sources: {
       INHERITED: "继承",

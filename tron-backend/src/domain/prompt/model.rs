@@ -45,6 +45,28 @@ pub struct PromptVariable {
     pub description: String,
 }
 
+pub type PromptParameter = PromptVariable;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PromptTranslation {
+    pub locale: String,
+    pub display_name: String,
+    pub prompt_body: String,
+    pub description: Option<String>,
+    pub status: PromptTranslationStatus,
+    pub source_version: u64,
+    pub updated_at: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub enum PromptTranslationStatus {
+    Published,
+    Draft,
+    UpdateAvailable,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "SCREAMING_SNAKE_CASE")]
 pub enum PromptVariableType {
@@ -81,6 +103,10 @@ pub struct Prompt {
     pub allow_inheritance: Option<bool>,
     pub version: u64,
     pub variables: Vec<PromptVariable>,
+    pub translations: Vec<PromptTranslation>,
+    pub built_in: bool,
+    pub runtime_required: bool,
+    pub catalog_key: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -112,6 +138,10 @@ pub struct PromptView {
     pub allow_inheritance: Option<bool>,
     pub version: u64,
     pub variables: Vec<PromptVariable>,
+    pub translations: Vec<PromptTranslation>,
+    pub built_in: bool,
+    pub runtime_required: bool,
+    pub catalog_key: Option<String>,
     pub created_at: String,
     pub updated_at: String,
 }

@@ -450,11 +450,13 @@ impl ShortTermMemoryService {
 }
 
 fn goal_judge_system_prompt() -> &'static str {
-    "You are the goal-loop judge for a coding agent session. Decide whether the active goal is complete, blocked, needs user input, or should continue. Use the structured evidence, not language-specific completion keywords. Return only one JSON object with fields: verdict, reason, completionEvidence, missingEvidence, requiredUserInput, nextStepHint, continuationPrompt. Valid verdicts are CONTINUE, COMPLETED, BLOCKED, NEEDS_USER_INPUT. If verdict is CONTINUE, continuationPrompt is required and must give the next agent run precise guidance. If verdict is not CONTINUE, continuationPrompt must be null."
+    crate::domain::prompt::builtin_prompt_text("memory.goal-judge-system", "en-US")
+        .expect("goal judge prompt must be bundled")
 }
 
 fn goal_judge_retry_system_prompt() -> &'static str {
-    "You are retrying a failed goal-loop judge attempt. Do not call tools. Return only one strict JSON object with exactly these camelCase fields: verdict, reason, completionEvidence, missingEvidence, requiredUserInput, nextStepHint, continuationPrompt. completionEvidence and missingEvidence may be arrays of strings. Valid verdicts are CONTINUE, COMPLETED, BLOCKED, NEEDS_USER_INPUT. If verdict is CONTINUE, continuationPrompt is required. If verdict is not CONTINUE, continuationPrompt must be null."
+    crate::domain::prompt::builtin_prompt_text("memory.goal-judge-retry-system", "en-US")
+        .expect("goal judge retry prompt must be bundled")
 }
 
 fn validate_goal_judge_output(output: &GoalJudgeOutput) -> Result<(), GoalJudgeFailure> {

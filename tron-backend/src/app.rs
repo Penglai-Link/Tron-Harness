@@ -441,7 +441,8 @@ impl AppState {
                 agent_tool_registry.clone(),
                 runtime_http_client.clone(),
             )
-            .with_active_runs(active_runs.clone()),
+            .with_active_runs(active_runs.clone())
+            .with_prompt_service(prompts.clone()),
         )));
         automations
             .bootstrap_scheduler()

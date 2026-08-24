@@ -2217,6 +2217,7 @@ export const pages = {
       bulkExport: "Bulk Export",
       cancel: "Cancel",
       createOverride: "Create override",
+      duplicate: "Duplicate",
       delete: "Delete",
       disable: "Disable",
       edit: "Edit",
@@ -2260,6 +2261,8 @@ export const pages = {
       save: "Prompt could not be saved",
       statusUpdate: "Status update failed",
       workspaceRequiredForSave: "Select a workspace before saving",
+      translation: "Translation failed",
+      translationExists: "Existing translation was kept. Clear it before translating again.",
     },
     fields: {
       actions: "Actions",
@@ -2277,6 +2280,7 @@ export const pages = {
       updated: "Updated",
       variable: "Variable",
       variables: "Variables",
+      translations: "Translations",
     },
     filters: {
       allCategories: "All categories",
@@ -2293,12 +2297,17 @@ export const pages = {
       overrideReverted: "Override reverted",
       overrideSaved: "Override saved",
       saved: "Prompt saved",
+      duplicated: "Prompt duplicated",
+      translationDraftCreated: "Translation draft created for review",
     },
     pagination: {
       itemLabel: "prompts",
     },
     shell: {
       searchPlaceholder: "Search prompts...",
+    },
+    hints: {
+      translationReview: "Edit one language at a time. Translation fills a draft only.",
     },
     sources: {
       INHERITED: "Inherited",

@@ -9,8 +9,6 @@ use super::{
     runtime_helpers::short_term_memory_error,
 };
 
-const STEER_CONTINUITY_GUIDANCE: &str = "Additional user messages may arrive while this run is active. Treat each one as steering within the same run. Preserve and complete all unresolved earlier user requests unless a later message explicitly cancels, replaces, or reprioritizes them. If a later message is independent, complete both instead of silently dropping earlier work.";
-
 impl ReactAgent {
     pub async fn run_with_control(
         &self,
@@ -49,9 +47,14 @@ impl RuntimeSteering {
             return;
         }
 
-        insert_continuity_guidance(&mut context.messages);
+        let guidance = crate::domain::prompt::builtin_prompt_text(
+            "agent.steer-continuity",
+            &context.locale,
+        )
+        .expect("steer continuity prompt must be bundled");
+        insert_continuity_guidance(&mut context.messages, guidance);
         if let Some(memory) = context.short_term_memory.as_mut() {
-            insert_continuity_guidance(&mut memory.prompt_prefix);
+            insert_continuity_guidance(&mut memory.prompt_prefix, guidance);
         }
     }
 
@@ -128,9 +131,9 @@ impl RuntimeSteering {
     }
 }
 
-fn insert_continuity_guidance(messages: &mut Vec<AgentMessage>) {
+fn insert_continuity_guidance(messages: &mut Vec<AgentMessage>, guidance: &str) {
     if messages.iter().any(|message| {
-        message.role == "system" && message.plain_text_content() == STEER_CONTINUITY_GUIDANCE
+        message.role == "system" && message.plain_text_content() == guidance
     }) {
         return;
     }
@@ -139,7 +142,7 @@ fn insert_continuity_guidance(messages: &mut Vec<AgentMessage>) {
         .iter()
         .position(|message| message.role != "system" && message.role != "developer")
         .unwrap_or(messages.len());
-    messages.insert(insert_at, AgentMessage::system(STEER_CONTINUITY_GUIDANCE));
+    messages.insert(insert_at, AgentMessage::system(guidance));
 }
 
 fn record_inputs(

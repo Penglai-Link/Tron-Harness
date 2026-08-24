@@ -162,7 +162,8 @@ pub async fn execute_task(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
-    .with_active_runs(state.active_runs.clone());
+    .with_active_runs(state.active_runs.clone())
+    .with_prompt_service(state.prompts.clone());
     let chats = state.chats.clone();
     let session_code = session.session_code.clone();
     let background_session_code = session_code.clone();
@@ -241,8 +242,8 @@ fn task_execution_prompt(task: &crate::domain::task::TaskDetail) -> String {
         .map(str::trim)
         .filter(|value| !value.is_empty())
         .unwrap_or("None");
-    format!(
-        "Execute the following task and provide the final result. Use available task, app, memory, and platform tools when helpful. Do not store the final result in the task description; the platform records your final reply separately as the task execution result.\n\nTask code: {}\nTitle: {}\nType: {:?}\nStatus: {:?}\nPriority: {:?}\nProgress: {}%\nSource type: {:?}\nSource URL: {}\nApps: {}\n\nDescription:\n{}",
+    let task_context = format!(
+        "Task code: {}\nTitle: {}\nType: {:?}\nStatus: {:?}\nPriority: {:?}\nProgress: {}%\nSource type: {:?}\nSource URL: {}\nApps: {}\n\nDescription:\n{}",
         task.task_code,
         task.title,
         task.task_type,
@@ -253,7 +254,10 @@ fn task_execution_prompt(task: &crate::domain::task::TaskDetail) -> String {
         source_url,
         apps,
         description,
-    )
+    );
+    crate::domain::prompt::builtin_prompt_text("task.execution", "en-US")
+        .expect("task execution prompt must be bundled")
+        .replace("{{task_context}}", &task_context)
 }
 
 pub async fn restore_task(

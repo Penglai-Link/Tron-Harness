@@ -36,6 +36,7 @@ import {
   fetchWorkspacePromptDetail,
   updatePlatformPrompt,
   updateWorkspacePrompt,
+  translatePromptDraft,
 } from "@/domain/prompt/api";
 import {
   promptCategoryLabel,
@@ -51,6 +52,7 @@ import {
   getWorkspacePromptMock,
   updatePlatformPromptMock,
   updateWorkspacePromptMock,
+  translatePromptDraftMock,
 } from "@/domain/prompt/mock";
 import {
   analyzePromptTemplate,
@@ -62,6 +64,8 @@ import {
   type PromptCategory,
   type PromptRecord,
   type PromptScopeKind,
+  type PromptTranslation,
+  type PromptTranslationStatus,
   type PromptVariable,
   type PromptVariableType,
 } from "@/domain/prompt/model";
@@ -74,6 +78,26 @@ interface PromptFormState {
   enabled: boolean;
   promptBody: string;
   variables: PromptVariable[];
+  translations: PromptTranslation[];
+}
+
+type PromptLocale = "en-US" | "zh-CN";
+
+const promptLocales: Array<{ value: PromptLocale; label: string }> = [
+  { value: "en-US", label: "English (en-US)" },
+  { value: "zh-CN", label: "简体中文 (zh-CN)" },
+];
+
+function emptyTranslation(locale: PromptLocale): PromptTranslation {
+  return {
+    locale,
+    displayName: "",
+    promptBody: "",
+    description: null,
+    status: "DRAFT",
+    sourceVersion: 1,
+    updatedAt: new Date(0).toISOString(),
+  };
 }
 
 function emptyForm(): PromptFormState {
@@ -85,18 +109,32 @@ function emptyForm(): PromptFormState {
     enabled: true,
     promptBody: "",
     variables: [],
+    translations: promptLocales.map(({ value }) => emptyTranslation(value)),
   };
 }
 
 function formFromRecord(record: PromptRecord): PromptFormState {
+  const translations = record.translations?.length
+    ? record.translations
+    : promptLocales.map(({ value }) => ({
+      ...emptyTranslation(value),
+      displayName: record.displayName,
+      promptBody: record.promptBody,
+      description: record.description,
+      status: "PUBLISHED" as const,
+      sourceVersion: record.version,
+      updatedAt: record.updatedAt,
+    }));
+  const defaultTranslation = translations.find((item) => item.locale === "en-US") ?? translations[0];
   return {
     allowInheritance: record.allowInheritance ?? true,
     category: record.category,
-    description: record.description ?? "",
-    displayName: record.displayName,
+    description: defaultTranslation?.description ?? record.description ?? "",
+    displayName: defaultTranslation?.displayName ?? record.displayName,
     enabled: record.enabled,
-    promptBody: record.promptBody,
+    promptBody: defaultTranslation?.promptBody ?? record.promptBody,
     variables: record.variables,
+    translations,
   };
 }
 
@@ -118,6 +156,7 @@ export function PromptEditorPage({
   const promptCode = mode === "detail" ? searchParams.get("promptCode")?.trim() ?? "" : "";
   const isOverrideMode = searchParams.get("mode") === "override";
   const [form, setForm] = useState<PromptFormState>(() => emptyForm());
+  const [activeLocale, setActiveLocale] = useState<PromptLocale>("en-US");
   const [record, setRecord] = useState<PromptRecord | null>(null);
   const [loading, setLoading] = useState(mode === "detail");
   const [submitting, setSubmitting] = useState(false);
@@ -141,6 +180,7 @@ export function PromptEditorPage({
     setRecord(null);
     setBackendAnalysis(null);
     setForm(emptyForm());
+    setActiveLocale("en-US");
 
     if (mode === "create") {
       setLoading(false);
@@ -166,6 +206,7 @@ export function PromptEditorPage({
         if (controller.signal.aborted) return;
         setRecord(nextRecord);
         setForm(formFromRecord(nextRecord));
+        setActiveLocale("en-US");
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) toast.error(reason instanceof Error ? reason.message : pt("errors.detailLoad", "Prompt could not be loaded"));
@@ -199,15 +240,83 @@ export function PromptEditorPage({
   }, [form.promptBody, promptDataSource]);
 
   function updateForm<Key extends keyof PromptFormState>(key: Key, value: PromptFormState[Key]) {
-    setForm((current) => ({ ...current, [key]: value }));
+    setForm((current) => {
+      const next = { ...current, [key]: value };
+      if (key === "displayName" || key === "promptBody" || key === "description") {
+        next.translations = current.translations.map((translation) => (
+          translation.locale === activeLocale
+            ? {
+              ...translation,
+              ...(key === "displayName" ? { displayName: value as string } : {}),
+              ...(key === "promptBody" ? { promptBody: value as string } : {}),
+              ...(key === "description" ? { description: (value as string) || null } : {}),
+              status: "DRAFT" as PromptTranslationStatus,
+            }
+            : translation
+        ));
+      }
+      return next;
+    });
   }
 
   function updatePromptBody(promptBody: string) {
     setForm((current) => ({
       ...current,
       promptBody,
+      translations: current.translations.map((translation) => (
+        translation.locale === activeLocale
+          ? { ...translation, promptBody, status: "DRAFT" as PromptTranslationStatus }
+          : translation
+      )),
       variables: reconcilePromptVariables(promptBody, current.variables),
     }));
+  }
+
+  function selectLocale(locale: PromptLocale) {
+    const translation = form.translations.find((item) => item.locale === locale) ?? emptyTranslation(locale);
+    setActiveLocale(locale);
+    setForm((current) => ({
+      ...current,
+      displayName: translation.displayName,
+      promptBody: translation.promptBody,
+      description: translation.description ?? "",
+      variables: reconcilePromptVariables(translation.promptBody, current.variables),
+    }));
+  }
+
+  async function translateActivePrompt() {
+    const targetLocale = activeLocale === "en-US" ? "zh-CN" : "en-US";
+    const sourceLocale = activeLocale;
+    const target = form.translations.find((item) => item.locale === targetLocale);
+    if (target?.promptBody.trim() || target?.displayName.trim()) {
+      toast.error(pt("errors.translationExists", "Existing translation was kept. Clear it before translating again."));
+      return;
+    }
+    try {
+      const draft = promptDataSource === "api"
+        ? await translatePromptDraft({
+          promptCode: promptCode || undefined,
+          sourceLocale,
+          targetLocale,
+          displayName: form.displayName,
+          promptBody: form.promptBody,
+          description: form.description || null,
+        })
+        : translatePromptDraftMock({
+          sourceLocale,
+          targetLocale,
+          displayName: form.displayName,
+          promptBody: form.promptBody,
+          description: form.description || null,
+        });
+      setForm((current) => ({
+        ...current,
+        translations: current.translations.map((item) => item.locale === targetLocale ? draft : item),
+      }));
+      toast.success(pt("messages.translationDraftCreated", "Translation draft created for review"));
+    } catch (reason) {
+      toast.error(reason instanceof Error ? reason.message : pt("errors.translation", "Translation failed"));
+    }
   }
 
   function updateVariable(name: string, patch: Partial<Pick<PromptVariable, "description" | "type">>) {
@@ -240,12 +349,28 @@ export function PromptEditorPage({
         return;
       }
       const variables = normalizePromptVariables(form.promptBody, form.variables);
+      const fallbackTranslation = {
+        locale: "en-US" as const,
+        displayName: form.displayName.trim(),
+        promptBody: form.promptBody,
+        description: form.description.trim() || null,
+        status: "DRAFT" as const,
+        sourceVersion: record?.version ?? 1,
+        updatedAt: new Date().toISOString(),
+      };
+      const translations = promptLocales.map(({ value }) => {
+        const existing = form.translations.find((translation) => translation.locale === value);
+        return existing?.displayName.trim() && existing.promptBody.trim()
+          ? existing
+          : { ...fallbackTranslation, locale: value, status: "DRAFT" as const };
+      });
       const commonFields = {
         description: form.description.trim(),
         displayName: form.displayName.trim(),
         enabled: form.enabled,
         promptBody: form.promptBody,
         variables,
+        translations,
       };
 
       let saved: PromptRecord;
@@ -337,6 +462,40 @@ export function PromptEditorPage({
                 {record.sourceWorkspacePath.length ? <span>{record.sourceWorkspacePath.map((item) => item.name).join(" / ")}</span> : null}
               </div>
             ) : null}
+
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] pb-4">
+              <div>
+                <p className="text-sm font-semibold">{pt("fields.translations", "Translations")}</p>
+                <p className="mt-1 text-xs text-[var(--color-on-surface-variant)]">{pt("hints.translationReview", "Edit one language at a time. Translation fills a draft only.")}</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2">
+                {promptLocales.map((locale) => {
+                  const translation = form.translations.find((item) => item.locale === locale.value);
+                  return (
+                    <Button
+                      key={locale.value}
+                      type="button"
+                      size="sm"
+                      variant={activeLocale === locale.value ? "default" : "outline"}
+                      aria-pressed={activeLocale === locale.value}
+                      onClick={() => selectLocale(locale.value)}
+                    >
+                      {locale.label}
+                      {translation?.status === "DRAFT" ? <span className="ml-1 text-xs">· draft</span> : null}
+                    </Button>
+                  );
+                })}
+                <Button
+                  type="button"
+                  size="sm"
+                  variant="outline"
+                  onClick={() => void translateActivePrompt()}
+                  disabled={!form.displayName.trim() || !form.promptBody.trim()}
+                >
+                  {pt("actions.translate", "Translate missing language")}
+                </Button>
+              </div>
+            </div>
 
             <div className="grid gap-4 md:grid-cols-2">
               {mode === "detail" ? (
