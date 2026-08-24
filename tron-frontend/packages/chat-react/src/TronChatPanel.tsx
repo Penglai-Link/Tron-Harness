@@ -665,7 +665,10 @@ function ReasoningCard({
         <div className="tron-chat__rail-entry-body">
           {card.content ? (
             <div className="tron-chat__rail-detail">
-              <MarkdownBlock content={card.content} />
+              <MarkdownBlock
+                content={card.content}
+                emptyMessage="No reasoning content was produced."
+              />
             </div>
           ) : null}
         </div>

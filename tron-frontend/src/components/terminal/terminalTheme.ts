@@ -1,6 +1,6 @@
 import type { ITheme } from "@xterm/xterm";
 
-type TerminalAppTheme = "light" | "dark";
+type TerminalAppTheme = "light" | "dark" | "matrix-dark";
 
 const lightAnsiTheme: Partial<ITheme> = {
   black: "#1c1b1b",
