@@ -27,6 +27,7 @@ This document catalogs the reusable primitives in `src/components/ui`. It is the
 | `label.tsx` | `Label` | Accessible labels for controls |
 | `resizable.tsx` | `ResizablePanelGroup`, `ResizablePanel`, `ResizableHandle` | User-adjustable panel layouts |
 | `scroll-area.tsx` | `ScrollArea`, `ScrollBar`, `ScrollAreaPrimitive` | Scrollable content with controlled scrollbars |
+| `sidebar.tsx` | `SidebarProvider`, `Sidebar`, `SidebarContent`, `SidebarFooter`, `SidebarGroup`, `SidebarMenu`, `SidebarMenuItem`, `SidebarMenuButton`, `SidebarMenuSub`, `useSidebar` | Application sidebar layouts with controlled desktop collapse and a keyboard-accessible fixed mobile drawer; consumers provide translated labels and remain responsible for navigation behavior |
 | `select.tsx` | `Select`, `SelectButton`, `SelectTrigger`, `SelectValue`, `SelectPopup`, `SelectItem`, `SelectSeparator`, `SelectGroup`, `SelectLabel`, `SelectGroupLabel`, `SelectPrimitive`, `selectTriggerVariants`, `selectTriggerIconClassName`, `SelectButtonProps` | Structured single-value selection |
 | `spinner.tsx` | `Spinner` | Loading and pending states |
 | `switch.tsx` | `Switch`, `SwitchPrimitive` | Immediate binary settings |

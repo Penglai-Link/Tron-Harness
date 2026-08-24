@@ -18,12 +18,10 @@ import {
 import {
   Bot,
   ChevronDown,
-  ChevronRight,
+  ChevronsUpDown,
   MoreHorizontal,
   PanelBottomClose,
   PanelBottomOpen,
-  PanelLeftClose,
-  PanelLeftOpen,
   PanelRightClose,
   PanelRightOpen,
   Settings2,
@@ -31,7 +29,6 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
-  Link,
   useLocation,
   useNavigate,
 } from "react-router";
@@ -75,7 +72,12 @@ import type {
 } from "@/shared/types/WorkspaceSpace";
 import DraggleLine from "../ui/DraggleLine";
 import { SelectItem } from "@/components/ui/select";
+import {
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar";
 import { Content } from "./content";
+import { TronSidebar } from "./TronSidebar";
 
 
 interface TronShellProps {
@@ -104,8 +106,6 @@ interface ConsoleShellConfigController {
 
 type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["secondarySpaces"][number]>;
 
-const TRON_DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS = "w-[280px]";
-const TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS = "lg:pl-[280px]";
 const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 
 export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
@@ -218,12 +218,10 @@ export function TronShell({
   const setWorkspaceSwitcherSnapshot = useAppShellStore((state) => state.setWorkspaceSwitcherSnapshot);
   const workspaceSwitcher = useAppShellStore((state) => state.workspaceSwitcherSnapshot);
   const dataSource = getServiceDataSource("admin");
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
   const [openNavigationItems, setOpenNavigationItems] = useState<Record<string, boolean>>({});
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [rightDragglePanelOpen, setRightDragglePanelOpen] = useState(false);
 
-  const [sidebarTooltip, setSidebarTooltip] = useState<{ label: string; top: number } | null>(null);
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const [mainAgentWindowState, setMainAgentWindowState] = useState<ChatFloatingState>(() => ({
@@ -436,15 +434,10 @@ export function TronShell({
   }, [shellConfigController, shellFrameMounted]);
 
   useEffect(() => {
-    setMobileSidebarOpen(false);
+    window.dispatchEvent(new Event("tron:close-sidebar"));
     setRightDrawerOpen(false);
-    setSidebarTooltip(null);
     setTopbarToolsMenuOpen(false);
   }, [pathname]);
-
-  useEffect(() => {
-    setSidebarTooltip(null);
-  }, [sidebarCollapsed]);
 
   useEffect(() => {
     setRightSidebarCollapsed(true);
@@ -467,14 +460,13 @@ export function TronShell({
   }, [hasRightPanel, rightPanel, rightSidebarCollapsed]);
 
   useEffect(() => {
-    if (!mobileSidebarOpen && !rightDrawerOpen) {
+    if (!rightDrawerOpen) {
       return;
     }
 
     const previousOverflow = document.body.style.overflow;
     const handleKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") {
-        setMobileSidebarOpen(false);
         setRightDrawerOpen(false);
       }
     };
@@ -486,7 +478,7 @@ export function TronShell({
       document.body.style.overflow = previousOverflow;
       window.removeEventListener("keydown", handleKeyDown);
     };
-  }, [mobileSidebarOpen, rightDrawerOpen]);
+  }, [rightDrawerOpen]);
 
   useDismissibleLayer({
     open: Boolean(utilityPanel),
@@ -510,24 +502,10 @@ export function TronShell({
     triggerElement: topbarToolsMenuContainerRef.current,
   });
 
-  function toggleMobileSidebar() {
-    if (!mobileSidebarOpen) {
-      closeFloatingPanels();
-      setRightDrawerOpen(false);
-    }
-
-    setMobileSidebarOpen((open) => !open);
-  }
-
-  function closeMobileSidebar() {
-    closeFloatingPanels();
-    setMobileSidebarOpen(false);
-  }
-
   function openRightDrawer() {
     closeFloatingPanels();
     setTopbarToolsMenuOpen(false);
-    setMobileSidebarOpen(false);
+    window.dispatchEvent(new Event("tron:close-sidebar"));
     setRightDrawerOpen(true);
   }
 
@@ -536,11 +514,7 @@ export function TronShell({
   }
 
   function toggleSidebarPanel() {
-    if (window.innerWidth < 1024) {
-      toggleMobileSidebar();
-      return;
-    }
-    setSidebarCollapsed(!sidebarCollapsed);
+    window.dispatchEvent(new Event("tron:toggle-sidebar"));
   }
 
   function toggleRightSidebarPanel() {
@@ -592,6 +566,11 @@ export function TronShell({
       if (!action) return;
 
       if (action === "toggleLeftSidebar") {
+        // SidebarProvider owns this built-in shortcut. Dispatching the custom
+        // event too would toggle twice when users bind the same combination.
+        if (event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
+          return;
+        }
         event.preventDefault();
         toggleSidebarPanel();
         return;
@@ -622,7 +601,6 @@ export function TronShell({
     return () => window.removeEventListener("keydown", handleShortcut);
   }, [
     hasRightPanel,
-    mobileSidebarOpen,
     navigate,
     pathname,
     rightDrawerOpen,
@@ -632,16 +610,6 @@ export function TronShell({
 
   function handleSidebarNavigationClick() {
     closeFloatingPanels();
-    closeMobileSidebar();
-  }
-
-  function showCollapsedNavTooltip(label: string, element: HTMLElement) {
-    const rect = element.getBoundingClientRect();
-    setSidebarTooltip({ label, top: rect.top + rect.height / 2 });
-  }
-
-  function hideCollapsedNavTooltip() {
-    setSidebarTooltip(null);
   }
 
   function handleWorkspaceSwitcherClick() {
@@ -770,7 +738,7 @@ export function TronShell({
   function renderUserPanelContent() {
     return (
       <>
-        <div className="space-y-3">
+        <div className="space-y-3 p-3">
           <div className="min-w-0">
             <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
               {t("shell:theme.label")}
@@ -809,7 +777,7 @@ export function TronShell({
           </div>
         </div>
         {userMenuContent ? (
-          <div className="border-t border-[var(--color-outline-variant)] pt-3">
+          <div className="">
             {userMenuContent}
           </div>
         ) : null}
@@ -817,19 +785,18 @@ export function TronShell({
     );
   }
 
-  function renderSidebarUserSection(mobile = false) {
-    const compact = mobile ? false : sidebarCollapsed;
+  function renderSidebarUserSection(compact: boolean, mobile: boolean) {
     const displayName = authSession?.user.displayName || t("shell:utilityPanel.user");
     const email = authSession?.user.email ?? "";
     const initial = displayName.trim().charAt(0).toUpperCase() || "U";
 
     return (
-      <div className={cn("relative shrink-0 border-t border-[var(--color-outline-variant)]", mobile ? "pt-3" : "py-2")}>
+      <div className="relative shrink-0">
         <button
           ref={userMenuTriggerRef}
           className={cn(
-            "flex min-w-0 w-full items-center rounded-xl text-left transition-colors hover:bg-[var(--color-hover-surface)]",
-            compact ? "justify-center px-2 py-2" : "gap-3 px-2 py-2",
+            "flex h-14 min-w-0 w-full items-center rounded-lg text-left transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            compact ? "justify-center px-1" : "gap-3 px-2.5",
           )}
           type="button"
           aria-label={t("shell:aria.openUserMenu")}
@@ -841,125 +808,40 @@ export function TronShell({
             {avatarSrc ? <img alt="" className="size-full object-cover" src={avatarSrc} /> : initial}
           </span>
           {compact ? null : (
-            <span className="min-w-0 flex-1">
-              <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
-              {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
-            </span>
+            <>
+              <span className="min-w-0 flex-1">
+                <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
+                {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
+              </span>
+              <ChevronsUpDown className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
+            </>
           )}
         </button>
         {utilityPanel === "user" ? (
           <div
             ref={utilityPanelRef}
             className={cn(
-              "absolute bottom-[calc(100%+8px)] z-[70] max-h-[min(70vh,36rem)] overflow-y-auto rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-              compact ? "left-[calc(100%+8px)] w-[min(320px,calc(100vw-1rem))]" : "left-0 w-[min(320px,calc(100vw-1rem))]",
+              "absolute z-[70] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              mobile ? "bottom-[calc(100%+8px)] left-0 max-h-[min(70vh,36rem)]" : "bottom-0 left-[calc(100%+8px)] max-h-[min(80vh,36rem)]",
             )}
             role="dialog"
             aria-label={t("shell:utilityPanel.user")}
           >
-            <div className="space-y-3">{renderUserPanelContent()}</div>
+            <div className="flex min-w-0 items-center gap-3 px-3 py-3">
+              <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
+                {avatarSrc ? <img alt="" className="size-full object-cover" src={avatarSrc} /> : initial}
+              </span>
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
+                {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
+              </span>
+            </div>
+            <div className="border-t border-[var(--color-card-border)]">{renderUserPanelContent()}</div>
           </div>
         ) : null}
       </div>
     );
   }
-
-  function renderSidebarContent(mobile = false) {
-    const compact = mobile ? false : sidebarCollapsed;
-
-    function renderNavigationItem(item: TronNavItem, itemKey: string, nestingLevel = 0): ReactNode {
-      const Icon = item.icon;
-      const active = item.label === activeItem;
-      const itemLabel = t(item.translationKey);
-      const hasChildren = Boolean(item.children?.length);
-      const open = hasChildren && (compact || openNavigationItems[itemKey]);
-      const childOffset = compact ? 0 : nestingLevel * 12;
-
-      return (
-        <div className="space-y-1" key={itemKey}>
-          <div className="flex min-w-0 items-center" style={{ paddingLeft: `${childOffset}px` }}>
-            {hasChildren && !compact ? (
-              <button
-                className="flex h-9 min-w-0 flex-1 items-center gap-2 rounded-lg px-3 text-sm text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
-                type="button"
-                aria-expanded={open}
-                aria-label={t(open ? "shell:aria.collapseNavigationItem" : "shell:aria.expandNavigationItem", { item: itemLabel })}
-                onClick={() => {
-                  setOpenNavigationItems((current) => ({ ...current, [itemKey]: !current[itemKey] }));
-                }}
-              >
-                <Icon className="shrink-0" size={17} aria-hidden="true" />
-                <span className="min-w-0 flex-1 truncate text-left">{itemLabel}</span>
-                <ChevronDown className={cn("shrink-0 transition-transform", open ? "rotate-180" : "")} size={14} aria-hidden="true" />
-              </button>
-            ) : (
-              <Link
-                className={cn(
-                  "flex h-9 min-w-0 flex-1 items-center rounded-lg text-sm transition-colors",
-                  compact ? "justify-center px-0" : "gap-2 px-3",
-                  active
-                    ? "bg-[var(--color-surface-container-high)] font-medium text-[var(--color-on-surface)]"
-                    : "text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
-                )}
-                aria-label={compact ? itemLabel : undefined}
-                aria-current={active ? "page" : undefined}
-                data-active={active}
-                onBlur={compact ? hideCollapsedNavTooltip : undefined}
-                onFocus={(event) => {
-                  if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
-                }}
-                onMouseEnter={(event) => {
-                  if (compact) showCollapsedNavTooltip(itemLabel, event.currentTarget);
-                }}
-                onMouseLeave={compact ? hideCollapsedNavTooltip : undefined}
-                onClick={mobile ? handleSidebarNavigationClick : undefined}
-                to={item.href}
-              >
-                <Icon size={17} aria-hidden="true" />
-                <span className={cn("truncate", compact ? "sr-only" : "")}>{itemLabel}</span>
-              </Link>
-            )}
-          </div>
-          {open ? (
-            <div className="space-y-1">
-              {item.children?.map((child) => renderNavigationItem(child, `${itemKey}/${child.label}`, nestingLevel + 1))}
-            </div>
-          ) : null}
-        </div>
-      );
-    }
-
-    return (
-      <>
-        <nav className={cn("space-y-4 flex-1", compact ? "space-y-2" : "")} aria-label={t("shell:aria.primaryNavigation")}>
-          {visibleNavigation.map((section) => {
-            const open = openSections[section.label];
-            return (
-              <section key={section.label} className="flex-1">
-                {compact ? null : (
-                  <button
-                    className="flex h-8 w-full items-center justify-between rounded-lg px-2 text-[15px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)]"
-                    type="button"
-                    aria-expanded={open}
-                    onClick={() => toggleSection(section.label)}
-                  >
-                    {t(section.translationKey)}
-                    <ChevronRight className={cn("transition-transform", open ? "rotate-90" : "")} size={14} aria-hidden="true" />
-                  </button>
-                )}
-                {open || compact ? (
-                  <div className={cn("space-y-1", compact ? "" : "mt-1")}>
-                    {section.items.map((item) => renderNavigationItem(item, `${section.label}/${item.label}`))}
-                  </div>
-                ) : null}
-              </section>
-            );
-          })}
-        </nav>
-      </>
-    );
-  }
-
 
   if (shellFrameMounted) {
     return <>{children}</>;
@@ -968,31 +850,19 @@ export function TronShell({
   return (
     <TronShellFrameContext.Provider value={true}>
       <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
-        <div className="isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]">
+        <SidebarProvider
+          className="isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]"
+          open={!sidebarCollapsed}
+          onOpenChange={(open) => setSidebarCollapsed(!open)}
+        >
           <header className="fixed inset-x-0 top-0 z-[60] h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
             <div className="flex h-full items-center justify-between gap-4">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <Button
-                  className="-ml-3 lg:hidden"
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                  aria-controls="tron-mobile-sidebar"
-                  aria-expanded={mobileSidebarOpen}
-                  aria-label={mobileSidebarOpen ? t("shell:aria.closeNavigation") : t("shell:aria.openNavigation")}
-                  onClick={toggleSidebarPanel}
-                >
-                  {mobileSidebarOpen ? <PanelLeftClose size={17} aria-hidden="true" /> : <PanelLeftOpen size={17} aria-hidden="true" />}
-                </Button>
-                <Button
-                  className="-ml-3 hidden lg:flex"
-                  size="icon"
-                  type="button"
-                  variant="ghost"
-                  onClick={toggleSidebarPanel}
-                >
-                  {sidebarCollapsed ? <PanelLeftOpen size={17} aria-hidden="true" /> : <PanelLeftClose size={17} aria-hidden="true" />}
-                </Button>
+                <SidebarTrigger aria-label={t("shell:aria.openNavigation")} className="-ml-3 md:hidden" />
+                <SidebarTrigger
+                  aria-label={sidebarCollapsed ? t("shell:aria.openNavigation") : t("shell:aria.closeNavigation")}
+                  className="-ml-3 hidden md:flex"
+                />
                 <button
                   ref={workspaceTriggerRef}
                   className="inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 items-center gap-2 rounded-lg bg-[var(--color-surface-container)] px-3 text-sm font-medium text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
@@ -1116,28 +986,6 @@ export function TronShell({
             />
           ) : null}
 
-          {mobileSidebarOpen ? (
-            <>
-              <button
-                className="fixed inset-x-0 bottom-0 top-14 z-40 bg-[var(--color-backdrop-scrim)] lg:hidden"
-                type="button"
-                aria-label={t("common:actions.close")}
-                onClick={closeMobileSidebar}
-              />
-              <aside
-                className="fixed bottom-0 left-0 top-14 z-50 flex w-[min(20rem,calc(100vw-1rem))] flex-col overflow-visible bg-[var(--color-elevated-surface)] px-3 py-4 shadow-[12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
-                id="tron-mobile-sidebar"
-              >
-                <div className="flex min-h-0 flex-1 flex-col">
-                  <div className="min-h-0 flex-1 overflow-y-auto">
-                    {renderSidebarContent(true)}
-                  </div>
-                  {renderSidebarUserSection(true)}
-                </div>
-              </aside>
-            </>
-          ) : null}
-
           {hasRightPanel && rightDrawerOpen ? (
             <>
               <button
@@ -1168,44 +1016,32 @@ export function TronShell({
             </>
           ) : null}
 
-          <aside
-            className={cn(
-              "fixed bottom-0 left-0 top-14 z-50 hidden flex-col overflow-visible bg-[var(--color-elevated-surface)] shadow-[10px_0_28px_rgba(15,23,42,0.04)] transition-[width] duration-200 lg:flex",
-              sidebarCollapsed ? "w-[76px]" : TRON_DESKTOP_SIDEBAR_EXPANDED_WIDTH_CLASS,
-            )}
-            data-collapsed={sidebarCollapsed}
-          >
-            <div className="flex h-full min-h-0 flex-col px-2 pt-2">
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                {renderSidebarContent()}
-              </div>
-              {renderSidebarUserSection()}
-            </div>
-          </aside>
+          <TronSidebar
+            activeItem={activeItem}
+            navigation={visibleNavigation}
+            openNavigationItems={openNavigationItems}
+            openSections={openSections}
+            renderFooter={renderSidebarUserSection}
+            setOpenNavigationItems={setOpenNavigationItems}
+            translate={(key, options) => t(key, options)}
+            onNavigate={handleSidebarNavigationClick}
+            onToggleSection={toggleSection}
+          />
 
-          {sidebarTooltip && sidebarCollapsed ? (
-            <div
-              className="pointer-events-none fixed left-[84px] z-[70] -translate-y-1/2 whitespace-nowrap rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-2 py-1 text-xs font-medium text-[var(--color-on-surface)] opacity-100 shadow-[0_8px_18px_rgba(15,23,42,0.12)]"
-              role="tooltip"
-              style={{ top: sidebarTooltip.top }}
-            >
-              {sidebarTooltip.label}
-            </div>
-          ) : null}
-
-          <div className={cn("relative z-0 min-w-0 pt-14 transition-[padding-left] duration-200 h-screen flex flex-col", sidebarCollapsed ? "lg:pl-[76px]" : TRON_DESKTOP_SIDEBAR_EXPANDED_PADDING_CLASS)}>
+          <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14">
             <Content
               contentClassName={contentClassName}
               onRightPanelOpenChange={setRightDragglePanelOpen}
               rightPanel={rightPanel}
               showBottomPanel={showBottomPanel}
+
               changeBottomPanel={setBottomPanel}
             >
               {children}
             </Content>
           </div>
 
-        </div>
+        </SidebarProvider>
       </WorkspaceSpacesContext.Provider>
     </TronShellFrameContext.Provider>
   );
