@@ -281,44 +281,51 @@ function ChatBubble({
     ? currentUserDisplayName || message.actor
     : message.actor;
   return (
-    <article
-      className={cx("tron-chat__message", isUser && "tron-chat__message--user")}
-    >
-      <div className="tron-chat__message-header">
-        <div className="tron-chat__message-actor">
-          {isUser ? <UserRound size={16} /> : <Bot size={16} />}
-          <span>{actorName}</span>
-        </div>
-        <div className="tron-chat__message-actions">
-          <CopyValueButton
-            ariaLabel="Copy raw markdown"
-            title="Copy raw markdown"
-            value={message.content}
-          />
-          {isUser && onEditMessage ? (
-            <button
-              className="tron-chat__icon-button"
-              type="button"
-              aria-label="Edit message"
-              onClick={() => onEditMessage(message.content)}
-            >
-              <Pencil size={14} />
-            </button>
-          ) : null}
-          <span className="tron-chat__message-time">
-            {formatTime(message.createdAt)}
-          </span>
-        </div>
-      </div>
-      {isUser ? (
-        <div className="tron-chat__message-body">{message.content}</div>
-      ) : (
-        <MarkdownBlock
-          content={message.content}
-          emptyMessage={emptyAssistantMessage}
-        />
+    <div
+      className={cx(
+        "tron-chat__message-entry",
+        isUser && "tron-chat__message-entry--user",
       )}
-    </article>
+    >
+      <article
+        className={cx("tron-chat__message", isUser && "tron-chat__message--user")}
+      >
+        <div className="tron-chat__message-header">
+          <div className="tron-chat__message-actor">
+            {isUser ? <UserRound size={16} /> : <Bot size={16} />}
+            <span>{actorName}</span>
+          </div>
+        </div>
+        {isUser ? (
+          <div className="tron-chat__message-body">{message.content}</div>
+        ) : (
+          <MarkdownBlock
+            content={message.content}
+            emptyMessage={emptyAssistantMessage}
+          />
+        )}
+      </article>
+      <div className="tron-chat__message-actions tron-chat__message-actions--outside">
+        <CopyValueButton
+          ariaLabel="Copy raw markdown"
+          title="Copy raw markdown"
+          value={message.content}
+        />
+        {isUser && onEditMessage ? (
+          <button
+            className="tron-chat__icon-button"
+            type="button"
+            aria-label="Edit message"
+            onClick={() => onEditMessage(message.content)}
+          >
+            <Pencil size={14} />
+          </button>
+        ) : null}
+        <span className="tron-chat__message-time">
+          {formatTime(message.createdAt)}
+        </span>
+      </div>
+    </div>
   );
 }
 

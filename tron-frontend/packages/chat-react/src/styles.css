@@ -534,7 +534,6 @@
 }
 
 .tron-chat__message {
-  max-width: 920px;
   border-radius: 6px;
   background: var(--tron-chat-surface);
   padding: 12px 16px;
@@ -546,6 +545,26 @@
   background: var(--tron-chat-surface-strong);
 }
 
+.tron-chat__message-entry {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tron-chat__message-entry--user {
+  align-items: flex-end;
+}
+
+.tron-chat__message-entry > .tron-chat__message {
+  align-self: stretch;
+}
+
+.tron-chat__message-entry--user > .tron-chat__message {
+  align-self: flex-end;
+  max-width: 100%;
+}
+
 .tron-chat__user-message-group {
   display: flex;
   max-width: 920px;
@@ -555,7 +574,7 @@
   gap: 8px;
 }
 
-.tron-chat__user-message-group > .tron-chat__message {
+.tron-chat__user-message-group > .tron-chat__message-entry {
   max-width: 100%;
 }
 

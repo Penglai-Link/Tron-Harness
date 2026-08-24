@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import type {
   ChatAguiStreamEvent,
+  ChatMessage,
   ChatQueuedSubmission,
   ChatSession,
 } from "@tron/chat-core";
@@ -68,6 +69,19 @@ function queuedSubmission(
       content,
       workspaceCode: "WORKSPACE-1",
     },
+    sessionCode: "SESSION-1",
+  };
+}
+
+function message(role: ChatMessage["role"], content: string): ChatMessage {
+  return {
+    actor: role === "USER" ? "Operator" : "Assistant",
+    channel: "MAIN_AGENT",
+    content,
+    createdAt: "2026-07-16T10:59:00.000Z",
+    id: `${role}-${content}`,
+    messageCode: `${role}-${content}`,
+    role,
     sessionCode: "SESSION-1",
   };
 }
@@ -187,6 +201,28 @@ describe("TronChatPanel submit controls", () => {
 
     expect(screen.getByText("Waiting for assistant output...")).toBeTruthy();
     expect(screen.queryByText("No assistant response was produced.")).toBeNull();
+  it("renders message actions below the message content", () => {
+    renderPanel({
+      messages: [
+        message("USER", "User message"),
+        message("ASSISTANT", "Assistant message"),
+      ],
+      onEditMessage: vi.fn(),
+    });
+
+    const userMessage = screen.getByText("User message", {
+      selector: ".tron-chat__message-body",
+    }).closest("article");
+    const assistantMessage = screen.getByText("Assistant message", {
+      selector: ".markdown-body p",
+    }).closest("article");
+
+    expect(userMessage?.querySelector(".tron-chat__message-header .tron-chat__message-actions")).toBeNull();
+    expect(assistantMessage?.querySelector(".tron-chat__message-header .tron-chat__message-actions")).toBeNull();
+    expect(userMessage?.querySelector(".tron-chat__message-actions")).toBeNull();
+    expect(assistantMessage?.querySelector(".tron-chat__message-actions")).toBeNull();
+    expect(userMessage?.nextElementSibling?.classList.contains("tron-chat__message-actions--outside")).toBe(true);
+    expect(assistantMessage?.nextElementSibling?.classList.contains("tron-chat__message-actions--outside")).toBe(true);
   });
 
   it("submits the idle draft while preserving Shift+Enter and IME composition", () => {

@@ -33,9 +33,10 @@ export const Content = memo(function Content({
           {children}
         </Panel>
       </ResizablePanel>
-      {showBottomPanel ? (
-        <BottomPanel changeBottomPanel={changeBottomPanel} />
-      ) : null}
+      <BottomPanel
+        changeBottomPanel={changeBottomPanel}
+        visible={showBottomPanel ?? false}
+      />
     </ResizablePanelGroup>
   );
 });

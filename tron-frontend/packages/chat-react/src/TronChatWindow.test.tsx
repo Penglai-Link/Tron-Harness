@@ -90,13 +90,14 @@ describe("TronChatWindow", () => {
 
     const annotationRegion = screen.getByRole("region", { name: "1 annotation" });
     const userMessage = document.querySelector("article.tron-chat__message--user");
+    const userMessageEntry = userMessage?.parentElement;
 
     expect(annotationRegion).toBeTruthy();
     expect(userMessage?.textContent).toContain("Please inspect this element");
     expect(screen.getByText("1 annotation")).toBeTruthy();
     expect(screen.getByRole("img", { name: "Selected page element" }).getAttribute("src")).toBe(screenshot);
     expect(userMessage?.contains(annotationRegion)).toBe(false);
-    expect(annotationRegion.nextElementSibling).toBe(userMessage);
+    expect(annotationRegion.nextElementSibling).toBe(userMessageEntry);
   });
 
   it("persists collapse state in uncontrolled mode", () => {

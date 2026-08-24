@@ -408,7 +408,6 @@
 }
 
 .tron-chat__message {
-  max-width: 920px;
   border-radius: 6px;
   background: var(--tron-chat-surface);
   padding: 12px 16px;

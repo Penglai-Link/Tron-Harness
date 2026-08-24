@@ -241,7 +241,12 @@ function AppRoutePage() {
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
   const activeTabId = useTabStore((state) => state.activeTabId);
   const suppressNextTabCreation = useTabStore((state) => state.suppressNextTabCreation);
+  const tabCreationSuppressionReachedTarget = useTabStore((state) => state.tabCreationSuppressionReachedTarget);
+  const tabCreationSuppressionTargetPath = useTabStore((state) => state.tabCreationSuppressionTargetPath);
   const clearTabCreationSuppression = useTabStore((state) => state.clearTabCreationSuppression);
+  const markTabCreationSuppressionTargetReached = useTabStore(
+    (state) => state.markTabCreationSuppressionTargetReached,
+  );
   const resolved = resolveAppRoute(pathname, search);
   const routeRenderKey = routeRenderKeyForLocation(pathname, search, resolved?.route.pageId);
   const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
@@ -295,9 +300,15 @@ function AppRoutePage() {
   useEffect(() => {
     if (resolved && resolved.route.layout !== "settings") {
       if (suppressNextTabCreation) {
-        if (pathname === "/apps") {
+        if (!tabCreationSuppressionReachedTarget) {
+          if (pathname === tabCreationSuppressionTargetPath) {
+            markTabCreationSuppressionTargetReached();
+          }
           return;
         }
+
+        if (pathname === tabCreationSuppressionTargetPath) return;
+
         clearTabCreationSuppression();
       }
       const currentPath = `${pathname}${search}`;
@@ -350,7 +361,16 @@ function AppRoutePage() {
       }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [clearTabCreationSuppression, pathname, search, resolved?.route.pageId, suppressNextTabCreation]);
+  }, [
+    clearTabCreationSuppression,
+    markTabCreationSuppressionTargetReached,
+    pathname,
+    search,
+    resolved?.route.pageId,
+    suppressNextTabCreation,
+    tabCreationSuppressionReachedTarget,
+    tabCreationSuppressionTargetPath,
+  ]);
 
   useEffect(() => {
     setPageShellConfig((current) => (isConsoleShellConfigEmpty(current) ? current : {}));

@@ -190,7 +190,7 @@ function renderCommandCard(
                   `
                 : html`
                     <button
-                      class="ai-terminal-model-session-command__button ai-terminal-model-session-command__button--primary"
+                      class="ai-terminal-model-session-command__button ai-terminal-model-session-command__button--default"
                       type="button"
                       ?disabled=${!canEdit}
                       @click=${(event: MouseEvent) => {
@@ -213,7 +213,7 @@ function renderCommandCard(
                     </button>
                   `}
               <button
-                class="ai-terminal-model-session-command__button ai-terminal-model-session-command__button--danger"
+                class="ai-terminal-model-session-command__button ai-terminal-model-session-command__button--default"
                 type="button"
                 ?disabled=${!canReject}
                 @click=${() => actions.onRejectCommand(token)}

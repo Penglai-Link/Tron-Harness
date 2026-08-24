@@ -6,8 +6,10 @@ import {
   memo,
   SetStateAction,
   useCallback,
+  useEffect,
   useMemo,
   useRef,
+  useState,
 } from "react";
 import Terminal from "@/components/terminal";
 import {
@@ -16,13 +18,16 @@ import {
 } from "@/components/editable-tabs/types";
 
 const BOTTOM_PANEL_COLLAPSE_THRESHOLD = 120;
+const BOTTOM_PANEL_DEFAULT_SIZE = "25%";
 
 interface IPanelProps {
   changeBottomPanel?: Dispatch<SetStateAction<boolean>>;
+  visible: boolean;
 }
 
-export default memo(function BottomPanel({ changeBottomPanel }: IPanelProps) {
+export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelProps) {
   const nextTabIdRef = useRef(1);
+  const [hasTerminal, setHasTerminal] = useState(visible);
   const createTab = useCallback((): EditableTab => {
     const tabId = nextTabIdRef.current++;
 
@@ -33,28 +38,45 @@ export default memo(function BottomPanel({ changeBottomPanel }: IPanelProps) {
       closable: true,
     };
   }, []);
-  const items = useMemo(() => [createTab()], [createTab]);
+  const items = useMemo(() => (hasTerminal ? [createTab()] : []), [createTab, hasTerminal]);
   const { panelRef, panelResize } = usePanel({
     collapseThreshold: BOTTOM_PANEL_COLLAPSE_THRESHOLD,
-    initiallyOpen: true,
+    initiallyOpen: visible,
     openEventName: null,
     toggleEventName: null,
   });
 
+  useEffect(() => {
+    if (visible) {
+      panelRef.current?.resize(BOTTOM_PANEL_DEFAULT_SIZE);
+      panelRef.current?.expand();
+      return;
+    }
+
+    panelRef.current?.collapse();
+  }, [panelRef, visible]);
+
+  useEffect(() => {
+    if (visible && !hasTerminal) {
+      setHasTerminal(true);
+    }
+  }, [hasTerminal, visible]);
+
   function onEdit(action: OperateType, { remainingTabs }: EditableTabEditInfo) {
     if (action === OperateType.Remove && remainingTabs?.length === 0) {
+      setHasTerminal(false);
       changeBottomPanel?.(false);
     }
   }
 
   return (
     <>
-      <ResizableHandle className="w-full" />
+      <ResizableHandle className={visible ? "w-full" : "hidden"} />
       <ResizablePanel
         panelRef={panelRef}
         collapsible
         collapsedSize={0}
-        defaultSize="25%"
+        defaultSize={visible ? BOTTOM_PANEL_DEFAULT_SIZE : 0}
         maxSize="70%"
         minSize={10}
         onResize={panelResize}

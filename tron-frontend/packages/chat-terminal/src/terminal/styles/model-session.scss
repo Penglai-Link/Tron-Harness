@@ -376,8 +376,8 @@
     opacity: 0.45;
   }
   &--primary {
-    background: var(--ai-terminal-card-background);
-    color: var(--ai-terminal-primary);
+    background: var(--ai-terminal-primary);
+    color: var(--ai-terminal-secondary);
   }
   &--info {
     background: color-mix(
@@ -387,9 +387,9 @@
     );
     color: var(--ai-terminal-primary);
   }
-  &--danger {
-    background: var(--ai-terminal-primary);
-    color: var(--ai-terminal-secondary);
+  &--default {
+    background: var(--ai-terminal-card-background);
+    color: var(--ai-terminal-primary);
   }
 }
 
