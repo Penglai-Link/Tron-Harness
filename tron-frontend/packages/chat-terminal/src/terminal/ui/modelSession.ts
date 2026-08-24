@@ -1,10 +1,5 @@
 import { html, render } from "lit-html";
 import { guard } from "lit-html/directives/guard.js";
-import {
-  buildAguiUserWorkCards,
-  deriveReasoningPreview,
-  formatJsonBlockValue,
-} from "@tron/chat-core";
 import type {
   ModelSessionCommandCardState,
   ModelSessionCommandToken,
@@ -13,6 +8,7 @@ import type {
   ModelSessionToken,
 } from "../types/modelSession";
 import type { ChatTerminalI18n } from "../i18n";
+import { renderAgentActivity } from "./agentActivity";
 import { renderMarkdown as renderMarkdownContent } from "../utils/markdown";
 
 export function createModelSessionHost() {
@@ -42,84 +38,6 @@ export function renderModelSession(
     `,
     host,
   );
-}
-
-function renderAgentActivity(
-  state: ModelSessionRenderState,
-) {
-  // Raw reasoning can contain provider-internal details. Only render summaries.
-  const cards = buildAguiUserWorkCards(
-    state.activityEvents.filter(
-      (event) => event.type.toUpperCase() !== "REASONING_TEXT_CONTENT",
-    ),
-  );
-  if (!cards.length) return null;
-
-  return html`<section class="ai-terminal-model-session__activity" aria-label=${state.i18n.t("activityLabel")}>
-    ${cards.map((card) => renderActivityCard(card, state.i18n))}
-  </section>`;
-}
-
-function renderActivityCard(
-  card: ReturnType<typeof buildAguiUserWorkCards>[number],
-  i18n: ChatTerminalI18n,
-) {
-  if (card.kind === "reasoning") {
-    const summary =
-      deriveReasoningPreview(card.value.content) ||
-      (card.value.ended
-        ? i18n.t("reasoningCaptured")
-        : i18n.t("reasoningThinking"));
-    return html`<details class="ai-terminal-model-session__activity-item">
-      <summary>${summary}</summary>
-      ${card.value.content
-        ? html`<div class="ai-terminal-model-session__activity-detail ai-terminal-markdown">
-            ${guard([card.value.content], () => renderMarkdownContent(card.value.content))}
-          </div>`
-        : null}
-    </details>`;
-  }
-
-  if (card.kind === "toolGroup") {
-    const tools = card.value.toolCards.filter((tool) => tool.started);
-    const running = tools.some((tool) => !tool.ended && !tool.result);
-    return html`<details class="ai-terminal-model-session__activity-item" ?open=${running}>
-      <summary>${i18n.t("toolsRan")} ${tools.length}</summary>
-      <div class="ai-terminal-model-session__activity-list">
-        ${tools.map((tool) => renderToolActivity(tool, i18n))}
-      </div>
-    </details>`;
-  }
-
-  return renderToolActivity(card.value, i18n);
-}
-
-function renderToolActivity(
-  tool: Extract<ReturnType<typeof buildAguiUserWorkCards>[number], { kind: "tool" }>["value"],
-  i18n: ChatTerminalI18n,
-) {
-  const complete = tool.ended || Boolean(tool.result);
-  const running = tool.started && !complete;
-  const args = tool.args === undefined ? "" : formatJsonBlockValue(tool.args);
-  const result = tool.result ? formatJsonBlockValue(tool.result) : "";
-  const label = tool.toolName || i18n.t("toolUnnamed");
-
-  return html`<details class="ai-terminal-model-session__activity-item ai-terminal-model-session__activity-item--tool" ?open=${running}>
-    <summary>${running ? i18n.t("toolRunning") : i18n.t("toolRan")} ${label}</summary>
-    ${args || tool.logs.length || result
-      ? html`<div class="ai-terminal-model-session__activity-detail">
-          ${args
-            ? html`<section><h4>${i18n.t("toolParameters")}</h4><pre>${args}</pre></section>`
-            : null}
-          ${tool.logs.length
-            ? html`<section><h4>${i18n.t("toolLog")}</h4><pre>${tool.logs.join("\n")}</pre></section>`
-            : null}
-          ${result
-            ? html`<section><h4>${i18n.t("toolResult")}</h4><pre>${result}</pre></section>`
-            : null}
-        </div>`
-      : null}
-  </details>`;
 }
 
 function renderModelSessionToken(

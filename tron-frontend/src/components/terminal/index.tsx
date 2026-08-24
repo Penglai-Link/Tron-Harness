@@ -121,7 +121,7 @@ const Terminal = () => {
         url: socketConnection.socketUrl,
       });
       const aiTransport: AITransport = {
-        async stream(content, { onChunk, signal }) {
+        async stream(content, { onChunk, onEvent, signal }) {
           const controller = new AbortController();
           const abort = () => controller.abort(signal?.reason);
           if (signal?.aborted) {
@@ -138,6 +138,9 @@ const Terminal = () => {
             }, {
               onDelta(delta) {
                 onChunk({ delta, requestId });
+              },
+              onAguiEvent(event) {
+                onEvent?.(event);
               },
             }, controller.signal);
             return { requestId };

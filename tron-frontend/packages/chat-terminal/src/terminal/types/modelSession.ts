@@ -78,6 +78,9 @@ export interface ModelSessionAddonOptions {
 export interface ModelSessionRenderState {
   tokens: ModelSessionToken[];
   activityEvents: readonly AIStreamEvent[];
+  activityStartedAt: number;
+  activityNow: number;
+  activityComplete: boolean;
   commandStates: ReadonlyMap<string, ModelSessionCommandCardState>;
   i18n: ChatTerminalI18n;
 }

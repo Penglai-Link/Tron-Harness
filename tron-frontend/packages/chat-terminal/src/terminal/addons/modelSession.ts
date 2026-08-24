@@ -48,6 +48,10 @@ interface ModelSessionInstance {
   conversationId: string;
   rawMessage: Signal<string>;
   activityEvents: Signal<readonly AIStreamEvent[]>;
+  activityStartedAt: number;
+  activityNow: Signal<number>;
+  activityComplete: Signal<boolean>;
+  activityClock?: ReturnType<typeof setInterval>;
   tokens: ReadonlySignal<ModelSessionToken[]>;
   anchorRow: number;
   reservedRows: number;
@@ -195,6 +199,9 @@ export class ModelSessionAddon implements ITerminalAddon {
     }
 
     for (const session of completedSessions) {
+      session.activityComplete.value = true;
+      session.activityNow.value = Date.now();
+      this.stopActivityClock(session);
       this.flushSessionRender(session);
       await this.reserveSessionRows(session);
     }
@@ -278,6 +285,9 @@ export class ModelSessionAddon implements ITerminalAddon {
     const host = createModelSessionHost();
     const rawMessage = signal("");
     const activityEvents = signal<readonly AIStreamEvent[]>([]);
+    const activityStartedAt = Date.now();
+    const activityNow = signal(activityStartedAt);
+    const activityComplete = signal(false);
     const commandStates = signal<
       ReadonlyMap<string, ModelSessionCommandCardState>
     >(new Map());
@@ -316,6 +326,9 @@ export class ModelSessionAddon implements ITerminalAddon {
       conversationId: chunk.conversationId,
       rawMessage,
       activityEvents,
+      activityStartedAt,
+      activityNow,
+      activityComplete,
       tokens,
       anchorRow: buffer.baseY + buffer.cursorY,
       reservedRows: 0,
@@ -330,9 +343,16 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.terminal.element.appendChild(host);
     this.sessions.set(key, session);
     this.activeSessionKey = key;
+    session.activityClock = setInterval(() => {
+      if (!session.activityComplete.peek()) {
+        session.activityNow.value = Date.now();
+      }
+    }, 1_000);
     session.disposeRenderEffect = effect(() => {
       tokens.value;
       activityEvents.value;
+      activityNow.value;
+      activityComplete.value;
       commandStates.value;
       this.scheduleSessionRender(session);
     });
@@ -367,6 +387,9 @@ export class ModelSessionAddon implements ITerminalAddon {
       {
         tokens: session.tokens.peek(),
         activityEvents: session.activityEvents.peek(),
+        activityStartedAt: session.activityStartedAt,
+        activityNow: session.activityNow.peek(),
+        activityComplete: session.activityComplete.peek(),
         commandStates: session.commandStates.peek(),
         i18n: this.i18n,
       },
@@ -376,6 +399,7 @@ export class ModelSessionAddon implements ITerminalAddon {
   }
 
   private disposeSession(session: ModelSessionInstance) {
+    this.stopActivityClock(session);
     session.disposeRenderEffect();
 
     if (session.renderAnimationFrame !== undefined) {
@@ -384,6 +408,12 @@ export class ModelSessionAddon implements ITerminalAddon {
     }
 
     session.host.remove();
+  }
+
+  private stopActivityClock(session: ModelSessionInstance) {
+    if (session.activityClock === undefined) return;
+    clearInterval(session.activityClock);
+    session.activityClock = undefined;
   }
 
   private scheduleInlineLayoutUpdate(shouldMeasure = false) {
