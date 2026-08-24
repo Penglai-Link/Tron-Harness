@@ -287,6 +287,9 @@ test("chat agent and model selectors are linked and agent locks after first turn
   await modelSelector.click();
   const mainModelList = page.getByRole("listbox", { name: "Chat models" });
   await expect(mainModelList.getByText("GPT-4o Main")).toBeVisible();
+  await expect(
+    page.getByRole("menuitemradio", { name: "GPT-4o Main", exact: true }),
+  ).toHaveAttribute("aria-checked", "true");
 
   await agentSelector.click();
   const agentList = page.getByRole("listbox", { name: "Chat agents" });

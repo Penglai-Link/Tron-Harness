@@ -162,6 +162,8 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuRadioGroup,
+  DropdownMenuRadioItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { throttle } from "lodash-es";
@@ -2969,39 +2971,41 @@ function ChatModelSelector({
               }}
             />
           </div>
-          {filteredModels.length ? filteredModels.map((model) => (
-            <DropdownMenuItem
-              className={cn(
-                "w-full items-start px-3 py-2",
-                model.optionCode === selectedModelCode && "bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
-              )}
-              key={model.optionCode}
-              title={model.displayName}
-              onMouseEnter={() => setExpandedModelCode(model.optionCode)}
-              onMouseLeave={() => setExpandedModelCode((current) => (
-                current === model.optionCode ? null : current
-              ))}
-              onFocus={() => setExpandedModelCode(model.optionCode)}
-              onBlur={() => setExpandedModelCode((current) => (
-                current === model.optionCode ? null : current
-              ))}
-              onClick={() => {
-                onSelect(model.optionCode);
-              }}
+          {filteredModels.length ? (
+            <DropdownMenuRadioGroup
+              value={selectedModelCode}
+              onValueChange={(modelCode) => onSelect(modelCode)}
             >
-              {model.optionCode === selectedModelCode ? <Check aria-hidden="true" className="mt-0.5 size-4 shrink-0" /> : <span className="size-4 shrink-0" />}
-              <span
-                className={cn(
-                  "block min-w-0 font-medium",
-                  expandedModelCode === model.optionCode
-                    ? "whitespace-normal break-all overflow-visible"
-                    : "truncate",
-                )}
-              >
-                {model.displayName}
-              </span>
-            </DropdownMenuItem>
-          )) : (
+              {filteredModels.map((model) => (
+                <DropdownMenuRadioItem
+                  className="w-full items-start px-3 py-2"
+                  closeOnClick
+                  key={model.optionCode}
+                  title={model.displayName}
+                  value={model.optionCode}
+                  onMouseEnter={() => setExpandedModelCode(model.optionCode)}
+                  onMouseLeave={() => setExpandedModelCode((current) => (
+                    current === model.optionCode ? null : current
+                  ))}
+                  onFocus={() => setExpandedModelCode(model.optionCode)}
+                  onBlur={() => setExpandedModelCode((current) => (
+                    current === model.optionCode ? null : current
+                  ))}
+                >
+                  <span
+                    className={cn(
+                      "block min-w-0 font-medium",
+                      expandedModelCode === model.optionCode
+                        ? "whitespace-normal break-all overflow-visible"
+                        : "truncate",
+                    )}
+                  >
+                    {model.displayName}
+                  </span>
+                </DropdownMenuRadioItem>
+              ))}
+            </DropdownMenuRadioGroup>
+          ) : (
             <p className="px-3 py-2 text-xs text-[var(--color-on-surface-variant)]">
               No models match "{searchQuery.trim()}".
             </p>
