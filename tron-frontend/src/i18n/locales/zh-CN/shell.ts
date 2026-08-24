@@ -95,6 +95,12 @@ export const shell = {
     user: "用户",
     workspace: "工作区",
   },
+  tabs: {
+    closeLeft: "关闭左侧标签页",
+    closeOthers: "关闭其他标签页",
+    closeRight: "关闭右侧标签页",
+    refresh: "刷新",
+  },
   theme: {
     hint: "当前默认主题为浅色。Matrix Dark 会启用霓虹绿色的深色控制台配色，并在刷新后保持。",
     label: "主题",

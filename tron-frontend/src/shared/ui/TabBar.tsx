@@ -1,5 +1,12 @@
 import { X } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuTrigger,
+} from "@/components/ui/context-menu";
 import { cn } from "@/shared/lib/utils";
 import { useTabStore, type TabItem } from "@/store/tabStore";
 import { Button } from "@/components/ui/button";
@@ -9,10 +16,13 @@ interface TabBarProps {
 }
 
 export function TabBar({ className }: TabBarProps) {
+  const { t } = useTranslation("shell");
   const navigate = useNavigate();
   const tabs = useTabStore((state) => state.tabs);
   const activeTabId = useTabStore((state) => state.activeTabId);
   const removeTab = useTabStore((state) => state.removeTab);
+  const removeTabs = useTabStore((state) => state.removeTabs);
+  const refreshTab = useTabStore((state) => state.refreshTab);
   const setActiveTab = useTabStore((state) => state.setActiveTab);
   const suppressNextTab = useTabStore((state) => state.suppressNextTab);
 
@@ -39,6 +49,16 @@ export function TabBar({ className }: TabBarProps) {
     }
   };
 
+  const closeTabsAndActivate = (
+    tabIds: readonly string[],
+    activeTab: TabItem,
+  ) => {
+    if (tabIds.length === 0) return;
+    removeTabs(tabIds);
+    setActiveTab(activeTab.id);
+    navigate(activeTab.path);
+  };
+
   if (tabs.length === 0) {
     return null;
   }
@@ -53,30 +73,81 @@ export function TabBar({ className }: TabBarProps) {
     >
       {tabs.map((tab) => {
         const isActive = tab.id === activeTabId;
+        const tabIndex = tabs.findIndex((item) => item.id === tab.id);
+        const closableLeftTabs = tabs
+          .slice(0, tabIndex)
+          .filter((item) => item.closable);
+        const closableRightTabs = tabs
+          .slice(tabIndex + 1)
+          .filter((item) => item.closable);
+        const closableOtherTabs = tabs.filter(
+          (item) => item.id !== tab.id && item.closable,
+        );
         return (
-          <div
-            key={tab.id}
-            className={cn(
-              "group relative text-[var(--color-on-surface-variant)] inline-flex h-8 max-w-[200px] shrink-0 items-center rounded-md px-1 text-sm font-medium whitespace-nowrap transition-all cursor-pointer",
-              isActive
-                ? "bg-[var(--color-elevated-surface)] text-foreground"
-                : "hover:text-foreground hover:bg-background/50",
-            )}
-            role="tab"
-            aria-selected={isActive}
-            onClick={() => handleTabClick(tab)}
-          >
-            <span className="truncate flex-1 text-left px-1.5">{tab.title}</span>
-            {tab.closable && (
-              <Button
-                size="icon-sm"
-                variant="ghost"
-                onClick={(e) => handleTabClose(e, tab.id)}
+          <ContextMenu key={tab.id}>
+            <ContextMenuTrigger
+              className={cn(
+                "group relative inline-flex h-8 max-w-[200px] shrink-0 cursor-pointer items-center rounded-md px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
+                isActive
+                  ? "bg-[var(--color-elevated-surface)] text-foreground"
+                  : "hover:bg-background/50 hover:text-foreground",
+              )}
+              role="tab"
+              aria-selected={isActive}
+              onClick={() => handleTabClick(tab)}
+            >
+              <span className="flex-1 truncate px-1.5 text-left">
+                {tab.title}
+              </span>
+              {tab.closable && (
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  onClick={(event) => handleTabClose(event, tab.id)}
+                >
+                  <X size={12} aria-hidden="true" />
+                </Button>
+              )}
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+              <ContextMenuItem
+                disabled={closableOtherTabs.length === 0}
+                onClick={() =>
+                  closeTabsAndActivate(
+                    closableOtherTabs.map((item) => item.id),
+                    tab,
+                  )
+                }
               >
-                <X size={12} aria-hidden="true" />
-              </Button>
-            )}
-          </div>
+                {t("tabs.closeOthers")}
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={closableLeftTabs.length === 0}
+                onClick={() =>
+                  closeTabsAndActivate(
+                    closableLeftTabs.map((item) => item.id),
+                    tab,
+                  )
+                }
+              >
+                {t("tabs.closeLeft")}
+              </ContextMenuItem>
+              <ContextMenuItem
+                disabled={closableRightTabs.length === 0}
+                onClick={() =>
+                  closeTabsAndActivate(
+                    closableRightTabs.map((item) => item.id),
+                    tab,
+                  )
+                }
+              >
+                {t("tabs.closeRight")}
+              </ContextMenuItem>
+              <ContextMenuItem onClick={() => refreshTab(tab.id)}>
+                {t("tabs.refresh")}
+              </ContextMenuItem>
+            </ContextMenuContent>
+          </ContextMenu>
         );
       })}
     </div>

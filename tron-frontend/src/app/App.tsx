@@ -277,7 +277,7 @@ function AppRoutePage() {
       const key = routeRenderKeyForLocation(cachedPathname, searchParam, cachedResolved.route.pageId);
 
       return (
-        <Activity key={cachedTab.tabId} mode={isCurrentTab ? "visible" : "hidden"}>
+        <Activity key={`${cachedTab.tabId}:${cachedTab.revision}`} mode={isCurrentTab ? "visible" : "hidden"}>
           <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
             <SuspendedRoute>
               <Component key={key} />

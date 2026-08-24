@@ -95,6 +95,12 @@ export const shell = {
     user: "User",
     workspace: "Workspace",
   },
+  tabs: {
+    closeLeft: "Close left tabs",
+    closeOthers: "Close other tabs",
+    closeRight: "Close right tabs",
+    refresh: "Refresh",
+  },
   theme: {
     hint: "Light is the current default. Matrix Dark applies a neon-green dark console palette and stays active after reload.",
     label: "Theme",

@@ -14,6 +14,7 @@ export interface CachedTabInfo {
   path: string;
   pageId: string;
   lastAccessTime: number;
+  revision: number;
 }
 
 interface TabState {
@@ -27,6 +28,8 @@ interface TabState {
   maxCachedTabs: number; // 最大缓存数量
   addTab: (tab: Omit<TabItem, "id">) => string;
   removeTab: (tabId: string) => void;
+  removeTabs: (tabIds: readonly string[]) => void;
+  refreshTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
   updateTab: (tabId: string, updates: Partial<Omit<TabItem, "id">>) => void;
   clearAllTabs: () => void;
@@ -91,14 +94,19 @@ export const useTabStore = create<TabState>()((set, get) => ({
     return newTab.id;
   },
 
-  removeTab: (tabId) => {
+  removeTab: (tabId) => get().removeTabs([tabId]),
+
+  removeTabs: (tabIds) => {
+    const tabIdSet = new Set(tabIds);
+    if (tabIdSet.size === 0) return;
+
     set((state) => {
-      const tabs = state.tabs.filter(t => t.id !== tabId);
+      const tabs = state.tabs.filter((tab) => !tabIdSet.has(tab.id));
       let nextActiveTabId = state.activeTabId;
 
-      if (state.activeTabId === tabId) {
+      if (state.activeTabId && tabIdSet.has(state.activeTabId)) {
         if (tabs.length > 0) {
-          const removedIndex = state.tabs.findIndex(t => t.id === tabId);
+          const removedIndex = state.tabs.findIndex((tab) => tab.id === state.activeTabId);
           const nextIndex = Math.min(removedIndex, tabs.length - 1);
           nextActiveTabId = tabs[nextIndex]?.id || null;
         } else {
@@ -108,7 +116,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
 
       // 从缓存中移除
       const newCachedTabsMap = new Map(state.cachedTabsMap);
-      newCachedTabsMap.delete(tabId);
+      tabIdSet.forEach((tabId) => newCachedTabsMap.delete(tabId));
       const newCachedTabsList = Array.from(newCachedTabsMap.values());
 
       return {
@@ -116,6 +124,24 @@ export const useTabStore = create<TabState>()((set, get) => ({
         activeTabId: nextActiveTabId,
         cachedTabsMap: newCachedTabsMap,
         cachedTabsList: newCachedTabsList,
+      };
+    });
+  },
+
+  refreshTab: (tabId) => {
+    set((state) => {
+      const cachedTab = state.cachedTabsMap.get(tabId);
+      if (!cachedTab) return state;
+
+      const cachedTabsMap = new Map(state.cachedTabsMap);
+      cachedTabsMap.set(tabId, {
+        ...cachedTab,
+        lastAccessTime: Date.now(),
+        revision: cachedTab.revision + 1,
+      });
+      return {
+        cachedTabsMap,
+        cachedTabsList: Array.from(cachedTabsMap.values()),
       };
     });
   },
@@ -213,6 +239,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
       path,
       pageId,
       lastAccessTime: Date.now(),
+      revision: 0,
     });
 
     const newCachedTabsList = Array.from(newCachedTabsMap.values());
