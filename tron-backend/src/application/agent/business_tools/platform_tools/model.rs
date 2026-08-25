@@ -412,6 +412,9 @@ fn parse_model_protocol(value: Option<&str>) -> Result<Option<ModelProtocol>, To
         Some("openai_compatible") | Some("open_ai_compatible") => {
             Ok(Some(ModelProtocol::OpenAiCompatible))
         }
+        Some("openai_compatible_embedding") | Some("open_ai_compatible_embedding") => {
+            Ok(Some(ModelProtocol::OpenAiCompatibleEmbedding))
+        }
         Some("responses") => Ok(Some(ModelProtocol::Responses)),
         Some("rerank") => Ok(Some(ModelProtocol::Rerank)),
         Some(other) => Err(enum_tool_error("protocol", other)),

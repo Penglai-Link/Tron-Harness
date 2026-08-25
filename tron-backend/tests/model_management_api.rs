@@ -1311,7 +1311,7 @@ async fn verify_uses_protocol_specific_request_shapes() {
         &server.base_url,
         "Verify Embedding",
         "verify-embedding",
-        "OPENAI_COMPATIBLE",
+        "OPENAI_COMPATIBLE_EMBEDDING",
         "EMBEDDING",
     )
     .await;
@@ -1370,7 +1370,7 @@ async fn verify_uses_protocol_specific_request_shapes() {
                 && capture.body["input"] == json!("ping")
                 && capture.body["model"] == json!("verify-embedding")
         }),
-        "OPENAI_COMPATIBLE + EMBEDDING should POST /embeddings",
+        "OPENAI_COMPATIBLE_EMBEDDING should POST /embeddings",
     );
     assert!(
         captures.iter().any(|capture| {
@@ -1419,7 +1419,7 @@ async fn verify_preserves_version_prefix_in_base_url() {
         &versioned_base,
         "Verify Embedding Versioned",
         "verify-embedding-versioned",
-        "OPENAI_COMPATIBLE",
+        "OPENAI_COMPATIBLE_EMBEDDING",
         "EMBEDDING",
     )
     .await;

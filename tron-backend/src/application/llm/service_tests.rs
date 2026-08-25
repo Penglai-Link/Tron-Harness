@@ -151,7 +151,7 @@ fn text_config() -> RuntimeModelConfig {
 fn embedding_config() -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: "MODEL-EMBED".into(),
-        protocol: ModelProtocol::OpenAiCompatible,
+        protocol: ModelProtocol::OpenAiCompatibleEmbedding,
         model_type: ModelType::Embedding,
         base_url: "https://provider.test/v1".into(),
         api_path: None,

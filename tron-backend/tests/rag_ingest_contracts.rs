@@ -1876,7 +1876,7 @@ fn llm_text_config(model_code: &str) -> RuntimeModelConfig {
 fn llm_embedding_config(model_code: &str) -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: model_code.into(),
-        protocol: ModelProtocol::OpenAiCompatible,
+        protocol: ModelProtocol::OpenAiCompatibleEmbedding,
         model_type: ModelType::Embedding,
         base_url: "https://provider.test/v1".into(),
         api_path: None,

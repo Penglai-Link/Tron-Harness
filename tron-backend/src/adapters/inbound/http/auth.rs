@@ -1,5 +1,5 @@
 pub(crate) mod error_mapper;
-mod handler;
+pub(crate) mod handler;
 mod request;
 mod response;
 mod routes;

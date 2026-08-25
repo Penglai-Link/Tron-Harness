@@ -225,6 +225,82 @@ async fn workspace_page_requires_workspace_read_permission() {
 }
 
 #[tokio::test]
+async fn platform_admin_can_manage_resources_in_any_active_workspace() {
+    let (app, _) = resource_app("admin-cross-workspace-authorization");
+    let token = authenticated_bearer_token(&app).await;
+
+    let created = create_file_resource_in_workspace(
+        &app,
+        &token,
+        "COMPLIANCE",
+        "admin-cross-workspace-file",
+        b"admin resource",
+    )
+    .await;
+    let status = created.status();
+    let body = response_json(created).await;
+    assert_eq!(status, StatusCode::OK, "admin create failed: {body}");
+
+    let page = api_json(
+        &app,
+        &token,
+        "/api/v1/resources/page",
+        json!({
+            "workspaceCode": "COMPLIANCE",
+            "kinds": ["File"],
+            "sourceKind": null,
+            "search": null,
+            "current": 1,
+            "size": 50
+        }),
+    )
+    .await;
+    assert_eq!(page["data"]["total"], 1);
+    assert_eq!(
+        page["data"]["records"][0]["resourceCode"],
+        "admin-cross-workspace-file"
+    );
+
+    let server = authenticated_json_response(
+        &app,
+        &token,
+        "/api/v1/resource-connections/servers",
+        json!({
+            "workspaceCode": "COMPLIANCE",
+            "serverCode": "admin-cross-workspace-server",
+            "name": "Admin cross-workspace server",
+            "description": "admin resource",
+            "host": "server.internal",
+            "port": 22,
+            "allowInheritance": false
+        }),
+    )
+    .await;
+    let status = server.status();
+    let body = response_json(server).await;
+    assert_eq!(status, StatusCode::OK, "admin server create failed: {body}");
+
+    let connections_page = api_json(
+        &app,
+        &token,
+        "/api/v1/resource-connections/page",
+        json!({
+            "workspaceCode": "COMPLIANCE",
+            "kinds": ["ServerConnection"],
+            "search": null,
+            "current": 1,
+            "size": 50
+        }),
+    )
+    .await;
+    assert_eq!(connections_page["data"]["total"], 1);
+    assert_eq!(
+        connections_page["data"]["records"][0]["resourceCode"],
+        "admin-cross-workspace-server"
+    );
+}
+
+#[tokio::test]
 async fn platform_admin_can_manage_platform_resources_without_workspace_membership() {
     let (app, _) = resource_app_without_platform_workspace("platform-admin-resource-authorization");
     let token = authenticated_bearer_token(&app).await;

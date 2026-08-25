@@ -328,6 +328,8 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .expect_err("missing userCode must be rejected");
     assert!(error.to_string().contains("authenticated user"));
 
+    let mut viewer_scope_context = context.clone();
+    viewer_scope_context.user_code = Some(VIEWER.to_string());
     let inaccessible_workspace = state
         .agent_tool_registry
         .execute_allowed(
@@ -335,7 +337,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
                 tool_name: "resource.query".to_string(),
                 input: json!({ "workspaceCode": "ENTERPRISE" }),
             },
-            &context,
+            &viewer_scope_context,
         )
         .expect_err("Resources permission does not bypass workspace access");
     assert!(

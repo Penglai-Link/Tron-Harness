@@ -1,6 +1,7 @@
 use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
 use gmcrypto_core::sm4::mode_gcm;
 use rand::RngCore;
+use std::sync::{Arc, RwLock};
 
 use crate::{
     application::variable::VariableCipher,
@@ -28,6 +29,68 @@ impl Sm4GcmVariableCipher {
             .try_into()
             .map_err(|_| VariableError::EncryptionNotConfigured)?;
         Ok(Self { key })
+    }
+}
+
+enum VariableCipherState {
+    Configured(Sm4GcmVariableCipher),
+    Unavailable,
+}
+
+#[derive(Clone)]
+pub struct VariableCipherProvider {
+    state: Arc<RwLock<VariableCipherState>>,
+}
+
+impl VariableCipherProvider {
+    pub fn from_config(config: VariableCryptoConfig) -> Self {
+        let state = Sm4GcmVariableCipher::from_config(config)
+            .map(VariableCipherState::Configured)
+            .unwrap_or(VariableCipherState::Unavailable);
+        Self {
+            state: Arc::new(RwLock::new(state)),
+        }
+    }
+}
+
+impl VariableCipher for VariableCipherProvider {
+    fn encrypt(
+        &self,
+        plaintext: &str,
+        aad: &[u8],
+    ) -> Result<EncryptedVariableValue, VariableError> {
+        match &*self.state.read().expect("variable cipher state lock poisoned") {
+            VariableCipherState::Configured(cipher) => cipher.encrypt(plaintext, aad),
+            VariableCipherState::Unavailable => Err(VariableError::EncryptionNotConfigured),
+        }
+    }
+
+    fn decrypt(
+        &self,
+        encrypted: &EncryptedVariableValue,
+        aad: &[u8],
+    ) -> Result<String, VariableError> {
+        match &*self.state.read().expect("variable cipher state lock poisoned") {
+            VariableCipherState::Configured(cipher) => cipher.decrypt(encrypted, aad),
+            VariableCipherState::Unavailable => Err(VariableError::EncryptionNotConfigured),
+        }
+    }
+
+    fn configure_key_base64(&self, key_base64: &str) -> Result<(), VariableError> {
+        let next = if key_base64.trim().is_empty() {
+            VariableCipherState::Unavailable
+        } else {
+            VariableCipherState::Configured(Sm4GcmVariableCipher::from_config(
+                VariableCryptoConfig {
+                    key_base64: key_base64.to_owned(),
+                },
+            )?)
+        };
+        *self
+            .state
+            .write()
+            .expect("variable cipher state lock poisoned") = next;
+        Ok(())
     }
 }
 

@@ -107,7 +107,7 @@ pub(super) fn runtime_model_config_from_view(
 ) -> Option<RuntimeModelConfig> {
     match (view.protocol, view.model_type) {
         (ModelProtocol::OpenAiCompatible, ModelType::Text)
-        | (ModelProtocol::OpenAiCompatible, ModelType::Embedding)
+        | (ModelProtocol::OpenAiCompatibleEmbedding, ModelType::Embedding)
         | (ModelProtocol::Responses, ModelType::Text)
         | (ModelProtocol::Responses, ModelType::Image)
         | (ModelProtocol::Rerank, ModelType::Rerank) => Some(RuntimeModelConfig {

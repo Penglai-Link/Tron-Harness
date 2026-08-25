@@ -1,6 +1,10 @@
 export type ModelScopeKind = "PLATFORM" | "WORKSPACE";
 export type ModelSourceKind = "PLATFORM" | "LOCAL" | "INHERITED" | "OVERRIDE";
-export type ModelProtocol = "OPENAI_COMPATIBLE" | "RESPONSES" | "RERANK";
+export type ModelProtocol =
+  | "OPENAI_COMPATIBLE"
+  | "OPENAI_COMPATIBLE_EMBEDDING"
+  | "RESPONSES"
+  | "RERANK";
 export type ModelType = "TEXT" | "EMBEDDING" | "RERANK" | "IMAGE";
 export type ModelVerifyStatus = "SUCCEEDED" | "FAILED";
 export type ReasoningEffort =

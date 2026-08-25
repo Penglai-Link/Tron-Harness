@@ -189,7 +189,7 @@ pub async fn oauth2_callback(
     }
 }
 
-fn response_with_refresh_cookie<T: IntoResponse>(
+pub(crate) fn response_with_refresh_cookie<T: IntoResponse>(
     status: StatusCode,
     body: T,
     users: &UserService,
@@ -238,7 +238,7 @@ fn append_auth_cookies(headers: &mut HeaderMap, users: &UserService, refresh_tok
     );
 }
 
-fn auth_grant_response(
+pub(crate) fn auth_grant_response(
     users: &UserService,
     access_token: &str,
     session: &CurrentSession,

@@ -60,7 +60,7 @@ impl ModelService {
         if reference.is_empty() {
             return Err(ModelError::ApiKeyRefRequired);
         }
-        Ok(reference.to_string())
+        self.reveal_api_key_ref(reference)
     }
 
     pub(super) async fn verify_model_and_persist(&self, model: Model) -> Result<Model, ModelError> {

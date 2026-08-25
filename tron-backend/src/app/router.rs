@@ -18,6 +18,7 @@ use crate::{
         },
         models::routes::routes as model_routes,
         rag::routes as rag_routes,
+        setup,
         skills::routes::routes as skill_routes,
         tasks::routes as task_routes,
         variables::routes::routes as variable_routes,
@@ -54,6 +55,9 @@ pub fn build_router(config: AppConfig) -> Result<Router, AppBootstrapError> {
         .route("/api/v1/health", get(health))
         .route("/api/v1/readiness", get(readiness))
         .merge(auth_routes())
+        .route("/api/v1/setup/status", get(setup::status))
+        .route("/api/v1/setup/session", axum::routing::post(setup::create_session))
+        .route("/api/v1/setup/activate-admin", axum::routing::post(setup::activate_admin))
         .merge(mcp_transport_routes())
         .merge(protected_routes)
         .merge(frontend_routes())

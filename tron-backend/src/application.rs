@@ -12,6 +12,7 @@ pub mod prompt;
 pub mod rag;
 pub mod resource;
 pub mod role;
+pub mod setup_state;
 pub mod short_term_memory;
 pub mod skill;
 pub mod system_config;

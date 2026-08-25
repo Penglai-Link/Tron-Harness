@@ -1319,7 +1319,7 @@ async fn create_embedding_default(app: &Router, authorization_header: &str, base
         Some(json!({
             "displayName": "Memory Test Embedding",
             "vendor": "Test",
-            "protocol": "OPENAI_COMPATIBLE",
+            "protocol": "OPENAI_COMPATIBLE_EMBEDDING",
             "modelType": "EMBEDDING",
             "modelCapabilities": ["TEXT_VECTOR"],
             "baseUrl": base_url,

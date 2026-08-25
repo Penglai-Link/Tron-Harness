@@ -30,6 +30,8 @@ pub enum ModelViewSourceKind {
 pub enum ModelProtocol {
     #[serde(rename = "OPENAI_COMPATIBLE")]
     OpenAiCompatible,
+    #[serde(rename = "OPENAI_COMPATIBLE_EMBEDDING")]
+    OpenAiCompatibleEmbedding,
     Responses,
     Rerank,
 }

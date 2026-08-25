@@ -62,6 +62,10 @@ pub trait VariableCipher: Send + Sync {
         encrypted: &EncryptedVariableValue,
         aad: &[u8],
     ) -> Result<String, VariableError>;
+
+    fn configure_key_base64(&self, _key_base64: &str) -> Result<(), VariableError> {
+        Err(VariableError::EncryptionNotConfigured)
+    }
 }
 
 pub trait VariableRepository: Send {
@@ -118,6 +122,14 @@ impl VariableService {
             workspaces,
             cipher: Arc::new(cipher),
         }
+    }
+
+    pub fn cipher(&self) -> Arc<dyn VariableCipher> {
+        self.cipher.clone()
+    }
+
+    pub fn configure_cipher(&self, key_base64: &str) -> Result<(), VariableError> {
+        self.cipher.configure_key_base64(key_base64)
     }
 
     fn active_workspace_detail(

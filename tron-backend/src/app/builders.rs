@@ -96,8 +96,7 @@ fn build_variable_service(
 ) -> VariableService {
     let repository = SqliteVariableRepository::connect(database_url)
         .expect("variable SQLite repository should initialize");
-    let cipher = Sm4GcmVariableCipher::from_config(config.variable_crypto.clone())
-        .expect("variable crypto should initialize");
+    let cipher = VariableCipherProvider::from_config(config.variable_crypto.clone());
     VariableService::new(repository, workspaces, cipher)
 }
 
@@ -168,10 +167,14 @@ fn build_skill_registry_service(
     SkillRegistryService::new(repository, workspaces, registry_root)
 }
 
-fn build_model_service(database_url: &str, workspaces: WorkspaceService) -> ModelService {
+fn build_model_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    variables: VariableService,
+) -> ModelService {
     let repository = SqliteModelRepository::connect(database_url)
         .expect("model SQLite repository should initialize");
-    ModelService::new(repository, workspaces)
+    ModelService::new(repository, workspaces, variables.cipher())
 }
 
 fn build_prompt_service(

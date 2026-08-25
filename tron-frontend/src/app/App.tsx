@@ -51,10 +51,12 @@ import { LinkButton } from "@/shared/ui/Button";
 import { appRoutes } from "@/router/routes";
 import { routePages } from "@/router/pageRegistry";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
+import { fetchSetupStatus, type SetupStatus } from "@/domain/setup/api";
 import { useTabStore } from "@/store/tabStore";
 
 const DesignStandardPage = lazy(() => import("@/domain/design-standard/pages/DesignStandardPage").then((module) => ({ default: module.DesignStandardPage })));
 const SharedShellPreviewPage = lazy(() => import("@/domain/shared-shell/pages/SharedShellPreviewPage").then((module) => ({ default: module.SharedShellPreviewPage })));
+const SetupPage = lazy(() => import("@/domain/setup/pages/SetupPage").then((module) => ({ default: module.SetupPage })));
 
 function resolveAppRoute(pathname: string, search: string) {
   const exactRoute = `${pathname}${search}`;
@@ -491,13 +493,51 @@ function LoginRoutePage() {
   return <PublicRoutePage pageId="auth.login" />;
 }
 
+function EntryRoutePage() {
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  const [setupError, setSetupError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchSetupStatus()
+      .then((next) => {
+        if (active) setSetupStatus(next);
+      })
+      .catch((error: unknown) => {
+        if (active) setSetupError(error instanceof Error ? error.message : "无法读取初始化状态");
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  if (setupError) {
+    return (
+      <main className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6 text-center">
+        <div><h1 className="text-xl font-semibold">无法读取初始化状态</h1><p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">{setupError}</p></div>
+      </main>
+    );
+  }
+
+  if (!setupStatus) {
+    return <RouteLoadingFallback fullScreen />;
+  }
+
+  if (!setupStatus.initialized) {
+    return <Navigate replace to="/setup" />;
+  }
+
+  return <LoginRoutePage />;
+}
+
 function RoutedApp() {
   useBootstrapAuthSession();
 
   return (
     <Routes>
-      <Route path="/" element={<LoginRoutePage />} />
-      <Route path="/login" element={<LoginRoutePage />} />
+      <Route path="/" element={<EntryRoutePage />} />
+      <Route path="/login" element={<EntryRoutePage />} />
+      <Route path="/setup" element={<SuspendedRoute fullScreen><SetupPage /></SuspendedRoute>} />
       <Route path={AUTH_CALLBACK_PATH} element={<PublicRoutePage pageId="auth.callback" />} />
       <Route
         path="/home"

@@ -470,7 +470,7 @@ export function WorkspaceModelDetailsPage() {
                 <ReadValue>{selectedRecord.vendor}</ReadValue>
               </Field>
               <Field label={pageT("form.protocol", "Protocol")}>
-                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? `openaiCompatible.${selectedRecord.modelType === "EMBEDDING" ? "embedding" : "chat"}` : selectedRecord.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
+                <ReadValue>{pageT(`protocol.${selectedRecord.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : selectedRecord.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : selectedRecord.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(selectedRecord.protocol, selectedRecord.modelType))}</ReadValue>
               </Field>
               <Field label={pageT("form.modelType", "Model Type")}>
                 <ReadValue>{normalizeModelCapabilities(selectedRecord.modelCapabilities, selectedRecord.modelType).map((capability) => pageT(`capabilities.${capability}`, formatModelCapability(capability))).join(", ")}</ReadValue>

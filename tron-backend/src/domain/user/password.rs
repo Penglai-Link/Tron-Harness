@@ -8,7 +8,7 @@ pub struct PasswordResetResult {
 }
 
 pub(crate) fn validate_initial_password(value: &str) -> Result<(), UserError> {
-    let has_min_length = value.chars().count() >= 8;
+    let has_min_length = value.chars().count() >= 12;
     let has_uppercase = value.chars().any(|ch| ch.is_ascii_uppercase());
     let has_lowercase = value.chars().any(|ch| ch.is_ascii_lowercase());
     let has_digit = value.chars().any(|ch| ch.is_ascii_digit());

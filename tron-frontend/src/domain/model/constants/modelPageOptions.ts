@@ -18,6 +18,13 @@ export interface ModelCapabilityGroup {
   options: ModelCapabilityOption[];
 }
 
+export interface ModelProtocolOption {
+  label: string;
+  modelType: ModelType;
+  protocol: ModelProtocol;
+  value: ModelProtocol;
+}
+
 export const modelTypeSequence: ModelType[] = ["TEXT", "EMBEDDING", "RERANK", "IMAGE"];
 
 export const reasoningEffortOptions: Array<{ label: string; value: ReasoningEffort }> = [
@@ -117,7 +124,8 @@ const modelCapabilityOptionMap = new Map(
 );
 
 const validModelTypesByProtocol: Record<ModelProtocol, ModelType[]> = {
-  OPENAI_COMPATIBLE: ["TEXT", "EMBEDDING"],
+  OPENAI_COMPATIBLE: ["TEXT"],
+  OPENAI_COMPATIBLE_EMBEDDING: ["EMBEDDING"],
   RESPONSES: ["TEXT", "IMAGE"],
   RERANK: ["RERANK"],
 };
@@ -125,9 +133,9 @@ const validModelTypesByProtocol: Record<ModelProtocol, ModelType[]> = {
 export function formatModelProtocol(value: ModelProtocol, modelType?: ModelType) {
   switch (value) {
     case "OPENAI_COMPATIBLE":
-      return modelType === "EMBEDDING"
-        ? "OpenAI Compatible - Embedding"
-        : "OpenAI Compatible - Chat";
+      return "OpenAI Compatible - Chat";
+    case "OPENAI_COMPATIBLE_EMBEDDING":
+      return "OpenAI Compatible - Embedding";
     case "RESPONSES":
       return "OpenAI Compatible - Response";
     case "RERANK":
@@ -153,11 +161,16 @@ export function formatModelCapabilities(
   return normalized.map((value) => formatModelCapability(value)).join(", ");
 }
 
-export function getModelProtocolOptions(modelType: ModelType): Array<{ label: string; value: ModelProtocol }> {
+export function getModelProtocolOptionValue(protocol: ModelProtocol, _modelType: ModelType): ModelProtocol {
+  return protocol;
+}
+
+export function getModelProtocolOptions(): ModelProtocolOption[] {
   return [
-    { label: formatModelProtocol("OPENAI_COMPATIBLE", modelType), value: "OPENAI_COMPATIBLE" },
-    { label: formatModelProtocol("RESPONSES", modelType), value: "RESPONSES" },
-    { label: formatModelProtocol("RERANK", modelType), value: "RERANK" },
+    { label: formatModelProtocol("OPENAI_COMPATIBLE"), modelType: "TEXT", protocol: "OPENAI_COMPATIBLE", value: "OPENAI_COMPATIBLE" },
+    { label: formatModelProtocol("OPENAI_COMPATIBLE_EMBEDDING"), modelType: "EMBEDDING", protocol: "OPENAI_COMPATIBLE_EMBEDDING", value: "OPENAI_COMPATIBLE_EMBEDDING" },
+    { label: formatModelProtocol("RESPONSES", "TEXT"), modelType: "TEXT", protocol: "RESPONSES", value: "RESPONSES" },
+    { label: formatModelProtocol("RERANK", "RERANK"), modelType: "RERANK", protocol: "RERANK", value: "RERANK" },
   ];
 }
 
@@ -238,8 +251,9 @@ export function getModelCapabilityGroups(protocol: ModelProtocol): ModelCapabili
 export function getDefaultApiPathForProtocol(protocol: ModelProtocol, modelType: ModelType = "TEXT") {
   switch (protocol) {
     case "OPENAI_COMPATIBLE":
-      if (modelType === "EMBEDDING") return "/embeddings";
       return "/chat/completions";
+    case "OPENAI_COMPATIBLE_EMBEDDING":
+      return "/embeddings";
     case "RERANK":
       return "/rerank";
     default:

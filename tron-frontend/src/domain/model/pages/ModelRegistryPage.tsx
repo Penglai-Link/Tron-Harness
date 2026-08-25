@@ -90,10 +90,9 @@ export function ModelRegistryPage() {
   function getProtocolLabel(protocol: ModelRecord["protocol"], modelType?: ModelRecord["modelType"]) {
     switch (protocol) {
       case "OPENAI_COMPATIBLE":
-        return pageT(
-          `protocol.openaiCompatible.${modelType === "EMBEDDING" ? "embedding" : "chat"}`,
-          modelType === "EMBEDDING" ? "OpenAI Compatible - Embedding" : "OpenAI Compatible - Chat",
-        );
+        return pageT("protocol.openaiCompatible.chat", "OpenAI Compatible - Chat");
+      case "OPENAI_COMPATIBLE_EMBEDDING":
+        return pageT("protocol.openaiCompatible.embedding", "OpenAI Compatible - Embedding");
       case "RESPONSES":
         return pageT("protocol.responses", "OpenAI Compatible - Response");
       case "RERANK":
@@ -104,7 +103,7 @@ export function ModelRegistryPage() {
   }
 
   function getProtocolFilterLabel(protocol: ModelRecord["protocol"]) {
-    if (protocol === "OPENAI_COMPATIBLE") {
+    if (protocol === "OPENAI_COMPATIBLE" || protocol === "OPENAI_COMPATIBLE_EMBEDDING") {
       return pageT("protocol.openaiCompatible.label", "OpenAI Compatible");
     }
     return getProtocolLabel(protocol);

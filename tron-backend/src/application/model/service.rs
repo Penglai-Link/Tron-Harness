@@ -8,6 +8,7 @@ use serde_json::{Value, json};
 use url::Url;
 
 use crate::{
+    application::variable::VariableCipher,
     application::workspace::WorkspaceService,
     domain::{
         agent::{AgentModelConfig, AgentModelProtocol},
@@ -130,6 +131,7 @@ pub struct ModelService {
     repository: Arc<Mutex<Box<dyn ModelRepository>>>,
     workspaces: WorkspaceService,
     http_client: Client,
+    cipher: Arc<dyn VariableCipher>,
 }
 
 #[derive(Debug, Clone)]
@@ -192,13 +194,43 @@ struct ResolvedWorkspaceCatalog {
 }
 
 impl ModelService {
-    pub fn new(repository: impl ModelRepository + 'static, workspaces: WorkspaceService) -> Self {
+    pub fn new(
+        repository: impl ModelRepository + 'static,
+        workspaces: WorkspaceService,
+        cipher: Arc<dyn VariableCipher>,
+    ) -> Self {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
             http_client: Client::builder()
                 .build()
                 .expect("model verify client should initialize"),
+            cipher,
         }
+    }
+
+    pub(super) fn protect_api_key_ref(&self, value: &str) -> Result<String, ModelError> {
+        let value = value.trim();
+        if value.is_empty() || value.starts_with("enc:v1:") {
+            return Ok(value.to_string());
+        }
+        let encrypted = self
+            .cipher
+            .encrypt(value, b"model.apiKeyRef")
+            .map_err(|_| ModelError::StorageFailure)?;
+        serde_json::to_string(&encrypted)
+            .map(|payload| format!("enc:v1:{payload}"))
+            .map_err(|_| ModelError::StorageFailure)
+    }
+
+    pub(super) fn reveal_api_key_ref(&self, value: &str) -> Result<String, ModelError> {
+        let value = value.trim();
+        let Some(payload) = value.strip_prefix("enc:v1:") else {
+            return Ok(value.to_string());
+        };
+        let encrypted = serde_json::from_str(payload).map_err(|_| ModelError::StorageFailure)?;
+        self.cipher
+            .decrypt(&encrypted, b"model.apiKeyRef")
+            .map_err(|_| ModelError::StorageFailure)
     }
 }

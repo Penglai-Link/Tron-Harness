@@ -1,14 +1,15 @@
 use std::{path::Path, sync::Arc};
 
 use super::{
+    SystemConfigUpdateResult,
     helpers::{
-        changed_leaf_paths, classify_paths, config_items, leaf_paths, parse_yaml, set_value_at_path,
+        changed_leaf_paths, classify_paths, config_items, leaf_paths, parse_yaml,
+        set_value_at_path, value_at_path,
     },
     types::{
         SystemConfigChange, SystemConfigDocument, SystemConfigError, SystemConfigService,
         SystemConfigStore,
     },
-    SystemConfigUpdateResult,
 };
 
 impl SystemConfigService {
@@ -24,6 +25,14 @@ impl SystemConfigService {
             path: stored.path,
             items: config_items(&value),
         })
+    }
+
+    pub fn variable_crypto_key_base64(&self) -> Result<Option<String>, SystemConfigError> {
+        let stored = self.store.read().map_err(SystemConfigError::from_store)?;
+        let value = parse_yaml(&stored.content, Path::new(&stored.path))?;
+        Ok(value_at_path(&value, "variableCrypto.keyBase64")
+            .and_then(serde_yaml::Value::as_str)
+            .map(str::to_owned))
     }
 
     pub fn update(

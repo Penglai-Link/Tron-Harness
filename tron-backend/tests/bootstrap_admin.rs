@@ -11,7 +11,7 @@ use serde_json::json;
 use tron_backend::{app::build_router, config::AppConfig};
 
 mod common;
-use common::{request, response_json};
+use common::{request, request_with_headers, response_json};
 
 static TEST_DB_SEQUENCE: AtomicU64 = AtomicU64::new(0);
 
@@ -76,6 +76,117 @@ async fn startup_bootstraps_platform_admin_when_database_is_empty() {
         })
         .expect("workspace owner grants should be queryable");
     assert_eq!(owner_count, 0);
+
+    let _ = fs::remove_file(database_path);
+}
+
+#[tokio::test]
+async fn setup_can_activate_bootstrap_admin_without_a_deployment_password() {
+    let database_path = temp_database_path("bootstrap-admin-setup");
+    let mut config = AppConfig::default();
+    config.database_url = database_path.to_string_lossy().into_owned();
+
+    let router = build_router(config).expect("router should build");
+
+    let activation_response = request(
+        &router,
+        Method::POST,
+        "/api/v1/setup/activate-admin",
+        Some(json!({
+            "newPassword": "TronNewAdminPass123!",
+        })),
+        None,
+    )
+    .await;
+    assert_eq!(activation_response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(activation_response).await["data"]["activated"],
+        true
+    );
+
+    let login_response = request(
+        &router,
+        Method::POST,
+        "/api/v1/auth/login",
+        Some(json!({
+            "login": "admin",
+            "password": "TronNewAdminPass123!",
+        })),
+        None,
+    )
+    .await;
+    assert_eq!(login_response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(login_response).await["data"]["session"]["user"]["passwordResetRequired"],
+        false
+    );
+
+    let second_activation_response = request(
+        &router,
+        Method::POST,
+        "/api/v1/setup/activate-admin",
+        Some(json!({
+            "newPassword": "AnotherAdminPass123!",
+        })),
+        None,
+    )
+    .await;
+    assert_eq!(second_activation_response.status(), StatusCode::CONFLICT);
+
+    let _ = fs::remove_file(database_path);
+}
+
+#[tokio::test]
+async fn setup_session_does_not_activate_bootstrap_admin() {
+    let database_path = temp_database_path("bootstrap-admin-session");
+    let mut config = AppConfig::default();
+    config.database_url = database_path.to_string_lossy().into_owned();
+
+    let router = build_router(config).expect("router should build");
+    let session_response = request(
+        &router,
+        Method::POST,
+        "/api/v1/setup/session",
+        Some(json!({
+            "newPassword": "TronNewAdminPass123!",
+        })),
+        None,
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::OK);
+    let session_json = response_json(session_response).await;
+    assert_eq!(
+        session_json["data"]["session"]["user"]["passwordResetRequired"],
+        true
+    );
+
+    let status_response = request(&router, Method::GET, "/api/v1/setup/status", None, None).await;
+    assert_eq!(status_response.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(status_response).await["data"]["admin"]["passwordResetRequired"],
+        true
+    );
+    assert_eq!(
+        response_json(
+            request(&router, Method::GET, "/api/v1/setup/status", None, None).await
+        )
+        .await["data"]["crypto"]["configured"],
+        false
+    );
+
+    let access_token = session_json["data"]["accessToken"]
+        .as_str()
+        .expect("setup session should return an access token");
+    let auth_response = request_with_headers(
+        &router,
+        Method::GET,
+        "/api/v1/auth/session",
+        None,
+        None,
+        Some(&format!("Bearer {access_token}")),
+    )
+    .await;
+    assert_eq!(auth_response.status(), StatusCode::OK);
 
     let _ = fs::remove_file(database_path);
 }

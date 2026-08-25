@@ -1,6 +1,24 @@
 use super::*;
 
 impl UserService {
+    pub fn initialize_bootstrap_password(&self, new_password: &str) -> Result<(), UserError> {
+        validate_initial_password(new_password)?;
+
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        let mut user = repository.get_user("USR-ADMIN")?;
+        if user.source_type != UserSourceType::Internal || !user.password_reset_required {
+            return Err(UserError::InvalidStatus);
+        }
+
+        user.password_hash = self.password_hasher.hash_password(new_password)?;
+        user.password_reset_required = false;
+        user.updated_at = current_timestamp();
+        repository.update_user(&user)
+    }
+
     pub fn update_account_profile(
         &self,
         actor: &AuthenticatedUser,

@@ -33,6 +33,7 @@ interface AuthState {
   initialize: () => Promise<void>;
   loginWithInternalAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
   loginWithLdapAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
+  acceptAuthGrant: (grant: AuthGrant) => AuthSession;
   markUnauthenticated: () => void;
   logout: () => Promise<void>;
   recoverFromUnauthorized: () => Promise<boolean>;
@@ -237,6 +238,11 @@ export const useAuthStore = create<AuthState>((set) => ({
     const loginEpoch = ++authEpoch;
     const grant = await loginLdap(payload);
     applyAuthenticatedSession(set, grant, loginEpoch);
+    return grant.session;
+  },
+  acceptAuthGrant: (grant) => {
+    const grantEpoch = ++authEpoch;
+    applyAuthenticatedSession(set, grant, grantEpoch);
     return grant.session;
   },
   logout: async () => {

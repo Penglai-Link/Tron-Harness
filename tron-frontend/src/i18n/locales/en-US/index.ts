@@ -5,6 +5,7 @@ import { consoleMessages } from "./console";
 import { home } from "./home";
 import { pages } from "./pages";
 import { shell } from "./shell";
+import { setup } from "./setup";
 
 export const enUS = {
   account,
@@ -14,4 +15,5 @@ export const enUS = {
   home,
   pages,
   shell,
+  setup,
 } as const;

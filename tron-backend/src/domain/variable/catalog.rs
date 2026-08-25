@@ -79,7 +79,8 @@ pub struct PlatformVariableDisplay {
     pub updated_at: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct EncryptedVariableValue {
     pub ciphertext: String,
     pub nonce: String,

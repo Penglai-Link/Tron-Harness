@@ -13,6 +13,7 @@ pub mod models;
 pub mod prompts;
 pub mod rag;
 pub mod resources;
+pub mod setup;
 pub mod skills;
 pub mod system_config;
 pub mod tasks;

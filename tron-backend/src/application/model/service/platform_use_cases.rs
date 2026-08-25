@@ -19,7 +19,8 @@ impl ModelService {
         let defaults_by_type = resolve_platform_defaults(&models, &assignments);
 
         let id = self.next_id()?;
-        let model = build_platform_model_from_spec(spec, id, build_model_code(id));
+        let mut model = build_platform_model_from_spec(spec, id, build_model_code(id));
+        model.api_key_ref = self.protect_api_key_ref(&model.api_key_ref)?;
 
         self.repository
             .lock()
@@ -123,7 +124,8 @@ impl ModelService {
         let existing = find_platform_model(&models, model_code)?.clone();
         let model_type_changed = existing.model_type != spec.model_type;
         let was_enabled = existing.enabled;
-        let updated = update_model_from_spec(existing, spec, None);
+        let mut updated = update_model_from_spec(existing, spec, None);
+        updated.api_key_ref = self.protect_api_key_ref(&updated.api_key_ref)?;
 
         self.repository
             .lock()

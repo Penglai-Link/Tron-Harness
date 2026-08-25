@@ -16,12 +16,12 @@ use crate::{
     adapters::{
         inbound::http::{
             auth::routes as auth_routes, frontend::routes as frontend_routes,
-            mcp::routes::transport_routes as mcp_transport_routes,
+            mcp::routes::transport_routes as mcp_transport_routes, setup,
         },
         inbound::socket::terminal as terminal_socket,
         outbound::{
             config::YamlSystemConfigStore,
-            crypto::{BcryptPasswordHasher, Sm4GcmVariableCipher},
+            crypto::{BcryptPasswordHasher, VariableCipherProvider},
             model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
             persistence::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
@@ -35,6 +35,7 @@ use crate::{
             },
             resource_connectivity::ProtocolResourceConnectionVerifier,
             resource_storage::LocalObjectStorage,
+            setup_transaction::SetupTransactionService,
         },
     },
     application::agent::{
@@ -135,6 +136,7 @@ pub struct AppState {
     pub resources: ResourceService,
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
+    pub setup_transaction: SetupTransactionService,
     pub system_config: SystemConfigService,
     pub models: ModelService,
     pub prompts: PromptService,
@@ -317,10 +319,12 @@ impl AppState {
             build_automation_service(&config.database_url, workspaces.clone(), event_bus.clone());
         let models = if config.database_url == ":memory:" {
             GLOBAL_MODEL_SERVICE
-                .get_or_init(|| build_model_service(":memory:", workspaces.clone()))
+                .get_or_init(|| {
+                    build_model_service(":memory:", workspaces.clone(), variables.clone())
+                })
                 .clone()
         } else {
-            build_model_service(&config.database_url, workspaces.clone())
+            build_model_service(&config.database_url, workspaces.clone(), variables.clone())
         };
         let prompts = build_prompt_service(
             &config.database_url,
@@ -455,6 +459,11 @@ impl AppState {
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
             config.application_config_path.clone(),
         )));
+        let setup_transaction = SetupTransactionService::connect(
+            config.database_url.clone(),
+            config.application_config_path.clone(),
+        )
+        .expect("setup transaction service should initialize");
 
         Ok(Self {
             config,
@@ -484,6 +493,7 @@ impl AppState {
             memory_work_domains,
             rag,
             skills,
+            setup_transaction,
             system_config,
             roles,
             tasks,
@@ -522,6 +532,9 @@ where
         .route("/api/v1/readiness", get(readiness))
         .merge(openapi_routes())
         .merge(auth_routes())
+        .route("/api/v1/setup/status", axum::routing::get(setup::status))
+        .route("/api/v1/setup/session", axum::routing::post(setup::create_session))
+        .route("/api/v1/setup/activate-admin", axum::routing::post(setup::activate_admin))
         .merge(mcp_transport_routes())
         .merge(protected_routes)
         .merge(frontend_routes())

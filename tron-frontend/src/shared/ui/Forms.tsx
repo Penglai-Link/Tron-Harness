@@ -20,19 +20,22 @@ interface FieldProps {
   children: ReactNode;
   error?: string;
   hint?: string;
+  hintAriaLabel?: string;
   label: ReactNode;
+  required?: boolean;
 }
 
 const disabledControlClasses =
   "disabled:cursor-not-allowed disabled:border-[var(--color-outline-variant)] disabled:bg-[var(--color-surface-container)] disabled:text-[var(--color-on-surface-variant)] disabled:opacity-100 disabled:placeholder:text-[var(--color-outline)] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
 
-export function Field({ children, className, error, hint, label }: FieldProps) {
+export function Field({ children, className, error, hint, hintAriaLabel = "打开字段说明", label, required = false }: FieldProps) {
   return (
     <FieldPrimitive className={className}>
       <FieldLabel>
         {label}
+        {required && <span className="text-destructive-foreground" aria-hidden="true">*</span>}
         {
-          hint && <InfoTooltip ariaLabel="打开字段说明">
+          hint && <InfoTooltip ariaLabel={hintAriaLabel}>
             {hint}
           </InfoTooltip>
         }

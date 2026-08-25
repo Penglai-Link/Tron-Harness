@@ -27,6 +27,7 @@ use crate::adapters::{
         prompts::routes::routes as prompt_routes,
         rag::routes as rag_routes,
         resources::routes::routes as resource_routes,
+        setup::complete as complete_setup,
         skills::routes::routes as skill_routes,
         system_config::routes as system_config_routes,
         tasks::routes as task_routes,
@@ -66,6 +67,10 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(skill_routes())
         .merge(system_config_routes())
         .merge(terminal_routes())
+        .route(
+            "/api/v1/setup/complete",
+            axum::routing::post(complete_setup),
+        )
         .route_layer(middleware::from_fn_with_state(
             state.users.clone(),
             require_auth,

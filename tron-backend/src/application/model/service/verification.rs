@@ -5,7 +5,7 @@ const MIN_VERIFY_OUTPUT_TOKENS: u32 = 16;
 pub(super) fn default_verify_path(protocol: ModelProtocol, model_type: ModelType) -> &'static str {
     match (protocol, model_type) {
         (ModelProtocol::OpenAiCompatible, ModelType::Text) => "/chat/completions",
-        (ModelProtocol::OpenAiCompatible, ModelType::Embedding) => "/embeddings",
+        (ModelProtocol::OpenAiCompatibleEmbedding, ModelType::Embedding) => "/embeddings",
         (ModelProtocol::Responses, ModelType::Text) => "/responses",
         (ModelProtocol::Responses, ModelType::Image) => "/responses",
         (ModelProtocol::Rerank, ModelType::Rerank) => "/rerank",
@@ -24,7 +24,7 @@ pub(super) fn verify_request_payload(
             "messages": [{ "role": "user", "content": "ping" }],
             "max_tokens": MIN_VERIFY_OUTPUT_TOKENS
         }),
-        (ModelProtocol::OpenAiCompatible, ModelType::Embedding) => json!({
+        (ModelProtocol::OpenAiCompatibleEmbedding, ModelType::Embedding) => json!({
             "model": model_name,
             "input": "ping"
         }),

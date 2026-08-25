@@ -15,7 +15,9 @@ import {
 import {
   getDefaultModelCapabilitiesForType,
   getDefaultApiPathForProtocol,
+  formatModelCapability,
   getModelCapabilityGroups,
+  getModelProtocolOptionValue,
   getModelProtocolOptions,
   getModelTypeFromCapability,
   getPrimaryModelTypeFromCapabilities,
@@ -27,6 +29,7 @@ import {
 import type { ModelMutationPayload } from "@/domain/model/api";
 import type {
   ModelCapability,
+  ModelProtocol,
   ModelRecord,
   ModelType,
   ReasoningEffort,
@@ -61,6 +64,9 @@ export interface ModelFormState {
   topP: string;
   vendor: string;
 }
+
+export type ModelFormFieldKey = "displayName" | "modelName" | "vendor" | "baseUrl" | "apiPath" | "apiKeyRef" | "contextWindowTokens";
+export type ModelFormFieldErrors = Partial<Record<ModelFormFieldKey, string>>;
 
 export function emptyModelFormState(): ModelFormState {
   const protocol: ModelFormState["protocol"] = "RESPONSES";
@@ -152,6 +158,7 @@ export function modelFormToPayload(
     && supportedReasoningEfforts.includes(state.defaultReasoningEffort)
     ? state.defaultReasoningEffort
     : null;
+  const isTextModel = modelType === "TEXT";
   return {
     displayName: state.displayName.trim(),
     vendor: state.vendor.trim(),
@@ -169,11 +176,11 @@ export function modelFormToPayload(
     defaultReasoningEffort,
     structuredOutputEnabled: state.structuredOutputEnabled,
     responsesStatefulEnabled: state.protocol === "RESPONSES" ? state.responsesStatefulEnabled : false,
-    temperature: parseOptionalNumber(state.temperature),
-    maxTokens: parseOptionalInteger(state.maxTokens),
-    contextWindowTokens: parseOptionalInteger(state.contextWindowTokens),
-    topP: parseOptionalNumber(state.topP),
-    maxRetries: parseOptionalInteger(state.maxRetries),
+    temperature: isTextModel ? parseOptionalNumber(state.temperature) : null,
+    maxTokens: isTextModel ? parseOptionalInteger(state.maxTokens) : null,
+    contextWindowTokens: isTextModel ? parseOptionalInteger(state.contextWindowTokens) : null,
+    topP: isTextModel ? parseOptionalNumber(state.topP) : null,
+    maxRetries: isTextModel ? parseOptionalInteger(state.maxRetries) : null,
     allowInheritance: options.allowInheritance,
   };
 }
@@ -181,8 +188,15 @@ export function modelFormToPayload(
 export function ModelFormFields({
   apiKeyFieldHint,
   apiKeyInputRef,
+  apiKeyValue,
+  onApiKeyChange,
   apiKeyPlaceholder,
   displayNameError,
+  fieldErrors,
+  fixedProtocol,
+  allowedProtocols,
+  allowedCapabilityGroups,
+  hideDescription = false,
   onApiKeyDirtyChange,
   readOnly,
   syncModelNameFromDisplayName,
@@ -191,8 +205,15 @@ export function ModelFormFields({
 }: {
   apiKeyFieldHint?: string;
   apiKeyInputRef?: RefObject<HTMLInputElement | null>;
+  apiKeyValue?: string;
+  onApiKeyChange?: (value: string) => void;
   apiKeyPlaceholder?: string;
   displayNameError?: string;
+  fieldErrors?: ModelFormFieldErrors;
+  fixedProtocol?: ModelProtocol;
+  allowedProtocols?: ModelProtocol[];
+  allowedCapabilityGroups?: string[];
+  hideDescription?: boolean;
   onApiKeyDirtyChange?: (dirty: boolean) => void;
   readOnly?: boolean;
   syncModelNameFromDisplayName?: boolean;
@@ -235,9 +256,20 @@ export function ModelFormFields({
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:modelRegistry.${key}`, { defaultValue, ...options })
   );
-  const protocolOptions = getModelProtocolOptions(state.modelType);
-  const modelCapabilityGroups = getModelCapabilityGroups(state.protocol);
+  const protocolOptions = getModelProtocolOptions().filter((option) => (
+    allowedProtocols === undefined || allowedProtocols.includes(option.protocol)
+  ));
+  const modelCapabilityGroups = getModelCapabilityGroups(state.protocol).filter((group) => (
+    allowedCapabilityGroups === undefined || allowedCapabilityGroups.includes(group.label)
+  ));
+  const modelCapabilityDisplayValue = normalizeModelCapabilities(
+    state.modelCapabilities,
+    state.modelType,
+  )
+    .map((value) => pageT(`capabilities.${value}`, formatModelCapability(value)))
+    .join(", ");
   const maxTokensDisabled = Boolean(readOnly || state.structuredOutputEnabled);
+  const isTextModel = state.modelType === "TEXT";
   const reasoningFieldsDisabled = Boolean(
     readOnly || !state.thinkingEnabled || state.modelType !== "TEXT",
   );
@@ -245,50 +277,44 @@ export function ModelFormFields({
   return (
     <div className="grid gap-4">
       <div className="grid gap-4 md:grid-cols-2">
-        <Field label={pageT("form.displayName", "Display Name")} error={displayNameError}>
+        <Field required label={pageT("form.displayName", "Display Name")} error={displayNameError ?? fieldErrors?.displayName}>
           <TextInput
             value={state.displayName}
+            aria-invalid={Boolean(displayNameError ?? fieldErrors?.displayName)}
             onChange={(event) => patchDisplayName(event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label={pageT("form.vendorModelId", "Vendor Model ID")}>
+        <Field required label={pageT("form.vendorModelId", "Vendor Model ID")} error={fieldErrors?.modelName}>
           <TextInput
             value={state.modelName}
+            aria-invalid={Boolean(fieldErrors?.modelName)}
             onChange={(event) => patchModelName(event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label={pageT("form.vendor", "Vendor")}>
+        <Field required label={pageT("form.vendor", "Vendor")} error={fieldErrors?.vendor}>
           <TextInput
             value={state.vendor}
+            aria-invalid={Boolean(fieldErrors?.vendor)}
             onChange={(event) => patch("vendor", event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label={pageT("form.protocol", "Protocol")}>
+        <Field required label={pageT("form.protocol", "Protocol")}>
           <SelectInput
-            value={state.protocol}
+            value={fixedProtocol ?? getModelProtocolOptionValue(state.protocol, state.modelType)}
             onValueChange={(event) => {
-              const nextProtocol = event as ModelFormState["protocol"];
-              const nextValidModelTypes = getValidModelTypesForProtocol(nextProtocol);
-              const nextModelCapabilities = state.modelCapabilities.filter((value) => (
-                nextValidModelTypes.includes(getModelTypeFromCapability(value))
-              ));
-              const nextFallbackModelType = nextValidModelTypes.includes(state.modelType)
-                ? state.modelType
-                : (nextValidModelTypes[0] ?? state.modelType);
-              const nextModelType = getPrimaryModelTypeFromCapabilities(
-                nextProtocol,
-                nextModelCapabilities,
-                nextFallbackModelType,
-              );
+              const selectedOption = protocolOptions.find((option) => option.value === event);
+              if (!selectedOption) return;
+              const nextProtocol = selectedOption.protocol;
+              const nextModelType = selectedOption.modelType;
               onChange({
                 ...state,
                 apiPath: getDefaultApiPathForProtocol(nextProtocol, nextModelType),
                 maxRetries: state.maxRetries.trim() ? state.maxRetries : DEFAULT_MAX_RETRIES,
                 maxTokens: defaultMaxTokensValue(),
-                modelCapabilities: normalizeModelCapabilities(nextModelCapabilities, nextModelType),
+                modelCapabilities: getDefaultModelCapabilitiesForType(nextModelType),
                 protocol: nextProtocol,
                 modelType: nextModelType,
                 responsesStatefulEnabled: false,
@@ -296,18 +322,22 @@ export function ModelFormFields({
                 topP: state.topP.trim() ? state.topP : DEFAULT_TOP_P,
               });
             }}
-            disabled={readOnly}
+            disabled={readOnly || fixedProtocol !== undefined}
           >
             {protocolOptions.map((item) => (
               <SelectItem key={item.value} value={item.value}>
-                {pageT(`protocol.${item.value === "OPENAI_COMPATIBLE" ? "openaiCompatible.label" : item.value === "RESPONSES" ? "responses" : "rerank"}`, item.label)}
+                {pageT(
+                  `protocol.${item.value === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : item.value === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : item.value === "RESPONSES" ? "responses" : "rerank"}`,
+                  item.label,
+                )}
               </SelectItem>
             ))}
           </SelectInput>
         </Field>
-        <Field label={pageT("form.modelType", "Model Type")}>
+        <Field required label={pageT("form.modelType", "Model Type")}>
           <SelectInput
             value={state.modelCapabilities}
+            displayValue={modelCapabilityDisplayValue}
             multiple
             onValueChange={(event) => {
               const nextModelCapabilities = Array.from(event, (option) => (
@@ -345,32 +375,48 @@ export function ModelFormFields({
             ))}
           </SelectInput>
         </Field>
-        <Field label={pageT("form.baseUrl", "Base URL")}>
+        <Field required label={pageT("form.baseUrl", "Base URL")} error={fieldErrors?.baseUrl}>
           <TextInput
             value={state.baseUrl}
+            aria-invalid={Boolean(fieldErrors?.baseUrl)}
             onChange={(event) => patch("baseUrl", event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label={pageT("form.apiPath", "API Path")}>
+        <Field required label={pageT("form.apiPath", "API Path")} error={fieldErrors?.apiPath}>
           <TextInput
             value={state.apiPath}
+            aria-invalid={Boolean(fieldErrors?.apiPath)}
             onChange={(event) => patch("apiPath", event.target.value)}
             disabled={readOnly}
           />
         </Field>
-        <Field label={pageT("form.apiKey", "API Key")} hint={apiKeyFieldHint}>
+        <Field required label={pageT("form.apiKey", "API Key")} error={fieldErrors?.apiKeyRef} hint={apiKeyFieldHint}>
           {readOnly ? (
             <TextInput
               value={maskApiKeyValue(state.apiKeyRef)}
               disabled
               readOnly
             />
+          ) : apiKeyValue !== undefined ? (
+            <TextInput
+              ref={apiKeyInputRef}
+              type="password"
+              value={apiKeyValue}
+              aria-invalid={Boolean(fieldErrors?.apiKeyRef)}
+              placeholder={apiKeyPlaceholder}
+              autoComplete="new-password"
+              onChange={(event) => {
+                onApiKeyChange?.(event.target.value);
+                onApiKeyDirtyChange?.(Boolean(event.target.value.trim()));
+              }}
+            />
           ) : (
             <TextInput
               ref={apiKeyInputRef}
               type="password"
               defaultValue=""
+              aria-invalid={Boolean(fieldErrors?.apiKeyRef)}
               placeholder={maskApiKeyValue(state.apiKeyRef) || apiKeyPlaceholder}
               autoComplete="new-password"
               onChange={(event) => onApiKeyDirtyChange?.(Boolean(event.target.value.trim()))}
@@ -379,16 +425,18 @@ export function ModelFormFields({
         </Field>
       </div>
 
-      <Field label={pageT("form.description", "Description")}>
-        <TextArea
-          className="min-h-24"
-          value={state.description}
-          onChange={(event) => patch("description", event.target.value)}
-          disabled={readOnly}
-        />
-      </Field>
+      {!hideDescription && (
+        <Field label={pageT("form.description", "Description")}>
+          <TextArea
+            className="min-h-24"
+            value={state.description}
+            onChange={(event) => patch("description", event.target.value)}
+            disabled={readOnly}
+          />
+        </Field>
+      )}
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <div className={isTextModel ? "grid gap-4 md:grid-cols-2 xl:grid-cols-4" : "hidden"}>
         <Field label={pageT("form.temperature", "Temperature")}>
           <TextInput
             type="number"
@@ -407,11 +455,12 @@ export function ModelFormFields({
             disabled={maxTokensDisabled}
           />
         </Field>
-        <Field label={pageT("form.contextWindow", "Context Window")}>
+        <Field required label={pageT("form.contextWindow", "Context Window")} error={fieldErrors?.contextWindowTokens}>
           <TextInput
             type="number"
             step="1"
             value={state.contextWindowTokens}
+            aria-invalid={Boolean(fieldErrors?.contextWindowTokens)}
             onChange={(event) => patch("contextWindowTokens", event.target.value)}
             disabled={readOnly}
           />
@@ -449,7 +498,7 @@ export function ModelFormFields({
         </Field>
       ) : null}
 
-      <div className="grid gap-4 md:grid-cols-2">
+      <div className={isTextModel ? "grid gap-4 md:grid-cols-2" : "hidden"}>
         <Field
           label={t("common:reasoningEffort.supportedLabel", "Supported reasoning efforts")}
           hint={t(
@@ -511,7 +560,7 @@ export function ModelFormFields({
         </Field>
       </div>
 
-      <div className="grid gap-3 md:grid-cols-2">
+      <div className={isTextModel ? "grid gap-3 md:grid-cols-2" : "hidden"}>
         <ToggleSwitch
           checked={state.thinkingEnabled}
           disabled={readOnly}

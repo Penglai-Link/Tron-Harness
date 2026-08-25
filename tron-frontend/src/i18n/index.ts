@@ -55,7 +55,7 @@ void i18n.use(initReactI18next).init({
       console.warn(`[i18n] Missing translation key: ${ns}:${key}`);
     }
   },
-  ns: ["common", "shell", "auth", "account", "home", "console", "pages"],
+  ns: ["common", "shell", "auth", "account", "home", "console", "pages", "setup"],
   resources: {
     "en-US": enUS,
     "zh-CN": zhCN,

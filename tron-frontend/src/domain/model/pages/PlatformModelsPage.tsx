@@ -296,7 +296,7 @@ export function PlatformModelsPage() {
           {
             id: "protocol",
             header: pageT("columns.protocol", "Protocol"),
-              render: (row) => pageT(`protocol.${row.protocol === "OPENAI_COMPATIBLE" ? `openaiCompatible.${row.modelType === "EMBEDDING" ? "embedding" : "chat"}` : row.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(row.protocol, row.modelType)),
+              render: (row) => pageT(`protocol.${row.protocol === "OPENAI_COMPATIBLE" ? "openaiCompatible.chat" : row.protocol === "OPENAI_COMPATIBLE_EMBEDDING" ? "openaiCompatible.embedding" : row.protocol === "RESPONSES" ? "responses" : "rerank"}`, formatModelProtocol(row.protocol, row.modelType)),
           },
           {
             id: "type",

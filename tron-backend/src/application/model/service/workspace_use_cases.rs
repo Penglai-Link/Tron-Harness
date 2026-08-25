@@ -115,8 +115,8 @@ impl ModelService {
         {
             return Err(ModelError::ReasoningEffortUnsupported);
         }
-        let mut config =
-            agent_model_config_from_view(&record.view, &record.definition_model.api_key_ref);
+        let api_key = self.reveal_api_key_ref(&record.definition_model.api_key_ref)?;
+        let mut config = agent_model_config_from_view(&record.view, &api_key);
         if let (Some(config), Some(reasoning_effort)) = (&mut config, reasoning_effort) {
             config.reasoning_effort = Some(reasoning_effort);
         }
@@ -154,10 +154,8 @@ impl ModelService {
             return Ok(None);
         };
 
-        Ok(runtime_model_config_from_view(
-            &record.view,
-            &record.definition_model.api_key_ref,
-        ))
+        let api_key = self.reveal_api_key_ref(&record.definition_model.api_key_ref)?;
+        Ok(runtime_model_config_from_view(&record.view, &api_key))
     }
 
     pub fn create_workspace_model(
@@ -176,12 +174,13 @@ impl ModelService {
         )?;
 
         let id = self.next_id()?;
-        let model = build_workspace_local_model_from_spec(
+        let mut model = build_workspace_local_model_from_spec(
             &workspace.workspace_code,
             spec,
             id,
             build_model_code(id),
         );
+        model.api_key_ref = self.protect_api_key_ref(&model.api_key_ref)?;
 
         self.repository
             .lock()
@@ -291,7 +290,8 @@ impl ModelService {
                 let model_type_changed = existing.model_type != spec.model_type;
                 let was_enabled = existing.enabled;
                 let allow_inheritance = existing.allow_inheritance;
-                let updated = update_model_from_spec(existing, spec.clone(), allow_inheritance);
+                let mut updated = update_model_from_spec(existing, spec.clone(), allow_inheritance);
+                updated.api_key_ref = self.protect_api_key_ref(&updated.api_key_ref)?;
 
                 self.repository
                     .lock()
@@ -315,6 +315,8 @@ impl ModelService {
                             spec.clone(),
                             &resolved.definition_model.api_key_ref,
                         );
+                        let mut updated = updated;
+                        updated.api_key_ref = self.protect_api_key_ref(&updated.api_key_ref)?;
                         self.repository
                             .lock()
                             .expect("model repository mutex poisoned")
@@ -329,13 +331,14 @@ impl ModelService {
                     }
                     Some(_) => return Err(ModelError::StorageFailure),
                     None => {
-                        let created = workspace_override_model(
+                        let mut created = workspace_override_model(
                             &workspace,
                             &resolved.view.model_code,
                             self.next_id()?,
                             spec.clone(),
                             &resolved.definition_model.api_key_ref,
                         );
+                        created.api_key_ref = self.protect_api_key_ref(&created.api_key_ref)?;
                         self.repository
                             .lock()
                             .expect("model repository mutex poisoned")

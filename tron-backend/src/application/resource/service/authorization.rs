@@ -66,22 +66,27 @@ impl ResourceService {
         {
             return Err(ResourceError::Forbidden);
         }
+        let is_admin = role_codes.iter().any(|role| role == "ADMIN");
         // New installations do not materialize PLATFORM as a workspace. Keep
         // its resources in the system scope for administrators while retaining
         // workspace-grant authorization for installations that still have the
         // legacy PLATFORM workspace.
         if workspace_code == PLATFORM_RESOURCE_SCOPE {
             match self.workspaces.get_workspace(workspace_code) {
-                Ok(_) => {}
+                Ok(workspace) if workspace.status == WorkspaceStatus::Active => {}
+                Ok(_) => return Err(ResourceError::InvalidWorkspace),
                 Err(WorkspaceError::NotFound) => {
-                    return role_codes
-                        .iter()
-                        .any(|role| role == "ADMIN")
+                    return is_admin
                         .then_some(())
                         .ok_or(ResourceError::Forbidden);
                 }
                 Err(_) => return Err(ResourceError::StorageFailure),
             }
+        } else {
+            self.active_workspace(workspace_code)?;
+        }
+        if is_admin {
+            return Ok(());
         }
         if !self
             .workspaces
@@ -90,7 +95,7 @@ impl ResourceService {
         {
             return Err(ResourceError::Forbidden);
         }
-        self.active_workspace(workspace_code)
+        Ok(())
     }
 
     fn active_actor_role_codes(&self, actor_user_code: &str) -> Result<Vec<String>, ResourceError> {

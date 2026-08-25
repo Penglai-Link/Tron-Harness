@@ -102,9 +102,9 @@ impl HttpLlmRuntimeClient {
                 config.model_type
             ));
         }
-        if config.protocol != ModelProtocol::OpenAiCompatible {
+        if config.protocol != ModelProtocol::OpenAiCompatibleEmbedding {
             return Err(format!(
-                "embedding call requires OPENAI_COMPATIBLE protocol, got {:?}",
+                "embedding call requires OPENAI_COMPATIBLE_EMBEDDING protocol, got {:?}",
                 config.protocol
             ));
         }

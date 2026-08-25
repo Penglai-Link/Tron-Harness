@@ -185,7 +185,7 @@ function createSeedBaseModel(
 function buildInitialPlatformModels(): PlatformModel[] {
   return [
     createSeedBaseModel("MODEL-734600000000000001", "GPT-4o Main", "OpenAI", "RESPONSES", "TEXT", "https://api.openai.com/v1", "/responses", "sk-platform-openai-gpt4o-demo", "gpt-4o"),
-    createSeedBaseModel("MODEL-734600000000000002", "Embedding Shared", "OpenAI", "OPENAI_COMPATIBLE", "EMBEDDING", "https://api.openai.com/v1", "/embeddings", "sk-platform-openai-embedding-demo", "text-embedding-3-small"),
+    createSeedBaseModel("MODEL-734600000000000002", "Embedding Shared", "OpenAI", "OPENAI_COMPATIBLE_EMBEDDING", "EMBEDDING", "https://api.openai.com/v1", "/embeddings", "sk-platform-openai-embedding-demo", "text-embedding-3-small"),
     createSeedBaseModel("MODEL-734600000000000003", "Rerank Default", "Cohere", "RERANK", "RERANK", "https://api.cohere.ai/v1", "/rerank", "sk-platform-cohere-rerank-demo", "rerank-v3.5"),
   ];
 }
@@ -1325,7 +1325,7 @@ export function deleteWorkspaceModelRecord(workspaceCode: string, modelCode: str
 
 function defaultVerifyPath(protocol: ModelProtocol, modelType: ModelType) {
   if (protocol === "OPENAI_COMPATIBLE" && modelType === "TEXT") return "/chat/completions";
-  if (protocol === "OPENAI_COMPATIBLE" && modelType === "EMBEDDING") return "/embeddings";
+  if (protocol === "OPENAI_COMPATIBLE_EMBEDDING") return "/embeddings";
   if (protocol === "RERANK" && modelType === "RERANK") return "/rerank";
   return "/responses";
 }

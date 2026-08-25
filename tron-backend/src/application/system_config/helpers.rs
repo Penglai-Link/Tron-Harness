@@ -121,7 +121,7 @@ pub(super) fn changed_leaf_paths(current: &Value, next: &Value) -> Vec<String> {
         .collect()
 }
 
-fn value_at_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
+pub(super) fn value_at_path<'a>(value: &'a Value, path: &str) -> Option<&'a Value> {
     let mut current = value;
     for segment in path.split('.') {
         let key = segment.split('[').next().unwrap_or(segment);

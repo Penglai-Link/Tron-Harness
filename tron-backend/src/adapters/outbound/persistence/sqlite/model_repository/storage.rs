@@ -96,6 +96,7 @@ pub(super) fn source_kind_from_storage(value: &str) -> Result<ModelSourceKind, M
 pub(super) fn protocol_to_storage(value: ModelProtocol) -> &'static str {
     match value {
         ModelProtocol::OpenAiCompatible => "OPENAI_COMPATIBLE",
+        ModelProtocol::OpenAiCompatibleEmbedding => "OPENAI_COMPATIBLE_EMBEDDING",
         ModelProtocol::Responses => "RESPONSES",
         ModelProtocol::Rerank => "RERANK",
     }
@@ -104,6 +105,7 @@ pub(super) fn protocol_to_storage(value: ModelProtocol) -> &'static str {
 pub(super) fn protocol_from_storage(value: &str) -> Result<ModelProtocol, ModelError> {
     match value {
         "OPENAI_COMPATIBLE" => Ok(ModelProtocol::OpenAiCompatible),
+        "OPENAI_COMPATIBLE_EMBEDDING" => Ok(ModelProtocol::OpenAiCompatibleEmbedding),
         "RESPONSES" => Ok(ModelProtocol::Responses),
         "RERANK" => Ok(ModelProtocol::Rerank),
         _ => Err(ModelError::StorageFailure),

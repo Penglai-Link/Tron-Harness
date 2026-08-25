@@ -1,6 +1,30 @@
 use super::*;
 
 impl UserService {
+    pub fn create_bootstrap_setup_session(&self) -> Result<AuthorizedSession, AuthError> {
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("user repository mutex poisoned");
+        let user = repository
+            .get_user("USR-ADMIN")
+            .map_err(map_user_error_to_auth)?;
+        ensure_active_user(&user)?;
+        if user.source_type != UserSourceType::Internal || !user.password_reset_required {
+            return Err(AuthError::InvalidCredentials);
+        }
+
+        let session = self.create_session(
+            repository.as_mut(),
+            &user,
+            AuthMethod::Internal,
+            None,
+            Some("/setup".into()),
+        )?;
+        drop(repository);
+        Ok(session)
+    }
+
     pub fn access_token_ttl_seconds(&self) -> i64 {
         self.auth_config.access_token_ttl_seconds
     }

@@ -145,16 +145,6 @@ export function WorkspaceMcpServersPage() {
     <div className="space-y-5">
       <PageHeader title={pageT("title", "MCP Servers")} />
 
-      <SurfaceCard className="space-y-2 p-4">
-        <p className="text-xs font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-          {pageT("workspace.label", "Current workspace")}
-        </p>
-        <p className="text-sm text-[var(--color-on-surface)]">{activeWorkspaceLabel}</p>
-        <p className="text-sm text-[var(--color-on-surface-variant)]">
-          {pageT("workspace.description", "Inherited MCP servers follow platform policy unless this workspace adds a local disable override.")}
-        </p>
-      </SurfaceCard>
-
       <DataTable<WorkspaceMcpServerRecord>
         title={pageT("table.title", "Effective MCP servers")}
         rows={pagination.visibleItems}
