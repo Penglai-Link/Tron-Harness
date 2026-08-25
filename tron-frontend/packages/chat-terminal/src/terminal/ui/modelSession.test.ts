@@ -139,7 +139,7 @@ describe("renderModelSession agent activity", () => {
     expect(host.textContent).toContain("Elapsed 0m 0s");
     expect(host.textContent).toContain("Tools called 1");
     expect(host.textContent).toContain("workspace.inspect");
-    expect(host.textContent).toContain("Loaded workspace");
+    expect(host.textContent).not.toContain("Loaded workspace");
     expect(host.textContent).toContain("Workspace context loaded.");
     expect(host.textContent).not.toContain("internal chain of thought");
     expect(host.querySelector("summary svg")?.getAttribute("viewBox")).toBe("0 0 24 24");
@@ -150,5 +150,77 @@ describe("renderModelSession agent activity", () => {
     expect(host.querySelector(".ai-terminal-model-session__activity-status--running")).toBeNull();
     expect(host.querySelectorAll(".ai-terminal-model-session__activity > details")).toHaveLength(1);
     expect(host.querySelector(".ai-terminal-model-session__activity-item--nested")).toBeTruthy();
+    (host.querySelector("summary") as HTMLElement).click();
+    expect(host.querySelector("details")?.open).toBe(true);
+  });
+
+  it("keeps tool details collapsed while a session is running", () => {
+    const host = document.createElement("div");
+    const i18n = createChatTerminalI18n({ locale: "en-US" });
+
+    renderModelSession(
+      host,
+      {
+        activityEvents: [
+          {
+            runId: "run-1",
+            timestamp: 1,
+            toolCallId: "tool-1",
+            toolCallName: "workspace.inspect",
+            type: "TOOL_CALL_START",
+          },
+        ],
+        activityStartedAt: 0,
+        activityNow: 1_000,
+        activityComplete: false,
+        commandStates: new Map(),
+        i18n,
+        tokens: [],
+      },
+      {
+        onDraftCommandChange: vi.fn(),
+        onExecuteCommand: vi.fn(),
+        onCancelCommandEdit: vi.fn(),
+        onRejectCommand: vi.fn(),
+        onSaveCommandEdit: vi.fn(),
+        onStartEditCommand: vi.fn(),
+      },
+    );
+
+    (host.querySelector("summary") as HTMLElement).click();
+
+    expect(host.querySelector("details")?.open).toBe(false);
+  });
+
+  it("renders one thinking state for repeated empty reasoning starts", () => {
+    const host = document.createElement("div");
+    const i18n = createChatTerminalI18n({ locale: "en-US" });
+
+    renderModelSession(
+      host,
+      {
+        activityEvents: [
+          { runId: "run-1", timestamp: 1, type: "REASONING_START" },
+          { runId: "run-1", timestamp: 2, type: "REASONING_START" },
+        ],
+        activityStartedAt: 0,
+        activityNow: 2_000,
+        activityComplete: false,
+        commandStates: new Map(),
+        i18n,
+        tokens: [],
+      },
+      {
+        onDraftCommandChange: vi.fn(),
+        onExecuteCommand: vi.fn(),
+        onCancelCommandEdit: vi.fn(),
+        onRejectCommand: vi.fn(),
+        onSaveCommandEdit: vi.fn(),
+        onStartEditCommand: vi.fn(),
+      },
+    );
+
+    expect(host.querySelectorAll("summary")).toHaveLength(1);
+    expect(host.textContent).toContain("Thinking");
   });
 });

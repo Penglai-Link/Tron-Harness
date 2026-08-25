@@ -88,7 +88,9 @@ export class Terminal {
   private readonly terminalContainer: HTMLElement;
   private terminalThemeTokens: TerminalThemeTokenOverrides;
   private fitAnimationFrame?: number;
+  private fitShouldNotifyTransport = false;
   private themeRefreshAnimationFrame?: number;
+  private isFittingContentLayout = false;
   private disposed = false;
 
   constructor(container: HTMLElement, params: TerminalOptions = {}) {
@@ -152,8 +154,15 @@ export class Terminal {
     }
 
     if (modelSession) {
+      const modelSessionOptions = this.normalizeModelSessionOptions(modelSession);
       this.modelSessionAddon = new ModelSessionAddon(
-        this.normalizeModelSessionOptions(modelSession),
+        {
+          ...modelSessionOptions,
+          onLayoutResize: () => {
+            modelSessionOptions.onLayoutResize?.();
+            this.refreshForContentLayout();
+          },
+        },
       );
       this.terminal.loadAddon(this.modelSessionAddon);
     }
@@ -219,6 +228,15 @@ export class Terminal {
     this.modelSessionAddon?.refreshLocale();
   }
 
+  /** Refit xterm after an inline card reflows without resizing its transport. */
+  refreshForContentLayout() {
+    this.scheduleFit(false);
+  }
+
+  shouldNotifyTransportResize() {
+    return !this.isFittingContentLayout;
+  }
+
   private scheduleThemeRefresh() {
     if (this.disposed) {
       return;
@@ -236,21 +254,24 @@ export class Terminal {
     });
   }
 
-  private scheduleFit() {
+  private scheduleFit(shouldNotifyTransport = true) {
     if (this.disposed) {
       return;
     }
+    this.fitShouldNotifyTransport ||= shouldNotifyTransport;
     if (this.fitAnimationFrame !== undefined) {
       return;
     }
 
     this.fitAnimationFrame = window.requestAnimationFrame(() => {
       this.fitAnimationFrame = undefined;
-      this.fitTerminalToContainer();
+      const notifyTransport = this.fitShouldNotifyTransport;
+      this.fitShouldNotifyTransport = false;
+      this.fitTerminalToContainer(notifyTransport);
     });
   }
 
-  private fitTerminalToContainer() {
+  private fitTerminalToContainer(shouldNotifyTransport: boolean) {
     if (this.disposed || !this.terminalContainer.isConnected) {
       return;
     }
@@ -265,12 +286,18 @@ export class Terminal {
       return;
     }
 
+    this.isFittingContentLayout = !shouldNotifyTransport;
     try {
       this.fitAddon.fit();
+      if (!shouldNotifyTransport) {
+        this.terminal.refresh(0, this.terminal.rows - 1);
+      }
     } catch (error) {
       if (!this.isMissingRenderDimensionsError(error)) {
         throw error;
       }
+    } finally {
+      this.isFittingContentLayout = false;
     }
   }
 

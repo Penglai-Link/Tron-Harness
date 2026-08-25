@@ -246,7 +246,9 @@ export function initTerminal(options: ChatTerminalOptions) {
         : undefined,
   });
   const resizeDisposable = termInstance.terminal.onResize((size) => {
-    terminalTransport.resize(size);
+    if (termInstance.shouldNotifyTransportResize()) {
+      terminalTransport.resize(size);
+    }
   });
   const sessionDisposable = terminalTransport.onSessionChange((session) => {
     setCurrentDirectory(session.currentDirectory);

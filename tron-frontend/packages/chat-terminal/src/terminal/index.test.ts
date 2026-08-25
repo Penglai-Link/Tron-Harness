@@ -3,6 +3,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fit = vi.fn();
+const refresh = vi.fn();
 
 vi.mock("@xterm/addon-fit", () => ({
   FitAddon: class {
@@ -18,6 +19,8 @@ vi.mock("@xterm/xterm", () => ({
     options = {};
 
     loadAddon() {}
+
+    refresh = refresh;
 
     open(container: HTMLElement) {
       this.element = document.createElement("div");
@@ -38,11 +41,13 @@ import { Terminal } from "./index";
 
 describe("Terminal resize tracking", () => {
   let observerCallback: ResizeObserverCallback;
+  let animationFrames: FrameRequestCallback[];
   const disconnect = vi.fn();
   const observe = vi.fn();
 
   beforeEach(() => {
-    fit.mockClear();
+    fit.mockReset();
+    refresh.mockReset();
     disconnect.mockClear();
     observe.mockClear();
 
@@ -57,7 +62,11 @@ describe("Terminal resize tracking", () => {
         observe = observe;
       },
     );
-    vi.stubGlobal("requestAnimationFrame", vi.fn(() => 1));
+    animationFrames = [];
+    vi.stubGlobal("requestAnimationFrame", vi.fn((callback: FrameRequestCallback) => {
+      animationFrames.push(callback);
+      return animationFrames.length;
+    }));
     vi.stubGlobal("cancelAnimationFrame", vi.fn());
   });
 
@@ -81,5 +90,30 @@ describe("Terminal resize tracking", () => {
     terminal.dispose();
 
     expect(disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("suppresses transport resize notifications for inline card layout refreshes", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const terminal = new Terminal(host);
+    const viewport = host.querySelector<HTMLElement>(".ai-terminal-viewport");
+
+    expect(viewport).toBeInstanceOf(HTMLElement);
+    vi.spyOn(viewport!, "getBoundingClientRect").mockReturnValue({
+      width: 640,
+      height: 320,
+    } as DOMRect);
+
+    animationFrames.splice(0).forEach((callback) => callback(0));
+    fit.mockClear();
+    fit.mockImplementation(() => {
+      expect(terminal.shouldNotifyTransportResize()).toBe(false);
+    });
+
+    terminal.refreshForContentLayout();
+    animationFrames.shift()?.(0);
+
+    expect(fit).toHaveBeenCalledOnce();
+    expect(refresh).toHaveBeenCalledWith(0, 23);
   });
 });

@@ -29,7 +29,23 @@ export function renderAgentActivity(state: AgentActivityState) {
     const rightRank = right.kind === "reasoning" ? 0 : 1;
     return leftRank - rightRank || left.value.firstMillis - right.value.firstMillis;
   });
+  const latestEmptyReasoningId = orderedCards
+    .filter(
+      (card) =>
+        card.kind === "reasoning" &&
+        !card.value.ended &&
+        !card.value.content.trim() &&
+        card.value.toolCards.length === 0,
+    )
+    .at(-1)?.value.id;
   const visibleCards = orderedCards.filter((card) => {
+    if (card.kind === "reasoning") {
+      return (
+        card.value.content.trim().length > 0 ||
+        card.value.toolCards.length > 0 ||
+        card.value.id === latestEmptyReasoningId
+      );
+    }
     if (card.kind === "tool") return card.value.parentReasoningId === null;
     if (card.kind === "toolGroup") {
       return card.value.toolCards.every((tool) => tool.parentReasoningId === null);
@@ -69,8 +85,8 @@ function renderActivityCard(
   const { i18n } = state;
   if (card.kind === "reasoning") {
     const summary = activityStatusLabel(state, events, i18n);
-    return html`<details class="ai-terminal-model-session__activity-item">
-      <summary>
+    return html`<details class="ai-terminal-model-session__activity-item" ?open=${state.activityComplete ? nothing : false} @toggle=${(event: Event) => closeActivityToggle(event, state)}>
+      <summary @click=${(event: MouseEvent) => preventActivityToggle(event, state)}>
         ${renderActivityChevron()}
         <span class=${activityStatusClass(state)}>${summary}</span>
       </summary>
@@ -80,28 +96,28 @@ function renderActivityCard(
           </div>`
         : nothing}
       ${card.value.toolCards.length
-        ? renderNestedToolGroup(card.value.toolCards, i18n)
+        ? renderNestedToolGroup(card.value.toolCards, i18n, state)
         : nothing}
     </details>`;
   }
 
   if (card.kind === "toolGroup") {
     const tools = card.value.toolCards.filter((tool) => tool.started);
-    const running = tools.some((tool) => !tool.ended && !tool.result);
-    return html`<details class="ai-terminal-model-session__activity-item" ?open=${running}>
-      <summary>${renderActivityChevron()}<span>${i18n.t("toolsRan")} ${tools.length}</span></summary>
+    return html`<details class="ai-terminal-model-session__activity-item" ?open=${state.activityComplete ? nothing : false} @toggle=${(event: Event) => closeActivityToggle(event, state)}>
+      <summary @click=${(event: MouseEvent) => preventActivityToggle(event, state)}>${renderActivityChevron()}<span>${i18n.t("toolsRan")} ${tools.length}</span></summary>
       <div class="ai-terminal-model-session__activity-list">
-        ${tools.map((tool) => renderToolActivity(tool, i18n))}
+        ${tools.map((tool) => renderToolActivity(tool, i18n, state))}
       </div>
     </details>`;
   }
 
-  return renderToolActivity(card.value, i18n);
+  return renderToolActivity(card.value, i18n, state);
 }
 
 function renderToolActivity(
   tool: Extract<ReturnType<typeof buildAguiUserWorkCards>[number], { kind: "tool" }>["value"],
   i18n: ChatTerminalI18n,
+  state: AgentActivityState,
 ) {
   const complete = tool.ended || Boolean(tool.result);
   const running = tool.started && !complete;
@@ -109,15 +125,12 @@ function renderToolActivity(
   const result = tool.result ? formatJsonBlockValue(tool.result) : "";
   const label = tool.toolName || i18n.t("toolUnnamed");
 
-  return html`<details class="ai-terminal-model-session__activity-item ai-terminal-model-session__activity-item--tool" ?open=${running}>
-    <summary>${renderActivityChevron()}<span>${running ? i18n.t("toolRunning") : i18n.t("toolRan")} ${label}</span></summary>
-    ${args || tool.logs.length || result
+  return html`<details class="ai-terminal-model-session__activity-item ai-terminal-model-session__activity-item--tool" ?open=${state.activityComplete ? nothing : false} @toggle=${(event: Event) => closeActivityToggle(event, state)}>
+    <summary @click=${(event: MouseEvent) => preventActivityToggle(event, state)}>${renderActivityChevron()}<span>${running ? i18n.t("toolRunning") : i18n.t("toolRan")} ${label}</span></summary>
+    ${args || result
       ? html`<div class="ai-terminal-model-session__activity-detail">
           ${args
             ? html`<section><h4>${i18n.t("toolParameters")}</h4><pre>${args}</pre></section>`
-            : nothing}
-          ${tool.logs.length
-            ? html`<section><h4>${i18n.t("toolLog")}</h4><pre>${tool.logs.join("\n")}</pre></section>`
             : nothing}
           ${result
             ? html`<section><h4>${i18n.t("toolResult")}</h4><pre>${result}</pre></section>`
@@ -132,18 +145,30 @@ function renderNestedToolGroup(
     ? Card extends { kind: "reasoning" }
       ? Card["value"]["toolCards"]
       : never
-    : never,
+  : never,
   i18n: ChatTerminalI18n,
+  state: AgentActivityState,
 ) {
   const startedTools = tools.filter((tool) => tool.started);
   if (!startedTools.length) return nothing;
-  const running = startedTools.some((tool) => !tool.ended && !tool.result);
-  return html`<details class="ai-terminal-model-session__activity-item ai-terminal-model-session__activity-item--nested" ?open=${running}>
-    <summary>${renderActivityChevron()}<span>${i18n.t("toolsRan")} ${startedTools.length}</span></summary>
+  return html`<details class="ai-terminal-model-session__activity-item ai-terminal-model-session__activity-item--nested" ?open=${state.activityComplete ? nothing : false} @toggle=${(event: Event) => closeActivityToggle(event, state)}>
+    <summary @click=${(event: MouseEvent) => preventActivityToggle(event, state)}>${renderActivityChevron()}<span>${i18n.t("toolsRan")} ${startedTools.length}</span></summary>
     <div class="ai-terminal-model-session__activity-list">
-      ${startedTools.map((tool) => renderToolActivity(tool, i18n))}
+      ${startedTools.map((tool) => renderToolActivity(tool, i18n, state))}
     </div>
   </details>`;
+}
+
+function preventActivityToggle(event: MouseEvent, state: AgentActivityState) {
+  if (!state.activityComplete) {
+    event.preventDefault();
+  }
+}
+
+function closeActivityToggle(event: Event, state: AgentActivityState) {
+  if (!state.activityComplete) {
+    (event.currentTarget as HTMLDetailsElement).open = false;
+  }
 }
 
 function renderActivityChevron() {

@@ -1,6 +1,7 @@
 import {
   Terminal as XTerminal,
   type IDisposable,
+  type IMarker,
   type ITerminalAddon,
 } from "@xterm/xterm";
 import {
@@ -53,8 +54,9 @@ interface ModelSessionInstance {
   activityComplete: Signal<boolean>;
   activityClock?: ReturnType<typeof setInterval>;
   tokens: ReadonlySignal<ModelSessionToken[]>;
-  anchorRow: number;
+  anchorMarker: IMarker;
   reservedRows: number;
+  fixedHeight?: number;
   host: HTMLElement;
   commandStates: Signal<ReadonlyMap<string, ModelSessionCommandCardState>>;
   actions: ModelSessionRenderActions;
@@ -75,6 +77,8 @@ export class ModelSessionAddon implements ITerminalAddon {
   private scrollDisposable?: IDisposable;
   private resizeDisposable?: IDisposable;
   private viewportElement?: HTMLElement;
+  private sessionResizeObserver?: ResizeObserver;
+  private readonly sessionWidths = new Map<string, number>();
   private positionAnimationFrame?: number;
   private shouldMeasureSessions = false;
   private sseBuffer = "";
@@ -84,6 +88,23 @@ export class ModelSessionAddon implements ITerminalAddon {
   private readonly i18n: ChatTerminalI18n;
   private readonly handleViewportScroll = () => {
     this.scheduleInlineLayoutUpdate();
+  };
+  private readonly handleSessionToggle = (event: Event) => {
+    if (!(event.target instanceof HTMLDetailsElement)) {
+      return;
+    }
+
+    const host = event.currentTarget as HTMLElement;
+    const session = this.sessions.get(host.dataset.sessionKey ?? "");
+    if (!session) {
+      return;
+    }
+
+    if (!session.activityComplete.peek()) {
+      return;
+    }
+
+    this.options.onLayoutResize?.();
   };
 
   constructor(private readonly options: ModelSessionAddonOptions = {}) {
@@ -108,7 +129,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.scheduleInlineLayoutUpdate();
     });
     this.resizeDisposable = terminal.onResize(() => {
-      this.scheduleInlineLayoutUpdate(true);
+      this.scheduleInlineLayoutUpdate(this.hasCompletedSessions());
     });
     this.viewportElement =
       terminal.element.querySelector<HTMLElement>(".xterm-viewport") ??
@@ -118,6 +139,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.handleViewportScroll,
       { passive: true },
     );
+    this.sessionResizeObserver = this.createSessionResizeObserver();
   }
 
   dispose() {
@@ -130,6 +152,9 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.handleViewportScroll,
     );
     this.viewportElement = undefined;
+    this.sessionResizeObserver?.disconnect();
+    this.sessionResizeObserver = undefined;
+    this.sessionWidths.clear();
     if (this.positionAnimationFrame !== undefined) {
       window.cancelAnimationFrame(this.positionAnimationFrame);
       this.positionAnimationFrame = undefined;
@@ -203,6 +228,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       session.activityNow.value = Date.now();
       this.stopActivityClock(session);
       this.flushSessionRender(session);
+      this.lockSessionHeight(session);
       await this.reserveSessionRows(session);
     }
   }
@@ -224,7 +250,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.sessions.forEach((session) => {
       session.host.hidden = false;
     });
-    this.scheduleInlineLayoutUpdate(true);
+    this.scheduleInlineLayoutUpdate(this.hasCompletedSessions());
   }
 
   hide() {
@@ -330,7 +356,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       activityNow,
       activityComplete,
       tokens,
-      anchorRow: buffer.baseY + buffer.cursorY,
+      anchorMarker: this.terminal.registerMarker(0),
       reservedRows: 0,
       host,
       commandStates,
@@ -341,6 +367,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     host.dataset.sessionKey = key;
     host.hidden = !this.isVisible.peek();
     this.terminal.element.appendChild(host);
+    this.observeSessionHost(key, host);
     this.sessions.set(key, session);
     this.activeSessionKey = key;
     session.activityClock = setInterval(() => {
@@ -395,7 +422,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       },
       session.actions,
     );
-    this.scheduleInlineLayoutUpdate(true);
+    this.scheduleInlineLayoutUpdate(session.activityComplete.peek());
   }
 
   private disposeSession(session: ModelSessionInstance) {
@@ -407,7 +434,48 @@ export class ModelSessionAddon implements ITerminalAddon {
       session.renderAnimationFrame = undefined;
     }
 
+    this.sessionResizeObserver?.unobserve(session.host);
+    session.host.removeEventListener("toggle", this.handleSessionToggle, true);
+    this.sessionWidths.delete(session.key);
+    session.anchorMarker.dispose();
     session.host.remove();
+  }
+
+  private createSessionResizeObserver() {
+    if (typeof ResizeObserver === "undefined") {
+      return undefined;
+    }
+
+    return new ResizeObserver((entries) => {
+      let hasWidthChange = false;
+
+      entries.forEach((entry) => {
+        const key = entry.target.getAttribute("data-session-key");
+        if (!key) return;
+
+        const previousWidth = this.sessionWidths.get(key);
+        const nextWidth = entry.contentRect.width;
+        this.sessionWidths.set(key, nextWidth);
+        hasWidthChange ||= previousWidth !== undefined && previousWidth !== nextWidth;
+      });
+
+      if (!hasWidthChange) return;
+
+      this.options.onLayoutResize?.();
+      this.scheduleInlineLayoutUpdate(this.hasCompletedSessions());
+    });
+  }
+
+  private observeSessionHost(key: string, host: HTMLElement) {
+    this.sessionWidths.set(key, host.getBoundingClientRect().width);
+    this.sessionResizeObserver?.observe(host);
+    host.addEventListener("toggle", this.handleSessionToggle, true);
+  }
+
+  private hasCompletedSessions() {
+    return [...this.sessions.values()].some((session) =>
+      session.activityComplete.peek(),
+    );
   }
 
   private stopActivityClock(session: ModelSessionInstance) {
@@ -442,6 +510,10 @@ export class ModelSessionAddon implements ITerminalAddon {
 
     if (shouldMeasure) {
       this.sessions.forEach((session) => {
+        if (!session.activityComplete.peek() || session.fixedHeight !== undefined) {
+          return;
+        }
+
         const requiredRows = Math.max(
           1,
           Math.ceil(this.getSessionContentHeight(session) / cell.height),
@@ -457,7 +529,13 @@ export class ModelSessionAddon implements ITerminalAddon {
     }
 
     this.sessions.forEach((session) => {
-      const viewportTop = (session.anchorRow - viewportY) * cell.height;
+      const anchorRow = session.anchorMarker.line;
+      if (anchorRow < 0) {
+        session.host.hidden = true;
+        return;
+      }
+
+      const viewportTop = (anchorRow - viewportY) * cell.height;
       session.host.style.transform = `translate3d(0, ${viewportTop}px, 0)`;
     });
 
@@ -490,9 +568,24 @@ export class ModelSessionAddon implements ITerminalAddon {
   }
 
   private getSessionContentHeight(session: ModelSessionInstance) {
+    if (session.fixedHeight !== undefined) {
+      return session.fixedHeight;
+    }
+
     return (
       session.host.firstElementChild?.scrollHeight ?? session.host.scrollHeight
     );
+  }
+
+  private lockSessionHeight(session: ModelSessionInstance) {
+    const card = session.host.firstElementChild as HTMLElement | null;
+    const height = card?.offsetHeight || card?.getBoundingClientRect().height || 0;
+    if (!card || height <= 0) {
+      return;
+    }
+
+    session.fixedHeight = height;
+    card.style.height = `${height}px`;
   }
 
   private syncSessionHostHeight(

@@ -27,7 +27,11 @@ export function renderModelSession(
 ) {
   render(
     html`
-      <section class="ai-terminal-model-session">
+      <section
+        class=${state.activityComplete
+          ? "ai-terminal-model-session ai-terminal-model-session--complete"
+          : "ai-terminal-model-session ai-terminal-model-session--running"}
+      >
         <div class="ai-terminal-model-session__body">
           ${renderAgentActivity(state)}
           ${state.tokens.map((token) =>

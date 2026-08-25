@@ -10,7 +10,7 @@
   width: stretch;
   box-sizing: border-box;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   z-index: 8;
   pointer-events: auto;
   transform: translate3d(0, 0, 0);
@@ -35,6 +35,17 @@
   user-select: text;
   -webkit-user-select: text;
   border: 1px solid var(--ai-terminal-border);
+}
+
+.ai-terminal-model-session--complete {
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.ai-terminal-model-session--running .ai-terminal-model-session__activity-item > summary {
+  cursor: default;
+  pointer-events: none;
 }
 
 .ai-terminal-model-session__body {
