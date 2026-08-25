@@ -1,0 +1,411 @@
+impl ChatService {
+    pub async fn send_message(
+        &self,
+        session_code: &str,
+        command: SendChatMessageCommand,
+        resolved_model: AgentModelConfig,
+        user_code: Option<String>,
+        locale: Option<String>,
+        llm_runtime: Option<LlmRuntimeService>,
+        agent: AgentInvocationService,
+    ) -> Result<ChatSendResult, ChatSendError> {
+        self.send_message_inner(
+            session_code,
+            command,
+            resolved_model,
+            user_code,
+            locale,
+            llm_runtime,
+            agent,
+            None,
+        )
+        .await
+    }
+
+    pub async fn send_message_stream(
+        &self,
+        session_code: &str,
+        command: SendChatMessageCommand,
+        resolved_model: AgentModelConfig,
+        user_code: Option<String>,
+        locale: Option<String>,
+        llm_runtime: Option<LlmRuntimeService>,
+        agent: AgentInvocationService,
+        sink: ModelStreamSink,
+    ) -> Result<ChatSendResult, ChatSendError> {
+        self.send_message_inner(
+            session_code,
+            command,
+            resolved_model,
+            user_code,
+            locale,
+            llm_runtime,
+            agent,
+            Some(sink),
+        )
+        .await
+    }
+
+    async fn send_message_inner(
+        &self,
+        session_code: &str,
+        command: SendChatMessageCommand,
+        resolved_model: AgentModelConfig,
+        user_code: Option<String>,
+        locale: Option<String>,
+        llm_runtime: Option<LlmRuntimeService>,
+        agent: AgentInvocationService,
+        sink: Option<ModelStreamSink>,
+    ) -> Result<ChatSendResult, ChatSendError> {
+        let content = normalized_optional(command.content).unwrap_or_default();
+        let attachments =
+            normalize_chat_attachments(command.attachments).map_err(ChatSendError::Chat)?;
+        if content.is_empty() && attachments.is_empty() {
+            return Err(ChatSendError::Chat(ChatError::MessageRequired));
+        }
+        let session = self
+            .repository()
+            .get_session(session_code)
+            .map_err(ChatSendError::Chat)?;
+        let (attachments, invocation_attachments) = self
+            .prepare_session_attachments(&session, attachments)
+            .map_err(ChatSendError::Chat)?;
+        let prompt = agent_prompt_for_content(&content);
+        let should_generate_title = should_generate_manual_session_title(&session);
+        let workspace_code = session.workspace_code.clone();
+        let channel = if command
+            .task_code
+            .as_ref()
+            .or(session.task_code.as_ref())
+            .is_some()
+        {
+            ChatMessageChannel::TaskAgent
+        } else {
+            ChatMessageChannel::MainAgent
+        };
+        let effective_agent_code = if session.last_run_code.is_some() {
+            session.agent_code.clone()
+        } else {
+            normalized_optional(command.agent_code.clone()).or(session.agent_code.clone())
+        }
+        .unwrap_or_else(|| MAIN_AGENT_CODE.to_string());
+        let reservation = self.reserve_run(
+            session_code,
+            command.run_code.clone(),
+            &effective_agent_code,
+        )?;
+        let run_code = reservation.run_code;
+        let runtime_adapter_key = reservation.runtime_adapter_key;
+        let active_run_reservation = reservation.guard;
+        let _session_run_guard = acquire_session_run(self.coordinator_namespace, session_code)?;
+        let mapped_runtime_session_id = self
+            .repository()
+            .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)
+            .map_err(ChatSendError::Chat)?;
+        let user_message = self.create_message(
+            session_code,
+            None,
+            ChatMessageRole::User,
+            channel,
+            "User",
+            &content,
+            attachments.clone(),
+            None,
+        )?;
+        if should_generate_title
+            && !content.is_empty()
+            && let Some(llm_runtime) = llm_runtime
+        {
+            let chat_service = self.clone();
+            let session_code = session_code.to_string();
+            let workspace_code = workspace_code.clone();
+            let user_message_content = content.clone();
+            tokio::spawn(async move {
+                chat_service
+                    .try_generate_manual_session_title(
+                        &session_code,
+                        &workspace_code,
+                        &user_message_content,
+                        llm_runtime,
+                    )
+                    .await;
+            });
+        }
+        let app_code_for_invocation = command.app_code.or(session.app_code.clone());
+        let task_code_for_invocation = command.task_code.or(session.task_code.clone());
+        let supports_user_input_requests = command
+            .client_capabilities
+            .as_ref()
+            .is_some_and(|capabilities| capabilities.user_input_requests);
+        let system_model_id_for_invocation = command.system_model_id;
+        let limits_for_invocation = command.limits;
+        let tools_for_invocation = command.tools;
+        let invocation = AgentInvocationCommand {
+            run_code: Some(run_code),
+            prompt: Some(prompt),
+            workspace_code: Some(workspace_code.clone()),
+            conversation_code: Some(session.session_code.clone()),
+            agent_code: Some(effective_agent_code.clone()),
+            system_agent_session_id: mapped_runtime_session_id
+                .or(session.system_agent_session_id.clone()),
+            app_code: app_code_for_invocation.clone(),
+            task_code: task_code_for_invocation.clone(),
+            model: Some(resolved_model.clone()),
+            system_model_id: system_model_id_for_invocation.clone(),
+            limits: limits_for_invocation,
+            tools: tools_for_invocation.clone(),
+            attachments: invocation_attachments,
+            supports_user_input_requests,
+            transcript_input_kind: None,
+            transcript_input_metadata: None,
+        };
+        let run = if let Some(sink) = sink {
+            agent
+                .invoke_stream_reserved(
+                    invocation,
+                    user_code.clone(),
+                    locale.clone(),
+                    sink,
+                    active_run_reservation,
+                )
+                .await
+        } else {
+            agent
+                .invoke_reserved(
+                    invocation,
+                    user_code.clone(),
+                    locale.clone(),
+                    active_run_reservation,
+                )
+                .await
+        }
+        .map_err(ChatSendError::Agent)?;
+        let awaiting_user_input = run.status == "AWAITING_USER_INPUT";
+        let (assistant_content, user_input_request) = if awaiting_user_input {
+            let raw = raw_user_input_request(&run)?;
+            (raw.intro.clone(), Some(raw))
+        } else {
+            (run.final_output.clone(), None)
+        };
+        let assistant_message = self.create_message(
+            session_code,
+            Some(run.run_code.clone()),
+            ChatMessageRole::Assistant,
+            channel,
+            "Assistant",
+            &assistant_content,
+            Vec::new(),
+            run.token_usage,
+        )?;
+        let mut result_messages = vec![user_message, assistant_message.clone()];
+        let mut user_input_request = if let Some(raw) = user_input_request {
+            Some(self.persist_user_input_request(session_code, &run, &assistant_message, raw)?)
+        } else {
+            None
+        };
+        let updated_at = current_timestamp();
+        if let Some(runtime_session_id) = run.system_agent_session_id.as_deref() {
+            self.repository()
+                .upsert_runtime_session(
+                    session_code,
+                    run.runtime_adapter_key.as_str(),
+                    &effective_agent_code,
+                    runtime_session_id,
+                    Some(run.run_code.as_str()),
+                    &updated_at,
+                )
+                .map_err(ChatSendError::Chat)?;
+        }
+        self.repository()
+            .update_session_run(
+                session_code,
+                &run.run_code,
+                run.status,
+                Some(effective_agent_code.as_str()),
+                run.system_agent_session_id.as_deref(),
+                &updated_at,
+            )
+            .map_err(ChatSendError::Chat)?;
+        if !awaiting_user_input && let Some(short_term_memory) = agent.short_term_memory() {
+            let goal_result = self
+                .run_goal_continuations(
+                    session_code,
+                    &session,
+                    &effective_agent_code,
+                    app_code_for_invocation,
+                    task_code_for_invocation,
+                    system_model_id_for_invocation,
+                    resolved_model,
+                    tools_for_invocation,
+                    user_code,
+                    locale,
+                    agent,
+                    short_term_memory,
+                    run.clone(),
+                    run.system_agent_session_id.clone(),
+                    supports_user_input_requests,
+                )
+                .await?;
+            result_messages.extend(goal_result.messages);
+            user_input_request = user_input_request.or(goal_result.user_input_request);
+        }
+        let updated_session = self
+            .repository()
+            .get_session(session_code)
+            .map_err(ChatSendError::Chat)?;
+        Ok(ChatSendResult {
+            session: updated_session,
+            run,
+            messages: result_messages,
+            user_input_request,
+        })
+    }
+
+    pub(super) fn persist_user_input_request(
+        &self,
+        session_code: &str,
+        run: &AgentInvocationResult,
+        assistant_message: &ChatMessage,
+        raw: RawUserInputRequest,
+    ) -> Result<ChatUserInputRequest, ChatSendError> {
+        let id = self
+            .id_provider
+            .next_id()
+            .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
+            .value();
+        let questions = raw
+            .questions
+            .into_iter()
+            .enumerate()
+            .map(|(index, question)| ChatUserInputQuestion {
+                question_code: format!("QUESTION-{id}-{index}"),
+                question: question.question,
+                options: question
+                    .options
+                    .into_iter()
+                    .enumerate()
+                    .map(|(option_index, option)| ChatUserInputOption {
+                        option_code: format!("OPTION-{id}-{index}-{option_index}"),
+                        label: option.label,
+                        description: option.description,
+                    })
+                    .chain([
+                        ChatUserInputOption {
+                            option_code: format!("OTHER-{id}-{index}"),
+                            label: "Other".into(),
+                            description: Some("Provide a custom answer.".into()),
+                        },
+                        ChatUserInputOption {
+                            option_code: format!("SKIP-{id}-{index}"),
+                            label: "Skip".into(),
+                            description: Some("Skip this question.".into()),
+                        },
+                    ])
+                    .collect(),
+            })
+            .collect::<Vec<_>>();
+        if questions.is_empty() {
+            return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                "chat.ask_user returned no questions".into(),
+            )));
+        }
+        let request = ChatUserInputRequest {
+            request_code: format!("INPUT-{id}"),
+            session_code: session_code.to_string(),
+            run_code: run.run_code.clone(),
+            assistant_message_code: Some(assistant_message.message_code.clone()),
+            intro: raw.intro,
+            questions,
+            answers: None,
+            model_code: Some(run.model_code.clone()),
+            reasoning_effort: run.reasoning_effort,
+            status: ChatUserInputRequestStatus::Pending,
+            requested_at: current_timestamp(),
+            answered_at: None,
+        };
+        self.repository()
+            .create_user_input_request(&request)
+            .map_err(ChatSendError::Chat)?;
+        Ok(request)
+    }
+
+    fn prepare_session_attachments(
+        &self,
+        session: &ChatSession,
+        attachments: Vec<ChatMessageAttachment>,
+    ) -> Result<(Vec<ChatMessageAttachment>, Vec<ChatMessageAttachment>), ChatError> {
+        if attachments
+            .iter()
+            .all(|attachment| attachment.resource_code.is_none())
+        {
+            return Ok((attachments.clone(), attachments));
+        }
+        let resources = self.resources.as_ref().ok_or(ChatError::StorageFailure)?;
+        let mut persisted = Vec::with_capacity(attachments.len());
+        let mut invocation = Vec::with_capacity(attachments.len());
+        for mut attachment in attachments {
+            let Some(attachment_code) = attachment.resource_code.clone() else {
+                invocation.push(attachment.clone());
+                persisted.push(attachment);
+                continue;
+            };
+            let (record, bytes) = resources
+                .read_chat_session_attachment(
+                    &session.workspace_code,
+                    &session.session_code,
+                    &attachment_code,
+                )
+                .map_err(chat_error_from_resource)?;
+            apply_attachment_record(&mut attachment, &record);
+            let mut agent_attachment = attachment.clone();
+            hydrate_attachment_for_agent(&mut agent_attachment, &record, &bytes);
+            persisted.push(attachment);
+            invocation.push(agent_attachment);
+        }
+        Ok((persisted, invocation))
+    }
+
+    pub(super) fn create_message(
+        &self,
+        session_code: &str,
+        run_code: Option<String>,
+        role: ChatMessageRole,
+        channel: ChatMessageChannel,
+        actor: &str,
+        content: &str,
+        attachments: Vec<ChatMessageAttachment>,
+        token_usage: Option<ModelTokenUsage>,
+    ) -> Result<ChatMessage, ChatSendError> {
+        let id = self
+            .id_provider
+            .next_id()
+            .map_err(|_| ChatSendError::Chat(ChatError::StorageFailure))?
+            .value();
+        let message = ChatMessage {
+            id,
+            message_code: format!("MSG-{id}"),
+            session_code: session_code.to_string(),
+            run_code,
+            role,
+            channel,
+            actor: actor.into(),
+            content: content.into(),
+            attachments,
+            input_tokens: token_usage.map(|usage| usage.input_tokens),
+            output_tokens: token_usage.map(|usage| usage.output_tokens),
+            total_tokens: token_usage.map(|usage| usage.total_tokens),
+            created_at: current_timestamp(),
+        };
+        let mut repository = self.repository();
+        repository
+            .create_message(&message)
+            .map_err(ChatSendError::Chat)?;
+        Ok(message)
+    }
+
+    pub(super) fn repository(&self) -> std::sync::MutexGuard<'_, Box<dyn ChatRepository>> {
+        self.repository
+            .lock()
+            .expect("chat repository mutex poisoned")
+    }
+}

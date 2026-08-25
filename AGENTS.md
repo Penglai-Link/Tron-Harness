@@ -46,3 +46,4 @@ Pagable response body format:
 <!-- SQLite `CREATE TABLE IF NOT EXISTS` does not retrofit columns or foreign keys; resource schema upgrades need an applied-version ledger and an explicit compatibility path. -->
 <!-- The Knowledge Base page is backed by the RAG corpus management API because the backend has no separate knowledge-base endpoint; API mode must never fall back to the fixture catalog. -->
 <!-- `rust_coding_spec_architecture` currently fails on the gh/master baseline because of pre-existing over-limit facade and implementation files; keep new modules within its 80/600-line limits. -->
+<!-- Oversized Rust modules are split into responsibility-named include fragments when private same-module visibility must remain unchanged. -->
