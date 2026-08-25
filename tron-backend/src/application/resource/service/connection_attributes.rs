@@ -337,14 +337,19 @@ fn parse<T: DeserializeOwned>(value: &Value) -> Result<T, ResourceError> {
 }
 
 fn serde_error_field(detail: &str) -> Option<String> {
-    ["missing field \u{0060}", "unknown field \u{0060}", "missing field '", "unknown field '"]
-        .iter()
-        .find_map(|marker| {
-            let start = detail.find(marker)? + marker.len();
-            let value = &detail[start..];
-            let end = value.find(['\u{0060}', '\''])?;
-            Some(value[..end].to_string())
-        })
+    [
+        "missing field \u{0060}",
+        "unknown field \u{0060}",
+        "missing field '",
+        "unknown field '",
+    ]
+    .iter()
+    .find_map(|marker| {
+        let start = detail.find(marker)? + marker.len();
+        let value = &detail[start..];
+        let end = value.find(['\u{0060}', '\''])?;
+        Some(value[..end].to_string())
+    })
 }
 
 fn endpoints(values: Vec<EndpointAttributes>) -> Vec<ConnectionEndpoint> {

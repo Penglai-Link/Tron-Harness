@@ -21,7 +21,10 @@ pub(super) fn validate_mysql_attributes(attributes: &MysqlAttributes) -> Result<
     validate_endpoints(&attributes.endpoints, mode == "REPLICATION")?;
     match mode {
         "SINGLE" if attributes.endpoints.len() != 1 => {
-            return Err(invalid("endpoints", "SINGLE mode requires exactly one endpoint"));
+            return Err(invalid(
+                "endpoints",
+                "SINGLE mode requires exactly one endpoint",
+            ));
         }
         "REPLICATION" if attributes.endpoints.len() < 2 => {
             return Err(invalid(
@@ -157,16 +160,10 @@ pub(super) fn validate_redis_attributes(attributes: &RedisAttributes) -> Result<
             )?;
         }
         ("SENTINEL", None) => {
-            return Err(invalid(
-                "sentinel",
-                "is required for SENTINEL topology",
-            ));
+            return Err(invalid("sentinel", "is required for SENTINEL topology"));
         }
         (_, Some(_)) => {
-            return Err(invalid(
-                "sentinel",
-                "is only allowed for SENTINEL topology",
-            ));
+            return Err(invalid("sentinel", "is only allowed for SENTINEL topology"));
         }
         _ => {}
     }
@@ -203,10 +200,7 @@ pub(super) fn validate_kafka_attributes(attributes: &KafkaAttributes) -> Result<
             validate_secret_reference(&sasl.password)?;
         }
         (true, None) => {
-            return Err(invalid(
-                "sasl",
-                "is required for SASL security protocols",
-            ));
+            return Err(invalid("sasl", "is required for SASL security protocols"));
         }
         (false, Some(_)) => {
             return Err(invalid(
@@ -222,10 +216,7 @@ pub(super) fn validate_kafka_attributes(attributes: &KafkaAttributes) -> Result<
             return Err(invalid("tls", "is required for SSL security protocols"));
         }
         (false, Some(_)) => {
-            return Err(invalid(
-                "tls",
-                "is only allowed for SSL security protocols",
-            ));
+            return Err(invalid("tls", "is only allowed for SSL security protocols"));
         }
         _ => {}
     }

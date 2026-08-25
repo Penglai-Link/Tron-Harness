@@ -144,14 +144,27 @@ async fn account_avatar_is_system_scoped_replaced_and_downloadable() {
     let first_download = download_avatar(&router, &authorization).await;
     assert_eq!(first_download.status(), StatusCode::OK);
     assert_eq!(first_download.headers()[header::CONTENT_TYPE], "image/png");
-    assert_eq!(to_bytes(first_download.into_body(), usize::MAX).await.unwrap(), &b"first-avatar"[..]);
+    assert_eq!(
+        to_bytes(first_download.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+        &b"first-avatar"[..]
+    );
 
     let second = upload_avatar(&router, &authorization, "second.jpg", b"second-avatar").await;
     assert_eq!(second.status(), StatusCode::OK);
     let second_download = download_avatar(&router, &authorization).await;
     assert_eq!(second_download.status(), StatusCode::OK);
-    assert_eq!(second_download.headers()[header::CONTENT_TYPE], "image/jpeg");
-    assert_eq!(to_bytes(second_download.into_body(), usize::MAX).await.unwrap(), &b"second-avatar"[..]);
+    assert_eq!(
+        second_download.headers()[header::CONTENT_TYPE],
+        "image/jpeg"
+    );
+    assert_eq!(
+        to_bytes(second_download.into_body(), usize::MAX)
+            .await
+            .unwrap(),
+        &b"second-avatar"[..]
+    );
 
     let profile = request_with_headers(
         &router,
@@ -235,10 +248,7 @@ async fn upload_avatar(
     router.clone().oneshot(request).await.unwrap()
 }
 
-async fn download_avatar(
-    router: &axum::Router,
-    authorization: &str,
-) -> axum::response::Response {
+async fn download_avatar(router: &axum::Router, authorization: &str) -> axum::response::Response {
     let request = Request::builder()
         .method(Method::GET)
         .uri("/api/v1/account/download-avatar")

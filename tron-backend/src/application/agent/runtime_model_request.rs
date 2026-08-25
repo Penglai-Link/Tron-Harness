@@ -1,8 +1,6 @@
 use crate::{
     application::short_term_memory::{ModelRequestTranscriptFacts, PreparedModelContext},
-    domain::agent::{
-        AgentModelProtocol, AgentRunContext, EffectiveTool, ModelRequest,
-    },
+    domain::agent::{AgentModelProtocol, AgentRunContext, EffectiveTool, ModelRequest},
 };
 
 use super::runtime_helpers::hash_text;

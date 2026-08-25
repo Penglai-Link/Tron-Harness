@@ -1,7 +1,7 @@
 use axum::{
+    Json,
     http::StatusCode,
     response::{IntoResponse, Response},
-    Json,
 };
 
 use crate::{application::user::AccountError, domain::user::UserError, response::ApiResponse};

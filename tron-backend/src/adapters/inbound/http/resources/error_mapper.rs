@@ -58,7 +58,10 @@ pub fn resource_error_with_field(error: ResourceError, field: &str) -> ResourceE
             field: field.to_string(),
             reason: "must match the resource code format".to_string(),
         },
-        ResourceError::InvalidField { field: nested, reason } if !nested.is_empty() => {
+        ResourceError::InvalidField {
+            field: nested,
+            reason,
+        } if !nested.is_empty() => {
             let field = if nested == field || nested.starts_with(&format!("{field}.")) {
                 nested
             } else {

@@ -6,8 +6,8 @@ use std::{
 use crate::{
     application::short_term_memory::PreparedModelContext,
     domain::agent::{
-        AgentModelProtocol, AgentRunContext, ModelResponse, ModelTokenUsage,
-        TokenEstimateSnapshot, TokenUsageAuditSnapshot,
+        AgentModelProtocol, AgentRunContext, ModelResponse, ModelTokenUsage, TokenEstimateSnapshot,
+        TokenUsageAuditSnapshot,
     },
 };
 

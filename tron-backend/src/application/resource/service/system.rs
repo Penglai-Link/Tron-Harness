@@ -2,7 +2,7 @@ use std::io::Read;
 
 use crate::domain::{
     resource::{
-        validate_resource_code, ManagedResource, ResourceError, ResourceFileRecord, ResourceKind,
+        ManagedResource, ResourceError, ResourceFileRecord, ResourceKind, validate_resource_code,
     },
     user::UserStatus,
 };

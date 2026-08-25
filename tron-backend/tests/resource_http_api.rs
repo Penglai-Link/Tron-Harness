@@ -557,7 +557,10 @@ async fn server_create_can_defer_account_creation_to_the_account_endpoint() {
     )
     .await;
     assert_eq!(page["data"]["total"], 1);
-    assert_eq!(page["data"]["records"][0]["attributes"]["host"], "server.internal");
+    assert_eq!(
+        page["data"]["records"][0]["attributes"]["host"],
+        "server.internal"
+    );
     assert_eq!(page["data"]["records"][0]["attributes"]["port"], 22);
 }
 
