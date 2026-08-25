@@ -32,7 +32,7 @@ export function EditableTabList({
           <EditableTabTrigger key={tab.key} onClose={onClose} tab={tab} />
         ))}
         {!hideAdd ? (
-          <Button onClick={onAdd} size="icon-sm" type="button" variant="ghost">
+          <Button aria-label="Add tab" onClick={onAdd} size="icon-sm" type="button" variant="ghost">
             <Plus aria-hidden="true" />
           </Button>
         ) : null}

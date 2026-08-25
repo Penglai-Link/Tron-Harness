@@ -2,7 +2,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { EditableTabs, type EditableTab } from "./index";
+import { EditableTabs } from "./index";
+import { OperateType, type EditableTab } from "./types";
 
 const initialTabs: EditableTab[] = [
   { key: "one", label: "One", children: <p>One content</p> },
@@ -59,8 +60,30 @@ describe("EditableTabs", () => {
     fireEvent.click(screen.getAllByRole("button", { name: "Close tab" })[0]);
 
     await waitFor(() => expect(screen.getByText("Two content")).toBeTruthy());
-    expect(onEdit).toHaveBeenCalledWith("remove", { key: "one" });
+    expect(onEdit).toHaveBeenCalledWith(
+      OperateType.Remove,
+      expect.objectContaining({ key: "one" }),
+    );
     expect(onChange).toHaveBeenLastCalledWith("two");
+  });
+
+  it("closes a requested tab through the shared close flow", async () => {
+    const onEdit = vi.fn();
+    const { rerender } = render(<EditableTabs items={initialTabs} onEdit={onEdit} />);
+
+    rerender(
+      <EditableTabs
+        closeTabRequest={{ id: 1, key: "one" }}
+        items={initialTabs}
+        onEdit={onEdit}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("Two content")).toBeTruthy());
+    expect(onEdit).toHaveBeenCalledWith(
+      OperateType.Remove,
+      expect.objectContaining({ key: "one" }),
+    );
   });
 
   it("does not render a close action for a non-closable tab", () => {

@@ -65,6 +65,8 @@ export interface ChatTerminalOptions {
    * sequences and hide auxiliary terminal UI.
    */
   isInteractiveCommand?: (command: string) => boolean;
+  /** Closes the hosting terminal tab when the user enters the exit command. */
+  onExitCommand?: () => void;
   onError?: (error: Error) => void;
 }
 
@@ -197,6 +199,10 @@ export function initTerminal(options: ChatTerminalOptions) {
       onBeforeCommand: async (command) => {
         if (!command.trim()) {
           return false;
+        }
+        if (command.trim() === "exit" && normalizeOptions.onExitCommand) {
+          normalizeOptions.onExitCommand();
+          return true;
         }
         if (
           !TerminalCommandDetector.shouldTriggerAgentMode(

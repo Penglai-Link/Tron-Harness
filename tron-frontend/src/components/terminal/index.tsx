@@ -30,7 +30,11 @@ type TerminalChatContextLease = {
   release: () => void;
 };
 
-const Terminal = () => {
+interface TerminalProps {
+  onExit?: () => void;
+}
+
+const Terminal = ({ onExit }: TerminalProps) => {
   const { theme } = useTheme();
   const { currentLocale } = useLocale();
   const { selectedPrimarySpaceId, selectedSecondarySpaceId } = useWorkspaceSpaces();
@@ -173,6 +177,7 @@ const Terminal = () => {
           explain: ({ command, output }) => explainResultMessage(command, output),
           generate: generateCommandMessage,
         },
+        onExitCommand: onExit,
         terminalOptions: {
           themeTokens: {
             ansi: getTerminalAnsiTheme(currentThemeRef.current),
@@ -209,7 +214,7 @@ const Terminal = () => {
       }
       terminalChatLease.release();
     };
-  }, [acquireTerminalChatContext, workspaceCode]);
+  }, [acquireTerminalChatContext, onExit, workspaceCode]);
 
   useEffect(() => {
     currentThemeRef.current = theme;

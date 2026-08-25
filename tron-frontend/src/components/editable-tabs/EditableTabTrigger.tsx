@@ -32,8 +32,9 @@ export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
       >
         <span className="max-w-40 truncate">{tab.label}</span>
       </TabsTrigger>
-      {tab.closable ? (
+      {tab.closable !== false ? (
         <Button
+          aria-label="Close tab"
           size="icon-sm"
           variant="ghost"
           className=""

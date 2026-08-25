@@ -12,12 +12,18 @@ export interface EditableTabEditInfo {
   remainingTabs?: EditableTab[];
 }
 
+export interface EditableTabCloseRequest {
+  id: number;
+  key: string;
+}
+
 export interface EditableTabAddTriggerProps {
   onAdd: () => void;
 }
 
 export interface EditableTabsProps {
   items: readonly EditableTab[];
+  closeTabRequest?: EditableTabCloseRequest | null;
   defaultActiveKey?: string;
   createTab?: () => EditableTab | undefined;
   hideAdd?: boolean;

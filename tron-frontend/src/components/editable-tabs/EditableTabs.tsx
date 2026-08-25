@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
@@ -18,6 +18,7 @@ function getInitialActiveKey(
 
 export function EditableTabs({
   items,
+  closeTabRequest,
   defaultActiveKey,
   createTab,
   hideAdd = false,
@@ -27,6 +28,7 @@ export function EditableTabs({
   className,
   keepMounted,
 }: EditableTabsProps) {
+  const processedCloseRequestId = useRef<number | undefined>(undefined);
   const [tabs, setTabs] = useState<EditableTab[]>(() => [...items]);
   const [activeKey, setActiveKey] = useState<string | undefined>(() =>
     getInitialActiveKey(items, defaultActiveKey),
@@ -85,6 +87,15 @@ export function EditableTabs({
     },
     [activeKey, onChange, onEdit, tabs],
   );
+
+  useEffect(() => {
+    if (!closeTabRequest || closeTabRequest.id === processedCloseRequestId.current) {
+      return;
+    }
+
+    processedCloseRequestId.current = closeTabRequest.id;
+    handleClose(closeTabRequest.key);
+  }, [closeTabRequest, handleClose]);
 
   const panels = useMemo(
     () => tabs.map((tab) => ({ key: tab.key, children: tab.children })),

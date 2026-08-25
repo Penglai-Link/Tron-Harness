@@ -13,7 +13,8 @@ import {
 } from "react";
 import Terminal from "@/components/terminal";
 import {
-  EditableTabEditInfo,
+  type EditableTabCloseRequest,
+  type EditableTabEditInfo,
   OperateType,
 } from "@/components/editable-tabs/types";
 
@@ -27,17 +28,23 @@ interface IPanelProps {
 
 export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelProps) {
   const nextTabIdRef = useRef(1);
+  const nextCloseRequestIdRef = useRef(1);
   const [hasTerminal, setHasTerminal] = useState(visible);
+  const [closeTabRequest, setCloseTabRequest] = useState<EditableTabCloseRequest | null>(null);
+  const requestTabClose = useCallback((key: string) => {
+    setCloseTabRequest({ id: nextCloseRequestIdRef.current++, key });
+  }, []);
   const createTab = useCallback((): EditableTab => {
     const tabId = nextTabIdRef.current++;
+    const key = `terminal-${tabId}`;
 
     return {
-      key: `terminal-${tabId}`,
+      key,
       label: "tron",
-      children: <Terminal />,
+      children: <Terminal onExit={() => requestTabClose(key)} />,
       closable: true,
     };
-  }, []);
+  }, [requestTabClose]);
   const items = useMemo(() => (hasTerminal ? [createTab()] : []), [createTab, hasTerminal]);
   const { panelRef, panelResize } = usePanel({
     collapseThreshold: BOTTOM_PANEL_COLLAPSE_THRESHOLD,
@@ -82,6 +89,7 @@ export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelP
         onResize={panelResize}
       >
         <EditableTabs
+          closeTabRequest={closeTabRequest}
           createTab={createTab}
           defaultActiveKey={items[0]?.key}
           items={items}

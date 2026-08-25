@@ -9,13 +9,18 @@ const harness = vi.hoisted(() => {
     onResize: vi.fn(() => resizeDisposable),
     write: vi.fn(),
   };
+  let localEchoOptions: unknown;
 
-  return { promptRendered, resizeDisposable, terminal };
+  return { localEchoOptions, promptRendered, resizeDisposable, terminal };
 });
 
 vi.mock("./terminal", () => ({
   isInteractiveShellCommand: vi.fn(() => false),
   Terminal: class {
+    constructor(_container: HTMLElement, options: { localEcho?: unknown }) {
+      harness.localEchoOptions = options.localEcho;
+    }
+
     terminal = harness.terminal;
 
     dispose = vi.fn();
@@ -42,6 +47,7 @@ describe("initTerminal", () => {
     harness.resizeDisposable.dispose.mockClear();
     harness.terminal.onResize.mockClear();
     harness.terminal.write.mockClear();
+    harness.localEchoOptions = undefined;
   });
 
   it("waits for the server session directory before rendering the first prompt", () => {
@@ -77,6 +83,34 @@ describe("initTerminal", () => {
       "\r\x1b[2K/workspace/project ",
     );
     expect(harness.promptRendered).toHaveBeenCalledOnce();
+
+    terminal.dispose();
+  });
+
+  it("closes the host tab for exit without executing a shell command", async () => {
+    const onExitCommand = vi.fn();
+    const transport = {
+      cancel: vi.fn(),
+      connect: vi.fn(() => new Promise<never>(() => undefined)),
+      dispose: vi.fn(),
+      execute: vi.fn(),
+      onSessionChange: vi.fn(() => ({ dispose: vi.fn() })),
+      resize: vi.fn(),
+      write: vi.fn(),
+    };
+
+    const terminal = initTerminal({
+      el: document.createElement("div"),
+      onExitCommand,
+      transport: { terminal: transport },
+    });
+    const localEchoOptions = harness.localEchoOptions as {
+      onBeforeCommand: (command: string) => Promise<boolean>;
+    };
+
+    await expect(localEchoOptions.onBeforeCommand("  exit  ")).resolves.toBe(true);
+    expect(onExitCommand).toHaveBeenCalledOnce();
+    expect(transport.execute).not.toHaveBeenCalled();
 
     terminal.dispose();
   });
