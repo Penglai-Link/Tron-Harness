@@ -97,6 +97,35 @@ function resolveDesktopDataDir() {
   return path.join(os.homedir(), ".tron");
 }
 
+function resolveBackendLogPath(appDataDir) {
+  return path.join(appDataDir, "logs", "tron-backend.log");
+}
+
+function resolveBackendConfigPath(appDataDir, resourcesDir) {
+  const userConfigPath = path.join(appDataDir, "application.yaml");
+  if (fs.existsSync(userConfigPath)) {
+    return userConfigPath;
+  }
+
+  const bundledConfigPath = path.join(resourcesDir, "application.yaml");
+  if (!fs.existsSync(bundledConfigPath)) {
+    throw new Error(`backend application config is missing: ${bundledConfigPath}`);
+  }
+
+  try {
+    fs.copyFileSync(bundledConfigPath, userConfigPath, fs.constants.COPYFILE_EXCL);
+    if (process.platform !== "win32") {
+      fs.chmodSync(userConfigPath, 0o600);
+    }
+  } catch (error) {
+    if (error?.code !== "EEXIST") {
+      throw error;
+    }
+  }
+
+  return userConfigPath;
+}
+
 function resolveTronDatabasePath(appDataDir) {
   const legacyPath = path.join(appDataDir, "tron.sqlite");
   if (fs.existsSync(legacyPath)) {
@@ -224,6 +253,8 @@ module.exports = {
   isHttpUrl,
   loadPort,
   resolveDesktopDataDir,
+  resolveBackendLogPath,
+  resolveBackendConfigPath,
   resolveFrontendDistDir,
   resolveResourcesDir,
   resolveSidecarPath,

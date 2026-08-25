@@ -19,7 +19,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
-import { Tooltip, TooltipPopup, TooltipTrigger } from "@/components/ui/tooltip";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import {
   Field,
   InfoTooltip,
@@ -687,7 +687,7 @@ export function PromptEditorPage({
                     </Button>
                   )}
                 />
-                <TooltipPopup>{pt("hints.translationSync", "Uses the current language to translate and overwrite the other languages.")}</TooltipPopup>
+                <TooltipContent>{pt("hints.translationSync", "Uses the current language to translate and overwrite the other languages.")}</TooltipContent>
               </Tooltip>
               <Button size="lg" variant="outline" disabled={editorLocked} onClick={() => navigate(cancelHref)}>{pt("actions.cancel", "Cancel")}</Button>
               <Button

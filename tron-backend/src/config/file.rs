@@ -1,13 +1,16 @@
 use serde::Deserialize;
-use std::{fs, path::Path};
+use std::{
+    env, fs,
+    path::{Path, PathBuf},
+};
 
 use super::{
-    AppConfig, AuthConfig, ConfigError, DEFAULT_APPLICATION_CONFIG_PATH,
-    DEFAULT_AUTH_GITHUB_AUTHORIZE_URL, DEFAULT_AUTH_GITHUB_EMAILS_API_URL,
-    DEFAULT_AUTH_GITHUB_NAME, DEFAULT_AUTH_GITHUB_SCOPE, DEFAULT_AUTH_GITHUB_TOKEN_URL,
-    DEFAULT_AUTH_GITHUB_USER_API_URL, DEFAULT_AUTH_LDAP_NAME, GitHubOAuthConfig,
-    HttpClientProfileConfig, HttpClientProfilesConfig, LdapConfig, SystemAgentConfig,
-    mineru::MineruFileConfig, parsing::required_config_string, paths::normalize_storage_path,
+    AppConfig, AuthConfig, ConfigError, DEFAULT_AUTH_GITHUB_AUTHORIZE_URL,
+    DEFAULT_AUTH_GITHUB_EMAILS_API_URL, DEFAULT_AUTH_GITHUB_NAME, DEFAULT_AUTH_GITHUB_SCOPE,
+    DEFAULT_AUTH_GITHUB_TOKEN_URL, DEFAULT_AUTH_GITHUB_USER_API_URL, DEFAULT_AUTH_LDAP_NAME,
+    GitHubOAuthConfig, HttpClientProfileConfig, HttpClientProfilesConfig, LdapConfig,
+    SystemAgentConfig, mineru::MineruFileConfig, parsing::required_config_string,
+    paths::default_application_config_path_from_home, paths::normalize_storage_path,
     resource::ResourceFileConfig, variable_crypto,
 };
 
@@ -21,7 +24,12 @@ use file_short_term_memory::ShortTermMemoryFileConfig;
 
 impl AppConfig {
     pub fn from_application_yaml() -> Result<Self, ConfigError> {
-        Self::from_yaml_file(DEFAULT_APPLICATION_CONFIG_PATH)
+        let path = env::var("TRON_BACKEND_APPLICATION_CONFIG_PATH")
+            .ok()
+            .filter(|value| !value.trim().is_empty())
+            .map(PathBuf::from)
+            .unwrap_or_else(|| PathBuf::from(default_application_config_path_from_home()));
+        Self::from_yaml_file(path)
     }
 
     pub fn from_yaml_file(path: impl AsRef<Path>) -> Result<Self, ConfigError> {

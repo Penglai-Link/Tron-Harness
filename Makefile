@@ -216,7 +216,7 @@ help:
 	@echo "  make web-clean    Remove standalone and integrated frontend build artifacts"
 	@echo ""
 	@echo "Desktop commands:"
-	@echo "  make desktop-build     Build desktop package artifacts and sidecar binary"
+	@echo "  make desktop-build     Build desktop installer packages and sidecar binary"
 	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
 	@echo "  make desktop-clean     Remove desktop build artifacts"
 	@echo ""
@@ -350,25 +350,27 @@ desktop-build: desktop-clean web-build
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
+	$(call COPY_FILE,$(BACKEND_DIR)/application.yaml,$(ELECTRON_DIR)/resources/application.yaml)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	$(call ASSERT_FILE,$(BACKEND_RELEASE_PATH))
 	$(call COPY_FILE,$(BACKEND_RELEASE_PATH),$(DESKTOP_SIDECAR_PATH))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(NPM) install))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(NPM) run -s ensure-electron))
-	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) run -s build)
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) run -s package)
 else
 desktop-build: desktop-clean web-build
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
+	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	test -f $(BACKEND_RELEASE_PATH)
 	cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)
 	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) install
 	cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) run -s ensure-electron
-	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s build
+	cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s package
 endif
 
 .PHONY: desktop-dev
@@ -380,6 +382,7 @@ desktop-clean:
 	$(call REMOVE,$(ELECTRON_DIR)/dist)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/binaries)
+	$(call REMOVE,$(ELECTRON_DIR)/node_modules)
 
 .PHONY: skill-memory-dreaming-test
 skill-memory-dreaming-test:

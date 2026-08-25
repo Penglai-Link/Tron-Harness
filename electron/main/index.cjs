@@ -1,5 +1,6 @@
 const fs = require("node:fs");
 const path = require("node:path");
+const readline = require("node:readline");
 const { spawn } = require("node:child_process");
 const { app, BrowserWindow, WebContentsView, ipcMain, shell } = require("electron");
 
@@ -10,6 +11,8 @@ const {
   findFreePort,
   isHttpUrl,
   loadPort,
+  resolveBackendConfigPath,
+  resolveBackendLogPath,
   resolveDesktopDataDir,
   resolveFrontendDistDir,
   resolveResourcesDir,
@@ -20,6 +23,7 @@ const {
 } = require("./helpers.cjs");
 
 const MAIN_WINDOW_LABEL = "tron-main";
+const MIN_STARTUP_SCREEN_MS = 1200;
 const ALLOWED_INJECTION_EVENTS = new Set([
   "tron:frame-ready",
   "tron:dom-event",
@@ -39,6 +43,7 @@ const state = {
   backendProcess: null,
   backendReady: false,
   databasePath: "",
+  backendLogPath: "",
   frontendDistDir: "",
   graphPath: "",
   injectionEnabled: false,
@@ -57,7 +62,7 @@ function buildInjectionScript(pageId) {
 function createMainWindow() {
   const window = new BrowserWindow({
     height: 920,
-    show: true,
+    show: false,
     title: "Tron",
     width: 1440,
     webPreferences: {
@@ -78,12 +83,174 @@ function createMainWindow() {
   return window;
 }
 
-function showStartupMessage(message) {
+async function showStartupMessage(message) {
   if (!state.mainWindow) {
     return;
   }
-  const html = `<pre style="padding:24px;font-family:monospace;white-space:pre-wrap;">${escapeHtml(message)}</pre>`;
-  void state.mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+  const html = startupPageHtml(message);
+  await state.mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
+}
+
+async function keepStartupScreenVisible(startedAt) {
+  const remainingMs = MIN_STARTUP_SCREEN_MS - (Date.now() - startedAt);
+  if (remainingMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, remainingMs));
+  }
+}
+
+function startupPageHtml(message) {
+  const safeMessage = escapeHtml(message).replace(/\r?\n/g, "<br />");
+  return `<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tron</title>
+    <style>
+      :root {
+        color-scheme: light;
+        font-family: Inter, ui-sans-serif, -apple-system, BlinkMacSystemFont, "SF Pro Display", sans-serif;
+        background: #f3f5f8;
+        color: #101827;
+      }
+
+      * { box-sizing: border-box; }
+
+      html, body { height: 100%; margin: 0; }
+
+      body {
+        display: grid;
+        min-height: 100%;
+        place-items: center;
+        padding: 32px;
+        overflow: hidden;
+        background:
+          radial-gradient(circle at center, rgba(255, 255, 255, 0.1) 0%, rgba(247, 250, 252, 0.48) 52%, rgba(238, 243, 248, 0.82) 100%),
+          #eef3f8;
+      }
+
+      body::before {
+        position: fixed;
+        inset: 0;
+        background-image: radial-gradient(rgba(142, 165, 214, 0.12) 1px, transparent 1px);
+        background-size: 8px 8px;
+        content: "";
+        mask-image: radial-gradient(circle at center, black, transparent 76%);
+        pointer-events: none;
+      }
+
+      .status {
+        position: relative;
+        width: min(100%, 420px);
+        padding: 32px;
+        border: 1px solid rgba(16, 24, 39, 0.08);
+        border-radius: 28px;
+        background: rgba(255, 255, 255, 0.72);
+        box-shadow: 0 18px 48px rgba(46, 54, 79, 0.08);
+        animation: appear 420ms cubic-bezier(0.2, 0.8, 0.2, 1) both;
+      }
+
+      .status-kicker {
+        color: #8992a2;
+        font-size: 10px;
+        font-weight: 750;
+        letter-spacing: 0.18em;
+      }
+
+      .status-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 20px;
+        color: #101827;
+        font-size: 14px;
+      }
+
+      .status-dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        background: #6f60e8;
+        box-shadow: 0 0 0 5px rgba(111, 96, 232, 0.12);
+        animation: pulse 1.8s ease-in-out infinite;
+      }
+
+      .status-message {
+        max-height: 86px;
+        margin-top: 14px;
+        overflow: auto;
+        color: #687386;
+        font-family: "SF Mono", "Roboto Mono", monospace;
+        font-size: 11px;
+        line-height: 1.65;
+        white-space: normal;
+      }
+
+      .progress {
+        position: relative;
+        height: 4px;
+        margin-top: 24px;
+        overflow: hidden;
+        border-radius: 10px;
+        background: rgba(16, 24, 39, 0.09);
+      }
+
+      .progress::after {
+        position: absolute;
+        inset: 0;
+        width: 42%;
+        border-radius: inherit;
+        background: linear-gradient(90deg, transparent, #6f60e8, #9ff1ff, transparent);
+        content: "";
+        animation: sweep 2.1s ease-in-out infinite;
+      }
+
+      .meta {
+        display: grid;
+        gap: 8px;
+        margin-top: 26px;
+        color: #8992a2;
+        font-size: 11px;
+      }
+
+      .meta-row {
+        display: flex;
+        justify-content: space-between;
+        gap: 20px;
+      }
+
+      .meta code {
+        color: #687386;
+        font-family: "SF Mono", "Roboto Mono", monospace;
+        font-size: 10px;
+      }
+
+      @keyframes appear { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
+      @keyframes pulse { 0%, 100% { opacity: 0.45; transform: scale(0.82); } 50% { opacity: 1; transform: scale(1); } }
+      @keyframes sweep { 0% { transform: translateX(-130%); } 60%, 100% { transform: translateX(310%); } }
+
+      @media (max-width: 760px) {
+        body { padding: 24px; }
+        .status { padding: 24px; }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; }
+      }
+    </style>
+  </head>
+  <body>
+    <section class="status" aria-live="polite">
+      <div class="status-row"><span class="status-dot"></span><strong>Connecting to Tron backend</strong></div>
+      <div class="status-message">${safeMessage}</div>
+      <div class="progress" aria-hidden="true"></div>
+      <div class="meta">
+        <div class="meta-row"><span>Data directory</span><code>~/.tron</code></div>
+        <div class="meta-row"><span>Backend logs</span><code>~/.tron/logs/</code></div>
+      </div>
+    </section>
+  </body>
+</html>`;
 }
 
 function escapeHtml(value) {
@@ -95,19 +262,55 @@ function escapeHtml(value) {
 
 function startBackend(resourcesDir) {
   const sidecarPath = resolveSidecarPath(resourcesDir);
+  const appDataDir = path.dirname(state.databasePath);
+  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir);
+  const logPath = resolveBackendLogPath(path.dirname(state.databasePath));
+  fs.mkdirSync(path.dirname(logPath), { recursive: true });
+  const logStream = fs.createWriteStream(logPath, { flags: "a" });
+  logStream.on("error", (error) => {
+    console.error(`tron-backend log stream failed: ${describeError(error)}`);
+  });
+  const writeLog = (source, message) => {
+    const line = `[${new Date().toISOString()}] [${source}] ${String(message)}`;
+    if (!logStream.destroyed && !logStream.writableEnded) {
+      logStream.write(`${line}\n`);
+    }
+    if (isDevMode()) {
+      const output = source === "stderr" ? process.stderr : process.stdout;
+      output.write(`[tron-backend] ${line}\n`);
+    }
+  };
+
+  writeLog("lifecycle", `using application config: ${configPath}`);
+  writeLog("lifecycle", `starting sidecar: ${sidecarPath}`);
   const child = spawn(sidecarPath, [], {
     env: {
       ...process.env,
       TRON_BACKEND_DATABASE_URL: state.databasePath,
+      TRON_BACKEND_APPLICATION_CONFIG_PATH: configPath,
       TRON_BACKEND_FRONTEND_DIST_DIR: state.frontendDistDir,
       TRON_BACKEND_GRAPH_STORAGE_PATH: state.graphPath,
       TRON_BACKEND_PORT: String(state.backendPort),
       TRON_AUTH_GITHUB_REDIRECT_URI: buildGitHubOAuthRedirectUri(state.backendUrl)
     },
-    stdio: ["ignore", "ignore", "inherit"]
+    cwd: appDataDir,
+    stdio: ["ignore", "pipe", "pipe"]
+  });
+
+  const stdout = readline.createInterface({ input: child.stdout });
+  const stderr = readline.createInterface({ input: child.stderr });
+  stdout.on("line", (line) => writeLog("stdout", line));
+  stderr.on("line", (line) => writeLog("stderr", line));
+  child.once("error", (error) => writeLog("lifecycle", `process error: ${describeError(error)}`));
+  child.once("close", (code, signal) => {
+    writeLog("lifecycle", `exited with code=${code ?? "null"} signal=${signal ?? "null"}`);
+    stdout.close();
+    stderr.close();
+    logStream.end();
   });
 
   state.backendProcess = child;
+  state.backendLogPath = logPath;
   child.once("exit", () => {
     if (state.backendProcess === child) {
       state.backendProcess = null;
@@ -136,26 +339,30 @@ async function bootstrap() {
   state.backendPort = await findFreePort(loadPort());
   state.backendUrl = `http://${HOST}:${state.backendPort}`;
   state.databasePath = resolveTronDatabasePath(appDataDir);
+  state.backendLogPath = resolveBackendLogPath(appDataDir);
   state.graphPath = path.join(appDataDir, "tron.graph.grafeo");
   state.frontendDistDir = resolveFrontendDistDir(resourcesDir);
 
   const mainWindow = createMainWindow();
-  showStartupMessage("Backend starting...");
+  await showStartupMessage("Backend starting...");
+  mainWindow.show();
+  const startupScreenStartedAt = Date.now();
 
   try {
     startBackend(resourcesDir);
   } catch (error) {
-    showStartupMessage(`Backend failed to start. ${describeError(error)}`);
+    await showStartupMessage(`Backend failed to start. ${describeError(error)}\nLogs: ${state.backendLogPath}`);
     return;
   }
 
   state.backendReady = await waitBackendReady(state.backendUrl);
   if (!state.backendReady) {
     stopBackend();
-    showStartupMessage("Backend failed to start in time. Your data directory is ~/.tron. Check logs and retry.");
+    await showStartupMessage(`Backend failed to start in time. Check logs at ${state.backendLogPath} and retry.`);
     return;
   }
 
+  await keepStartupScreenVisible(startupScreenStartedAt);
   await mainWindow.loadURL(state.backendUrl);
   if (isDevMode()) {
     mainWindow.webContents.openDevTools({ mode: "detach" });

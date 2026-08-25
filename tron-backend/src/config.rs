@@ -17,9 +17,10 @@ pub use self::error::ConfigError;
 pub use self::mineru::MineruConfig;
 use self::parsing::{env_port_override, ldap_env_override};
 use self::paths::{
-    default_database_url_from_home, default_graph_storage_path_from_home,
-    default_resource_storage_root_from_home, default_skills_registry_root_from_home,
-    env_database_url_override, env_graph_storage_path_override, normalize_storage_path,
+    default_application_config_path_from_home, default_database_url_from_home,
+    default_graph_storage_path_from_home, default_resource_storage_root_from_home,
+    default_skills_registry_root_from_home, env_database_url_override,
+    env_graph_storage_path_override, normalize_storage_path,
 };
 pub use self::resource::{
     LocalResourceStorageProfile, ResourceConfig, ResourceLimits, ResourceStorageConfig,
@@ -44,8 +45,6 @@ const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
 const DEFAULT_AUTH_LDAP_NAME: &str = "LDAP";
 const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
-pub const DEFAULT_APPLICATION_CONFIG_PATH: &str =
-    concat!(env!("CARGO_MANIFEST_DIR"), "/application.yaml");
 const ENV_BACKEND_PORT: &str = "TRON_BACKEND_PORT";
 const ENV_LDAP_URL: &str = "LDAP_URL";
 const ENV_LDAP_BIND_DN: &str = "LDAP_BIND_DN";
@@ -156,7 +155,7 @@ pub struct LdapConfig {
 impl AppConfig {
     fn runtime_defaults() -> Self {
         Self {
-            application_config_path: DEFAULT_APPLICATION_CONFIG_PATH.into(),
+            application_config_path: default_application_config_path_from_home(),
             bind_address: DEFAULT_BIND_ADDRESS.into(),
             port: DEFAULT_PORT,
             database_url: default_database_url_from_home(),

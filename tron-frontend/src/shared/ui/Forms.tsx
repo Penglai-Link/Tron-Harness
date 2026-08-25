@@ -44,14 +44,15 @@ export function Field({ children, className, error, hint, label }: FieldProps) {
 }
 
 export const TextInput = forwardRef(function TextInput(
-  { className, ...props }: InputHTMLAttributes<HTMLInputElement>,
+  { className, size, ...props }: InputHTMLAttributes<HTMLInputElement>,
   ref: ForwardedRef<HTMLInputElement>,
 ) {
   return (
     <Input
-      size={props.size || 'lg'}
+      size={size}
       ref={ref}
       className={cn(
+        "h-9 sm:h-8.5",
         disabledControlClasses,
         className,
       )}

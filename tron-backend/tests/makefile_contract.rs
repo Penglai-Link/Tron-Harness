@@ -224,17 +224,26 @@ fn desktop_build_copies_only_current_platform_sidecar() {
         "BACKEND_RELEASE_BINARY := tron-backend$(HOST_EXE_SUFFIX)",
         "BACKEND_RELEASE_PATH := $(BACKEND_DIR)/target/release/$(BACKEND_RELEASE_BINARY)",
         "DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BINARY)",
+        "cp -- \"$(BACKEND_DIR)/application.yaml\" \"$(ELECTRON_DIR)/resources/application.yaml\"",
         "ELECTRON_INSTALL_ENV = $(if $(strip $(ELECTRON_MIRROR)),ELECTRON_MIRROR=$(ELECTRON_MIRROR))",
         "test -f $(BACKEND_RELEASE_PATH)",
         "cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)",
         "cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) install",
         "cd $(ELECTRON_DIR) && $(ELECTRON_INSTALL_ENV) $(ELECTRON_NPM) run -s ensure-electron",
+        "cd $(ELECTRON_DIR) && $(ELECTRON_NPM) run -s package",
     ] {
         assert!(
             makefile.contains(required),
             "desktop-build must use platform-specific sidecar handling via `{required}`",
         );
     }
+
+    let config_source = fs::read_to_string(repo_root.join("tron-backend/src/config/file.rs"))
+        .expect("backend config file source should be readable");
+    assert!(
+        config_source.contains("TRON_BACKEND_APPLICATION_CONFIG_PATH"),
+        "packaged backend must accept an explicit application config path",
+    );
 
     assert!(
         !makefile.contains(

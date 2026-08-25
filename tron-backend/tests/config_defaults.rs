@@ -12,7 +12,8 @@ static TEMP_CONFIG_COUNTER: AtomicU64 = AtomicU64::new(1);
 
 #[test]
 fn application_yaml_uses_home_storage_defaults() {
-    let config = AppConfig::from_application_yaml().expect("application yaml should load");
+    let config_path = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("application.yaml");
+    let config = AppConfig::from_yaml_file(config_path).expect("application yaml should load");
 
     assert_eq!(
         PathBuf::from(config.database_url),

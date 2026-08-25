@@ -1,6 +1,7 @@
 use std::{env, path::PathBuf};
 
 const DEFAULT_DATABASE_URL_SUFFIX: &str = ".tron/tron.sqlite3";
+const DEFAULT_APPLICATION_CONFIG_PATH_SUFFIX: &str = ".tron/application.yaml";
 const DEFAULT_GRAPH_STORAGE_PATH_SUFFIX: &str = ".tron/tron.graph.grafeo";
 const DEFAULT_SKILLS_REGISTRY_ROOT_SUFFIX: &str = ".tron/skills-registry";
 const DEFAULT_RESOURCE_STORAGE_ROOT_SUFFIX: &str = ".tron/resources";
@@ -9,6 +10,13 @@ const ENV_GRAPH_STORAGE_PATH: &str = "TRON_BACKEND_GRAPH_STORAGE_PATH";
 
 pub(super) fn default_database_url_from_home() -> String {
     default_path_from_home(env::var("HOME").ok(), DEFAULT_DATABASE_URL_SUFFIX)
+}
+
+pub(super) fn default_application_config_path_from_home() -> String {
+    default_path_from_home(
+        env::var("HOME").ok(),
+        DEFAULT_APPLICATION_CONFIG_PATH_SUFFIX,
+    )
 }
 
 pub(super) fn default_graph_storage_path_from_home() -> String {
@@ -63,4 +71,19 @@ fn default_path_from_home(home: Option<String>, suffix: &str) -> String {
         .unwrap_or_else(|| PathBuf::from(suffix))
         .display()
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::default_application_config_path_from_home;
+    use std::{env, path::PathBuf};
+
+    #[test]
+    fn application_config_defaults_to_home_tron_directory() {
+        let expected = PathBuf::from(env::var("HOME").expect("HOME should be set"))
+            .join(".tron/application.yaml")
+            .display()
+            .to_string();
+        assert_eq!(default_application_config_path_from_home(), expected);
+    }
 }
