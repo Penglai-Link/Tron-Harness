@@ -252,7 +252,13 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
     },
     answerUserInputRequestStream(session, requestCode, input: ChatUserInputAnswerInput, handlers, signal) {
       return transport.streamSse<ChatSendResult>({
-        body: input,
+        body: {
+          resume: input.resume ?? [{
+            interruptId: requestCode,
+            status: "resolved",
+            payload: { answers: input.answers },
+          }],
+        },
         handlers: {
           onFrame: (eventName, payload) => {
             const type = String(payload.type ?? eventName).toUpperCase();

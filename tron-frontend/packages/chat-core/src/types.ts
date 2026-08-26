@@ -155,8 +155,15 @@ export interface ChatUserInputRequest {
   answeredAt?: number | null;
 }
 
+export interface ChatAguiResumeEntry {
+  interruptId: string;
+  status: "resolved" | "cancelled";
+  payload: unknown;
+}
+
 export interface ChatUserInputAnswerInput {
   answers: ChatUserInputAnswer[];
+  resume?: ChatAguiResumeEntry[];
 }
 
 export interface ChatUserInputLabels {
@@ -165,6 +172,7 @@ export interface ChatUserInputLabels {
   back: string;
   next: string;
   continue: string;
+  confirm?: string;
   continuing: string;
   otherOptionLabel: string;
   otherOptionDescription: string;
@@ -181,6 +189,10 @@ export interface ChatWorkRailLabels {
   thinking: string;
   workedFor: (duration: string) => string;
   workingFor: (duration: string) => string;
+  askingQuestions?: (count: number) => string;
+  askedQuestions?: (count: number) => string;
+  waitingForAnswer?: string;
+  skipped?: string;
 }
 
 export interface SendChatMessageInput {
@@ -223,6 +235,13 @@ export interface ChatActiveRun {
   state: ChatActiveRunState;
 }
 
+export interface ChatRuntimeRunState {
+  active: boolean;
+  runCode: string;
+  sessionCode: string;
+  supportsSteer: boolean;
+}
+
 export interface ChatActiveRunResult {
   sessionCode: string;
   activeRun: ChatActiveRun | null;
@@ -247,6 +266,19 @@ export interface ChatAguiEvent {
   outcome: string;
   metadata: Record<string, string>;
 }
+
+export interface ChatAguiInterrupt {
+  id: string;
+  reason: string;
+  message?: string;
+  toolCallId?: string;
+  responseSchema?: unknown;
+  metadata?: Record<string, unknown>;
+}
+
+export type ChatAguiRunOutcome =
+  | { type: "success" }
+  | { type: "interrupt"; interrupts: ChatAguiInterrupt[] };
 
 export type ChatAguiStreamEventType =
   | "RUN_STARTED"
@@ -287,6 +319,7 @@ export interface ChatAguiStreamEvent {
   toolCallArgs?: unknown;
   parentMessageId?: string;
   timestamp?: number;
+  outcome?: ChatAguiRunOutcome | null;
   result?: ChatSendResult;
   [key: string]: unknown;
 }

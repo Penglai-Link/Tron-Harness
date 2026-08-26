@@ -33,6 +33,17 @@ pub(super) fn publish_mcp_runtime_warnings(
         publish_mcp_runtime_tool_event(
             event_bus,
             context,
+            "agent.tool.selected",
+            BusOutcome::Progress,
+            Some("mcp_warning"),
+            &tool_call_id,
+            tool_name,
+            Some(&tool_args),
+            None,
+        );
+        publish_mcp_runtime_tool_event(
+            event_bus,
+            context,
             "agent.tool.started",
             BusOutcome::Started,
             Some("mcp_warning"),

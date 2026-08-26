@@ -433,7 +433,12 @@ async fn agui_protocol_tool_events_keep_correlation_fields() {
         json!("RUN-TOOL-AGUI-tool-1")
     );
     assert_eq!(
-        event("TOOL_CALL_START").data["toolCallArgs"]["command"],
+        serde_json::from_str::<Value>(
+            event("TOOL_CALL_ARGS").data["delta"]
+                .as_str()
+                .expect("tool arguments should be encoded as an AG-UI delta"),
+        )
+        .expect("tool arguments delta should be valid JSON")["command"],
         json!("cargo test")
     );
     let activity_events = events

@@ -333,7 +333,11 @@ describe("createOpenApiChatAdapter", () => {
     );
     expect(headers.get("X-Tron-Signature")).toMatch(/^[a-f0-9]{64}$/);
     expect(JSON.parse(String(init?.body))).toEqual({
-      answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }],
+      resume: [{
+        interruptId: "INPUT-1",
+        status: "resolved",
+        payload: { answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }] },
+      }],
     });
   });
 

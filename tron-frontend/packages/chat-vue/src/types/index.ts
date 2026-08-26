@@ -9,6 +9,7 @@ import type {
   ChatMessageAttachment,
   ChatQueuedSubmission,
   ChatRunningSubmitMode,
+  ChatRuntimeRunState,
   ChatSession,
   ChatSubmitMode,
   ChatUserInputAnswer,
@@ -20,6 +21,8 @@ import type {
 export interface TronChatPanelProps {
   attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   attachmentLabels?: ChatAttachmentLabels;
+  autoFocusComposer?: boolean;
+  composerHeader?: unknown;
   createSessionLabel?: string;
   currentUserDisplayName?: string;
   debugOptions?: ChatDebugOptions;
@@ -31,6 +34,7 @@ export interface TronChatPanelProps {
   inputPlaceholder?: string;
   liveAguiAnchorMessageCodes?: Record<string, string>;
   liveAguiEvents?: ChatAguiStreamEvent[];
+  liveAguiPendingAnchorMessageCode?: string;
   liveAguiPending?: boolean;
   messages: ChatMessage[];
   onCreateSession?: () => void;
@@ -59,6 +63,7 @@ export interface TronChatPanelProps {
   title?: string;
   userInputLabels?: ChatUserInputLabels;
   workRailLabels?: ChatWorkRailLabels;
+  userInputRequests?: ChatUserInputRequest[];
   userInputRequest?: ChatUserInputRequest | null;
   userInputAnswerPending?: boolean;
   onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;
@@ -68,15 +73,35 @@ export type ToastLikeCallback = (message: string, title?: string) => void;
 
 export interface TronChatRuntimeWindowProps {
   adapter?: ChatAdapter;
+  attachmentLabels?: ChatAttachmentLabels;
+  autoFocusComposer?: boolean;
   config: ChatClientConfig;
+  composerHeader?: unknown;
   currentUserDisplayName?: string;
+  draft?: string;
   debugOptions?: ChatDebugOptions;
+  emptyDescription?: string;
+  emptyTitle?: string;
   floatingSubtitle?: string;
   floatingTitle?: string;
+  formatAnnotationCount?: (count: number) => string;
+  footerAddon?: unknown;
   initialSession?: ChatSession | null;
+  onCreateSession?: () => void;
+  onDraftChange?: (draft: string) => void;
   onError?: ToastLikeCallback;
   onInfo?: ToastLikeCallback;
+  onPendingAttachmentsChange?: (attachments: ChatMessageAttachment[]) => void;
+  onRunStateChange?: (state: ChatRuntimeRunState) => void;
   onSessionChange?: (session: ChatSession | null) => void;
+  pendingAttachments?: ChatMessageAttachment[];
+  createSendInput?: (
+    session: ChatSession,
+    content: string,
+    attachments: ChatMessageAttachment[],
+  ) => import("@tron/chat-core").SendChatMessageInput | null;
+  showAttachmentControl?: boolean;
+  showHeader?: boolean;
   onWindowStateChange?: (state: ChatFloatingState) => void;
   windowState?: ChatFloatingState;
 }

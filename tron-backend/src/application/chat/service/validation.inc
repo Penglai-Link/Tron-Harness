@@ -149,6 +149,23 @@ fn agent_prompt_for_content(content: &str) -> String {
     }
 }
 
+fn resume_prompt(resume: &[ChatResumeEntry]) -> String {
+    let payload = resume
+        .iter()
+        .map(|entry| {
+            json!({
+                "interruptId": entry.interrupt_id,
+                "status": entry.status,
+                "payload": entry.payload,
+            })
+        })
+        .collect::<Vec<_>>();
+    format!(
+        "Resume the interrupted task using these user responses: {}",
+        json!(payload)
+    )
+}
+
 fn chat_error_from_resource(error: ResourceError) -> ChatError {
     match error {
         ResourceError::NotFound | ResourceError::MissingBinaryObject => {
@@ -291,38 +308,4 @@ fn validate_user_input_answers(
         }
     }
     Ok(())
-}
-
-fn format_user_input_answer_summary(
-    questions: &[ChatUserInputQuestion],
-    answers: &[ChatUserInputAnswer],
-) -> String {
-    let lines = questions
-        .iter()
-        .filter_map(|question| {
-            let answer = answers
-                .iter()
-                .find(|answer| answer.question_code == question.question_code)?;
-            let value = match answer.answer_kind {
-                ChatUserInputAnswerKind::Option => question
-                    .options
-                    .iter()
-                    .find(|option| {
-                        answer.option_code.as_deref() == Some(option.option_code.as_str())
-                    })
-                    .map(|option| option.label.clone())
-                    .unwrap_or_else(|| "(invalid option)".into()),
-                ChatUserInputAnswerKind::Other => answer
-                    .other_text
-                    .clone()
-                    .unwrap_or_else(|| "(empty other answer)".into()),
-                ChatUserInputAnswerKind::Skipped => "Skipped".into(),
-            };
-            Some(format!("{}: {}", question.question, value))
-        })
-        .collect::<Vec<_>>();
-    format!(
-        "The user answered the questions you asked:\n{}\nContinue the task using these answers.",
-        lines.join("\n")
-    )
 }

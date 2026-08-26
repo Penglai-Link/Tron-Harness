@@ -60,7 +60,7 @@ impl ChatService {
         let content = normalized_optional(command.content).unwrap_or_default();
         let attachments =
             normalize_chat_attachments(command.attachments).map_err(ChatSendError::Chat)?;
-        if content.is_empty() && attachments.is_empty() {
+        if content.is_empty() && attachments.is_empty() && command.resume.is_empty() {
             return Err(ChatSendError::Chat(ChatError::MessageRequired));
         }
         let session = self
@@ -70,7 +70,11 @@ impl ChatService {
         let (attachments, invocation_attachments) = self
             .prepare_session_attachments(&session, attachments)
             .map_err(ChatSendError::Chat)?;
-        let prompt = agent_prompt_for_content(&content);
+        let prompt = if command.resume.is_empty() {
+            agent_prompt_for_content(&content)
+        } else {
+            resume_prompt(&command.resume)
+        };
         let should_generate_title = should_generate_manual_session_title(&session);
         let workspace_code = session.workspace_code.clone();
         let channel = if command
@@ -102,16 +106,20 @@ impl ChatService {
             .repository()
             .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)
             .map_err(ChatSendError::Chat)?;
-        let user_message = self.create_message(
-            session_code,
-            None,
-            ChatMessageRole::User,
-            channel,
-            "User",
-            &content,
-            attachments.clone(),
-            None,
-        )?;
+        let user_message = if content.is_empty() && attachments.is_empty() {
+            None
+        } else {
+            Some(self.create_message(
+                session_code,
+                None,
+                ChatMessageRole::User,
+                channel,
+                "User",
+                &content,
+                attachments.clone(),
+                None,
+            )?)
+        };
         if should_generate_title
             && !content.is_empty()
             && let Some(llm_runtime) = llm_runtime
@@ -197,7 +205,8 @@ impl ChatService {
             Vec::new(),
             run.token_usage,
         )?;
-        let mut result_messages = vec![user_message, assistant_message.clone()];
+        let mut result_messages = user_message.into_iter().collect::<Vec<_>>();
+        result_messages.push(assistant_message.clone());
         let mut user_input_request = if let Some(raw) = user_input_request {
             Some(self.persist_user_input_request(session_code, &run, &assistant_message, raw)?)
         } else {
@@ -289,18 +298,6 @@ impl ChatService {
                         label: option.label,
                         description: option.description,
                     })
-                    .chain([
-                        ChatUserInputOption {
-                            option_code: format!("OTHER-{id}-{index}"),
-                            label: "Other".into(),
-                            description: Some("Provide a custom answer.".into()),
-                        },
-                        ChatUserInputOption {
-                            option_code: format!("SKIP-{id}-{index}"),
-                            label: "Skip".into(),
-                            description: Some("Skip this question.".into()),
-                        },
-                    ])
                     .collect(),
             })
             .collect::<Vec<_>>();

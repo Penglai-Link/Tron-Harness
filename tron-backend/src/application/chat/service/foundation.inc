@@ -16,7 +16,8 @@ use crate::{
             AgentInvocationService, AgentSteerInput, ModelStreamSink,
         },
         chat::{
-            ChatRepository, ChatSendResult, ChatSessionAttachmentUploadCommand, ChatSessionQuery,
+            ChatRepository, ChatResumeEntry, ChatSendResult, ChatSessionAttachmentUploadCommand,
+            ChatSessionQuery,
             ChatSteerError, ChatSteerResult, CreateChatSessionCommand, SendChatMessageCommand,
             SteerChatMessageCommand, UpdateChatSessionCommand,
         },

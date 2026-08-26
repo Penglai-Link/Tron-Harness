@@ -4,6 +4,7 @@ import {
   aguiReasoningEffort,
   aguiWorkRailsByMessageCode,
   buildAguiUserWorkCards,
+  buildTranscriptPresentation,
   isRecentPendingUserTurn,
   openAguiProtocolRunCodes,
 } from "./transcript";
@@ -227,9 +228,52 @@ describe("aguiWorkRailsByMessageCode", () => {
     expect(rails.get("MSG-USER")).toHaveLength(1);
     expect(rails.get("MSG-USER")?.[0]?.runCode).toBe("RUN-1");
   });
+
+  it("anchors continuation runs after the interrupted assistant message", () => {
+    const messages = [
+      userMessage(),
+      assistantMessage({ messageCode: "MSG-ASK", runCode: "RUN-1" }),
+      assistantMessage({
+        content: "continued reply",
+        messageCode: "MSG-CONTINUATION",
+        runCode: "RUN-2",
+      }),
+    ];
+    const rails = aguiWorkRailsByMessageCode(messages, [
+      event({ runId: "RUN-2", type: "RUN_STARTED", timestamp: 4_000 }),
+      event({ runId: "RUN-2", type: "REASONING_START", timestamp: 4_001 }),
+      event({ runId: "RUN-2", type: "REASONING_TEXT_CONTENT", delta: "continuing", timestamp: 4_002 }),
+      event({ runId: "RUN-2", type: "REASONING_END", timestamp: 4_003 }),
+      event({ runId: "RUN-2", type: "RUN_FINISHED", timestamp: 4_004 }),
+    ], {}, 5);
+
+    expect(rails.get("MSG-ASK")).toHaveLength(1);
+    expect(rails.get("MSG-ASK")?.[0]?.runCode).toBe("RUN-2");
+    expect(rails.get("MSG-USER")).toBeUndefined();
+  });
 });
 
 describe("pending run helpers", () => {
+  it("anchors answer continuations to the interrupted assistant while events are pending", () => {
+    const messages = [
+      userMessage(),
+      assistantMessage({ messageCode: "MSG-ASK" }),
+    ];
+
+    const presentation = buildTranscriptPresentation({
+      liveAguiPending: true,
+      liveAguiPendingAnchorMessageCode: "MSG-ASK",
+      messages,
+      protocolEvents: [
+        event({ type: "RUN_STARTED", timestamp: 1_000 }),
+        event({ type: "RUN_FINISHED", timestamp: 1_001 }),
+      ],
+      sessionCode: "SESSION-1",
+    });
+
+    expect(presentation.waitingForModelAnchorMessageCode).toBe("MSG-ASK");
+  });
+
   it("detects recent pending user turns and ignores stale ones", () => {
     expect(isRecentPendingUserTurn([
       userMessage({ createdAt: "2026-06-10T00:29:59.000Z" }),

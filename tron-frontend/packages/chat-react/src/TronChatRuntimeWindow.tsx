@@ -16,12 +16,14 @@ import {
   type ChatActiveRun,
   type ChatAguiEvent,
   type ChatAguiStreamEvent,
+  type ChatAttachmentLabels,
   type ChatMessageAttachment,
   type ChatClientConfig,
   type ChatDebugOptions,
   type ChatMessage,
   type ChatQueuedSubmission,
   type ChatRunningSubmitMode,
+  type ChatRuntimeRunState,
   type ChatSession,
   type ChatSendResult,
   type ChatSubmitMode,
@@ -37,7 +39,9 @@ import {
   useRef,
   useState,
   type ChangeEvent,
+  type Ref,
   type ReactNode,
+  type SetStateAction,
 } from "react";
 import { TronChatPanel } from "./TronChatPanel";
 import { TronChatWindow } from "./TronChatWindow";
@@ -49,17 +53,37 @@ interface ToastLikeCallback {
 
 export interface TronChatRuntimeWindowProps {
   adapter?: ChatAdapter;
+  attachmentLabels?: ChatAttachmentLabels;
+  autoFocusComposer?: boolean;
   config: ChatClientConfig;
+  composerRef?: Ref<HTMLTextAreaElement>;
+  composerHeader?: ReactNode;
   currentUserDisplayName?: string;
+  draft?: string;
   debugOptions?: ChatDebugOptions;
+  emptyDescription?: string;
+  emptyTitle?: string;
   floatingTitle?: string;
   floatingSubtitle?: string;
+  formatAnnotationCount?: (count: number) => string;
   footerAddon?: ReactNode;
   headerContent?: ReactNode;
   initialSession?: ChatSession | null;
+  onCreateSession?: () => void;
+  onDraftChange?: (draft: string) => void;
   onError?: ToastLikeCallback;
   onInfo?: ToastLikeCallback;
+  onPendingAttachmentsChange?: (attachments: ChatMessageAttachment[]) => void;
+  onRunStateChange?: (state: ChatRuntimeRunState) => void;
   onSessionChange?: (session: ChatSession | null) => void;
+  pendingAttachments?: ChatMessageAttachment[];
+  createSendInput?: (
+    session: ChatSession,
+    content: string,
+    attachments: ChatMessageAttachment[],
+  ) => SendChatMessageInput | null;
+  showAttachmentControl?: boolean;
+  showHeader?: boolean;
   sidebarContent?: ReactNode;
   windowState?: ChatFloatingState;
   onWindowStateChange?: (state: ChatFloatingState) => void;
@@ -135,17 +159,33 @@ function PendingAttachmentCard({
 
 export function TronChatRuntimeWindow({
   adapter,
+  attachmentLabels,
+  autoFocusComposer = false,
+  composerHeader,
   config,
+  composerRef,
   currentUserDisplayName,
+  draft: controlledDraft,
   debugOptions,
+  emptyDescription,
+  emptyTitle,
   floatingSubtitle = "Workspace assistant",
   floatingTitle = "Main Agent",
+  formatAnnotationCount,
   footerAddon,
   headerContent,
   initialSession = null,
+  onCreateSession,
+  onDraftChange,
   onError = defaultErrorReporter,
   onInfo,
+  onPendingAttachmentsChange,
+  onRunStateChange,
   onSessionChange,
+  pendingAttachments: controlledPendingAttachments,
+  createSendInput: createSendInputOverride,
+  showAttachmentControl = true,
+  showHeader,
   sidebarContent,
   windowState,
   onWindowStateChange,
@@ -161,13 +201,15 @@ export function TronChatRuntimeWindow({
   const [session, setSession] = useState<ChatSession | null>(normalizedInitialSession);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [userInputRequest, setUserInputRequest] = useState<ChatUserInputRequest | null>(null);
+  const [userInputRequests, setUserInputRequests] = useState<ChatUserInputRequest[]>([]);
   const [userInputAnswerPending, setUserInputAnswerPending] = useState(false);
   const [aguiEvents, setAguiEvents] = useState<ChatAguiEvent[]>([]);
   const [protocolEvents, setProtocolEvents] = useState<ChatAguiStreamEvent[]>([]);
   const [liveAguiEvents, setLiveAguiEvents] = useState<ChatAguiStreamEvent[]>([]);
   const [liveAguiAnchorMessageCodes, setLiveAguiAnchorMessageCodes] = useState<Record<string, string>>({});
-  const [draft, setDraft] = useState("");
-  const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
+  const [liveAguiPendingAnchorMessageCode, setLiveAguiPendingAnchorMessageCode] = useState("");
+  const [internalDraft, setInternalDraft] = useState("");
+  const [internalPendingAttachments, setInternalPendingAttachments] = useState<ChatMessageAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
   const [sending, setSending] = useState(false);
   const [steering, setSteering] = useState(false);
@@ -200,6 +242,34 @@ export function TronChatRuntimeWindow({
   const observedRemoteRunRef = useRef<{ runCode: string; sessionCode: string } | null>(null);
   const drainedRemoteRunKeysRef = useRef<Set<string>>(new Set());
   const suppressedAutoDrainRunKeysRef = useRef<Set<string>>(new Set());
+  const draftRef = useRef(controlledDraft ?? "");
+  const pendingAttachmentsRef = useRef<ChatMessageAttachment[]>(controlledPendingAttachments ?? []);
+  const draft = controlledDraft ?? internalDraft;
+  const pendingAttachments = controlledPendingAttachments ?? internalPendingAttachments;
+
+  useEffect(() => {
+    draftRef.current = draft;
+  }, [draft]);
+
+  useEffect(() => {
+    pendingAttachmentsRef.current = pendingAttachments;
+  }, [pendingAttachments]);
+
+  function setDraft(nextValue: SetStateAction<string>) {
+    const next = typeof nextValue === "function" ? nextValue(draftRef.current) : nextValue;
+    draftRef.current = next;
+    if (controlledDraft === undefined) setInternalDraft(next);
+    onDraftChange?.(next);
+  }
+
+  function setPendingAttachments(nextValue: SetStateAction<ChatMessageAttachment[]>) {
+    const next = typeof nextValue === "function"
+      ? nextValue(pendingAttachmentsRef.current)
+      : nextValue;
+    pendingAttachmentsRef.current = next;
+    if (controlledPendingAttachments === undefined) setInternalPendingAttachments(next);
+    onPendingAttachmentsChange?.(next);
+  }
   const aguiEnabled = config.showAgui !== false && activeAdapter.capabilities.supportsAgui;
   const protocolReplayEnabled = aguiEnabled
     && activeAdapter.capabilities.supportsProtocolReplay
@@ -243,6 +313,21 @@ export function TronChatRuntimeWindow({
         )
       ),
   );
+
+  useEffect(() => {
+    onRunStateChange?.({
+      active: runActive,
+      runCode: effectiveActiveRunCode,
+      sessionCode: session?.sessionCode ?? "",
+      supportsSteer: canSteer,
+    });
+  }, [
+    canSteer,
+    effectiveActiveRunCode,
+    onRunStateChange,
+    runActive,
+    session?.sessionCode,
+  ]);
   const visibleQueuedSubmissions = useMemo(
     () => queuedSubmissions.filter((submission) => (
       submission.sessionCode === session?.sessionCode
@@ -349,7 +434,10 @@ export function TronChatRuntimeWindow({
     activeSession: ChatSession,
     content: string,
     attachments: ChatMessageAttachment[] = [],
-  ): SendChatMessageInput {
+  ): SendChatMessageInput | null {
+    if (createSendInputOverride) {
+      return createSendInputOverride(activeSession, content, attachments);
+    }
     const input: SendChatMessageInput = {
       agentCode: normalizeOptionalValue(config.agentCode),
       appCode: normalizeOptionalValue(activeSession.appCode ?? config.appCode),
@@ -444,6 +532,7 @@ export function TronChatRuntimeWindow({
         setMessages([]);
         setAguiEvents([]);
         setProtocolEvents([]);
+        setUserInputRequests([]);
         replaceRemoteActiveRun(null);
         return;
       }
@@ -465,6 +554,7 @@ export function TronChatRuntimeWindow({
         setMessages(nextMessages);
         setAguiEvents(nextAguiEvents);
         setProtocolEvents(nextProtocolEvents);
+        setUserInputRequests(nextUserInputRequests);
         setUserInputRequest(nextUserInputRequests.find((request) => request.status === "Pending") ?? null);
         if (nextActiveRun !== undefined) {
           replaceRemoteActiveRun(nextActiveRun);
@@ -537,6 +627,7 @@ export function TronChatRuntimeWindow({
         setMessages(nextMessages);
         setAguiEvents(nextAguiEvents);
         setProtocolEvents(nextProtocolEvents);
+        setUserInputRequests(nextUserInputRequests);
         setUserInputRequest(nextUserInputRequests.find((request) => request.status === "Pending") ?? null);
         if (nextActiveRun !== undefined) {
           replaceRemoteActiveRun(nextActiveRun);
@@ -804,6 +895,13 @@ export function TronChatRuntimeWindow({
       shouldRestoreSourceSubmission = false;
       setSession(result.session);
       setUserInputRequest(result.userInputRequest?.status === "Pending" ? result.userInputRequest : null);
+      const pendingUserInputRequest = result.userInputRequest;
+      if (pendingUserInputRequest?.status === "Pending") {
+        setUserInputRequests((current) => [
+          ...current.filter((request) => request.requestCode !== pendingUserInputRequest.requestCode),
+          pendingUserInputRequest,
+        ]);
+      }
       const nextMessages = await activeAdapter
         .loadMessages(result.session.sessionCode)
         .catch(() => null);
@@ -910,8 +1008,15 @@ export function TronChatRuntimeWindow({
 
   async function handleAnswerUserInput(answers: ChatUserInputAnswer[]) {
     if (!session || !userInputRequest || !activeAdapter.answerUserInputRequestStream) return;
+    const continuationAnchorMessageCode = [...messages]
+      .reverse()
+      .find((message) => message.role === "ASSISTANT")?.messageCode ?? "";
     setUserInputAnswerPending(true);
     setSendingState(true);
+    setLiveAguiPending(aguiEnabled);
+    setLiveAguiPendingAnchorMessageCode(continuationAnchorMessageCode);
+    setLiveAguiEvents([]);
+    setLiveAguiAnchorMessageCodes({});
     try {
       const result = await activeAdapter.answerUserInputRequestStream(
         session,
@@ -919,20 +1024,55 @@ export function TronChatRuntimeWindow({
         { answers },
         {
           onAguiEvent: (event) => {
-            if (aguiEnabled) setLiveAguiEvents((current) => [...current, event]);
+            if (!aguiEnabled) return;
+            setLiveAguiEvents((current) => [...current, event]);
+            const runCode = String(event.runId ?? event.runCode ?? "");
+            if (runCode && continuationAnchorMessageCode) {
+              setLiveAguiAnchorMessageCodes((current) => current[runCode]
+                ? current
+                : { ...current, [runCode]: continuationAnchorMessageCode });
+            }
           },
         },
       );
       setMessages(await activeAdapter.loadMessages(session.sessionCode).catch(() => result.messages));
       setSession(result.session);
-      setUserInputRequest(result.userInputRequest?.status === "Pending" ? result.userInputRequest : null);
+      const nextUserInputRequests = activeAdapter.loadUserInputRequests
+        ? await activeAdapter.loadUserInputRequests(session.sessionCode).catch(() => null)
+        : null;
+      if (nextUserInputRequests) {
+        setUserInputRequests(nextUserInputRequests);
+        setUserInputRequest(nextUserInputRequests.find((request) => request.status === "Pending") ?? null);
+      } else {
+        setUserInputRequest(result.userInputRequest?.status === "Pending" ? result.userInputRequest : null);
+        setUserInputRequests((current) => current.map((request) => (
+          request.requestCode === userInputRequest.requestCode
+            ? { ...request, answers, status: "Answered" as const }
+            : request
+        )));
+      }
+      if (aguiEnabled) {
+        const [nextAguiEvents, nextProtocolEvents] = await Promise.all([
+          activeAdapter.loadAguiEvents(session.sessionCode).catch(() => aguiEvents),
+          protocolReplayEnabled && activeAdapter.loadProtocolEvents
+            ? activeAdapter.loadProtocolEvents(session.sessionCode).catch(() => protocolEvents)
+            : Promise.resolve([]),
+        ]);
+        setAguiEvents(nextAguiEvents);
+        setProtocolEvents(nextProtocolEvents);
+      }
       setLiveAguiEvents([]);
+      setLiveAguiPending(false);
+      setLiveAguiPendingAnchorMessageCode("");
+      setLiveAguiAnchorMessageCodes({});
       await loadActiveRunSnapshot(session.sessionCode).then(replaceRemoteActiveRun).catch(() => undefined);
     } catch (error) {
       onError(error instanceof Error ? error.message : "Chat answer failed", "Chat answer failed");
     } finally {
-      setSendingState(false);
-      setUserInputAnswerPending(false);
+        setSendingState(false);
+        setUserInputAnswerPending(false);
+        setLiveAguiPending(false);
+        setLiveAguiPendingAnchorMessageCode("");
     }
   }
 
@@ -943,6 +1083,7 @@ export function TronChatRuntimeWindow({
     const content = draft.trim();
     if (!content && !pendingAttachments.length) return;
     const sendInput = createSendInput(activeSession, content, pendingAttachments);
+    if (!sendInput) return;
     setDraft("");
     setPendingAttachments([]);
     if (remoteActiveRunRef.current) {
@@ -959,6 +1100,7 @@ export function TronChatRuntimeWindow({
     const content = draft.trim();
     if (!content && !pendingAttachments.length) return;
     const sendInput = createSendInput(activeSession, content, pendingAttachments);
+    if (!sendInput) return;
     setDraft("");
     setPendingAttachments([]);
     if (sendingRef.current || remoteActiveRunRef.current) {
@@ -975,6 +1117,7 @@ export function TronChatRuntimeWindow({
     const content = draft.trim();
     if (!content && !pendingAttachments.length) return;
     const sendInput = createSendInput(activeSession, content, pendingAttachments);
+    if (!sendInput) return;
     const expectedRunCode = activeRunCodeRef.current
       || remoteActiveRunRef.current?.runCode
       || "";
@@ -1145,6 +1288,7 @@ export function TronChatRuntimeWindow({
     setAguiEvents([]);
     setProtocolEvents([]);
     setLiveAguiEvents([]);
+    setLiveAguiPendingAnchorMessageCode("");
     setLiveAguiAnchorMessageCodes({});
     setPendingAttachments([]);
     activeRunCodeRef.current = "";
@@ -1159,12 +1303,13 @@ export function TronChatRuntimeWindow({
       debugOptions,
       liveAguiAnchorMessageCodes,
       liveAguiEvents,
+      liveAguiPendingAnchorMessageCode,
       liveAguiPending,
       messages,
       protocolEvents,
       sessionCode: session?.sessionCode ?? "",
     }).debugEventsByRunCode,
-    [debugOptions, liveAguiAnchorMessageCodes, liveAguiEvents, liveAguiPending, messages, protocolEvents, session?.sessionCode],
+    [debugOptions, liveAguiAnchorMessageCodes, liveAguiEvents, liveAguiPendingAnchorMessageCode, liveAguiPending, messages, protocolEvents, session?.sessionCode],
   );
 
   const resolvedDebugOptions = useMemo(() => ({
@@ -1204,7 +1349,7 @@ export function TronChatRuntimeWindow({
   ) : null;
   const runtimeFooterAddon = (
     <div className="tron-chat__runtime-footer-addon">
-      {activeAdapter.uploadAttachment ? (
+      {showAttachmentControl && activeAdapter.uploadAttachment ? (
         <div className="tron-chat__runtime-attachments">
           <input
             className="tron-chat__runtime-attachment-input"
@@ -1230,26 +1375,30 @@ export function TronChatRuntimeWindow({
 
   const panel = (
     <TronChatPanel
+      attachmentLabels={attachmentLabels}
       attachmentDownloader={attachmentDownloader}
-      composerHeader={pendingAttachmentHeader}
+      autoFocusComposer={autoFocusComposer}
+      composerRef={composerRef}
+      composerHeader={composerHeader ?? pendingAttachmentHeader}
       createSessionLabel="Start chat"
       currentUserDisplayName={currentUserDisplayName}
       debugOptions={resolvedDebugOptions}
       disabledInput={Boolean(config.disabledInput) || userInputRequest?.status === "Pending"}
       draft={draft}
-      emptyDescription={config.workspaceCode
+      emptyDescription={emptyDescription ?? (config.workspaceCode
         ? "Open a session and start talking to your configured agent."
-        : "Set a workspace code before starting a session."}
+        : "Set a workspace code before starting a session.")}
+      emptyTitle={emptyTitle}
       footerAddon={runtimeFooterAddon}
+      formatAnnotationCount={formatAnnotationCount}
       headerContent={headerContent}
       inputPlaceholder={config.inputPlaceholder}
       liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
       liveAguiEvents={liveAguiEvents}
+      liveAguiPendingAnchorMessageCode={liveAguiPendingAnchorMessageCode}
       liveAguiPending={liveAguiPending}
       messages={messages}
-      onCreateSession={() => {
-        void ensureSession();
-      }}
+      onCreateSession={onCreateSession ?? (() => { void ensureSession(); })}
       onNewSession={handleNewSession}
       onDraftChange={setDraft}
       onPasteAttachment={handleAttachmentUpload}
@@ -1266,12 +1415,13 @@ export function TronChatRuntimeWindow({
       sending={runActive}
       session={session}
       showAgui={aguiEnabled}
-      showHeader={!config.floating}
+      showHeader={showHeader ?? !config.floating}
       showStop={canStop}
       sidebarContent={sidebarContent}
       steerDisabled={steerDisabled || Boolean(userInputRequest)}
       title={config.title || floatingTitle}
       userInputLabels={config.userInputLabels}
+      userInputRequests={userInputRequests}
       workRailLabels={config.workRailLabels}
       userInputAnswerPending={userInputAnswerPending}
       userInputRequest={userInputRequest}
@@ -1282,22 +1432,28 @@ export function TronChatRuntimeWindow({
   if (config.floating !== false) {
     return (
       <TronChatWindow
+        attachmentLabels={attachmentLabels}
         attachmentDownloader={attachmentDownloader}
-        composerHeader={pendingAttachmentHeader}
+        autoFocusComposer={autoFocusComposer}
+        composerRef={composerRef}
+        composerHeader={composerHeader ?? pendingAttachmentHeader}
         currentUserDisplayName={currentUserDisplayName}
         debugOptions={resolvedDebugOptions}
         disabledInput={Boolean(config.disabledInput) || userInputRequest?.status === "Pending"}
         draft={draft}
-        emptyDescription={config.workspaceCode
+        emptyDescription={emptyDescription ?? (config.workspaceCode
           ? "Open a session and start talking to your configured agent."
-          : "Set a workspace code before starting a session."}
+          : "Set a workspace code before starting a session.")}
+        emptyTitle={emptyTitle}
         footerAddon={runtimeFooterAddon}
+        formatAnnotationCount={formatAnnotationCount}
         inputPlaceholder={config.inputPlaceholder}
-        liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
-        liveAguiEvents={liveAguiEvents}
-        liveAguiPending={liveAguiPending}
+      liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
+      liveAguiEvents={liveAguiEvents}
+      liveAguiPendingAnchorMessageCode={liveAguiPendingAnchorMessageCode}
+      liveAguiPending={liveAguiPending}
         messages={messages}
-        onCreateSession={() => { void ensureSession(); }}
+        onCreateSession={onCreateSession ?? (() => { void ensureSession(); })}
         onNewSession={handleNewSession}
         onDraftChange={setDraft}
         onPasteAttachment={handleAttachmentUpload}
@@ -1322,6 +1478,7 @@ export function TronChatRuntimeWindow({
         title={floatingTitle}
         titleSubtitle={floatingSubtitle}
         userInputLabels={config.userInputLabels}
+        userInputRequests={userInputRequests}
         workRailLabels={config.workRailLabels}
         userInputAnswerPending={userInputAnswerPending}
         userInputRequest={userInputRequest}

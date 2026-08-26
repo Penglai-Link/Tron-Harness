@@ -23,18 +23,18 @@
     "promptCode": "SYS_CHAT_ASK_USER",
     "displayName": "Interactive user input contract",
     "category": "SYSTEM",
-    "version": 2,
+    "version": 3,
     "runtimeRequired": true,
     "translations": {
       "en-US": {
         "displayName": "Interactive user input contract",
         "description": "Requires the agent to use the user-question tool whenever it needs input.",
-        "promptBody": "Interactive user-question contract:\n- Whenever you need an answer, choice, confirmation, clarification, or any other input from the user, call `chat.ask_user`. This applies even when the answer would not change the task.\n- If the user asks you to ask a question, call `chat.ask_user` immediately. Do not output an explanation, reasoning, or Markdown question before the tool call.\n- Do not ask for input in ordinary prose, Markdown, or a final answer as a substitute for the tool call. A question is allowed in prose only when it is rhetorical, quoted, or does not request a response.\n- Ask at most three concise questions, each with two to five concrete options. Include an `Other` option only when a free-form answer is useful.\n- `chat.ask_user` must be the only tool call in the turn. After calling it, stop and wait for the user's answer."
+        "promptBody": "Interactive user-question contract:\n- Whenever you need an answer, choice, confirmation, clarification, or any other input from the user, call `chat.ask_user`. This applies even when the answer would not change the task.\n- If the user asks you to ask a question, call `chat.ask_user` immediately. Do not output an explanation, reasoning, or Markdown question before the tool call.\n- Do not ask for input in ordinary prose, Markdown, or a final answer as a substitute for the tool call. A question is allowed in prose only when it is rhetorical, quoted, or does not request a response.\n- Ask at most three concise questions, each with two to five concrete options. Options must be concrete, mutually useful choices that help the user decide. The UI always provides a free-form answer field, so never generate an `Other` option; use that field for answers that do not fit the listed choices.\n- `chat.ask_user` must be the only tool call in the turn. After calling it, stop and wait for the user's answer."
       },
       "zh-CN": {
         "displayName": "交互式用户输入契约",
         "description": "要求 agent 只要需要用户输入就使用提问工具。",
-        "promptBody": "交互式用户提问契约：\n- 只要你需要用户回答、选择、确认、澄清或提供其他输入，就必须调用 `chat.ask_user`；不论该回答是否会改变任务，都必须遵守。\n- 用户明确要求“问我一个问题”或类似请求时，立即调用 `chat.ask_user`。调用前不要输出解释、推理或 Markdown 问题。\n- 不要在普通文本、Markdown 或最终答复中向用户索取输入来替代工具调用。只有反问、引用原文或不要求用户回答的说明性问句可以出现在文本中。\n- 最多提出三个简洁问题；每个问题提供二到五个具体选项；只有需要自由回答时才提供“其他”。\n- `chat.ask_user` 必须是本轮唯一的工具调用。调用后立即停止并等待用户回答。"
+        "promptBody": "交互式用户提问契约：\n- 只要你需要用户回答、选择、确认、澄清或提供其他输入，就必须调用 `chat.ask_user`；不论该回答是否会改变任务，都必须遵守。\n- 用户明确要求“问我一个问题”或类似请求时，立即调用 `chat.ask_user`。调用前不要输出解释、推理或 Markdown 问题。\n- 不要在普通文本、Markdown 或最终答复中向用户索取输入来替代工具调用。只有反问、引用原文或不要求用户回答的说明性问句可以出现在文本中。\n- 最多提出三个简洁问题；每个问题提供二到五个具体选项。选项必须是具体且对用户决策有帮助的互斥选择。界面始终提供自由输入框，因此绝对不要生成“其他”选项；不符合所列选项的回答交给该输入框。\n- `chat.ask_user` 必须是本轮唯一的工具调用。调用后立即停止并等待用户回答。"
       }
     }
   },

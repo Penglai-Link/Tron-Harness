@@ -51,16 +51,38 @@ pub(crate) enum ChatStreamCompletion {
 impl ChatStreamCompletion {
     pub(crate) fn payload(&self, session_code: &str, run_code: &str) -> ChatSsePayload {
         match self {
-            Self::Success(result) => ChatSsePayload::agui(
-                "RUN_FINISHED",
-                json!({
-                    "type": "RUN_FINISHED",
-                    "threadId": session_code,
-                    "runId": result.run.run_code,
-                    "result": result,
-                    "timestamp": chrono::Utc::now().timestamp_millis(),
-                }),
-            ),
+            Self::Success(result) => {
+                let outcome = result
+                    .user_input_request
+                    .as_ref()
+                    .map(|request| {
+                        json!({
+                            "type": "interrupt",
+                            "interrupts": [{
+                                "id": request.request_code,
+                                "reason": "input_required",
+                                "message": request.intro,
+                                "metadata": {
+                                    "requestCode": request.request_code,
+                                    "runCode": request.run_code,
+                                    "questions": request.questions,
+                                },
+                            }],
+                        })
+                    })
+                    .unwrap_or_else(|| json!({ "type": "success" }));
+                ChatSsePayload::agui(
+                    "RUN_FINISHED",
+                    json!({
+                        "type": "RUN_FINISHED",
+                        "threadId": session_code,
+                        "runId": result.run.run_code,
+                        "outcome": outcome,
+                        "result": result,
+                        "timestamp": chrono::Utc::now().timestamp_millis(),
+                    }),
+                )
+            }
             Self::Error { code, message } => ChatSsePayload::agui(
                 "RUN_ERROR",
                 json!({

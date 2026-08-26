@@ -522,6 +522,22 @@ export function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserW
       card.toolName = aguiEventToolName(event);
       const args = aguiEventToolArgs(event);
       if (args !== undefined) card.args = args;
+      const argumentDelta = "delta" in event && typeof event.delta === "string"
+        ? event.delta
+        : null;
+      if (type === "TOOL_CALL_ARGS" && argumentDelta !== null) {
+        const previous = typeof card.args === "string"
+          ? card.args
+          : card.args == null
+            ? ""
+            : JSON.stringify(card.args);
+        const combined = `${previous}${argumentDelta}`;
+        try {
+          card.args = JSON.parse(combined);
+        } catch {
+          card.args = combined;
+        }
+      }
       return;
     }
     if (type === "ACTIVITY_DELTA") {
@@ -626,6 +642,8 @@ function anchorMessageCodeForAguiRun(
     message.role === "ASSISTANT" && message.runCode === runCode
   ));
   if (assistantIndex > 0) {
+    const previousMessage = messages[assistantIndex - 1];
+    if (previousMessage.role === "ASSISTANT") return previousMessage.messageCode;
     return userMessageCodeBeforeIndex(messages, assistantIndex - 1);
   }
   const liveAnchorMessageCode = liveAnchorMessageCodes[runCode] ?? "";
@@ -656,6 +674,7 @@ export function buildTranscriptPresentation(args: {
   debugOptions?: ChatDebugOptions;
   liveAguiAnchorMessageCodes?: Record<string, string>;
   liveAguiEvents?: ChatAguiStreamEvent[];
+  liveAguiPendingAnchorMessageCode?: string;
   liveAguiPending?: boolean;
   messages: ChatMessage[];
   protocolEvents?: ChatAguiStreamEvent[];
@@ -676,6 +695,10 @@ export function buildTranscriptPresentation(args: {
     );
   const waitingForModelAnchorMessageCode = (() => {
     if (!args.liveAguiPending || !args.sessionCode) return "";
+    const pendingAnchor = args.liveAguiPendingAnchorMessageCode ?? "";
+    if (pendingAnchor && args.messages.some((message) => message.messageCode === pendingAnchor)) {
+      return pendingAnchor;
+    }
     if (transcriptAguiEvents.some((event) => aguiEventType(event).toUpperCase() === "RUN_STARTED")) {
       return "";
     }

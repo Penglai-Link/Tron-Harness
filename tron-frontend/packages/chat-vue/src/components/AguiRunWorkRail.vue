@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { BrainCircuit, ChevronDown, ChevronRight } from "lucide-vue-next";
+import { BrainCircuit, ChevronDown, ChevronRight, MessageSquareText } from "lucide-vue-next";
 import { computed, onBeforeUnmount, ref, watch } from "vue";
 import {
   aguiWorkElapsedMilliseconds,
@@ -9,6 +9,8 @@ import {
   isAguiRunTerminal,
   type TranscriptAguiEvent,
   type ChatWorkRailLabels,
+  type ChatUserInputRequest,
+  type AguiUserWorkCard,
 } from "@tron/chat-core";
 import ReasoningCard from "./ReasoningCard.vue";
 import ToolGroupCard from "./ToolGroupCard.vue";
@@ -18,10 +20,14 @@ const props = withDefaults(defineProps<{
   debugEvents?: string[];
   events?: TranscriptAguiEvent[];
   labels?: ChatWorkRailLabels;
+  messageCode?: string;
+  userInputRequests?: ChatUserInputRequest[];
 }>(), {
   debugEvents: () => [],
   events: () => [],
   labels: undefined,
+  messageCode: "",
+  userInputRequests: () => [],
 });
 
 const defaultLabels: ChatWorkRailLabels = {
@@ -31,6 +37,10 @@ const defaultLabels: ChatWorkRailLabels = {
   thinking: "Thinking…",
   workedFor: (duration) => `Worked for ${duration}`,
   workingFor: (duration) => `Working for ${duration}`,
+  askingQuestions: (count) => `Asking ${count} questions`,
+  askedQuestions: (count) => `Asked ${count} questions`,
+  waitingForAnswer: "Waiting for your answer",
+  skipped: "Skipped",
 };
 
 function formatAguiDuration(milliseconds: number) {
@@ -46,6 +56,29 @@ function formatAguiDuration(milliseconds: number) {
 }
 
 const userCards = computed(() => buildAguiUserWorkCards(props.events));
+const matchingUserInputRequests = computed(() => {
+  const runCodes = new Set(props.events.map((event) => {
+    if ("runId" in event && typeof event.runId === "string") return event.runId;
+    if ("runCode" in event && typeof event.runCode === "string") return event.runCode;
+    return "";
+  }));
+  return props.userInputRequests.filter((request) => (
+    runCodes.has(request.runCode) || request.assistantMessageCode === props.messageCode
+  ));
+});
+const answeredUserInputRequests = computed(() => matchingUserInputRequests.value.filter(
+  (request) => request.status === "Answered",
+));
+const pendingUserInputRequest = computed(() => matchingUserInputRequests.value.find(
+  (request) => request.status === "Pending",
+));
+const expandedRequestCode = ref<string | null>(null);
+const visibleUserCards = computed<AguiUserWorkCard[]>(() => userCards.value.flatMap((card): AguiUserWorkCard[] => {
+  if (card.kind === "tool" && card.value.toolName === "chat.ask_user") return [];
+  if (card.kind !== "toolGroup") return [card];
+  const toolCards = card.value.toolCards.filter((toolCard) => toolCard.toolName !== "chat.ask_user");
+  return toolCards.length ? [{ ...card, value: { ...card.value, toolCards } }] : [];
+}));
 const reasoningEffort = computed(() => aguiReasoningEffort(props.events));
 const terminalEvent = computed(() => isAguiRunTerminal(props.events));
 const expanded = ref(false);
@@ -60,6 +93,20 @@ const currentSummary = computed(() => {
   if (activity === "RESPONDING") return labels.value.responding;
   return labels.value.thinking;
 });
+function answerText(request: ChatUserInputRequest, question: ChatUserInputRequest["questions"][number]) {
+  const answer = request.answers?.find((item) => item.questionCode === question.questionCode);
+  if (!answer) return labels.value.waitingForAnswer ?? "Waiting for your answer";
+  if (answer.answerKind === "Other") return answer.otherText?.trim() || labels.value.waitingForAnswer || "Waiting for your answer";
+  if (answer.answerKind === "Skipped") return labels.value.skipped ?? "Skipped";
+  return question.options.find((option) => option.optionCode === answer.optionCode)?.label
+    ?? answer.optionCode
+    ?? labels.value.waitingForAnswer
+    ?? "Waiting for your answer";
+}
+function requestSummary(request: ChatUserInputRequest) {
+  return labels.value.askedQuestions?.(request.questions.length)
+    ?? `Asked ${request.questions.length} questions`;
+}
 let timer: ReturnType<typeof setInterval> | undefined;
 
 watch(terminalEvent, (completed) => {
@@ -98,9 +145,48 @@ onBeforeUnmount(() => {
       <ChevronDown v-if="expanded" :size="14" />
       <ChevronRight v-else :size="14" />
     </button>
-    <div v-if="!terminalEvent" aria-live="polite" class="tron-chat__rail-current">
-      <BrainCircuit class="tron-chat__rail-current-icon animate-pulse" :size="15" />
-      <span class="tron-chat__rail-current-text">{{ currentSummary }}</span>
+    <section
+      v-for="request in answeredUserInputRequests"
+      :key="request.requestCode"
+      :aria-label="requestSummary(request)"
+      class="tron-chat__rail-entry"
+    >
+      <button
+        :aria-expanded="expandedRequestCode === request.requestCode"
+        class="tron-chat__rail-entry-toggle"
+        type="button"
+        @click="expandedRequestCode = expandedRequestCode === request.requestCode ? null : request.requestCode"
+      >
+        <span class="tron-chat__rail-entry-label">
+          <MessageSquareText :size="15" />
+          <span>{{ requestSummary(request) }}</span>
+        </span>
+        <ChevronRight v-if="expandedRequestCode !== request.requestCode" :size="14" />
+        <ChevronDown v-else :size="14" />
+      </button>
+      <ol v-if="expandedRequestCode === request.requestCode" class="tron-chat__rail-entry-list">
+        <li
+          v-for="question in request.questions"
+          :key="question.questionCode"
+          class="tron-chat__user-input-work-answer"
+        >
+          <span class="tron-chat__user-input-work-question">{{ question.question }}</span>
+          <span class="tron-chat__user-input-work-value">{{ answerText(request, question) }}</span>
+        </li>
+      </ol>
+    </section>
+    <div v-if="!terminalEvent || pendingUserInputRequest" aria-live="polite" class="tron-chat__rail-current">
+      <template v-if="pendingUserInputRequest">
+        <MessageSquareText class="tron-chat__rail-current-icon animate-pulse" :size="15" />
+        <span class="tron-chat__rail-current-text">
+          {{ labels.askingQuestions?.(pendingUserInputRequest.questions.length) ?? 'Asking questions' }}
+          <span class="tron-chat__rail-current-subtext">{{ labels.waitingForAnswer ?? 'Waiting for your answer' }}</span>
+        </span>
+      </template>
+      <template v-else>
+        <BrainCircuit class="tron-chat__rail-current-icon animate-pulse" :size="15" />
+        <span class="tron-chat__rail-current-text">{{ currentSummary }}</span>
+      </template>
     </div>
     <div
       v-if="expanded"
@@ -108,13 +194,13 @@ onBeforeUnmount(() => {
       :style="{ marginTop: '8px' }"
     >
       <section
-        v-if="userCards.length"
+        v-if="visibleUserCards.length"
         aria-label="Agent work rail"
         class="tron-chat__rail"
         style="max-width: none; padding-left: 0"
       >
         <div class="tron-chat__rail-card-list">
-          <template v-for="card in userCards" :key="card.value.id">
+          <template v-for="card in visibleUserCards" :key="card.value.id">
             <ReasoningCard v-if="card.kind === 'reasoning'" :card="card.value" />
             <ToolGroupCard v-else-if="card.kind === 'toolGroup'" :card="card.value" />
             <ToolCard v-else :card="card.value" />

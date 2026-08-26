@@ -54,6 +54,7 @@ fn map_send_request(
         tools: request.tools,
         attachments: request.attachments,
         client_capabilities: request.client_capabilities,
+        resume: request.resume,
     }
 }
 

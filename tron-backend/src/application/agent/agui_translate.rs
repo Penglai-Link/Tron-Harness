@@ -210,15 +210,31 @@ pub fn translate_protocol_events(
                 "timestamp": timestamp,
             }),
         )],
-        CanonicalRuntimeEvent::RunCompleted => vec![protocol_event(
-            "RUN_FINISHED",
-            json!({
-                "type": "RUN_FINISHED",
-                "threadId": stream_key,
-                "runId": run_code,
-                "timestamp": timestamp,
-            }),
-        )],
+        CanonicalRuntimeEvent::RunCompleted => {
+            let outcome = if event.summary.as_deref() == Some("awaiting_user_input") {
+                json!({
+                    "type": "interrupt",
+                    "interrupts": [{
+                        "id": format!("{run_code}-user-input"),
+                        "reason": "input_required",
+                        "message": "The agent is waiting for user input.",
+                        "metadata": { "runCode": run_code },
+                    }],
+                })
+            } else {
+                json!({ "type": "success" })
+            };
+            vec![protocol_event(
+                "RUN_FINISHED",
+                json!({
+                    "type": "RUN_FINISHED",
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "outcome": outcome,
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
         CanonicalRuntimeEvent::RunFailed => vec![protocol_event(
             "RUN_ERROR",
             json!({
@@ -232,16 +248,14 @@ pub fn translate_protocol_events(
         CanonicalRuntimeEvent::ToolSelected => {
             let tool_name = event_tool_name(event);
             let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
-            let tool_args = event_tool_args(event);
             vec![protocol_event(
-                "TOOL_CALL_ARGS",
+                "TOOL_CALL_START",
                 json!({
-                    "type": "TOOL_CALL_ARGS",
+                    "type": "TOOL_CALL_START",
                     "threadId": stream_key,
                     "runId": run_code,
                     "toolCallId": tool_call_id,
                     "toolCallName": tool_name,
-                    "toolCallArgs": tool_args,
                     "parentMessageId": assistant_message_id,
                     "timestamp": timestamp,
                 }),
@@ -252,15 +266,13 @@ pub fn translate_protocol_events(
             let tool_call_id = event_tool_call_id(event, &run_code, &tool_name);
             let tool_args = event_tool_args(event);
             vec![protocol_event(
-                "TOOL_CALL_START",
+                "TOOL_CALL_ARGS",
                 json!({
-                    "type": "TOOL_CALL_START",
+                    "type": "TOOL_CALL_ARGS",
                     "threadId": stream_key,
                     "runId": run_code,
                     "toolCallId": tool_call_id,
-                    "toolCallName": tool_name,
-                    "toolCallArgs": tool_args,
-                    "parentMessageId": assistant_message_id,
+                    "delta": serde_json::to_string(&tool_args).unwrap_or_else(|_| "{}".into()),
                     "timestamp": timestamp,
                 }),
             )]
@@ -271,6 +283,16 @@ pub fn translate_protocol_events(
             let result = event_tool_result(event).unwrap_or_else(|| "completed".into());
             vec![
                 protocol_event(
+                    "TOOL_CALL_END",
+                    json!({
+                        "type": "TOOL_CALL_END",
+                        "threadId": stream_key,
+                        "runId": run_code,
+                        "toolCallId": tool_call_id,
+                        "timestamp": timestamp,
+                    }),
+                ),
+                protocol_event(
                     "TOOL_CALL_RESULT",
                     json!({
                         "type": "TOOL_CALL_RESULT",
@@ -278,19 +300,8 @@ pub fn translate_protocol_events(
                         "runId": run_code,
                         "messageId": format!("{run_code}-tool-result"),
                         "toolCallId": tool_call_id,
-                        "toolCallName": tool_name,
                         "content": result,
                         "role": "tool",
-                        "timestamp": timestamp,
-                    }),
-                ),
-                protocol_event(
-                    "TOOL_CALL_END",
-                    json!({
-                        "type": "TOOL_CALL_END",
-                        "threadId": stream_key,
-                        "runId": run_code,
-                        "toolCallId": tool_call_id,
                         "timestamp": timestamp,
                     }),
                 ),

@@ -121,6 +121,13 @@ const defaultAttachmentLabels: ChatAttachmentLabels = {
   annotationPreview: "Annotation preview",
 };
 
+function isUserInputAnswerSummary(message: ChatMessage) {
+  if (message.role !== "USER") return false;
+  const content = message.content.trimStart();
+  return content.startsWith("The user answered the questions you asked:")
+    || content.startsWith("用户回答了你提出的问题：");
+}
+
 function AttachmentImagePreview({
   attachment,
   downloadAttachment,
@@ -822,16 +829,96 @@ function ReasoningCard({
   );
 }
 
+function userInputAnswerText(
+  request: ChatUserInputRequest,
+  question: ChatUserInputRequest["questions"][number],
+  labels: ChatWorkRailLabels,
+) {
+  const answer = request.answers?.find((item) => item.questionCode === question.questionCode);
+  if (!answer) return labels.waitingForAnswer ?? "Waiting for your answer";
+  if (answer.answerKind === "Other") return answer.otherText?.trim() || labels.waitingForAnswer || "Waiting for your answer";
+  if (answer.answerKind === "Skipped") return labels.skipped ?? "Skipped";
+  return question.options.find((option) => option.optionCode === answer.optionCode)?.label
+    ?? answer.optionCode
+    ?? labels.waitingForAnswer
+    ?? "Waiting for your answer";
+}
+
+function UserInputWorkCard({
+  labels,
+  request,
+}: {
+  labels: ChatWorkRailLabels;
+  request: ChatUserInputRequest;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const summary = labels.askedQuestions?.(request.questions.length)
+    ?? `Asked ${request.questions.length} questions`;
+  return (
+    <section className="tron-chat__rail-entry" aria-label={summary}>
+      <button
+        aria-expanded={expanded}
+        className="tron-chat__rail-entry-toggle"
+        type="button"
+        onClick={() => setExpanded((value) => !value)}
+      >
+        <span className="tron-chat__rail-entry-label">
+          <MessageSquareText size={15} />
+          <span>{summary}</span>
+        </span>
+        <span className="tron-chat__rail-entry-chevron">
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </span>
+      </button>
+      {expanded ? (
+        <ol className="tron-chat__rail-entry-list">
+          {request.questions.map((question) => (
+            <li className="tron-chat__user-input-work-answer" key={question.questionCode}>
+              <span className="tron-chat__user-input-work-question">{question.question}</span>
+              <span className="tron-chat__user-input-work-value">
+                {userInputAnswerText(request, question, labels)}
+              </span>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
+  );
+}
+
 function AguiRunWorkRail({
   debugEvents,
   events,
   labels = defaultWorkRailLabels,
+  messageCode,
+  userInputRequests = [],
 }: {
   debugEvents: string[];
   events: ChatAguiStreamEvent[];
   labels?: ChatWorkRailLabels;
+  messageCode?: string;
+  userInputRequests?: ChatUserInputRequest[];
 }) {
-  const userCards = useMemo(() => buildAguiUserWorkCards(events), [events]);
+  const userCards = useMemo<AguiUserWorkCard[]>(() => buildAguiUserWorkCards(events).flatMap((card): AguiUserWorkCard[] => {
+    if (card.kind === "tool" && card.value.toolName === "chat.ask_user") return [];
+    if (card.kind !== "toolGroup") return [card];
+    const toolCards = card.value.toolCards.filter((toolCard) => toolCard.toolName !== "chat.ask_user");
+    return toolCards.length
+      ? [{ ...card, value: { ...card.value, toolCards } }]
+      : [];
+  }), [events]);
+  const matchingUserInputRequests = useMemo(() => {
+    const runCodes = new Set(events.map((event) => aguiEventRunCode(event)));
+    return userInputRequests.filter((request) => (
+      runCodes.has(request.runCode) || request.assistantMessageCode === messageCode
+    ));
+  }, [events, messageCode, userInputRequests]);
+  const answeredUserInputRequests = matchingUserInputRequests.filter(
+    (request) => request.status === "Answered",
+  );
+  const pendingUserInputRequest = matchingUserInputRequests.find(
+    (request) => request.status === "Pending",
+  );
   const reasoningEffort = useMemo(() => aguiReasoningEffort(events), [events]);
   const terminalEvent = useMemo(() => [...events].reverse().find((event) => {
     const type = String(event.type ?? "").toUpperCase();
@@ -853,7 +940,7 @@ function AguiRunWorkRail({
       : null);
   const [expanded, setExpanded] = useState(false);
   const [now, setNow] = useState(() => Date.now());
-  const completed = Boolean(displayedTerminalSummary);
+  const completed = Boolean(displayedTerminalSummary) && !pendingUserInputRequest;
   const duration = completed
     ? displayedTerminalSummary?.duration ?? "<1s"
     : formatAguiDuration(aguiWorkElapsedMilliseconds(events, now));
@@ -893,10 +980,27 @@ function AguiRunWorkRail({
         </span>
         {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
       </button>
+      {answeredUserInputRequests.map((request) => (
+        <UserInputWorkCard labels={labels} request={request} key={request.requestCode} />
+      ))}
       {!completed ? (
         <div className="tron-chat__rail-current" aria-live="polite">
-          <BrainCircuit className="tron-chat__rail-current-icon animate-pulse" size={15} />
-          <span className="tron-chat__rail-current-text">{currentSummary}</span>
+          {pendingUserInputRequest ? (
+            <>
+              <MessageSquareText className="tron-chat__rail-current-icon animate-pulse" size={15} />
+              <span className="tron-chat__rail-current-text">
+                {labels.askingQuestions?.(pendingUserInputRequest.questions.length) ?? "Asking questions"}
+                <span className="tron-chat__rail-current-subtext">
+                  {labels.waitingForAnswer ?? "Waiting for your answer"}
+                </span>
+              </span>
+            </>
+          ) : (
+            <>
+              <BrainCircuit className="tron-chat__rail-current-icon animate-pulse" size={15} />
+              <span className="tron-chat__rail-current-text">{currentSummary}</span>
+            </>
+          )}
         </div>
       ) : null}
       {expanded ? (
@@ -981,6 +1085,7 @@ export interface TronChatPanelProps {
   inputPlaceholder?: string;
   liveAguiAnchorMessageCodes?: Record<string, string>;
   liveAguiEvents?: ChatAguiStreamEvent[];
+  liveAguiPendingAnchorMessageCode?: string;
   liveAguiPending?: boolean;
   messages: ChatMessage[];
   onCreateSession?: () => void;
@@ -1010,6 +1115,7 @@ export interface TronChatPanelProps {
   title?: string;
   userInputLabels?: ChatUserInputLabels;
   workRailLabels?: ChatWorkRailLabels;
+  userInputRequests?: ChatUserInputRequest[];
   userInputRequest?: ChatUserInputRequest | null;
   userInputAnswerPending?: boolean;
   onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;
@@ -1034,6 +1140,7 @@ export function TronChatPanel({
   inputPlaceholder = "Enter to send, Shift+Enter for newline",
   liveAguiAnchorMessageCodes,
   liveAguiEvents,
+  liveAguiPendingAnchorMessageCode,
   liveAguiPending,
   messages,
   onCreateSession,
@@ -1063,6 +1170,7 @@ export function TronChatPanel({
   title,
   userInputLabels,
   workRailLabels,
+  userInputRequests = [],
   userInputRequest,
   userInputAnswerPending = false,
   onAnswerUserInput,
@@ -1105,6 +1213,7 @@ export function TronChatPanel({
         debugOptions,
         liveAguiAnchorMessageCodes,
         liveAguiEvents,
+        liveAguiPendingAnchorMessageCode,
         liveAguiPending,
         messages,
         protocolEvents,
@@ -1114,6 +1223,7 @@ export function TronChatPanel({
       debugOptions,
       liveAguiAnchorMessageCodes,
       liveAguiEvents,
+      liveAguiPendingAnchorMessageCode,
       liveAguiPending,
       messages,
       protocolEvents,
@@ -1276,17 +1386,19 @@ export function TronChatPanel({
                                 formatAnnotationCount={formatAnnotationCount}
                                 onPreviewImage={(source, alt) => setPreviewImage({ alt, source })}
                               />
-                              <ChatBubble
-                                currentUserDisplayName={currentUserDisplayName}
-                                emptyAssistantMessage={
-                                  message.messageCode ===
-                                  pendingAssistantMessageCode
-                                    ? "Waiting for assistant output..."
-                                    : undefined
-                                }
-                                message={message}
-                                onEditMessage={onEditMessage}
-                              />
+                              {!isUserInputAnswerSummary(message) ? (
+                                <ChatBubble
+                                  currentUserDisplayName={currentUserDisplayName}
+                                  emptyAssistantMessage={
+                                    message.messageCode ===
+                                    pendingAssistantMessageCode
+                                      ? "Waiting for assistant output..."
+                                      : undefined
+                                  }
+                                  message={message}
+                                  onEditMessage={onEditMessage}
+                                />
+                              ) : null}
                             </div>
                           ) : (
                             <ChatBubble
@@ -1321,6 +1433,8 @@ export function TronChatPanel({
                                 events={run.events as ChatAguiStreamEvent[]}
                                 key={run.runCode}
                                 labels={workRailLabels}
+                                messageCode={message.messageCode}
+                                userInputRequests={userInputRequests}
                               />
                             ))
                             : null}

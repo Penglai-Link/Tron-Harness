@@ -12,6 +12,7 @@ import type {
   ChatMessage,
   ChatQueuedSubmission,
   ChatSession,
+  ChatUserInputRequest,
 } from "@tron/chat-core";
 import type { ComponentProps } from "react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -135,6 +136,56 @@ describe("TronChatPanel submit controls", () => {
     expect(screen.queryByText("Inspecting the implementation plan.")).toBeNull();
     fireEvent.click(completedButton);
     expect(completedButton.getAttribute("aria-expanded")).toBe("true");
+  });
+
+  it("renders answered user questions as an expandable AG-UI work item", () => {
+    const messages = [
+      message("USER", "Choose a direction"),
+      {
+        ...message("ASSISTANT", "Please choose one."),
+        messageCode: "MSG-ASK",
+        runCode: "RUN-1",
+      },
+    ];
+    const request: ChatUserInputRequest = {
+      assistantMessageCode: "MSG-ASK",
+      answers: [{
+        answerKind: "Option",
+        optionCode: "OPTION-1",
+        questionCode: "QUESTION-1",
+      }],
+      intro: "Choose a direction",
+      questions: [{
+        options: [{
+          description: "Continue with the first option.",
+          label: "First option",
+          optionCode: "OPTION-1",
+        }],
+        question: "Which direction?",
+        questionCode: "QUESTION-1",
+      }],
+      requestCode: "INPUT-1",
+      requestedAt: 1_000,
+      runCode: "RUN-1",
+      sessionCode: "SESSION-1",
+      status: "Answered",
+    };
+
+    renderPanel({
+      messages,
+      protocolEvents: [
+        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_000, type: "RUN_STARTED" },
+        { delta: "Thinking", runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_001, type: "REASONING_TEXT_CONTENT" },
+        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_002, type: "RUN_FINISHED" },
+      ],
+      userInputRequests: [request],
+    });
+
+    const summary = screen.getByRole("button", { name: "Asked 1 questions" });
+    expect(screen.queryByText("Which direction?")).toBeNull();
+    fireEvent.click(summary);
+    expect(screen.getByText("Which direction?")).toBeTruthy();
+    expect(screen.getByText("First option")).toBeTruthy();
   });
 
   it("only labels an active empty assistant message as waiting", () => {

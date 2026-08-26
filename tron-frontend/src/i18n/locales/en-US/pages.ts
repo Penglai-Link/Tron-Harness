@@ -598,6 +598,10 @@ export const pages = {
       thinking: "Thinking…",
       workedFor: "Worked for {{duration}}",
       workingFor: "Working for {{duration}}",
+      askingQuestions: "Asking {{count}} questions",
+      askedQuestions: "Asked {{count}} questions",
+      waitingForAnswer: "Waiting for your answer",
+      skipped: "Skipped",
     },
     shortTermMemory: {
       workspace: "Execution",

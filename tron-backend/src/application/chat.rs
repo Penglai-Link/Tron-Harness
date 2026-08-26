@@ -9,8 +9,8 @@ mod steer;
 mod title;
 
 pub use dto::{
-    ChatSendResult, ChatSessionAttachmentUploadCommand, ChatSessionQuery, ChatSteerResult,
-    CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
+    ChatResumeEntry, ChatSendResult, ChatSessionAttachmentUploadCommand, ChatSessionQuery,
+    ChatSteerResult, CreateChatSessionCommand, SendChatMessageCommand, SteerChatMessageCommand,
     UpdateChatSessionCommand,
 };
 pub use port::ChatRepository;

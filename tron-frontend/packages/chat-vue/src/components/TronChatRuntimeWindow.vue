@@ -52,14 +52,30 @@ import { TronChatRuntimeWindowProps } from "../types";
 
 const props = withDefaults(defineProps<TronChatRuntimeWindowProps>(), {
   adapter: undefined,
+  attachmentLabels: undefined,
+  autoFocusComposer: false,
+  composerHeader: undefined,
   currentUserDisplayName: "",
+  draft: undefined,
   debugOptions: undefined,
+  emptyDescription: undefined,
+  emptyTitle: undefined,
   floatingSubtitle: "Workspace assistant",
   floatingTitle: "Main Agent",
+  formatAnnotationCount: undefined,
+  footerAddon: undefined,
   initialSession: null,
+  onCreateSession: undefined,
+  onDraftChange: undefined,
   onError: defaultErrorReporter,
   onInfo: undefined,
+  onPendingAttachmentsChange: undefined,
+  onRunStateChange: undefined,
   onSessionChange: undefined,
+  pendingAttachments: undefined,
+  createSendInput: undefined,
+  showAttachmentControl: true,
+  showHeader: undefined,
   onWindowStateChange: undefined,
   windowState: undefined,
 });
@@ -82,19 +98,35 @@ const normalizedInitialSession = computed(() =>
 const session = ref<ChatSession | null>(normalizedInitialSession.value);
 const messages = ref<ChatMessage[]>([]);
 const userInputRequest = ref<ChatUserInputRequest | null>(null);
+const userInputRequests = ref<ChatUserInputRequest[]>([]);
 const userInputAnswerPending = ref(false);
 const aguiEvents = ref<ChatAguiEvent[]>([]);
 const protocolEvents = ref<ChatAguiStreamEvent[]>([]);
 const liveAguiEvents = ref<ChatAguiStreamEvent[]>([]);
 const liveAguiAnchorMessageCodes = ref<Record<string, string>>({});
-const draft = ref("");
-const pendingAttachments = ref<ChatMessageAttachment[]>([]);
+const internalDraft = ref("");
+const internalPendingAttachments = ref<ChatMessageAttachment[]>([]);
+const draft = computed({
+  get: () => props.draft ?? internalDraft.value,
+  set: (value: string) => {
+    if (props.draft === undefined) internalDraft.value = value;
+    props.onDraftChange?.(value);
+  },
+});
+const pendingAttachments = computed({
+  get: () => props.pendingAttachments ?? internalPendingAttachments.value,
+  set: (value: ChatMessageAttachment[]) => {
+    if (props.pendingAttachments === undefined) internalPendingAttachments.value = value;
+    props.onPendingAttachmentsChange?.(value);
+  },
+});
 const attachmentUploadPending = ref(false);
 const attachmentFileInput = ref<HTMLInputElement | null>(null);
 const sending = ref(false);
 const steering = ref(false);
 const loading = ref(false);
 const liveAguiPending = ref(false);
+const liveAguiPendingAnchorMessageCode = ref("");
 const activeRunCode = ref("");
 const activeRunSupportsSteer = ref<boolean | null>(null);
 const remoteActiveRun = ref<ChatActiveRun | null>(null);
@@ -195,6 +227,19 @@ const canStop = computed(() =>
   ),
 );
 
+watch(
+  [runActive, effectiveActiveRunCode, canSteer, () => session.value?.sessionCode ?? ""],
+  ([active, runCode, supportsSteer, sessionCode]) => {
+    props.onRunStateChange?.({
+      active,
+      runCode,
+      sessionCode,
+      supportsSteer,
+    });
+  },
+  { immediate: true },
+);
+
 function isRunAlreadyActiveError(error: unknown) {
   return (
     (error instanceof FetchTransportError &&
@@ -274,7 +319,10 @@ function createSendInput(
   activeSession: ChatSession,
   content: string,
   attachments: ChatMessageAttachment[] = [],
-): SendChatMessageInput {
+): SendChatMessageInput | null {
+  if (props.createSendInput) {
+    return props.createSendInput(activeSession, content, attachments);
+  }
   const input: SendChatMessageInput = {
     agentCode: normalizeOptionalValue(props.config.agentCode),
     appCode: normalizeOptionalValue(
@@ -468,6 +516,7 @@ watch(
       aguiEvents.value = [];
       protocolEvents.value = [];
       userInputRequest.value = null;
+      userInputRequests.value = [];
       remoteActiveRun.value = null;
       pendingProtocolTerminalRun.value = null;
       activeRunStatusPending.value = false;
@@ -504,6 +553,7 @@ watch(
       messages.value = dataResult.nextMessages;
       aguiEvents.value = dataResult.nextAguiEvents;
       protocolEvents.value = dataResult.nextProtocolEvents;
+      userInputRequests.value = dataResult.nextUserInputRequests;
       userInputRequest.value = dataResult.nextUserInputRequests.find(
         (request) => request.status === "Pending",
       ) ?? null;
@@ -593,6 +643,7 @@ watch(
           messages.value = dataResult.nextMessages;
           aguiEvents.value = dataResult.nextAguiEvents;
           protocolEvents.value = dataResult.nextProtocolEvents;
+          userInputRequests.value = dataResult.nextUserInputRequests;
           userInputRequest.value = dataResult.nextUserInputRequests.find(
             (request) => request.status === "Pending",
           ) ?? null;
@@ -840,6 +891,14 @@ async function runMessage(
       result.userInputRequest?.status === "Pending"
         ? result.userInputRequest
         : null;
+    if (result.userInputRequest) {
+      userInputRequests.value = [
+        ...userInputRequests.value.filter(
+          (request) => request.requestCode !== result.userInputRequest?.requestCode,
+        ),
+        result.userInputRequest,
+      ];
+    }
     streamSucceeded = settlement.streamSucceeded;
     shouldRestoreSourceSubmission = settlement.restoreSourceSubmission;
 
@@ -1011,6 +1070,7 @@ async function handleSend() {
   const attachments = pendingAttachments.value;
   if (!content && !attachments.length) return;
   const sendInput = createSendInput(activeSession, content, attachments);
+  if (!sendInput) return;
   draft.value = "";
   pendingAttachments.value = [];
   if (runActive.value) {
@@ -1028,6 +1088,7 @@ async function handleQueue() {
   const attachments = pendingAttachments.value;
   if (!content && !attachments.length) return;
   const sendInput = createSendInput(activeSession, content, attachments);
+  if (!sendInput) return;
   draft.value = "";
   pendingAttachments.value = [];
   if (runActive.value) {
@@ -1045,6 +1106,7 @@ async function handleSteer() {
   const attachments = pendingAttachments.value;
   if (!content && !attachments.length) return;
   const sendInput = createSendInput(activeSession, content, attachments);
+  if (!sendInput) return;
   const expectedRunCode = effectiveActiveRunCode.value;
   const adapter = activeAdapter.value;
   const queueGeneration = queueGenerationRef.value;
@@ -1147,26 +1209,74 @@ async function handleAnswerUserInput(answers: ChatUserInputAnswer[]) {
   ) {
     return;
   }
+  const continuationAnchorMessageCode = [...messages.value]
+    .reverse()
+    .find((message) => message.role === "ASSISTANT")?.messageCode ?? "";
   userInputAnswerPending.value = true;
+  sending.value = true;
+  liveAguiPending.value = aguiEnabled.value;
+  liveAguiPendingAnchorMessageCode.value = continuationAnchorMessageCode;
+  liveAguiEvents.value = [];
+  liveAguiAnchorMessageCodes.value = {};
   try {
     const result = await adapter.answerUserInputRequestStream(
       activeSession,
       request.requestCode,
       { answers },
-      undefined,
+      {
+        onAguiEvent: (event) => {
+          if (!aguiEnabled.value) return;
+          liveAguiEvents.value = [...liveAguiEvents.value, event];
+          const runCode = String(event.runId ?? event.runCode ?? "");
+          if (runCode && continuationAnchorMessageCode && !liveAguiAnchorMessageCodes.value[runCode]) {
+            liveAguiAnchorMessageCodes.value = {
+              ...liveAguiAnchorMessageCodes.value,
+              [runCode]: continuationAnchorMessageCode,
+            };
+          }
+        },
+      },
     );
     if (activeSessionCodeRef.value !== activeSession.sessionCode) return;
     const nextMessages = await adapter.loadMessages(activeSession.sessionCode).catch(() => null);
     messages.value = nextMessages
       ? nextMessages
       : mergeChatMessagesChronologically(messages.value, result.messages);
-    userInputRequest.value =
-      result.userInputRequest?.status === "Pending"
-        ? result.userInputRequest
-        : null;
+    const nextUserInputRequests = adapter.loadUserInputRequests
+      ? await adapter.loadUserInputRequests(activeSession.sessionCode).catch(() => null)
+      : null;
+    if (nextUserInputRequests) {
+      userInputRequests.value = nextUserInputRequests;
+      userInputRequest.value = nextUserInputRequests.find(
+        (item) => item.status === "Pending",
+      ) ?? null;
+    } else {
+      userInputRequest.value =
+        result.userInputRequest?.status === "Pending"
+          ? result.userInputRequest
+          : null;
+      userInputRequests.value = userInputRequests.value.map((item) => (
+        item.requestCode === request.requestCode
+          ? { ...item, answers, status: "Answered" as const }
+          : item
+      ));
+    }
     session.value = result.session;
+    if (aguiEnabled.value) {
+      const [nextAguiEvents, nextProtocolEvents] = await Promise.all([
+        adapter.loadAguiEvents(result.session.sessionCode).catch(() => aguiEvents.value),
+        protocolReplayEnabled.value && adapter.loadProtocolEvents
+          ? adapter.loadProtocolEvents(result.session.sessionCode).catch(() => protocolEvents.value)
+          : Promise.resolve([]),
+      ]);
+      aguiEvents.value = nextAguiEvents;
+      protocolEvents.value = nextProtocolEvents;
+    }
+    liveAguiEvents.value = [];
+    liveAguiPending.value = false;
+    liveAguiPendingAnchorMessageCode.value = "";
+    liveAguiAnchorMessageCodes.value = {};
     await refreshActiveRun(activeSession.sessionCode, undefined, false).catch(() => undefined);
-    reportInfo("The assistant continued with your answers", "Answer submitted");
   } catch (error) {
     reportError(
       error instanceof Error ? error.message : "Answer submission failed",
@@ -1174,6 +1284,9 @@ async function handleAnswerUserInput(answers: ChatUserInputAnswer[]) {
     );
   } finally {
     userInputAnswerPending.value = false;
+    sending.value = false;
+    liveAguiPending.value = false;
+    liveAguiPendingAnchorMessageCode.value = "";
   }
 }
 
@@ -1273,11 +1386,13 @@ function handleNewSession() {
   stopAbortRef.value?.abort();
   session.value = null;
   messages.value = [];
-  userInputRequest.value = null;
+    userInputRequest.value = null;
+    userInputRequests.value = [];
   aguiEvents.value = [];
   protocolEvents.value = [];
   liveAguiEvents.value = [];
   liveAguiAnchorMessageCodes.value = {};
+  liveAguiPendingAnchorMessageCode.value = "";
   pendingAttachments.value = [];
   activeSessionCodeRef.value = "";
   activeRunCode.value = "";
@@ -1301,6 +1416,7 @@ const presentationDebugEvents = computed(
       debugOptions: props.debugOptions,
       liveAguiAnchorMessageCodes: liveAguiAnchorMessageCodes.value,
       liveAguiEvents: liveAguiEvents.value,
+      liveAguiPendingAnchorMessageCode: liveAguiPendingAnchorMessageCode.value,
       liveAguiPending: liveAguiPending.value,
       messages: messages.value,
       protocolEvents: protocolEvents.value,
@@ -1347,24 +1463,42 @@ function handleEditMessage(content: string) {
   draft.value = content;
 }
 
+function handleCreateSession() {
+  if (props.onCreateSession) {
+    props.onCreateSession();
+    return;
+  }
+  void ensureSession();
+}
+
+function handleRuntimeSend(mode?: ChatSubmitMode) {
+  void handleSubmit(mode);
+}
+
 const panelCommonProps = computed(() => ({
   attachmentDownloader: attachmentDownloader.value,
+  attachmentLabels: props.attachmentLabels,
+  autoFocusComposer: props.autoFocusComposer,
+  composerHeader: props.composerHeader,
   createSessionLabel: "Start chat",
   currentUserDisplayName: props.currentUserDisplayName,
   debugOptions: resolvedDebugOptions.value,
   disabledInput: Boolean(props.config.disabledInput) || Boolean(userInputRequest.value),
   draft: draft.value,
-  emptyDescription: props.config.workspaceCode
+  emptyDescription: props.emptyDescription ?? (props.config.workspaceCode
     ? "Open a session and start talking to your configured agent."
-    : "Set a workspace code before starting a session.",
+    : "Set a workspace code before starting a session."),
+  emptyTitle: props.emptyTitle,
+  formatAnnotationCount: props.formatAnnotationCount,
   inputPlaceholder: props.config.inputPlaceholder,
   liveAguiAnchorMessageCodes: liveAguiAnchorMessageCodes.value,
   liveAguiEvents: liveAguiEvents.value,
+  liveAguiPendingAnchorMessageCode: liveAguiPendingAnchorMessageCode.value,
   liveAguiPending: liveAguiPending.value,
   messages: messages.value,
-  onCreateSession: () => {
+  onCreateSession: props.onCreateSession ?? (() => {
     void ensureSession();
-  },
+  }),
   onNewSession: handleNewSession,
   onDraftChange: handleDraftChange,
   onPasteAttachment: handleAttachmentUpload,
@@ -1388,11 +1522,13 @@ const panelCommonProps = computed(() => ({
   sending: runActive.value,
   session: session.value,
   showAgui: aguiEnabled.value,
+  showHeader: props.showHeader ?? props.config.floating !== false,
   showStop: canStop.value,
   steerDisabled: steerDisabled.value || Boolean(userInputRequest.value),
   stopLabel: "Stop",
   title: props.config.title || props.floatingTitle,
   userInputLabels: props.config.userInputLabels,
+  userInputRequests: userInputRequests.value,
   workRailLabels: props.config.workRailLabels,
   userInputAnswerPending: userInputAnswerPending.value,
   userInputRequest: userInputRequest.value,
@@ -1412,6 +1548,14 @@ function handleWindowStateChange(state: ChatFloatingState) {
     :storage-key="config.storageKey || 'tron.chat.runtime.window'"
     :title="floatingTitle"
     :title-subtitle="floatingSubtitle"
+    @create-session="handleCreateSession"
+    @new-session="handleNewSession"
+    @draft-change="handleDraftChange"
+    @edit-message="handleEditMessage"
+    @edit-queued-message="handleEditQueuedMessage"
+    @remove-queued-message="handleRemoveQueuedMessage"
+    @send="handleRuntimeSend"
+    @stop="handleStop"
     @state-change="handleWindowStateChange"
   >
     <template #footerAddon>
@@ -1436,7 +1580,7 @@ function handleWindowStateChange(state: ChatFloatingState) {
             </button>
           </div>
         </div>
-        <div v-if="activeAdapter.uploadAttachment" class="tron-chat__runtime-attachments">
+        <div v-if="props.showAttachmentControl && activeAdapter.uploadAttachment" class="tron-chat__runtime-attachments">
           <input
             ref="attachmentFileInput"
             class="tron-chat__runtime-attachment-input"
@@ -1461,7 +1605,19 @@ function handleWindowStateChange(state: ChatFloatingState) {
       <slot :name="name" v-bind="slotProps || {}" />
     </template>
   </TronChatWindow>
-  <TronChatPanel v-else v-bind="panelCommonProps" :show-header="true">
+  <TronChatPanel
+    v-else
+    v-bind="panelCommonProps"
+    :show-header="props.showHeader ?? true"
+    @create-session="handleCreateSession"
+    @new-session="handleNewSession"
+    @draft-change="handleDraftChange"
+    @edit-message="handleEditMessage"
+    @edit-queued-message="handleEditQueuedMessage"
+    @remove-queued-message="handleRemoveQueuedMessage"
+    @send="handleRuntimeSend"
+    @stop="handleStop"
+  >
     <template #footerAddon>
       <div class="tron-chat__runtime-footer-addon">
         <div v-if="pendingAttachments.length" class="tron-chat__runtime-attachments tron-chat__runtime-attachments--pending">
@@ -1484,7 +1640,7 @@ function handleWindowStateChange(state: ChatFloatingState) {
             </button>
           </div>
         </div>
-        <div v-if="activeAdapter.uploadAttachment" class="tron-chat__runtime-attachments">
+        <div v-if="props.showAttachmentControl && activeAdapter.uploadAttachment" class="tron-chat__runtime-attachments">
           <input
             ref="attachmentFileInput"
             class="tron-chat__runtime-attachment-input"

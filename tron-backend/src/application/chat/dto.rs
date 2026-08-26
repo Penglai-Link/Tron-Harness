@@ -39,6 +39,14 @@ pub struct UpdateChatSessionCommand {
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
+pub struct ChatResumeEntry {
+    pub interrupt_id: String,
+    pub status: String,
+    pub payload: Value,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct SendChatMessageCommand {
     #[serde(skip)]
     pub run_code: Option<String>,
@@ -57,6 +65,8 @@ pub struct SendChatMessageCommand {
     pub attachments: Vec<ChatMessageAttachment>,
     #[serde(default)]
     pub client_capabilities: Option<ChatClientCapabilities>,
+    #[serde(default)]
+    pub resume: Vec<ChatResumeEntry>,
 }
 
 #[derive(Debug, Clone, Deserialize)]

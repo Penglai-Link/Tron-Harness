@@ -598,6 +598,10 @@ export const pages = {
       thinking: "正在思考…",
       workedFor: "已工作 {{duration}}",
       workingFor: "正在工作 {{duration}}",
+      askingQuestions: "正在询问 {{count}} 个问题",
+      askedQuestions: "已询问 {{count}} 个问题",
+      waitingForAnswer: "等待你的回答",
+      skipped: "已跳过",
     },
     shortTermMemory: {
       workspace: "执行",

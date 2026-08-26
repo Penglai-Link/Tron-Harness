@@ -154,6 +154,7 @@ pub async fn execute_task(
         tools: Vec::new(),
         attachments: Vec::new(),
         client_capabilities: None,
+        resume: Vec::new(),
     };
     let runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
         Ok(runtime) => runtime,

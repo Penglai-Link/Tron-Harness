@@ -98,11 +98,13 @@ import {
   formatReasoningEffort,
   reasoningEffortOptions,
 } from "@/domain/model/constants/modelPageOptions";
-import { isApiError } from "@/shared/api/httpClient";
+import { getApiAccessToken, isApiError } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
-import { TronChatPanel } from "@tron/chat-react";
+import { TronChatRuntimeWindow } from "@tron/chat-react";
+import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
+  createMockChatAdapter,
   enqueueChatSubmission,
   isSteerQueueFallbackCode,
   mergeChatMessagesChronologically,
@@ -113,6 +115,8 @@ import {
   type ChatSubmitMode,
   type ChatUserInputLabels,
   type ChatWorkRailLabels,
+  type ChatRuntimeRunState,
+  type ChatSession as RuntimeChatSession,
 } from "@tron/chat-core";
 import { deriveReasoningPreview, truncateLabel } from "./chatReasoningPreview";
 import {
@@ -3881,11 +3885,21 @@ export function ChatManagementPage() {
     thinking: t("chat.workRail.thinking"),
     workedFor: (duration) => t("chat.workRail.workedFor", { duration }),
     workingFor: (duration) => t("chat.workRail.workingFor", { duration }),
+    askingQuestions: (count) => t("chat.workRail.askingQuestions", { count }),
+    askedQuestions: (count) => t("chat.workRail.askedQuestions", { count }),
+    waitingForAnswer: t("chat.workRail.waitingForAnswer"),
+    skipped: t("chat.workRail.skipped"),
   }), [i18n.language, t]);
   const { session: authSession } = useAuthSession();
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
+  const chatRuntimeAdapter = useMemo(
+    () => getServiceDataSource("chat") === "mock"
+      ? createMockChatAdapter()
+      : createInternalChatAdapter({ getAccessToken: getApiAccessToken }),
+    [],
+  );
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);
   const [activeChatReplayRefreshKey, setActiveChatReplayRefreshKey] = useState(0);
   const [activeRunRefreshKey, setActiveRunRefreshKey] = useState(0);
@@ -3953,9 +3967,11 @@ export function ChatManagementPage() {
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
   const [liveAguiAnchorMessageCodesBySessionCode, setLiveAguiAnchorMessageCodesBySessionCode] = useState<Record<string, Record<string, string>>>({});
+  const [liveAguiPendingAnchorMessageCodesBySessionCode, setLiveAguiPendingAnchorMessageCodesBySessionCode] = useState<Record<string, string>>({});
   const [latestRequestEstimatesBySessionCode, setLatestRequestEstimatesBySessionCode] = useState<Record<string, ChatTokenEstimateSnapshot>>({});
   const [latestUsageAuditsBySessionCode, setLatestUsageAuditsBySessionCode] = useState<Record<string, ChatUsageAuditSnapshot>>({});
   const [sending, setSending] = useState(false);
+  const [userInputRequests, setUserInputRequests] = useState<ChatUserInputRequest[]>([]);
   const [userInputRequest, setUserInputRequest] = useState<ChatUserInputRequest | null>(null);
   const [userInputAnswerPending, setUserInputAnswerPending] = useState(false);
   const [steering, setSteering] = useState(false);
@@ -4063,6 +4079,7 @@ export function ChatManagementPage() {
     let active = true;
     const sessionCode = activeSession?.sessionCode ?? "";
     if (!sessionCode) {
+      setUserInputRequests([]);
       setUserInputRequest(null);
       return () => {
         active = false;
@@ -4071,12 +4088,14 @@ export function ChatManagementPage() {
     void listChatUserInputRequests(sessionCode)
       .then((requests) => {
         if (!active || activeSessionCodeRef.current !== sessionCode) return;
+        setUserInputRequests(requests);
         setUserInputRequest(
           requests.find((request) => request.status === "Pending") ?? null,
         );
       })
       .catch(() => {
         if (active && activeSessionCodeRef.current === sessionCode) {
+          setUserInputRequests([]);
           setUserInputRequest(null);
         }
       });
@@ -4178,6 +4197,41 @@ export function ChatManagementPage() {
     }
     return input;
   }
+
+  function toPageChatSession(session: RuntimeChatSession): ChatSession {
+    return {
+      ...session,
+      sourceType: session.sourceType ?? undefined,
+    };
+  }
+
+  const createRuntimeSendInput = useCallback(
+    (session: RuntimeChatSession, content: string, attachments: ChatMessageAttachment[]) => (
+      createSendInput(toPageChatSession(session), content, attachments)
+    ),
+    [effectiveAgentCode, selectedModel, selectedReasoningEffort],
+  );
+
+  const handleRuntimeSessionChange = useCallback((nextSession: RuntimeChatSession | null) => {
+    if (nextSession) {
+      setSessionGroups((current) => replaceSession(current, toPageChatSession(nextSession)));
+    }
+    setActiveChatDataRefreshKey((current) => current + 1);
+    setActiveChatReplayRefreshKey((current) => current + 1);
+    setActiveRunRefreshKey((current) => current + 1);
+  }, []);
+
+  const handleRuntimeRunStateChange = useCallback((state: ChatRuntimeRunState) => {
+    if (!state.sessionCode) return;
+    setSending(state.active);
+    setRunningSessionCode((current) => {
+      if (state.active) return state.sessionCode;
+      return current === state.sessionCode ? "" : current;
+    });
+    setActiveRunCode(state.active ? state.runCode : "");
+    setActiveRunSupportsSteer(state.active ? state.supportsSteer : null);
+    setActiveRunRefreshKey((current) => current + 1);
+  }, []);
 
   async function uploadAttachmentForActiveSession(
     file: File,
@@ -4614,6 +4668,9 @@ export function ChatManagementPage() {
   const liveAguiAnchorMessageCodes = activeSession?.sessionCode
     ? liveAguiAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? emptyLiveAguiAnchorMessageCodes
     : emptyLiveAguiAnchorMessageCodes;
+  const liveAguiPendingAnchorMessageCode = activeSession?.sessionCode
+    ? liveAguiPendingAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? ""
+    : "";
   const liveAguiPending = Boolean(
     sending
     && activeSession
@@ -4638,6 +4695,12 @@ export function ChatManagementPage() {
   ]);
   const waitingForModelAnchorMessageCode = useMemo(() => {
     if (!liveAguiPending || !activeSession?.sessionCode) return "";
+    if (liveAguiPendingAnchorMessageCode && visibleMessages.some((message) => (
+      message.sessionCode === activeSession.sessionCode
+      && message.messageCode === liveAguiPendingAnchorMessageCode
+    ))) {
+      return liveAguiPendingAnchorMessageCode;
+    }
     for (let index = visibleMessages.length - 1; index >= 0; index -= 1) {
       const message = visibleMessages[index];
       if (message.sessionCode === activeSession.sessionCode && message.role === "USER") {
@@ -4645,7 +4708,7 @@ export function ChatManagementPage() {
       }
     }
     return "";
-  }, [activeSession?.sessionCode, liveAguiPending, visibleMessages]);
+  }, [activeSession?.sessionCode, liveAguiPending, liveAguiPendingAnchorMessageCode, visibleMessages]);
   const workRailsByMessageCode = useMemo(() => (
     aguiWorkRailsByMessageCode(
       visibleMessages,
@@ -5528,6 +5591,13 @@ export function ChatManagementPage() {
           ? result.userInputRequest
           : null,
       );
+      const pendingUserInputRequest = result.userInputRequest;
+      if (pendingUserInputRequest?.status === "Pending") {
+        setUserInputRequests((current) => [
+          ...current.filter((request) => request.requestCode !== pendingUserInputRequest.requestCode),
+          pendingUserInputRequest,
+        ]);
+      }
       setSessionGroups((current) => replaceSession(current, result.session));
       scheduleSessionTitleRefresh(result.session);
       setLatestRequestEstimatesBySessionCode((current) => {
@@ -5691,36 +5761,110 @@ export function ChatManagementPage() {
     const targetSession = activeSession;
     const request = userInputRequest;
     if (!targetSession || !request || userInputAnswerPending) return;
+    const continuationAnchorMessageCode = [...visibleMessages]
+      .reverse()
+      .find((message) => message.role === "ASSISTANT")?.messageCode ?? "";
     setUserInputAnswerPending(true);
+    setSendingState(true);
+    runningSessionCodeRef.current = targetSession.sessionCode;
+    setRunningSessionCode(targetSession.sessionCode);
+    activeRunCodeRef.current = "";
+    activeRunSupportsSteerRef.current = null;
+    setActiveRunCode("");
+    setActiveRunSupportsSteer(null);
+    setLiveAguiPendingAnchorMessageCodesBySessionCode((current) => ({
+      ...current,
+      [targetSession.sessionCode]: continuationAnchorMessageCode,
+    }));
+    setLiveAguiEventsBySessionCode((current) => ({
+      ...current,
+      [targetSession.sessionCode]: [],
+    }));
+    setLiveAguiAnchorMessageCodesBySessionCode((current) => ({
+      ...current,
+      [targetSession.sessionCode]: {},
+    }));
     try {
       const result = await streamChatUserInputAnswer(
         targetSession,
         request.requestCode,
         { answers },
+        {
+          onAguiEvent: (event) => {
+            if (activeSessionCodeRef.current !== targetSession.sessionCode) return;
+            const runCode = aguiEventRunCode(event);
+            if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {
+              activeRunCodeRef.current = runCode;
+              setActiveRunCode(runCode);
+              const supportsSteer = typeof event.supportsSteer === "boolean"
+                ? event.supportsSteer
+                : null;
+              activeRunSupportsSteerRef.current = supportsSteer;
+              setActiveRunSupportsSteer(supportsSteer);
+            }
+            if (runCode && runCode !== "stream") {
+              setLiveAguiAnchorMessageCodesBySessionCode((current) => {
+                const sessionAnchors = current[targetSession.sessionCode] ?? {};
+                if (sessionAnchors[runCode]) return current;
+                return {
+                  ...current,
+                  [targetSession.sessionCode]: {
+                    ...sessionAnchors,
+                    [runCode]: continuationAnchorMessageCode,
+                  },
+                };
+              });
+            }
+            setLiveAguiEventsBySessionCode((current) => ({
+              ...current,
+              [targetSession.sessionCode]: mergeTranscriptAguiEvents(
+                current[targetSession.sessionCode] ?? [],
+                [event],
+              ),
+            }));
+          },
+        },
       );
       if (activeSessionCodeRef.current === targetSession.sessionCode) {
         setVisibleMessages((current) =>
           mergeChatMessagesChronologically(current, result.messages),
         );
-        setUserInputRequest(
-          result.userInputRequest?.status === "Pending"
-            ? result.userInputRequest
-            : null,
-        );
+        const nextRequests = await listChatUserInputRequests(targetSession.sessionCode).catch(() => null);
+        if (nextRequests) {
+          setUserInputRequests(nextRequests);
+          setUserInputRequest(
+            nextRequests.find((item) => item.status === "Pending") ?? null,
+          );
+        } else {
+          setUserInputRequest(
+            result.userInputRequest?.status === "Pending"
+              ? result.userInputRequest
+              : null,
+          );
+          setUserInputRequests((current) => current.map((item) => (
+            item.requestCode === request.requestCode
+              ? { ...item, answers, status: "Answered" as const }
+              : item
+          )));
+        }
       }
       setSessionGroups((current) => replaceSession(current, result.session));
       setActiveChatDataRefreshKey((current) => current + 1);
       setActiveRunRefreshKey((current) => current + 1);
       setActiveChatReplayRefreshKey((current) => current + 1);
       setShortTermMemoryRefreshKey((current) => current + 1);
-      toast.success("The assistant continued with your answers", {
-        title: "Answer submitted",
-      });
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Answer submission failed", {
         title: "Answer submission failed",
       });
     } finally {
+      setLiveAguiPendingAnchorMessageCodesBySessionCode((current) => {
+        if (!(targetSession.sessionCode in current)) return current;
+        const next = { ...current };
+        delete next[targetSession.sessionCode];
+        return next;
+      });
+      clearLocalStreamState();
       setUserInputAnswerPending(false);
     }
   }
@@ -6220,60 +6364,44 @@ export function ChatManagementPage() {
           </div>
         </header>
 
-        <TronChatPanel
-          attachmentDownloader={activeSession
-            ? (attachment) => downloadChatSessionAttachment(activeSession, attachment)
-              .then((response) => response.blob)
-            : undefined}
+        <TronChatRuntimeWindow
+          adapter={chatRuntimeAdapter}
           attachmentLabels={attachmentLabels}
           autoFocusComposer={shouldAutoFocusChatComposer()}
           composerRef={composerRef}
           composerHeader={transcriptAttachmentHeader}
-          createSessionLabel="Create session"
+          config={{
+            agentCode: effectiveAgentCode,
+            disabledInput: creatingSession || !activeSession || !selectedModel,
+            floating: false,
+            inputPlaceholder: "Enter to send, Shift+Enter for newline",
+            showAgui: true,
+            storageKey: "tron.chat.management.runtime",
+            title: activeSession?.title ?? "Chat Management",
+            userInputLabels,
+            workRailLabels,
+            workspaceCode: activeWorkspaceCode,
+          }}
+          createSendInput={createRuntimeSendInput}
           currentUserDisplayName={currentUserDisplayName}
           debugOptions={transcriptWorkReplayOptions}
-          disabledInput={Boolean(userInputRequest) || userInputAnswerPending}
-          draft={composer}
           emptyDescription={activeWorkspaceCode
             ? "Create a new session or pick one from the left panel to view chat details and start messaging."
             : "Select or create a workspace before loading chat sessions."}
-          footerAddon={transcriptFooterAddon}
           formatAnnotationCount={formatAnnotationCount}
-          inputPlaceholder="Enter to send, Shift+Enter for newline"
-          liveAguiAnchorMessageCodes={liveAguiAnchorMessageCodes}
-          liveAguiEvents={liveAguiEvents}
-          liveAguiPending={liveAguiPending}
-          messages={visibleMessages}
+          draft={composer}
+          initialSession={activeSession ?? null}
           onCreateSession={() => {
             void handleCreateSession();
           }}
           onDraftChange={setComposer}
-          onPasteAttachment={handleAttachmentFile}
-          onEditMessage={setComposer}
-          onEditQueuedMessage={handleEditQueuedMessage}
-          onRemoveQueuedMessage={handleRemoveQueuedMessage}
-          onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
-          onSend={(mode) => {
-            void handleSubmit(mode);
-          }}
-          onStop={() => {
-            void handleStopRun();
-          }}
-          protocolEvents={aguiProtocolEvents}
-          queueDisabled={queueDisabled}
-          queuedMessages={visibleQueuedSubmissions}
-          runningSubmitModes={runningSubmitModes}
-          sendDisabled={Boolean(userInputRequest) || (!currentSessionRunActive && (sending || !activeSession || !selectedModel))}
-          sending={currentSessionRunActive}
-          session={activeSession}
+          onPendingAttachmentsChange={setPendingAttachments}
+          onRunStateChange={handleRuntimeRunStateChange}
+          onSessionChange={handleRuntimeSessionChange}
+          pendingAttachments={pendingAttachments}
+          showAttachmentControl={false}
           showHeader={false}
-          showStop={canStopCurrentRun}
-          steerDisabled={steerDisabled}
-          title={activeSession?.title ?? "Chat Management"}
-          userInputLabels={userInputLabels}
-          workRailLabels={workRailLabels}
-          userInputAnswerPending={userInputAnswerPending}
-          userInputRequest={userInputRequest}
+          footerAddon={transcriptFooterAddon}
         />
       </main>
       <ConfirmDialog

@@ -165,9 +165,23 @@ pub async fn answer_user_input(
         Ok(request) => request,
         Err(error) => return steer_chat_message_request_rejection_response(error),
     };
+    let answers = request
+        .answers
+        .or_else(|| {
+            request
+                .resume
+                .first()
+                .and_then(|entry| entry.payload.get("answers"))
+                .and_then(|value| serde_json::from_value(value.clone()).ok())
+        });
+    let Some(answers) = answers else {
+        return chat_error_response(ChatError::UserInputAnswerInvalid(
+            "resume payload must contain answers".into(),
+        ));
+    };
     let command = match state
         .chats
-        .answer_user_input(&session_code, &request_code, request.answers)
+        .answer_user_input(&session_code, &request_code, answers)
     {
         Ok(command) => command,
         Err(error) => return chat_error_response(error),

@@ -7,6 +7,7 @@ import {
   type ChatAttachmentLabels,
   type ChatMessage,
   type ChatSubmitMode,
+  type ChatUserInputRequest,
 } from "@tron/chat-core";
 import { computed, nextTick, onMounted, ref, watch } from "vue";
 import { cx, insertNewlineAtCursor } from "../utils";
@@ -23,6 +24,8 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
     annotationPreview: "Annotation preview",
     attachments: "Attachments",
   }),
+  autoFocusComposer: false,
+  composerHeader: undefined,
   createSessionLabel: "Create session",
   currentUserDisplayName: "",
   debugOptions: undefined,
@@ -33,6 +36,7 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
   inputPlaceholder: "Enter to send, Shift+Enter for newline",
   liveAguiAnchorMessageCodes: () => ({}),
   liveAguiEvents: () => [],
+  liveAguiPendingAnchorMessageCode: "",
   liveAguiPending: false,
   onCreateSession: undefined,
   onEditMessage: undefined,
@@ -57,6 +61,7 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
   title: "",
   userInputLabels: undefined,
   workRailLabels: undefined,
+  userInputRequests: () => [],
   userInputRequest: null,
   userInputAnswerPending: false,
   onAnswerUserInput: undefined,
@@ -74,9 +79,17 @@ const emit = defineEmits<{
 }>();
 
 const transcriptRef = ref<HTMLElement | null>(null);
+const composerRef = ref<HTMLTextAreaElement | null>(null);
 const showJumpButton = ref(false);
 const autoStickToBottom = ref(true);
 const previewImage = ref<{ alt: string; source: string } | null>(null);
+
+function isUserInputAnswerSummary(message: ChatMessage) {
+  if (message.role !== "USER") return false;
+  const content = message.content.trimStart();
+  return content.startsWith("The user answered the questions you asked:")
+    || content.startsWith("用户回答了你提出的问题：");
+}
 
 function openImagePreview(source: string, alt: string) {
   previewImage.value = { alt, source };
@@ -136,6 +149,7 @@ const presentation = computed(() =>
     debugOptions: props.debugOptions,
     liveAguiAnchorMessageCodes: props.liveAguiAnchorMessageCodes,
     liveAguiEvents: props.liveAguiEvents,
+    liveAguiPendingAnchorMessageCode: props.liveAguiPendingAnchorMessageCode,
     liveAguiPending: props.liveAguiPending,
     messages: props.messages,
     protocolEvents: props.protocolEvents,
@@ -239,14 +253,19 @@ watch([() => props.messages, presentation], async () => {
 
 watch(
   () => props.session?.sessionCode,
-  () => {
+  async () => {
     autoStickToBottom.value = true;
     showJumpButton.value = false;
+    if (props.autoFocusComposer) {
+      await nextTick();
+      composerRef.value?.focus();
+    }
   },
 );
 
 onMounted(() => {
   scrollToBottom("auto");
+  if (props.autoFocusComposer) composerRef.value?.focus();
 });
 </script>
 
@@ -305,6 +324,7 @@ onMounted(() => {
           <div v-if="messages.length" class="tron-chat__transcript-inner">
             <template v-for="message in messages" :key="message.messageCode">
               <ChatBubble
+                v-if="!isUserInputAnswerSummary(message)"
                 :current-user-display-name="currentUserDisplayName"
                 :empty-assistant-message="
                   message.messageCode === pendingAssistantMessageCode
@@ -338,6 +358,8 @@ onMounted(() => {
                   :debug-events="debugEventsForRun(run.runCode)"
                   :events="run.events"
                   :labels="props.workRailLabels"
+                  :message-code="message.messageCode"
+                  :user-input-requests="props.userInputRequests"
                 />
               </template>
             </template>
@@ -423,8 +445,13 @@ onMounted(() => {
           </ol>
         </section>
         <div class="tron-chat__composer">
+          <div v-if="composerHeader" class="tron-chat__composer-header">
+            <component :is="composerHeader" />
+          </div>
           <textarea
+            ref="composerRef"
             class="tron-chat__textarea"
+            :autofocus="autoFocusComposer"
             :disabled="disabledInput"
             :placeholder="composerPlaceholder"
             :value="draft"

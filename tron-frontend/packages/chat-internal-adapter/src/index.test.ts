@@ -300,7 +300,11 @@ describe("createInternalChatAdapter", () => {
       "https://internal.example.com/api/v1/chats/sessions/SESSION-1/user-input-requests/INPUT-1/answers/stream",
     );
     expect(JSON.parse(String(answerInit?.body))).toEqual({
-      answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }],
+      resume: [{
+        interruptId: "INPUT-1",
+        status: "resolved",
+        payload: { answers: [{ answerKind: "Skipped", questionCode: "QUESTION-1" }] },
+      }],
     });
   });
 });

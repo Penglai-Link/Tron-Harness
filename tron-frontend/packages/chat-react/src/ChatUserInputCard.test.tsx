@@ -49,7 +49,7 @@ describe("ChatUserInputCard", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next" }));
 
     expect(screen.getByText("Question 2 of 2")).toBeTruthy();
-    expect(screen.getByText(/What is the scope\?/)).toBeTruthy();
+    expect(screen.getByRole("region").querySelector(".tron-chat__user-input-title")?.textContent).toBe("What is the scope?");
     expect((screen.getByRole("button", { name: "Back" }) as HTMLButtonElement).disabled).toBe(false);
 
     fireEvent.click(screen.getByRole("button", { name: "Back" }));
@@ -84,17 +84,34 @@ describe("ChatUserInputCard", () => {
     ]);
   });
 
+  it("offers a confirm action after selecting an option", () => {
+    const onSubmit = vi.fn();
+    render(<ChatUserInputCard onSubmit={onSubmit} request={{ ...request, questions: [request.questions[0]] }} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /Option one/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
+
+    expect(onSubmit).toHaveBeenCalledWith([
+      {
+        answerKind: "Option",
+        otherText: null,
+        optionCode: "OPTION-1",
+        questionCode: "QUESTION-1",
+      },
+    ]);
+  });
+
   it("turns the other option into an inline custom answer field", () => {
     const onSubmit = vi.fn();
     render(<ChatUserInputCard onSubmit={onSubmit} request={request} />);
 
-    fireEvent.click(screen.getByRole("radio", { name: /^Other/ }));
     const otherAnswer = screen.getByRole("textbox", { name: "Other answer for question 1" });
     expect(otherAnswer).toBeTruthy();
     expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
 
     fireEvent.change(otherAnswer, { target: { value: "I want to define my own direction." } });
-    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    expect(screen.getByRole("button", { name: "Confirm" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Confirm" }));
     fireEvent.click(screen.getByRole("radio", { name: /Keep it simple/ }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
@@ -109,6 +126,34 @@ describe("ChatUserInputCard", () => {
         answerKind: "Option",
         otherText: null,
         optionCode: "OPTION-3",
+        questionCode: "QUESTION-2",
+      },
+    ]);
+  });
+
+  it("advances and submits a custom answer with Enter", () => {
+    const onSubmit = vi.fn();
+    render(<ChatUserInputCard onSubmit={onSubmit} request={request} />);
+
+    const otherAnswer = screen.getByRole("textbox", { name: "Other answer for question 1" });
+    fireEvent.change(otherAnswer, { target: { value: "Use the custom direction." } });
+    fireEvent.keyDown(otherAnswer, { key: "Enter" });
+
+    expect(screen.getByText("Question 2 of 2")).toBeTruthy();
+    fireEvent.change(screen.getByRole("textbox", { name: "Other answer for question 2" }), { target: { value: "Keep the scope focused." } });
+    fireEvent.keyDown(screen.getByRole("textbox", { name: "Other answer for question 2" }), { key: "Enter" });
+
+    expect(onSubmit).toHaveBeenCalledWith([
+      {
+        answerKind: "Other",
+        otherText: "Use the custom direction.",
+        optionCode: null,
+        questionCode: "QUESTION-1",
+      },
+      {
+        answerKind: "Other",
+        otherText: "Keep the scope focused.",
+        optionCode: null,
         questionCode: "QUESTION-2",
       },
     ]);

@@ -49,3 +49,4 @@ Pagable response body format:
 <!-- Oversized Rust modules are split into responsibility-named include fragments when private same-module visibility must remain unchanged. -->
 <!-- The chat panel test baseline had a missing closing test delimiter; keep the focused test file syntactically complete when extending composer behavior. -->
 <!-- Built-in prompt source changes require incrementing the definition version so existing database records synchronize without overwriting edited prompts. -->
+<!-- `chat.ask_user` questions persist only model-provided choices; the UI owns the free-form answer and skip actions, so synthetic Other/Skip options must not be appended during persistence. -->

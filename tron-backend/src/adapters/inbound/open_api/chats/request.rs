@@ -1,11 +1,15 @@
 use serde::Deserialize;
 
-use crate::domain::{
-    agent::{AgentRunLimits, EffectiveTool},
-    chat::{
-        ChatClientCapabilities, ChatMessageAttachment, ChatSessionSourceType, ChatUserInputAnswer,
+use crate::{
+    application::chat::ChatResumeEntry,
+    domain::{
+        agent::{AgentRunLimits, EffectiveTool},
+        chat::{
+            ChatClientCapabilities, ChatMessageAttachment, ChatSessionSourceType,
+            ChatUserInputAnswer,
+        },
+        reasoning::ReasoningEffort,
     },
-    reasoning::ReasoningEffort,
 };
 
 #[derive(Debug, Clone, Deserialize)]
@@ -51,6 +55,8 @@ pub struct OpenApiSendChatMessageRequest {
     pub attachments: Vec<ChatMessageAttachment>,
     #[serde(default)]
     pub client_capabilities: Option<ChatClientCapabilities>,
+    #[serde(default)]
+    pub resume: Vec<ChatResumeEntry>,
 }
 
 #[derive(Debug, Clone, Deserialize)]
@@ -79,5 +85,7 @@ pub struct OpenApiStopChatRunRequest {
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct OpenApiAnswerChatUserInputRequest {
-    pub answers: Vec<ChatUserInputAnswer>,
+    pub answers: Option<Vec<ChatUserInputAnswer>>,
+    #[serde(default)]
+    pub resume: Vec<ChatResumeEntry>,
 }

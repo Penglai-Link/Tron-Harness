@@ -240,10 +240,9 @@ impl ChatService {
             &answers,
             &answered_at,
         )?;
-        let summary = format_user_input_answer_summary(&answered.questions, &answers);
         Ok(SendChatMessageCommand {
             run_code: None,
-            content: Some(summary),
+            content: None,
             workspace_code: Some(session.workspace_code),
             app_code: session.app_code,
             task_code: session.task_code,
@@ -257,6 +256,11 @@ impl ChatService {
             client_capabilities: Some(crate::domain::chat::ChatClientCapabilities {
                 user_input_requests: true,
             }),
+            resume: vec![crate::application::chat::ChatResumeEntry {
+                interrupt_id: request_code.to_string(),
+                status: "resolved".into(),
+                payload: serde_json::json!({ "answers": answers }),
+            }],
         })
     }
 
