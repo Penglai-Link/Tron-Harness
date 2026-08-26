@@ -643,9 +643,7 @@ export function TronChatRuntimeWindow({
     return created;
   }
 
-  async function handleAttachmentFileInputChange(event: ChangeEvent<HTMLInputElement>) {
-    const file = event.currentTarget.files?.item(0);
-    event.currentTarget.value = "";
+  async function handleAttachmentUpload(file: File) {
     if (!file || !activeAdapter.uploadAttachment || attachmentUploadPending) return;
     const activeSession = await ensureSession();
     if (!activeSession) return;
@@ -667,6 +665,13 @@ export function TronChatRuntimeWindow({
     } finally {
       setAttachmentUploadPending(false);
     }
+  }
+
+  async function handleAttachmentFileInputChange(event: ChangeEvent<HTMLInputElement>) {
+    const file = event.currentTarget.files?.item(0);
+    event.currentTarget.value = "";
+    if (!file) return;
+    await handleAttachmentUpload(file);
   }
 
   async function runMessage(
@@ -1247,6 +1252,7 @@ export function TronChatRuntimeWindow({
       }}
       onNewSession={handleNewSession}
       onDraftChange={setDraft}
+      onPasteAttachment={handleAttachmentUpload}
       onEditMessage={setDraft}
       onEditQueuedMessage={handleEditQueuedMessage}
       onRemoveQueuedMessage={handleRemoveQueuedMessage}
@@ -1294,6 +1300,7 @@ export function TronChatRuntimeWindow({
         onCreateSession={() => { void ensureSession(); }}
         onNewSession={handleNewSession}
         onDraftChange={setDraft}
+        onPasteAttachment={handleAttachmentUpload}
         onEditMessage={setDraft}
         onEditQueuedMessage={handleEditQueuedMessage}
         onRemoveQueuedMessage={handleRemoveQueuedMessage}

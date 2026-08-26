@@ -168,6 +168,52 @@ describe("TronChatRuntimeWindow", () => {
     await waitFor(() => expect(screen.queryByRole("img", { name: "screen.png" })).toBeNull());
   });
 
+  it("uploads an image pasted into the composer", async () => {
+    const pastedAttachment = {
+      contentType: "image/png",
+      fileName: "pasted.png",
+      id: "IMAGE-PASTED",
+      imageUrl: "data:image/png;base64,AA==",
+      kind: "image" as const,
+      metadata: {},
+      summary: "pasted.png",
+    };
+    const uploadAttachment = vi.fn().mockResolvedValue(pastedAttachment);
+    const adapter = {
+      ...createAdapter().adapter,
+      uploadAttachment,
+    } satisfies ChatAdapter;
+    render(
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        config={{ floating: false, workspaceCode: "WS-1" }}
+        initialSession={restoredSession()}
+      />,
+    );
+
+    await waitFor(() => expect(adapter.loadMessages).toHaveBeenCalled());
+    const file = new File(["image"], "clipboard.png", { type: "image/png" });
+    fireEvent.paste(screen.getByRole("textbox"), {
+      clipboardData: {
+        items: [{
+          getAsFile: () => file,
+          kind: "file",
+          type: "image/png",
+        }],
+      },
+    });
+
+    await waitFor(() => expect(uploadAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionCode: "SESSION-RESTORED" }),
+      expect.objectContaining({
+        file,
+        kind: "image",
+        summary: "clipboard.png",
+      }),
+    ));
+    expect(screen.getByRole("img", { name: "pasted.png" })).toBeTruthy();
+  });
+
   it("synchronizes a later initialSession value into the runtime state", async () => {
     const { adapter, loadMessages } = createAdapter();
     const { rerender } = render(

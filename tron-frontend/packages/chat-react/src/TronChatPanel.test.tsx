@@ -201,6 +201,8 @@ describe("TronChatPanel submit controls", () => {
 
     expect(screen.getByText("Waiting for assistant output...")).toBeTruthy();
     expect(screen.queryByText("No assistant response was produced.")).toBeNull();
+  });
+
   it("renders message actions below the message content", () => {
     renderPanel({
       messages: [
@@ -250,6 +252,54 @@ describe("TronChatPanel submit controls", () => {
     expect(onSend).toHaveBeenNthCalledWith(1, "send");
     expect(onSend).toHaveBeenNthCalledWith(2, "send");
     expect(screen.getByRole("button", { name: "Send" }).title).toBe("Send");
+  });
+
+  it("uploads an image pasted into the composer instead of inserting it as text", () => {
+    const onDraftChange = vi.fn();
+    const onPasteAttachment = vi.fn();
+    renderPanel({ onDraftChange, onPasteAttachment });
+
+    const file = new File(["image"], "", { type: "image/png" });
+    fireEvent.paste(screen.getByRole("textbox"), {
+      clipboardData: {
+        items: [{
+          getAsFile: () => file,
+          kind: "file",
+          type: "image/png",
+        }],
+      },
+    });
+
+    expect(onDraftChange).not.toHaveBeenCalled();
+    expect(onPasteAttachment).toHaveBeenCalledTimes(1);
+    expect(onPasteAttachment.mock.calls[0][0]).toMatchObject({
+      name: expect.stringMatching(/^pasted-image-\d+\.png$/),
+      type: "image/png",
+    });
+  });
+
+  it("opens a preview when a historical image attachment is clicked", () => {
+    renderPanel({
+      messages: [{
+        ...message("USER", "What is this image?"),
+        attachments: [{
+          contentType: "image/png",
+          fileName: "screenshot.png",
+          id: "IMAGE-1",
+          imageUrl: "data:image/png;base64,AA==",
+          kind: "image",
+          metadata: {},
+          summary: "screenshot.png",
+        }],
+      }],
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Preview screenshot.png" }));
+
+    const dialog = screen.getByRole("dialog", { name: "Image preview" });
+    expect(within(dialog).getByRole("img", { name: "screenshot.png" })).toBeTruthy();
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(screen.queryByRole("dialog", { name: "Image preview" })).toBeNull();
   });
 
   it("keeps a single Stop action and routes Queue and Steer through shortcuts", () => {

@@ -303,6 +303,178 @@
   gap: 8px;
 }
 
+.tron-chat__runtime-footer-addon,
+.tron-chat__runtime-attachments {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.tron-chat__runtime-attachments--pending {
+  width: 100%;
+  flex-basis: 100%;
+  align-items: stretch;
+}
+
+.tron-chat__runtime-attachment-chip {
+  position: relative;
+  display: inline-flex;
+  min-width: 0;
+  max-width: min(280px, 100%);
+  align-items: center;
+  gap: 7px;
+  border: 1px solid var(--tron-chat-border);
+  border-radius: 10px;
+  background: var(--tron-chat-surface-soft);
+  color: var(--tron-chat-text);
+  padding: 7px 34px 7px 10px;
+  font-size: 13px;
+}
+
+.tron-chat__runtime-attachment-chip img {
+  width: 28px;
+  height: 28px;
+  flex: none;
+  border-radius: 6px;
+  object-fit: cover;
+}
+
+.tron-chat__runtime-attachment-chip > span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tron-chat__runtime-attachment-input {
+  display: none;
+}
+
+.tron-chat__runtime-attachment-remove {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--tron-chat-text-muted);
+  cursor: pointer;
+  padding: 0;
+  transform: translateY(-50%);
+}
+
+.tron-chat__runtime-attachment-remove:hover {
+  color: var(--tron-chat-text);
+}
+
+.tron-chat__inspection-attachments {
+  display: flex;
+  max-width: 100%;
+  align-items: flex-end;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tron-chat__inspection-previews {
+  display: flex;
+  max-width: 100%;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.tron-chat__inspection-preview {
+  display: flex;
+  max-width: min(224px, 100%);
+  max-height: 160px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  margin: 0;
+  border: 1px solid var(--tron-chat-border);
+  border-radius: 12px;
+  background: var(--tron-chat-surface-muted);
+  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.08);
+}
+
+.tron-chat__inspection-preview-button {
+  display: block;
+  max-width: 100%;
+  border: 0;
+  background: transparent;
+  cursor: zoom-in;
+  padding: 0;
+}
+
+.tron-chat__inspection-preview-button:focus-visible {
+  outline: 2px solid var(--tron-chat-focus);
+  outline-offset: -2px;
+}
+
+.tron-chat__inspection-preview img {
+  display: block;
+  max-width: 100%;
+  max-height: 160px;
+  object-fit: contain;
+}
+
+.tron-chat__image-preview-dialog {
+  position: fixed;
+  z-index: 60;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(15, 23, 42, 0.72);
+  cursor: zoom-out;
+  padding: 24px;
+}
+
+.tron-chat__image-preview-content {
+  position: relative;
+  display: flex;
+  max-width: min(1200px, 100%);
+  max-height: 100%;
+  align-items: center;
+  justify-content: center;
+  cursor: default;
+}
+
+.tron-chat__image-preview-content img {
+  display: block;
+  max-width: 100%;
+  max-height: calc(100vh - 48px);
+  border-radius: 8px;
+  object-fit: contain;
+}
+
+.tron-chat__image-preview-close {
+  position: absolute;
+  z-index: 1;
+  top: 8px;
+  right: 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border: 0;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.72);
+  color: #fff;
+  cursor: pointer;
+}
+
+.tron-chat__image-preview-close:hover {
+  background: rgba(15, 23, 42, 0.9);
+}
+
 .tron-chat__composer-actions {
   display: inline-flex;
   flex: none;

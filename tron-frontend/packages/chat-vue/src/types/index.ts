@@ -5,6 +5,7 @@ import type {
   ChatDebugOptions,
   ChatFloatingState,
   ChatMessage,
+  ChatMessageAttachment,
   ChatQueuedSubmission,
   ChatRunningSubmitMode,
   ChatSession,
@@ -16,6 +17,7 @@ import type {
 } from "@tron/chat-core";
 
 export interface TronChatPanelProps {
+  attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   createSessionLabel?: string;
   currentUserDisplayName?: string;
   debugOptions?: ChatDebugOptions;
@@ -31,6 +33,7 @@ export interface TronChatPanelProps {
   onCreateSession?: () => void;
   onNewSession?: () => void;
   onDraftChange: (value: string) => void;
+  onPasteAttachment?: (file: File) => void | Promise<void>;
   onEditMessage?: (content: string) => void;
   onEditQueuedMessage?: (id: string, content: string) => void;
   onRemoveQueuedMessage?: (id: string) => void;

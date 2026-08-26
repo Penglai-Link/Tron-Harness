@@ -13,9 +13,11 @@ import ChatBubble from "./ChatBubble.vue";
 import WaitingRail from "./WaitingRail.vue";
 import ChatUserInputCard from "./ChatUserInputCard.vue";
 import AguiRunWorkRail from "./AguiRunWorkRail.vue";
+import ChatAttachments from "./ChatAttachments.vue";
 import { TronChatPanelProps } from "../types";
 
 const props = withDefaults(defineProps<TronChatPanelProps>(), {
+  attachmentDownloader: undefined,
   createSessionLabel: "Create session",
   currentUserDisplayName: "",
   debugOptions: undefined,
@@ -30,6 +32,7 @@ const props = withDefaults(defineProps<TronChatPanelProps>(), {
   onEditMessage: undefined,
   onEditQueuedMessage: undefined,
   onRemoveQueuedMessage: undefined,
+  onPasteAttachment: undefined,
   onStop: undefined,
   protocolEvents: () => [],
   queueDisabled: false,
@@ -67,6 +70,24 @@ const emit = defineEmits<{
 const transcriptRef = ref<HTMLElement | null>(null);
 const showJumpButton = ref(false);
 const autoStickToBottom = ref(true);
+const previewImage = ref<{ alt: string; source: string } | null>(null);
+
+function openImagePreview(source: string, alt: string) {
+  previewImage.value = { alt, source };
+}
+
+function closeImagePreview() {
+  previewImage.value = null;
+}
+
+watch(previewImage, (image, _, onCleanup) => {
+  if (!image) return;
+  const handleKeyDown = (event: KeyboardEvent) => {
+    if (event.key === "Escape") closeImagePreview();
+  };
+  document.addEventListener("keydown", handleKeyDown);
+  onCleanup(() => document.removeEventListener("keydown", handleKeyDown));
+});
 
 const canQueueWhileRunning = computed(() =>
   props.runningSubmitModes.includes("queue"),
@@ -174,6 +195,21 @@ function handleStopSubmit() {
   emit("stop");
 }
 
+function handleComposerPaste(event: ClipboardEvent) {
+  if (props.disabledInput || !props.onPasteAttachment) return;
+  const imageItem = Array.from(event.clipboardData?.items ?? []).find(
+    (item) => item.kind === "file" && item.type.startsWith("image/"),
+  );
+  const file = imageItem?.getAsFile();
+  if (!file) return;
+  event.preventDefault();
+  const fileName = file.name.trim() || `pasted-image-${Date.now()}.${file.type.split("/")[1] || "png"}`;
+  const normalizedFile = file.name.trim()
+    ? file
+    : new File([file], fileName, { type: file.type || "image/png" });
+  void props.onPasteAttachment(normalizedFile);
+}
+
 function workRailsForMessage(message: ChatMessage) {
   return (
     presentation.value.workRailsByMessageCode.get(message.messageCode) ?? []
@@ -210,6 +246,27 @@ onMounted(() => {
 
 <template>
   <div class="tron-chat">
+    <div
+      v-if="previewImage"
+      aria-label="Image preview"
+      aria-modal="true"
+      class="tron-chat__image-preview-dialog"
+      role="dialog"
+      @click.self="closeImagePreview"
+    >
+      <div class="tron-chat__image-preview-content">
+        <button
+          aria-label="Close image preview"
+          class="tron-chat__image-preview-close"
+          title="Close image preview"
+          type="button"
+          @click="closeImagePreview"
+        >
+          <X :size="18" />
+        </button>
+        <img :alt="previewImage.alt" :src="previewImage.source" />
+      </div>
+    </div>
     <header v-if="showHeader" class="tron-chat__header">
       <div class="tron-chat__header-content">
         <slot name="header">
@@ -252,6 +309,12 @@ onMounted(() => {
                 @edit-message="
                   (content: string) => emit('edit-message', content)
                 "
+              />
+              <ChatAttachments
+                v-if="message.role === 'USER'"
+                :attachments="message.attachments"
+                :download-attachment="attachmentDownloader"
+                @preview-image="openImagePreview"
               />
               <WaitingRail
                 v-if="
@@ -366,6 +429,7 @@ onMounted(() => {
               (e: Event) =>
                 emit('draft-change', (e.target as HTMLTextAreaElement).value)
             "
+            @paste="handleComposerPaste"
             @keydown="handleKeydown"
           />
           <div class="tron-chat__composer-row">

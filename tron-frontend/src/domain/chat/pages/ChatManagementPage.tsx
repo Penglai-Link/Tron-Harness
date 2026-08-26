@@ -4207,18 +4207,22 @@ export function ChatManagementPage() {
     }
   }
 
-  async function handleAttachmentFileInputChange(
-    event: ChangeEvent<HTMLInputElement>,
-  ) {
-    const file = event.currentTarget.files?.item(0);
-    event.currentTarget.value = "";
-    if (!file) return;
+  async function handleAttachmentFile(file: File) {
     const attachment = await uploadAttachmentForActiveSession(file, {
       kind: file.type.startsWith("image/") ? "image" : "file",
       summary: file.name,
     });
     if (!attachment) return;
     setPendingAttachments((current) => [...current, attachment]);
+  }
+
+  async function handleAttachmentFileInputChange(
+    event: ChangeEvent<HTMLInputElement>,
+  ) {
+    const file = event.currentTarget.files?.item(0);
+    event.currentTarget.value = "";
+    if (!file) return;
+    await handleAttachmentFile(file);
   }
 
   async function handleInspectionConfirm(result: TargetPageFrameInspectionResult) {
@@ -5978,7 +5982,6 @@ export function ChatManagementPage() {
       handleSessionSelect(session);
       setVisibleMessages([]);
       setComposer("");
-      toast.success("Session created", { title: session.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : "Create session failed";
       toast.error(message, { title: "Create session failed" });
@@ -6239,6 +6242,7 @@ export function ChatManagementPage() {
             void handleCreateSession();
           }}
           onDraftChange={setComposer}
+          onPasteAttachment={handleAttachmentFile}
           onEditMessage={setComposer}
           onEditQueuedMessage={handleEditQueuedMessage}
           onRemoveQueuedMessage={handleRemoveQueuedMessage}

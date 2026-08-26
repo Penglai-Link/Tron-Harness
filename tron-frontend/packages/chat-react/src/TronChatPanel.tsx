@@ -55,6 +55,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type ClipboardEvent,
   type ReactNode,
 } from "react";
 import "github-markdown-css/github-markdown.css";
@@ -116,15 +117,24 @@ function defaultFormatAnnotationCount(count: number) {
 function AttachmentImagePreview({
   attachment,
   downloadAttachment,
+  onPreview,
 }: {
   attachment: ChatMessageAttachment;
   downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+  onPreview: (source: string, alt: string) => void;
 }) {
   const source = useAttachmentImageSource(attachment, downloadAttachment);
   if (!source) return null;
   return (
     <figure className="tron-chat__inspection-preview">
-      <img alt={attachment.summary} src={source} />
+      <button
+        aria-label={`Preview ${attachment.summary}`}
+        className="tron-chat__inspection-preview-button"
+        type="button"
+        onClick={() => onPreview(source, attachment.summary)}
+      >
+        <img alt={attachment.summary} src={source} />
+      </button>
     </figure>
   );
 }
@@ -176,10 +186,12 @@ function ChatAttachments({
   attachments,
   downloadAttachment,
   formatAnnotationCount,
+  onPreviewImage,
 }: {
   attachments: ChatMessage["attachments"];
   downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   formatAnnotationCount: (count: number) => string;
+  onPreviewImage: (source: string, alt: string) => void;
 }) {
   const attachmentItems = attachments ?? [];
   const inspectionAttachments = attachmentItems.filter((attachment) => attachment.kind === "inspection");
@@ -200,6 +212,7 @@ function ChatAttachments({
             attachment={attachment}
             downloadAttachment={downloadAttachment}
             key={attachment.id}
+            onPreview={onPreviewImage}
           />
         ))}
       </div>
@@ -221,6 +234,49 @@ function ChatAttachments({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function ImagePreviewDialog({
+  image,
+  onClose,
+}: {
+  image: { alt: string; source: string } | null;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!image) return undefined;
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [image, onClose]);
+
+  if (!image) return null;
+  return (
+    <div
+      aria-label="Image preview"
+      aria-modal="true"
+      className="tron-chat__image-preview-dialog"
+      role="dialog"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div className="tron-chat__image-preview-content">
+        <button
+          aria-label="Close image preview"
+          className="tron-chat__image-preview-close"
+          title="Close image preview"
+          type="button"
+          onClick={onClose}
+        >
+          <X size={18} />
+        </button>
+        <img alt={image.alt} src={image.source} />
+      </div>
+    </div>
   );
 }
 
@@ -847,6 +903,7 @@ export interface TronChatPanelProps {
   onCreateSession?: () => void;
   onNewSession?: () => void;
   onDraftChange: (value: string) => void;
+  onPasteAttachment?: (file: File) => void | Promise<void>;
   onEditMessage?: (content: string) => void;
   onEditQueuedMessage?: (id: string, content: string) => void;
   onRemoveQueuedMessage?: (id: string) => void;
@@ -898,6 +955,7 @@ export function TronChatPanel({
   onCreateSession,
   onNewSession,
   onDraftChange,
+  onPasteAttachment,
   onEditMessage,
   onEditQueuedMessage,
   onRemoveQueuedMessage,
@@ -928,6 +986,7 @@ export function TronChatPanel({
   const transcriptRef = useRef<HTMLElement | null>(null);
   const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
   const [showJumpButton, setShowJumpButton] = useState(false);
+  const [previewImage, setPreviewImage] = useState<{ alt: string; source: string } | null>(null);
   const autoStickToBottomRef = useRef(true);
   const canQueueWhileRunning = runningSubmitModes.includes("queue");
   const canSteerWhileRunning = runningSubmitModes.includes("steer");
@@ -1047,6 +1106,21 @@ export function TronChatPanel({
     composerRef.current = node;
   }
 
+  function handleComposerPaste(event: ClipboardEvent<HTMLTextAreaElement>) {
+    if (disabledInput || !onPasteAttachment) return;
+    const imageItem = Array.from(event.clipboardData.items).find(
+      (item) => item.kind === "file" && item.type.startsWith("image/"),
+    );
+    const file = imageItem?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    const fileName = file.name.trim() || `pasted-image-${Date.now()}.${file.type.split("/")[1] || "png"}`;
+    const normalizedFile = file.name.trim()
+      ? file
+      : new File([file], fileName, { type: file.type || "image/png" });
+    void onPasteAttachment(normalizedFile);
+  }
+
   function handleStopSubmit() {
     if (onStop) {
       onStop();
@@ -1057,6 +1131,10 @@ export function TronChatPanel({
 
   return (
     <div className="tron-chat">
+      <ImagePreviewDialog
+        image={previewImage}
+        onClose={() => setPreviewImage(null)}
+      />
       {showHeader ? (
         <header className="tron-chat__header">
           <div className="tron-chat__header-content">
@@ -1111,6 +1189,7 @@ export function TronChatPanel({
                                 attachments={message.attachments}
                                 downloadAttachment={attachmentDownloader}
                                 formatAnnotationCount={formatAnnotationCount}
+                                onPreviewImage={(source, alt) => setPreviewImage({ alt, source })}
                               />
                               <ChatBubble
                                 currentUserDisplayName={currentUserDisplayName}
@@ -1263,6 +1342,7 @@ export function TronChatPanel({
                 placeholder={composerPlaceholder}
                 value={draft}
                 onChange={(event) => onDraftChange(event.target.value)}
+                onPaste={handleComposerPaste}
                 onKeyDown={(event) => {
                   if (event.nativeEvent.isComposing) return;
                   if (event.key === "Enter" && event.shiftKey) {

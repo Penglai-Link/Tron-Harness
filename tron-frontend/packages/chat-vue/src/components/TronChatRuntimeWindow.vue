@@ -14,6 +14,7 @@ import {
   type ChatAguiStreamEvent,
   type ChatFloatingState,
   type ChatMessage,
+  type ChatMessageAttachment,
   type ChatQueuedSubmission,
   type ChatRunningSubmitMode,
   type ChatSession,
@@ -25,6 +26,7 @@ import {
   isSteerQueueFallbackCode,
   openAguiProtocolRunCodes,
 } from "@tron/chat-core";
+import { FileText, Paperclip, X } from "lucide-vue-next";
 import {
   computed,
   onBeforeUnmount,
@@ -69,7 +71,9 @@ const emit = defineEmits<{
   "window-state-change": [state: ChatFloatingState];
 }>();
 
-const forwardedSlotNames: string[] = Object.keys(useSlots());
+const forwardedSlotNames: string[] = Object.keys(useSlots()).filter(
+  (name) => name !== "footerAddon",
+);
 
 const activeAdapter = computed(() => props.adapter ?? createMockChatAdapter());
 const normalizedInitialSession = computed(() =>
@@ -84,6 +88,9 @@ const protocolEvents = ref<ChatAguiStreamEvent[]>([]);
 const liveAguiEvents = ref<ChatAguiStreamEvent[]>([]);
 const liveAguiAnchorMessageCodes = ref<Record<string, string>>({});
 const draft = ref("");
+const pendingAttachments = ref<ChatMessageAttachment[]>([]);
+const attachmentUploadPending = ref(false);
+const attachmentFileInput = ref<HTMLInputElement | null>(null);
 const sending = ref(false);
 const steering = ref(false);
 const loading = ref(false);
@@ -266,8 +273,9 @@ function replaceQueuedSubmissions(next: ChatQueuedSubmission[]) {
 function createSendInput(
   activeSession: ChatSession,
   content: string,
+  attachments: ChatMessageAttachment[] = [],
 ): SendChatMessageInput {
-  return {
+  const input: SendChatMessageInput = {
     agentCode: normalizeOptionalValue(props.config.agentCode),
     appCode: normalizeOptionalValue(
       activeSession.appCode ?? props.config.appCode,
@@ -279,6 +287,8 @@ function createSendInput(
     ),
     workspaceCode: activeSession.workspaceCode,
   };
+  if (attachments.length) input.attachments = attachments;
+  return input;
 }
 
 function enqueueSubmission(
@@ -434,6 +444,7 @@ watch(
       activeRunStatusPending.value = false;
       activeRunCode.value = "";
       activeRunSupportsSteer.value = null;
+      pendingAttachments.value = [];
     }
     activeSessionCodeRef.value = nextSession?.sessionCode ?? "";
     props.onSessionChange?.(nextSession);
@@ -612,7 +623,7 @@ watch(
 
 const sendDisabled = computed(() => {
   if (loading.value || props.config.disabledInput || userInputRequest.value) return true;
-  if (!draft.value.trim()) return true;
+  if (!draft.value.trim() && !pendingAttachments.value.length) return true;
   return !session.value && !props.config.workspaceCode;
 });
 const queueDisabled = computed(
@@ -620,7 +631,7 @@ const queueDisabled = computed(
     loading.value ||
     Boolean(props.config.disabledInput) ||
     Boolean(userInputRequest.value) ||
-    !draft.value.trim() ||
+    (!draft.value.trim() && !pendingAttachments.value.length) ||
     !session.value,
 );
 const steerDisabled = computed(
@@ -660,6 +671,38 @@ async function ensureSession() {
   aguiEvents.value = [];
   protocolEvents.value = [];
   return created;
+}
+
+async function handleAttachmentUpload(file: File) {
+  const adapter = activeAdapter.value;
+  if (attachmentUploadPending.value || !adapter.uploadAttachment) return;
+  const activeSession = await ensureSession();
+  if (!activeSession) return;
+  attachmentUploadPending.value = true;
+  try {
+    const attachment = await adapter.uploadAttachment(activeSession, {
+      file,
+      kind: file.type.startsWith("image/") ? "image" : "file",
+      summary: file.name,
+    });
+    if (activeSessionCodeRef.value === activeSession.sessionCode) {
+      pendingAttachments.value = [...pendingAttachments.value, attachment];
+    }
+  } catch (error) {
+    reportError(
+      error instanceof Error ? error.message : "Chat attachment upload failed",
+      "Attachment upload failed",
+    );
+  } finally {
+    attachmentUploadPending.value = false;
+  }
+}
+
+function handleAttachmentFileInputChange(event: Event) {
+  const input = event.currentTarget as HTMLInputElement;
+  const file = input.files?.item(0);
+  input.value = "";
+  if (file) void handleAttachmentUpload(file);
 }
 
 async function runMessage(
@@ -965,9 +1008,11 @@ async function handleSend() {
   const activeSession = await ensureSession();
   if (!activeSession) return;
   const content = draft.value.trim();
-  if (!content) return;
-  const sendInput = createSendInput(activeSession, content);
+  const attachments = pendingAttachments.value;
+  if (!content && !attachments.length) return;
+  const sendInput = createSendInput(activeSession, content, attachments);
   draft.value = "";
+  pendingAttachments.value = [];
   if (runActive.value) {
     enqueueSubmission(activeSession, sendInput);
     return;
@@ -980,9 +1025,11 @@ async function handleQueue() {
   const activeSession = await ensureSession();
   if (!activeSession) return;
   const content = draft.value.trim();
-  if (!content) return;
-  const sendInput = createSendInput(activeSession, content);
+  const attachments = pendingAttachments.value;
+  if (!content && !attachments.length) return;
+  const sendInput = createSendInput(activeSession, content, attachments);
   draft.value = "";
+  pendingAttachments.value = [];
   if (runActive.value) {
     enqueueSubmission(activeSession, sendInput);
     return;
@@ -995,12 +1042,14 @@ async function handleSteer() {
   const activeSession = session.value;
   if (!activeSession) return;
   const content = draft.value.trim();
-  if (!content) return;
-  const sendInput = createSendInput(activeSession, content);
+  const attachments = pendingAttachments.value;
+  if (!content && !attachments.length) return;
+  const sendInput = createSendInput(activeSession, content, attachments);
   const expectedRunCode = effectiveActiveRunCode.value;
   const adapter = activeAdapter.value;
   const queueGeneration = queueGenerationRef.value;
   draft.value = "";
+  pendingAttachments.value = [];
   if (
     !runActive.value ||
     !expectedRunCode ||
@@ -1229,6 +1278,7 @@ function handleNewSession() {
   protocolEvents.value = [];
   liveAguiEvents.value = [];
   liveAguiAnchorMessageCodes.value = {};
+  pendingAttachments.value = [];
   activeSessionCodeRef.value = "";
   activeRunCode.value = "";
   activeRunSupportsSteer.value = null;
@@ -1280,6 +1330,15 @@ const resolvedDebugOptions = computed(() => ({
     : props.debugOptions?.debugEventTypes,
 }));
 
+const attachmentDownloader = computed<
+  ((attachment: ChatMessageAttachment) => Promise<Blob>) | undefined
+>(() => {
+  const activeSession = session.value;
+  const downloadAttachment = activeAdapter.value.downloadAttachment;
+  if (!activeSession || !downloadAttachment) return undefined;
+  return (attachment) => downloadAttachment(activeSession, attachment);
+});
+
 function handleDraftChange(value: string) {
   draft.value = value;
 }
@@ -1289,6 +1348,7 @@ function handleEditMessage(content: string) {
 }
 
 const panelCommonProps = computed(() => ({
+  attachmentDownloader: attachmentDownloader.value,
   createSessionLabel: "Start chat",
   currentUserDisplayName: props.currentUserDisplayName,
   debugOptions: resolvedDebugOptions.value,
@@ -1307,6 +1367,7 @@ const panelCommonProps = computed(() => ({
   },
   onNewSession: handleNewSession,
   onDraftChange: handleDraftChange,
+  onPasteAttachment: handleAttachmentUpload,
   onEditMessage: handleEditMessage,
   onEditQueuedMessage: handleEditQueuedMessage,
   onRemoveQueuedMessage: handleRemoveQueuedMessage,
@@ -1353,11 +1414,97 @@ function handleWindowStateChange(state: ChatFloatingState) {
     :title-subtitle="floatingSubtitle"
     @state-change="handleWindowStateChange"
   >
+    <template #footerAddon>
+      <div class="tron-chat__runtime-footer-addon">
+        <div v-if="pendingAttachments.length" class="tron-chat__runtime-attachments tron-chat__runtime-attachments--pending">
+          <div
+            v-for="attachment in pendingAttachments"
+            :key="attachment.id"
+            class="tron-chat__runtime-attachment-chip"
+            :title="attachment.fileName || attachment.title || attachment.summary"
+          >
+            <img v-if="attachment.imageUrl" :alt="attachment.fileName || attachment.summary" :src="attachment.imageUrl" />
+            <FileText v-else :size="16" />
+            <span>{{ attachment.fileName || attachment.title || attachment.summary }}</span>
+            <button
+              :aria-label="`Remove ${attachment.fileName || attachment.title || attachment.summary}`"
+              class="tron-chat__runtime-attachment-remove"
+              type="button"
+              @click="pendingAttachments = pendingAttachments.filter((item) => item.id !== attachment.id)"
+            >
+              <X :size="14" />
+            </button>
+          </div>
+        </div>
+        <div v-if="activeAdapter.uploadAttachment" class="tron-chat__runtime-attachments">
+          <input
+            ref="attachmentFileInput"
+            class="tron-chat__runtime-attachment-input"
+            type="file"
+            @change="handleAttachmentFileInputChange"
+          />
+          <button
+            aria-label="Attach file"
+            class="tron-chat__icon-button"
+            :disabled="attachmentUploadPending"
+            :title="attachmentUploadPending ? 'Uploading attachment' : 'Attach file'"
+            type="button"
+            @click="attachmentFileInput?.click()"
+          >
+            <Paperclip :size="16" />
+          </button>
+        </div>
+        <slot name="footerAddon" />
+      </div>
+    </template>
     <template v-for="name in forwardedSlotNames" #[name]="slotProps">
       <slot :name="name" v-bind="slotProps || {}" />
     </template>
   </TronChatWindow>
   <TronChatPanel v-else v-bind="panelCommonProps" :show-header="true">
+    <template #footerAddon>
+      <div class="tron-chat__runtime-footer-addon">
+        <div v-if="pendingAttachments.length" class="tron-chat__runtime-attachments tron-chat__runtime-attachments--pending">
+          <div
+            v-for="attachment in pendingAttachments"
+            :key="attachment.id"
+            class="tron-chat__runtime-attachment-chip"
+            :title="attachment.fileName || attachment.title || attachment.summary"
+          >
+            <img v-if="attachment.imageUrl" :alt="attachment.fileName || attachment.summary" :src="attachment.imageUrl" />
+            <FileText v-else :size="16" />
+            <span>{{ attachment.fileName || attachment.title || attachment.summary }}</span>
+            <button
+              :aria-label="`Remove ${attachment.fileName || attachment.title || attachment.summary}`"
+              class="tron-chat__runtime-attachment-remove"
+              type="button"
+              @click="pendingAttachments = pendingAttachments.filter((item) => item.id !== attachment.id)"
+            >
+              <X :size="14" />
+            </button>
+          </div>
+        </div>
+        <div v-if="activeAdapter.uploadAttachment" class="tron-chat__runtime-attachments">
+          <input
+            ref="attachmentFileInput"
+            class="tron-chat__runtime-attachment-input"
+            type="file"
+            @change="handleAttachmentFileInputChange"
+          />
+          <button
+            aria-label="Attach file"
+            class="tron-chat__icon-button"
+            :disabled="attachmentUploadPending"
+            :title="attachmentUploadPending ? 'Uploading attachment' : 'Attach file'"
+            type="button"
+            @click="attachmentFileInput?.click()"
+          >
+            <Paperclip :size="16" />
+          </button>
+        </div>
+        <slot name="footerAddon" />
+      </div>
+    </template>
     <template v-for="name in forwardedSlotNames" #[name]="slotProps">
       <slot :name="name" v-bind="slotProps || {}" />
     </template>
