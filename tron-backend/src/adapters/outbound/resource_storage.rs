@@ -1,6 +1,6 @@
 use std::{
     fs::{self, File, OpenOptions},
-    io::{self, BufReader, BufWriter, Read, Write},
+    io::{self, BufReader, BufWriter, Read, Seek, SeekFrom, Write},
     path::{Component, Path, PathBuf},
 };
 
@@ -118,6 +118,27 @@ impl ObjectStorage for LocalObjectStorage {
         }
         let input = File::open(source).map_err(|_| ResourceError::StorageFailure)?;
         let copied = io::copy(&mut BufReader::new(input), target)
+            .map_err(|_| ResourceError::StorageFailure)?;
+        target.flush().map_err(|_| ResourceError::StorageFailure)?;
+        Ok(copied)
+    }
+
+    fn get_range_writer(
+        &self,
+        object_key: &str,
+        start_byte: u64,
+        max_bytes: u64,
+        target: &mut dyn Write,
+    ) -> Result<u64, ResourceError> {
+        let source = self.object_path(object_key)?;
+        if !source.is_file() {
+            return Err(ResourceError::MissingBinaryObject);
+        }
+        let mut input = File::open(source).map_err(|_| ResourceError::StorageFailure)?;
+        input
+            .seek(SeekFrom::Start(start_byte))
+            .map_err(|_| ResourceError::StorageFailure)?;
+        let copied = io::copy(&mut input.take(max_bytes), target)
             .map_err(|_| ResourceError::StorageFailure)?;
         target.flush().map_err(|_| ResourceError::StorageFailure)?;
         Ok(copied)

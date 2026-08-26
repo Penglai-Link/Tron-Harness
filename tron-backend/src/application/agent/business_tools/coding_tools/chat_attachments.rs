@@ -54,8 +54,6 @@ struct ChatAttachmentTextOutput {
     start_byte: usize,
     end_byte: usize,
     next_start_byte: Option<usize>,
-    start_line: usize,
-    end_line: usize,
     end_of_file: bool,
     truncated: bool,
     content: String,
@@ -73,41 +71,53 @@ impl Tool for ChatAttachmentReadTextTool {
     ) -> Result<ToolExecutionResult, ToolError> {
         let input: ChatAttachmentReadTextInput = parse_tool_input(request.input)?;
         let max_bytes = bounded_limit(input.max_bytes, DEFAULT_READ_BYTES, MAX_READ_BYTES)?;
-        let (record, bytes) = read_attachment(&self.resources, context, &input.attachment_code)?;
+        let requested_start = input.start_byte.unwrap_or(0) as u64;
+        let range_start = requested_start.saturating_sub(3);
+        let (record, range_start, bytes) = self
+            .resources
+            .read_chat_session_attachment_range(
+                &context.workspace_code,
+                conversation_code(context)?,
+                input.attachment_code.trim(),
+                range_start,
+                max_bytes.saturating_add(3) as u64,
+            )
+            .map_err(|error| {
+                ToolError::ExecutionFailed(format!(
+                    "read chat attachment `{}` failed: {error}",
+                    input.attachment_code
+                ))
+            })?;
+        if requested_start > record.byte_size {
+            return Err(ToolError::ExecutionFailed(format!(
+                "startByte {} exceeds attachment size {}",
+                requested_start, record.byte_size
+            )));
+        }
         let text = std::str::from_utf8(&bytes).map_err(|_| {
             ToolError::ExecutionFailed(format!(
                 "attachment `{}` is not valid UTF-8 text",
                 input.attachment_code
             ))
         })?;
-        let requested_start = input.start_byte.unwrap_or(0);
-        if requested_start > bytes.len() {
-            return Err(ToolError::ExecutionFailed(format!(
-                "startByte {} exceeds attachment size {}",
-                requested_start,
-                bytes.len()
-            )));
-        }
-
-        let start = previous_char_boundary(text, requested_start);
+        let local_start = requested_start.saturating_sub(range_start) as usize;
+        let start = previous_char_boundary(text, local_start);
         let requested_end = start.saturating_add(max_bytes).min(bytes.len());
         let end = next_char_boundary(text, requested_end);
         let content = text
             .get(start..end)
             .ok_or_else(|| ToolError::ExecutionFailed("text chunk boundary is invalid".into()))?;
-        let end_of_file = end >= bytes.len();
-        let start_line = line_number_at(text, start);
-        let end_line = line_number_at(text, end.saturating_sub(1));
+        let global_start = range_start as usize + start;
+        let global_end = range_start as usize + end;
+        let end_of_file = global_end >= record.byte_size as usize;
 
         json_observation(
             self.name(),
             &ChatAttachmentTextOutput {
                 attachment: descriptor(&record),
-                start_byte: start,
-                end_byte: end,
-                next_start_byte: (!end_of_file).then_some(end),
-                start_line,
-                end_line,
+                start_byte: global_start,
+                end_byte: global_end,
+                next_start_byte: (!end_of_file).then_some(global_end),
                 end_of_file,
                 truncated: !end_of_file,
                 content: content.to_string(),
@@ -232,7 +242,18 @@ fn read_attachment(
             "attachmentCode is required".into(),
         ));
     }
-    let session_code = context
+    let session_code = conversation_code(context)?;
+    resources
+        .read_chat_session_attachment(&context.workspace_code, session_code, attachment_code)
+        .map_err(|error| {
+            ToolError::ExecutionFailed(format!(
+                "read chat attachment `{attachment_code}` failed: {error}"
+            ))
+        })
+}
+
+fn conversation_code(context: &AgentRunContext) -> Result<&str, ToolError> {
+    context
         .conversation_code
         .as_deref()
         .filter(|value| !value.trim().is_empty())
@@ -240,13 +261,6 @@ fn read_attachment(
             ToolError::ExecutionFailed(
                 "chat attachment tools require a conversation session".into(),
             )
-        })?;
-    resources
-        .read_chat_session_attachment(&context.workspace_code, session_code, attachment_code)
-        .map_err(|error| {
-            ToolError::ExecutionFailed(format!(
-                "read chat attachment `{attachment_code}` failed: {error}"
-            ))
         })
 }
 
@@ -287,14 +301,6 @@ fn next_char_boundary(text: &str, mut index: usize) -> usize {
         index += 1;
     }
     index
-}
-
-fn line_number_at(text: &str, index: usize) -> usize {
-    text[..index.min(text.len())]
-        .bytes()
-        .filter(|byte| *byte == b'\n')
-        .count()
-        + 1
 }
 
 fn collect_json_stats(value: &Value, depth: usize, stats: &mut JsonDocumentStats) {

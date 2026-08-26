@@ -88,6 +88,18 @@ impl StorageRouter {
         self.storage(&profile)?.get_writer(&key, target)
     }
 
+    pub fn get_range_writer(
+        &self,
+        locator: &str,
+        start_byte: u64,
+        max_bytes: u64,
+        target: &mut dyn Write,
+    ) -> Result<u64, ResourceError> {
+        let (profile, key) = self.parse_locator(locator)?;
+        self.storage(&profile)?
+            .get_range_writer(&key, start_byte, max_bytes, target)
+    }
+
     pub fn delete(&self, locator: &str) -> Result<(), ResourceError> {
         let (profile, key) = self.parse_locator(locator)?;
         self.storage(&profile)?.delete(&key)

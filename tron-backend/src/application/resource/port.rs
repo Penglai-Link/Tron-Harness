@@ -1,3 +1,5 @@
+use std::io::Write;
+
 use crate::domain::resource::{
     ChatSessionAttachmentRecord, DataSourceConnectionRecord, ResourceError, ResourceFileRecord,
     ServerAccountRecord, ServerRecord,
@@ -90,6 +92,81 @@ pub trait ObjectStorage: Send + Sync {
         object_key: &str,
         target: &mut dyn std::io::Write,
     ) -> Result<u64, ResourceError>;
+    /// Stream a bounded byte range into the target. Backends with native range
+    /// support should override this method; the default keeps memory bounded
+    /// while remaining compatible with storage implementations that only
+    /// expose sequential reads.
+    fn get_range_writer(
+        &self,
+        object_key: &str,
+        start_byte: u64,
+        max_bytes: u64,
+        target: &mut dyn std::io::Write,
+    ) -> Result<u64, ResourceError> {
+        let mut range = RangeWriter {
+            skipped: start_byte,
+            remaining: max_bytes,
+            written: 0,
+            target,
+        };
+        self.get_writer(object_key, &mut range)?;
+        range.flush().map_err(|_| ResourceError::StorageFailure)?;
+        Ok(range.written)
+    }
     fn delete(&self, object_key: &str) -> Result<(), ResourceError>;
     fn exists(&self, object_key: &str) -> Result<bool, ResourceError>;
+}
+
+struct RangeWriter<'a> {
+    skipped: u64,
+    remaining: u64,
+    written: u64,
+    target: &'a mut dyn std::io::Write,
+}
+
+impl std::io::Write for RangeWriter<'_> {
+    fn write(&mut self, buffer: &[u8]) -> std::io::Result<usize> {
+        let mut selected = buffer;
+        if self.skipped > 0 {
+            let skipped = self.skipped.min(buffer.len() as u64) as usize;
+            self.skipped -= skipped as u64;
+            selected = &buffer[skipped..];
+        }
+        if self.remaining > 0 && !selected.is_empty() {
+            let length = self.remaining.min(selected.len() as u64) as usize;
+            self.target.write_all(&selected[..length])?;
+            self.remaining -= length as u64;
+            self.written += length as u64;
+        }
+        Ok(buffer.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        self.target.flush()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::io::{Cursor, Write};
+
+    use super::RangeWriter;
+
+    #[test]
+    fn range_writer_selects_only_the_requested_window() {
+        let mut output = Cursor::new(Vec::new());
+        let mut writer = RangeWriter {
+            skipped: 3,
+            remaining: 4,
+            written: 0,
+            target: &mut output,
+        };
+
+        writer.write_all(b"abcdef").expect("range should write");
+        writer.write_all(b"ghij").expect("range should write");
+
+        assert_eq!(writer.written, 4);
+        drop(writer);
+        assert_eq!(output.into_inner(), b"defg");
+    }
 }

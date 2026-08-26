@@ -101,6 +101,38 @@ impl ResourceService {
         Ok((record, bytes))
     }
 
+    pub fn read_chat_session_attachment_range(
+        &self,
+        workspace_code: &str,
+        session_code: &str,
+        attachment_code: &str,
+        start_byte: u64,
+        max_bytes: u64,
+    ) -> Result<(ChatSessionAttachmentRecord, u64, Vec<u8>), ResourceError> {
+        let record = self.repository(|repository| {
+            repository.get_chat_session_attachment(workspace_code, session_code, attachment_code)
+        })?;
+        let maximum = self.max_chat_session_attachment_bytes();
+        if record.byte_size == 0 || record.byte_size > maximum {
+            return Err(ResourceError::MissingBinaryObject);
+        }
+        if start_byte > record.byte_size {
+            return Err(ResourceError::InvalidInput);
+        }
+        let length = max_bytes.min(record.byte_size.saturating_sub(start_byte));
+        let mut bytes = Vec::with_capacity(length as usize);
+        let copied = self.storage.get_range_writer(
+            &record.storage_locator,
+            start_byte,
+            length,
+            &mut bytes,
+        )?;
+        if copied != length || bytes.len() as u64 != length {
+            return Err(ResourceError::StorageFailure);
+        }
+        Ok((record, start_byte, bytes))
+    }
+
     /// Delete the physical objects before removing their private references.
     /// If storage cleanup fails the session stays intact, making the operation
     /// retryable and ensuring a successfully deleted session has no attachment
