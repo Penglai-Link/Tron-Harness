@@ -1339,7 +1339,7 @@
     min-width: 0;
   }
 }
-.tron-chat__user-input-card { position: absolute; right: 16px; bottom: calc(100% + 10px); z-index: 20; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: .625rem; width: min(480px, calc(100% - 32px)); max-height: min(56svh, 460px); overflow: hidden; margin: 0; padding: .75rem; border: 1px solid color-mix(in srgb, var(--tron-chat-border) 82%, white 18%); border-radius: 1rem; background: color-mix(in srgb, var(--tron-chat-surface-strong) 94%, transparent); box-shadow: 0 20px 54px rgba(15, 23, 42, .2), 0 4px 16px rgba(15, 23, 42, .08); backdrop-filter: blur(16px); animation: tron-chat-user-input-pop 180ms ease-out both; }
+.tron-chat__user-input-card { position: absolute; left: 50%; right: auto; bottom: calc(100% + 10px); transform: translateX(-50%); z-index: 20; display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: .625rem; width: min(720px, calc(100% - 32px), calc(100vw - 48px)); max-height: min(70svh, 640px); overflow: hidden; margin: 0; padding: .75rem; border: 1px solid color-mix(in srgb, var(--tron-chat-border) 82%, white 18%); border-radius: 1rem; background: color-mix(in srgb, var(--tron-chat-surface-strong) 94%, transparent); box-shadow: 0 20px 54px rgba(15, 23, 42, .2), 0 4px 16px rgba(15, 23, 42, .08); backdrop-filter: blur(16px); animation: tron-chat-user-input-pop 180ms ease-out both; }
 .tron-chat__user-input-body { display: grid; min-height: 0; gap: .625rem; overflow-y: auto; padding-right: .125rem; overscroll-behavior: contain; }
 .tron-chat__user-input-intro { margin: 0; color: var(--color-on-surface, #0f172a); font-size: .875rem; line-height: 1.4; }
 .tron-chat__user-input-progress { color: var(--color-on-surface-variant, #64748b); font-size: .75rem; font-weight: 600; }
@@ -1347,9 +1347,10 @@
 .tron-chat__user-input-question legend { font-size: .875rem; font-weight: 600; color: var(--color-on-surface, #0f172a); }
 .tron-chat__user-input-options { display: grid; gap: .4rem; }
 .tron-chat__user-input-option { display: flex; gap: .5rem; align-items: flex-start; padding: .5rem; border-radius: .5rem; background: var(--color-surface, #fff); cursor: pointer; }
+.tron-chat__user-input-option.is-selected { outline: 1px solid var(--color-primary, #2563eb); }
 .tron-chat__user-input-option span { display: grid; gap: .15rem; }
 .tron-chat__user-input-option small { color: var(--color-on-surface-variant, #64748b); }
-.tron-chat__user-input-question textarea { min-height: 4rem; resize: vertical; border: 1px solid var(--color-outline-variant, #cbd5e1); border-radius: .5rem; padding: .5rem; }
+.tron-chat__user-input-other-answer { min-height: 4rem; width: min(100%, 26rem); resize: vertical; border: 1px solid var(--color-outline-variant, #cbd5e1); border-radius: .5rem; padding: .5rem; background: var(--color-surface, #fff); color: var(--color-on-surface, #0f172a); }
 .tron-chat__user-input-actions { display: flex; gap: .5rem; align-items: center; }
 .tron-chat__user-input-back { justify-self: start; border-radius: .5rem; padding: .5rem .75rem; border: 1px solid var(--color-outline-variant, #cbd5e1); background: var(--color-surface, #fff); color: var(--color-on-surface, #0f172a); font-size: .875rem; font-weight: 600; }
 .tron-chat__user-input-submit { justify-self: start; border-radius: .5rem; padding: .5rem .75rem; background: var(--color-primary, #2563eb); color: white; font-size: .875rem; font-weight: 600; }
@@ -1357,15 +1358,15 @@
 .tron-chat__user-input-submit:disabled { cursor: not-allowed; opacity: .5; }
 
 @media (max-width: 640px) {
-  .tron-chat__user-input-card { right: 8px; bottom: calc(100% + 8px); left: 8px; width: auto; max-height: min(60svh, 420px); padding: .625rem; border-radius: .875rem; }
+.tron-chat__user-input-card { left: 50%; right: auto; bottom: calc(100% + 8px); width: min(calc(100% - 16px), calc(100vw - 16px)); max-height: min(70svh, 520px); padding: .625rem; border-radius: .875rem; }
   .tron-chat__user-input-option { padding: .4375rem; }
   .tron-chat__user-input-option small { font-size: .75rem; line-height: 1.3; }
   .tron-chat__user-input-actions { padding-top: .125rem; }
 }
 
 @keyframes tron-chat-user-input-pop {
-  from { opacity: 0; transform: translateY(8px) scale(.985); }
-  to { opacity: 1; transform: translateY(0) scale(1); }
+  from { opacity: 0; transform: translate(-50%, 8px) scale(.985); }
+  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
 }
 
 @keyframes tron-chat-user-input-question-in {

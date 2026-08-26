@@ -16,6 +16,7 @@ const request: ChatUserInputRequest = {
       options: [
         { description: "First choice", label: "Option one", optionCode: "OPTION-1" },
         { description: "Second choice", label: "Option two", optionCode: "OPTION-2" },
+        { description: null, label: "Other", optionCode: "OTHER-1" },
       ],
       question: "Which direction should we take?",
       questionCode: "QUESTION-1",
@@ -72,6 +73,36 @@ describe("ChatUserInputCard", () => {
         answerKind: "Option",
         otherText: null,
         optionCode: "OPTION-2",
+        questionCode: "QUESTION-1",
+      },
+      {
+        answerKind: "Option",
+        otherText: null,
+        optionCode: "OPTION-3",
+        questionCode: "QUESTION-2",
+      },
+    ]);
+  });
+
+  it("turns the other option into an inline custom answer field", () => {
+    const onSubmit = vi.fn();
+    render(<ChatUserInputCard onSubmit={onSubmit} request={request} />);
+
+    fireEvent.click(screen.getByRole("radio", { name: /^Other/ }));
+    const otherAnswer = screen.getByRole("textbox", { name: "Other answer for question 1" });
+    expect(otherAnswer).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Next" }) as HTMLButtonElement).disabled).toBe(true);
+
+    fireEvent.change(otherAnswer, { target: { value: "I want to define my own direction." } });
+    fireEvent.click(screen.getByRole("button", { name: "Next" }));
+    fireEvent.click(screen.getByRole("radio", { name: /Keep it simple/ }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(onSubmit).toHaveBeenCalledWith([
+      {
+        answerKind: "Other",
+        otherText: "I want to define my own direction.",
+        optionCode: null,
         questionCode: "QUESTION-1",
       },
       {

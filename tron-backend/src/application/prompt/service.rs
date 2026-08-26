@@ -71,10 +71,46 @@ impl PromptService {
     pub fn bootstrap_builtins(&self) -> Result<(), crate::domain::prompt::PromptError> {
         let existing = self.all_prompts()?;
         for definition in crate::domain::prompt::builtin_prompts() {
-            if existing.iter().any(|prompt| {
+            if let Some(current) = existing.iter().find(|prompt| {
                 prompt.catalog_key.as_deref() == Some(definition.catalog_key.as_str())
                     || prompt.prompt_code == definition.prompt_code
             }) {
+                if current.built_in && current.version < definition.version {
+                    let mut prompt = current.clone();
+                    let translation = definition
+                        .translations
+                        .get("en-US")
+                        .or_else(|| definition.translations.values().next())
+                        .ok_or(crate::domain::prompt::PromptError::StorageFailure)?;
+                    let now = current_timestamp();
+                    prompt.display_name = translation.display_name.clone();
+                    prompt.prompt_body = translation.prompt_body.clone();
+                    prompt.description = Some(translation.description.clone());
+                    prompt.version = definition.version;
+                    prompt.variables =
+                        crate::domain::prompt::builtin_prompt_variables(&definition.catalog_key)
+                            .expect(
+                                "builtin prompt definition must produce its variable contracts",
+                            );
+                    prompt.translations = definition
+                        .translations
+                        .iter()
+                        .map(|(locale, value)| crate::domain::prompt::PromptTranslation {
+                            locale: locale.clone(),
+                            display_name: value.display_name.clone(),
+                            prompt_body: value.prompt_body.clone(),
+                            description: Some(value.description.clone()),
+                            status: crate::domain::prompt::PromptTranslationStatus::Published,
+                            source_version: definition.version,
+                            updated_at: now.clone(),
+                        })
+                        .collect();
+                    prompt.updated_at = now;
+                    self.repository
+                        .lock()
+                        .expect("prompt repository mutex poisoned")
+                        .update_prompt(&prompt, current.version)?;
+                }
                 continue;
             }
             let translation = definition
@@ -101,7 +137,7 @@ impl PromptService {
                 source_kind: PromptSourceKind::Platform,
                 source_prompt_code: None,
                 allow_inheritance: None,
-                version: 1,
+                version: definition.version,
                 variables: crate::domain::prompt::builtin_prompt_variables(&definition.catalog_key)
                     .expect("builtin prompt definition must produce its variable contracts"),
                 translations: definition
@@ -113,7 +149,7 @@ impl PromptService {
                         prompt_body: value.prompt_body.clone(),
                         description: Some(value.description.clone()),
                         status: crate::domain::prompt::PromptTranslationStatus::Published,
-                        source_version: 1,
+                        source_version: definition.version,
                         updated_at: now.clone(),
                     })
                     .collect(),

@@ -15,11 +15,17 @@ pub struct BuiltinPromptDefinition {
     pub prompt_code: String,
     pub display_name: String,
     pub category: PromptCategory,
+    #[serde(default = "default_builtin_prompt_version")]
+    pub version: u64,
     #[serde(default)]
     pub runtime_required: bool,
     #[serde(default)]
     pub parameters: Vec<BuiltinPromptParameter>,
     pub translations: BTreeMap<String, BuiltinPromptTranslation>,
+}
+
+fn default_builtin_prompt_version() -> u64 {
+    1
 }
 
 #[derive(Debug, Clone, Deserialize)]

@@ -101,6 +101,23 @@ export function ChatUserInputCard({
     return option.description;
   }
 
+  function customAnswer(questionCode: string) {
+    return (
+      <textarea
+        aria-label={labels.otherAnswerAriaLabel(currentIndex + 1)}
+        className="tron-chat__user-input-other-answer"
+        disabled={disabled}
+        maxLength={2000}
+        placeholder={labels.otherAnswerPlaceholder}
+        value={otherText[questionCode] ?? ""}
+        onChange={(event) => setOtherText((current) => ({
+          ...current,
+          [questionCode]: event.target.value,
+        }))}
+      />
+    );
+  }
+
   return (
     <section className="tron-chat__user-input-card" aria-label={labels.ariaLabel}>
       <div className="tron-chat__user-input-body">
@@ -111,36 +128,34 @@ export function ChatUserInputCard({
         <fieldset className="tron-chat__user-input-question" key={question.questionCode}>
           <legend>{currentIndex + 1}. {question.question}</legend>
           <div className="tron-chat__user-input-options">
-            {question.options.map((option) => (
-              <label className="tron-chat__user-input-option" key={option.optionCode}>
-                <input
-                  checked={selectedCode === option.optionCode}
-                  disabled={disabled}
-                  name={question.questionCode}
-                  type="radio"
-                  value={option.optionCode}
-                  onChange={() => setSelected((current) => ({ ...current, [question.questionCode]: option.optionCode }))}
-                />
-                <span>
-                  <strong>{optionLabel(option)}</strong>
-                  {optionDescription(option) ? <small>{optionDescription(option)}</small> : null}
-                </span>
-              </label>
-            ))}
+            {question.options.map((option) => {
+              const isOtherOption = option.optionCode.startsWith("OTHER-");
+              const isSelected = selectedCode === option.optionCode;
+              return (
+                <label
+                  className={`tron-chat__user-input-option${isSelected ? " is-selected" : ""}`}
+                  key={option.optionCode}
+                >
+                  <input
+                    checked={isSelected}
+                    disabled={disabled}
+                    name={question.questionCode}
+                    type="radio"
+                    value={option.optionCode}
+                    onChange={() => setSelected((current) => ({ ...current, [question.questionCode]: option.optionCode }))}
+                  />
+                  <span>
+                    <strong>{optionLabel(option)}</strong>
+                    {isOtherOption && isSelected
+                      ? customAnswer(question.questionCode)
+                      : optionDescription(option)
+                        ? <small>{optionDescription(option)}</small>
+                        : null}
+                  </span>
+                </label>
+              );
+            })}
           </div>
-          {otherSelected ? (
-            <textarea
-              aria-label={labels.otherAnswerAriaLabel(currentIndex + 1)}
-              disabled={disabled}
-              maxLength={2000}
-              placeholder={labels.otherAnswerPlaceholder}
-              value={otherText[question.questionCode] ?? ""}
-              onChange={(event) => setOtherText((current) => ({
-                ...current,
-                [question.questionCode]: event.target.value,
-              }))}
-            />
-          ) : null}
         </fieldset>
       </div>
       <div className="tron-chat__user-input-actions">

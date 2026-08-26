@@ -56,6 +56,14 @@ function goBack() {
   if (props.disabled || currentIndex.value === 0) return;
   currentIndex.value -= 1;
 }
+
+function isOtherOption(optionCode: string) {
+  return optionCode.startsWith("OTHER-");
+}
+
+function isSkipOption(optionCode: string) {
+  return optionCode.startsWith("SKIP-");
+}
 </script>
 
 <template>
@@ -66,12 +74,15 @@ function goBack() {
       <fieldset v-if="currentQuestion" :key="currentQuestion.questionCode" class="tron-chat__user-input-question">
         <legend>{{ currentIndex + 1 }}. {{ currentQuestion.question }}</legend>
         <div class="tron-chat__user-input-options">
-          <label v-for="option in currentQuestion.options" :key="option.optionCode" class="tron-chat__user-input-option">
+          <label v-for="option in currentQuestion.options" :key="option.optionCode" :class="['tron-chat__user-input-option', { 'is-selected': selectedCode === option.optionCode }]">
             <input v-model="selected[currentQuestion.questionCode]" :disabled="disabled" :name="currentQuestion.questionCode" type="radio" :value="option.optionCode" />
-            <span><strong>{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionLabel : option.optionCode.startsWith('SKIP-') ? labels.skipOptionLabel : option.label }}</strong><small v-if="option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description">{{ option.optionCode.startsWith('OTHER-') ? labels.otherOptionDescription : option.optionCode.startsWith('SKIP-') ? labels.skipOptionDescription : option.description }}</small></span>
+            <span>
+              <strong>{{ isOtherOption(option.optionCode) ? labels.otherOptionLabel : isSkipOption(option.optionCode) ? labels.skipOptionLabel : option.label }}</strong>
+              <textarea v-if="isOtherOption(option.optionCode) && selectedCode === option.optionCode" v-model="otherText[currentQuestion.questionCode]" class="tron-chat__user-input-other-answer" :disabled="disabled" :aria-label="labels.otherAnswerAriaLabel(currentIndex + 1)" maxlength="2000" :placeholder="labels.otherAnswerPlaceholder" />
+              <small v-else-if="isOtherOption(option.optionCode) ? labels.otherOptionDescription : isSkipOption(option.optionCode) ? labels.skipOptionDescription : option.description">{{ isOtherOption(option.optionCode) ? labels.otherOptionDescription : isSkipOption(option.optionCode) ? labels.skipOptionDescription : option.description }}</small>
+            </span>
           </label>
         </div>
-        <textarea v-if="otherSelected" v-model="otherText[currentQuestion.questionCode]" :disabled="disabled" :aria-label="labels.otherAnswerAriaLabel(currentIndex + 1)" maxlength="2000" :placeholder="labels.otherAnswerPlaceholder" />
       </fieldset>
     </div>
     <div class="tron-chat__user-input-actions">

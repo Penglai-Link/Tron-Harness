@@ -48,3 +48,4 @@ Pagable response body format:
 <!-- `rust_coding_spec_architecture` currently fails on the gh/master baseline because of pre-existing over-limit facade and implementation files; keep new modules within its 80/600-line limits. -->
 <!-- Oversized Rust modules are split into responsibility-named include fragments when private same-module visibility must remain unchanged. -->
 <!-- The chat panel test baseline had a missing closing test delimiter; keep the focused test file syntactically complete when extending composer behavior. -->
+<!-- Built-in prompt source changes require incrementing the definition version so existing database records synchronize without overwriting edited prompts. -->
