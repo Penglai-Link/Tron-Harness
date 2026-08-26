@@ -302,6 +302,37 @@ describe("TronChatPanel submit controls", () => {
     expect(screen.queryByRole("dialog", { name: "Image preview" })).toBeNull();
   });
 
+  it("shows annotation content while its tag is hovered and supports translated labels", () => {
+    renderPanel({
+      attachmentLabels: {
+        annotationPreview: "注释预览",
+        attachments: "附件",
+      },
+      formatAnnotationCount: (count) => `${count} 条注释`,
+      messages: [{
+        ...message("USER", "Inspect this element"),
+        attachments: [{
+          id: "INSPECTION-1",
+          imageUrl: "data:image/png;base64,AA==",
+          kind: "inspection",
+          metadata: {},
+          summary: "页面按钮",
+        }],
+      }],
+    });
+
+    const tag = screen.getByRole("button", { name: "注释预览: 1 条注释" });
+    expect(screen.queryByRole("tooltip", { name: "注释预览" })).toBeNull();
+    fireEvent.mouseEnter(tag);
+
+    const preview = screen.getByRole("tooltip", { name: "注释预览" });
+    expect(preview.textContent).toContain("页面按钮");
+    expect(within(preview).getByRole("img", { name: "页面按钮" })).toBeTruthy();
+
+    fireEvent.mouseLeave(tag.parentElement!);
+    expect(screen.queryByRole("tooltip", { name: "注释预览" })).toBeNull();
+  });
+
   it("keeps a single Stop action and routes Queue and Steer through shortcuts", () => {
     const onSend = vi.fn();
     const onStop = vi.fn();

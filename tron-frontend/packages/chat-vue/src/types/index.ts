@@ -1,5 +1,6 @@
 import type {
   ChatAdapter,
+  ChatAttachmentLabels,
   ChatAguiStreamEvent,
   ChatClientConfig,
   ChatDebugOptions,
@@ -18,6 +19,7 @@ import type {
 
 export interface TronChatPanelProps {
   attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+  attachmentLabels?: ChatAttachmentLabels;
   createSessionLabel?: string;
   currentUserDisplayName?: string;
   debugOptions?: ChatDebugOptions;
@@ -25,6 +27,7 @@ export interface TronChatPanelProps {
   draft: string;
   emptyDescription?: string;
   emptyTitle?: string;
+  formatAnnotationCount?: (count: number) => string;
   inputPlaceholder?: string;
   liveAguiAnchorMessageCodes?: Record<string, string>;
   liveAguiEvents?: ChatAguiStreamEvent[];

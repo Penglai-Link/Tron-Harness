@@ -31,6 +31,7 @@ import {
   toolSummaryLabel,
   type AguiUserWorkCard,
   type ChatAguiStreamEvent,
+  type ChatAttachmentLabels,
   type ChatDebugOptions,
   type ChatMessage,
   type ChatMessageAttachment,
@@ -51,6 +52,7 @@ import {
   type Ref,
   Fragment,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -114,6 +116,11 @@ function defaultFormatAnnotationCount(count: number) {
   return `${count} annotation${count === 1 ? "" : "s"}`;
 }
 
+const defaultAttachmentLabels: ChatAttachmentLabels = {
+  attachments: "Attachments",
+  annotationPreview: "Annotation preview",
+};
+
 function AttachmentImagePreview({
   attachment,
   downloadAttachment,
@@ -176,6 +183,39 @@ function ChatAttachmentFile({
   );
 }
 
+function AnnotationPreviewItem({
+  attachment,
+  downloadAttachment,
+  onPreview,
+}: {
+  attachment: ChatMessageAttachment;
+  downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+  onPreview: (source: string, alt: string) => void;
+}) {
+  const source = useAttachmentImageSource(attachment, downloadAttachment);
+  const label = attachment.summary || attachment.fileName || attachment.id;
+
+  return (
+    <div className="tron-chat__annotation-preview-item">
+      {source ? (
+        <button
+          aria-label={`Preview ${label}`}
+          className="tron-chat__annotation-preview-image-button"
+          type="button"
+          onClick={() => onPreview(source, label)}
+        >
+          <img alt={label} src={source} />
+        </button>
+      ) : (
+        <div className="tron-chat__annotation-preview-placeholder">
+          <FileText aria-hidden="true" size={16} />
+        </div>
+      )}
+      <span title={label}>{label}</span>
+    </div>
+  );
+}
+
 function formatByteSize(value: number) {
   if (value < 1024) return `${value} B`;
   if (value < 1024 * 1024) return `${Math.ceil(value / 1024)} KB`;
@@ -184,11 +224,13 @@ function formatByteSize(value: number) {
 
 function ChatAttachments({
   attachments,
+  attachmentLabels,
   downloadAttachment,
   formatAnnotationCount,
   onPreviewImage,
 }: {
   attachments: ChatMessage["attachments"];
+  attachmentLabels: ChatAttachmentLabels;
   downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   formatAnnotationCount: (count: number) => string;
   onPreviewImage: (source: string, alt: string) => void;
@@ -197,15 +239,17 @@ function ChatAttachments({
   const inspectionAttachments = attachmentItems.filter((attachment) => attachment.kind === "inspection");
   const imageAttachments = attachmentItems.filter(isImageAttachment);
   const fileAttachments = attachmentItems.filter((attachment) => !isImageAttachment(attachment));
+  const [annotationPreviewOpen, setAnnotationPreviewOpen] = useState(false);
+  const annotationPreviewId = useId();
 
   if (!attachmentItems.length) return null;
 
   const countLabel = inspectionAttachments.length
     ? formatAnnotationCount(inspectionAttachments.length)
-    : "Attachments";
+    : attachmentLabels.attachments;
 
   return (
-    <section aria-label={countLabel || "Attachments"} className="tron-chat__inspection-attachments">
+    <section aria-label={countLabel || attachmentLabels.attachments} className="tron-chat__inspection-attachments">
       <div className="tron-chat__inspection-previews">
         {imageAttachments.map((attachment) => (
           <AttachmentImagePreview
@@ -228,9 +272,47 @@ function ChatAttachments({
         </div>
       ) : null}
       {inspectionAttachments.length ? (
-        <div className="tron-chat__inspection-count">
-          <MessageSquareText aria-hidden="true" size={16} />
-          <span>{countLabel}</span>
+        <div
+          className="tron-chat__inspection-count-wrap"
+          onBlur={(event) => {
+            if (!event.currentTarget.contains(event.relatedTarget)) {
+              setAnnotationPreviewOpen(false);
+            }
+          }}
+          onFocus={() => setAnnotationPreviewOpen(true)}
+          onMouseEnter={() => setAnnotationPreviewOpen(true)}
+          onMouseLeave={() => setAnnotationPreviewOpen(false)}
+        >
+          <button
+            aria-controls={annotationPreviewId}
+            aria-expanded={annotationPreviewOpen}
+            aria-label={`${attachmentLabels.annotationPreview}: ${countLabel}`}
+            className="tron-chat__inspection-count"
+            type="button"
+          >
+            <MessageSquareText aria-hidden="true" size={16} />
+            <span>{countLabel}</span>
+          </button>
+          {annotationPreviewOpen ? (
+            <div
+              aria-label={attachmentLabels.annotationPreview}
+              className="tron-chat__annotation-preview"
+              id={annotationPreviewId}
+              role="tooltip"
+            >
+              <strong>{attachmentLabels.annotationPreview}</strong>
+              <div className="tron-chat__annotation-preview-list">
+                {inspectionAttachments.map((attachment) => (
+                  <AnnotationPreviewItem
+                    attachment={attachment}
+                    downloadAttachment={downloadAttachment}
+                    key={attachment.id}
+                    onPreview={onPreviewImage}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
         </div>
       ) : null}
     </section>
@@ -882,6 +964,7 @@ function WaitingRail() {
 
 export interface TronChatPanelProps {
   attachmentDownloader?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+  attachmentLabels?: ChatAttachmentLabels;
   autoFocusComposer?: boolean;
   createSessionLabel?: string;
   currentUserDisplayName?: string;
@@ -934,6 +1017,7 @@ export interface TronChatPanelProps {
 
 export function TronChatPanel({
   attachmentDownloader,
+  attachmentLabels = defaultAttachmentLabels,
   autoFocusComposer = false,
   createSessionLabel = "Create session",
   currentUserDisplayName,
@@ -1187,6 +1271,7 @@ export function TronChatPanel({
                             <div className="tron-chat__user-message-group">
                               <ChatAttachments
                                 attachments={message.attachments}
+                                attachmentLabels={attachmentLabels}
                                 downloadAttachment={attachmentDownloader}
                                 formatAnnotationCount={formatAnnotationCount}
                                 onPreviewImage={(source, alt) => setPreviewImage({ alt, source })}

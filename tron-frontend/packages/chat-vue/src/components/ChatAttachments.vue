@@ -1,10 +1,13 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from "vue";
-import type { ChatMessageAttachment } from "@tron/chat-core";
+import { FileText, MessageSquareText } from "lucide-vue-next";
+import { computed, onBeforeUnmount, ref, useId, watch } from "vue";
+import type { ChatAttachmentLabels, ChatMessageAttachment } from "@tron/chat-core";
 
 const props = defineProps<{
   attachments?: ChatMessageAttachment[];
+  attachmentLabels: ChatAttachmentLabels;
   downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
+  formatAnnotationCount: (count: number) => string;
 }>();
 
 const emit = defineEmits<{
@@ -20,11 +23,24 @@ const imageAttachments = computed(() => (props.attachments ?? []).filter((attach
     || Boolean(attachment.imageUrl)
     || Boolean(contentType?.startsWith("image/"));
 }));
+const inspectionAttachments = computed(() => (props.attachments ?? []).filter(
+  (attachment) => attachment.kind === "inspection",
+));
+const annotationPreviewOpen = ref(false);
+const annotationPreviewId = useId();
+const annotationCountLabel = computed(() => props.formatAnnotationCount(inspectionAttachments.value.length));
 
 function revokeSources() {
   objectUrls.forEach((source) => URL.revokeObjectURL(source));
   objectUrls.clear();
   imageSources.value = {};
+}
+
+function closeAnnotationPreview(event: FocusEvent) {
+  const currentTarget = event.currentTarget as HTMLElement | null;
+  if (!currentTarget?.contains(event.relatedTarget as Node | null)) {
+    annotationPreviewOpen.value = false;
+  }
 }
 
 async function loadSources(attachments: ChatMessageAttachment[]) {
@@ -59,8 +75,8 @@ onBeforeUnmount(revokeSources);
 
 <template>
   <section
-    v-if="imageAttachments.length"
-    aria-label="Image attachments"
+    v-if="imageAttachments.length || inspectionAttachments.length"
+    :aria-label="inspectionAttachments.length ? annotationCountLabel : attachmentLabels.attachments"
     class="tron-chat__inspection-attachments"
   >
     <div class="tron-chat__inspection-previews">
@@ -79,6 +95,55 @@ onBeforeUnmount(revokeSources);
           <img :alt="attachment.summary" :src="imageSources[attachment.id]" />
         </button>
       </figure>
+    </div>
+    <div
+      v-if="inspectionAttachments.length"
+      class="tron-chat__inspection-count-wrap"
+      @blur="closeAnnotationPreview"
+      @focus="annotationPreviewOpen = true"
+      @mouseenter="annotationPreviewOpen = true"
+      @mouseleave="annotationPreviewOpen = false"
+    >
+      <button
+        :aria-controls="annotationPreviewId"
+        :aria-expanded="annotationPreviewOpen"
+        :aria-label="`${attachmentLabels.annotationPreview}: ${annotationCountLabel}`"
+        class="tron-chat__inspection-count"
+        type="button"
+      >
+        <MessageSquareText :size="16" />
+        <span>{{ annotationCountLabel }}</span>
+      </button>
+      <div
+        v-if="annotationPreviewOpen"
+        :aria-label="attachmentLabels.annotationPreview"
+        :id="annotationPreviewId"
+        class="tron-chat__annotation-preview"
+        role="tooltip"
+      >
+        <strong>{{ attachmentLabels.annotationPreview }}</strong>
+        <div class="tron-chat__annotation-preview-list">
+          <div
+            v-for="attachment in inspectionAttachments"
+            :key="attachment.id"
+            class="tron-chat__annotation-preview-item"
+          >
+            <button
+              v-if="imageSources[attachment.id]"
+              :aria-label="`Preview ${attachment.summary}`"
+              class="tron-chat__annotation-preview-image-button"
+              type="button"
+              @click="emit('previewImage', imageSources[attachment.id], attachment.summary)"
+            >
+              <img :alt="attachment.summary" :src="imageSources[attachment.id]" />
+            </button>
+            <div v-else class="tron-chat__annotation-preview-placeholder">
+              <FileText :size="16" />
+            </div>
+            <span :title="attachment.summary">{{ attachment.summary }}</span>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 </template>

@@ -4,6 +4,7 @@ import {
   buildTranscriptPresentation,
   describeDebugEvent,
   sessionAgentTagLabel,
+  type ChatAttachmentLabels,
   type ChatMessage,
   type ChatSubmitMode,
 } from "@tron/chat-core";
@@ -18,12 +19,17 @@ import { TronChatPanelProps } from "../types";
 
 const props = withDefaults(defineProps<TronChatPanelProps>(), {
   attachmentDownloader: undefined,
+  attachmentLabels: (): ChatAttachmentLabels => ({
+    annotationPreview: "Annotation preview",
+    attachments: "Attachments",
+  }),
   createSessionLabel: "Create session",
   currentUserDisplayName: "",
   debugOptions: undefined,
   disabledInput: false,
   emptyDescription: "Create a session to start chatting.",
   emptyTitle: "No session selected",
+  formatAnnotationCount: (count: number) => `${count} annotation${count === 1 ? "" : "s"}`,
   inputPlaceholder: "Enter to send, Shift+Enter for newline",
   liveAguiAnchorMessageCodes: () => ({}),
   liveAguiEvents: () => [],
@@ -313,7 +319,9 @@ onMounted(() => {
               <ChatAttachments
                 v-if="message.role === 'USER'"
                 :attachments="message.attachments"
+                :attachment-labels="attachmentLabels"
                 :download-attachment="attachmentDownloader"
+                :format-annotation-count="formatAnnotationCount"
                 @preview-image="openImagePreview"
               />
               <WaitingRail

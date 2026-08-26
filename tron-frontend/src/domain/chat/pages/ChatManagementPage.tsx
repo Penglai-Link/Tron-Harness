@@ -109,6 +109,7 @@ import {
   removeQueuedChatSubmission,
   takeNextQueuedChatSubmission,
   type ChatQueuedSubmission,
+  type ChatAttachmentLabels,
   type ChatSubmitMode,
   type ChatUserInputLabels,
   type ChatWorkRailLabels,
@@ -4980,6 +4981,10 @@ export function ChatManagementPage() {
     (count: number) => t("chat.attachments.annotationCount", { count }),
     [t],
   );
+  const attachmentLabels = useMemo<ChatAttachmentLabels>(() => ({
+    annotationPreview: t("chat.attachments.annotationPreview"),
+    attachments: t("chat.attachments.attachments"),
+  }), [i18n.language, t]);
 
   useConsoleShellConfig({ rightPanel });
 
@@ -6142,7 +6147,7 @@ export function ChatManagementPage() {
         creatingSession={creatingSession}
         groups={sessionGroups}
         pendingUserInputSessionCodes={pendingUserInputSessionCodes}
-        runningSessionCode={runningSessionCode}
+        runningSessionCode={currentSessionRunActive ? activeSession?.sessionCode ?? "" : ""}
         sessionActionPendingCode={sessionActionPendingCode}
         unseenSessionCodes={unseenSessionCodes}
         onArchiveSession={(session) => void handleArchiveSession(session)}
@@ -6220,6 +6225,7 @@ export function ChatManagementPage() {
             ? (attachment) => downloadChatSessionAttachment(activeSession, attachment)
               .then((response) => response.blob)
             : undefined}
+          attachmentLabels={attachmentLabels}
           autoFocusComposer={shouldAutoFocusChatComposer()}
           composerRef={composerRef}
           composerHeader={transcriptAttachmentHeader}

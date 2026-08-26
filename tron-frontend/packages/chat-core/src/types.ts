@@ -84,6 +84,11 @@ export interface ChatMessageAttachment {
   summary: string;
 }
 
+export interface ChatAttachmentLabels {
+  attachments: string;
+  annotationPreview: string;
+}
+
 export interface ChatAttachmentUploadInput {
   file: File;
   kind?: ChatMessageAttachmentKind;

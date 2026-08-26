@@ -574,6 +574,8 @@ export const pages = {
     attachments: {
       annotationCount_one: "{{count}} annotation",
       annotationCount_other: "{{count}} annotations",
+      annotationPreview: "Annotation preview",
+      attachments: "Attachments",
     },
     userInput: {
       ariaLabel: "Assistant questions",
