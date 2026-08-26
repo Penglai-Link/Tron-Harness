@@ -24,6 +24,7 @@ use self::paths::{
 };
 pub use self::resource::{
     LocalResourceStorageProfile, ResourceConfig, ResourceLimits, ResourceStorageConfig,
+    ResourceStorageProfile, S3ResourceStorageProfile,
 };
 pub use variable_crypto::VariableCryptoConfig;
 

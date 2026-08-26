@@ -6,7 +6,7 @@ use std::{
 };
 
 use crate::{
-    config::ResourceStorageConfig,
+    config::{ResourceStorageConfig, ResourceStorageProfile},
     domain::resource::{DEFAULT_BINARY_STORAGE_PROFILE, ResourceError},
 };
 
@@ -35,10 +35,12 @@ impl StorageRouter {
             if !profiles.contains_key(profile_code) {
                 return Err(ResourceError::StorageProfileNotFound);
             }
-            let root = PathBuf::from(&profile.root)
-                .canonicalize()
-                .map_err(|_| ResourceError::StorageFailure)?;
-            roots.push(root);
+            if let ResourceStorageProfile::Local(profile) = profile {
+                let root = PathBuf::from(&profile.root)
+                    .canonicalize()
+                    .map_err(|_| ResourceError::StorageFailure)?;
+                roots.push(root);
+            }
         }
 
         Ok(Self {
@@ -132,12 +134,13 @@ impl StorageRouter {
     }
 
     fn locator(&self, profile: &str, object_key: &str) -> String {
-        format!("local://{profile}/{object_key}")
+        format!("storage://{profile}/{object_key}")
     }
 
     fn parse_locator(&self, locator: &str) -> Result<(String, String), ResourceError> {
         let value = locator
-            .strip_prefix("local://")
+            .strip_prefix("storage://")
+            .or_else(|| locator.strip_prefix("local://"))
             .ok_or(ResourceError::StorageLocatorInvalid)?;
         let (profile, key) = value
             .split_once('/')

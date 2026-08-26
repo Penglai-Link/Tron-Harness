@@ -23,12 +23,30 @@ pub struct ResourceConfig {
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct ResourceStorageConfig {
     pub default_profile: String,
-    pub profiles: BTreeMap<String, LocalResourceStorageProfile>,
+    pub profiles: BTreeMap<String, ResourceStorageProfile>,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum ResourceStorageProfile {
+    Local(LocalResourceStorageProfile),
+    S3(S3ResourceStorageProfile),
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub struct LocalResourceStorageProfile {
     pub root: String,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct S3ResourceStorageProfile {
+    pub endpoint: String,
+    pub region: String,
+    pub bucket: String,
+    pub prefix: String,
+    pub force_path_style: bool,
+    pub access_key_id_env: String,
+    pub secret_access_key_env: String,
+    pub session_token_env: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -48,7 +66,7 @@ impl ResourceConfig {
         let mut profiles = BTreeMap::new();
         profiles.insert(
             DEFAULT_RESOURCE_STORAGE_PROFILE.to_string(),
-            LocalResourceStorageProfile { root },
+            ResourceStorageProfile::Local(LocalResourceStorageProfile { root }),
         );
         Self {
             storage: ResourceStorageConfig {
@@ -97,16 +115,19 @@ impl ResourceConfig {
             .contains_key(self.storage.default_profile.as_str())
         {
             return Err(invalid_config(
-                "resource.storage.defaultProfile must reference a configured local profile",
+                "resource.storage.defaultProfile must reference a configured profile",
             ));
         }
-        if self
-            .storage
-            .profiles
-            .values()
-            .any(|profile| profile.root.trim().is_empty())
-        {
-            return Err(invalid_config("resource storage profile root is required"));
+        for (code, profile) in &self.storage.profiles {
+            match profile {
+                ResourceStorageProfile::Local(profile) if profile.root.trim().is_empty() => {
+                    return Err(invalid_config(format!(
+                        "resource storage profile {code} root is required"
+                    )));
+                }
+                ResourceStorageProfile::S3(profile) => profile.validate(code)?,
+                ResourceStorageProfile::Local(_) => {}
+            }
         }
         if self.limits.schema_max_bytes == 0
             || self.limits.attributes_max_bytes == 0
@@ -155,22 +176,77 @@ impl ResourceStorageConfig {
                 if code.is_empty() {
                     return Err(invalid_config("resource storage profile code is required"));
                 }
-                if profile.storage_type.as_deref() != Some("local") {
-                    return Err(invalid_config(
-                        "only local resource storage profiles are supported in the first delivery",
-                    ));
-                }
-                let root = profile
-                    .root
-                    .ok_or_else(|| invalid_config("resource storage profile root is required"))?;
-                parsed.insert(
-                    code,
-                    LocalResourceStorageProfile {
-                        root: normalize_storage_path(root),
-                    },
-                );
+                let storage_type = profile.storage_type.as_deref().unwrap_or("local");
+                let parsed_profile = match storage_type {
+                    "local" => {
+                        let root = profile.root.ok_or_else(|| {
+                            invalid_config("resource storage profile root is required")
+                        })?;
+                        ResourceStorageProfile::Local(LocalResourceStorageProfile {
+                            root: normalize_storage_path(root),
+                        })
+                    }
+                    "s3" => ResourceStorageProfile::S3(S3ResourceStorageProfile {
+                        endpoint: profile.endpoint.ok_or_else(|| {
+                            invalid_config("s3 resource storage profile endpoint is required")
+                        })?,
+                        region: profile.region.unwrap_or_else(|| "us-east-1".to_string()),
+                        bucket: profile.bucket.ok_or_else(|| {
+                            invalid_config("s3 resource storage profile bucket is required")
+                        })?,
+                        prefix: profile.prefix.unwrap_or_default(),
+                        force_path_style: profile.force_path_style.unwrap_or(true),
+                        access_key_id_env: profile
+                            .access_key_id_env
+                            .unwrap_or_else(|| "AWS_ACCESS_KEY_ID".to_string()),
+                        secret_access_key_env: profile
+                            .secret_access_key_env
+                            .unwrap_or_else(|| "AWS_SECRET_ACCESS_KEY".to_string()),
+                        session_token_env: Some(
+                            profile
+                                .session_token_env
+                                .unwrap_or_else(|| "AWS_SESSION_TOKEN".to_string()),
+                        ),
+                    }),
+                    other => {
+                        return Err(invalid_config(format!(
+                            "unsupported resource storage profile type: {other}"
+                        )));
+                    }
+                };
+                parsed.insert(code, parsed_profile);
             }
             self.profiles = parsed;
+        }
+        Ok(())
+    }
+}
+
+impl S3ResourceStorageProfile {
+    fn validate(&self, code: &str) -> Result<(), ConfigError> {
+        if self.endpoint.trim().is_empty()
+            || url::Url::parse(&self.endpoint).is_err()
+            || !matches!(url::Url::parse(&self.endpoint).map(|url| url.scheme().to_string()), Ok(s) if s == "http" || s == "https")
+        {
+            return Err(invalid_config(format!(
+                "resource storage profile {code} endpoint must be an http(s) URL"
+            )));
+        }
+        if self.region.trim().is_empty() {
+            return Err(invalid_config(format!(
+                "resource storage profile {code} region is required"
+            )));
+        }
+        if self.bucket.trim().is_empty() || self.bucket.contains('/') {
+            return Err(invalid_config(format!(
+                "resource storage profile {code} bucket must be a non-empty name"
+            )));
+        }
+        if self.access_key_id_env.trim().is_empty() || self.secret_access_key_env.trim().is_empty()
+        {
+            return Err(invalid_config(format!(
+                "resource storage profile {code} credential environment names are required"
+            )));
         }
         Ok(())
     }
@@ -233,6 +309,14 @@ struct ResourceStorageProfileFileConfig {
     #[serde(rename = "type")]
     storage_type: Option<String>,
     root: Option<String>,
+    endpoint: Option<String>,
+    region: Option<String>,
+    bucket: Option<String>,
+    prefix: Option<String>,
+    force_path_style: Option<bool>,
+    access_key_id_env: Option<String>,
+    secret_access_key_env: Option<String>,
+    session_token_env: Option<String>,
 }
 
 #[derive(Debug, serde::Deserialize, Default)]
@@ -246,4 +330,64 @@ struct ResourceLimitsFileConfig {
     max_binary_bytes: Option<u64>,
     max_commit_bytes: Option<u64>,
     max_binary_name_length: Option<usize>,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parses_s3_storage_profiles_without_storing_credentials() {
+        let mut config = ResourceConfig::test_default();
+        let mut profiles = BTreeMap::new();
+        profiles.insert(
+            "s3-default".to_string(),
+            ResourceStorageProfileFileConfig {
+                storage_type: Some("s3".to_string()),
+                root: None,
+                endpoint: Some("http://127.0.0.1:9000".to_string()),
+                region: Some("us-east-1".to_string()),
+                bucket: Some("tron".to_string()),
+                prefix: Some("attachments".to_string()),
+                force_path_style: Some(true),
+                access_key_id_env: Some("TRON_S3_ACCESS_KEY".to_string()),
+                secret_access_key_env: Some("TRON_S3_SECRET_KEY".to_string()),
+                session_token_env: None,
+            },
+        );
+        config
+            .apply_overrides(ResourceFileConfig {
+                storage: Some(ResourceStorageFileConfig {
+                    default_profile: Some("s3-default".to_string()),
+                    profiles: Some(profiles),
+                }),
+                ..Default::default()
+            })
+            .expect("s3 profile should be valid");
+
+        assert!(matches!(
+            config.storage.profiles.get("s3-default"),
+            Some(ResourceStorageProfile::S3(profile))
+                if profile.bucket == "tron"
+                    && profile.prefix == "attachments"
+                    && profile.access_key_id_env == "TRON_S3_ACCESS_KEY"
+                    && profile.secret_access_key_env == "TRON_S3_SECRET_KEY"
+                    && profile.session_token_env.as_deref() == Some("AWS_SESSION_TOKEN")
+        ));
+    }
+
+    #[test]
+    fn rejects_non_http_s3_endpoint() {
+        let profile = S3ResourceStorageProfile {
+            endpoint: "file:///tmp/s3".to_string(),
+            region: "us-east-1".to_string(),
+            bucket: "tron".to_string(),
+            prefix: String::new(),
+            force_path_style: true,
+            access_key_id_env: "AWS_ACCESS_KEY_ID".to_string(),
+            secret_access_key_env: "AWS_SECRET_ACCESS_KEY".to_string(),
+            session_token_env: None,
+        };
+        assert!(profile.validate("s3-default").is_err());
+    }
 }

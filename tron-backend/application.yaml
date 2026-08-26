@@ -12,6 +12,18 @@ resource:
       local-default:
         type: local
         root: ~/.tron/resources
+      # Example S3-compatible profile. Set defaultProfile to this profile and
+      # export the three credential variables before starting the backend.
+      # s3-default:
+      #   type: s3
+      #   endpoint: https://s3.example.com
+      #   region: us-east-1
+      #   bucket: tron-resources
+      #   prefix: attachments
+      #   forcePathStyle: false
+      #   accessKeyIdEnv: AWS_ACCESS_KEY_ID
+      #   secretAccessKeyEnv: AWS_SECRET_ACCESS_KEY
+      #   sessionTokenEnv: AWS_SESSION_TOKEN
   limits:
     schemaMaxBytes: 1048576
     attributesMaxBytes: 1048576

@@ -117,10 +117,16 @@ fn build_resource_service(
         .profiles
         .iter()
         .map(|(profile_code, profile)| {
-            let storage: Arc<dyn ObjectStorage> = Arc::new(
-                LocalObjectStorage::new(&profile.root)
-                    .expect("local resource storage should initialize"),
-            );
+            let storage: Arc<dyn ObjectStorage> = match profile {
+                ResourceStorageProfile::Local(profile) => Arc::new(
+                    LocalObjectStorage::new(&profile.root)
+                        .expect("local resource storage should initialize"),
+                ),
+                ResourceStorageProfile::S3(profile) => Arc::new(
+                    S3ObjectStorage::from_config(profile)
+                        .expect("s3 resource storage should initialize"),
+                ),
+            };
             (profile_code.clone(), storage)
         })
         .collect::<BTreeMap<_, _>>();
