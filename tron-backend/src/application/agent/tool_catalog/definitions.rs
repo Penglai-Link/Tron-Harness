@@ -44,6 +44,11 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
             description_i18n_key: "agent.toolCatalog.domains.bash.description",
         },
         ToolDomainDefinition {
+            domain_code: "chat_attachment",
+            name_i18n_key: "agent.toolCatalog.domains.chat_attachment.name",
+            description_i18n_key: "agent.toolCatalog.domains.chat_attachment.description",
+        },
+        ToolDomainDefinition {
             domain_code: "fs",
             name_i18n_key: "agent.toolCatalog.domains.fs.name",
             description_i18n_key: "agent.toolCatalog.domains.fs.description",

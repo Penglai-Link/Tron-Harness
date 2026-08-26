@@ -4,6 +4,10 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.domains.bash.description" => {
             Some("Run shell fallback commands with structured arguments.")
         }
+        "agent.toolCatalog.domains.chat_attachment.name" => Some("Chat Attachment Tools"),
+        "agent.toolCatalog.domains.chat_attachment.description" => Some(
+            "Read session attachments in bounded text chunks and parse complete JSON documents.",
+        ),
         "agent.toolCatalog.domains.fs.name" => Some("Filesystem Tools"),
         "agent.toolCatalog.domains.fs.description" => {
             Some("Read, write, inspect, and patch local workspace files.")
@@ -53,6 +57,42 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.read_text.params.maxBytes" => {
             Some("Optional maximum number of bytes to return after slicing.")
         }
+        "agent.toolCatalog.tools.chat_attachment.read_text.name" => {
+            Some("Read chat attachment text")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.description" => Some(
+            "Read a session attachment as bounded UTF-8 chunks. The attachment is not a workspace file.",
+        ),
+        "agent.toolCatalog.tools.chat_attachment.read_text.sampleResultSummary" => {
+            Some("Returns one text chunk with byte and line cursors for the next chunk.")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.params.attachmentCode" => {
+            Some("Session attachment code from the chat attachment context.")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.params.startByte" => {
+            Some("Byte offset for the chunk; use nextStartByte from the previous result.")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.params.maxBytes" => {
+            Some("Maximum chunk size; the server caps this at 262144 bytes.")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.name" => {
+            Some("Parse chat attachment JSON")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.description" => Some(
+            "Parse the complete session attachment as JSON, return document statistics, and inspect an optional JSON Pointer.",
+        ),
+        "agent.toolCatalog.tools.chat_attachment.parse_json.sampleResultSummary" => {
+            Some("Returns full-document JSON statistics and a bounded selected value.")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.params.attachmentCode" => {
+            Some("Session attachment code from the chat attachment context.")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.params.jsonPath" => Some(
+            "Optional RFC 6901 JSON Pointer, for example /topics/0; empty selects the document root.",
+        ),
+        "agent.toolCatalog.tools.chat_attachment.parse_json.params.maxValueBytes" => Some(
+            "Maximum serialized bytes returned for the selected JSON value; parsing still covers the full document.",
+        ),
         "agent.toolCatalog.tools.fs.write_text.name" => Some("Write text file"),
         "agent.toolCatalog.tools.fs.write_text.description" => {
             Some("Create, overwrite, or append a local text file.")
@@ -210,6 +250,10 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
     match key {
         "agent.toolCatalog.domains.bash.name" => Some("命令行工具"),
         "agent.toolCatalog.domains.bash.description" => Some("以结构化参数执行 shell 兜底命令。"),
+        "agent.toolCatalog.domains.chat_attachment.name" => Some("会话附件工具"),
+        "agent.toolCatalog.domains.chat_attachment.description" => {
+            Some("对会话附件进行分块文本读取和完整 JSON 解析。")
+        }
         "agent.toolCatalog.domains.fs.name" => Some("文件工具"),
         "agent.toolCatalog.domains.fs.description" => {
             Some("读取、写入、检查并修补本地工作区文件。")
@@ -256,6 +300,38 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         }
         "agent.toolCatalog.tools.fs.read_text.params.maxBytes" => {
             Some("按行截取后最多返回的字节数。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.name" => Some("读取会话附件文本"),
+        "agent.toolCatalog.tools.chat_attachment.read_text.description" => {
+            Some("将会话附件按受限大小读取为 UTF-8 文本块；附件不是工作区文件。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.sampleResultSummary" => {
+            Some("返回一个文本块以及下一块所需的字节和行游标。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.params.attachmentCode" => {
+            Some("聊天附件上下文中的会话附件编码。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.params.startByte" => {
+            Some("本次读取的字节偏移；后续使用上一次结果中的 nextStartByte。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.read_text.params.maxBytes" => {
+            Some("本次最多读取的字节数；服务端上限为 262144 字节。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.name" => Some("解析会话附件 JSON"),
+        "agent.toolCatalog.tools.chat_attachment.parse_json.description" => {
+            Some("完整解析会话附件 JSON，返回文档统计，并可通过 JSON Pointer 查看指定节点。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.sampleResultSummary" => {
+            Some("返回完整 JSON 文档统计和受限大小的指定节点值。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.params.attachmentCode" => {
+            Some("聊天附件上下文中的会话附件编码。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.params.jsonPath" => {
+            Some("可选 RFC 6901 JSON Pointer，例如 /topics/0；为空时选择整个文档根节点。")
+        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.params.maxValueBytes" => {
+            Some("指定 JSON 节点最多返回的序列化字节数；完整文档仍会被解析。")
         }
         "agent.toolCatalog.tools.fs.write_text.name" => Some("写入文本文件"),
         "agent.toolCatalog.tools.fs.write_text.description" => {

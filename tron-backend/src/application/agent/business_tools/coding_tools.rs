@@ -1,4 +1,5 @@
 mod bash;
+mod chat_attachments;
 mod filesystem;
 mod search;
 
@@ -6,12 +7,13 @@ use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::agent::{
-    AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolObservation,
+use crate::{
+    application::resource::ResourceService,
+    domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolObservation},
 };
 
-pub(super) fn coding_domain_tools() -> Vec<Arc<dyn Tool>> {
-    vec![
+pub(super) fn coding_domain_tools(resources: ResourceService) -> Vec<Arc<dyn Tool>> {
+    let mut tools: Vec<Arc<dyn Tool>> = vec![
         Arc::new(bash::BashExecTool),
         Arc::new(filesystem::FsReadTextTool),
         Arc::new(filesystem::FsWriteTextTool),
@@ -21,7 +23,9 @@ pub(super) fn coding_domain_tools() -> Vec<Arc<dyn Tool>> {
         Arc::new(search::SearchGrepTool),
         Arc::new(search::SearchGlobTool),
         Arc::new(search::SearchPathTool),
-    ]
+    ];
+    tools.extend(chat_attachments::tools(resources));
+    tools
 }
 
 #[derive(Debug, Serialize)]

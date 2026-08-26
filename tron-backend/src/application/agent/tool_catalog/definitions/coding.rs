@@ -58,6 +58,54 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             sample_result_summary_i18n_key: "agent.toolCatalog.tools.fs.read_text.sampleResultSummary",
         },
         ToolCatalogDefinition {
+            tool_code: "chat_attachment.read_text",
+            domain_code: "chat_attachment",
+            name_i18n_key: "agent.toolCatalog.tools.chat_attachment.read_text.name",
+            description_i18n_key: "agent.toolCatalog.tools.chat_attachment.read_text.description",
+            operation_kind: ToolOperationKind::Query,
+            input_schema: schema(
+                "agent.toolCatalog.tools.chat_attachment.read_text.description",
+                json!([{ "attachmentCode": "ATTACHMENT-1", "startByte": 0, "maxBytes": 65536 }]),
+                json!({
+                    "type": "object",
+                    "required": ["attachmentCode"],
+                    "properties": {
+                        "attachmentCode": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.read_text.params.attachmentCode" },
+                        "startByte": { "type": "integer", "minimum": 0, "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.read_text.params.startByte" },
+                        "maxBytes": { "type": "integer", "minimum": 1, "maximum": 262144, "default": 65536, "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.read_text.params.maxBytes" }
+                    },
+                    "additionalProperties": false
+                }),
+            ),
+            module_owner: "coding",
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary_i18n_key: "agent.toolCatalog.tools.chat_attachment.read_text.sampleResultSummary",
+        },
+        ToolCatalogDefinition {
+            tool_code: "chat_attachment.parse_json",
+            domain_code: "chat_attachment",
+            name_i18n_key: "agent.toolCatalog.tools.chat_attachment.parse_json.name",
+            description_i18n_key: "agent.toolCatalog.tools.chat_attachment.parse_json.description",
+            operation_kind: ToolOperationKind::Query,
+            input_schema: schema(
+                "agent.toolCatalog.tools.chat_attachment.parse_json.description",
+                json!([{ "attachmentCode": "ATTACHMENT-1", "jsonPath": "/topics" }]),
+                json!({
+                    "type": "object",
+                    "required": ["attachmentCode"],
+                    "properties": {
+                        "attachmentCode": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.parse_json.params.attachmentCode" },
+                        "jsonPath": { "type": "string", "default": "", "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.parse_json.params.jsonPath" },
+                        "maxValueBytes": { "type": "integer", "minimum": 1, "maximum": 262144, "default": 65536, "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.parse_json.params.maxValueBytes" }
+                    },
+                    "additionalProperties": false
+                }),
+            ),
+            module_owner: "coding",
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary_i18n_key: "agent.toolCatalog.tools.chat_attachment.parse_json.sampleResultSummary",
+        },
+        ToolCatalogDefinition {
             tool_code: "fs.write_text",
             domain_code: "fs",
             name_i18n_key: "agent.toolCatalog.tools.fs.write_text.name",

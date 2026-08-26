@@ -83,12 +83,12 @@ where
         models,
         skills,
         variables,
-        resources,
+        resources.clone(),
         prompts,
         mcp,
         open_apps,
     );
-    tools.extend(coding_tools::coding_domain_tools());
+    tools.extend(coding_tools::coding_domain_tools(resources.clone()));
     tools.extend(memory_tools::memory_business_tools(memory));
     tools.extend(short_term_memory_tools::short_term_memory_tools(
         short_term_memory,

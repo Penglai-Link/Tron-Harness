@@ -59,8 +59,15 @@ fn attachment_context_text(attachment: &ChatMessageAttachment) -> String {
         .and_then(Value::as_str)
         .map(|text| format!("\nExtracted text:\n{text}"))
         .unwrap_or_default();
+    let attachment_guidance = attachment
+        .resource_code
+        .as_deref()
+        .map(|_| {
+            "\nThis is a session attachment, not a workspace path. For complete access use chat_attachment.read_text with attachmentCode for byte chunks, or chat_attachment.parse_json for full JSON parsing."
+        })
+        .unwrap_or_default();
     format!(
-        "<{tag} id=\"{}\" kind=\"{}\">\nSummary: {}{file_details}{extracted_text}\nMetadata: {}\n</{tag}>",
+        "<{tag} id=\"{}\" kind=\"{}\">\nSummary: {}{file_details}{extracted_text}{attachment_guidance}\nMetadata: {}\n</{tag}>",
         attachment.id, attachment.kind, attachment.summary, metadata,
     )
 }
