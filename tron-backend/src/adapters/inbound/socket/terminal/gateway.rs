@@ -5,15 +5,14 @@ use std::{
 
 use tokio::sync::mpsc::UnboundedSender;
 
-use crate::{application::terminal::TerminalService, shared::random::random_base64url};
+use crate::application::terminal::TerminalService;
 
 use super::{
     protocol::{
-        CommandCancelPayload, CommandExecutePayload, CommandInputPayload, MAX_COMMAND_BYTES,
-        MAX_INPUT_BYTES, TerminalResizePayload, TerminalSocketGatewayError, TerminalSocketMessage,
-        required_message_id,
+        MAX_INPUT_BYTES, TerminalInputPayload, TerminalResizePayload, TerminalSessionEvent,
+        TerminalSignalPayload, TerminalSocketGatewayError,
     },
-    session::PtySession,
+    session::{PtySession, SessionDescriptor},
 };
 
 #[derive(Clone)]
@@ -34,10 +33,10 @@ impl TerminalSocketGateway {
         &self,
         socket_id: String,
         ticket: String,
-        output: UnboundedSender<TerminalSocketMessage>,
-    ) -> Result<String, TerminalSocketGatewayError> {
+        output: UnboundedSender<TerminalSessionEvent>,
+    ) -> Result<SessionDescriptor, TerminalSocketGatewayError> {
         let authorization = self.terminal.consume_socket_ticket(&ticket)?;
-        let (session, current_directory) =
+        let (session, descriptor) =
             tokio::task::spawn_blocking(move || PtySession::spawn(authorization, output))
                 .await
                 .map_err(|_| TerminalSocketGatewayError::PtyFailed)??;
@@ -46,53 +45,39 @@ impl TerminalSocketGateway {
             .lock()
             .map_err(|_| TerminalSocketGatewayError::PtyFailed)?
             .insert(socket_id, session);
-        Ok(current_directory)
-    }
-
-    pub(super) fn execute(
-        &self,
-        socket_id: &str,
-        payload: CommandExecutePayload,
-    ) -> Result<(), TerminalSocketGatewayError> {
-        let command = payload.command.trim();
-        if command.is_empty() {
-            return Err(TerminalSocketGatewayError::CommandRequired);
-        }
-        if command.len() > MAX_COMMAND_BYTES {
-            return Err(TerminalSocketGatewayError::InputTooLarge);
-        }
-        let message_id = required_message_id(payload.message_id)?;
-        self.session(socket_id)?.execute(
-            command,
-            message_id,
-            payload.interactive.unwrap_or(false),
-            &random_base64url(16),
-        )
-    }
-
-    pub(super) fn cancel(
-        &self,
-        socket_id: &str,
-        payload: CommandCancelPayload,
-    ) -> Result<(), TerminalSocketGatewayError> {
-        let message_id = required_message_id(payload.message_id)?;
-        self.session(socket_id)?.cancel(&message_id)
+        Ok(descriptor)
     }
 
     pub(super) fn write_input(
         &self,
         socket_id: &str,
-        payload: CommandInputPayload,
+        payload: TerminalInputPayload,
     ) -> Result<(), TerminalSocketGatewayError> {
-        if payload.data.is_empty() {
+        // Allow empty data when clearBuffer is true
+        if payload.data.is_empty() && !payload.clear_buffer {
             return Ok(());
         }
-        if payload.data.len() > MAX_INPUT_BYTES {
+        if payload.data.len() > MAX_INPUT_BYTES
+            || payload
+                .input_line
+                .as_ref()
+                .is_some_and(|line| line.len() > MAX_INPUT_BYTES)
+        {
             return Err(TerminalSocketGatewayError::InputTooLarge);
         }
-        let message_id = required_message_id(payload.message_id)?;
-        self.session(socket_id)?
-            .write_input(&message_id, payload.data)
+        self.session(socket_id)?.write_input(
+            &payload.data,
+            payload.clear_buffer,
+            payload.input_line.as_deref(),
+        )
+    }
+
+    pub(super) fn signal(
+        &self,
+        socket_id: &str,
+        payload: TerminalSignalPayload,
+    ) -> Result<(), TerminalSocketGatewayError> {
+        self.session(socket_id)?.signal(payload.signal)
     }
 
     pub(super) fn resize(

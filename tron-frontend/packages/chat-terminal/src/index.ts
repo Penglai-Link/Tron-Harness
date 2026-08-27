@@ -1,14 +1,8 @@
 import "@xterm/xterm/css/xterm.css";
-import {
-  isInteractiveShellCommand,
-  Terminal,
-  type CommandExecutionContext,
-  type CommandExplainContext,
-} from "./terminal";
-import { formatePath } from "./terminal/utils/common";
-import { TerminalCommandDetector } from "./terminal/utils/terminalCommandDetector";
+import { Terminal } from "./terminal";
 import { ITerminalInitOnlyOptions, ITerminalOptions } from "@xterm/xterm";
 import type { TerminalThemeTokenOverrides } from "./terminal/types/themes";
+import type { TerminalCommandBlock } from "./terminal/types/shellIntegration";
 import {
   createChatTerminalI18n,
   type ChatTerminalLocale,
@@ -17,6 +11,7 @@ import {
 import {
   type AIStreamEvent,
   type AITransport,
+  type TerminalSession,
   type TerminalTransport,
 } from "./transport";
 
@@ -25,10 +20,12 @@ export type {
   ChatTerminalMessageKey,
   ChatTerminalMessageOverrides,
   ChatTerminalMessages,
-  CommandExecutionContext,
   CommandExplain,
   CommandExplainContext,
   CommandExplainPayload,
+  ShellIntegrationState,
+  SubshellDetection,
+  TerminalCommandBlock,
 } from "./terminal";
 export type { TerminalThemeTokenOverrides } from "./terminal";
 export * from "./transport";
@@ -56,87 +53,100 @@ export interface ChatTerminalOptions {
       themeTokens?: TerminalThemeTokenOverrides;
     };
   /**
-   * Controls whether a shell command may receive keyboard input while it runs.
-   * Commands are input-enabled by default.
+   * Prefix that always routes a submitted line to the agent, defaulting to `#`.
+   * It doubles as a shell comment, so a mis-route cannot execute anything.
    */
-  isCommandInputEnabled?: (command: string) => boolean;
+  agentPrefix?: string;
   /**
-   * Marks full-screen terminal programs whose output must keep all ANSI control
-   * sequences and hide auxiliary terminal UI.
+   * Overrides the heuristic used for input without the explicit prefix. By
+   * default only high-confidence natural language is diverted to the agent, so
+   * an ordinary shell command is never swallowed.
    */
-  isInteractiveCommand?: (command: string) => boolean;
-  /** Closes the hosting terminal tab when the user enters the exit command. */
-  onExitCommand?: () => void;
+  shouldRouteToAgent?: (input: string) => boolean;
+  /** Fires when the shell process itself exits, so the host can close the tab. */
+  onExit?: (exitCode: number | null) => void;
+  /** Fires when the shell cannot report command boundaries. */
+  onDegraded?: (session: TerminalSession) => void;
   onError?: (error: Error) => void;
 }
 
 export type IOptions = ChatTerminalOptions;
 
-const defaultOptions: Partial<ChatTerminalOptions> = {};
-
 export function initTerminal(options: ChatTerminalOptions) {
-  const normalizeOptions = { ...defaultOptions, ...options };
-  const { terminalOptions } = normalizeOptions;
-  const terminalTransport = normalizeOptions.transport.terminal;
-  const aiTransport = normalizeOptions.transport.ai;
+  const { terminalOptions } = options;
+  const terminalTransport = options.transport.terminal;
+  const aiTransport = options.transport.ai;
   const i18n = createChatTerminalI18n({
-    locale: normalizeOptions.locale,
+    locale: options.locale,
     messages: {
-      ...(terminalOptions?.agentTips
-        ? { agentTips: terminalOptions.agentTips }
-        : {}),
+      ...(terminalOptions?.agentTips ? { agentTips: terminalOptions.agentTips } : {}),
       ...(terminalOptions?.explainTitle
         ? { explainTitle: terminalOptions.explainTitle }
         : {}),
-      ...normalizeOptions.messages,
+      ...options.messages,
     },
   });
-  let currentDirectory = "/";
+  let session: TerminalSession | undefined;
   let disposed = false;
+  const termRef: { current?: Terminal } = {};
+
+  const writeToShell = (
+    data: string,
+    clearBuffer?: boolean,
+    inputLine?: string,
+  ) => {
+    const integration = termRef.current?.shellIntegrationAddon;
+    const sanitizedData = integration?.sanitizeInput(data) ?? data;
+    integration?.noteInput(sanitizedData);
+    terminalTransport.input(sanitizedData, clearBuffer, inputLine);
+  };
 
   const commandChat = aiTransport
-    ? async (command: string) => {
-        const requestId = globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
+    ? async (content: string) => {
+        const requestId =
+          globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
         try {
-          await aiTransport.stream(
-            normalizeOptions.prompts?.chat?.(command) ?? command,
-            {
-              onChunk: ({ delta }) => {
-                if (disposed) return;
-                termInstance.modelSessionAddon?.appendMessageChunk({
-                  conversationId: "default",
-                  requestId,
-                  response: delta,
-                });
-              },
-              onEvent: (event) => {
-                if (disposed || !isAgentActivityEvent(event)) return;
-                termInstance.modelSessionAddon?.appendActivityEvent({
-                  conversationId: "default",
-                  event,
-                  requestId,
-                });
-              },
+          termRef.current?.modelSessionAddon?.startSession({
+            conversationId: "default",
+            requestId,
+          });
+          await aiTransport.stream(options.prompts?.chat?.(content) ?? content, {
+            onChunk: ({ delta }) => {
+              if (disposed) return;
+              termRef.current?.modelSessionAddon?.appendMessageChunk({
+                conversationId: "default",
+                requestId,
+                response: delta,
+              });
             },
-          );
+            onEvent: (event) => {
+              if (disposed || !isAgentActivityEvent(event)) return;
+              termRef.current?.modelSessionAddon?.appendActivityEvent({
+                conversationId: "default",
+                event,
+                requestId,
+              });
+            },
+          });
         } finally {
           if (!disposed) {
             await (
-              termInstance.modelSessionAddon?.complete(requestId) ??
+              termRef.current?.modelSessionAddon?.complete(requestId) ??
               Promise.resolve()
             );
           }
         }
       }
-      : undefined;
+    : undefined;
+
   const commandExplain = aiTransport
     ? async (
         payload: { command: string; output: string },
-        { onChunk, signal }: CommandExplainContext,
+        { onChunk, signal }: { onChunk?: (delta: string) => void; signal: AbortSignal },
       ) => {
         let content = "";
         await aiTransport.stream(
-          normalizeOptions.prompts?.explain?.(payload) ??
+          options.prompts?.explain?.(payload) ??
             `Command:\n${payload.command}\n\nOutput:\n${payload.output}`,
           {
             onChunk: ({ delta }) => {
@@ -148,81 +158,53 @@ export function initTerminal(options: ChatTerminalOptions) {
         );
         return content;
       }
-      : undefined;
+    : undefined;
+
   const commandGenerate = aiTransport
     ? (content: string) =>
-        aiTransport.request(
-          normalizeOptions.prompts?.generate?.(content) ?? content,
-        )
-      : undefined;
+        aiTransport.request(options.prompts?.generate?.(content) ?? content)
+    : undefined;
 
-  async function runCommandByIo(
-    command: string,
-    onOutput: (output: string) => void = (output) => {
-      termInstance.terminal.write(output);
-    },
-    context: CommandExecutionContext = { interactive: false },
-  ) {
-    const input = command.trim();
-    if (!input) {
-      return;
-    }
-    try {
-      const result = await terminalTransport.execute(input, onOutput, context);
-      if (result?.currentDirectory) {
-        currentDirectory = result.currentDirectory;
-      }
-    } catch (error) {
-      onOutput(`${error}\r\n`);
-    }
-  }
+  const executeCommand = (command: string) => {
+    const instance = termRef.current;
+    return instance
+      ? instance.executeCommand(command)
+      : Promise.reject(new Error("终端尚未完成初始化"));
+  };
 
-  const termInstance: Terminal = new Terminal(normalizeOptions.el, {
+  // The terminal activates addons during construction. Keep the reference
+  // outside the constructor because inputRouter may synchronously query it
+  // from its initial state notification.
+  const termInstance = new Terminal(options.el, {
     cursorBlink: true,
     ...terminalOptions,
-    localEcho: {
-      enabled: true,
-      prompt: () => {
-        return formatePath(currentDirectory);
-      },
-      isInteractiveCommand:
-        normalizeOptions.isInteractiveCommand ?? isInteractiveShellCommand,
-      isCommandInputEnabled:
-        normalizeOptions.isCommandInputEnabled ?? ((command) =>
-          !TerminalCommandDetector.shouldTriggerAgentMode(
-            getTerminalBufferContent(termInstance.terminal, currentDirectory),
-            command,
-          )),
-      onCancelCommand: () => terminalTransport.cancel(),
-      onCommandInput: (data) => terminalTransport.write(data),
-      // 执行命令前判断，系统命令直接执行，非系统命令调用大模型
-      onBeforeCommand: async (command) => {
-        if (!command.trim()) {
-          return false;
-        }
-        if (command.trim() === "exit" && normalizeOptions.onExitCommand) {
-          normalizeOptions.onExitCommand();
-          return true;
-        }
-        if (
-          !TerminalCommandDetector.shouldTriggerAgentMode(
-            getTerminalBufferContent(termInstance.terminal, currentDirectory),
-            command,
-          )
-        ) {
-          return false;
-        }
-        if (!commandChat) {
-          return false;
-        }
-        await commandChat(command);
-        // 调用大模型
-        return true;
-      },
-      onCommand: runCommandByIo,
-      // 结果解释
-      onExplain: commandExplain,
+    shellIntegration: {
+      write: writeToShell,
+    },
+    inputRouter: {
+      write: writeToShell,
+      isAtPrompt: () => termRef.current?.shellIntegrationAddon?.isAtPrompt() ?? false,
+      readInputLine: () => termRef.current?.shellIntegrationAddon?.readInputLine() ?? "",
+      clearInputLine: () => termRef.current?.shellIntegrationAddon?.clearInputLine(),
+      onAgentRequest: (request) => commandChat?.(request),
+      agentPrefix: options.agentPrefix,
+      shouldRouteToAgent: options.shouldRouteToAgent,
+    },
+    blocks: {
       i18n,
+      explainTitle: terminalOptions?.explainTitle,
+      onExplain: commandExplain,
+      onAskAgent: commandChat
+        ? (block) => commandChat(buildBlockQuestion(block, i18n.t("blockAskPrompt")))
+        : undefined,
+      onRerun: async (command) => {
+        await executeCommand(command);
+      },
+    },
+    subshell: {
+      i18n,
+      write: writeToShell,
+      getBootstrap: () => session?.subshellBootstrap ?? "",
     },
     agentPrompt: commandChat
       ? {
@@ -235,13 +217,10 @@ export function initTerminal(options: ChatTerminalOptions) {
       commandChat || commandGenerate
         ? {
             i18n,
-            // 点击直接命令
-            onExecuteCommand: ({ command }) => {
-              return termInstance.executeCommand(command);
+            onExecuteCommand: async ({ command }) => {
+              await executeCommand(command);
             },
-            // 编辑命令成功回调
             onModifyCommand: async ({ command }) => command.trim(),
-            // AI生成命令
             onGenerateCommand: ({ command }) => {
               if (!commandGenerate) {
                 return Promise.reject(new Error("未配置 AI 命令生成能力"));
@@ -251,42 +230,62 @@ export function initTerminal(options: ChatTerminalOptions) {
           }
         : undefined,
   });
+  termRef.current = termInstance;
+
+  const outputDisposable = terminalTransport.onOutput((data) => {
+    termInstance.terminal.write(data, () => {
+      // Only after xterm parsed the chunk do the OSC handlers know whether a
+      // nested shell announced itself, so the subshell watch is nudged here.
+      termInstance.shellIntegrationAddon?.noteOutput(data);
+    });
+  });
+  const sessionDisposable = terminalTransport.onSessionChange((next) => {
+    session = next;
+    termInstance.shellIntegrationAddon?.setCwd(next.currentDirectory);
+    if (!next.supportsBlocks) {
+      options.onDegraded?.(next);
+    }
+  });
+  const exitDisposable = terminalTransport.onExit((exitCode) => {
+    options.onExit?.(exitCode);
+  });
+  const errorDisposable = terminalTransport.onError((error) => {
+    reportError(error);
+  });
   const resizeDisposable = termInstance.terminal.onResize((size) => {
     if (termInstance.shouldNotifyTransportResize()) {
       terminalTransport.resize(size);
     }
   });
-  const sessionDisposable = terminalTransport.onSessionChange((session) => {
-    setCurrentDirectory(session.currentDirectory);
-  });
-  void terminalTransport.connect().catch((error) => {
-    const normalizedError = toError(error);
-    if (normalizeOptions.onError) {
-      normalizeOptions.onError(normalizedError);
-    } else {
-      console.warn(normalizedError);
-    }
+
+  void terminalTransport.connect().catch((error: unknown) => {
+    reportError(toError(error));
   });
 
-  function setCurrentDirectory(nextDirectory: string) {
-    currentDirectory = nextDirectory;
-    termInstance.terminal.write(`\r\x1b[2K${formatePath(currentDirectory)}`);
-    termInstance.markPromptRendered();
+  function reportError(error: Error) {
+    if (options.onError) {
+      options.onError(error);
+    } else {
+      console.warn(error);
+    }
   }
 
   return {
     dispose() {
       disposed = true;
-      sessionDisposable?.dispose();
-      resizeDisposable?.dispose();
+      outputDisposable.dispose();
+      sessionDisposable.dispose();
+      exitDisposable.dispose();
+      errorDisposable.dispose();
+      resizeDisposable.dispose();
       terminalTransport.dispose();
       aiTransport?.dispose?.();
       termInstance.dispose();
     },
-    setCurrentDirectory(nextDirectory: string) {
-      setCurrentDirectory(nextDirectory);
+    /** Runs a command through the real prompt, producing a normal block. */
+    executeCommand(command: string) {
+      return termInstance.executeCommand(command);
     },
-    // 向模型会话追加一段流式增量，渲染到终端
     appendChatChunk(
       response: string,
       ids?: { requestId?: string; conversationId?: string },
@@ -297,7 +296,6 @@ export function initTerminal(options: ChatTerminalOptions) {
         response,
       });
     },
-    // 结束模型会话，收尾渲染
     completeChat(requestId = "default") {
       return (
         termInstance.modelSessionAddon?.complete(requestId) ?? Promise.resolve()
@@ -312,10 +310,7 @@ export function initTerminal(options: ChatTerminalOptions) {
     refreshTheme() {
       termInstance.refreshTheme();
     },
-    setLocale(
-      locale: ChatTerminalLocale,
-      messages?: ChatTerminalMessageOverrides,
-    ) {
+    setLocale(locale: ChatTerminalLocale, messages?: ChatTerminalMessageOverrides) {
       i18n.setLocale(locale);
       if (messages) {
         i18n.setMessages(messages);
@@ -329,6 +324,18 @@ export function initTerminal(options: ChatTerminalOptions) {
   };
 }
 
+function buildBlockQuestion(block: TerminalCommandBlock, instruction: string) {
+  return [
+    instruction,
+    "",
+    `command: ${block.command}`,
+    `exit code: ${block.exitCode ?? "unknown"}`,
+    "",
+    "output:",
+    block.readOutput(),
+  ].join("\n");
+}
+
 function isAgentActivityEvent(event: AIStreamEvent) {
   const type = event.type.toUpperCase();
   return (
@@ -337,38 +344,6 @@ function isAgentActivityEvent(event: AIStreamEvent) {
     type === "ACTIVITY_DELTA" ||
     type === "ACTIVITY_SNAPSHOT"
   );
-}
-
-function getTerminalBufferContent(
-  terminal: Terminal["terminal"],
-  currentDirectory: string,
-) {
-  const buffer = terminal.buffer.active;
-  const end = buffer.baseY + buffer.cursorY;
-  let start = Math.max(0, end - 200);
-  const prompt = formatePath(currentDirectory).trim();
-
-  for (let row = end; row >= 0; row -= 1) {
-    const line = buffer.getLine(row)?.translateToString(true) ?? "";
-    if (line.startsWith(prompt)) {
-      start = row;
-      break;
-    }
-  }
-
-  const lines: string[] = [];
-  for (let row = start; row <= end; row += 1) {
-    const line = buffer.getLine(row);
-    if (!line) continue;
-    const content = line.translateToString(true).replace(/\s+$/, "");
-    if (line.isWrapped && lines.length > 0) {
-      lines[lines.length - 1] += content;
-    } else {
-      lines.push(content);
-    }
-  }
-
-  return lines.join("\n");
 }
 
 function toError(error: unknown) {

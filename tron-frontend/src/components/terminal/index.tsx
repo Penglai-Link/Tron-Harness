@@ -177,7 +177,9 @@ const Terminal = ({ onExit }: TerminalProps) => {
           explain: ({ command, output }) => explainResultMessage(command, output),
           generate: generateCommandMessage,
         },
-        onExitCommand: onExit,
+        // Fires when the shell process itself exits, which covers `exit`,
+        // Ctrl-D and a killed shell alike.
+        onExit: () => onExit?.(),
         terminalOptions: {
           themeTokens: {
             ansi: getTerminalAnsiTheme(currentThemeRef.current),

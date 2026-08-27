@@ -6,74 +6,65 @@ import {
 } from "socket.io-client";
 
 import {
-  createMessageId,
-  parseTerminalMessage,
+  parseTerminalExit,
+  parseTerminalOutput,
   parseTerminalSession,
 } from "./protocol";
 import type {
-  TerminalCommandOptions,
-  TerminalCommandResult,
   TerminalSession,
+  TerminalSignalName,
   TerminalSize,
   TerminalTransport,
   TransportDisposable,
 } from "./types";
 
-interface CommandExecutePayload {
-  command: string;
-  interactive?: true;
-  messageId: string;
-}
-
 interface ServerToClientEvents {
-  "command:message": (response: unknown) => void;
+  "terminal:output": (response: unknown) => void;
   "terminal:session": (response: unknown) => void;
+  "terminal:exit": (response: unknown) => void;
 }
 
 interface ClientToServerEvents {
-  "command:cancel": (payload: { messageId: string }) => void;
-  "command:execute": (payload: CommandExecutePayload) => void;
-  "command:input": (payload: { data: string; messageId: string }) => void;
+  "terminal:input": (payload: {
+    data: string;
+    clearBuffer?: boolean;
+    inputLine?: string;
+  }) => void;
   "terminal:resize": (payload: TerminalSize) => void;
-}
-
-interface PendingCommand {
-  cancelled: boolean;
-  interactive: boolean;
-  onOutput: (output: string) => void;
-  reject: (reason: Error) => void;
-  resolve: (result: TerminalCommandResult) => void;
-  timeoutId?: number;
+  "terminal:signal": (payload: { signal: TerminalSignalName }) => void;
 }
 
 export interface TerminalTransportOptions {
   url: string;
-  commandTimeoutMs?: number;
   socketOptions?: Partial<ManagerOptions & SocketOptions>;
 }
 
 type TerminalTransportRuntimeOptions = Omit<TerminalTransportOptions, "url">;
 
-const DEFAULT_COMMAND_TIMEOUT_MS = 60_000;
-
+/**
+ * Streams a remote PTY over socket.io.
+ *
+ * There is no command framing here: keystrokes go to the PTY verbatim and every
+ * byte the PTY produces comes back. Command boundaries are recovered from the
+ * shell integration markers embedded in the stream, which is what keeps blocks
+ * and AI routing working inside `ssh`, `vim` and other nested programs.
+ */
 export class SocketIoTerminalTransport implements TerminalTransport {
-  private readonly commandTimeoutMs: number;
-  private readonly pendingCommands = new Map<string, PendingCommand>();
-  private readonly sessionListeners = new Set<
-    (session: TerminalSession) => void
-  >();
   private readonly socket: Socket<ServerToClientEvents, ClientToServerEvents>;
+  private readonly outputListeners = new Set<(data: string) => void>();
+  private readonly sessionListeners = new Set<(session: TerminalSession) => void>();
+  private readonly exitListeners = new Set<(exitCode: number | null) => void>();
+  private readonly errorListeners = new Set<(error: Error) => void>();
+  /** Output that arrived before any listener attached. */
+  private bufferedOutput: string[] = [];
   private connecting?: Promise<TerminalSession>;
   private rejectConnecting?: (reason: Error) => void;
   private resolveConnecting?: (session: TerminalSession) => void;
-  private activeMessageId?: string;
   private currentSession?: TerminalSession;
   private latestSize?: TerminalSize;
   private destroyed = false;
 
   constructor(url: string, options: TerminalTransportRuntimeOptions = {}) {
-    this.commandTimeoutMs =
-      options.commandTimeoutMs ?? DEFAULT_COMMAND_TIMEOUT_MS;
     this.socket = io(url, {
       reconnection: true,
       timeout: 10_000,
@@ -86,20 +77,15 @@ export class SocketIoTerminalTransport implements TerminalTransport {
       autoConnect: false,
     });
 
-    this.socket.on("command:message", (response) =>
-      this.handleMessage(response),
-    );
-    this.socket.on("terminal:session", (response) =>
-      this.handleSession(response),
-    );
+    this.socket.on("terminal:output", (response) => this.handleOutput(response));
+    this.socket.on("terminal:session", (response) => this.handleSession(response));
+    this.socket.on("terminal:exit", (response) => this.handleExit(response));
     this.socket.on("disconnect", () => {
       this.currentSession = undefined;
-      const error = new Error("终端连接已断开");
-      this.settleConnection(undefined, error);
-      this.rejectAll(error);
+      this.failConnection(new Error("终端连接已断开"));
     });
     this.socket.on("connect_error", () => {
-      this.settleConnection(undefined, new Error("无法连接终端服务"));
+      this.failConnection(new Error("无法连接终端服务"));
     });
   }
 
@@ -128,71 +114,20 @@ export class SocketIoTerminalTransport implements TerminalTransport {
     return this.connecting;
   }
 
-  async execute(
-    command: string,
-    onOutput: (output: string) => void,
-    options: TerminalCommandOptions = {},
-  ): Promise<TerminalCommandResult> {
-    if (!command.trim()) return {};
-
-    await this.connect();
-    const messageId = createMessageId();
-    const interactive = options.interactive === true;
-
-    return new Promise((resolve, reject) => {
-      const timeoutMs = interactive
-        ? 0
-        : (options.timeoutMs ?? this.commandTimeoutMs);
-      const timeoutId =
-        timeoutMs > 0
-          ? window.setTimeout(() => {
-              this.socket.emit("command:cancel", { messageId });
-              this.rejectCommand(messageId, new Error("命令执行超时，请重试"));
-            }, timeoutMs)
-          : undefined;
-
-      this.pendingCommands.set(messageId, {
-        cancelled: false,
-        interactive,
-        onOutput,
-        reject,
-        resolve,
-        timeoutId,
-      });
-      this.activeMessageId = messageId;
-      this.socket.emit("command:execute", {
-        command,
-        messageId,
-        ...(interactive ? { interactive: true as const } : {}),
-      });
-    });
-  }
-
-  cancel() {
-    const messageId = this.activeMessageId;
-    const pending = messageId
-      ? this.pendingCommands.get(messageId)
-      : undefined;
-
-    if (!messageId || !pending || pending.cancelled) {
+  input(data: string, clearBuffer?: boolean, inputLine?: string) {
+    if ((!data && !clearBuffer) || this.destroyed || !this.currentSession) {
       return;
     }
 
-    pending.cancelled = true;
-    this.socket.emit("command:cancel", { messageId });
+    this.socket.emit("terminal:input", { data, clearBuffer, inputLine });
   }
 
-  write(data: string) {
-    const messageId = this.activeMessageId;
-    const pending = messageId
-      ? this.pendingCommands.get(messageId)
-      : undefined;
-
-    if (!data || !messageId || !pending?.interactive || pending.cancelled) {
+  signal(name: TerminalSignalName) {
+    if (this.destroyed || !this.currentSession) {
       return;
     }
 
-    this.socket.emit("command:input", { data, messageId });
+    this.socket.emit("terminal:signal", { signal: name });
   }
 
   resize(size: TerminalSize) {
@@ -202,6 +137,23 @@ export class SocketIoTerminalTransport implements TerminalTransport {
 
     this.latestSize = size;
     this.emitTerminalSize();
+  }
+
+  onOutput(listener: (data: string) => void): TransportDisposable {
+    this.outputListeners.add(listener);
+    if (this.bufferedOutput.length > 0) {
+      const buffered = this.bufferedOutput;
+      this.bufferedOutput = [];
+      for (const data of buffered) {
+        listener(data);
+      }
+    }
+
+    return {
+      dispose: () => {
+        this.outputListeners.delete(listener);
+      },
+    };
   }
 
   onSessionChange(
@@ -219,65 +171,88 @@ export class SocketIoTerminalTransport implements TerminalTransport {
     };
   }
 
+  onExit(listener: (exitCode: number | null) => void): TransportDisposable {
+    this.exitListeners.add(listener);
+
+    return {
+      dispose: () => {
+        this.exitListeners.delete(listener);
+      },
+    };
+  }
+
+  onError(listener: (error: Error) => void): TransportDisposable {
+    this.errorListeners.add(listener);
+
+    return {
+      dispose: () => {
+        this.errorListeners.delete(listener);
+      },
+    };
+  }
+
   dispose() {
     this.destroyed = true;
     this.currentSession = undefined;
-    const error = new Error("终端连接已关闭");
-    this.settleConnection(undefined, error);
-    this.rejectAll(error);
+    this.failConnection(new Error("终端连接已关闭"));
+    this.outputListeners.clear();
     this.sessionListeners.clear();
+    this.exitListeners.clear();
+    this.errorListeners.clear();
+    this.bufferedOutput = [];
     this.socket.disconnect();
   }
 
-  private handleMessage(response: unknown) {
-    const message = parseTerminalMessage(response);
-    if (!message) {
-      console.warn("忽略格式错误的终端消息", response);
+  private handleOutput(response: unknown) {
+    const data = parseTerminalOutput(response);
+    if (data === undefined) {
+      console.warn("忽略格式错误的终端输出", response);
+      return;
+    }
+    if (!data) {
       return;
     }
 
-    const pending = this.pendingCommands.get(message.messageId);
-    if (!pending) return;
+    if (this.outputListeners.size === 0) {
+      this.bufferedOutput.push(data);
+      return;
+    }
 
-    switch (message.type) {
-      case "TEXT_MESSAGE_CONTENT":
-        if (!pending.cancelled) {
-          pending.onOutput(message.delta);
-        }
-        break;
-      case "TEXT_MESSAGE_END":
-        this.resolveCommand(message.messageId, {
-          currentDirectory: message.currentDirectory,
-        });
-        break;
-      case "TEXT_MESSAGE_ERROR":
-        this.rejectCommand(
-          message.messageId,
-          new Error(message.delta || "命令执行失败"),
-        );
-        break;
-      default:
-        break;
+    for (const listener of this.outputListeners) {
+      listener(data);
     }
   }
 
   private handleSession(response: unknown) {
-    const session = parseTerminalSession(response);
-    if (!session) return;
-    if ("error" in session) {
-      this.currentSession = undefined;
-      const error = new Error(session.error);
-      this.settleConnection(undefined, error);
-      this.rejectAll(error);
+    const parsed = parseTerminalSession(response);
+    if (!parsed) {
+      console.warn("忽略格式错误的终端会话消息", response);
       return;
     }
 
-    this.currentSession = { currentDirectory: session.currentDirectory };
+    const session = parsed.session;
+    if (!session) {
+      this.currentSession = undefined;
+      this.failConnection(new Error(parsed.error ?? "终端会话创建失败"));
+      return;
+    }
+
+    this.currentSession = session;
     for (const listener of this.sessionListeners) {
-      listener(this.currentSession);
+      listener(session);
     }
     this.emitTerminalSize();
-    this.settleConnection(this.currentSession);
+    this.settleConnection(session);
+  }
+
+  private handleExit(response: unknown) {
+    const parsed = parseTerminalExit(response);
+    const exitCode = parsed?.exitCode ?? null;
+
+    this.currentSession = undefined;
+    for (const listener of this.exitListeners) {
+      listener(exitCode);
+    }
   }
 
   private emitTerminalSize() {
@@ -288,63 +263,34 @@ export class SocketIoTerminalTransport implements TerminalTransport {
     this.socket.emit("terminal:resize", this.latestSize);
   }
 
-  private settleConnection(session?: TerminalSession, error?: Error) {
+  private settleConnection(session: TerminalSession) {
     const resolve = this.resolveConnecting;
+    this.connecting = undefined;
+    this.resolveConnecting = undefined;
+    this.rejectConnecting = undefined;
+    resolve?.(session);
+  }
+
+  /**
+   * Rejects an in-flight `connect()` and reports the failure. Errors are also
+   * surfaced to `onError` listeners so a drop after a successful connect is not
+   * swallowed.
+   */
+  private failConnection(error: Error) {
     const reject = this.rejectConnecting;
     this.connecting = undefined;
     this.resolveConnecting = undefined;
     this.rejectConnecting = undefined;
 
-    if (error) {
-      reject?.(error);
-    } else if (session) {
-      resolve?.(session);
+    if (reject) {
+      reject(error);
+      return;
+    }
+
+    for (const listener of this.errorListeners) {
+      listener(error);
     }
   }
-
-  private resolveCommand(
-    messageId: string,
-    result: TerminalCommandResult = {},
-  ) {
-    const pending = this.pendingCommands.get(messageId);
-    if (!pending) return;
-
-    if (pending.timeoutId !== undefined) {
-      window.clearTimeout(pending.timeoutId);
-    }
-    this.pendingCommands.delete(messageId);
-    if (this.activeMessageId === messageId) {
-      this.activeMessageId = undefined;
-    }
-    pending.resolve(result);
-  }
-
-  private rejectCommand(messageId: string, error: Error) {
-    const pending = this.pendingCommands.get(messageId);
-    if (!pending) return;
-
-    if (pending.timeoutId !== undefined) {
-      window.clearTimeout(pending.timeoutId);
-    }
-    this.pendingCommands.delete(messageId);
-    if (this.activeMessageId === messageId) {
-      this.activeMessageId = undefined;
-    }
-    pending.reject(error);
-  }
-
-  private rejectAll(error: Error) {
-    for (const messageId of this.pendingCommands.keys()) {
-      this.rejectCommand(messageId, error);
-    }
-  }
-}
-
-export function createTerminalTransport(options: TerminalTransportOptions) {
-  return new SocketIoTerminalTransport(options.url, {
-    commandTimeoutMs: options.commandTimeoutMs,
-    socketOptions: options.socketOptions,
-  });
 }
 
 function isTerminalSize(value: TerminalSize) {
@@ -354,4 +300,10 @@ function isTerminalSize(value: TerminalSize) {
     Number.isInteger(value.rows) &&
     value.rows > 0
   );
+}
+
+export function createTerminalTransport(options: TerminalTransportOptions) {
+  return new SocketIoTerminalTransport(options.url, {
+    socketOptions: options.socketOptions,
+  });
 }

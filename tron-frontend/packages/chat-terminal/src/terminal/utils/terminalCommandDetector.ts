@@ -5,7 +5,43 @@
  * Aliyun ECS Workbench so short command-shaped input can still run locally,
  * while descriptive requests are sent to the agent.
  */
+export type AgentRoutingConfidence = "none" | "low" | "high";
+
 export class TerminalCommandDetector {
+  /**
+   * Grades how sure we are that input is a request for the agent rather than a
+   * command for the shell.
+   *
+   * Unlike {@link shouldTriggerAgentMode} this takes no terminal buffer: whether
+   * the shell is at a prompt is now reported by the shell integration, so it no
+   * longer has to be guessed from what is on screen.
+   *
+   * Only `high` is acted on automatically. The heuristic below is broad enough to
+   * misread ordinary English commands as prose, so English input that merely
+   * looks descriptive is graded `low` and still runs as a command; the explicit
+   * `#` prefix remains the reliable way to reach the agent.
+   */
+  static agentConfidence(input: string): AgentRoutingConfidence {
+    const text = input.trim();
+    if (!text || text.startsWith("#")) {
+      return "none";
+    }
+    if (!this.isNaturalLanguageQuery(text)) {
+      return "none";
+    }
+
+    const hasChinese = /[一-鿿]/.test(text);
+    if (
+      hasChinese ||
+      this.isStrongQuestionPattern(text) ||
+      /[?？]\s*$/.test(text)
+    ) {
+      return "high";
+    }
+
+    return "low";
+  }
+
   static shouldTriggerAgentMode(buffer: string, input: string) {
     return (
       !input.trim().startsWith("#") &&

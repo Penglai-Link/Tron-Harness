@@ -1,22 +1,16 @@
 use chrono::Utc;
 use serde::{Deserialize, Serialize};
 
-use crate::{application::terminal::TerminalError, shared::random::random_base64url};
+use crate::application::terminal::TerminalError;
 
-pub(super) const TERMINAL_COMMAND_MESSAGE_EVENT: &str = "command:message";
+pub(super) const TERMINAL_OUTPUT_EVENT: &str = "terminal:output";
 pub(super) const TERMINAL_SESSION_EVENT: &str = "terminal:session";
-pub(super) const COMMAND_MARKER_PREFIX: &[u8] = b"\x1eTRON_COMMAND_END:";
-pub(super) const COMMAND_MARKER_SUFFIX: u8 = b'\x1f';
-pub(super) const MAX_COMMAND_BYTES: usize = 64 * 1024;
+pub(super) const TERMINAL_EXIT_EVENT: &str = "terminal:exit";
 pub(super) const MAX_INPUT_BYTES: usize = 64 * 1024;
 
 #[derive(Debug)]
 pub(super) enum TerminalSocketGatewayError {
-    CommandAlreadyRunning,
-    CommandNotFound,
-    CommandRequired,
     InputTooLarge,
-    MessageIdRequired,
     PtyFailed,
     ResizeFailed,
     SessionNotFound,
@@ -27,16 +21,12 @@ pub(super) enum TerminalSocketGatewayError {
 impl std::fmt::Display for TerminalSocketGatewayError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::CommandAlreadyRunning => formatter.write_str("已有命令正在执行"),
-            Self::CommandNotFound => formatter.write_str("未找到正在执行的命令"),
-            Self::CommandRequired => formatter.write_str("命令不能为空"),
             Self::InputTooLarge => formatter.write_str("终端输入过长"),
-            Self::MessageIdRequired => formatter.write_str("命令消息 ID 不能为空"),
             Self::PtyFailed => formatter.write_str("终端会话无法启动"),
             Self::ResizeFailed => formatter.write_str("终端窗口大小无法调整"),
             Self::SessionNotFound => formatter.write_str("终端会话不存在"),
             Self::Terminal(error) => write!(formatter, "{error}"),
-            Self::WriteFailed => formatter.write_str("终端命令无法发送"),
+            Self::WriteFailed => formatter.write_str("终端输入无法发送"),
         }
     }
 }
@@ -55,23 +45,15 @@ pub(super) struct TerminalSocketAuth {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct CommandExecutePayload {
-    pub(super) command: String,
-    pub(super) interactive: Option<bool>,
-    pub(super) message_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct CommandCancelPayload {
-    pub(super) message_id: String,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub(super) struct CommandInputPayload {
+pub(super) struct TerminalInputPayload {
     pub(super) data: String,
-    pub(super) message_id: String,
+    /// When true, clear the input buffer before processing.
+    /// Used when frontend detects natural language to prevent execution.
+    #[serde(default)]
+    pub(super) clear_buffer: bool,
+    /// Complete rendered input line when `data` submits it.
+    #[serde(default)]
+    pub(super) input_line: Option<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -81,94 +63,203 @@ pub(super) struct TerminalResizePayload {
     pub(super) rows: u16,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub(super) struct TerminalSignalPayload {
+    pub(super) signal: TerminalSignal,
+}
+
+#[derive(Debug, Clone, Copy, Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
+pub(super) enum TerminalSignal {
+    Sigint,
+    Sigkill,
+}
+
+/// Anything the PTY reader thread hands back to the socket task.
+#[derive(Debug, Clone)]
+pub(super) enum TerminalSessionEvent {
+    Output(String),
+    Exit(Option<i32>),
+}
+
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct TerminalSocketMessage {
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub(super) current_directory: Option<String>,
-    pub(super) delta: String,
-    pub(super) message_id: String,
+pub(super) struct TerminalOutputMessage {
+    pub(super) data: String,
     pub(super) timestamp: i64,
-    pub(super) r#type: TerminalMessageType,
 }
 
-#[derive(Debug, Clone, Copy, Serialize)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub(super) enum TerminalMessageType {
-    TextMessageContent,
-    TextMessageEnd,
-    TextMessageError,
-    TextMessageStart,
-}
-
-impl TerminalSocketMessage {
-    pub(super) fn content(message_id: impl Into<String>, delta: impl Into<String>) -> Self {
+impl TerminalOutputMessage {
+    pub(super) fn new(data: String) -> Self {
         Self {
-            current_directory: None,
-            delta: delta.into(),
-            message_id: message_id.into(),
+            data,
             timestamp: Utc::now().timestamp_millis(),
-            r#type: TerminalMessageType::TextMessageContent,
-        }
-    }
-
-    pub(super) fn end(message_id: impl Into<String>, current_directory: String) -> Self {
-        Self {
-            current_directory: Some(current_directory),
-            delta: String::new(),
-            message_id: message_id.into(),
-            timestamp: Utc::now().timestamp_millis(),
-            r#type: TerminalMessageType::TextMessageEnd,
-        }
-    }
-
-    pub(super) fn error(message_id: impl Into<String>, message: impl Into<String>) -> Self {
-        Self {
-            current_directory: None,
-            delta: message.into(),
-            message_id: message_id.into(),
-            timestamp: Utc::now().timestamp_millis(),
-            r#type: TerminalMessageType::TextMessageError,
-        }
-    }
-
-    pub(super) fn start(message_id: impl Into<String>) -> Self {
-        Self {
-            current_directory: None,
-            delta: String::new(),
-            message_id: message_id.into(),
-            timestamp: Utc::now().timestamp_millis(),
-            r#type: TerminalMessageType::TextMessageStart,
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub(super) struct ActiveCommand {
-    pub(super) interactive: bool,
-    pub(super) marker_prefix: Vec<u8>,
-    pub(super) message_id: String,
-    pub(super) output_buffer: Vec<u8>,
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct TerminalExitMessage {
+    pub(super) exit_code: Option<i32>,
+    pub(super) timestamp: i64,
 }
 
-pub(super) fn command_marker_prefix(token: &str) -> Vec<u8> {
-    let mut marker = COMMAND_MARKER_PREFIX.to_vec();
-    marker.extend_from_slice(token.as_bytes());
-    marker.push(b':');
-    marker
-}
-
-pub(super) fn required_message_id(
-    message_id: String,
-) -> Result<String, TerminalSocketGatewayError> {
-    let message_id = message_id.trim();
-    if message_id.is_empty() {
-        Err(TerminalSocketGatewayError::MessageIdRequired)
-    } else {
-        Ok(message_id.to_owned())
+impl TerminalExitMessage {
+    pub(super) fn new(exit_code: Option<i32>) -> Self {
+        Self {
+            exit_code,
+            timestamp: Utc::now().timestamp_millis(),
+        }
     }
 }
 
-pub(super) fn generated_message_id() -> String {
-    random_base64url(12)
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct TerminalSessionMessage {
+    pub(super) current_directory: String,
+    /// `bash`, `zsh` or `sh`.
+    pub(super) shell: String,
+    /// False when the shell cannot report OSC 133 prompt boundaries, so the
+    /// client must degrade to a plain terminal without command blocks.
+    pub(super) supports_blocks: bool,
+    /// One-liner that installs the same hooks into a subshell the server did
+    /// not spawn, used to keep blocks working across `ssh`.
+    pub(super) subshell_bootstrap: String,
+    pub(super) timestamp: i64,
+}
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct TerminalSessionErrorMessage {
+    pub(super) error: String,
+    pub(super) timestamp: i64,
+}
+
+impl TerminalSessionErrorMessage {
+    pub(super) fn new(error: impl Into<String>) -> Self {
+        Self {
+            error: error.into(),
+            timestamp: Utc::now().timestamp_millis(),
+        }
+    }
+}
+
+/// Splits a byte stream into UTF-8 safe chunks.
+///
+/// PTY reads land on arbitrary byte boundaries, so a multi-byte character can
+/// straddle two reads. Decoding each read on its own would replace those halves
+/// with U+FFFD and corrupt any non-ASCII output.
+#[derive(Debug, Default)]
+pub(super) struct Utf8Stream {
+    carry: Vec<u8>,
+}
+
+impl Utf8Stream {
+    /// Returns the text that is complete so far, holding back at most three
+    /// bytes of a partial trailing character until the next read completes it.
+    pub(super) fn push(&mut self, bytes: &[u8]) -> String {
+        self.carry.extend_from_slice(bytes);
+        let mut text = String::new();
+
+        loop {
+            match std::str::from_utf8(&self.carry) {
+                Ok(valid) => {
+                    text.push_str(valid);
+                    self.carry.clear();
+                    return text;
+                }
+                Err(error) => {
+                    let valid_up_to = error.valid_up_to();
+                    // Borrowed, not copied: this prefix was just reported valid.
+                    text.push_str(&String::from_utf8_lossy(&self.carry[..valid_up_to]));
+
+                    match error.error_len() {
+                        // An incomplete trailing character: hold it back until
+                        // the next read completes it.
+                        None => {
+                            self.carry.drain(..valid_up_to);
+                            return text;
+                        }
+                        // Genuinely invalid bytes: substitute them and keep
+                        // decoding, so valid text behind them is not delayed.
+                        Some(length) => {
+                            text.push(char::REPLACEMENT_CHARACTER);
+                            self.carry.drain(..valid_up_to + length);
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    /// Flushes any bytes still held back, used when the PTY reaches EOF.
+    pub(super) fn flush(&mut self) -> String {
+        if self.carry.is_empty() {
+            return String::new();
+        }
+
+        let carry = std::mem::take(&mut self.carry);
+        String::from_utf8_lossy(&carry).into_owned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn utf8_stream_joins_a_character_split_across_reads() {
+        let mut stream = Utf8Stream::default();
+        let bytes = "终端".as_bytes();
+
+        assert_eq!(stream.push(&bytes[..1]), "");
+        assert_eq!(stream.push(&bytes[1..4]), "终");
+        assert_eq!(stream.push(&bytes[4..]), "端");
+    }
+
+    #[test]
+    fn utf8_stream_emits_ascii_immediately() {
+        let mut stream = Utf8Stream::default();
+
+        assert_eq!(stream.push(b"ls -al\r\n"), "ls -al\r\n");
+        assert_eq!(stream.flush(), "");
+    }
+
+    #[test]
+    fn utf8_stream_keeps_valid_text_ahead_of_a_partial_tail() {
+        let mut stream = Utf8Stream::default();
+        let mut bytes = b"done ".to_vec();
+        bytes.extend_from_slice(&"完".as_bytes()[..2]);
+
+        assert_eq!(stream.push(&bytes), "done ");
+        assert_eq!(stream.push(&"完".as_bytes()[2..]), "完");
+    }
+
+    #[test]
+    fn utf8_stream_does_not_stall_on_invalid_bytes() {
+        let mut stream = Utf8Stream::default();
+
+        let text = stream.push(&[0xff, b'o', b'k']);
+
+        assert!(text.contains("ok"));
+        assert_eq!(stream.flush(), "");
+    }
+
+    #[test]
+    fn utf8_stream_flushes_an_unterminated_character_at_eof() {
+        let mut stream = Utf8Stream::default();
+
+        assert_eq!(stream.push(&"端".as_bytes()[..2]), "");
+        assert_eq!(stream.flush(), "\u{fffd}");
+    }
+
+    #[test]
+    fn terminal_signal_is_parsed_from_screaming_snake_case() {
+        let payload: TerminalSignalPayload =
+            serde_json::from_str(r#"{"signal":"SIGINT"}"#).expect("signal should parse");
+
+        assert_eq!(payload.signal, TerminalSignal::Sigint);
+    }
 }

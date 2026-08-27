@@ -1,4 +1,4 @@
-import type { AIStreamEvent } from "./types";
+import type { AIStreamEvent, TerminalSession } from "./types";
 
 export type TerminalMessageType =
   | "TEXT_MESSAGE_START"
@@ -59,30 +59,67 @@ export function parseAIStreamEvent(
 }
 
 export type TerminalSessionResponse =
-  | { currentDirectory: string; error?: never }
-  | { currentDirectory?: never; error: string };
+  | { session: TerminalSession; error?: never }
+  | { session?: never; error: string };
 
+/**
+ * Parses a `terminal:session` payload, which either describes the PTY that was
+ * opened or reports why it could not be opened.
+ */
 export function parseTerminalSession(
   value: unknown,
 ): TerminalSessionResponse | undefined {
-  const message = parseTerminalMessage(value);
-  if (!message) {
+  if (!isRecord(value)) {
     return undefined;
   }
 
-  if (message.type === "TEXT_MESSAGE_ERROR") {
-    return message.delta ? { error: message.delta } : undefined;
+  if (typeof value.error === "string") {
+    return value.error ? { error: value.error } : undefined;
   }
 
   if (
-    message.type !== "TEXT_MESSAGE_CONTENT" ||
-    message.delta !== "" ||
-    !message.currentDirectory
+    typeof value.currentDirectory !== "string" ||
+    !value.currentDirectory ||
+    typeof value.shell !== "string" ||
+    typeof value.supportsBlocks !== "boolean" ||
+    typeof value.subshellBootstrap !== "string"
   ) {
     return undefined;
   }
 
-  return { currentDirectory: message.currentDirectory };
+  return {
+    session: {
+      currentDirectory: value.currentDirectory,
+      shell: value.shell,
+      supportsBlocks: value.supportsBlocks,
+      subshellBootstrap: value.subshellBootstrap,
+    },
+  };
+}
+
+/** Parses a `terminal:output` payload carrying raw PTY bytes as text. */
+export function parseTerminalOutput(value: unknown): string | undefined {
+  if (!isRecord(value) || typeof value.data !== "string") {
+    return undefined;
+  }
+
+  return value.data;
+}
+
+/** Parses a `terminal:exit` payload. A missing code means the shell was killed. */
+export function parseTerminalExit(value: unknown): { exitCode: number | null } | undefined {
+  if (!isRecord(value)) {
+    return undefined;
+  }
+
+  const exitCode = value.exitCode;
+  if (exitCode === null || exitCode === undefined) {
+    return { exitCode: null };
+  }
+
+  return typeof exitCode === "number" && Number.isFinite(exitCode)
+    ? { exitCode }
+    : undefined;
 }
 
 export function createMessageId() {

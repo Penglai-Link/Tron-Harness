@@ -4,6 +4,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const fit = vi.fn();
 const refresh = vi.fn();
+const disposeBufferChange = vi.fn();
+let bufferChange: ((buffer: { type: "normal" | "alternate" }) => void) | undefined;
 
 vi.mock("@xterm/addon-fit", () => ({
   FitAddon: class {
@@ -17,6 +19,15 @@ vi.mock("@xterm/xterm", () => ({
     rows = 24;
     element?: HTMLElement;
     options = {};
+    buffer = {
+      active: { type: "normal" as const },
+      onBufferChange: vi.fn(
+        (listener: (buffer: { type: "normal" | "alternate" }) => void) => {
+          bufferChange = listener;
+          return { dispose: disposeBufferChange };
+        },
+      ),
+    };
 
     loadAddon() {}
 
@@ -49,7 +60,9 @@ describe("Terminal resize tracking", () => {
     fit.mockReset();
     refresh.mockReset();
     disconnect.mockClear();
+    disposeBufferChange.mockClear();
     observe.mockClear();
+    bufferChange = undefined;
 
     vi.stubGlobal(
       "ResizeObserver",
@@ -90,6 +103,78 @@ describe("Terminal resize tracking", () => {
     terminal.dispose();
 
     expect(disconnect).toHaveBeenCalledOnce();
+  });
+
+  it("hides overlay cards only while the terminal uses the alternate screen", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const terminal = new Terminal(host);
+    const viewport = host.querySelector<HTMLElement>(".ai-terminal-viewport");
+
+    expect(viewport?.classList.contains("ai-terminal-fullscreen-mode")).toBe(false);
+
+    bufferChange?.({ type: "normal" });
+    expect(viewport?.classList.contains("ai-terminal-fullscreen-mode")).toBe(false);
+
+    bufferChange?.({ type: "alternate" });
+    expect(viewport?.classList.contains("ai-terminal-fullscreen-mode")).toBe(true);
+
+    bufferChange?.({ type: "normal" });
+    expect(viewport?.classList.contains("ai-terminal-fullscreen-mode")).toBe(false);
+
+    terminal.dispose();
+    expect(disposeBufferChange).toHaveBeenCalledOnce();
+  });
+
+  it("hides the cursor only while a model request is in flight", () => {
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const terminal = new Terminal(host, {
+      agentPrompt: "Ask AI",
+      inputRouter: {
+        clearInputLine: vi.fn(),
+        isAtPrompt: vi.fn(() => true),
+        onAgentRequest: vi.fn(),
+        readInputLine: vi.fn(() => ""),
+        write: vi.fn(),
+      },
+    });
+    const internals = terminal as unknown as {
+      agentPromptAddon: { setInputState: ReturnType<typeof vi.fn> };
+      inputRouterAddon: {
+        options: {
+          onInputStateChange: (state: {
+            agentRequestInFlight: boolean;
+            enabled: boolean;
+            input: string;
+          }) => void;
+        };
+      };
+    };
+    const setInputState = vi.spyOn(
+      internals.agentPromptAddon,
+      "setInputState",
+    );
+
+    internals.inputRouterAddon.options.onInputStateChange({
+      agentRequestInFlight: true,
+      enabled: false,
+      input: "",
+    });
+    expect(setInputState).toHaveBeenLastCalledWith(false, "", {
+      hideCursor: true,
+    });
+
+    internals.inputRouterAddon.options.onInputStateChange({
+      agentRequestInFlight: false,
+      enabled: false,
+      input: "",
+    });
+    expect(setInputState).toHaveBeenLastCalledWith(false, "", {
+      hideCursor: false,
+    });
+
+    terminal.dispose();
   });
 
   it("suppresses transport resize notifications for inline card layout refreshes", () => {

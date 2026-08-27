@@ -37,4 +37,20 @@ export default {
   toolParameters: "Parameters",
   toolLog: "Log",
   toolResult: "Result",
+  blockActions: "Block actions",
+  blockExplain: "Explain output",
+  blockAsk: "Ask AI",
+  blockCopy: "Copy",
+  blockCopied: "Copied",
+  blockRerun: "Rerun",
+  blockExitCode: "Exit code",
+  blockAskPrompt: "Analyse the result of this command",
+  subshellTitle: "Enable AI features on this host",
+  subshellDescription:
+    "The remote shell is not reporting command boundaries, so command blocks and prompt-aware AI are unavailable. Enabling writes a setup script into the remote shell.",
+  subshellEnable: "Enable",
+  subshellDismiss: "Not now",
+  subshellRemember: "Remember this host",
+  subshellDegraded:
+    "This shell cannot report command blocks; running as a plain terminal",
 };

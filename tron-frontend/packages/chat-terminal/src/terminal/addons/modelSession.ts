@@ -54,7 +54,8 @@ interface ModelSessionInstance {
   activityComplete: Signal<boolean>;
   activityClock?: ReturnType<typeof setInterval>;
   tokens: ReadonlySignal<ModelSessionToken[]>;
-  anchorMarker: IMarker;
+  anchorMarker?: IMarker;
+  anchorPending: boolean;
   reservedRows: number;
   fixedHeight?: number;
   host: HTMLElement;
@@ -81,6 +82,8 @@ export class ModelSessionAddon implements ITerminalAddon {
   private readonly sessionWidths = new Map<string, number>();
   private positionAnimationFrame?: number;
   private shouldMeasureSessions = false;
+  private preparedSessionAnchor = false;
+  private readonly pendingRowWrites = new Set<Promise<void>>();
   private sseBuffer = "";
   private readonly sessions = new Map<string, ModelSessionInstance>();
   private activeSessionKey?: string;
@@ -166,6 +169,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.sseBuffer = "";
     this.activeSessionKey = undefined;
     this.shouldMeasureSessions = false;
+    this.preparedSessionAnchor = false;
   }
 
   refreshLocale() {
@@ -173,6 +177,45 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.scheduleSessionRender(session);
     });
     this.scheduleInlineLayoutUpdate(true);
+  }
+
+  /** Prepares the next shell input line as the fixed anchor for an AI session. */
+  prepareNextSessionAnchor() {
+    this.preparedSessionAnchor = true;
+  }
+
+  /** Anchors the card directly below the submitted natural-language line. */
+  anchorPreparedSession() {
+    if (!this.terminal || !this.preparedSessionAnchor) {
+      return;
+    }
+
+    if (this.anchorPendingSessions(1)) {
+      this.preparedSessionAnchor = false;
+    }
+  }
+
+  /** Pins pending AI sessions to the current terminal position. */
+  anchorPendingSessions(cursorYOffset = 0) {
+    const terminal = this.terminal;
+    if (!terminal) {
+      return false;
+    }
+
+    let anchored = false;
+    this.sessions.forEach((session) => {
+      if (session.anchorPending && !session.anchorMarker) {
+        session.anchorMarker = terminal.registerMarker(cursorYOffset);
+        session.anchorPending = false;
+        anchored = true;
+      }
+    });
+
+    if (anchored) {
+      this.scheduleInlineLayoutUpdate();
+    }
+
+    return anchored;
   }
 
   appendSseChunk(chunk: string) {
@@ -185,6 +228,16 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.consumeSseFrame(frame);
       frameEnd = this.sseBuffer.indexOf("\n\n");
     }
+  }
+
+  startSession(chunk: Omit<ModelSessionMessageChunk, "response">) {
+    const session = this.getOrCreateSession({ ...chunk, response: "" });
+    if (!session) {
+      return;
+    }
+
+    this.show();
+    this.anchorPreparedSession();
   }
 
   appendMessageChunk(chunk: ModelSessionMessageChunk) {
@@ -223,6 +276,8 @@ export class ModelSessionAddon implements ITerminalAddon {
       });
     }
 
+    this.anchorPendingSessions();
+
     for (const session of completedSessions) {
       session.activityComplete.value = true;
       session.activityNow.value = Date.now();
@@ -231,6 +286,8 @@ export class ModelSessionAddon implements ITerminalAddon {
       this.lockSessionHeight(session);
       await this.reserveSessionRows(session);
     }
+
+    await this.waitForPendingRowWrites();
   }
 
   clear() {
@@ -238,6 +295,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.sessions.forEach((session) => this.disposeSession(session));
     this.sessions.clear();
     this.activeSessionKey = undefined;
+    this.preparedSessionAnchor = false;
     this.isVisible.value = false;
   }
 
@@ -356,7 +414,8 @@ export class ModelSessionAddon implements ITerminalAddon {
       activityNow,
       activityComplete,
       tokens,
-      anchorMarker: this.terminal.registerMarker(0),
+      anchorMarker: undefined,
+      anchorPending: true,
       reservedRows: 0,
       host,
       commandStates,
@@ -370,6 +429,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.observeSessionHost(key, host);
     this.sessions.set(key, session);
     this.activeSessionKey = key;
+
     session.activityClock = setInterval(() => {
       if (!session.activityComplete.peek()) {
         session.activityNow.value = Date.now();
@@ -422,7 +482,12 @@ export class ModelSessionAddon implements ITerminalAddon {
       },
       session.actions,
     );
-    this.scheduleInlineLayoutUpdate(session.activityComplete.peek());
+
+    if (!session.activityComplete.peek()) {
+      void this.reserveStreamingRows(session);
+    } else {
+      this.scheduleInlineLayoutUpdate(true);
+    }
   }
 
   private disposeSession(session: ModelSessionInstance) {
@@ -437,7 +502,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.sessionResizeObserver?.unobserve(session.host);
     session.host.removeEventListener("toggle", this.handleSessionToggle, true);
     this.sessionWidths.delete(session.key);
-    session.anchorMarker.dispose();
+    session.anchorMarker?.dispose();
     session.host.remove();
   }
 
@@ -506,11 +571,9 @@ export class ModelSessionAddon implements ITerminalAddon {
 
     const cell = getTerminalCellMetrics(this.terminal);
     const viewportY = this.terminal.buffer.active.viewportY;
-    let rowsAdded = 0;
-
     if (shouldMeasure) {
       this.sessions.forEach((session) => {
-        if (!session.activityComplete.peek() || session.fixedHeight !== undefined) {
+        if (session.fixedHeight !== undefined) {
           return;
         }
 
@@ -519,17 +582,12 @@ export class ModelSessionAddon implements ITerminalAddon {
           Math.ceil(this.getSessionContentHeight(session) / cell.height),
         );
 
-        if (requiredRows > session.reservedRows) {
-          rowsAdded += requiredRows - session.reservedRows;
-          session.reservedRows = requiredRows;
-        }
-
-        this.syncSessionHostHeight(session, cell.height);
+        void this.reserveRows(session, requiredRows, cell.height);
       });
     }
 
     this.sessions.forEach((session) => {
-      const anchorRow = session.anchorMarker.line;
+      const anchorRow = session.anchorMarker?.line ?? -1;
       if (anchorRow < 0) {
         session.host.hidden = true;
         return;
@@ -538,11 +596,6 @@ export class ModelSessionAddon implements ITerminalAddon {
       const viewportTop = (anchorRow - viewportY) * cell.height;
       session.host.style.transform = `translate3d(0, ${viewportTop}px, 0)`;
     });
-
-    if (rowsAdded > 0) {
-      this.terminal.write("\r\n".repeat(rowsAdded));
-      this.scheduleInlineLayoutUpdate();
-    }
   }
 
   private async reserveSessionRows(session: ModelSessionInstance) {
@@ -555,16 +608,46 @@ export class ModelSessionAddon implements ITerminalAddon {
       1,
       Math.ceil(this.getSessionContentHeight(session) / cell.height),
     );
-    const rowsToAdd = requiredRows - session.reservedRows;
+    await this.reserveRows(session, requiredRows, cell.height);
+  }
 
-    if (rowsToAdd <= 0) {
-      return;
+  /**
+   * Reserves terminal rows as streaming content grows.
+   */
+  private reserveStreamingRows(session: ModelSessionInstance) {
+    if (!this.terminal || !this.isVisible.peek()) {
+      return Promise.resolve();
     }
 
+    const cell = getTerminalCellMetrics(this.terminal);
+    const requiredRows = Math.max(
+      1,
+      Math.ceil(this.getSessionContentHeight(session) / cell.height),
+    );
+    return this.reserveRows(session, requiredRows, cell.height);
+  }
+
+  private reserveRows(
+    session: ModelSessionInstance,
+    requiredRows: number,
+    cellHeight: number,
+  ) {
+    if (!this.terminal || requiredRows <= session.reservedRows) {
+      return Promise.resolve();
+    }
+
+    const rowsToAdd = requiredRows - session.reservedRows;
     session.reservedRows = requiredRows;
-    this.syncSessionHostHeight(session, cell.height);
-    await writeTerminalAsync(this.terminal, "\r\n".repeat(rowsToAdd));
-    this.scheduleInlineLayoutUpdate();
+    this.syncSessionHostHeight(session, cellHeight);
+
+    const write = writeTerminalAsync(this.terminal, "\r\n".repeat(rowsToAdd));
+    this.pendingRowWrites.add(write);
+    void write.finally(() => this.pendingRowWrites.delete(write));
+    return write.then(() => this.scheduleInlineLayoutUpdate());
+  }
+
+  private waitForPendingRowWrites() {
+    return Promise.all([...this.pendingRowWrites]).then(() => undefined);
   }
 
   private getSessionContentHeight(session: ModelSessionInstance) {

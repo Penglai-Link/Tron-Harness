@@ -1,8 +1,30 @@
 # @tron/chat-terminal
 
-基于 xterm.js 的可嵌入 AI 终端。SDK 提供命令执行、交互式 PTY 输入、终端尺寸同步、AI 流式消息、命令卡片和输出解释。
+基于 xterm.js 的可嵌入 AI 终端。SDK 提供真实 PTY 终端、命令 block、AI 流式消息、命令卡片和输出解释。
 
-默认使用 Socket.IO 传输终端命令，使用 SSE 传输 AI 消息。终端和 AI 传输都可以替换。
+终端按**字节流**工作：按键原样送进 PTY，shell 的输出原样回传。PTY 是唯一权威——回显、行编辑、提示符渲染都由 shell 负责，SDK 不再本地回显、不再封帧命令。命令边界由 shell 通过 OSC 133 语义标记自己上报，因此 `vim`、`top`、`ssh` 等程序原生透传，block 与 AI 在 `ssh` 远端同样可用。
+
+默认使用 Socket.IO 传输终端字节流，使用 SSE 传输 AI 消息。终端和 AI 传输都可以替换。
+
+## 服务端要求
+
+服务端必须为终端安装 shell integration，否则 SDK 退化为普通终端（无 block、无提示符态 AI 触发）：
+
+- shell 为 `bash` 或 `zsh`。`sh` 没有 precmd/preexec 钩子，会以 `supportsBlocks: false` 降级。
+- 不要关闭 shell 的回显或清空 `PS1`。
+- hook 脚本需上报下表的标记，并且**不能覆盖用户自己的 rc**（bash 用 `--init-file`、zsh 用临时 `ZDOTDIR`，其中先 source 用户真实配置再装 hook）。
+- Windows 暂不支持，需在 WSL 中运行。
+
+| 标记 | 含义 |
+| --- | --- |
+| `OSC 133 ; A ST` | 提示符开始 |
+| `OSC 133 ; B ST` | 提示符结束，开始接收命令输入 |
+| `OSC 133 ; C ST` | 命令输出开始 |
+| `OSC 133 ; D ; <exit> ST` | 命令结束及退出码 |
+| `OSC 633 ; E ; <line> ST` | 即将执行的命令原文 |
+| `OSC 7 ; file://<host><cwd> ST` | 工作目录变更 |
+
+参考实现见 `server/shell-integration.sh` 与 `server/shellIntegration.js`；Tron 后端使用同一份脚本。
 
 ## 安装
 
@@ -137,8 +159,9 @@ await chatAdapter.deleteSession(session.sessionCode);
 | `transport.ai` | `AITransport` | 可选。未配置时不启用 AI 能力。 |
 | `prompts` | `TerminalPrompts` | 配置聊天、解释和命令生成请求。 |
 | `terminalOptions` | xterm.js 选项及 SDK 扩展 | 主题、字体、`agentTips` 等。 |
-| `isCommandInputEnabled` | `(command: string) => boolean` | 控制已路由到 shell 的命令是否接收键盘输入；默认由内置检测器决定。 |
-| `isInteractiveCommand` | `(command: string) => boolean` | 标记全屏终端程序，保留原始 ANSI 输出并隐藏终端辅助 UI。 |
+| `agentPrefix` | `string` | AI 显式触发前缀，默认 `"#"`。行首命中时该行走 AI 而不执行。 |
+| `shouldRouteToAgent` | `(input: string) => boolean` | 覆盖启发式兜底判定。返回 `true` 时该行走 AI。 |
+| `onExit` | `(exitCode: number \| null) => void` | shell 进程自身退出时触发，宿主可据此关闭标签页。 |
 | `locale` | `"zh-CN" \| "en-US"` | 默认 `"zh-CN"`。 |
 | `messages` | `ChatTerminalMessageOverrides` | 覆盖内置文案。 |
 | `onError` | `(error: Error) => void` | 连接失败等 transport 错误回调。 |
@@ -152,7 +175,6 @@ await chatAdapter.deleteSession(session.sessionCode);
 ```ts
 const terminalTransport = createTerminalTransport({
   url: "https://terminal.example.com",
-  commandTimeoutMs: 60_000,
   socketOptions: {
     auth: { token: accessToken },
     path: "/custom/socket.io",
@@ -235,11 +257,9 @@ const aiTransport: AITransport = {
 
 ```ts
 import type {
-  TerminalCommandOptions,
-  TerminalCommandResult,
   TerminalSession,
+  TerminalSignalName,
   TerminalSize,
-  TerminalMessage,
   TerminalTransport,
   TransportDisposable,
 } from "@tron/chat-terminal";
@@ -254,21 +274,14 @@ type Socket = {
 // 由业务侧创建 WebSocket、Socket.IO 或其他 socket 实现。
 declare function createSocket(): Socket;
 
-type PendingCommand = {
-  interactive: boolean;
-  onOutput: (output: string) => void;
-  resolve: (result: TerminalCommandResult) => void;
-  reject: (error: Error) => void;
-  timeout?: number;
-};
-
-// 实现TerminalTransport类型
+// 实现 TerminalTransport：只搬运字节，不解析输出。
 export class CustomTerminalTransport implements TerminalTransport {
-  private readonly pending = new Map<string, PendingCommand>();
+  private readonly outputListeners = new Set<(data: string) => void>();
+  private readonly exitListeners = new Set<(code: number | null) => void>();
+  private readonly errorListeners = new Set<(error: Error) => void>();
   private readonly sessionListeners = new Set<
     (session: TerminalSession) => void
   >();
-  private activeMessageId?: string;
   private session?: TerminalSession;
   private latestSize?: TerminalSize;
   private disposed = false;
@@ -278,7 +291,12 @@ export class CustomTerminalTransport implements TerminalTransport {
 
   constructor(private readonly socket: Socket) {
     socket.on("terminal:session", (payload) => this.handleSession(payload));
-    socket.on("command:message", (payload) => this.handleMessage(payload));
+    socket.on("terminal:output", ({ data }) => {
+      for (const listener of this.outputListeners) listener(data);
+    });
+    socket.on("terminal:exit", ({ exitCode }) => {
+      for (const listener of this.exitListeners) listener(exitCode ?? null);
+    });
     socket.on("disconnect", () => this.handleDisconnect());
   }
 
@@ -295,58 +313,24 @@ export class CustomTerminalTransport implements TerminalTransport {
     return this.connecting;
   }
 
-  async execute(
-    command: string,
-    onOutput: (output: string) => void,
-    options: TerminalCommandOptions = {},
-  ): Promise<TerminalCommandResult> {
-    await this.connect();
-    const messageId = crypto.randomUUID();
-    const interactive = options.interactive === true;
-
-    return new Promise((resolve, reject) => {
-      const timeoutMs = options.timeoutMs ?? 60_000;
-      const timeout = !interactive && timeoutMs > 0
-        ? window.setTimeout(() => {
-            this.socket.send("command:cancel", { messageId });
-            this.rejectCommand(messageId, new Error("命令执行超时"));
-          }, timeoutMs)
-        : undefined;
-
-      this.pending.set(messageId, {
-        interactive,
-        onOutput,
-        resolve,
-        reject,
-        timeout,
-      });
-      this.activeMessageId = messageId;
-      this.socket.send("command:execute", {
-        command,
-        messageId,
-        ...(interactive ? { interactive: true } : {}),
-      });
-    });
+  // 按键原样送进 PTY：不本地回显，也不封帧。
+  input(data: string) {
+    if (data && this.session) this.socket.send("terminal:input", { data });
   }
 
-  cancel() {
-    const messageId = this.activeMessageId;
-    if (messageId && this.pending.has(messageId)) {
-      this.socket.send("command:cancel", { messageId });
-    }
-  }
-
-  write(data: string) {
-    const messageId = this.activeMessageId;
-    const command = messageId ? this.pending.get(messageId) : undefined;
-    if (data && messageId && command?.interactive) {
-      this.socket.send("command:input", { data, messageId });
-    }
+  // 写进 PTY 而不是发给子进程，这样当前前台任务（含 ssh 里的）才收得到。
+  signal(name: TerminalSignalName) {
+    if (this.session) this.socket.send("terminal:signal", { signal: name });
   }
 
   resize(size: TerminalSize) {
     this.latestSize = size;
     if (this.session) this.socket.send("terminal:resize", size);
+  }
+
+  onOutput(listener: (data: string) => void): TransportDisposable {
+    this.outputListeners.add(listener);
+    return { dispose: () => this.outputListeners.delete(listener) };
   }
 
   onSessionChange(listener: (session: TerminalSession) => void): TransportDisposable {
@@ -355,37 +339,47 @@ export class CustomTerminalTransport implements TerminalTransport {
     return { dispose: () => this.sessionListeners.delete(listener) };
   }
 
+  onExit(listener: (code: number | null) => void): TransportDisposable {
+    this.exitListeners.add(listener);
+    return { dispose: () => this.exitListeners.delete(listener) };
+  }
+
+  onError(listener: (error: Error) => void): TransportDisposable {
+    this.errorListeners.add(listener);
+    return { dispose: () => this.errorListeners.delete(listener) };
+  }
+
   dispose() {
     if (this.disposed) return;
     this.disposed = true;
-    const error = new Error("终端连接已关闭");
-    this.rejectConnect?.(error);
-    for (const messageId of this.pending.keys()) {
-      this.rejectCommand(messageId, error);
-    }
+    this.rejectConnect?.(new Error("终端连接已关闭"));
+    this.outputListeners.clear();
     this.sessionListeners.clear();
+    this.exitListeners.clear();
+    this.errorListeners.clear();
     this.socket.close();
   }
 
-  private handleSession(payload: TerminalMessage) {
-    if (
-      payload.type === "TEXT_MESSAGE_ERROR" &&
-      payload.delta
-    ) {
-      const error = new Error(payload.delta);
-      this.rejectConnect?.(error);
-      this.connecting = undefined;
-      this.rejectPending(error);
+  private handleSession(payload: {
+    currentDirectory?: string;
+    shell?: string;
+    supportsBlocks?: boolean;
+    subshellBootstrap?: string;
+    error?: string;
+  }) {
+    if (payload.error) {
+      this.fail(new Error(payload.error));
       return;
     }
-    if (
-      payload.type !== "TEXT_MESSAGE_CONTENT" ||
-      payload.delta !== "" ||
-      !payload.currentDirectory
-    ) {
-      return;
-    }
-    this.session = { currentDirectory: payload.currentDirectory };
+    if (!payload.currentDirectory) return;
+
+    this.session = {
+      currentDirectory: payload.currentDirectory,
+      shell: payload.shell ?? "sh",
+      // 未装 hook 时必须为 false：SDK 退化为普通终端，而不是画出空 block。
+      supportsBlocks: payload.supportsBlocks === true,
+      subshellBootstrap: payload.subshellBootstrap ?? "",
+    };
     this.connecting = undefined;
     this.resolveConnect?.(this.session);
     for (const listener of this.sessionListeners) listener(this.session);
@@ -393,55 +387,16 @@ export class CustomTerminalTransport implements TerminalTransport {
   }
 
   private handleDisconnect() {
-    const error = new Error("终端连接已断开");
     this.session = undefined;
+    this.fail(new Error("终端连接已断开"));
+  }
+
+  private fail(error: Error) {
     this.connecting = undefined;
     this.rejectConnect?.(error);
-    this.rejectPending(error);
+    for (const listener of this.errorListeners) listener(error);
   }
 
-  private handleMessage(message: {
-    type: string;
-    messageId: string;
-    delta: string;
-    currentDirectory?: string;
-  }) {
-    const command = this.pending.get(message.messageId);
-    if (!command) return;
-    if (message.type === "TEXT_MESSAGE_CONTENT") command.onOutput(message.delta);
-    if (message.type === "TEXT_MESSAGE_END") {
-      this.resolveCommand(message.messageId, {
-        currentDirectory: message.currentDirectory,
-      });
-    }
-    if (message.type === "TEXT_MESSAGE_ERROR") {
-      this.rejectCommand(message.messageId, new Error(message.delta || "命令执行失败"));
-    }
-  }
-
-  private resolveCommand(messageId: string, result: TerminalCommandResult) {
-    const command = this.pending.get(messageId);
-    if (!command) return;
-    if (command.timeout !== undefined) window.clearTimeout(command.timeout);
-    this.pending.delete(messageId);
-    if (this.activeMessageId === messageId) this.activeMessageId = undefined;
-    command.resolve(result);
-  }
-
-  private rejectCommand(messageId: string, error: Error) {
-    const command = this.pending.get(messageId);
-    if (!command) return;
-    if (command.timeout !== undefined) window.clearTimeout(command.timeout);
-    this.pending.delete(messageId);
-    if (this.activeMessageId === messageId) this.activeMessageId = undefined;
-    command.reject(error);
-  }
-
-  private rejectPending(error: Error) {
-    for (const messageId of this.pending.keys()) {
-      this.rejectCommand(messageId, error);
-    }
-  }
 }
 
 initTerminal({
@@ -452,75 +407,55 @@ initTerminal({
 
 自定义实现需要保证：
 
-- `connect()` 在收到初始 session 后 resolve，并返回 `currentDirectory`。
-- `execute()` 持有 `messageId`，在内容消息中调用 `onOutput`，在结束消息中 resolve。
-- 交互命令的 `options.interactive` 为 `true` 时，不设置普通命令超时。
-- `cancel()`、`write()` 和 `resize()` 映射到业务 socket 协议。
-- `dispose()` 关闭 socket，并 reject 所有未完成命令。
+- `connect()` 在收到 session 后 resolve，返回 `currentDirectory`、`shell`、`supportsBlocks` 和 `subshellBootstrap`。
+- `onOutput` 把 PTY 字节**原样**交给 SDK：不要按行缓冲、不要剥离 ANSI/OSC，否则 block 与 cwd 会丢。
+- `input()` 原样透传按键，不做回显、不做行编辑、不封帧。全屏程序（`vim`、`top`）依赖这一点。
+- `signal()` 把 `\x03` 写进 PTY，而不是发信号给子进程；否则 `ssh` 内的前台任务收不到 Ctrl-C。
+- `resize()` 在 session 建立后补发最后一次尺寸。
+- `onExit` 在 shell 进程退出时上报退出码，宿主据此关闭标签页。
+- `dispose()` 关闭 socket 并清空所有监听器。
+
+不需要实现命令超时：字节流模型下没有「一条命令」的生命周期，长任务和 `ssh` 会话本来就该一直开着。
 
 ## Socket.IO 协议
 
-### 响应数据结构
-成功响应：
+### 客户端 → 服务端
 
-```json
-{
-  "type": "TEXT_MESSAGE_CONTENT",
-  "messageId": "session-1",
-  "delta": "",
-  "timestamp": 1710000000000,
-  "currentDirectory": "/workspace" // 可选
-}
-```
-失败响应：
+| 事件 | payload | 说明 |
+| --- | --- | --- |
+| `terminal:input` | `{ data: string }` | 按键原样写入 PTY，服务端应限制单帧大小（参考实现 64 KiB）。 |
+| `terminal:signal` | `{ signal: "SIGINT" \| "SIGKILL" }` | `SIGINT` 写入 `\x03`；`SIGKILL` 结束 shell 进程。 |
+| `terminal:resize` | `{ cols: number, rows: number }` | 正整数，服务端应校验上限。 |
 
-```json
-{
-  "type": "TEXT_MESSAGE_ERROR",
-  "messageId": "session-1",
-  "delta": "终端会话创建失败",
-  "timestamp": 1710000000000
-}
-```
+### 服务端 → 客户端
+
+| 事件 | payload | 说明 |
+| --- | --- | --- |
+| `terminal:session` | `{ currentDirectory, shell, supportsBlocks, subshellBootstrap }` | 每次连接一条。 |
+| `terminal:session` | `{ error: string }` | 会话创建失败，`error` 为展示文案。 |
+| `terminal:output` | `{ data: string }` | PTY 字节流，原样透传。 |
+| `terminal:exit` | `{ exitCode: number \| null }` | shell 退出；被信号杀死时为 `null`。 |
+
 ```ts
-type TerminalMessageType =
-  | "TEXT_MESSAGE_START"
-  | "TEXT_MESSAGE_CONTENT"
-  | "TEXT_MESSAGE_END"
-  | "TEXT_MESSAGE_ERROR"
-  | "TEXT_MESSAGE_SUGGESTION";
-
-interface TerminalMessage {
-  type: TerminalMessageType;
-  messageId: string;
-  delta: string;
-  timestamp: number;
-  currentDirectory?: string;
+interface TerminalSession {
+  currentDirectory: string;
+  /** `bash`、`zsh` 或 `sh`。 */
+  shell: string;
+  /** 为 false 时无 block、无提示符态 AI 触发。 */
+  supportsBlocks: boolean;
+  /** 注入远端 shell 的一行 bootstrap，用于 ssh 之后继续可用。 */
+  subshellBootstrap: string;
 }
 ```
 
-字段约定：
+约定：
 
-- `messageId` 标识一次命令或 AI 请求。一次流式响应中的所有消息帧使用同一个值。
-- `delta` 是终端输出、AI 文本或错误信息。`START` 和 `END` 通常为空字符串。
-- `currentDirectory` 在会话成功消息和命令执行结束消息中返回，用于更新终端提示符目录。
-- `TEXT_MESSAGE_SUGGESTION` 的 `delta` 保存 AI 生成的可执行命令。
-- `TEXT_MESSAGE_ERROR` 的 `delta` 保存错误信息。
+- 没有命令级事件。命令边界完全来自输出流里的 OSC 133 标记，服务端不需要知道「当前在跑哪条命令」。
+- `terminal:output` 不做缓冲也不做改写。UTF-8 多字节字符会跨 PTY 读边界，服务端必须保留尾部残字节 carry，不能对每次读取单独做 lossy 解码，否则中文输出必然乱码。
+- `currentDirectory` 只在建立会话时给一个初值。此后 cwd 由 shell 通过 `OSC 7` 自行上报，服务端不再参与。
+- 每个 socket 一个 PTY。断开即回收 PTY 与生成的临时 rc 目录。
 
-客户端事件：
-
-| 事件 | payload |
-| --- | --- |
-| `command:execute` | `{ command, messageId, interactive? }` |
-| `command:input` | `{ data, messageId }` |
-| `command:cancel` | `{ messageId }` |
-| `terminal:resize` | `{ cols, rows }` |
-
-服务端通过 `command:message` 返回 `TerminalMessage`：
-
-正常顺序为 `START`、零次或多次 `CONTENT`、`END`。错误使用 `TEXT_MESSAGE_ERROR`，错误文本放在 `delta`。
-
-AI SSE 的每个 `data:` 帧也使用 `TerminalMessage` 格式，并以 `data: [DONE]` 结束。
+AI SSE 的每个 `data:` 帧使用 `TerminalMessage` 格式，并以 `data: [DONE]` 结束。
 
 ## 返回实例
 

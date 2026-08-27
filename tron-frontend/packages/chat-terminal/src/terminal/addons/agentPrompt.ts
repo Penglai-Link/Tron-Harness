@@ -8,6 +8,8 @@ import {
 import type { AgentPromptAddonOptions } from "../types/agentPrompt";
 
 const PROMPT_RESIZE_DEBOUNCE_MS = 100;
+const CURSOR_HIDE_SEQUENCE = "\x1b[?25l";
+const CURSOR_SHOW_SEQUENCE = "\x1b[?25h";
 
 export class AgentPromptAddon implements ITerminalAddon {
   private disposables: IDisposable[] = [];
@@ -22,6 +24,9 @@ export class AgentPromptAddon implements ITerminalAddon {
   private isInputStateManaged = false;
   private standaloneInput = "";
   private visible = true;
+  private cursorHidden = false;
+  private cursorWasFocused = false;
+  private previousCursorInactiveStyle?: XTerminal["options"]["cursorInactiveStyle"];
 
   constructor(private readonly options: AgentPromptAddonOptions) {}
 
@@ -31,6 +36,7 @@ export class AgentPromptAddon implements ITerminalAddon {
     }
 
     this.terminal = terminal;
+    terminal.element.addEventListener("focusin", this.handleTerminalFocusIn);
     this.bindTracking(terminal);
     this.syncVisibility();
     this.updateDecoration();
@@ -52,6 +58,11 @@ export class AgentPromptAddon implements ITerminalAddon {
     }
     this.resizeSuppressed = false;
     this.disposeDecoration();
+    this.terminal?.element?.removeEventListener(
+      "focusin",
+      this.handleTerminalFocusIn,
+    );
+    this.setCursorHidden(false, false);
     this.terminal?.element?.classList.remove("ai-terminal-input-disabled");
     this.terminal = undefined;
   }
@@ -73,11 +84,48 @@ export class AgentPromptAddon implements ITerminalAddon {
     this.isInputStateManaged = true;
     this.inputEnabled = enabled;
     this.hasInput = input.length > 0;
+    const hideCursor = options.hideCursor ?? !enabled;
     this.terminal?.element?.classList.toggle(
       "ai-terminal-input-disabled",
-      options.hideCursor ?? !enabled,
+      hideCursor,
     );
+    this.setCursorHidden(hideCursor);
     this.syncVisibility();
+  }
+
+  private readonly handleTerminalFocusIn = () => {
+    if (this.cursorHidden) {
+      this.terminal?.blur();
+    }
+  };
+
+  private setCursorHidden(hidden: boolean, restoreFocus = true) {
+    const terminal = this.terminal;
+    if (!terminal || this.cursorHidden === hidden) {
+      return;
+    }
+
+    if (hidden) {
+      this.cursorHidden = true;
+      this.cursorWasFocused = Boolean(
+        terminal.element?.contains(terminal.element.ownerDocument.activeElement),
+      );
+      this.previousCursorInactiveStyle = terminal.options.cursorInactiveStyle;
+      terminal.options.cursorInactiveStyle = "none";
+      terminal.write(CURSOR_HIDE_SEQUENCE);
+      terminal.blur();
+      return;
+    }
+
+    const shouldRestoreFocus = restoreFocus && this.cursorWasFocused;
+    terminal.write(CURSOR_SHOW_SEQUENCE);
+    terminal.options.cursorInactiveStyle = this.previousCursorInactiveStyle;
+    this.cursorHidden = false;
+    this.cursorWasFocused = false;
+    this.previousCursorInactiveStyle = undefined;
+    if (shouldRestoreFocus) {
+      terminal.focus();
+    }
   }
 
   private getPromptText() {

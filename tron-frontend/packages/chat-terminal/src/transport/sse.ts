@@ -51,6 +51,22 @@ export class SseAITransport implements AITransport {
           reject(toError(error, "AI 流式请求失败"));
         };
 
+        // 当 signal 被 abort 时，立即 reject Promise
+        const handleAbort = () => {
+          console.log("[SSE] Stream aborted, rejecting promise");
+          rejectOnce(
+            request.controller.signal.reason ||
+              new DOMException("请求已取消", "AbortError"),
+          );
+        };
+        if (request.controller.signal.aborted) {
+          handleAbort();
+          return;
+        }
+        request.controller.signal.addEventListener("abort", handleAbort, {
+          once: true,
+        });
+
         void fetchEventSource(this.options.url, {
           body: JSON.stringify(this.createBody(content, true)),
           fetch: this.fetchImplementation,

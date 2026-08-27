@@ -1,0 +1,229 @@
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const INTEGRATION_SCRIPT = fs.readFileSync(
+  path.join(HERE, "shell-integration.sh"),
+  "utf8",
+);
+const SSH_HELPER_SCRIPT = fs.readFileSync(path.join(HERE, "ssh-helper.sh"), "utf8");
+const SSH_BOOTSTRAP_SCRIPT = fs.readFileSync(
+  path.join(HERE, "ssh-bootstrap.sh"),
+  "utf8",
+);
+const INTEGRATION_PLACEHOLDER = "__TRON_INTEGRATION_BASE64__";
+
+const ZSH_CANDIDATES = ["/bin/zsh", "/usr/bin/zsh"];
+const BASH_CANDIDATES = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"];
+const SSH_CANDIDATES = ["/usr/bin/ssh", "/bin/ssh", "/usr/local/bin/ssh"];
+const POSIX_FALLBACK = "/bin/sh";
+
+/**
+ * Resolves the shell to spawn and writes the rc files that load the hook script.
+ *
+ * Mirrors shell_integration.rs. Never throws: a shell that cannot report prompt
+ * boundaries still gets a working terminal, the client just degrades to a plain
+ * one (`supportsBlocks: false`).
+ */
+export function prepareShell({ env = process.env, shell } = {}) {
+  const program = resolveShellProgram(env, shell);
+  const kind = shellKind(program);
+  const integrationEnv = {
+    ...env,
+    __TRON_SUBSHELL_BOOTSTRAP: subshellBootstrap(),
+  };
+
+  if (kind === "sh") {
+    return {
+      args: ["-i"],
+      command: program,
+      env: integrationEnv,
+      kind,
+      supportsBlocks: false,
+    };
+  }
+
+  let directory;
+  try {
+    directory = writeShellFiles(kind);
+  } catch (error) {
+    console.warn(
+      "终端 shell integration 文件写入失败，降级为无 block 的普通终端：",
+      error.message,
+    );
+    return {
+      args: ["-i"],
+      command: program,
+      env: integrationEnv,
+      kind: "sh",
+      supportsBlocks: false,
+    };
+  }
+
+  const realSsh = resolveSshProgram();
+  if (realSsh) {
+    integrationEnv.__TRON_SSH_HELPER = path.join(directory, "ssh-helper.sh");
+    integrationEnv.__TRON_REAL_SSH = realSsh;
+    integrationEnv.__TRON_SSH_BOOTSTRAP = sshBootstrap();
+  }
+
+  if (kind === "bash") {
+    return {
+      // `--init-file` replaces ~/.bashrc, and the generated rc sources the
+      // user's own configuration before installing the hooks.
+      args: ["--init-file", path.join(directory, "bashrc"), "-i"],
+      cleanup: () => removeDirectory(directory),
+      command: program,
+      env: integrationEnv,
+      kind,
+      supportsBlocks: true,
+    };
+  }
+
+  const zshEnv = { ...integrationEnv, ZDOTDIR: directory };
+  if (env.ZDOTDIR) {
+    zshEnv.__TRON_ORIGINAL_ZDOTDIR = env.ZDOTDIR;
+  }
+
+  return {
+    args: ["-i"],
+    cleanup: () => removeDirectory(directory),
+    command: program,
+    env: zshEnv,
+    kind,
+    supportsBlocks: true,
+  };
+}
+
+/**
+ * A single line that installs the same hooks into a shell this process did not
+ * spawn (a remote shell over SSH, a container shell, ...).
+ */
+export function subshellBootstrap() {
+  const encoded = Buffer.from(minifiedIntegrationScript(), "utf8").toString(
+    "base64",
+  );
+  return decodeAndEval(encoded);
+}
+
+export function sshBootstrap() {
+  const integration = Buffer.from(minifiedIntegrationScript(), "utf8").toString(
+    "base64",
+  );
+  const launcher = SSH_BOOTSTRAP_SCRIPT.replace(
+    INTEGRATION_PLACEHOLDER,
+    integration,
+  );
+  return decodeAndEval(Buffer.from(launcher, "utf8").toString("base64"));
+}
+
+function decodeAndEval(encoded) {
+  // BSD `base64` predates `-d`, GNU `base64` has never had `-D`.
+  return `eval "$(printf %s '${encoded}' | { base64 -d 2>/dev/null || base64 -D; })"`;
+}
+
+/** Drops whole-line comments and blank lines to keep the bootstrap line short. */
+export function minifiedIntegrationScript() {
+  return INTEGRATION_SCRIPT.split("\n")
+    .filter((line) => {
+      const trimmed = line.trimStart();
+      return trimmed && !trimmed.startsWith("#");
+    })
+    .join("\n");
+}
+
+export function shellKind(program) {
+  const name = path.basename(program);
+  if (name === "bash") return "bash";
+  if (name === "zsh") return "zsh";
+  return "sh";
+}
+
+function resolveShellProgram(env, shell) {
+  const configured = shell ?? env.SHELL;
+  if (configured && shellKind(configured) !== "sh" && isFile(configured)) {
+    return configured;
+  }
+
+  return (
+    [...ZSH_CANDIDATES, ...BASH_CANDIDATES].find(isFile) ?? POSIX_FALLBACK
+  );
+}
+
+function resolveSshProgram() {
+  return SSH_CANDIDATES.find(isFile);
+}
+
+function writeShellFiles(kind) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), "tron-terminal-"));
+  const scriptPath = path.join(directory, "integration.sh");
+  fs.writeFileSync(scriptPath, INTEGRATION_SCRIPT);
+  fs.writeFileSync(path.join(directory, "ssh-helper.sh"), SSH_HELPER_SCRIPT);
+  const script = shellSingleQuote(scriptPath);
+
+  if (kind === "bash") {
+    fs.writeFileSync(
+      path.join(directory, "bashrc"),
+      [
+        "# Generated by Tron.",
+        "if [ -f /etc/bash.bashrc ]; then . /etc/bash.bashrc; fi",
+        'if [ -f "$HOME/.bashrc" ]; then . "$HOME/.bashrc"; fi',
+        `. ${script}`,
+        "",
+      ].join("\n"),
+    );
+    return directory;
+  }
+
+  // ZDOTDIR points here, so both startup files must hand control back to the
+  // user's real ones before the hooks are installed.
+  fs.writeFileSync(
+    path.join(directory, ".zshenv"),
+    [
+      "# Generated by Tron.",
+      'if [ -f "${__TRON_ORIGINAL_ZDOTDIR:-$HOME}/.zshenv" ]; then',
+      '  . "${__TRON_ORIGINAL_ZDOTDIR:-$HOME}/.zshenv"',
+      "fi",
+      "",
+    ].join("\n"),
+  );
+  fs.writeFileSync(
+    path.join(directory, ".zshrc"),
+    [
+      "# Generated by Tron.",
+      'if [ -n "${__TRON_ORIGINAL_ZDOTDIR-}" ]; then',
+      '  ZDOTDIR="$__TRON_ORIGINAL_ZDOTDIR"',
+      "  unset __TRON_ORIGINAL_ZDOTDIR",
+      "else",
+      "  unset ZDOTDIR",
+      "fi",
+      'if [ -f "${ZDOTDIR:-$HOME}/.zshrc" ]; then . "${ZDOTDIR:-$HOME}/.zshrc"; fi',
+      `. ${script}`,
+      "",
+    ].join("\n"),
+  );
+
+  return directory;
+}
+
+function shellSingleQuote(value) {
+  return `'${value.replaceAll("'", `'"'"'`)}'`;
+}
+
+function isFile(candidate) {
+  try {
+    return fs.statSync(candidate).isFile();
+  } catch {
+    return false;
+  }
+}
+
+function removeDirectory(directory) {
+  try {
+    fs.rmSync(directory, { force: true, recursive: true });
+  } catch {
+    // The directory lives in the OS temp dir; leaving it behind is harmless.
+  }
+}

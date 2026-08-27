@@ -5,35 +5,50 @@ export interface TerminalSize {
 
 export interface TerminalSession {
   currentDirectory: string;
+  /** `bash`, `zsh` or `sh`. */
+  shell: string;
+  /**
+   * False when the shell cannot report OSC 133 prompt boundaries. Command
+   * blocks and prompt-aware AI routing are unavailable in that case, and the
+   * terminal behaves as a plain terminal.
+   */
+  supportsBlocks: boolean;
+  /**
+   * One-liner that installs the shell integration into a shell the server did
+   * not spawn, used to keep blocks working after `ssh`.
+   */
+  subshellBootstrap: string;
 }
 
-export interface TerminalCommandOptions {
-  interactive?: boolean;
-  timeoutMs?: number;
-}
-
-export interface TerminalCommandResult {
-  currentDirectory?: string;
-}
+export type TerminalSignalName = "SIGINT" | "SIGKILL";
 
 export interface TransportDisposable {
   dispose(): void;
 }
 
+/**
+ * A raw duplex connection to the remote PTY.
+ *
+ * The PTY is authoritative: the shell owns echo, line editing and prompt
+ * rendering, so this transport neither frames commands nor interprets output.
+ * Command boundaries are derived from the shell integration markers inside the
+ * output stream instead.
+ */
 export interface TerminalTransport {
-  cancel(): void;
   connect(): Promise<TerminalSession>;
-  dispose(): void;
-  execute(
-    command: string,
-    onOutput: (output: string) => void,
-    options?: TerminalCommandOptions,
-  ): Promise<TerminalCommandResult>;
-  onSessionChange(
-    listener: (session: TerminalSession) => void,
-  ): TransportDisposable;
+  /**
+   * Sends keystrokes to the PTY verbatim.
+   * When clearBuffer is true, the backend will clear the readline buffer first.
+   */
+  input(data: string, clearBuffer?: boolean, inputLine?: string): void;
   resize(size: TerminalSize): void;
-  write(data: string): void;
+  signal(name: TerminalSignalName): void;
+  onOutput(listener: (data: string) => void): TransportDisposable;
+  onSessionChange(listener: (session: TerminalSession) => void): TransportDisposable;
+  /** Fires when the shell process itself exits, so the host can close the tab. */
+  onExit(listener: (exitCode: number | null) => void): TransportDisposable;
+  onError(listener: (error: Error) => void): TransportDisposable;
+  dispose(): void;
 }
 
 export interface AIStreamChunk {

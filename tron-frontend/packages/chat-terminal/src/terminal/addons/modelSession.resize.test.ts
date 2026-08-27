@@ -26,8 +26,8 @@ class TerminalStub {
     return { dispose: vi.fn() };
   }
 
-  registerMarker() {
-    const marker = { dispose: vi.fn(), line: 0 };
+  registerMarker(cursorYOffset = 0) {
+    const marker = { dispose: vi.fn(), line: cursorYOffset };
     this.markers.push(marker);
     return marker;
   }
@@ -36,7 +36,7 @@ class TerminalStub {
     this.resizeHandler?.();
   }
 
-  write() {}
+  write = vi.fn((_data: string, callback?: () => void) => callback?.());
 }
 
 describe("ModelSessionAddon card resize tracking", () => {
@@ -107,6 +107,100 @@ describe("ModelSessionAddon card resize tracking", () => {
     addon.dispose();
   });
 
+  it("anchors a streaming card only after the command output has finished", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+    addon.appendMessageChunk({
+      conversationId: "one",
+      requestId: "one",
+      response: "one",
+    });
+
+    expect(terminal.markers).toHaveLength(0);
+
+    addon.anchorPendingSessions();
+    expect(terminal.markers).toHaveLength(1);
+    addon.dispose();
+  });
+
+  it("shows a prepared session immediately below the submitted natural-language line", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+
+    addon.prepareNextSessionAnchor();
+    addon.startSession({ conversationId: "one", requestId: "one" });
+    flushAnimationFrames();
+
+    const host = terminal.element.querySelector<HTMLElement>(
+      ".ai-terminal-model-session-host",
+    );
+    expect(host?.hidden).toBe(false);
+    expect(terminal.markers).toHaveLength(1);
+    expect(terminal.markers[0].line).toBe(1);
+    expect(terminal.write).toHaveBeenCalledWith("\r\n", expect.any(Function));
+    addon.dispose();
+  });
+
+  it("reserves additional terminal rows as a streaming card grows", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+    addon.appendMessageChunk({
+      conversationId: "one",
+      requestId: "one",
+      response: "one",
+    });
+    addon.anchorPendingSessions();
+    flushAnimationFrames();
+
+    const host = terminal.element.querySelector<HTMLElement>(
+      ".ai-terminal-model-session-host",
+    );
+    const card = host?.firstElementChild as HTMLElement;
+    Object.defineProperty(card, "scrollHeight", { configurable: true, value: 72 });
+
+    addon.appendMessageChunk({
+      conversationId: "one",
+      requestId: "one",
+      response: " more",
+    });
+    flushAnimationFrames();
+
+    expect(terminal.markers).toHaveLength(1);
+    expect(terminal.write).toHaveBeenLastCalledWith(
+      "\r\n".repeat(3),
+      expect.any(Function),
+    );
+    addon.dispose();
+  });
+
+  it("does not complete until every reserved terminal row has been written", async () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    let releaseWrite: (() => void) | undefined;
+    terminal.write.mockImplementation((_data, callback) => {
+      releaseWrite = callback;
+    });
+    addon.activate(terminal as unknown as XTerminal);
+    addon.prepareNextSessionAnchor();
+    addon.startSession({ conversationId: "one", requestId: "one" });
+    flushAnimationFrames();
+
+    let completed = false;
+    const completion = addon.complete("one").then(() => {
+      completed = true;
+    });
+    await Promise.resolve();
+
+    expect(completed).toBe(false);
+    releaseWrite?.();
+    await completion;
+    expect(completed).toBe(true);
+    addon.dispose();
+  });
+
   it("repositions a card from its reflowed marker line after terminal resize", () => {
     const addon = new ModelSessionAddon();
     const terminal = new TerminalStub();
@@ -116,6 +210,7 @@ describe("ModelSessionAddon card resize tracking", () => {
       requestId: "one",
       response: "one",
     });
+    addon.anchorPendingSessions();
     flushAnimationFrames();
 
     terminal.markers[0].line = 4;

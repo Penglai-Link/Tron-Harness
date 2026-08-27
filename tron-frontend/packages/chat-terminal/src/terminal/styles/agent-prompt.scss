@@ -10,6 +10,9 @@
   opacity: 0.3;
 }
 
-.ai-terminal-input-disabled .xterm-cursor-layer {
-  display: none;
+.ai-terminal-input-disabled {
+  .xterm-cursor-layer,
+  .xterm-cursor {
+    display: none !important;
+  }
 }
