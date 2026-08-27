@@ -1,4 +1,5 @@
 import {
+  useCallback,
   useEffect,
   useMemo,
   useRef,
@@ -118,16 +119,19 @@ function taskDetailHref(taskCode: string) {
   return `/tasks/detail?taskCode=${encodeURIComponent(taskCode)}`;
 }
 
-function ReadValue({ children }: { children: ReactNode }) {
+function ReadValue({ children, noneLabel = "None" }: { children: ReactNode; noneLabel?: string }) {
   return (
     <div className="min-h-6 min-w-0 max-w-full py-1 text-sm leading-6 text-[var(--color-on-surface)] whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
-      {children || <span className="text-[var(--color-on-surface-variant)]">None</span>}
+      {children || <span className="text-[var(--color-on-surface-variant)]">{noneLabel}</span>}
     </div>
   );
 }
 
 export function TaskDetailsPage() {
   const { t } = useTranslation(["pages"]);
+  const pageT = useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) => (
+    t(`tasks.${key}`, { defaultValue, ...options })
+  ), [t]);
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const taskCode = searchParams.get("taskCode") || "TSK-SEED-FEATURE";
@@ -275,7 +279,7 @@ export function TaskDetailsPage() {
         if (!active) return;
         setAgentOptions([mainAutomationAgentOption]);
         setWorkspaceModelOptions([]);
-        toast.error(error instanceof Error ? error.message : "Execution options could not be loaded");
+        toast.error(error instanceof Error ? error.message : pageT("errors.executionOptions", "Execution options could not be loaded"));
       })
       .finally(() => {
         if (active) setExecutionOptionsLoading(false);
@@ -284,7 +288,7 @@ export function TaskDetailsPage() {
     return () => {
       active = false;
     };
-  }, [task.workspaceCode, toast]);
+  }, [pageT, task.workspaceCode, toast]);
 
   useEffect(() => {
     if (visibleAgentOptions.some((agent) => agent.agentCode === selectedAgentCode)) return;
@@ -339,52 +343,52 @@ export function TaskDetailsPage() {
     || selectedModelCode !== task.modelCode;
 
   const rightPanel = useMemo(() => (
-    <InspectorPanel title="Task Metadata">
+    <InspectorPanel title={pageT("detail.metadata", "Task Metadata")}>
       <SurfaceCard className="space-y-5 p-2">
         <div>
-          <h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Task Metadata</h3>
+          <h3 className="mb-3 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{pageT("detail.metadata", "Task Metadata")}</h3>
           <div className="space-y-3 text-sm">
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Workspace</span><span className="font-medium">{task.workspaceCode}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.workspace", "Workspace")}</span><span className="font-medium">{task.workspaceCode}</span></div>
             <div className="flex justify-between gap-3">
-              <span className="text-[var(--color-on-surface-variant)]">Parent</span>
+              <span className="text-[var(--color-on-surface-variant)]">{pageT("detail.parent", "Parent")}</span>
               {task.parent ? (
                 <Link className="text-right font-medium text-[var(--color-primary)] hover:underline" to={taskDetailHref(task.parent.taskCode)}>
                   {task.parent.taskCode}
                 </Link>
               ) : (
-                <span className="font-medium">None</span>
+                <span className="font-medium">{pageT("detail.none", "None")}</span>
               )}
             </div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Created</span><span className="font-medium">{task.createdAt}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Updated</span><span className="font-medium">{task.updatedAt}</span></div>
-            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">Archived At</span><span className="font-medium">{task.archivedAt ?? "Not archived"}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.created", "Created")}</span><span className="font-medium">{task.createdAt}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.updated", "Updated")}</span><span className="font-medium">{task.updatedAt}</span></div>
+            <div className="flex justify-between gap-3"><span className="text-[var(--color-on-surface-variant)]">{pageT("detail.archivedAt", "Archived At")}</span><span className="font-medium">{task.archivedAt ?? pageT("detail.notArchived", "Not archived")}</span></div>
           </div>
         </div>
 
         <div>
-          <h3 className="mb-3 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Subtasks</h3>
+          <h3 className="mb-3 border-b border-[var(--color-outline-variant)] pb-2 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{pageT("detail.subtasks", "Subtasks")}</h3>
           <div className="space-y-2">
             {task.subtasks.map((item) => (
               <Link className="block rounded-lg border border-[var(--color-outline-variant)] p-3 hover:border-[var(--color-primary)]" key={item.taskCode} to={taskDetailHref(item.taskCode)}>
                 <div className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
                 <div className="mt-1 text-sm font-medium">{item.title}</div>
                 <div className="mt-2 flex items-center justify-between gap-3">
-                  <span className="text-xs text-[var(--color-on-surface-variant)]">{statusLabel(item.status)}</span>
+                  <span className="text-xs text-[var(--color-on-surface-variant)]">{pageT(`statuses.${item.status}`, statusLabel(item.status))}</span>
                   <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
                 </div>
                 <div className="mt-2"><ProgressBar value={item.progress} /></div>
               </Link>
             ))}
-            {!task.subtasks.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">No active subtasks.</p> : null}
+            {!task.subtasks.length ? <p className="text-sm text-[var(--color-on-surface-variant)]">{pageT("detail.noSubtasks", "No active subtasks.")}</p> : null}
           </div>
           {!archived ? (
             <>
               <div className="mt-4">
-                <Field label="New Subtask Title">
-                  <TextInput aria-label="New subtask title" value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
+                <Field label={pageT("detail.newSubtaskTitle", "New Subtask Title")}>
+                  <TextInput aria-label={pageT("detail.newSubtaskTitle", "New subtask title")} value={childTitle} onChange={(event) => setChildTitle(event.target.value)} />
                 </Field>
               </div>
-              <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />Add Subtask</Button>
+              <Button className="mt-3 w-full" disabled={!childTitle.trim()} variant="secondary" onClick={addSubtask}><Plus size={14} aria-hidden="true" />{pageT("detail.addSubtask", "Add Subtask")}</Button>
             </>
           ) : null}
         </div>
@@ -396,13 +400,14 @@ export function TaskDetailsPage() {
     availableAppCodeSet,
     childTitle,
     dataSource,
+    pageT,
     selectedAppCodes,
     task,
   ]);
 
   useConsoleShellConfig({ rightPanel });
   const breadcrumbs = [
-    { label: "Tasks", href: "/tasks" },
+    { label: pageT("title", "Tasks"), href: "/tasks" },
     ...(task.parent ? [{ label: task.parent.taskCode, href: taskDetailHref(task.parent.taskCode) }] : []),
     { label: task.taskCode },
   ];
@@ -420,7 +425,7 @@ export function TaskDetailsPage() {
 
   async function saveDetailFields() {
     if (archived) {
-      toast.warning("Restore archived task before editing");
+      toast.warning(pageT("warnings.restoreBeforeEditing", "Restore archived task before editing"));
       return;
     }
     try {
@@ -438,9 +443,9 @@ export function TaskDetailsPage() {
       setDescriptionFullscreenOpen(false);
       setExecutionResultFullscreenOpen(false);
       setEditing(false);
-      toast.success(`Task ${updated.taskCode} details saved`);
+      toast.success(pageT("messages.detailsSaved", "Task {{code}} details saved", { code: updated.taskCode }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Task details could not be updated");
+      toast.error(error instanceof Error ? error.message : pageT("errors.update", "Task details could not be updated"));
     }
   }
 
@@ -477,7 +482,7 @@ export function TaskDetailsPage() {
       const appCodesChanged = !sameCodes(draft.appCodes, task.appCodes);
       if (appCodesChanged && draft.appCodes.some((code) => !availableAppCodeSet.has(code))) {
         options.onError?.();
-        toast.warning("Remove legacy app codes before changing app selection");
+        toast.warning(pageT("warnings.removeLegacyAppCodes", "Remove legacy app codes before changing app selection"));
         return;
       }
 
@@ -498,10 +503,10 @@ export function TaskDetailsPage() {
       }
       skipNextTaskSync.current = true;
       setTask(updated);
-      toast.success(`Task ${updated.taskCode} updates saved`);
+      toast.success(pageT("messages.updatesSaved", "Task {{code}} updates saved", { code: updated.taskCode }));
     } catch (error) {
       options.onError?.();
-      toast.error(error instanceof Error ? error.message : "Updates could not be saved");
+      toast.error(error instanceof Error ? error.message : pageT("errors.updates", "Updates could not be saved"));
     }
   }
 
@@ -526,7 +531,7 @@ export function TaskDetailsPage() {
         });
         setStatus(lifecycle.status);
         statusRef.current = lifecycle.status;
-        toast.success(`Task ${currentTask.taskCode} archived`);
+        toast.success(pageT("messages.archived", "Task {{code}} archived", { code: currentTask.taskCode }));
         return;
       }
 
@@ -541,7 +546,7 @@ export function TaskDetailsPage() {
         statusRef.current = updated.status;
         setProgress(String(updated.progress));
         progressRef.current = String(updated.progress);
-        toast.success(`Task ${currentTask.taskCode} restored`);
+        toast.success(pageT("messages.restored", "Task {{code}} restored", { code: currentTask.taskCode }));
         return;
       }
 
@@ -554,11 +559,11 @@ export function TaskDetailsPage() {
       statusRef.current = updated.status;
       setProgress(String(updated.progress));
       progressRef.current = String(updated.progress);
-      toast.success(`Task ${updated.taskCode} updates saved`);
+      toast.success(pageT("messages.updatesSaved", "Task {{code}} updates saved", { code: updated.taskCode }));
     } catch (error) {
       setStatus(previousStatus);
       statusRef.current = previousStatus;
-      toast.error(error instanceof Error ? error.message : "Updates could not be saved");
+      toast.error(error instanceof Error ? error.message : pageT("errors.updates", "Updates could not be saved"));
     }
   }
 
@@ -599,7 +604,7 @@ export function TaskDetailsPage() {
 
   async function addSubtask() {
     if (archived) {
-      toast.warning("Restore archived task before adding subtasks");
+      toast.warning(pageT("warnings.restoreBeforeSubtasks", "Restore archived task before adding subtasks"));
       return;
     }
     try {
@@ -622,9 +627,9 @@ export function TaskDetailsPage() {
         ? await createTask(payload)
         : createMockTask(payload);
       refresh();
-      toast.success(`Subtask ${child.taskCode} created`);
+      toast.success(pageT("messages.subtaskCreated", "Subtask {{code}} created", { code: child.taskCode }));
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Subtask could not be created");
+      toast.error(error instanceof Error ? error.message : pageT("errors.subtask", "Subtask could not be created"));
     }
   }
 
@@ -633,7 +638,7 @@ export function TaskDetailsPage() {
     setExecuting(true);
     try {
       const result = dataSource === "api" ? await executeTask(task.taskCode) : executeMockTask(task.taskCode);
-      toast.success(`Task ${result.taskCode} execution started`, { title: result.runCode });
+      toast.success(pageT("messages.executionStarted", "Task {{code}} execution started", { code: result.taskCode }), { title: result.runCode });
       navigate(`/chats?sessionCode=${encodeURIComponent(result.sessionCode)}&sourceTab=chat`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("pages:tasks.detail.errors.execution", "Task execution failed"));
@@ -674,16 +679,16 @@ export function TaskDetailsPage() {
               <SelectInput aria-label={t("pages:tasks.detail.statusAria", "Task detail status")} value={status} onValueChange={(event) => {
                 void handleStatusChange(event as TaskStatus);
               }}>
-                {availableStatuses.map((item) => <SelectItem key={item} value={item}>{statusLabel(item)}</SelectItem>)}
+                {availableStatuses.map((item) => <SelectItem key={item} value={item}>{pageT(`statuses.${item}`, statusLabel(item))}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={t("pages:tasks.fields.priority", "Priority")}>
               {updatesEditable ? (
                 <SelectInput aria-label={t("pages:tasks.detail.priorityAria", "Task detail priority")} value={priority} onValueChange={(event) => handlePriorityChange(event as TaskPriority)}>
-                  {options.priorities.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
+                  {options.priorities.map((item) => <SelectItem key={item} value={item}>{pageT(`priorities.${item}`, item)}</SelectItem>)}
                 </SelectInput>
               ) : (
-                <ReadValue>{task.priority}</ReadValue>
+                <ReadValue>{pageT(`priorities.${task.priority}`, task.priority)}</ReadValue>
               )}
             </Field>
             <Field label={t("pages:tasks.detail.progress", "Progress")}>
@@ -709,7 +714,7 @@ export function TaskDetailsPage() {
               {updatesEditable ? (
                 <TextInput
                   aria-label={t("pages:tasks.detail.agentCodesAria", "Task detail agent codes")}
-                  placeholder="agent-reviewer, agent-builder"
+                  placeholder={pageT("placeholders.agentCodes", "agent-reviewer, agent-builder")}
                   value={agentCodesInput}
                   onChange={(event) => setAgentCodesInput(event.target.value)}
                   onBlur={handleAgentCodesBlur}
@@ -718,16 +723,16 @@ export function TaskDetailsPage() {
                   }}
                 />
               ) : (
-                <ReadValue>{task.agentCodes.join(", ") || "None"}</ReadValue>
+                <ReadValue noneLabel={pageT("detail.none", "None")}>{task.agentCodes.join(", ")}</ReadValue>
               )}
             </Field>
-            <Field label="Execution Agent">
+            <Field label={pageT("fields.executionAgent", "Execution Agent")}>
               {detailEditable ? (
                 <OptionSelect
-                  ariaLabel="Task execution agent"
+                  ariaLabel={pageT("aria.executionAgent", "Task execution agent")}
                   disabled={executionOptionsLoading}
                   loading={executionOptionsLoading}
-                  loadingLabel="Loading agents..."
+                  loadingLabel={pageT("values.loadingAgents", "Loading agents...")}
                   options={executionAgentSelectOptions}
                   value={selectedAgentCode}
                   onChange={setSelectedAgentCode}
@@ -736,14 +741,14 @@ export function TaskDetailsPage() {
                 <ReadValue>{task.agentCode || "main-agent"}</ReadValue>
               )}
             </Field>
-            <Field label="Execution Model">
+            <Field label={pageT("fields.executionModel", "Execution Model")}>
               {detailEditable ? (
                 <OptionSelect
-                  ariaLabel="Task execution model"
-                  emptyLabel="No executable models"
+                  ariaLabel={pageT("aria.executionModel", "Task execution model")}
+                  emptyLabel={pageT("values.noModels", "No executable models")}
                   disabled={executionOptionsLoading || !visibleModelOptions.length}
                   loading={executionOptionsLoading}
-                  loadingLabel="Loading models..."
+                  loadingLabel={pageT("values.loadingModels", "Loading models...")}
                   options={executionModelSelectOptions}
                   value={selectedModelOptionCode}
                   onChange={setSelectedModelOptionCode}
@@ -752,44 +757,44 @@ export function TaskDetailsPage() {
                 <ReadValue>{task.modelCode || "Workspace default text model"}</ReadValue>
               )}
             </Field>
-            <Field label="Title">
+            <Field label={pageT("fields.title", "Title")}>
               {detailEditable ? (
-                <TextInput aria-label="Task detail title" value={title} onChange={(event) => setTitle(event.target.value)} />
+                <TextInput aria-label={pageT("detail.titleAria", "Task detail title")} value={title} onChange={(event) => setTitle(event.target.value)} />
               ) : (
                 <ReadValue>{task.title}</ReadValue>
               )}
             </Field>
-            <Field label="Task Type">
+            <Field label={pageT("fields.taskType", "Task Type")}>
               {detailEditable ? (
-                <SelectInput aria-label="Task detail type" value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
-                  {options.taskTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
+                <SelectInput aria-label={pageT("detail.typeAria", "Task detail type")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
+                  {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{pageT(`types.${item}`, item)}</SelectItem>)}
                 </SelectInput>
               ) : (
-                <ReadValue>{task.taskType}</ReadValue>
+                <ReadValue>{pageT(`types.${task.taskType}`, task.taskType)}</ReadValue>
               )}
             </Field>
-            <Field label="Source Type">
+            <Field label={pageT("fields.sourceType", "Source Type")}>
               {detailEditable ? (
-                <SelectInput aria-label="Task detail source type" value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
-                  {options.sourceTypes.map((item) => <SelectItem key={item}>{item}</SelectItem>)}
+                <SelectInput aria-label={pageT("detail.sourceTypeAria", "Task detail source type")} value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
+                  {options.sourceTypes.map((item) => <SelectItem key={item} value={item}>{pageT(`sourceTypes.${item}`, item)}</SelectItem>)}
                 </SelectInput>
               ) : (
-                <ReadValue>{task.sourceType}</ReadValue>
+                <ReadValue>{pageT(`sourceTypes.${task.sourceType}`, task.sourceType)}</ReadValue>
               )}
             </Field>
-            <Field label="Source URL">
+            <Field label={pageT("fields.sourceUrl", "Source URL")}>
               {detailEditable ? (
-                <TextInput aria-label="Task detail source URL" placeholder="Optional GitHub/GitLab URL" value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
+                <TextInput aria-label={pageT("detail.sourceUrlAria", "Task detail source URL")} placeholder={pageT("placeholders.sourceUrl", "Optional GitHub/GitLab URL")} value={sourceUrl} onChange={(event) => setSourceUrl(event.target.value)} />
               ) : (
-                <ReadValue>{task.sourceUrl || "None"}</ReadValue>
+                <ReadValue noneLabel={pageT("detail.none", "None")}>{task.sourceUrl}</ReadValue>
               )}
             </Field>
             <div className="md:col-span-2">
-              <Field label="Apps" hint="Only active apps from this workspace can be newly assigned.">
+              <Field label={pageT("fields.apps", "Apps")} hint={pageT("hints.apps", "Only active apps from this workspace can be newly assigned.")}>
                 <TaskAppSelectionField
                   availableApps={appOptions}
                   disabled={!updatesEditable}
-                  emptyMessage="No active apps are available for this workspace."
+                  emptyMessage={pageT("values.noActiveApps", "No active apps are available for this workspace.")}
                   legacyAppCodes={legacyAppCodes}
                   loading={workspaceOptionsLoading}
                   selectedAppCodes={selectedAppCodes}
@@ -799,58 +804,58 @@ export function TaskDetailsPage() {
               </Field>
             </div>
             <div className="md:col-span-2">
-              <Field label="Assigned Users" hint="Only effective users from the current workspace can be assigned.">
+              <Field label={pageT("fields.assignedUsers", "Assigned Users")} hint={pageT("hints.assignedUsers", "Only effective users from the current workspace can be assigned.")}>
                 {updatesEditable ? (
                   <MultiSelectDropdown
-                    ariaLabel="Task assignees"
-                    emptyMessage="No effective users available for this workspace."
+                    ariaLabel={pageT("aria.assignees", "Task assignees")}
+                    emptyMessage={pageT("values.noUsers", "No effective users available for this workspace.")}
                     loading={workspaceOptionsLoading}
-                    loadingMessage="Loading user options..."
+                    loadingMessage={pageT("values.loadingUsers", "Loading user options...")}
                     options={userOptions}
-                    placeholder="Select assigned users"
+                    placeholder={pageT("placeholders.assignedUsers", "Select assigned users")}
                     selectedValues={assigneeUserCodes}
                     onToggle={handleAssigneeToggle}
                   />
                 ) : (
-                  <ReadValue>{assignedUsers.join(", ") || "None"}</ReadValue>
+                  <ReadValue noneLabel={pageT("detail.none", "None")}>{assignedUsers.join(", ")}</ReadValue>
                 )}
               </Field>
             </div>
           </div>
           <div className="mt-4 grid gap-1.5">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Description</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("fields.description", "Description")}</span>
               <Button
                 size="lg"
                 type="button"
                 variant="ghost"
-                aria-label="Open description fullscreen"
+                aria-label={pageT("aria.openDescription", "Open description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(true)}
               >
                 <Maximize2 size={14} aria-hidden="true" />
               </Button>
             </div>
             {detailEditable ? (
-              <TextArea aria-label="Task detail description" className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
+              <TextArea aria-label={pageT("detail.descriptionAria", "Task detail description")} className="min-h-36 w-full" value={description} onChange={(event) => setDescription(event.target.value)} />
             ) : (
-              <MarkdownContent ariaLabel="Task description markdown" className="max-h-80 overflow-y-auto pr-2" content={task.description} />
+              <MarkdownContent ariaLabel={pageT("detail.descriptionMarkdownAria", "Task description markdown")} className="max-h-80 overflow-y-auto pr-2" content={task.description} />
             )}
           </div>
           <div className="mt-4 grid gap-1.5 border-t border-[var(--color-outline-variant)] pt-4">
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">Execution Result</span>
+              <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("detail.executionResult", "Execution Result")}</span>
               <Button
                 size="lg"
                 type="button"
                 variant="ghost"
-                aria-label="Open execution result fullscreen"
+                aria-label={pageT("detail.openExecutionResultFullscreen", "Open execution result fullscreen")}
                 disabled={!task.executionResult}
                 onClick={() => setExecutionResultFullscreenOpen(true)}
               >
                 <Maximize2 size={14} aria-hidden="true" />
               </Button>
             </div>
-            <MarkdownContent ariaLabel="Task execution result markdown" className="max-h-80 overflow-y-auto pr-2" content={task.executionResult} />
+            <MarkdownContent ariaLabel={pageT("detail.executionResultMarkdownAria", "Task execution result markdown")} className="max-h-80 overflow-y-auto pr-2" content={task.executionResult} />
           </div>
         </SurfaceCard>
       </div>
@@ -860,20 +865,20 @@ export function TaskDetailsPage() {
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
-            aria-label={detailEditable ? "Description fullscreen editor" : "Description fullscreen preview"}
+            aria-label={detailEditable ? pageT("detail.descriptionFullscreenEditorAria", "Description fullscreen editor") : pageT("detail.descriptionFullscreenPreviewAria", "Description fullscreen preview")}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Description</h2>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("fields.description", "Description")}</h2>
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                  {detailEditable ? "Edit the task description in a larger workspace." : "Preview the rendered markdown for this task description."}
+                  {detailEditable ? pageT("detail.descriptionEditHint", "Edit the task description in a larger workspace.") : pageT("detail.descriptionPreviewHint", "Preview the rendered markdown for this task description.")}
                 </p>
               </div>
               <Button
                 size="icon"
                 type="button"
                 variant="ghost"
-                aria-label="Close description fullscreen"
+                aria-label={pageT("aria.closeDescription", "Close description fullscreen")}
                 onClick={() => setDescriptionFullscreenOpen(false)}
               >
                 <X size={16} aria-hidden="true" />
@@ -882,14 +887,14 @@ export function TaskDetailsPage() {
             <div className="min-h-0 flex-1 px-5 py-4">
               {detailEditable ? (
                 <TextArea
-                  aria-label="Task detail description fullscreen"
+                  aria-label={pageT("detail.descriptionFullscreenAria", "Task detail description fullscreen")}
                   className="h-full min-h-0 w-full resize-none"
                   value={description}
                   onChange={(event) => setDescription(event.target.value)}
                 />
               ) : (
                 <div className="h-full overflow-y-auto pr-1">
-                  <MarkdownContent ariaLabel="Task description markdown fullscreen" className="max-w-none" content={task.description} />
+                  <MarkdownContent ariaLabel={pageT("detail.descriptionMarkdownFullscreenAria", "Task description markdown fullscreen")} className="max-w-none" content={task.description} />
                 </div>
               )}
             </div>
@@ -903,18 +908,18 @@ export function TaskDetailsPage() {
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
-            aria-label="Execution result fullscreen preview"
+            aria-label={pageT("detail.executionResultFullscreenAria", "Execution result fullscreen preview")}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">Execution Result</h2>
-                <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">Preview the final agent reply recorded for this task execution.</p>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("detail.executionResult", "Execution Result")}</h2>
+                <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">{pageT("detail.executionResultHint", "Preview the final agent reply recorded for this task execution.")}</p>
               </div>
               <Button
                 size="icon"
                 type="button"
                 variant="ghost"
-                aria-label="Close execution result fullscreen"
+                aria-label={pageT("detail.closeExecutionResultFullscreen", "Close execution result fullscreen")}
                 onClick={() => setExecutionResultFullscreenOpen(false)}
               >
                 <X size={16} aria-hidden="true" />
@@ -922,7 +927,7 @@ export function TaskDetailsPage() {
             </div>
             <div className="min-h-0 flex-1 px-5 py-4">
               <div className="h-full overflow-y-auto pr-1">
-                <MarkdownContent ariaLabel="Task execution result markdown fullscreen" className="max-w-none" content={task.executionResult} />
+                <MarkdownContent ariaLabel={pageT("detail.executionResultMarkdownFullscreenAria", "Task execution result markdown fullscreen")} className="max-w-none" content={task.executionResult} />
               </div>
             </div>
           </div>

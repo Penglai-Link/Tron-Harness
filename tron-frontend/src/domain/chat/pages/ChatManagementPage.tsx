@@ -263,10 +263,10 @@ function sessionAgentIconTone(agentCode: string | null | undefined) {
 
 type ChatSessionSourceTab = "chat" | "automation" | "task";
 
-const chatSessionSourceTabs: { id: ChatSessionSourceTab; icon: LucideIcon; label: string }[] = [
-  { id: "chat", icon: MessageSquareText, label: "Chat sessions" },
-  { id: "automation", icon: AlarmClock, label: "Automation sessions" },
-  { id: "task", icon: ListTodo, label: "Task sessions" },
+const chatSessionSourceTabs: { id: ChatSessionSourceTab; icon: LucideIcon; labelKey: string }[] = [
+  { id: "chat", icon: MessageSquareText, labelKey: "chat.management.sourceTabs.chat" },
+  { id: "automation", icon: AlarmClock, labelKey: "chat.management.sourceTabs.automation" },
+  { id: "task", icon: ListTodo, labelKey: "chat.management.sourceTabs.task" },
 ];
 const defaultChatSessionSourceTab: ChatSessionSourceTab = "chat";
 const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
@@ -286,6 +286,7 @@ function ChatAttachmentChip({
   downloadAttachment?: (attachment: ChatMessageAttachment) => Promise<Blob>;
   onRemove: () => void;
 }) {
+  const { t } = useTranslation("pages");
   const label = attachment.fileName || attachment.title || attachment.summary || attachment.id;
   const contentType = attachment.contentType?.toLowerCase();
   const isImage = attachment.kind === "image"
@@ -326,7 +327,7 @@ function ChatAttachmentChip({
           <img alt={label} className="h-full w-full object-cover" src={imageSource} />
         ) : null}
         <Button
-          aria-label={`Remove ${label}`}
+          aria-label={t("chat.management.composer.removeAttachment", { label })}
           size="icon"
           variant="outline"
           className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
@@ -351,7 +352,7 @@ function ChatAttachmentChip({
         <span className="truncate text-xs text-[var(--color-on-surface-variant)]">{typeLabel}</span>
       </span>
       <Button
-        aria-label={`Remove ${label}`}
+        aria-label={t("chat.management.composer.removeAttachment", { label })}
         size="icon"
         variant="outline"
         className="absolute right-1 top-1 h-6 w-6 rounded-full bg-[var(--color-on-surface)] p-0 text-[var(--color-surface)]"
@@ -1300,19 +1301,19 @@ function valueAtKnownKey(value: unknown, depth = 0): string {
   return "";
 }
 
-function toolActionLabel(toolName: string, args: unknown) {
+function toolActionLabel(toolName: string, args: unknown, t: (key: string) => string) {
   const normalizedTool = toolName.toLowerCase();
   const target = valueAtKnownKey(args).toLowerCase();
-  if (normalizedTool.includes("edit") || normalizedTool.includes("write") || normalizedTool.includes("patch")) return "Edit";
+  if (normalizedTool.includes("edit") || normalizedTool.includes("write") || normalizedTool.includes("patch")) return t("chat.management.tool.actionEdit");
   if (target.includes("/") || target.includes(".")) {
-    if (!normalizedTool.includes("exec") && !normalizedTool.includes("run") && !normalizedTool.includes("shell")) return "Edit";
+    if (!normalizedTool.includes("exec") && !normalizedTool.includes("run") && !normalizedTool.includes("shell")) return t("chat.management.tool.actionEdit");
   }
-  return "Run";
+  return t("chat.management.tool.actionRun");
 }
 
-function toolSummaryLabel(toolName: string, args: unknown) {
+function toolSummaryLabel(toolName: string, args: unknown, t: (key: string) => string) {
   const target = valueAtKnownKey(args);
-  const title = `${toolActionLabel(toolName, args)} ${toolName}`;
+  const title = `${toolActionLabel(toolName, args, t)} ${toolName}`;
   if (!target || target === toolName) return title;
   return `${title} [${truncateLabel(target, 48)}]`;
 }
@@ -1822,6 +1823,7 @@ function SessionActionMenu({
   const [open, setOpen] = useState(false);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
   const menuRef = useRef<HTMLDivElement | null>(null);
+  const { t } = useTranslation("pages");
 
   useDismissibleLayer({
     onDismiss: () => setOpen(false),
@@ -1841,7 +1843,7 @@ function SessionActionMenu({
         ref={triggerRef}
         className="inline-flex size-7 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
         type="button"
-        aria-label={`Open actions for ${session.title}`}
+        aria-label={t("chat.management.sidebar.openActionsAria", { title: session.title })}
         aria-expanded={open}
         disabled={disabled}
         onClick={(event) => {
@@ -1856,16 +1858,16 @@ function SessionActionMenu({
           ref={menuRef}
           className="absolute right-0 top-full z-30 mt-1 w-32 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-1 text-sm shadow-[0_12px_28px_rgba(0,0,0,0.18)]"
           role="menu"
-          aria-label={`${session.title} actions`}
+          aria-label={t("chat.management.sidebar.actionsAria", { title: session.title })}
         >
           <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onRename)}>
-            Rename
+            {t("chat.management.actions.rename")}
           </button>
           <button className="flex w-full rounded-md px-2.5 py-1.5 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={() => select(onArchive)}>
-            Archive
+            {t("chat.management.actions.archive")}
           </button>
           <button className="flex w-full rounded-md px-2.5 py-1.5 text-left text-[var(--color-error)] hover:bg-[var(--color-error-container)]" type="button" role="menuitem" onClick={() => select(onDelete)}>
-            Delete
+            {t("chat.management.actions.delete")}
           </button>
         </div>
       ) : null}
@@ -1882,9 +1884,10 @@ function SessionRunIndicator({
   running: boolean;
   unseen: boolean;
 }) {
+  const { t } = useTranslation("pages");
   if (running) {
     return (
-      <span className="inline-flex size-5 items-center justify-center" aria-label="Session running" title="Session running">
+      <span className="inline-flex size-5 items-center justify-center" aria-label={t("chat.management.runIndicator.running")} title={t("chat.management.runIndicator.running")}>
         <LoaderCircle className="animate-spin text-[var(--color-focus-ring)]" size={15} />
       </span>
     );
@@ -1892,7 +1895,7 @@ function SessionRunIndicator({
 
   if (needsUserInput) {
     return (
-      <span className="inline-flex size-5 items-center justify-center" aria-label="Waiting for your answer" title="Waiting for your answer">
+      <span className="inline-flex size-5 items-center justify-center" aria-label={t("chat.management.runIndicator.waitingAnswer")} title={t("chat.management.runIndicator.waitingAnswer")}>
         <CircleAlert className="text-[var(--color-warning)]" size={15} />
       </span>
     );
@@ -1900,7 +1903,7 @@ function SessionRunIndicator({
 
   if (unseen) {
     return (
-      <span className="inline-flex size-5 items-center justify-center" aria-label="Unread response" title="Unread response">
+      <span className="inline-flex size-5 items-center justify-center" aria-label={t("chat.management.runIndicator.unread")} title={t("chat.management.runIndicator.unread")}>
         <span className="size-2 rounded-full bg-[var(--color-focus-ring)]" />
       </span>
     );
@@ -2918,13 +2921,14 @@ function ChatModelSelector({
   const [searchQuery, setSearchQuery] = useState("");
   const [expandedModelCode, setExpandedModelCode] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const { t } = useTranslation("pages");
   const selectedModel = models.find((model) => model.optionCode === selectedModelCode) ?? null;
   const filteredModels = useMemo(
     () => models.filter((model) => fuzzyModelMatch(searchQuery, model)),
     [models, searchQuery],
   );
   const disabled = loading || models.length === 0;
-  const selectedModelLabel = loading ? "Loading models..." : selectedModel ? selectedModel.displayName : emptyLabel;
+  const selectedModelLabel = loading ? t("chat.management.modelSelector.loading") : selectedModel ? selectedModel.displayName : emptyLabel;
 
   useEffect(() => {
     if (!open) {
@@ -2943,7 +2947,7 @@ function ChatModelSelector({
     <div className="relative min-w-0">
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
-          aria-label="Select chat model"
+          aria-label={t("chat.management.modelSelector.selectAria")}
           className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled}
           title={selectedModelLabel}
@@ -2961,9 +2965,9 @@ function ChatModelSelector({
           <div className="sticky top-0 z-10 bg-popover pb-1.5">
             <input
               ref={searchInputRef}
-              aria-label="Search chat models"
+              aria-label={t("chat.management.modelSelector.searchAria")}
               className="h-8 w-full rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-2 text-xs text-[var(--color-on-surface)] outline-none focus:border-[var(--color-focus-ring)]"
-              placeholder="Search models..."
+              placeholder={t("chat.management.modelSelector.searchPlaceholder")}
               value={searchQuery}
               onChange={(event) => setSearchQuery(event.target.value)}
               onKeyDown={(event) => {
@@ -3013,7 +3017,7 @@ function ChatModelSelector({
             </DropdownMenuRadioGroup>
           ) : (
             <p className="px-3 py-2 text-xs text-[var(--color-on-surface-variant)]">
-              No models match "{searchQuery.trim()}".
+              {t("chat.management.modelSelector.noMatch", { query: searchQuery.trim() })}
             </p>
           )}
         </DropdownMenuContent>
@@ -3036,6 +3040,7 @@ function ChatAgentSelector({
   selectedAgentCode: string;
 }) {
   const [open, setOpen] = useState(false);
+  const { t } = useTranslation("pages");
   const selectedAgent = agents.find((agent) => agent.agentCode === selectedAgentCode) ?? null;
   const disabled = loading || agents.length === 0 || Boolean(locked);
 
@@ -3043,13 +3048,13 @@ function ChatAgentSelector({
     <div className="relative min-w-0">
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
-          aria-label="Select chat agent"
+          aria-label={t("chat.management.agentSelector.selectAria")}
           className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled}
-          title={locked ? "Agent is locked after the first chat turn in this session" : undefined}
+          title={locked ? t("chat.management.agentSelector.locked") : undefined}
         >
           <Bot aria-hidden="true" size={14} />
-          <span className="truncate">{loading ? "Loading agents..." : selectedAgent?.name ?? "Main Agent"}</span>
+          <span className="truncate">{loading ? t("chat.management.agentSelector.loading") : selectedAgent?.name ?? t("chat.management.agentSelector.mainAgent")}</span>
           <ChevronDown aria-hidden="true" size={14} />
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="max-h-72 min-w-[180px] max-w-[260px] overflow-y-auto p-1.5" side="top" sideOffset={8}>
@@ -3115,6 +3120,7 @@ function SessionSidebar({
   const [closedGroups, setClosedGroups] = useState<Set<string>>(() => new Set());
   const [editingSessionCode, setEditingSessionCode] = useState("");
   const [renameDraft, setRenameDraft] = useState("");
+  const { t } = useTranslation("pages");
   const [collapsedTooltip, setCollapsedTooltip] = useState<{
     agentLabel: string;
     sessionTitle: string;
@@ -3214,7 +3220,7 @@ function SessionSidebar({
         {editing ? (
           <input
             autoFocus
-            aria-label={`Rename ${session.title}`}
+            aria-label={t("chat.management.sidebar.renameAria", { title: session.title })}
             className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
             disabled={pending}
             value={renameDraft}
@@ -3282,8 +3288,8 @@ function SessionSidebar({
             <button
               className={iconButtonClass()}
               type="button"
-              aria-label="New session"
-              title="New session"
+              aria-label={t("chat.management.sidebar.newSession")}
+              title={t("chat.management.sidebar.newSession")}
               disabled={creatingSession}
               onClick={onCreateSession}
             >
@@ -3297,7 +3303,7 @@ function SessionSidebar({
                 className={iconButtonClass(activeSessionCode === session.sessionCode)}
                 key={session.sessionCode}
                 type="button"
-                aria-label={`Open ${session.title}`}
+                aria-label={t("chat.management.sidebar.openAria", { title: session.title })}
                 onClick={() => onSessionSelect(session, activeSourceTab)}
                 onMouseEnter={(event) => showCollapsedTooltip(event.currentTarget, session)}
                 onMouseLeave={hideCollapsedTooltip}
@@ -3332,14 +3338,14 @@ function SessionSidebar({
           <div className="flex h-14 items-center justify-between px-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
             <div className="flex items-center gap-2">
               <MessageSquareText size={17} />
-              <h2 className="text-sm font-semibold">Sessions</h2>
+              <h2 className="text-sm font-semibold">{t("chat.management.sidebar.sessions")}</h2>
             </div>
             <div className="flex items-center gap-1">
               <button
                 className={iconButtonClass()}
                 type="button"
-                aria-label="New session"
-                title="New session"
+                aria-label={t("chat.management.sidebar.newSession")}
+                title={t("chat.management.sidebar.newSession")}
                 disabled={creatingSession}
                 onClick={onCreateSession}
               >
@@ -3348,7 +3354,7 @@ function SessionSidebar({
             </div>
           </div>
           <div className="h-[calc(100%-3.5rem)] overflow-y-auto px-3 py-4">
-            <div className="mb-4 grid grid-cols-3 gap-1 rounded-md bg-[var(--color-surface-container)] p-1" role="tablist" aria-label="Session source">
+            <div className="mb-4 grid grid-cols-3 gap-1 rounded-md bg-[var(--color-surface-container)] p-1" role="tablist" aria-label={t("chat.management.sourceTabs.aria")}>
               {chatSessionSourceTabs.map((tab) => {
                 const TabIcon = tab.icon;
                 return (
@@ -3362,13 +3368,13 @@ function SessionSidebar({
                     key={tab.id}
                     type="button"
                     role="tab"
-                    aria-label={tab.label}
+                    aria-label={t(tab.labelKey)}
                     aria-selected={activeSourceTab === tab.id}
-                    title={tab.label}
+                    title={t(tab.labelKey)}
                     onClick={() => onSourceTabSelect(tab.id)}
                   >
                     <TabIcon size={17} strokeWidth={2.2} />
-                    <span className="sr-only">{tab.label}</span>
+                    <span className="sr-only">{t(tab.labelKey)}</span>
                   </button>
                 );
               })}
@@ -3379,7 +3385,7 @@ function SessionSidebar({
                   activeFlatSessions.map((session) => renderSessionRow(session))
                 ) : (
                   <p className="px-2 py-6 text-center text-xs text-[var(--color-on-surface-variant)]">
-                    No sessions in this tab.
+                    {t("chat.management.sidebar.noSessions")}
                   </p>
                 )}
               </div>
@@ -3413,14 +3419,14 @@ function SessionSidebar({
             })}
             {activeSourceTab === "task" && activeGroups.length === 0 ? (
               <p className="px-2 py-6 text-center text-xs text-[var(--color-on-surface-variant)]">
-                No sessions in this tab.
+                {t("chat.management.sidebar.noSessions")}
               </p>
             ) : null}
           </div>
         </>
       )}
       <DraggleLine
-        ariaLabel={collapsed ? "Expand session history" : "Collapse session history"}
+        ariaLabel={collapsed ? t("chat.management.sidebar.expandHistory") : t("chat.management.sidebar.collapseHistory")}
         onClick={onCollapseToggle}
         className="absolute right-0 top-0 z-10 h-full"
       />
@@ -3439,6 +3445,7 @@ function ChatBubble({
 }) {
   const isUser = message.role === "USER";
   const actorName = isUser ? (currentUserDisplayName || message.actor) : message.actor;
+  const { t } = useTranslation("pages");
   async function handleEditMessage() {
     if (!isUser || !message.content || !onEditMessage) return;
     onEditMessage(message.content);
@@ -3454,23 +3461,23 @@ function ChatBubble({
         <div className="flex shrink-0 items-center gap-1.5">
           {!isUser ? (
             <CopyValueButton
-              ariaLabel="Copy raw markdown"
-              title="Copy raw markdown"
+              ariaLabel={t("chat.management.bubble.copyRaw")}
+              title={t("chat.management.bubble.copyRaw")}
               value={message.content}
             />
           ) : null}
           {isUser ? (
             <>
               <CopyValueButton
-                ariaLabel="Copy raw markdown"
-                title="Copy raw markdown"
+                ariaLabel={t("chat.management.bubble.copyRaw")}
+                title={t("chat.management.bubble.copyRaw")}
                 value={message.content}
               />
               <button
-                aria-label="Edit message"
+                aria-label={t("chat.management.bubble.editMessage")}
                 className="inline-flex size-6 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-40"
                 disabled={!message.content || !onEditMessage}
-                title="Edit message"
+                title={t("chat.management.bubble.editMessage")}
                 type="button"
                 onClick={() => void handleEditMessage()}
               >
@@ -3485,10 +3492,10 @@ function ChatBubble({
         <p className="whitespace-pre-wrap text-sm leading-6 text-[var(--color-on-surface)]">{message.content}</p>
       ) : (
         <MarkdownContent
-          ariaLabel="Streaming assistant markdown"
+          ariaLabel={t("chat.management.bubble.streamingAria")}
           className="py-0"
           content={message.content}
-          emptyMessage="Waiting for assistant output..."
+          emptyMessage={t("chat.management.bubble.waitingOutput")}
         />
       )}
     </article>
@@ -3496,10 +3503,11 @@ function ChatBubble({
 }
 
 function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
+  const { t } = useTranslation("pages");
   const hasContent = card.content.trim().length > 0;
   const detail = hasContent ? card.content : "";
   const initializingHint = !card.ended && !hasContent && card.runCode === "pending"
-    ? "System agent 正在初始化..."
+    ? t("chat.management.reasoning.initializing")
     : "";
   const [expanded, setExpanded] = useState(() => !card.ended);
   const contentRef = useRef<HTMLDivElement | null>(null);
@@ -3507,7 +3515,7 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const hasRunningTool = nestedToolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
   const shouldStayExpanded = !card.ended || hasRunningTool;
   const reasoningPreview = hasContent ? deriveReasoningPreview(detail, nestedToolCards) : "";
-  const headerSummary = initializingHint || reasoningPreview || (card.ended ? "Reasoning captured." : "Thinking...");
+  const headerSummary = initializingHint || reasoningPreview || (card.ended ? t("chat.management.reasoning.captured") : t("chat.management.reasoning.thinking"));
 
   useEffect(() => {
     if (shouldStayExpanded) {
@@ -3529,7 +3537,7 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
 
   return (
     <article
-      aria-label="Thinking"
+      aria-label={t("chat.management.reasoning.aria")}
       className="text-sm"
     >
       <button
@@ -3558,7 +3566,7 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
               className="max-h-36 overflow-y-auto overscroll-contain pr-2"
             >
               <MarkdownContent
-                ariaLabel="Streaming reasoning markdown"
+                ariaLabel={t("chat.management.reasoning.streamingAria")}
                 className="min-h-0 py-0 text-sm leading-6 text-[var(--color-on-surface)]"
                 content={detail}
               />
@@ -3632,17 +3640,18 @@ function CompactToolRow({
   nested?: boolean;
   stepNumber?: number;
 }) {
+  const { t } = useTranslation("pages");
   const complete = card.ended || Boolean(card.result);
   const hasResultPayload = Boolean(card.result);
-  const result = card.result || (complete ? "No result payload." : "");
+  const result = card.result || (complete ? t("chat.management.tool.noResult") : "");
   const [expanded, setExpanded] = useState(() => !complete);
   const logRef = useRef<HTMLDivElement | null>(null);
   const running = card.started && !complete;
   const hasParameters = hasToolParameterPayload(card.args);
   const parametersText = hasParameters ? formatJsonBlockValue(card.args) : "";
   const resultText = hasResultPayload ? formatJsonBlockValue(card.result) : "";
-  const toolLabel = toolSummaryLabel(card.toolName, card.args);
-  const nestedToolLabel = `${complete ? "Ran" : "Running"} ${toolLabel.replace(/^Run\s+/i, "")}`;
+  const toolLabel = toolSummaryLabel(card.toolName, card.args, t);
+  const nestedToolLabel = `${complete ? t("chat.management.tool.ranPrefix") : t("chat.management.tool.runningPrefix")} ${toolLabel.replace(/^(Run|Edit|运行|编辑)\s+/i, "")}`;
   const [parametersExpanded, setParametersExpanded] = useState(false);
 
   useEffect(() => {
@@ -3692,7 +3701,7 @@ function CompactToolRow({
               <span className={cn("truncate", nested ? "font-normal" : "font-semibold")}>
                 {nested ? nestedToolLabel : toolLabel}
               </span>
-              {nested ? null : <Badge tone={complete ? "info" : "success"}>{complete ? "done" : "running"}</Badge>}
+              {nested ? null : <Badge tone={complete ? "info" : "success"}>{complete ? t("chat.management.tool.badgeDone") : t("chat.management.tool.badgeRunning")}</Badge>}
             </div>
           </div>
         </div>
@@ -3716,9 +3725,9 @@ function CompactToolRow({
                     onClick={() => setParametersExpanded((current) => !current)}
                   >
                     {parametersExpanded ? <ChevronDown size={13} /> : <ChevronRight size={13} />}
-                    <span>Parameters</span>
+                    <span>{t("chat.management.tool.parameters")}</span>
                   </button>
-                  <CopyValueButton ariaLabel="Copy parameters" title="Copy parameters" value={parametersText} />
+                  <CopyValueButton ariaLabel={t("chat.management.tool.copyParameters")} title={t("chat.management.tool.copyParameters")} value={parametersText} />
                 </div>
                 {parametersExpanded ? (
                   <div className="max-h-40 overflow-y-auto">
@@ -3730,27 +3739,27 @@ function CompactToolRow({
             {complete ? (
               <section className="flex min-h-0 flex-col gap-1">
                 <div className="flex items-center justify-between gap-2">
-                  <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Result</h3>
-                  <CopyValueButton ariaLabel="Copy result" title="Copy result" value={resultText} />
+                  <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{t("chat.management.tool.result")}</h3>
+                  <CopyValueButton ariaLabel={t("chat.management.tool.copyResult")} title={t("chat.management.tool.copyResult")} value={resultText} />
                 </div>
                 <div className="max-h-64 overflow-y-auto">
                   {result ? <JsonBlock value={result} /> : (
                     <div className="rounded-md bg-[var(--color-surface-container-lowest)] px-3 py-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
-                      No result payload.
+                      {t("chat.management.tool.noResult")}
                     </div>
                   )}
                 </div>
               </section>
             ) : (
               <section className="flex min-h-0 flex-col gap-1">
-                <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">Log</h3>
+                <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{t("chat.management.tool.log")}</h3>
                 <div
                   ref={logRef}
                   className="max-h-64 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3 font-mono text-xs leading-5 text-[var(--color-on-surface)]"
                 >
                   {card.logs.length ? card.logs.map((line, index) => (
                     <p className="whitespace-pre-wrap" key={`${card.id}-log-${index}`}>{line}</p>
-                  )) : <p className="text-[var(--color-on-surface-variant)]">Waiting for tool activity...</p>}
+                  )) : <p className="text-[var(--color-on-surface-variant)]">{t("chat.management.tool.waitingActivity")}</p>}
                 </div>
               </section>
             )}
@@ -3774,6 +3783,7 @@ function ToolUserCard({
 }
 
 function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
+  const { t } = useTranslation("pages");
   const toolCards = card.toolCards.filter((toolCard) => toolCard.started);
   const hasRunningTool = toolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
   const toolCount = toolCards.length;
@@ -3786,7 +3796,7 @@ function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
   if (!toolCount) return null;
 
   return (
-    <section className="text-sm" aria-label="Tool run steps">
+    <section className="text-sm" aria-label={t("chat.management.tool.stepsAria")}>
       <button
         aria-expanded={expanded}
         className="group flex w-full items-center justify-between gap-3 rounded-md py-1 text-left text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
@@ -3798,7 +3808,7 @@ function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
             <Terminal className={hasRunningTool ? "animate-pulse" : undefined} size={15} />
           </span>
           <span className="truncate font-medium">
-            {`Ran ${toolCount} ${toolCount === 1 ? "command" : "commands"}`}
+            {t("chat.management.tool.ranCommands", { count: toolCount })}
           </span>
         </span>
         <span className="shrink-0 text-[var(--color-on-surface-variant)]">
@@ -3819,10 +3829,11 @@ function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
 }
 
 function AguiUserWorkRail({ cards }: { cards: AguiUserWorkCard[] }) {
+  const { t } = useTranslation("pages");
   if (!cards.length) return null;
 
   return (
-    <section className="space-y-2 py-1" aria-label="Agent work rail">
+    <section className="space-y-2 py-1" aria-label={t("chat.workRail.ariaLabel")}>
       {cards.map((card) => (
         card.kind === "reasoning"
           ? <ReasoningUserCard card={card.value} key={`reasoning-${card.value.id}`} />
@@ -3835,13 +3846,14 @@ function AguiUserWorkRail({ cards }: { cards: AguiUserWorkCard[] }) {
 }
 
 function AguiWaitingForModelRail() {
+  const { t } = useTranslation("pages");
   return (
-    <section className="max-w-[920px]" aria-label="Waiting for model">
+    <section className="max-w-[920px]" aria-label={t("chat.management.rail.waitingModelAria")}>
       <div className="flex w-full items-center gap-3 py-1 text-xs font-medium text-[var(--color-on-surface-variant)]">
         <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
         <span className="inline-flex items-center gap-1.5 whitespace-nowrap">
           <LoaderCircle className="animate-spin" size={14} />
-          Waiting for model...
+          {t("chat.management.rail.waitingModel")}
         </span>
         <span className="h-px flex-1 bg-[var(--color-outline-variant)]" />
       </div>
@@ -4070,8 +4082,8 @@ export function ChatManagementPage() {
     ? (activeSession?.agentCode ?? selectedModelAgentCode ?? selectedAgentCode ?? mainChatAgentOption.agentCode)
     : (selectedModelAgentCode || selectedAgentCode || activeSession?.agentCode || mainChatAgentOption.agentCode);
   const modelEmptyLabel = isMainChatAgent(effectiveAgentCode)
-    ? "No text model"
-    : `No models for ${selectedAgent?.name ?? effectiveAgentCode}`;
+    ? t("chat.management.modelEmpty.noTextModel")
+    : t("chat.management.modelEmpty.noneForAgent", { name: selectedAgent?.name ?? effectiveAgentCode });
   const currentUserDisplayName = authSession?.user.displayName ?? "";
   const { createInspectionAttachmentUpload } = useInspection();
 
@@ -4239,7 +4251,7 @@ export function ChatManagementPage() {
   ): Promise<ChatMessageAttachment | null> {
     const targetSession = activeSession;
     if (!targetSession) {
-      toast.warning("Create or select a session before attaching a file", { title: "Session required" });
+      toast.warning(t("chat.management.toasts.attachNoSession"), { title: t("chat.management.toasts.sessionRequiredTitle") });
       return null;
     }
 
@@ -4253,8 +4265,8 @@ export function ChatManagementPage() {
         ? attachment
         : null;
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Chat attachment upload failed", {
-        title: "Attachment upload failed",
+      toast.error(error instanceof Error ? error.message : t("chat.management.toasts.attachmentUploadFailed"), {
+        title: t("chat.management.toasts.attachmentUploadFailed"),
       });
       return null;
     } finally {
@@ -4298,11 +4310,11 @@ export function ChatManagementPage() {
       if (content) setComposer(content);
       setPendingAttachments((current) => [...current, attachment]);
       if (inspectionSubmitMode(result) === "send" && !selectedModel) {
-        toast.warning("Select a model before sending the page annotation", { title: "Model required" });
+        toast.warning(t("chat.management.toasts.selectModelFirst"), { title: t("chat.management.toasts.modelRequiredTitle") });
       }
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Page annotation attachment failed", {
-        title: "Attachment upload failed",
+      toast.error(error instanceof Error ? error.message : t("chat.management.toasts.annotationUploadFailed"), {
+        title: t("chat.management.toasts.attachmentUploadFailed"),
       });
     }
   }
@@ -4447,7 +4459,7 @@ export function ChatManagementPage() {
         if (active) {
           setChatModels([]);
           setSelectedModelCode("");
-          toast.error(error instanceof Error ? error.message : "Workspace models could not be loaded", { title: "Model load failed" });
+          toast.error(error instanceof Error ? error.message : t("chat.management.toasts.modelLoadFailed"), { title: t("chat.management.toasts.modelLoadFailedTitle") });
         }
       } finally {
         if (active) setModelsLoading(false);
@@ -4488,7 +4500,7 @@ export function ChatManagementPage() {
         if (active) {
           setChatAgents([mainChatAgentOption]);
           setSelectedAgentCode(mainChatAgentOption.agentCode);
-          toast.error(error instanceof Error ? error.message : "Workspace agents could not be loaded", { title: "Agent load failed" });
+          toast.error(error instanceof Error ? error.message : t("chat.management.toasts.agentLoadFailed"), { title: t("chat.management.toasts.agentLoadFailedTitle") });
         }
       } finally {
         if (active) setAgentsLoading(false);
@@ -4948,10 +4960,10 @@ export function ChatManagementPage() {
           onChange={(event) => { void handleAttachmentFileInputChange(event); }}
         />
         <Button
-          aria-label="Upload attachment"
+          aria-label={t("chat.management.composer.uploadAttachment")}
           disabled={!activeSession || attachmentUploadPending}
           size="icon"
-          title={attachmentUploadPending ? "Uploading…" : "Upload attachment"}
+          title={attachmentUploadPending ? t("chat.management.composer.uploading") : t("chat.management.composer.uploadAttachment")}
           type="button"
           variant="ghost"
           onClick={() => attachmentFileInputRef.current?.click()}
@@ -5289,12 +5301,12 @@ export function ChatManagementPage() {
       setActiveRunRefreshKey((current) => current + 1);
       setActiveChatReplayRefreshKey((current) => current + 1);
       setActiveChatDataRefreshKey((current) => current + 1);
-      toast.info("Current response has been stopped", { title: "Chat stopped" });
+      toast.info(t("chat.management.toasts.chatStopped"), { title: t("chat.management.toasts.chatStoppedTitle") });
     } catch (error) {
       if (!isAbortError(error)) {
         toast.error(
-          error instanceof Error ? error.message : "Chat stop failed",
-          { title: "Chat stop failed" },
+          error instanceof Error ? error.message : t("chat.management.toasts.chatStopFailed"),
+          { title: t("chat.management.toasts.chatStopFailedTitle") },
         );
       }
     } finally {
@@ -5361,13 +5373,13 @@ export function ChatManagementPage() {
     const attachments = attachmentOverride ?? pendingAttachments;
     if (!content && !attachments.length) {
       toast.warning(
-        goalCommand.isGoalCommand ? "Goal content is required" : "Message content is required",
-        { title: goalCommand.isGoalCommand ? "Goal required" : "Nothing to send" },
+        goalCommand.isGoalCommand ? t("chat.management.toasts.goalRequired") : t("chat.management.toasts.nothingToSend"),
+        { title: goalCommand.isGoalCommand ? t("chat.management.toasts.goalRequiredTitle") : t("chat.management.toasts.nothingToSendTitle") },
       );
       return;
     }
     if (!selectedModel) {
-      toast.warning("Select a model before sending", { title: "Model required" });
+      toast.warning(t("chat.management.toasts.selectModelFirst"), { title: t("chat.management.toasts.modelRequiredTitle") });
       return;
     }
 
@@ -5693,11 +5705,11 @@ export function ChatManagementPage() {
           )));
         }
         toast.info(
-          "Message was kept in the queue while the current response finishes",
-          { title: "Active response recovered" },
+          t("chat.management.toasts.responseRecovered"),
+          { title: t("chat.management.toasts.responseRecoveredTitle") },
         );
       } else {
-        const rawMessage = error instanceof Error ? error.message : "Chat send failed";
+        const rawMessage = error instanceof Error ? error.message : t("chat.management.toasts.chatSendFailed");
         const toastMessage = chatSendErrorToastMessage(rawMessage);
         if (!sourceSubmission && pendingSubmissionAttachments.length) {
           setPendingAttachments((current) => [...pendingSubmissionAttachments, ...current]);
@@ -5707,7 +5719,7 @@ export function ChatManagementPage() {
             item.messageCode !== optimisticAssistantCode || Boolean(item.content.trim())
           )));
         }
-        toast.error(toastMessage, { title: "Chat send failed" });
+        toast.error(toastMessage, { title: t("chat.management.toasts.chatSendFailedTitle") });
       }
     } finally {
       clearLocalStreamOwnership(streamOwner);
@@ -5854,8 +5866,8 @@ export function ChatManagementPage() {
       setActiveChatReplayRefreshKey((current) => current + 1);
       setShortTermMemoryRefreshKey((current) => current + 1);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Answer submission failed", {
-        title: "Answer submission failed",
+      toast.error(error instanceof Error ? error.message : t("chat.management.toasts.answerFailed"), {
+        title: t("chat.management.toasts.answerFailedTitle"),
       });
     } finally {
       setLiveAguiPendingAnchorMessageCodesBySessionCode((current) => {
@@ -5954,21 +5966,21 @@ export function ChatManagementPage() {
         }
       }
       if (sessionInvalidated) {
-        toast.info("Steer message was discarded with its session", { title: "Session closed" });
+        toast.info(t("chat.management.toasts.steerDiscarded"), { title: t("chat.management.toasts.sessionClosedTitle") });
       } else if (safeQueueFallback) {
         toast.info(
-          "The active run rejected steer; the message was queued",
-          { title: "Message queued" },
+          t("chat.management.toasts.steerQueued"),
+          { title: t("chat.management.toasts.messageQueuedTitle") },
         );
       } else if (isAbortError(error)) {
         toast.info(
-          "Steer delivery was not confirmed and was not retried",
-          { title: "Steer not retried" },
+          t("chat.management.toasts.steerNotRetried"),
+          { title: t("chat.management.toasts.steerNotRetriedTitle") },
         );
       } else {
         toast.error(
-          error instanceof Error ? error.message : "Chat steer failed",
-          { title: "Chat steer failed" },
+          error instanceof Error ? error.message : t("chat.management.toasts.steerFailed"),
+          { title: t("chat.management.toasts.steerFailedTitle") },
         );
       }
     } finally {
@@ -6061,7 +6073,7 @@ export function ChatManagementPage() {
   async function handleCreateGoal(input: SetChatSessionGoalInput) {
     if (sending) return false;
     if (!selectedModel) {
-      toast.warning("Select a model before setting the goal", { title: "Model required" });
+      toast.warning(t("chat.management.toasts.selectModelFirst"), { title: t("chat.management.toasts.modelRequiredTitle") });
       return false;
     }
     const created = await runGoalAction(
@@ -6085,7 +6097,7 @@ export function ChatManagementPage() {
   async function handleResumeGoal(input: ChatSessionGoalCommand) {
     if (sending) return false;
     if (!selectedModel) {
-      toast.warning("Select a model before resuming the goal", { title: "Model required" });
+      toast.warning(t("chat.management.toasts.selectModelFirst"), { title: t("chat.management.toasts.modelRequiredTitle") });
       return false;
     }
     const resumed = await runGoalAction(
@@ -6114,7 +6126,7 @@ export function ChatManagementPage() {
 
   async function handleCreateSession() {
     if (!activeWorkspaceCode) {
-      toast.warning("Create a workspace before starting a chat session", { title: "No workspace selected" });
+      toast.warning(t("chat.management.toasts.createWorkspaceFirst"), { title: t("chat.management.toasts.noWorkspaceTitle") });
       return;
     }
 
@@ -6132,8 +6144,8 @@ export function ChatManagementPage() {
       setVisibleMessages([]);
       setComposer("");
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Create session failed";
-      toast.error(message, { title: "Create session failed" });
+      const message = error instanceof Error ? error.message : t("chat.management.toasts.createSessionFailed");
+      toast.error(message, { title: t("chat.management.toasts.createSessionFailed") });
     } finally {
       setCreatingSession(false);
     }
@@ -6170,10 +6182,10 @@ export function ChatManagementPage() {
         selectSessionAfterRemoval(nextGroups, returnSourceTab);
       }
       forgetSessionModelSelection(archived.sessionCode);
-      toast.success("Session archived", { title: archived.sessionCode });
+      toast.success(t("chat.management.toasts.sessionArchived"), { title: archived.sessionCode });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Archive session failed";
-      toast.error(message, { title: "Archive session failed" });
+      const message = error instanceof Error ? error.message : t("chat.management.toasts.archiveSessionFailed");
+      toast.error(message, { title: t("chat.management.toasts.archiveSessionFailed") });
     } finally {
       setSessionActionPendingCode("");
     }
@@ -6203,10 +6215,10 @@ export function ChatManagementPage() {
       forgetSessionModelSelection(deleted.sessionCode);
       // Clear MainAgentChatWindow's persisted session if it matches the deleted one
       forgetMainAgentPersistedSession(activeWorkspaceCode, deleted.sessionCode);
-      toast.success("Session deleted", { title: deleted.sessionCode });
+      toast.success(t("chat.management.toasts.sessionDeleted"), { title: deleted.sessionCode });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Delete session failed";
-      toast.error(message, { title: "Delete session failed" });
+      const message = error instanceof Error ? error.message : t("chat.management.toasts.deleteSessionFailed");
+      toast.error(message, { title: t("chat.management.toasts.deleteSessionFailed") });
     } finally {
       setSessionActionPendingCode("");
       setDeleteTargetSession((current) => (
@@ -6219,7 +6231,7 @@ export function ChatManagementPage() {
     if (!activeSession || renamingSession) return;
     const title = titleDraft.trim();
     if (!title) {
-      toast.warning("Session title is required", { title: "Rename skipped" });
+      toast.warning(t("chat.management.toasts.titleRequired"), { title: t("chat.management.toasts.renameSkippedTitle") });
       return;
     }
     if (title === activeSession.title) {
@@ -6232,10 +6244,10 @@ export function ChatManagementPage() {
       const session = await updateChatSession(activeSession.sessionCode, { title });
       setSessionGroups((current) => replaceSession(current, session));
       setEditingTitle(false);
-      toast.success("Session renamed", { title: session.sessionCode });
+      toast.success(t("chat.management.toasts.sessionRenamed"), { title: session.sessionCode });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Rename session failed";
-      toast.error(message, { title: "Rename session failed" });
+      const message = error instanceof Error ? error.message : t("chat.management.toasts.renameSessionFailed");
+      toast.error(message, { title: t("chat.management.toasts.renameSessionFailed") });
     } finally {
       setRenamingSession(false);
     }
@@ -6243,7 +6255,7 @@ export function ChatManagementPage() {
 
   async function handleSidebarRenameSession(session: ChatSession, title: string) {
     if (!title.trim()) {
-      toast.warning("Session title is required", { title: "Rename skipped" });
+      toast.warning(t("chat.management.toasts.titleRequired"), { title: t("chat.management.toasts.renameSkippedTitle") });
       return;
     }
 
@@ -6251,10 +6263,10 @@ export function ChatManagementPage() {
     try {
       const renamed = await updateChatSession(session.sessionCode, { title });
       setSessionGroups((current) => replaceSession(current, renamed));
-      toast.success("Session renamed", { title: renamed.sessionCode });
+      toast.success(t("chat.management.toasts.sessionRenamed"), { title: renamed.sessionCode });
     } catch (error) {
-      const message = error instanceof Error ? error.message : "Rename session failed";
-      toast.error(message, { title: "Rename session failed" });
+      const message = error instanceof Error ? error.message : t("chat.management.toasts.renameSessionFailed");
+      toast.error(message, { title: t("chat.management.toasts.renameSessionFailed") });
     } finally {
       setSessionActionPendingCode("");
     }
@@ -6332,7 +6344,7 @@ export function ChatManagementPage() {
                   activeSession && "cursor-text rounded-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]",
                 )}
                 tabIndex={activeSession ? 0 : undefined}
-                title={activeSession ? "Double-click to rename" : undefined}
+                title={activeSession ? t("chat.management.header.doubleClickRename") : undefined}
                 onDoubleClick={() => {
                   if (!activeSession) return;
                   setTitleDraft(activeSession.title);
@@ -6344,7 +6356,7 @@ export function ChatManagementPage() {
                   setEditingTitle(true);
                 }}
               >
-                {activeSession?.title ?? "Chat Management"}
+                {activeSession?.title ?? t("chat.management.header.defaultTitle")}
               </h1>
             )}
             {hasActiveSession ? (
@@ -6374,20 +6386,22 @@ export function ChatManagementPage() {
             agentCode: effectiveAgentCode,
             disabledInput: creatingSession || !activeSession || !selectedModel,
             floating: false,
-            inputPlaceholder: "Enter to send, Shift+Enter for newline",
+            inputPlaceholder: t("chat.management.composer.inputPlaceholder"),
             showAgui: true,
             storageKey: "tron.chat.management.runtime",
-            title: activeSession?.title ?? "Chat Management",
+            title: activeSession?.title ?? t("chat.management.header.defaultTitle"),
             userInputLabels,
             workRailLabels,
             workspaceCode: activeWorkspaceCode,
           }}
           createSendInput={createRuntimeSendInput}
+          createSessionLabel={t("chat.management.emptyState.startChat")}
           currentUserDisplayName={currentUserDisplayName}
           debugOptions={transcriptWorkReplayOptions}
           emptyDescription={activeWorkspaceCode
-            ? "Create a new session or pick one from the left panel to view chat details and start messaging."
-            : "Select or create a workspace before loading chat sessions."}
+            ? t("chat.management.emptyState.withWorkspace")
+            : t("chat.management.emptyState.noWorkspace")}
+          emptyTitle={t("chat.management.emptyState.noSessionTitle")}
           formatAnnotationCount={formatAnnotationCount}
           draft={composer}
           initialSession={activeSession ?? null}
@@ -6405,15 +6419,15 @@ export function ChatManagementPage() {
         />
       </main>
       <ConfirmDialog
-        ariaLabel="Delete chat session confirmation"
-        cancelText="Cancel"
-        confirmText={sessionActionPendingCode === deleteTargetSession?.sessionCode ? "Deleting..." : "Delete"}
+        ariaLabel={t("chat.management.deleteDialog.aria")}
+        cancelText={t("chat.management.deleteDialog.cancel")}
+        confirmText={sessionActionPendingCode === deleteTargetSession?.sessionCode ? t("chat.management.deleteDialog.confirming") : t("chat.management.deleteDialog.confirm")}
         description={deleteTargetSession
-          ? `Delete "${deleteTargetSession.title}" permanently? This action cannot be undone.`
+          ? t("chat.management.deleteDialog.description", { title: deleteTargetSession.title })
           : undefined}
         open={Boolean(deleteTargetSession)}
         pending={sessionActionPendingCode === deleteTargetSession?.sessionCode}
-        title="Delete session"
+        title={t("chat.management.deleteDialog.title")}
         tone="danger"
         onCancel={() => {
           if (sessionActionPendingCode === deleteTargetSession?.sessionCode) return;
