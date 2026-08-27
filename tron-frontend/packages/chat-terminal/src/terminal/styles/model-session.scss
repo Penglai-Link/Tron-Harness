@@ -55,14 +55,14 @@
 .ai-terminal-model-session__activity {
   display: grid;
   gap: 4px;
-  margin-bottom: 10px;
   color: color-mix(in srgb, var(--ai-terminal-primary) 74%, transparent);
   font-size: 12px;
   line-height: 1.45;
 }
 
 .ai-terminal-model-session__activity-item--snapshot {
-  padding: 6px 8px;
+  padding: 6px 0px;
+  display: flex;
 }
 
 .ai-terminal-model-session__activity-item > summary {
