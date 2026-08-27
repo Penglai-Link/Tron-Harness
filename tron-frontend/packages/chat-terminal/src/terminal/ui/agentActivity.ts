@@ -141,11 +141,10 @@ function renderToolActivity(
 }
 
 function renderNestedToolGroup(
-  tools: ReturnType<typeof buildAguiUserWorkCards>[number] extends infer Card
-    ? Card extends { kind: "reasoning" }
-      ? Card["value"]["toolCards"]
-      : never
-  : never,
+  tools: Extract<
+    ReturnType<typeof buildAguiUserWorkCards>[number],
+    { kind: "reasoning" }
+  >["value"]["toolCards"],
   i18n: ChatTerminalI18n,
   state: AgentActivityState,
 ) {
