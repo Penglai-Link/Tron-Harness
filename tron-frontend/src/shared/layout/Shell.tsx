@@ -795,8 +795,8 @@ export function TronShell({
         <button
           ref={userMenuTriggerRef}
           className={cn(
-            "flex h-14 min-w-0 w-full items-center rounded-lg text-left transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
-            compact ? "justify-center px-1" : "gap-3 px-2.5",
+            "flex h-14 min-w-0 w-full cursor-pointer items-center rounded-lg text-left transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            compact ? "justify-center px-1" : "gap-3 px-2.5 hover:bg-[var(--color-hover-surface)]",
           )}
           type="button"
           aria-label={t("shell:aria.openUserMenu")}
