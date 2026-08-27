@@ -315,11 +315,8 @@ function AppRoutePage() {
       }
       const currentPath = `${pathname}${search}`;
       const navItem = resolveActiveItem(pathname) ?? resolveActiveItemByLabel(resolved.route.activeNav);
-      const tabTitle = navItem
-        ? t(navItem.translationKey)
-        : resolved.route.titleTranslationKey
-          ? t(resolved.route.titleTranslationKey)
-          : resolved.route.title;
+      const titleTranslationKey = navItem?.translationKey ?? resolved.route.titleTranslationKey;
+      const tabTitle = titleTranslationKey ? t(titleTranslationKey) : resolved.route.title;
       const activeNav = resolved.route.activeNav;
 
       // Stateful detail pages react to their query themselves. Replacing their
@@ -330,6 +327,7 @@ function AppRoutePage() {
       // 调用 addTab，它会根据 activeNav 复用已存在的 tab，或创建新 tab
       const tabId = addTab({
         title: tabTitle,
+        titleTranslationKey,
         path: lookupPath,
         closable: true,
         activeNav,
@@ -351,8 +349,8 @@ function AppRoutePage() {
         if (tab.path !== lookupPath) {
           useTabStore.getState().updateTab(tabId, { path: lookupPath });
         }
-        if (tab.title !== tabTitle) {
-          useTabStore.getState().updateTab(tabId, { title: tabTitle });
+        if (tab.title !== tabTitle || tab.titleTranslationKey !== titleTranslationKey) {
+          useTabStore.getState().updateTab(tabId, { title: tabTitle, titleTranslationKey });
         }
 
         // 设置为当前活动的 tab

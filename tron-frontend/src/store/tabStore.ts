@@ -3,6 +3,7 @@ import { create } from "zustand";
 export interface TabItem {
   id: string;
   title: string;
+  titleTranslationKey?: string;
   path: string;
   closable: boolean;
   activeNav?: string;

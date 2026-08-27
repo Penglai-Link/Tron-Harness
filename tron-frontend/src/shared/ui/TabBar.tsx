@@ -97,7 +97,7 @@ export function TabBar({ className }: TabBarProps) {
               onClick={() => handleTabClick(tab)}
             >
               <span className="flex-1 truncate px-1.5 text-left">
-                {tab.title}
+                {tab.titleTranslationKey ? t(tab.titleTranslationKey) : tab.title}
               </span>
               {tab.closable && (
                 <Button
