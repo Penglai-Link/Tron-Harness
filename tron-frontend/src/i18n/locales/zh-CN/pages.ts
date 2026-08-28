@@ -870,7 +870,7 @@ export const pages = {
         },
         visible: "显示 {{count}} 个检索配置",
       },
-      searchPlaceholder: "搜索检索配置、语料库、路由或策略...",
+      searchPlaceholder: "搜索检索配置、语料库、路由...",
       tabs: {
         Ingest: "写入配置",
         Retrieval: "检索配置",
@@ -3002,7 +3002,7 @@ export const pages = {
     },
     filters: {
       allStatuses: "全部状态",
-      searchPlaceholder: "搜索知识库、工作区或检索配置...",
+      searchPlaceholder: "搜索知识库、检索配置...",
     },
     inspector: {
       apiNote: "此视图由 RAG 语料库管理 API 提供支持；只有 API 返回时才展示索引数量和新鲜度指标。",
@@ -3166,6 +3166,9 @@ export const pages = {
     },
     filters: {
       all: "全部",
+      allProtocols: "全部协议",
+      allStatuses: "全部状态",
+      allTypes: "全部类型",
       protocol: "协议",
       search: "搜索",
       searchPlaceholder: "搜索模型",

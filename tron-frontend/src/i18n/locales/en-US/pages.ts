@@ -814,7 +814,7 @@ export const pages = {
       pagination: {
         itemLabel: "corpora",
       },
-      searchPlaceholder: "Search corpora, codes, or descriptions...",
+      searchPlaceholder: "Search corpora, codes, descriptions...",
       table: {
         columns: {
           actions: "Actions",
@@ -870,7 +870,7 @@ export const pages = {
         },
         visible: "{{count}} retrieval profiles visible",
       },
-      searchPlaceholder: "Search retrieval profiles, corpora, routes, or strategies...",
+      searchPlaceholder: "Search retrieval profiles, corpora, routes...",
       tabs: {
         Ingest: "Ingest profiles",
         Retrieval: "Retrieval profiles",
@@ -2874,7 +2874,7 @@ export const pages = {
     },
     filters: {
       allStatuses: "All statuses",
-      searchPlaceholder: "Search knowledge bases, workspaces, or retrieval profiles...",
+      searchPlaceholder: "Search knowledge bases, retrieval...",
     },
     inspector: {
       apiNote: "This view is backed by the RAG corpus management API. Index counts and freshness metrics are shown only when the API reports them.",
@@ -3038,6 +3038,9 @@ export const pages = {
     },
     filters: {
       all: "All",
+      allProtocols: "All protocols",
+      allStatuses: "All statuses",
+      allTypes: "All types",
       protocol: "Protocol",
       search: "Search",
       searchPlaceholder: "Search models",
