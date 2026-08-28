@@ -150,6 +150,22 @@ mod tests {
     }
 
     #[test]
+    fn catalog_keeps_business_code_separate_from_runtime_tool_name() {
+        let page = BusinessToolCatalog::tool("app.page", "en-US")
+            .expect("app page tool should be catalogued");
+        assert_eq!(page.tool_code, "app.page");
+        assert_eq!(page.tool_name, "app_page");
+        assert!(page
+            .tool_name
+            .chars()
+            .all(|character| character.is_ascii_alphanumeric() || character == '_' || character == '-'));
+
+        let payload = serde_json::to_value(&page).expect("catalog record should serialize");
+        assert!(payload.get("toolCode").is_some());
+        assert!(payload.get("toolName").is_none());
+    }
+
+    #[test]
     fn data_source_tools_describe_kind_specific_nested_attributes() {
         let create = BusinessToolCatalog::tool("resource.data_source.create", "en-US")
             .expect("data source create tool should be catalogued");

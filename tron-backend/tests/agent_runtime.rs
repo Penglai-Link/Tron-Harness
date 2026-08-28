@@ -1225,7 +1225,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![ToolCall {
                 call_id: Some("call-write".into()),
-                tool_name: "fs.write_text".into(),
+                tool_name: "fs_write_text".into(),
                 input: serde_json::Value::Null,
                 input_error: Some("function arguments are missing".into()),
             }]),
@@ -1245,7 +1245,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
     assert!(matches!(
         error,
         AgentError::EmptyFinalOutput(message)
-            if message.contains("fs.write_text: tool input is invalid: function arguments are missing")
+            if message.contains("fs_write_text: tool input is invalid: function arguments are missing")
     ));
     assert!(sink.wait_for_len(11, Duration::from_secs(2)));
     let event_names = sink
@@ -2324,7 +2324,7 @@ async fn tool_registry_rejects_missing_or_unauthorized_tools() {
 fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
     let registry = ToolRegistry::default();
     registry
-        .register(Arc::new(InProcessTool::new("fs.write_text", |request| {
+        .register(Arc::new(InProcessTool::new("fs_write_text", |request| {
             Ok(ToolObservation {
                 tool_name: request.tool_name,
                 output: "written".into(),
@@ -2333,7 +2333,7 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
         .expect("effective tool should register");
 
     let discovery = EffectiveTool {
-        tool_name: "discovery.expand_tool_domain".into(),
+        tool_name: "discovery_expand_tool_domain".into(),
         domain_code: Some("discovery".into()),
         description: "Expand one tool domain".into(),
         input_schema: json!({"type": "object"}),
@@ -2341,7 +2341,7 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
         required_variable_keys: Vec::new(),
     };
     let write_text = EffectiveTool {
-        tool_name: "fs.write_text".into(),
+        tool_name: "fs_write_text".into(),
         domain_code: Some("fs".into()),
         description: "Write text".into(),
         input_schema: json!({"type": "object"}),
@@ -2355,7 +2355,7 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
     let execution = registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "fs.write_text".into(),
+                tool_name: "fs_write_text".into(),
                 input: json!({}),
             },
             &context,

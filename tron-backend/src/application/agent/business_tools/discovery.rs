@@ -16,7 +16,7 @@ use crate::{
 
 use crate::application::agent::tool_catalog::{materialize_schema, translate};
 
-pub const DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL: &str = "discovery.expand_tool_domain";
+pub const DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL: &str = "discovery_expand_tool_domain";
 
 pub fn discovery_expand_tool_definition(locale: &str) -> EffectiveTool {
     let locale = SupportedLocale::from_raw(locale);

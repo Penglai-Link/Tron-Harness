@@ -28,7 +28,7 @@ impl ReactAgent {
                 .any(|call| call.tool_name == CHAT_ASK_USER_TOOL)
             {
                 return Err(AgentError::InvalidConfiguration(
-                    "chat.ask_user must be the only tool call in a model turn".into(),
+                    "chat_ask_user must be the only tool call in a model turn".into(),
                 ));
             }
             self.execute_tool_call_batches(

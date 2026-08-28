@@ -41,7 +41,7 @@ struct PlatformMcpPageInput {
 
 impl Tool for PlatformMcpPageTool {
     fn name(&self) -> &str {
-        "platform.mcp.page"
+        "platform_mcp_page"
     }
 
     fn exec(
@@ -75,7 +75,7 @@ struct PlatformMcpCodeInput {
 
 impl Tool for PlatformMcpGetTool {
     fn name(&self) -> &str {
-        "platform.mcp.get"
+        "platform_mcp_get"
     }
 
     fn exec(
@@ -118,7 +118,7 @@ struct PlatformMcpCreateInput {
 
 impl Tool for PlatformMcpCreateTool {
     fn name(&self) -> &str {
-        "platform.mcp.create"
+        "platform_mcp_create"
     }
 
     fn exec(
@@ -176,7 +176,7 @@ struct PlatformMcpUpdateInput {
 
 impl Tool for PlatformMcpUpdateTool {
     fn name(&self) -> &str {
-        "platform.mcp.update"
+        "platform_mcp_update"
     }
 
     fn exec(
@@ -218,7 +218,7 @@ struct PlatformMcpDeleteTool {
 
 impl Tool for PlatformMcpDeleteTool {
     fn name(&self) -> &str {
-        "platform.mcp.delete"
+        "platform_mcp_delete"
     }
 
     fn exec(

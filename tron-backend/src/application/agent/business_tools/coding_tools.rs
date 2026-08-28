@@ -334,10 +334,10 @@ mod tests {
                 skill_name: "planner".into(),
                 description: "Plan work".into(),
                 instruction: None,
-                tool_names: vec!["fs.list".into()],
+                tool_names: vec!["fs_list".into()],
             }],
             tools: vec![EffectiveTool {
-                tool_name: "fs.list".into(),
+                tool_name: "fs_list".into(),
                 domain_code: Some("fs".into()),
                 description: "List files".into(),
                 input_schema: json!({"type": "object"}),

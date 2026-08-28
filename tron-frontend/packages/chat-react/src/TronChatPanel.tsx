@@ -900,9 +900,9 @@ function AguiRunWorkRail({
   userInputRequests?: ChatUserInputRequest[];
 }) {
   const userCards = useMemo<AguiUserWorkCard[]>(() => buildAguiUserWorkCards(events).flatMap((card): AguiUserWorkCard[] => {
-    if (card.kind === "tool" && card.value.toolName === "chat.ask_user") return [];
+    if (card.kind === "tool" && card.value.toolName === "chat_ask_user") return [];
     if (card.kind !== "toolGroup") return [card];
-    const toolCards = card.value.toolCards.filter((toolCard) => toolCard.toolName !== "chat.ask_user");
+    const toolCards = card.value.toolCards.filter((toolCard) => toolCard.toolName !== "chat_ask_user");
     return toolCards.length
       ? [{ ...card, value: { ...card.value, toolCards } }]
       : [];

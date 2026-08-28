@@ -48,7 +48,7 @@ struct VariablePageInput {
 
 impl Tool for VariablePageTool {
     fn name(&self) -> &str {
-        "variable.page"
+        "variable_page"
     }
 
     fn exec(
@@ -89,7 +89,7 @@ struct VariableCreateInput {
 
 impl Tool for VariableCreateTool {
     fn name(&self) -> &str {
-        "variable.create"
+        "variable_create"
     }
 
     fn exec(
@@ -134,7 +134,7 @@ struct VariableUpdateInput {
 
 impl Tool for VariableUpdateTool {
     fn name(&self) -> &str {
-        "variable.update"
+        "variable_update"
     }
 
     fn exec(
@@ -190,7 +190,7 @@ struct VariableDeleteInput {
 
 impl Tool for VariableDeleteTool {
     fn name(&self) -> &str {
-        "variable.delete"
+        "variable_delete"
     }
 
     fn exec(

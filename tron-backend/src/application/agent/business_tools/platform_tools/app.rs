@@ -42,7 +42,7 @@ struct AppPageInput {
 
 impl Tool for AppPageTool {
     fn name(&self) -> &str {
-        "app.page"
+        "app_page"
     }
 
     fn exec(
@@ -91,7 +91,7 @@ struct AppCreateInput {
 
 impl Tool for AppCreateTool {
     fn name(&self) -> &str {
-        "app.create"
+        "app_create"
     }
 
     fn exec(
@@ -141,7 +141,7 @@ struct AppUpdateInput {
 
 impl Tool for AppUpdateTool {
     fn name(&self) -> &str {
-        "app.update"
+        "app_update"
     }
 
     fn exec(
@@ -193,7 +193,7 @@ struct AppCodeInput {
 
 impl Tool for AppDeleteTool {
     fn name(&self) -> &str {
-        "app.delete"
+        "app_delete"
     }
 
     fn exec(
@@ -223,7 +223,7 @@ struct AppRestoreTool {
 
 impl Tool for AppRestoreTool {
     fn name(&self) -> &str {
-        "app.restore"
+        "app_restore"
     }
 
     fn exec(

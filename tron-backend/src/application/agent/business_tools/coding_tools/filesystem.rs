@@ -81,7 +81,7 @@ struct FsStatInput {
 
 impl Tool for FsReadTextTool {
     fn name(&self) -> &str {
-        "fs.read_text"
+        "fs_read_text"
     }
 
     fn exec(
@@ -137,7 +137,7 @@ impl Tool for FsReadTextTool {
 
 impl Tool for FsWriteTextTool {
     fn name(&self) -> &str {
-        "fs.write_text"
+        "fs_write_text"
     }
 
     fn exec(
@@ -181,7 +181,7 @@ impl Tool for FsWriteTextTool {
 
 impl Tool for FsApplyPatchTool {
     fn name(&self) -> &str {
-        "fs.apply_patch"
+        "fs_apply_patch"
     }
 
     fn exec(
@@ -241,7 +241,7 @@ impl Tool for FsApplyPatchTool {
 
 impl Tool for FsListTool {
     fn name(&self) -> &str {
-        "fs.list"
+        "fs_list"
     }
 
     fn exec(
@@ -284,7 +284,7 @@ impl Tool for FsListTool {
 
 impl Tool for FsStatTool {
     fn name(&self) -> &str {
-        "fs.stat"
+        "fs_stat"
     }
 
     fn exec(

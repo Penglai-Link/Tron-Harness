@@ -17,7 +17,7 @@ struct DataSourceCreateInput {
 
 impl Tool for DataSourceCreateTool {
     fn name(&self) -> &str {
-        "resource.data_source.create"
+        "resource_data_source_create"
     }
 
     fn exec(
@@ -67,7 +67,7 @@ struct DataSourceUpdateInput {
 
 impl Tool for DataSourceUpdateTool {
     fn name(&self) -> &str {
-        "resource.data_source.update"
+        "resource_data_source_update"
     }
 
     fn exec(

@@ -303,7 +303,7 @@ impl ChatService {
             .collect::<Vec<_>>();
         if questions.is_empty() {
             return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
-                "chat.ask_user returned no questions".into(),
+                "chat_ask_user returned no questions".into(),
             )));
         }
         let request = ChatUserInputRequest {

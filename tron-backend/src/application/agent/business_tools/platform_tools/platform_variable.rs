@@ -48,7 +48,7 @@ struct PlatformVariablePageInput {
 
 impl Tool for PlatformVariablePageTool {
     fn name(&self) -> &str {
-        "platform.variable.page"
+        "platform_variable_page"
     }
 
     fn exec(
@@ -98,7 +98,7 @@ struct PlatformVariableCreateInput {
 
 impl Tool for PlatformVariableCreateTool {
     fn name(&self) -> &str {
-        "platform.variable.create"
+        "platform_variable_create"
     }
 
     fn exec(
@@ -138,7 +138,7 @@ struct PlatformVariableUpdateInput {
 
 impl Tool for PlatformVariableUpdateTool {
     fn name(&self) -> &str {
-        "platform.variable.update"
+        "platform_variable_update"
     }
 
     fn exec(
@@ -189,7 +189,7 @@ struct PlatformVariableDeleteInput {
 
 impl Tool for PlatformVariableDeleteTool {
     fn name(&self) -> &str {
-        "platform.variable.delete"
+        "platform_variable_delete"
     }
 
     fn exec(

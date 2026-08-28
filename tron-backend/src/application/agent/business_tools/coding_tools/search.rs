@@ -56,7 +56,7 @@ enum SearchPathEntryType {
 
 impl Tool for SearchGrepTool {
     fn name(&self) -> &str {
-        "search.grep"
+        "search_grep"
     }
 
     fn exec(
@@ -125,7 +125,7 @@ impl Tool for SearchGrepTool {
 
 impl Tool for SearchGlobTool {
     fn name(&self) -> &str {
-        "search.glob"
+        "search_glob"
     }
 
     fn exec(
@@ -183,7 +183,7 @@ impl Tool for SearchGlobTool {
 
 impl Tool for SearchPathTool {
     fn name(&self) -> &str {
-        "search.path"
+        "search_path"
     }
 
     fn exec(

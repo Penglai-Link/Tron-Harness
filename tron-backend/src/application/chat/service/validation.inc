@@ -231,7 +231,7 @@ pub(super) fn raw_user_input_request(
         })
         .ok_or_else(|| {
             ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
-                "chat.ask_user returned an invalid request".into(),
+                "chat_ask_user returned an invalid request".into(),
             ))
         })
 }

@@ -58,7 +58,7 @@ struct ModelPageInput {
 
 impl Tool for ModelPageTool {
     fn name(&self) -> &str {
-        "model.page"
+        "model_page"
     }
 
     fn exec(
@@ -113,7 +113,7 @@ struct ModelCreateInput {
 
 impl Tool for ModelCreateTool {
     fn name(&self) -> &str {
-        "model.create"
+        "model_create"
     }
 
     fn exec(
@@ -148,7 +148,7 @@ struct ModelUpdateInput {
 
 impl Tool for ModelUpdateTool {
     fn name(&self) -> &str {
-        "model.update"
+        "model_update"
     }
 
     fn exec(
@@ -195,7 +195,7 @@ struct ModelCodeInput {
 
 impl Tool for ModelEnableTool {
     fn name(&self) -> &str {
-        "model.enable"
+        "model_enable"
     }
 
     fn exec(
@@ -215,7 +215,7 @@ impl Tool for ModelEnableTool {
 
 impl Tool for ModelDisableTool {
     fn name(&self) -> &str {
-        "model.disable"
+        "model_disable"
     }
 
     fn exec(
@@ -235,7 +235,7 @@ impl Tool for ModelDisableTool {
 
 impl Tool for ModelDeleteTool {
     fn name(&self) -> &str {
-        "model.delete"
+        "model_delete"
     }
 
     fn exec(

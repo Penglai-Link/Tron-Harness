@@ -15,7 +15,7 @@ struct ResourceQueryInput {
 
 impl Tool for ResourceQueryTool {
     fn name(&self) -> &str {
-        "resource.query"
+        "resource_query"
     }
 
     fn exec(
@@ -58,7 +58,7 @@ struct ResourceGetInput {
 
 impl Tool for ResourceGetTool {
     fn name(&self) -> &str {
-        "resource.get"
+        "resource_get"
     }
 
     fn exec(
@@ -102,7 +102,7 @@ struct ResourceCreateInput {
 
 impl Tool for ResourceCreateTool {
     fn name(&self) -> &str {
-        "resource.create"
+        "resource_create"
     }
 
     fn exec(
@@ -150,7 +150,7 @@ struct ResourceUpdateInput {
 
 impl Tool for ResourceUpdateTool {
     fn name(&self) -> &str {
-        "resource.update"
+        "resource_update"
     }
 
     fn exec(

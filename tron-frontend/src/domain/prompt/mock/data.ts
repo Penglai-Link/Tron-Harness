@@ -108,7 +108,7 @@ function initialPlatformPrompts() {
   ];
   const builtinSeeds: Array<[string, string, PromptCategory, string, boolean]> = [
     ["SYS_AGENT_FINAL_OUTPUT", "Agent final output guidance", "SYSTEM", "Final assistant output contract: answer with only the final result and do not expose chain-of-thought.", true],
-    ["SYS_CHAT_ASK_USER", "Interactive user input contract", "SYSTEM", "When material clarification is required, call chat.ask_user and stop the turn.", true],
+    ["SYS_CHAT_ASK_USER", "Interactive user input contract", "SYSTEM", "When material clarification is required, call chat_ask_user and stop the turn.", true],
     ["SYS_AGENT_DOMAIN_DISCOVERY", "Domain discovery guidance", "SYSTEM", "Tool domain discovery is enabled. Visible domains: {{visible_domains}}. Persistence mode: {{persistence_mode}}.", true],
     ["SYS_AGENT_STEER_CONTINUITY", "Steer continuity guidance", "SYSTEM", "Preserve unresolved earlier requests when steering messages arrive during a run.", true],
     ["SYS_MEMORY_COMPACTION", "Short-term memory compaction", "SYSTEM", "Generate a short-term memory compaction checkpoint. Return final text only.", true],

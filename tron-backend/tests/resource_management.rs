@@ -310,7 +310,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .collect::<Vec<_>>();
     let context = resource_tool_context(tools);
     let request = ToolRequest {
-        tool_name: "resource.query".to_string(),
+        tool_name: "resource_query".to_string(),
         input: json!({ "workspaceCode": WORKSPACE }),
     };
     let output = state
@@ -334,7 +334,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.query".to_string(),
+                tool_name: "resource_query".to_string(),
                 input: json!({ "workspaceCode": "ENTERPRISE" }),
             },
             &viewer_scope_context,
@@ -352,7 +352,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.binary".to_string(),
+                tool_name: "resource_binary".to_string(),
                 input: json!({
                     "action": "upload",
                     "resourceCode": "viewer-file",
@@ -368,7 +368,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.binary".to_string(),
+                tool_name: "resource_binary".to_string(),
                 input: json!({
                     "action": "upload",
                     "resourceCode": "test-document"
@@ -383,7 +383,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.binary".to_string(),
+                tool_name: "resource_binary".to_string(),
                 input: json!({
                     "action": "download",
                     "resourceCode": "test-document",
@@ -414,7 +414,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.create".to_string(),
+                tool_name: "resource_create".to_string(),
                 input: json!({
                     "resourceCode": "agent-release-notes",
                     "kind": "File",
@@ -434,7 +434,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.get".to_string(),
+                tool_name: "resource_get".to_string(),
                 input: json!({ "resourceCode": "agent-release-notes" }),
             },
             &context,
@@ -448,7 +448,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.update".to_string(),
+                tool_name: "resource_update".to_string(),
                 input: json!({
                     "resourceCode": "agent-release-notes",
                     "name": "Agent release notes v2"
@@ -462,7 +462,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.data_source.create".to_string(),
+                tool_name: "resource_data_source_create".to_string(),
                 input: json!({
                     "resourceCode": "agent-mysql",
                     "kind": "MysqlConnection",
@@ -492,7 +492,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.data_source.update".to_string(),
+                tool_name: "resource_data_source_update".to_string(),
                 input: json!({
                     "resourceCode": "agent-mysql",
                     "description": "Agent-owned data source"
@@ -506,7 +506,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.server.create".to_string(),
+                tool_name: "resource_server_create".to_string(),
                 input: json!({
                     "serverCode": "agent-bastion",
                     "name": "Agent bastion",
@@ -535,7 +535,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.server_account.create".to_string(),
+                tool_name: "resource_server_account_create".to_string(),
                 input: json!({
                     "serverCode": "agent-bastion",
                     "account": {
@@ -559,7 +559,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.get".to_string(),
+                tool_name: "resource_get".to_string(),
                 input: json!({ "resourceCode": "agent-mysql" }),
             },
             &context,
@@ -576,7 +576,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource.delete".to_string(),
+                tool_name: "resource_delete".to_string(),
                 input: json!({ "resourceCode": "agent-bastion-deploy" }),
             },
             &context,

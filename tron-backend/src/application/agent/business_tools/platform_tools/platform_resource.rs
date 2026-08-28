@@ -54,7 +54,7 @@ struct PlatformResourceQueryInput {
 
 impl Tool for PlatformResourceQueryTool {
     fn name(&self) -> &str {
-        "platform.resource.query"
+        "platform_resource_query"
     }
 
     fn exec(
@@ -95,7 +95,7 @@ struct PlatformResourceCodeInput {
 
 impl Tool for PlatformResourceGetTool {
     fn name(&self) -> &str {
-        "platform.resource.get"
+        "platform_resource_get"
     }
 
     fn exec(
@@ -135,7 +135,7 @@ struct PlatformResourceCreateInput {
 
 impl Tool for PlatformResourceCreateTool {
     fn name(&self) -> &str {
-        "platform.resource.create"
+        "platform_resource_create"
     }
 
     fn exec(
@@ -179,7 +179,7 @@ struct PlatformResourceUpdateInput {
 
 impl Tool for PlatformResourceUpdateTool {
     fn name(&self) -> &str {
-        "platform.resource.update"
+        "platform_resource_update"
     }
 
     fn exec(
@@ -212,7 +212,7 @@ struct PlatformResourceDeleteTool {
 
 impl Tool for PlatformResourceDeleteTool {
     fn name(&self) -> &str {
-        "platform.resource.delete"
+        "platform_resource_delete"
     }
 
     fn exec(
@@ -259,7 +259,7 @@ enum PlatformResourceBinaryAction {
 
 impl Tool for PlatformResourceBinaryTool {
     fn name(&self) -> &str {
-        "platform.resource.binary"
+        "platform_resource_binary"
     }
 
     fn exec(

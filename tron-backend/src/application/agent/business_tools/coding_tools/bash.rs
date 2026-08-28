@@ -35,7 +35,7 @@ struct StreamLine {
 
 impl Tool for BashExecTool {
     fn name(&self) -> &str {
-        "bash.exec"
+        "bash_exec"
     }
 
     fn exec(
@@ -261,7 +261,7 @@ mod tests {
         let result = tool
             .exec_with_progress(
                 ToolRequest {
-                    tool_name: "bash.exec".into(),
+                    tool_name: "bash_exec".into(),
                     input: json!({
                         "command": "sh",
                         "args": ["-c", "printf 'one\\n'; printf 'two\\n' >&2"]

@@ -122,7 +122,7 @@ where
     E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
-        "memory.search"
+        "memory_search"
     }
 
     fn exec(
@@ -172,7 +172,7 @@ where
     E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
-        "memory.save"
+        "memory_save"
     }
 
     fn exec(
@@ -228,7 +228,7 @@ where
     E: RagEmbeddingRuntime + RagSearchRuntime + RagDocumentSourceRuntime + Send + Sync + 'static,
 {
     fn name(&self) -> &str {
-        "memory.delete"
+        "memory_delete"
     }
 
     fn exec(

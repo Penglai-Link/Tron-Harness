@@ -46,7 +46,7 @@ struct PlatformOpenAppPageInput {
 
 impl Tool for PlatformOpenAppPageTool {
     fn name(&self) -> &str {
-        "platform.open_app.page"
+        "platform_open_app_page"
     }
 
     fn exec(
@@ -91,7 +91,7 @@ struct PlatformOpenAppCodeInput {
 
 impl Tool for PlatformOpenAppGetTool {
     fn name(&self) -> &str {
-        "platform.open_app.get"
+        "platform_open_app_get"
     }
 
     fn exec(
@@ -122,7 +122,7 @@ struct PlatformOpenAppCreateInput {
 
 impl Tool for PlatformOpenAppCreateTool {
     fn name(&self) -> &str {
-        "platform.open_app.create"
+        "platform_open_app_create"
     }
 
     fn exec(
@@ -162,7 +162,7 @@ struct PlatformOpenAppUpdateInput {
 
 impl Tool for PlatformOpenAppUpdateTool {
     fn name(&self) -> &str {
-        "platform.open_app.update"
+        "platform_open_app_update"
     }
 
     fn exec(
@@ -193,7 +193,7 @@ struct PlatformOpenAppDisableTool {
 
 impl Tool for PlatformOpenAppDisableTool {
     fn name(&self) -> &str {
-        "platform.open_app.disable"
+        "platform_open_app_disable"
     }
 
     fn exec(

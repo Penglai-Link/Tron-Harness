@@ -60,7 +60,7 @@ struct AutomationPageInput {
 
 impl Tool for AutomationPageTool {
     fn name(&self) -> &str {
-        "automation.page"
+        "automation_page"
     }
 
     fn exec(
@@ -99,7 +99,7 @@ struct AutomationCodeInput {
 
 impl Tool for AutomationGetTool {
     fn name(&self) -> &str {
-        "automation.get"
+        "automation_get"
     }
 
     fn exec(
@@ -138,7 +138,7 @@ struct AutomationCreateInput {
 
 impl Tool for AutomationCreateTool {
     fn name(&self) -> &str {
-        "automation.create"
+        "automation_create"
     }
 
     fn exec(
@@ -186,7 +186,7 @@ struct AutomationUpdateInput {
 
 impl Tool for AutomationUpdateTool {
     fn name(&self) -> &str {
-        "automation.update"
+        "automation_update"
     }
 
     fn exec(
@@ -235,7 +235,7 @@ struct AutomationDeleteTool {
 
 impl Tool for AutomationDeleteTool {
     fn name(&self) -> &str {
-        "automation.delete"
+        "automation_delete"
     }
 
     fn exec(
@@ -265,7 +265,7 @@ struct AutomationRestoreTool {
 
 impl Tool for AutomationRestoreTool {
     fn name(&self) -> &str {
-        "automation.restore"
+        "automation_restore"
     }
 
     fn exec(
@@ -295,7 +295,7 @@ struct AutomationExecuteTool {
 
 impl Tool for AutomationExecuteTool {
     fn name(&self) -> &str {
-        "automation.execute"
+        "automation_execute"
     }
 
     fn exec(

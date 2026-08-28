@@ -638,7 +638,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let created = execute_tool_json(
         &state,
         &context,
-        "automation.create",
+        "automation_create",
         json!({
             "workspaceCode": "TRON_CORE",
             "name": "Agent-created automation",
@@ -658,7 +658,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let fetched = execute_tool_json(
         &state,
         &context,
-        "automation.get",
+        "automation_get",
         json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code.clone() }),
     );
     assert_eq!(fetched["status"], json!("Paused"));
@@ -668,7 +668,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let updated = execute_tool_json(
         &state,
         &context,
-        "automation.update",
+        "automation_update",
         json!({
             "workspaceCode": "TRON_CORE",
             "automationCode": automation_code.clone(),
@@ -683,7 +683,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let listed = execute_tool_json(
         &state,
         &context,
-        "automation.page",
+        "automation_page",
         json!({ "workspaceCode": "TRON_CORE", "search": "Agent-updated" }),
     );
     assert_eq!(listed["total"], json!(1));
@@ -691,7 +691,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let executed = execute_tool_json(
         &state,
         &context,
-        "automation.execute",
+        "automation_execute",
         json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code.clone() }),
     );
     assert_eq!(executed["lastExecutionStatus"], json!("Running"));
@@ -711,7 +711,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let deleted = execute_tool_json(
         &state,
         &context,
-        "automation.delete",
+        "automation_delete",
         json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code.clone() }),
     );
     assert_eq!(deleted["status"], json!("Archived"));
@@ -719,7 +719,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     let restored = execute_tool_json(
         &state,
         &context,
-        "automation.restore",
+        "automation_restore",
         json!({ "workspaceCode": "TRON_CORE", "automationCode": automation_code }),
     );
     assert_eq!(restored["status"], json!("Paused"));

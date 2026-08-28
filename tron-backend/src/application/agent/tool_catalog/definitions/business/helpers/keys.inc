@@ -12,6 +12,7 @@ pub(super) fn definition(
 ) -> ToolCatalogDefinition {
     ToolCatalogDefinition {
         tool_code,
+        tool_name: tool_code.replace('.', "_"),
         domain_code,
         name_i18n_key: tool_key(tool_code, "name"),
         description_i18n_key: tool_key(tool_code, "description"),

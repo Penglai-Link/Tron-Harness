@@ -8,7 +8,7 @@ use crate::domain::agent::{
     ToolRequest,
 };
 
-pub const CHAT_ASK_USER_TOOL: &str = "chat.ask_user";
+pub const CHAT_ASK_USER_TOOL: &str = "chat_ask_user";
 
 pub fn ask_user_definition() -> EffectiveTool {
     EffectiveTool {

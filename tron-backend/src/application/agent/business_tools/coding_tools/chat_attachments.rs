@@ -61,7 +61,7 @@ struct ChatAttachmentTextOutput {
 
 impl Tool for ChatAttachmentReadTextTool {
     fn name(&self) -> &str {
-        "chat_attachment.read_text"
+        "chat_attachment_read_text"
     }
 
     fn exec(
@@ -179,7 +179,7 @@ struct ChatAttachmentJsonOutput {
 
 impl Tool for ChatAttachmentParseJsonTool {
     fn name(&self) -> &str {
-        "chat_attachment.parse_json"
+        "chat_attachment_parse_json"
     }
 
     fn exec(

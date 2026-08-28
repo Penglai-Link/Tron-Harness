@@ -38,7 +38,7 @@ struct WorkspacePageInput {
 
 impl Tool for WorkspacePageTool {
     fn name(&self) -> &str {
-        "workspace.page"
+        "workspace_page"
     }
 
     fn exec(
@@ -75,7 +75,7 @@ struct WorkspaceGetInput {
 
 impl Tool for WorkspaceGetTool {
     fn name(&self) -> &str {
-        "workspace.get"
+        "workspace_get"
     }
 
     fn exec(

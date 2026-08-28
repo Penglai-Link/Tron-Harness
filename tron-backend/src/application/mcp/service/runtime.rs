@@ -66,6 +66,26 @@ pub(crate) struct RuntimeMcpWarning {
     pub message: String,
 }
 
+/// MCP servers may expose names containing dots, slashes, or other characters
+/// that are not accepted by the model tool-name contract. Keep the remote name
+/// in the binding, but expose a deterministic model-safe name at runtime.
+fn runtime_tool_name(server_code: &str, remote_tool_name: &str) -> String {
+    let mut name = String::from("mcp_");
+    for byte in server_code
+        .as_bytes()
+        .iter()
+        .chain(std::iter::once(&b'_'))
+        .chain(remote_tool_name.as_bytes())
+    {
+        if byte.is_ascii_alphanumeric() || *byte == b'_' || *byte == b'-' {
+            name.push(*byte as char);
+        } else {
+            name.push('_');
+        }
+    }
+    name
+}
+
 struct McpRuntimeToolDispatch {
     name: String,
     http_client: Client,
@@ -182,9 +202,9 @@ impl McpService {
                     };
 
                     for discovered_tool in discovered_tools {
-                        let tool_name = format!(
-                            "mcp.{}.{}",
-                            server.server_code, discovered_tool.remote_tool_name
+                        let tool_name = runtime_tool_name(
+                            &server.server_code,
+                            &discovered_tool.remote_tool_name,
                         );
                         let binding = RuntimeMcpToolBinding::StreamableHttp {
                             server_code: server.server_code.clone(),
@@ -235,9 +255,9 @@ impl McpService {
                     };
 
                     for discovered_tool in discovery.tools {
-                        let tool_name = format!(
-                            "mcp.{}.{}",
-                            server.server_code, discovered_tool.remote_tool_name
+                        let tool_name = runtime_tool_name(
+                            &server.server_code,
+                            &discovered_tool.remote_tool_name,
                         );
                         let binding = RuntimeMcpToolBinding::Stdio {
                             server_code: server.server_code.clone(),

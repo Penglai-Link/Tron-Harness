@@ -8,6 +8,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     vec![
         ToolCatalogDefinition {
             tool_code: "memory.search",
+            tool_name: "memory_search".into(),
             domain_code: "memory",
             name_i18n_key: "agent.toolCatalog.tools.memory.search.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.search.description",
@@ -59,6 +60,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "memory.save",
+            tool_name: "memory_save".into(),
             domain_code: "memory",
             name_i18n_key: "agent.toolCatalog.tools.memory.save.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.save.description",
@@ -97,6 +99,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "memory.delete",
+            tool_name: "memory_delete".into(),
             domain_code: "memory",
             name_i18n_key: "agent.toolCatalog.tools.memory.delete.name",
             description_i18n_key: "agent.toolCatalog.tools.memory.delete.description",
@@ -123,6 +126,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "todo.update",
+            tool_name: "todo_update".into(),
             domain_code: "memory",
             name_i18n_key: "agent.toolCatalog.tools.todo.update.name",
             description_i18n_key: "agent.toolCatalog.tools.todo.update.description",

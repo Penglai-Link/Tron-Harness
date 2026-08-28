@@ -78,7 +78,7 @@ fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
             &ModelResponse::from_tool_calls(vec![
                 ToolCall {
                     call_id: Some("call-write".into()),
-                    tool_name: "fs.write_text".into(),
+                    tool_name: "fs_write_text".into(),
                     input: json!({
                         "path": "long_running_test.sh",
                         "relativeTo": "workspaceRoot",
@@ -88,7 +88,7 @@ fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
                 },
                 ToolCall {
                     call_id: Some("call-discovery".into()),
-                    tool_name: "discovery.expand_tool_domain".into(),
+                    tool_name: "discovery_expand_tool_domain".into(),
                     input: json!({"domainCode": "fs"}),
                     input_error: None,
                 },
@@ -99,7 +99,7 @@ fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
         .record_tool_result(
             &first_context,
             &ToolObservation {
-                tool_name: "fs.write_text".into(),
+                tool_name: "fs_write_text".into(),
                 output: "tool input is invalid: missing field `content`".into(),
             },
             Some("call-write".into()),
@@ -111,10 +111,10 @@ fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
         .record_tool_result(
             &first_context,
             &ToolObservation {
-                tool_name: "discovery.expand_tool_domain".into(),
+                tool_name: "discovery_expand_tool_domain".into(),
                 output: json!({
                     "domain": {"domainCode": "fs"},
-                    "tools": [{"toolName": "fs.write_text"}]
+                    "tools": [{"toolName": "fs_write_text"}]
                 })
                 .to_string(),
             },
@@ -144,13 +144,13 @@ fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
         .expect("next run context should assemble");
 
     assert!(prepared.messages.iter().flat_map(|message| &message.parts).any(
-        |part| matches!(part, AgentMessagePart::ToolCall { tool_name, .. } if tool_name == "fs.write_text")
+        |part| matches!(part, AgentMessagePart::ToolCall { tool_name, .. } if tool_name == "fs_write_text")
     ));
     assert!(prepared.messages.iter().flat_map(|message| &message.parts).any(
-        |part| matches!(part, AgentMessagePart::ToolResult { tool_name, output, .. } if tool_name == "fs.write_text" && output.contains("missing field"))
+        |part| matches!(part, AgentMessagePart::ToolResult { tool_name, output, .. } if tool_name == "fs_write_text" && output.contains("missing field"))
     ));
     assert!(prepared.messages.iter().flat_map(|message| &message.parts).any(
-        |part| matches!(part, AgentMessagePart::ToolResult { tool_name, output, .. } if tool_name == "discovery.expand_tool_domain" && output.contains("fs.write_text"))
+        |part| matches!(part, AgentMessagePart::ToolResult { tool_name, output, .. } if tool_name == "discovery_expand_tool_domain" && output.contains("fs_write_text"))
     ));
 }
 
@@ -229,7 +229,7 @@ fn transcript_service_records_todos_and_compaction() {
             &context,
             &ModelResponse::from_tool_calls(vec![ToolCall {
                 call_id: Some("call-1".into()),
-                tool_name: "todo.update".into(),
+                tool_name: "todo_update".into(),
                 input: json!({"todos": []}),
                 input_error: None,
             }]),
@@ -3687,7 +3687,7 @@ fn auto_compaction_can_compress_same_run_early_tool_chain() {
                 &context,
                 &ModelResponse::from_tool_calls(vec![ToolCall {
                     call_id: Some(call_id.clone()),
-                    tool_name: "bash.exec".into(),
+                    tool_name: "bash_exec".into(),
                     input: json!({"command": format!("bad shell pipeline {index}")}),
                     input_error: None,
                 }]),
@@ -3704,7 +3704,7 @@ fn auto_compaction_can_compress_same_run_early_tool_chain() {
             .record_tool_result(
                 &context,
                 &ToolObservation {
-                    tool_name: "bash.exec".into(),
+                    tool_name: "bash_exec".into(),
                     output,
                 },
                 Some(call_id),
@@ -5428,7 +5428,7 @@ fn base_context(session_code: &str) -> AgentRunContext {
         variables: Vec::<EffectiveVariable>::new(),
         skills: Vec::<EffectiveSkill>::new(),
         tools: vec![EffectiveTool {
-            tool_name: "todo.update".into(),
+            tool_name: "todo_update".into(),
             domain_code: Some("memory".into()),
             description: "Update session todos".into(),
             input_schema: json!({}),

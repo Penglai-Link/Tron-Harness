@@ -38,7 +38,7 @@ pub use discovery::{
 
 pub fn tool_record_to_effective_tool(record: ToolCatalogRecord) -> EffectiveTool {
     EffectiveTool {
-        tool_name: record.tool_code,
+        tool_name: record.tool_name,
         domain_code: Some(record.domain_code),
         description: record.description,
         input_schema: record.input_schema,

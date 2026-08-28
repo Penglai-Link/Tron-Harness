@@ -18,6 +18,7 @@ pub(super) fn localize_tool_record(
 ) -> ToolCatalogRecord {
     ToolCatalogRecord {
         tool_code: definition.tool_code.to_string(),
+        tool_name: definition.tool_name,
         domain_code: definition.domain_code.to_string(),
         name: translate(locale, definition.name_i18n_key).to_string(),
         description: translate(locale, definition.description_i18n_key).to_string(),

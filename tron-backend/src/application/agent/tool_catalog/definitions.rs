@@ -16,6 +16,7 @@ pub(super) struct ToolDomainDefinition {
 #[derive(Debug, Clone)]
 pub(super) struct ToolCatalogDefinition {
     pub tool_code: &'static str,
+    pub(super) tool_name: String,
     pub domain_code: &'static str,
     pub name_i18n_key: &'static str,
     pub description_i18n_key: &'static str,

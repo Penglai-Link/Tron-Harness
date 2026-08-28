@@ -8,6 +8,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     vec![
         ToolCatalogDefinition {
             tool_code: "bash.exec",
+            tool_name: "bash_exec".into(),
             domain_code: "bash",
             name_i18n_key: "agent.toolCatalog.tools.bash.exec.name",
             description_i18n_key: "agent.toolCatalog.tools.bash.exec.description",
@@ -34,6 +35,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "fs.read_text",
+            tool_name: "fs_read_text".into(),
             domain_code: "fs",
             name_i18n_key: "agent.toolCatalog.tools.fs.read_text.name",
             description_i18n_key: "agent.toolCatalog.tools.fs.read_text.description",
@@ -59,6 +61,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "chat_attachment.read_text",
+            tool_name: "chat_attachment_read_text".into(),
             domain_code: "chat_attachment",
             name_i18n_key: "agent.toolCatalog.tools.chat_attachment.read_text.name",
             description_i18n_key: "agent.toolCatalog.tools.chat_attachment.read_text.description",
@@ -83,6 +86,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "chat_attachment.parse_json",
+            tool_name: "chat_attachment_parse_json".into(),
             domain_code: "chat_attachment",
             name_i18n_key: "agent.toolCatalog.tools.chat_attachment.parse_json.name",
             description_i18n_key: "agent.toolCatalog.tools.chat_attachment.parse_json.description",
@@ -107,6 +111,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "fs.write_text",
+            tool_name: "fs_write_text".into(),
             domain_code: "fs",
             name_i18n_key: "agent.toolCatalog.tools.fs.write_text.name",
             description_i18n_key: "agent.toolCatalog.tools.fs.write_text.description",
@@ -132,6 +137,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "fs.apply_patch",
+            tool_name: "fs_apply_patch".into(),
             domain_code: "fs",
             name_i18n_key: "agent.toolCatalog.tools.fs.apply_patch.name",
             description_i18n_key: "agent.toolCatalog.tools.fs.apply_patch.description",
@@ -158,6 +164,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "fs.list",
+            tool_name: "fs_list".into(),
             domain_code: "fs",
             name_i18n_key: "agent.toolCatalog.tools.fs.list.name",
             description_i18n_key: "agent.toolCatalog.tools.fs.list.description",
@@ -185,6 +192,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "fs.stat",
+            tool_name: "fs_stat".into(),
             domain_code: "fs",
             name_i18n_key: "agent.toolCatalog.tools.fs.stat.name",
             description_i18n_key: "agent.toolCatalog.tools.fs.stat.description",
@@ -208,6 +216,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "search.grep",
+            tool_name: "search_grep".into(),
             domain_code: "search",
             name_i18n_key: "agent.toolCatalog.tools.search.grep.name",
             description_i18n_key: "agent.toolCatalog.tools.search.grep.description",
@@ -236,6 +245,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "search.glob",
+            tool_name: "search_glob".into(),
             domain_code: "search",
             name_i18n_key: "agent.toolCatalog.tools.search.glob.name",
             description_i18n_key: "agent.toolCatalog.tools.search.glob.description",
@@ -261,6 +271,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
         },
         ToolCatalogDefinition {
             tool_code: "search.path",
+            tool_name: "search_path".into(),
             domain_code: "search",
             name_i18n_key: "agent.toolCatalog.tools.search.path.name",
             description_i18n_key: "agent.toolCatalog.tools.search.path.description",

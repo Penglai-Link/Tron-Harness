@@ -18,7 +18,7 @@ struct ServerCreateInput {
 
 impl Tool for ServerCreateTool {
     fn name(&self) -> &str {
-        "resource.server.create"
+        "resource_server_create"
     }
 
     fn exec(
@@ -66,7 +66,7 @@ struct ServerAccountCreateToolInput {
 
 impl Tool for ServerAccountCreateTool {
     fn name(&self) -> &str {
-        "resource.server_account.create"
+        "resource_server_account_create"
     }
 
     fn exec(

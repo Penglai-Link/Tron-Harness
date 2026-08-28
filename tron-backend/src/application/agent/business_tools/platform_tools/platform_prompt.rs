@@ -52,7 +52,7 @@ struct PlatformPromptPageInput {
 
 impl Tool for PlatformPromptPageTool {
     fn name(&self) -> &str {
-        "platform.prompt.page"
+        "platform_prompt_page"
     }
 
     fn exec(
@@ -89,7 +89,7 @@ struct PlatformPromptCodeInput {
 
 impl Tool for PlatformPromptGetTool {
     fn name(&self) -> &str {
-        "platform.prompt.get"
+        "platform_prompt_get"
     }
 
     fn exec(
@@ -124,7 +124,7 @@ struct PlatformPromptCreateInput {
 
 impl Tool for PlatformPromptCreateTool {
     fn name(&self) -> &str {
-        "platform.prompt.create"
+        "platform_prompt_create"
     }
 
     fn exec(
@@ -164,7 +164,7 @@ struct PlatformPromptUpdateInput {
 
 impl Tool for PlatformPromptUpdateTool {
     fn name(&self) -> &str {
-        "platform.prompt.update"
+        "platform_prompt_update"
     }
 
     fn exec(
@@ -204,7 +204,7 @@ struct PlatformPromptDeleteTool {
 
 impl Tool for PlatformPromptDeleteTool {
     fn name(&self) -> &str {
-        "platform.prompt.delete"
+        "platform_prompt_delete"
     }
 
     fn exec(

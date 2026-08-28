@@ -63,7 +63,7 @@ fn attachment_context_text(attachment: &ChatMessageAttachment) -> String {
         .resource_code
         .as_deref()
         .map(|_| {
-            "\nThis is a session attachment, not a workspace path. For complete access use chat_attachment.read_text with attachmentCode for byte chunks, or chat_attachment.parse_json for full JSON parsing."
+            "\nThis is a session attachment, not a workspace path. For complete access use chat_attachment_read_text with attachmentCode for byte chunks, or chat_attachment_parse_json for full JSON parsing."
         })
         .unwrap_or_default();
     format!(

@@ -13,7 +13,7 @@ struct ResourceDeleteInput {
 
 impl Tool for ResourceDeleteTool {
     fn name(&self) -> &str {
-        "resource.delete"
+        "resource_delete"
     }
 
     fn exec(
@@ -63,7 +63,7 @@ enum ResourceBinaryAction {
 
 impl Tool for ResourceBinaryTool {
     fn name(&self) -> &str {
-        "resource.binary"
+        "resource_binary"
     }
 
     fn exec(

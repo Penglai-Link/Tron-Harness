@@ -241,10 +241,10 @@ async fn main_agent_default_all_platform_tools_injects_memory_tools() {
     let requests = recorded_requests(&model_server);
     assert_eq!(requests.len(), 1);
     let tool_names = tool_names_in_request(&requests[0]);
-    assert!(tool_names.contains(&"memory.search".to_string()));
-    assert!(tool_names.contains(&"memory.save".to_string()));
-    assert!(tool_names.contains(&"memory.delete".to_string()));
-    assert!(tool_names.contains(&"automation.create".to_string()));
+    assert!(tool_names.contains(&"memory_search".to_string()));
+    assert!(tool_names.contains(&"memory_save".to_string()));
+    assert!(tool_names.contains(&"memory_delete".to_string()));
+    assert!(tool_names.contains(&"automation_create".to_string()));
 }
 
 #[tokio::test]
@@ -311,9 +311,9 @@ async fn selected_tools_without_memory_selection_does_not_inject_memory_tools() 
     let requests = recorded_requests(&model_server);
     assert_eq!(requests.len(), 1);
     let tool_names = tool_names_in_request(&requests[0]);
-    assert!(!tool_names.contains(&"memory.search".to_string()));
-    assert!(!tool_names.contains(&"memory.save".to_string()));
-    assert!(!tool_names.contains(&"memory.delete".to_string()));
+    assert!(!tool_names.contains(&"memory_search".to_string()));
+    assert!(!tool_names.contains(&"memory_save".to_string()));
+    assert!(!tool_names.contains(&"memory_delete".to_string()));
 }
 
 #[tokio::test]
@@ -388,10 +388,10 @@ async fn selected_tools_only_injects_selected_memory_tools() {
     let requests = recorded_requests(&model_server);
     assert_eq!(requests.len(), 1);
     let tool_names = tool_names_in_request(&requests[0]);
-    assert!(tool_names.contains(&"memory.search".to_string()));
-    assert!(tool_names.contains(&"workspace.page".to_string()));
-    assert!(!tool_names.contains(&"memory.save".to_string()));
-    assert!(!tool_names.contains(&"memory.delete".to_string()));
+    assert!(tool_names.contains(&"memory_search".to_string()));
+    assert!(tool_names.contains(&"workspace_page".to_string()));
+    assert!(!tool_names.contains(&"memory_save".to_string()));
+    assert!(!tool_names.contains(&"memory_delete".to_string()));
 }
 
 #[test]
@@ -491,7 +491,7 @@ async fn unauthorized_memory_tool_call_is_rejected_without_aborting_run() {
     );
     let requests = recorded_requests(&model_server);
     assert_eq!(requests.len(), 2);
-    assert_json_mentions(&requests[1]["messages"], "memory.delete");
+    assert_json_mentions(&requests[1]["messages"], "memory_delete");
     assert_json_mentions(&requests[1]["messages"], "is not allowed");
 }
 
@@ -672,7 +672,7 @@ async fn memory_search_allows_empty_query_without_memory_code() {
             .iter()
             .map(|observation| observation.tool_name.as_str())
             .collect::<Vec<_>>(),
-        vec!["memory.save", "memory.search"]
+        vec!["memory_save", "memory_search"]
     );
     assert_json_mentions(&observations[1].output, WORK_DOMAIN_MEMORY_CODE);
     assert!(
@@ -776,7 +776,7 @@ async fn memory_search_observation_stays_under_event_bus_limit_with_governance_m
     let search_observation = observations
         .last()
         .expect("final memory observation should be the compact search");
-    assert_eq!(search_observation.tool_name, "memory.search");
+    assert_eq!(search_observation.tool_name, "memory_search");
     assert_eq!(result_count(&search_observation.output), Some(7));
     assert_memory_search_observation_is_slim(search_observation);
 }
@@ -871,7 +871,7 @@ async fn memory_context_pack_merges_baseline_injectable_and_query_related_memori
             .iter()
             .map(|observation| observation.tool_name.as_str())
             .collect::<Vec<_>>(),
-        vec!["memory.save", "memory.save", "memory.search"]
+        vec!["memory_save", "memory_save", "memory_search"]
     );
     let search_observation = &observations[2];
     assert_eq!(result_count(&search_observation.output), Some(2));
@@ -990,7 +990,7 @@ async fn memory_code_upsert_loads_current_without_default_governance_filters() {
             .iter()
             .map(|observation| observation.tool_name.as_str())
             .collect::<Vec<_>>(),
-        vec!["memory.save", "memory.save", "memory.search"]
+        vec!["memory_save", "memory_save", "memory_search"]
     );
     assert_json_mentions_any(&observations[0].output, &["CREATED", "created"]);
     assert_json_mentions_any(&observations[1].output, &["UPDATED", "updated"]);
@@ -1198,12 +1198,12 @@ async fn memory_code_save_update_delete_search_observations_are_sanitized() {
             .map(|observation| observation.tool_name.as_str())
             .collect::<Vec<_>>(),
         vec![
-            "memory.save",
-            "memory.save",
-            "memory.search",
-            "memory.search",
-            "memory.delete",
-            "memory.search"
+            "memory_save",
+            "memory_save",
+            "memory_search",
+            "memory_search",
+            "memory_delete",
+            "memory_search"
         ]
     );
 
@@ -1437,6 +1437,7 @@ fn agent_run_payload(base_url: &str, tools: Option<Vec<Value>>, limits: Value) -
 }
 
 fn effective_tool(tool_name: &str) -> Value {
+    let tool_name = tool_name.replace('.', "_");
     json!({
         "toolName": tool_name,
         "domainCode": "memory",
@@ -1465,6 +1466,7 @@ fn final_response(content: impl Into<String>) -> Value {
 }
 
 fn tool_call_response(tool_name: &str, input: Value) -> Value {
+    let tool_name = tool_name.replace('.', "_");
     json!({
         "choices": [{
             "message": {
@@ -1546,7 +1548,7 @@ fn parse_memory_observation_message(
     if message["role"] == json!("tool") {
         let call_id = message["tool_call_id"].as_str()?;
         let tool_name = call_names.get(call_id)?;
-        if !tool_name.starts_with("memory.") {
+        if !tool_name.starts_with("memory_") {
             return None;
         }
         let output = message["content"].as_str()?;
@@ -1566,7 +1568,7 @@ fn parse_memory_observation_message(
 fn parse_memory_observation(content: &str) -> Option<ParsedObservation> {
     let (tool_line, output) = content.split_once("\nresult:\n")?;
     let tool_name = tool_line.strip_prefix("tool:")?;
-    if !tool_name.starts_with("memory.") {
+    if !tool_name.starts_with("memory_") {
         return None;
     }
     let output = serde_json::from_str(output)

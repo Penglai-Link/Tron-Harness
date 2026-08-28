@@ -40,7 +40,7 @@ struct SkillPageInput {
 
 impl Tool for SkillPageTool {
     fn name(&self) -> &str {
-        "skill.page"
+        "skill_page"
     }
 
     fn exec(
@@ -81,7 +81,7 @@ struct SkillViewInput {
 
 impl Tool for SkillViewTool {
     fn name(&self) -> &str {
-        "skill.view"
+        "skill_view"
     }
 
     fn exec(

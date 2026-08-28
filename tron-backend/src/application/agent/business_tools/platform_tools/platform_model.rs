@@ -52,7 +52,7 @@ struct PlatformModelPageInput {
 
 impl Tool for PlatformModelPageTool {
     fn name(&self) -> &str {
-        "platform.model.page"
+        "platform_model_page"
     }
 
     fn exec(
@@ -102,7 +102,7 @@ struct PlatformModelCodeInput {
 
 impl Tool for PlatformModelGetTool {
     fn name(&self) -> &str {
-        "platform.model.get"
+        "platform_model_get"
     }
 
     fn exec(
@@ -133,7 +133,7 @@ struct PlatformModelCreateInput {
 
 impl Tool for PlatformModelCreateTool {
     fn name(&self) -> &str {
-        "platform.model.create"
+        "platform_model_create"
     }
 
     fn exec(
@@ -165,7 +165,7 @@ struct PlatformModelUpdateInput {
 
 impl Tool for PlatformModelUpdateTool {
     fn name(&self) -> &str {
-        "platform.model.update"
+        "platform_model_update"
     }
 
     fn exec(
@@ -204,7 +204,7 @@ struct PlatformModelDeleteTool {
 
 impl Tool for PlatformModelEnableTool {
     fn name(&self) -> &str {
-        "platform.model.enable"
+        "platform_model_enable"
     }
 
     fn exec(
@@ -223,7 +223,7 @@ impl Tool for PlatformModelEnableTool {
 
 impl Tool for PlatformModelDisableTool {
     fn name(&self) -> &str {
-        "platform.model.disable"
+        "platform_model_disable"
     }
 
     fn exec(
@@ -242,7 +242,7 @@ impl Tool for PlatformModelDisableTool {
 
 impl Tool for PlatformModelDeleteTool {
     fn name(&self) -> &str {
-        "platform.model.delete"
+        "platform_model_delete"
     }
 
     fn exec(

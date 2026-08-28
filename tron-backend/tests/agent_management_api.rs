@@ -801,7 +801,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "discovery.expand_tool_domain",
+                            "name": "discovery_expand_tool_domain",
                             "arguments": "{\"domainCode\":\"workspace\"}"
                         }
                     }]
@@ -814,7 +814,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "workspace.page",
+                            "name": "workspace_page",
                             "arguments": "{}"
                         }
                     }]
@@ -888,7 +888,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     assert_eq!(first_tools.len(), 1);
     assert_eq!(
         first_tools[0]["function"]["name"],
-        json!("discovery.expand_tool_domain")
+        json!("discovery_expand_tool_domain")
     );
     let first_messages = recorded_requests[0]["messages"]
         .as_array()
@@ -912,23 +912,23 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     assert!(
         second_tools
             .iter()
-            .any(|tool| { tool["function"]["name"] == json!("discovery.expand_tool_domain") })
+            .any(|tool| { tool["function"]["name"] == json!("discovery_expand_tool_domain") })
     );
     assert!(
         second_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("workspace.page"))
+            .any(|tool| tool["function"]["name"] == json!("workspace_page"))
     );
     assert!(
         second_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("workspace.get"))
+            .any(|tool| tool["function"]["name"] == json!("workspace_get"))
     );
     for removed_tool in [
-        "workspace.create",
-        "workspace.update",
-        "workspace.delete",
-        "workspace.restore",
+        "workspace_create",
+        "workspace_update",
+        "workspace_delete",
+        "workspace_restore",
     ] {
         assert!(
             second_tools
@@ -944,7 +944,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         message["role"] == json!("user")
             && message["content"]
                 .as_str()
-                .is_some_and(|content| content.contains("discovery.expand_tool_domain"))
+                .is_some_and(|content| content.contains("discovery_expand_tool_domain"))
     }));
 
     let third_messages = recorded_requests[2]["messages"]
@@ -954,7 +954,7 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         message["role"] == json!("user")
             && message["content"]
                 .as_str()
-                .is_some_and(|content| content.contains("workspace.page"))
+                .is_some_and(|content| content.contains("workspace_page"))
     }));
 }
 
@@ -973,13 +973,13 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
                     "tool_calls": [
                         {
                             "function": {
-                                "name": "fs.write_text",
+                                "name": "fs_write_text",
                                 "arguments": "{\"path\":\"long_running_test.sh\",\"relativeTo\":\"workspaceRoot\",\"text\":\"echo test\"}"
                             }
                         },
                         {
                             "function": {
-                                "name": "discovery.expand_tool_domain",
+                                "name": "discovery_expand_tool_domain",
                                 "arguments": "{\"domainCode\":\"fs\"}"
                             }
                         }
@@ -1054,7 +1054,7 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
     assert_eq!(first_tools.len(), 1);
     assert_eq!(
         first_tools[0]["function"]["name"],
-        json!("discovery.expand_tool_domain")
+        json!("discovery_expand_tool_domain")
     );
 
     let second_tools = recorded_requests[1]["tools"]
@@ -1063,11 +1063,11 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
     assert!(
         second_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("fs.write_text"))
+            .any(|tool| tool["function"]["name"] == json!("fs_write_text"))
     );
     let second_request = recorded_requests[1].to_string();
     assert!(second_request.contains("tool input is invalid"));
-    assert!(second_request.contains("fs.write_text"));
+    assert!(second_request.contains("fs_write_text"));
     assert!(!second_request.contains("is not allowed"));
 }
 
@@ -1101,7 +1101,7 @@ Progressive disclosure instructions loaded.\n",
     .expect("test skill markdown should be written");
     std::fs::write(
         skill_dir.join("references").join("checklist.md"),
-        "Confirm the selected skill details are loaded only after skill.view.\n",
+        "Confirm the selected skill details are loaded only after skill_view.\n",
     )
     .expect("test skill reference should be written");
 
@@ -1112,7 +1112,7 @@ Progressive disclosure instructions loaded.\n",
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "skill.view",
+                            "name": "skill_view",
                             "arguments": "{\"skillName\":\"progressive-reviewer\"}"
                         }
                     }]
@@ -1215,7 +1215,7 @@ Progressive disclosure instructions loaded.\n",
     assert!(
         first_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("skill.view"))
+            .any(|tool| tool["function"]["name"] == json!("skill_view"))
     );
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
@@ -1223,7 +1223,7 @@ Progressive disclosure instructions loaded.\n",
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
             && message["content"].as_str().is_some_and(|content| {
-                content.contains("skill.view")
+                content.contains("skill_view")
                     && content.contains("Progressive disclosure instructions loaded.")
                     && content.contains("references/checklist.md")
             })
@@ -1290,7 +1290,7 @@ async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schem
     assert_eq!(tools.len(), 1);
     assert_eq!(
         tools[0]["function"]["name"],
-        json!("discovery.expand_tool_domain")
+        json!("discovery_expand_tool_domain")
     );
     assert_eq!(
         tools[0]["function"]["description"],
@@ -1841,7 +1841,7 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "workspace.page",
+                            "name": "workspace_page",
                             "arguments": "{}"
                         }
                     }]
@@ -1929,7 +1929,7 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "mcp.knowledge_tools.search_docs",
+                            "name": "mcp_knowledge_tools_search_docs",
                             "arguments": "{\"query\":\"snapshot\"}"
                         }
                     }]
@@ -2045,7 +2045,7 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
     assert!(
         first_run_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("mcp.knowledge_tools.search_docs"))
+            .any(|tool| tool["function"]["name"] == json!("mcp_knowledge_tools_search_docs"))
     );
 
     let recorded_mcp_requests = mcp_requests
@@ -2096,7 +2096,7 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
     assert!(
         second_run_tools
             .iter()
-            .all(|tool| tool["function"]["name"] != json!("mcp.knowledge_tools.search_docs"))
+            .all(|tool| tool["function"]["name"] != json!("mcp_knowledge_tools_search_docs"))
     );
 }
 
@@ -2124,40 +2124,40 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                     "tool_calls": [
                         {
                             "function": {
-                                "name": "bash.exec",
+                                "name": "bash_exec",
                                 "arguments": serde_json::to_string(&json!({
                                     "command": "sed",
                                     "args": ["-n", "1,1p", cargo_toml.display().to_string()]
-                                })).expect("bash.exec arguments should serialize")
+                                })).expect("bash_exec arguments should serialize")
                             }
                         },
                         {
                             "function": {
-                                "name": "fs.read_text",
+                                "name": "fs_read_text",
                                 "arguments": serde_json::to_string(&json!({
                                     "path": lib_rs.display().to_string(),
                                     "startLine": 1,
                                     "endLine": 1
-                                })).expect("fs.read_text arguments should serialize")
+                                })).expect("fs_read_text arguments should serialize")
                             }
                         },
                         {
                             "function": {
-                                "name": "search.glob",
+                                "name": "search_glob",
                                 "arguments": serde_json::to_string(&json!({
                                     "patterns": ["*.rs"],
                                     "root": workspace_dir.display().to_string()
-                                })).expect("search.glob arguments should serialize")
+                                })).expect("search_glob arguments should serialize")
                             }
                         },
                         {
                             "function": {
-                                "name": "search.path",
+                                "name": "search_path",
                                 "arguments": serde_json::to_string(&json!({
                                     "patterns": ["src"],
                                     "root": workspace_dir.display().to_string(),
                                     "entryType": "directory"
-                                })).expect("search.path arguments should serialize")
+                                })).expect("search_path arguments should serialize")
                             }
                         }
                     ]
@@ -2217,22 +2217,22 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     assert!(
         first_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("bash.exec"))
+            .any(|tool| tool["function"]["name"] == json!("bash_exec"))
     );
     assert!(
         first_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("fs.read_text"))
+            .any(|tool| tool["function"]["name"] == json!("fs_read_text"))
     );
     assert!(
         first_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("search.glob"))
+            .any(|tool| tool["function"]["name"] == json!("search_glob"))
     );
     assert!(
         first_tools
             .iter()
-            .any(|tool| tool["function"]["name"] == json!("search.path"))
+            .any(|tool| tool["function"]["name"] == json!("search_path"))
     );
 
     let second_messages = recorded_requests[1]["messages"]
@@ -2241,26 +2241,26 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
             && message["content"].as_str().is_some_and(|content| {
-                content.contains("bash.exec") && content.contains("[package]")
+                content.contains("bash_exec") && content.contains("[package]")
             })
     }));
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
             && message["content"].as_str().is_some_and(|content| {
-                content.contains("fs.read_text") && content.contains("ToolRegistry")
+                content.contains("fs_read_text") && content.contains("ToolRegistry")
             })
     }));
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
             && message["content"].as_str().is_some_and(|content| {
-                content.contains("search.glob") && content.contains("src/lib.rs")
+                content.contains("search_glob") && content.contains("src/lib.rs")
             })
     }));
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
             && message["content"]
                 .as_str()
-                .is_some_and(|content| content.contains("search.path") && content.contains("src"))
+                .is_some_and(|content| content.contains("search_path") && content.contains("src"))
     }));
 }
 
@@ -2327,41 +2327,41 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
                     "tool_calls": [
                         {
                             "function": {
-                                "name": "app.page",
+                                "name": "app_page",
                                 "arguments": serde_json::to_string(&json!({
                                     "workspaceCode": "TRON_CORE",
                                     "current": huge_current,
                                     "size": 100
-                                })).expect("app.page arguments should serialize")
+                                })).expect("app_page arguments should serialize")
                             }
                         },
                         {
                             "function": {
-                                "name": "task.page",
+                                "name": "task_page",
                                 "arguments": serde_json::to_string(&json!({
                                     "workspaceCode": "TRON_CORE",
                                     "current": huge_current,
                                     "size": 100
-                                })).expect("task.page arguments should serialize")
+                                })).expect("task_page arguments should serialize")
                             }
                         },
                         {
                             "function": {
-                                "name": "app.update",
+                                "name": "app_update",
                                 "arguments": serde_json::to_string(&json!({
                                     "workspaceCode": "ENTERPRISE",
                                     "appCode": app_code.clone(),
                                     "name": "Cross Workspace Mutation"
-                                })).expect("app.update arguments should serialize")
+                                })).expect("app_update arguments should serialize")
                             }
                         },
                         {
                             "function": {
-                                "name": "task.delete",
+                                "name": "task_delete",
                                 "arguments": serde_json::to_string(&json!({
                                     "workspaceCode": "ENTERPRISE",
                                     "taskCode": task_code.clone()
-                                })).expect("task.delete arguments should serialize")
+                                })).expect("task_delete arguments should serialize")
                             }
                         }
                     ]
@@ -2420,16 +2420,16 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
         .filter_map(|message| message["content"].as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(tool_results.contains("tool:app.page"));
-    assert!(tool_results.contains("tool:task.page"));
+    assert!(tool_results.contains("tool:app_page"));
+    assert!(tool_results.contains("tool:task_page"));
     assert!(tool_results.contains(&format!("\"current\":{huge_current}")));
     assert!(tool_results.contains("\"records\":[]"));
-    assert!(tool_results.contains("tool:app.update"));
+    assert!(tool_results.contains("tool:app_update"));
     assert!(
         tool_results
             .contains("workspaceCode `ENTERPRISE` does not match app workspace `TRON_CORE`")
     );
-    assert!(tool_results.contains("tool:task.delete"));
+    assert!(tool_results.contains("tool:task_delete"));
     assert!(
         tool_results
             .contains("workspaceCode `ENTERPRISE` does not match task workspace `TRON_CORE`")
@@ -2502,14 +2502,14 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "task.update",
+                            "name": "task_update",
                             "arguments": serde_json::to_string(&json!({
                                 "workspaceCode": "TRON_CORE",
                                 "taskCode": task_code.clone(),
                                 "title": "Should Not Persist",
                                 "status": "in_progress",
                                 "progress": 40
-                            })).expect("task.update arguments should serialize")
+                            })).expect("task_update arguments should serialize")
                         }
                     }]
                 }
@@ -2562,7 +2562,7 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
         .filter_map(|message| message["content"].as_str())
         .collect::<Vec<_>>()
         .join("\n");
-    assert!(tool_results.contains("tool:task.update"));
+    assert!(tool_results.contains("tool:task_update"));
     assert!(tool_results.contains("task status does not match the inferred task role"));
 
     let task_detail = request_with_headers(

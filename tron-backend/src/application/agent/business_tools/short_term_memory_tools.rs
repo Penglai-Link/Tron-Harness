@@ -21,7 +21,7 @@ struct TodoUpdateTool {
 
 impl Tool for TodoUpdateTool {
     fn name(&self) -> &str {
-        "todo.update"
+        "todo_update"
     }
 
     fn exec(
@@ -30,7 +30,7 @@ impl Tool for TodoUpdateTool {
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
         let command: ReplaceTodosCommand = serde_json::from_value(request.input)
-            .map_err(|_| ToolError::ExecutionFailed("todo.update input is invalid".into()))?;
+            .map_err(|_| ToolError::ExecutionFailed("todo_update input is invalid".into()))?;
         let todos = self
             .short_term_memory
             .replace_todos(context, command.todos)
@@ -44,7 +44,7 @@ impl Tool for TodoUpdateTool {
             "todos": todos,
         }))
         .map_err(|_| {
-            ToolError::ExecutionFailed("todo.update output serialization failed".into())
+            ToolError::ExecutionFailed("todo_update output serialization failed".into())
         })?;
         Ok(ToolExecutionResult::observation(ToolObservation {
             tool_name: self.name().into(),

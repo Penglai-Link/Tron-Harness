@@ -61,7 +61,7 @@ struct TaskPageInput {
 
 impl Tool for TaskPageTool {
     fn name(&self) -> &str {
-        "task.page"
+        "task_page"
     }
 
     fn exec(
@@ -122,7 +122,7 @@ struct TaskCreateInput {
 
 impl Tool for TaskCreateTool {
     fn name(&self) -> &str {
-        "task.create"
+        "task_create"
     }
 
     fn exec(
@@ -189,7 +189,7 @@ struct TaskUpdateInput {
 
 impl Tool for TaskUpdateTool {
     fn name(&self) -> &str {
-        "task.update"
+        "task_update"
     }
 
     fn exec(
@@ -266,7 +266,7 @@ struct TaskCodeInput {
 
 impl Tool for TaskDeleteTool {
     fn name(&self) -> &str {
-        "task.delete"
+        "task_delete"
     }
 
     fn exec(
@@ -296,7 +296,7 @@ struct TaskRestoreTool {
 
 impl Tool for TaskRestoreTool {
     fn name(&self) -> &str {
-        "task.restore"
+        "task_restore"
     }
 
     fn exec(

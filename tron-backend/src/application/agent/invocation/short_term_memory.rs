@@ -76,7 +76,7 @@ fn resolve_todo_enabled(context: &AgentRunContext) -> bool {
     let visible_tools_contain_todo = context
         .tools
         .iter()
-        .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo.update"));
+        .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update"));
     if visible_tools_contain_todo {
         return true;
     }
@@ -85,9 +85,9 @@ fn resolve_todo_enabled(context: &AgentRunContext) -> bool {
     }
     context
         .tool_exposure
-        .hidden_tools
-        .iter()
-        .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo.update"))
+            .hidden_tools
+            .iter()
+            .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update"))
 }
 
 #[cfg(test)]
@@ -111,7 +111,7 @@ mod tests {
                 ExpandedDomainPersistenceMode::EphemeralExpanded,
             ),
             visible_domains: Vec::new(),
-            hidden_tools: vec![tool("todo.update")],
+            hidden_tools: vec![tool("todo_update")],
             expanded_domain_codes: Vec::new(),
         };
 
@@ -125,7 +125,7 @@ mod tests {
             tool_exposure_mode: Some(ToolExposureMode::DirectList),
             expanded_domain_persistence_mode: None,
             visible_domains: Vec::new(),
-            hidden_tools: vec![tool("todo.update")],
+            hidden_tools: vec![tool("todo_update")],
             expanded_domain_codes: Vec::new(),
         };
 
