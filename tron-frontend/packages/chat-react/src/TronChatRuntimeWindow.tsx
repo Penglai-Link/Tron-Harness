@@ -58,6 +58,7 @@ export interface TronChatRuntimeWindowProps {
   config: ChatClientConfig;
   composerRef?: Ref<HTMLTextAreaElement>;
   composerHeader?: ReactNode;
+  createSessionLabel?: string;
   currentUserDisplayName?: string;
   draft?: string;
   debugOptions?: ChatDebugOptions;
@@ -164,6 +165,7 @@ export function TronChatRuntimeWindow({
   composerHeader,
   config,
   composerRef,
+  createSessionLabel = "Start chat",
   currentUserDisplayName,
   draft: controlledDraft,
   debugOptions,
@@ -1380,7 +1382,7 @@ export function TronChatRuntimeWindow({
       autoFocusComposer={autoFocusComposer}
       composerRef={composerRef}
       composerHeader={composerHeader ?? pendingAttachmentHeader}
-      createSessionLabel="Start chat"
+      createSessionLabel={createSessionLabel}
       currentUserDisplayName={currentUserDisplayName}
       debugOptions={resolvedDebugOptions}
       disabledInput={Boolean(config.disabledInput) || userInputRequest?.status === "Pending"}

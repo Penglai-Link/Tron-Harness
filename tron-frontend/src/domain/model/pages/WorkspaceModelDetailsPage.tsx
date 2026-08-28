@@ -164,7 +164,7 @@ export function WorkspaceModelDetailsPage() {
           : getWorkspaceModelCatalog(activeWorkspaceCode);
         if (active) setRecords(nextCatalog.records);
       } catch (error) {
-        if (active) toast.error(error instanceof Error ? error.message : "Workspace models could not be loaded");
+        if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Workspace models could not be loaded"));
       } finally {
         if (active) setLoading(false);
       }
@@ -355,7 +355,7 @@ export function WorkspaceModelDetailsPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Models", href: "/models" }, { label: selectedRecord.displayName }]}
+        breadcrumbs={[{ label: pageT("title", "Models"), href: "/models" }, { label: selectedRecord.displayName }]}
         title={selectedRecord.displayName}
         actions={editing ? (
           <>
@@ -509,13 +509,13 @@ export function WorkspaceModelDetailsPage() {
               </Field>
               <Field label={t("common:reasoningEffort.supportedLabel", "Supported reasoning efforts")}>
                 <ReadValue>
-                  {selectedRecord.supportedReasoningEfforts.map(formatReasoningEffort).join(", ")}
+                  {selectedRecord.supportedReasoningEfforts.map((effort) => pageT(`reasoning.${effort}`, formatReasoningEffort(effort))).join(", ")}
                 </ReadValue>
               </Field>
               <Field label={t("common:reasoningEffort.defaultLabel", "Default reasoning effort")}>
                 <ReadValue>
                   {selectedRecord.defaultReasoningEffort
-                    ? formatReasoningEffort(selectedRecord.defaultReasoningEffort)
+                    ? pageT(`reasoning.${selectedRecord.defaultReasoningEffort}`, formatReasoningEffort(selectedRecord.defaultReasoningEffort))
                     : t("common:reasoningEffort.providerDefault", "Provider default")}
                 </ReadValue>
               </Field>

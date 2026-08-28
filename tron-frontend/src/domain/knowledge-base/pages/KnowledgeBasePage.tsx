@@ -5,7 +5,6 @@ import {
   BookCopy,
   Database,
   FolderSync,
-  Search,
   Sparkles,
 } from "lucide-react";
 
@@ -274,36 +273,6 @@ export function KnowledgeBasePage() {
         />
       </div>
 
-      <SurfaceCard className="mt-5">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex min-w-0 flex-1 items-center gap-3">
-            <div className="relative min-w-[280px] flex-1">
-              <Search className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-[var(--color-on-surface-variant)]" size={15} aria-hidden="true" />
-              <TextInput
-                placeholder={pageT("filters.searchPlaceholder", "Search knowledge bases, workspaces, or retrieval profiles...")}
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-            <SelectInput
-              className="min-w-[180px]"
-              value={statusFilter}
-              onValueChange={(event) => setStatusFilter(event! as (typeof statusFilters)[number])}
-            >
-              {statusFilters.map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status === "All" ? pageT("filters.allStatuses", "All statuses") : pageT(`status.${status}`, status)}
-                </SelectItem>
-              ))}
-            </SelectInput>
-          </div>
-          <p className="text-sm text-[var(--color-on-surface-variant)]">
-            {pageT("description", "Traditional RAG libraries with ingestion, chunking, retrieval profiles, and freshness controls.")}
-          </p>
-        </div>
-      </SurfaceCard>
-
       <div className="mt-5">
         <SurfaceCard className="p-0">
           <DataTable
@@ -315,9 +284,37 @@ export function KnowledgeBasePage() {
               knowledgeBase.id === selectedKnowledgeBase?.id ? "bg-[var(--color-surface-container-low)]" : undefined
             )}
             toolbar={(
-              <span className="text-[13px] text-[var(--color-on-surface-variant)]">
-                {pageT("catalog.visibleLibraries", "{{count}} visible libraries", { count: filteredKnowledgeBases.length })}
-              </span>
+              <div className="flex w-full flex-col items-end gap-2">
+                <div className="flex items-center gap-2">
+                  <div className="min-w-[310px]">
+                    <TextInput
+                      placeholder={pageT("filters.searchPlaceholder", "Search knowledge bases, retrieval...")}
+                      type="search"
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                    />
+                  </div>
+                  <SelectInput
+                    className="min-w-[180px]"
+                    value={statusFilter}
+                    onValueChange={(event) => setStatusFilter(event! as (typeof statusFilters)[number])}
+                  >
+                    {statusFilters.map((status) => (
+                      <SelectItem key={status} value={status}>
+                        {status === "All" ? pageT("filters.allStatuses", "All statuses") : pageT(`status.${status}`, status)}
+                      </SelectItem>
+                    ))}
+                  </SelectInput>
+                </div>
+                <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-[13px] text-[var(--color-on-surface-variant)]">
+                  <span>
+                    {pageT("catalog.visibleLibraries", "{{count}} visible libraries", { count: filteredKnowledgeBases.length })}
+                  </span>
+                  <span className="text-sm">
+                    {pageT("description", "Traditional RAG libraries with ingestion, chunking, retrieval profiles, and freshness controls.")}
+                  </span>
+                </div>
+              </div>
             )}
             columns={[
               {

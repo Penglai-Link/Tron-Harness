@@ -138,26 +138,23 @@ export function RagProfilesTab({
   return (
     <>
       <SurfaceCard className="p-0">
-        <div className="border-b border-[var(--color-outline-variant)] p-4 flex items-center justify-between">
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <h2 className="text-base font-semibold">{pageT("title", "Retrieval profiles")}</h2>
-          </div>
-          <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_auto] md:items-center">
-            <div className="relative min-w-0">
-              <TextInput
-                placeholder={pageT("searchPlaceholder", "Search retrieval profiles, corpora, routes, or strategies...")}
-                type="search"
-                value={query}
-                onChange={(event) => setQuery(event.target.value)}
-              />
-            </div>
-            <Button size={'lg'} onClick={openAddProfile}>
-              {pageT("actions.newRetrieval", "New retrieval profile")}
-            </Button>
-          </div>
-        </div>
-
         <DataTable<RetrievalProfileRecord>
+          title={pageT("title", "Retrieval profiles")}
+          toolbar={(
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-[350px]">
+                <TextInput
+                  placeholder={pageT("searchPlaceholder", "Search retrieval profiles, corpora, routes...")}
+                  type="search"
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                />
+              </div>
+              <Button size={'lg'} onClick={openAddProfile}>
+                {pageT("actions.newRetrieval", "New retrieval profile")}
+              </Button>
+            </div>
+          )}
           rows={retrievalPagination.visibleItems}
           rowKey={(profile) => profile.id}
           variant="embedded"

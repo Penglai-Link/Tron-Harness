@@ -450,13 +450,13 @@ export function PlatformModelDetailsPage() {
               </Field>
               <Field label={t("common:reasoningEffort.supportedLabel", "Supported reasoning efforts")}>
                 <ReadValue>
-                  {selectedRecord.supportedReasoningEfforts.map(formatReasoningEffort).join(", ")}
+                  {selectedRecord.supportedReasoningEfforts.map((effort) => pageT(`reasoning.${effort}`, formatReasoningEffort(effort))).join(", ")}
                 </ReadValue>
               </Field>
               <Field label={t("common:reasoningEffort.defaultLabel", "Default reasoning effort")}>
                 <ReadValue>
                   {selectedRecord.defaultReasoningEffort
-                    ? formatReasoningEffort(selectedRecord.defaultReasoningEffort)
+                    ? pageT(`reasoning.${selectedRecord.defaultReasoningEffort}`, formatReasoningEffort(selectedRecord.defaultReasoningEffort))
                     : t("common:reasoningEffort.providerDefault", "Provider default")}
                 </ReadValue>
               </Field>

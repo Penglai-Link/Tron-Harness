@@ -87,36 +87,33 @@ export function RagCorporaTab({
   return (
     <>
       <SurfaceCard className="p-0">
-        <div className="border-b border-[var(--color-outline-variant)] p-4 flex items-center justify-between">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <h2 className="text-base font-semibold">{pageT("table.title", "Corpus")}</h2>
-          </div>
-          <div className="grid gap-3 md:grid-cols-[minmax(260px,1fr)_180px_auto] md:items-center">
-            <div className="relative min-w-0">
-              <TextInput
-                placeholder={pageT("searchPlaceholder", "Search corpora, codes, or descriptions...")}
-                value={query}
-                onChange={(event) => onQueryChange(event.target.value)}
-              />
-            </div>
-            <SelectInput
-              className="w-full"
-              value={statusFilter}
-              onValueChange={(event) => onStatusFilterChange(event!)}
-            >
-              {["All", "Active", "Indexing", "Warning", "Disabled"].map((status) => (
-                <SelectItem key={status} value={status}>
-                  {status === "All" ? pageT("filters.allStatuses", "All statuses") : formatRagStatusLabel(status, t)}
-                </SelectItem>
-              ))}
-            </SelectInput>
-            <Button size={'lg'} onClick={onCreateCorpus}>
-              {pageT("actions.newCorpus", "New corpus")}
-            </Button>
-          </div>
-        </div>
-
         <DataTable
+          title={pageT("table.title", "Corpus")}
+          toolbar={(
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="min-w-[320px]">
+                <TextInput
+                  placeholder={pageT("searchPlaceholder", "Search corpora, codes, descriptions...")}
+                  value={query}
+                  onChange={(event) => onQueryChange(event.target.value)}
+                />
+              </div>
+              <SelectInput
+                className="w-[180px]"
+                value={statusFilter}
+                onValueChange={(event) => onStatusFilterChange(event!)}
+              >
+                {["All", "Active", "Indexing", "Warning", "Disabled"].map((status) => (
+                  <SelectItem key={status} value={status}>
+                    {status === "All" ? pageT("filters.allStatuses", "All statuses") : formatRagStatusLabel(status, t)}
+                  </SelectItem>
+                ))}
+              </SelectInput>
+              <Button size={'lg'} onClick={onCreateCorpus}>
+                {pageT("actions.newCorpus", "New corpus")}
+              </Button>
+            </div>
+          )}
           rows={corpusPagination.visibleItems}
           rowKey={(corpus) => corpus.code}
           variant="embedded"

@@ -13,10 +13,8 @@ import { Badge } from "@/shared/ui/Badge";
 import { Button } from "@/components/ui/button";
 import {
   DataTable,
-  Field,
   PageHeader,
   SelectInput,
-  SurfaceCard,
   TablePagination,
   TextInput,
   useTablePagination,
@@ -347,71 +345,67 @@ export function ModelRegistryPage() {
     <>
       <PageHeader title={pageT("title", "Models")} actions={headerActions} />
 
-      <div className="space-y-5">
-        <SurfaceCard className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+      <DataTable<ModelRecord>
+        toolbar={(
+          <div className="grid w-full gap-4 md:grid-cols-2 xl:grid-cols-4">
             <div className="min-w-0">
-              <Field label={pageT("filters.search", "Search")}>
-                <TextInput
-                  className="w-full"
-                  value={searchQuery}
-                  placeholder={pageT("filters.searchPlaceholder", "Search models")}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                />
-              </Field>
+              <TextInput
+                aria-label={pageT("filters.search", "Search")}
+                className="w-full"
+                value={searchQuery}
+                placeholder={pageT("filters.searchPlaceholder", "Search models")}
+                onChange={(event) => setSearchQuery(event.target.value)}
+              />
             </div>
             <div className="min-w-0">
-              <Field label={pageT("filters.status", "Status")}>
-                <SelectInput className="w-full" value={statusFilter} onValueChange={(event) => setStatusFilter(event!)}>
-                  <SelectItem value="ALL">{pageT("filters.all", "All")}</SelectItem>
-                  <SelectItem value="ENABLED">{pageT("status.enabled", "Enabled")}</SelectItem>
-                  <SelectItem value="DISABLED">{pageT("status.disabled", "Disabled")}</SelectItem>
-                </SelectInput>
-              </Field>
+              <SelectInput
+                aria-label={pageT("filters.status", "Status")}
+                className="w-full"
+                value={statusFilter}
+                onValueChange={(event) => setStatusFilter(event!)}
+              >
+                <SelectItem value="ALL">{pageT("filters.allStatuses", "All statuses")}</SelectItem>
+                <SelectItem value="ENABLED">{pageT("status.enabled", "Enabled")}</SelectItem>
+                <SelectItem value="DISABLED">{pageT("status.disabled", "Disabled")}</SelectItem>
+              </SelectInput>
             </div>
             <div className="min-w-0">
-              <Field label={pageT("filters.protocol", "Protocol")}>
-                <SelectInput
-                  aria-label={pageT("filters.protocol", "Protocol")}
-                  className="w-full"
-                  value={protocolFilter}
-                  onValueChange={(event) => setProtocolFilter(event!)}
-                >
-                  <SelectItem value="ALL">{pageT("filters.all", "All")}</SelectItem>
-                  {protocolOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectInput>
-              </Field>
+              <SelectInput
+                aria-label={pageT("filters.protocol", "Protocol")}
+                className="w-full"
+                value={protocolFilter}
+                onValueChange={(event) => setProtocolFilter(event!)}
+              >
+                <SelectItem value="ALL">{pageT("filters.allProtocols", "All protocols")}</SelectItem>
+                {protocolOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectInput>
             </div>
             <div className="min-w-0">
-              <Field label={pageT("filters.type", "Type")}>
-                <SelectInput
-                  aria-label={pageT("filters.type", "Type")}
-                  className="w-full"
-                  value={typeFilter}
-                  onValueChange={(event) => setTypeFilter(event!)}
-                >
-                  <SelectItem value="ALL">{pageT("filters.all", "All")}</SelectItem>
-                  {typeOptions.map((option) => (
-                    <SelectItem key={option.value} value={option.value}>
-                      {option.label}
-                    </SelectItem>
-                  ))}
-                </SelectInput>
-              </Field>
+              <SelectInput
+                aria-label={pageT("filters.type", "Type")}
+                className="w-full"
+                value={typeFilter}
+                onValueChange={(event) => setTypeFilter(event!)}
+              >
+                <SelectItem value="ALL">{pageT("filters.allTypes", "All types")}</SelectItem>
+                {typeOptions.map((option) => (
+                  <SelectItem key={option.value} value={option.value}>
+                    {option.label}
+                  </SelectItem>
+                ))}
+              </SelectInput>
             </div>
           </div>
-        </SurfaceCard>
-
-        <DataTable<ModelRecord>
-          rows={pagination.visibleItems}
-          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "models")} {...pagination.paginationProps} />}
-          rowKey={(row) => row.modelCode}
-          onRowClick={(row) => navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}`)}
-          columns={[
+        )}
+        rows={pagination.visibleItems}
+        pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "models")} {...pagination.paginationProps} />}
+        rowKey={(row) => row.modelCode}
+        onRowClick={(row) => navigate(`/models/detail?modelCode=${encodeURIComponent(row.modelCode)}`)}
+        columns={[
             {
               id: "displayName",
               header: pageT("columns.displayName", "Display Name"),
@@ -558,10 +552,9 @@ export function ModelRegistryPage() {
                 );
               },
             },
-          ]}
-          emptyState={activeWorkspaceCode ? pageT("empty.filtered", "No effective models match the current filters.") : pageT("empty.workspace", "Select a workspace in the shell to load models.")}
+        ]}
+        emptyState={activeWorkspaceCode ? pageT("empty.filtered", "No effective models match the current filters.") : pageT("empty.workspace", "Select a workspace in the shell to load models.")}
         />
-      </div>
     </>
   );
 }
