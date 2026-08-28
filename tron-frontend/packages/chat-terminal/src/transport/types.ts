@@ -72,10 +72,18 @@ export interface AIStreamEvent {
   [key: string]: unknown;
 }
 
+export interface AIStreamResumeEntry {
+  interruptId: string;
+  status: "resolved" | "cancelled";
+  payload: unknown;
+}
+
 export interface AIStreamOptions {
   onChunk: (chunk: AIStreamChunk) => void;
   /** Receives structured agent activity without changing text-stream behavior. */
   onEvent?: (event: AIStreamEvent) => void;
+  /** Resumes an interrupted run with the user's answers. */
+  resume?: AIStreamResumeEntry[];
   signal?: AbortSignal;
 }
 

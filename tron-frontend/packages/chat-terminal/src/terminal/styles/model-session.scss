@@ -47,8 +47,150 @@
   pointer-events: none;
 }
 
+.ai-terminal-model-session__cancel-button {
+  position: absolute;
+  right: 10px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ai-terminal-border);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ai-terminal-primary);
+  cursor: pointer;
+  font: inherit;
+  font-size: 12px;
+}
+
+.ai-terminal-model-session__cancel-button:hover {
+  background: color-mix(in srgb, var(--ai-terminal-primary) 9%, transparent);
+}
+
 .ai-terminal-model-session__body {
+  position: relative;
   padding: 10px;
+  min-height: 70px;
+  box-sizing: border-box;
+}
+
+.ai-terminal-model-session__body--running {
+  position: relative;
+}
+
+.ai-terminal-model-session__user-input {
+  margin: 10px 0;
+  padding: 12px;
+  border: 1px solid var(--ai-terminal-border);
+  border-radius: 6px;
+  background: var(--ai-terminal-card-background);
+}
+
+.ai-terminal-model-session__user-input-intro {
+  margin: 0 0 10px;
+  color: var(--ai-terminal-primary);
+  font-weight: 600;
+}
+
+.ai-terminal-model-session__user-input-questions {
+  display: grid;
+  gap: 12px;
+}
+
+.ai-terminal-model-session__user-input-question {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ai-terminal-model-session__user-input-question legend {
+  margin-bottom: 7px;
+  color: var(--ai-terminal-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.ai-terminal-model-session__user-input-options {
+  display: grid;
+  gap: 6px;
+}
+
+.ai-terminal-model-session__user-input-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 7px 8px;
+  border: 1px solid var(--ai-terminal-border);
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.ai-terminal-model-session__user-input-option.is-selected {
+  border-color: var(--ai-terminal-primary);
+  background: color-mix(in srgb, var(--ai-terminal-primary) 9%, transparent);
+}
+
+.ai-terminal-model-session__user-input-option input {
+  margin-top: 2px;
+}
+
+.ai-terminal-model-session__user-input-option-content {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.ai-terminal-model-session__user-input-option-content small {
+  color: color-mix(in srgb, var(--ai-terminal-primary) 62%, transparent);
+}
+
+.ai-terminal-model-session__user-input-other-row,
+.ai-terminal-model-session__user-input-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.ai-terminal-model-session__user-input-other-row textarea {
+  flex: 1;
+  min-width: 0;
+  resize: vertical;
+  border: 0;
+  border-bottom: 1px solid var(--ai-terminal-border);
+  background: transparent;
+  color: var(--ai-terminal-primary);
+  font: inherit;
+  outline: none;
+}
+
+.ai-terminal-model-session__user-input-skip,
+.ai-terminal-model-session__user-input-submit {
+  flex: 0 0 auto;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 1px solid var(--ai-terminal-border);
+  border-radius: 4px;
+  background: var(--ai-terminal-card-background);
+  color: var(--ai-terminal-primary);
+  cursor: pointer;
+}
+
+.ai-terminal-model-session__user-input-submit {
+  border-color: var(--ai-terminal-primary);
+  background: var(--ai-terminal-primary);
+  color: var(--ai-terminal-secondary);
+}
+
+.ai-terminal-model-session__user-input-skip:disabled,
+.ai-terminal-model-session__user-input-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.ai-terminal-model-session__user-input-progress {
+  margin-right: auto;
+  color: color-mix(in srgb, var(--ai-terminal-primary) 62%, transparent);
+  font-size: 12px;
 }
 
 .ai-terminal-model-session__activity {

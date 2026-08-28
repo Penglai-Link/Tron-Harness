@@ -39,6 +39,31 @@ export interface ModelSessionActivityEvent {
   event: AIStreamEvent;
 }
 
+export interface ModelSessionUserInputOption {
+  optionCode: string;
+  label: string;
+  description?: string;
+}
+
+export interface ModelSessionUserInputQuestion {
+  questionCode: string;
+  question: string;
+  options: ModelSessionUserInputOption[];
+}
+
+export interface ModelSessionUserInputRequest {
+  requestCode: string;
+  intro: string;
+  questions: ModelSessionUserInputQuestion[];
+}
+
+export interface ModelSessionUserInputState {
+  request: ModelSessionUserInputRequest;
+  selected: Readonly<Record<string, string>>;
+  otherText: Readonly<Record<string, string>>;
+  submitting: boolean;
+}
+
 export interface ModelSessionCommandActionPayload {
   requestId: string;
   conversationId: string;
@@ -75,6 +100,25 @@ export interface ModelSessionAddonOptions {
   onRejectCommand?: (
     payload: ModelSessionCommandActionPayload,
   ) => MaybePromise<void>;
+  onUserInputSubmit?: (
+    payload: {
+      requestId: string;
+      conversationId: string;
+      requestCode: string;
+      answers: ModelSessionUserInputAnswer[];
+    },
+  ) => MaybePromise<void>;
+  onCancelSession?: (payload: {
+    requestId: string;
+    conversationId: string;
+  }) => MaybePromise<void>;
+}
+
+export interface ModelSessionUserInputAnswer {
+  questionCode: string;
+  answerKind: "Option" | "Other" | "Skipped";
+  optionCode: string | null;
+  otherText: string | null;
 }
 
 export interface ModelSessionRenderState {
@@ -84,6 +128,7 @@ export interface ModelSessionRenderState {
   activityNow: number;
   activityComplete: boolean;
   commandStates: ReadonlyMap<string, ModelSessionCommandCardState>;
+  userInput?: ModelSessionUserInputState;
   i18n: ChatTerminalI18n;
 }
 
@@ -101,4 +146,8 @@ export interface ModelSessionRenderActions {
   onGenerateCommand?: (token: ModelSessionCommandToken) => void;
   onCancelCommandEdit: (token: ModelSessionCommandToken) => void;
   onRejectCommand: (token: ModelSessionCommandToken) => void;
+  onUserInputSelect: (questionCode: string, optionCode: string) => void;
+  onUserInputOtherText: (questionCode: string, value: string) => void;
+  onUserInputSubmit: () => void;
+  onCancelSession?: () => void;
 }

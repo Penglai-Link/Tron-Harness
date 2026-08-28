@@ -14,6 +14,11 @@ import {
   type TerminalSession,
   type TerminalTransport,
 } from "./transport";
+import type { AIStreamResumeEntry } from "./transport/types";
+import type {
+  ModelSessionUserInputAnswer,
+  ModelSessionUserInputRequest,
+} from "./terminal/types/modelSession";
 
 export type {
   ChatTerminalLocale,
@@ -89,6 +94,9 @@ export function initTerminal(options: ChatTerminalOptions) {
   let session: TerminalSession | undefined;
   let disposed = false;
   const termRef: { current?: Terminal } = {};
+  const pendingContinuations = new Map<string, (requestCode: string, answers: ModelSessionUserInputAnswer[]) => Promise<void>>();
+  const activeChatControllers = new Map<string, AbortController>();
+  const cancelledChatRequests = new Set<string>();
 
   const writeToShell = (
     data: string,
@@ -105,12 +113,13 @@ export function initTerminal(options: ChatTerminalOptions) {
     ? async (content: string) => {
         const requestId =
           globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`;
-        try {
-          termRef.current?.modelSessionAddon?.startSession({
-            conversationId: "default",
-            requestId,
-          });
-          await aiTransport.stream(options.prompts?.chat?.(content) ?? content, {
+        const controller = new AbortController();
+        activeChatControllers.set(requestId, controller);
+        let interrupted: ModelSessionUserInputRequest | undefined;
+        const stream = async (resume?: AIStreamResumeEntry[]) => {
+          await aiTransport.stream(resume ? "" : (options.prompts?.chat?.(content) ?? content), {
+            resume,
+            signal: controller.signal,
             onChunk: ({ delta }) => {
               if (disposed) return;
               termRef.current?.modelSessionAddon?.appendMessageChunk({
@@ -120,21 +129,60 @@ export function initTerminal(options: ChatTerminalOptions) {
               });
             },
             onEvent: (event) => {
-              if (disposed || !isAgentActivityEvent(event)) return;
-              termRef.current?.modelSessionAddon?.appendActivityEvent({
-                conversationId: "default",
-                event,
-                requestId,
-              });
+              if (disposed) return;
+              const request = parseUserInputRequest(event);
+              if (request) {
+                interrupted = request;
+                termRef.current?.modelSessionAddon?.appendUserInputRequest({
+                  conversationId: "default",
+                  requestId,
+                  request,
+                  response: "",
+                });
+                return;
+              }
+              if (isAgentActivityEvent(event)) {
+                termRef.current?.modelSessionAddon?.appendActivityEvent({
+                  conversationId: "default",
+                  event,
+                  requestId,
+                });
+              }
             },
           });
+        };
+        try {
+          termRef.current?.modelSessionAddon?.startSession({
+            conversationId: "default",
+            requestId,
+          });
+          await stream();
         } finally {
-          if (!disposed) {
+          activeChatControllers.delete(requestId);
+          if (!disposed && !interrupted && !cancelledChatRequests.has(requestId)) {
             await (
               termRef.current?.modelSessionAddon?.complete(requestId) ??
               Promise.resolve()
             );
           }
+        }
+        if (interrupted && !disposed) {
+          pendingContinuations.set(requestId, async (requestCode, answers) => {
+            const addon = termRef.current?.modelSessionAddon;
+            addon?.clearUserInputRequest(requestId, requestCode);
+            interrupted = undefined;
+            try {
+              await stream([{
+                interruptId: requestCode,
+                status: "resolved",
+                payload: { answers },
+              }]);
+              if (!interrupted) await addon?.complete(requestId);
+            } finally {
+              addon?.setUserInputSubmitting(requestId, false);
+              if (!interrupted) pendingContinuations.delete(requestId);
+            }
+          });
         }
       }
     : undefined;
@@ -227,6 +275,20 @@ export function initTerminal(options: ChatTerminalOptions) {
                 return Promise.reject(new Error("未配置 AI 命令生成能力"));
               }
               return commandGenerate(command);
+            },
+            onUserInputSubmit: async ({ requestId: inputRequestId, requestCode, answers }) => {
+              const continuation = pendingContinuations.get(inputRequestId);
+              if (!continuation) return;
+              await continuation(requestCode, answers);
+            },
+            onCancelSession: async ({ requestId: inputRequestId }) => {
+              cancelledChatRequests.add(inputRequestId);
+              pendingContinuations.delete(inputRequestId);
+              const controller = activeChatControllers.get(inputRequestId);
+              controller?.abort(new DOMException("会话已终止", "AbortError"));
+              await aiTransport?.cancel?.(controller?.signal ?? new AbortController().signal);
+              await termRef.current?.modelSessionAddon?.complete(inputRequestId);
+              cancelledChatRequests.delete(inputRequestId);
             },
           }
         : undefined,
@@ -346,6 +408,49 @@ function isAgentActivityEvent(event: AIStreamEvent) {
     type === "ACTIVITY_SNAPSHOT" ||
     type === "RUN_ERROR"
   );
+}
+
+function parseUserInputRequest(event: AIStreamEvent): ModelSessionUserInputRequest | undefined {
+  if (event.type.toUpperCase() !== "RUN_FINISHED") return undefined;
+  const outcome = event.outcome;
+  const interrupt = isRecord(outcome) && outcome.type === "interrupt"
+    ? (Array.isArray(outcome.interrupts) ? outcome.interrupts[0] : undefined)
+    : isRecord(event.result) && isRecord(event.result.userInputRequest)
+      ? event.result.userInputRequest
+      : undefined;
+  if (!isRecord(interrupt)) return undefined;
+  const metadata = isRecord(interrupt.metadata) ? interrupt.metadata : interrupt;
+  const requestCode = readString(metadata.requestCode) ?? readString(interrupt.id);
+  const questions = metadata.questions;
+  if (!requestCode || !Array.isArray(questions)) return undefined;
+  const normalizedQuestions = questions
+    .filter(isRecord)
+    .map((question) => ({
+      questionCode: readString(question.questionCode) ?? "",
+      question: readString(question.question) ?? "",
+      options: Array.isArray(question.options)
+        ? question.options.filter(isRecord).map((option) => ({
+            optionCode: readString(option.optionCode) ?? "",
+            label: readString(option.label) ?? "",
+            description: readString(option.description),
+          })).filter((option) => option.optionCode && option.label)
+        : [],
+    }))
+    .filter((question) => question.questionCode && question.question);
+  if (!normalizedQuestions.length) return undefined;
+  return {
+    requestCode,
+    intro: readString(interrupt.message) ?? readString(metadata.intro) ?? "",
+    questions: normalizedQuestions,
+  };
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
+}
+
+function readString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value : undefined;
 }
 
 function toError(error: unknown) {

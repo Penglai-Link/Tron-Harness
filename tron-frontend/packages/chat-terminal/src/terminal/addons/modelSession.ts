@@ -23,6 +23,9 @@ import type {
   ModelSessionMessageChunk,
   ModelSessionRenderActions,
   ModelSessionToken,
+  ModelSessionUserInputAnswer,
+  ModelSessionUserInputRequest,
+  ModelSessionUserInputState,
 } from "../types/modelSession";
 import type { AIStreamEvent } from "../../transport/types";
 
@@ -60,6 +63,7 @@ interface ModelSessionInstance {
   fixedHeight?: number;
   host: HTMLElement;
   commandStates: Signal<ReadonlyMap<string, ModelSessionCommandCardState>>;
+  userInput: Signal<ModelSessionUserInputState | undefined>;
   actions: ModelSessionRenderActions;
   renderAnimationFrame?: number;
   disposeRenderEffect: () => void;
@@ -258,6 +262,86 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.show();
   }
 
+  appendUserInputRequest(
+    chunk: ModelSessionMessageChunk & { request: ModelSessionUserInputRequest },
+  ) {
+    const session = this.getOrCreateSession({ ...chunk, response: "" });
+    if (!session) return;
+
+    session.userInput.value = {
+      request: chunk.request,
+      selected: {},
+      otherText: {},
+      submitting: false,
+    };
+    session.activityComplete.value = true;
+    session.activityNow.value = Date.now();
+    this.stopActivityClock(session);
+    this.show();
+    this.flushSessionRender(session);
+    this.scheduleInlineLayoutUpdate(true);
+  }
+
+  clearUserInputRequest(requestId: string, requestCode: string) {
+    const session = this.findSession(requestId);
+    if (!session || session.userInput.peek()?.request.requestCode !== requestCode) return;
+    session.userInput.value = undefined;
+    session.activityComplete.value = false;
+    session.activityNow.value = Date.now();
+    session.activityClock = setInterval(() => {
+      if (!session.activityComplete.peek()) session.activityNow.value = Date.now();
+    }, 1_000);
+    this.flushSessionRender(session);
+  }
+
+  updateUserInputSelection(requestId: string, questionCode: string, optionCode: string) {
+    const session = this.findSession(requestId);
+    const current = session?.userInput.peek();
+    if (!session || !current) return;
+    session.userInput.value = {
+      ...current,
+      selected: { ...current.selected, [questionCode]: optionCode },
+      otherText: { ...current.otherText, [questionCode]: "" },
+    };
+  }
+
+  updateUserInputOtherText(requestId: string, questionCode: string, value: string) {
+    const session = this.findSession(requestId);
+    const current = session?.userInput.peek();
+    if (!session || !current) return;
+    session.userInput.value = {
+      ...current,
+      selected: { ...current.selected, [questionCode]: value.trim() ? `OTHER-${questionCode}` : "" },
+      otherText: { ...current.otherText, [questionCode]: value },
+    };
+  }
+
+  setUserInputSubmitting(requestId: string, submitting: boolean) {
+    const session = this.findSession(requestId);
+    const current = session?.userInput.peek();
+    if (!session || !current) return;
+    session.userInput.value = { ...current, submitting };
+    this.flushSessionRender(session);
+  }
+
+  getUserInputAnswers(requestId: string): { requestCode: string; answers: ModelSessionUserInputAnswer[] } | undefined {
+    const session = this.findSession(requestId);
+    const current = session?.userInput.peek();
+    if (!session || !current) return undefined;
+    const answers = current.request.questions.map((question) => {
+      const selected = current.selected[question.questionCode] ?? "";
+      const otherText = current.otherText[question.questionCode]?.trim() ?? "";
+      if (otherText || selected.startsWith("OTHER-")) {
+        return { questionCode: question.questionCode, answerKind: "Other" as const, optionCode: null, otherText: otherText || null };
+      }
+      if (selected.startsWith("SKIP-")) {
+        return { questionCode: question.questionCode, answerKind: "Skipped" as const, optionCode: null, otherText: null };
+      }
+      return { questionCode: question.questionCode, answerKind: "Option" as const, optionCode: selected || null, otherText: null };
+    });
+    return { requestCode: current.request.requestCode, answers };
+  }
+
   async complete(requestId?: string) {
     const completedSessions: ModelSessionInstance[] = [];
 
@@ -375,6 +459,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     const commandStates = signal<
       ReadonlyMap<string, ModelSessionCommandCardState>
     >(new Map());
+    const userInput = signal<ModelSessionUserInputState | undefined>(undefined);
     const tokens = computed(() =>
       this.parseTokens(rawMessage.value, chunk.requestId, chunk.conversationId),
     );
@@ -403,6 +488,30 @@ export class ModelSessionAddon implements ITerminalAddon {
       onRejectCommand: (token) => {
         void this.rejectCommand(session, token);
       },
+      onUserInputSelect: (questionCode, optionCode) => {
+        this.updateUserInputSelection(session.requestId, questionCode, optionCode);
+      },
+      onUserInputOtherText: (questionCode, value) => {
+        this.updateUserInputOtherText(session.requestId, questionCode, value);
+      },
+      onUserInputSubmit: () => {
+        const input = this.getUserInputAnswers(session.requestId);
+        if (!input || !this.options.onUserInputSubmit) return;
+        this.setUserInputSubmitting(session.requestId, true);
+        void Promise.resolve(this.options.onUserInputSubmit({
+          requestId: session.requestId,
+          conversationId: session.conversationId,
+          ...input,
+        })).catch(() => this.setUserInputSubmitting(session.requestId, false));
+      },
+      onCancelSession: this.options.onCancelSession
+        ? () => {
+            void this.options.onCancelSession?.({
+              requestId: session.requestId,
+              conversationId: session.conversationId,
+            });
+          }
+        : undefined,
     };
     session = {
       key,
@@ -419,6 +528,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       reservedRows: 0,
       host,
       commandStates,
+      userInput,
       actions,
       disposeRenderEffect: () => {},
     };
@@ -441,6 +551,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       activityNow.value;
       activityComplete.value;
       commandStates.value;
+      userInput.value;
       this.scheduleSessionRender(session);
     });
     return session;
@@ -478,6 +589,7 @@ export class ModelSessionAddon implements ITerminalAddon {
         activityNow: session.activityNow.peek(),
         activityComplete: session.activityComplete.peek(),
         commandStates: session.commandStates.peek(),
+        userInput: session.userInput.peek(),
         i18n: this.i18n,
       },
       session.actions,
@@ -504,6 +616,14 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.sessionWidths.delete(session.key);
     session.anchorMarker?.dispose();
     session.host.remove();
+  }
+
+  private findSession(requestId: string) {
+    if (this.activeSessionKey) {
+      const active = this.sessions.get(this.activeSessionKey);
+      if (active?.requestId === requestId) return active;
+    }
+    return [...this.sessions.values()].find((session) => session.requestId === requestId);
   }
 
   private createSessionResizeObserver() {

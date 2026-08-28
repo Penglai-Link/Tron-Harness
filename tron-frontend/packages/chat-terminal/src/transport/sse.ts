@@ -11,7 +11,11 @@ import type {
 type MaybePromise<T> = T | Promise<T>;
 
 export interface AITransportOptions {
-  body?: (context: { content: string; stream: boolean }) => unknown;
+  body?: (context: {
+    content: string;
+    stream: boolean;
+    resume?: AIStreamOptions["resume"];
+  }) => unknown;
   fetch?: typeof globalThis.fetch;
   headers?: HeadersInit | (() => MaybePromise<HeadersInit>);
   openWhenHidden?: boolean;
@@ -68,7 +72,7 @@ export class SseAITransport implements AITransport {
         });
 
         void fetchEventSource(this.options.url, {
-          body: JSON.stringify(this.createBody(content, true)),
+          body: JSON.stringify(this.createBody(content, true, options.resume)),
           fetch: this.fetchImplementation,
           headers: Object.fromEntries([...headers]),
           method: "POST",
@@ -159,11 +163,15 @@ export class SseAITransport implements AITransport {
     this.activeRequests.clear();
   }
 
-  private createBody(content: string, stream: boolean) {
+  private createBody(
+    content: string,
+    stream: boolean,
+    resume?: AIStreamOptions["resume"],
+  ) {
     return (
-      this.options.body?.({ content, stream }) ??
-      {
-        messages: [{ content, role: "user" }],
+      this.options.body?.({ content, stream, resume }) ?? {
+        ...(content ? { messages: [{ content, role: "user" }] } : {}),
+        ...(resume?.length ? { resume } : {}),
         stream,
       }
     );
