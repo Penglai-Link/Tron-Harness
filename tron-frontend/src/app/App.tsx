@@ -521,9 +521,9 @@ function EntryRoutePage() {
     return <RouteLoadingFallback fullScreen />;
   }
 
-  if (!setupStatus.initialized) {
-    return <Navigate replace to="/setup" />;
-  }
+  // if (!setupStatus.initialized) {
+  //   return <Navigate replace to="/setup" />;
+  // }
 
   return <LoginRoutePage />;
 }

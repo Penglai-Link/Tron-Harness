@@ -55,6 +55,8 @@ import {
   useOpenRightSidebar,
   useToast,
   PageView,
+  LinkBrowserDialog,
+  MarkdownLink,
   type TargetPageFrameInspectionResult,
 } from "@/shared";
 import { cn } from "@/shared/lib/utils";
@@ -4012,6 +4014,7 @@ export function ChatManagementPage() {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
+  const [linkBrowserUrl, setLinkBrowserUrl] = useState<string | null>(null);
   const activeSessionCodeRef = useRef("");
   const modelSelectionSessionRef = useRef("");
   const streamOwnershipRegistryRef = useRef(new ChatStreamOwnershipRegistry());
@@ -6417,8 +6420,19 @@ export function ChatManagementPage() {
           showAttachmentControl={false}
           showHeader={false}
           footerAddon={transcriptFooterAddon}
+          renderMarkdownLink={({ href, children }) => (
+            <MarkdownLink href={href} onOpenInternal={(url) => setLinkBrowserUrl(url)}>
+              {children}
+            </MarkdownLink>
+          )}
         />
       </main>
+      {linkBrowserUrl ? (
+        <LinkBrowserDialog
+          url={linkBrowserUrl}
+          onClose={() => setLinkBrowserUrl(null)}
+        />
+      ) : null}
       <ConfirmDialog
         ariaLabel={t("chat.management.deleteDialog.aria")}
         cancelText={t("chat.management.deleteDialog.cancel")}

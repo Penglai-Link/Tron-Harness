@@ -61,7 +61,9 @@ export function MarkdownContent({
         className,
       )}
     >
-      <ReactMarkdown remarkPlugins={[remarkGfm]}>{value}</ReactMarkdown>
+      <ReactMarkdown remarkPlugins={[remarkGfm]}>
+        {value}
+      </ReactMarkdown>
     </div>
   );
 }

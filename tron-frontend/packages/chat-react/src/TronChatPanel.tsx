@@ -51,6 +51,8 @@ import remarkGfm from "remark-gfm";
 import {
   type Ref,
   Fragment,
+  createContext,
+  useContext,
   useEffect,
   useId,
   useLayoutEffect,
@@ -96,6 +98,17 @@ async function copyPlainText(value: string) {
   document.body.removeChild(textarea);
 }
 
+export interface ChatMarkdownLinkProps {
+  children?: ReactNode;
+  href?: string;
+}
+
+export type ChatMarkdownLinkRenderer = (props: ChatMarkdownLinkProps) => ReactNode;
+
+const MarkdownLinkRendererContext = createContext<ChatMarkdownLinkRenderer | undefined>(
+  undefined,
+);
+
 function MarkdownBlock({
   content,
   emptyMessage,
@@ -103,9 +116,14 @@ function MarkdownBlock({
   content: string;
   emptyMessage: string;
 }) {
+  const renderLink = useContext(MarkdownLinkRendererContext);
+
   return (
     <div className="markdown-body">
-      <ReactMarkdown remarkPlugins={[remarkGfm]} >
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm]}
+        components={renderLink ? { a: renderLink } : undefined}
+      >
         {content || emptyMessage}
       </ReactMarkdown>
     </div>
@@ -1119,6 +1137,7 @@ export interface TronChatPanelProps {
   userInputRequest?: ChatUserInputRequest | null;
   userInputAnswerPending?: boolean;
   onAnswerUserInput?: (answers: ChatUserInputAnswer[]) => void;
+  renderMarkdownLink?: ChatMarkdownLinkRenderer;
 }
 
 export function TronChatPanel({
@@ -1174,6 +1193,7 @@ export function TronChatPanel({
   userInputRequest,
   userInputAnswerPending = false,
   onAnswerUserInput,
+  renderMarkdownLink,
 }: TronChatPanelProps) {
   const transcriptRef = useRef<HTMLElement | null>(null);
   const composerElementRef = useRef<HTMLTextAreaElement | null>(null);
@@ -1324,6 +1344,7 @@ export function TronChatPanel({
   }
 
   return (
+    <MarkdownLinkRendererContext.Provider value={renderMarkdownLink}>
     <div className="tron-chat">
       <ImagePreviewDialog
         image={previewImage}
@@ -1640,5 +1661,6 @@ export function TronChatPanel({
         </div>
       )}
     </div>
+    </MarkdownLinkRendererContext.Provider>
   );
 }

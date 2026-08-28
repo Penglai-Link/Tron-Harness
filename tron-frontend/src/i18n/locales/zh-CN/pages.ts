@@ -577,6 +577,15 @@ export const pages = {
       annotationPreview: "注释预览",
       attachments: "附件",
     },
+    markdownLink: {
+      openInternal: "在内置浏览器中打开",
+      openExternal: "在外部浏览器中打开",
+      copyLink: "复制链接",
+      copied: "链接已复制",
+      copyFailed: "复制链接失败",
+      browserTitle: "链接浏览器",
+      browserClose: "关闭",
+    },
     userInput: {
       ariaLabel: "助手问题",
       progress: "第 {{current}} / {{total}} 题",
