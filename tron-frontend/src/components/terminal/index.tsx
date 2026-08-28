@@ -103,6 +103,7 @@ const Terminal = ({ onExit }: TerminalProps) => {
     let disposed = false;
     let terminalInstance: ReturnType<typeof initTerminal> | null = null;
     let activeChatAbortController: AbortController | null = null;
+    const activeChatRequestControllers = new Map<AbortSignal, AbortController>();
     const terminalChatLease = acquireTerminalChatContext(workspaceCode);
 
     void (async () => {
@@ -134,6 +135,9 @@ const Terminal = ({ onExit }: TerminalProps) => {
             signal?.addEventListener("abort", abort, { once: true });
           }
           activeChatAbortController = controller;
+          if (signal) {
+            activeChatRequestControllers.set(signal, controller);
+          }
           const requestId = crypto.randomUUID();
           try {
             await chatAdapter.streamMessage(session, {
@@ -150,6 +154,9 @@ const Terminal = ({ onExit }: TerminalProps) => {
             return { requestId };
           } finally {
             signal?.removeEventListener("abort", abort);
+            if (signal) {
+              activeChatRequestControllers.delete(signal);
+            }
             if (activeChatAbortController === controller) {
               activeChatAbortController = null;
             }
@@ -158,6 +165,21 @@ const Terminal = ({ onExit }: TerminalProps) => {
 
         dispose() {
           activeChatAbortController?.abort();
+        },
+
+        async cancel(signal) {
+          const controller = activeChatRequestControllers.get(signal);
+
+          try {
+            const activeRun = await chatAdapter.getActiveRun?.(session.sessionCode);
+            if (activeRun?.activeRun?.runCode && chatAdapter.stopRun) {
+              await chatAdapter.stopRun(session, {
+                expectedRunCode: activeRun.activeRun.runCode,
+              });
+            }
+          } finally {
+            controller?.abort();
+          }
         },
 
         async request(content, { signal } = {}) {

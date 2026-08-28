@@ -1,4 +1,4 @@
-import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import { ArrowRight, ChevronLeft, ChevronRight, PencilLine } from "lucide-react";
 import type {
   ChatUserInputAnswer,
@@ -36,11 +36,25 @@ export function ChatUserInputCard({
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selected, setSelected] = useState<Record<string, string>>({});
   const [otherText, setOtherText] = useState<Record<string, string>>({});
+  const cardRef = useRef<HTMLElement>(null);
+
   useEffect(() => {
     setCurrentIndex(0);
     setSelected({});
     setOtherText({});
   }, [request.requestCode]);
+
+  useEffect(() => {
+    const handleWheel = (e: WheelEvent) => {
+      e.stopPropagation();
+    };
+
+    const card = cardRef.current;
+    if (card) {
+      card.addEventListener('wheel', handleWheel, { passive: false });
+      return () => card.removeEventListener('wheel', handleWheel);
+    }
+  }, []);
 
   const question = request.questions[currentIndex];
   const selectedCode = question ? selected[question.questionCode] ?? "" : "";
@@ -146,7 +160,7 @@ export function ChatUserInputCard({
   if (!question) return null;
 
   return (
-    <section className="tron-chat__user-input-card" aria-label={labels.ariaLabel}>
+    <section className="tron-chat__user-input-card" aria-label={labels.ariaLabel} ref={cardRef}>
       <div className="tron-chat__user-input-body">
         <div className="tron-chat__user-input-header">
           <p className="tron-chat__user-input-title">{question.question}</p>

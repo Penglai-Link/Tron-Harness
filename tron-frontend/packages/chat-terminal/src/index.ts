@@ -194,6 +194,7 @@ export function initTerminal(options: ChatTerminalOptions) {
       i18n,
       explainTitle: terminalOptions?.explainTitle,
       onExplain: commandExplain,
+      onExplainCancel: aiTransport?.cancel,
       onAskAgent: commandChat
         ? (block) => commandChat(buildBlockQuestion(block, i18n.t("blockAskPrompt")))
         : undefined,

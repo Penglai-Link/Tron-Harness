@@ -180,12 +180,13 @@ export class InputRouterAddon implements ITerminalAddon {
       }
     }
 
-    // Cmd+K: ask the shell to redraw a clean screen, rather than clearing the
-    // buffer behind its back and leaving the prompt orphaned.
+    // Cmd+K: clear host-owned overlays and scrollback, then ask the shell to
+    // redraw its prompt so readline state stays synchronized.
     const isClearShortcut =
       key === "k" && event.metaKey && !event.altKey && !event.ctrlKey;
     if (isClearShortcut && canUseShortcuts) {
       event.preventDefault();
+      this.options.onClearScreen?.();
       this.options.write(REDRAW);
       return false;
     }

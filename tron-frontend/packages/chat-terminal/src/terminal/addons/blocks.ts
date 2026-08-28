@@ -14,6 +14,7 @@ import { createBlockActionBar, type BlockActionBar } from "../ui/blockActionBar"
 import { createExplainButton } from "../ui/explainButton";
 
 const DEFAULT_MAX_RENDERED_BLOCKS = 80;
+const SSH_COMMAND = /(?:^|\s)(?:[\w./-]+\/)?ssh(?:\s|$)/;
 
 interface RenderedBlock {
   block: TerminalCommandBlock;
@@ -53,6 +54,7 @@ export class BlockAddon implements ITerminalAddon {
       host: () => this.terminal?.element ?? undefined,
       i18n: this.i18n,
       explainTitle: options.explainTitle,
+      onCancel: options.onExplainCancel,
       onExplain: (payload, context) => {
         if (!options.onExplain) {
           return Promise.resolve("");
@@ -124,12 +126,14 @@ export class BlockAddon implements ITerminalAddon {
   /** Adds an explain button for a finished command. */
   addExplainButton(block: TerminalCommandBlock) {
     const terminal = this.terminal;
-    if (!terminal || !this.options.onExplain) {
+    if (!terminal || !this.options.onExplain || !block.command.trim()) {
       return;
     }
 
-    // Use promptMarker or outputMarker to find the command line
-    const marker = block.promptMarker ?? block.outputMarker;
+    // The shell reports this marker after the prompt and before the command
+    // text. It survives SSH login output, unlike the prompt and output markers.
+    const marker =
+      block.commandMarker ?? block.promptMarker ?? block.outputMarker;
     if (!marker || block.startLine < 0) {
       return;
     }
@@ -137,27 +141,42 @@ export class BlockAddon implements ITerminalAddon {
     // The command line is at the marker's line
     const commandLine = marker.line;
     const buffer = terminal.buffer.active;
-    let commandEndColumn = 0;
+    let commandEndColumn =
+      block.commandStartColumn === undefined
+        ? 0
+        : block.commandStartColumn + block.command.length;
 
     if (commandLine >= 0 && commandLine < buffer.length) {
       const line = buffer.getLine(commandLine);
       if (line) {
         const lineText = line.translateToString(false);
 
-        // Find the command in the line
-        const commandIndex = lineText.indexOf(block.command);
+        // The outer SSH invocation is a transport/login command. Its output
+        // is a mixture of banners, authentication prompts and the remote
+        // session, so there is no single useful command location for a button.
+        // Check both the reported command and the rendered marker row because
+        // either can contain terminal-control bytes or stale shell metadata.
+        if (SSH_COMMAND.test(block.command) || SSH_COMMAND.test(lineText)) {
+          return;
+        }
+
+        // The rendered command is the source of truth. Shell-reported columns
+        // can be stale when a prompt is redrawn or an SSH session echoes the
+        // command on a different cursor position.
+        const commandIndex = lineText.indexOf(
+          block.command,
+          block.commandStartColumn ?? 0,
+        );
 
         if (commandIndex >= 0) {
-          // Position button right after the command text
           commandEndColumn = commandIndex + block.command.length;
+        } else if (block.commandStartColumn !== undefined) {
+          // Older/injected shells may not leave the command in the marker row.
+          commandEndColumn = block.commandStartColumn + block.command.length;
         } else {
-          // Fallback: try to find the command at the end of visible content
-          const trimmed = lineText.trimEnd();
-          if (trimmed.endsWith(block.command)) {
-            commandEndColumn = trimmed.length;
-          } else {
-            commandEndColumn = trimmed.length;
-          }
+          // Last resort for blocks without either a command column or an exact
+          // command echo: put the button after the visible content.
+          commandEndColumn = lineText.trimEnd().length;
         }
       }
     }

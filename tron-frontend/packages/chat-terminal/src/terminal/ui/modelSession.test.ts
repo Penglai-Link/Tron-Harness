@@ -3,7 +3,83 @@
 import { describe, expect, it, vi } from "vitest";
 
 import { createChatTerminalI18n } from "../i18n";
-import { renderModelSession } from "./modelSession";
+import { createModelSessionHost, renderModelSession } from "./modelSession";
+
+describe("model session scrolling", () => {
+  it("keeps scrolling inside the card while it has room to scroll", () => {
+    const outer = document.createElement("div");
+    const modelSessionHost = createModelSessionHost();
+    const content = document.createElement("div");
+    Object.defineProperties(content, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 200 },
+    });
+    modelSessionHost.append(content);
+    outer.append(modelSessionHost);
+    document.body.append(outer);
+
+    const outerScrollHandler = vi.fn();
+    outer.addEventListener("wheel", outerScrollHandler);
+    outer.addEventListener("touchmove", outerScrollHandler);
+
+    const wheelEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      deltaY: 40,
+    });
+    const touchEvent = new TouchEvent("touchmove", { bubbles: true });
+    content.dispatchEvent(wheelEvent);
+    content.dispatchEvent(touchEvent);
+
+    expect(outerScrollHandler).not.toHaveBeenCalled();
+    expect(wheelEvent.defaultPrevented).toBe(false);
+    expect(touchEvent.defaultPrevented).toBe(false);
+    outer.remove();
+  });
+
+  it("lets the outer terminal scroll when the card has no room to consume it", () => {
+    const outer = document.createElement("div");
+    const modelSessionHost = createModelSessionHost();
+    const content = document.createElement("div");
+    modelSessionHost.append(content);
+    outer.append(modelSessionHost);
+    document.body.append(outer);
+
+    const outerScrollHandler = vi.fn();
+    outer.addEventListener("wheel", outerScrollHandler);
+    const wheelEvent = new WheelEvent("wheel", {
+      bubbles: true,
+      deltaY: 40,
+    });
+    content.dispatchEvent(wheelEvent);
+
+    expect(outerScrollHandler).toHaveBeenCalledOnce();
+    expect(wheelEvent.defaultPrevented).toBe(false);
+    outer.remove();
+  });
+
+  it("lets the outer terminal scroll when the card is already at its boundary", () => {
+    const outer = document.createElement("div");
+    const modelSessionHost = createModelSessionHost();
+    const content = document.createElement("div");
+    Object.defineProperties(content, {
+      clientHeight: { configurable: true, value: 100 },
+      scrollHeight: { configurable: true, value: 200 },
+      scrollTop: { configurable: true, value: 100, writable: true },
+    });
+    modelSessionHost.append(content);
+    outer.append(modelSessionHost);
+    document.body.append(outer);
+
+    const outerScrollHandler = vi.fn();
+    outer.addEventListener("wheel", outerScrollHandler);
+    content.dispatchEvent(
+      new WheelEvent("wheel", { bubbles: true, deltaY: 40 }),
+    );
+
+    expect(outerScrollHandler).toHaveBeenCalledOnce();
+    outer.remove();
+  });
+});
 
 describe("renderModelSession agent activity", () => {
   it("renders an activity snapshot when reasoning cards have not started yet", () => {

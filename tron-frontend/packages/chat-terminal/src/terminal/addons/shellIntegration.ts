@@ -39,7 +39,8 @@ const DEFAULT_MAX_OUTPUT_LINES = 400;
 const MAX_TRACKED_BLOCKS = 200;
 
 /** Commands that hand the PTY to a nested shell we do not control. */
-const SUBSHELL_COMMAND = /^\s*(?:[\w./-]*\/)?(ssh|mosh|docker|kubectl|podman)\b/;
+const SUBSHELL_COMMAND =
+  /^\s*(?:(?:[\w./-]*\/)?(?:ssh|mosh)\b|(?:[\w./-]*\/)?(?:docker|kubectl|podman)\s+(?:exec|attach|run)\b)/;
 
 /**
  * Turns the OSC 133 markers the shell emits into prompt state and command blocks.
@@ -119,7 +120,10 @@ export class ShellIntegrationAddon implements ITerminalAddon {
     }
     this.disposables.length = 0;
     this.clearSubshellWatch();
+    this.inputStartMarker?.dispose();
+    this.inputStartMarker = undefined;
     this.pending?.promptMarker?.dispose();
+    this.pending?.commandMarker?.dispose();
     this.pending?.outputMarker?.dispose();
     this.pending = undefined;
     this.awaitingCommandFinish?.reject(new Error("终端已关闭"));
@@ -184,6 +188,17 @@ export class ShellIntegrationAddon implements ITerminalAddon {
   }
 
   private handlePromptStart() {
+    // An interactive SSH/container command reports the remote prompt before
+    // the outer command returns. Finish the outer block at that boundary so
+    // its output remains explainable, then start tracking the remote prompt.
+    if (
+      this.pending &&
+      this.state === "executing" &&
+      SUBSHELL_COMMAND.test(this.pending.command)
+    ) {
+      this.finishPendingCommand(null);
+    }
+
     // A prompt appearing while we were watching for a subshell means the nested
     // shell does have the integration, so there is nothing to bootstrap.
     this.clearSubshellWatch();
@@ -213,6 +228,9 @@ export class ShellIntegrationAddon implements ITerminalAddon {
     }
 
     this.pending.command = this.reportedCommand;
+    this.pending.commandStartColumn = this.inputStartColumn;
+    this.pending.commandMarker = this.inputStartMarker;
+    this.inputStartMarker = undefined;
     this.reportedCommand = "";
     this.pending.outputMarker = this.terminal?.registerMarker() ?? undefined;
     this.setState("executing");
@@ -221,6 +239,10 @@ export class ShellIntegrationAddon implements ITerminalAddon {
   }
 
   private handleCommandEnd(exitCode: number | null) {
+    this.finishPendingCommand(exitCode);
+  }
+
+  private finishPendingCommand(exitCode: number | null) {
     this.clearSubshellWatch();
     this.inUnintegratedSubshell = false;
 
@@ -250,6 +272,7 @@ export class ShellIntegrationAddon implements ITerminalAddon {
     terminal: XTerminal,
   ): TerminalCommandBlock {
     const promptMarker = pending.promptMarker;
+    const commandMarker = pending.commandMarker;
     const outputMarker = pending.outputMarker;
     const endMarker = terminal.registerMarker() ?? undefined;
     const maxOutputLines = this.options.maxOutputLines ?? DEFAULT_MAX_OUTPUT_LINES;
@@ -259,7 +282,9 @@ export class ShellIntegrationAddon implements ITerminalAddon {
       command: pending.command,
       exitCode,
       cwd: pending.cwd,
+      commandStartColumn: pending.commandStartColumn,
       promptMarker,
+      commandMarker,
       outputMarker,
       endMarker,
       get startLine() {
@@ -293,6 +318,7 @@ export class ShellIntegrationAddon implements ITerminalAddon {
 
   private discardPending() {
     this.pending?.promptMarker?.dispose();
+    this.pending?.commandMarker?.dispose();
     this.pending?.outputMarker?.dispose();
     this.pending = undefined;
   }
@@ -307,6 +333,7 @@ export class ShellIntegrationAddon implements ITerminalAddon {
     while (this.blocks.length > MAX_TRACKED_BLOCKS) {
       const evicted = this.blocks.shift();
       evicted?.promptMarker?.dispose();
+      evicted?.commandMarker?.dispose();
       evicted?.outputMarker?.dispose();
       evicted?.endMarker?.dispose();
     }
@@ -324,12 +351,7 @@ export class ShellIntegrationAddon implements ITerminalAddon {
   private watchForSubshell(command: string) {
     this.clearSubshellWatch();
 
-    const match = SUBSHELL_COMMAND.exec(command);
-    if (!match) {
-      return;
-    }
-    // `docker`/`kubectl`/`podman` only open a shell for their exec-style verbs.
-    if (match[1] !== "ssh" && match[1] !== "mosh" && !/\b(exec|attach|run)\b/.test(command)) {
+    if (!SUBSHELL_COMMAND.test(command)) {
       return;
     }
 

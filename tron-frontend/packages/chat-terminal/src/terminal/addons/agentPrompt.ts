@@ -21,6 +21,8 @@ export class AgentPromptAddon implements ITerminalAddon {
   private resizeSuppressed = false;
   private inputEnabled = true;
   private hasInput = false;
+  private pendingInput = "";
+  private pendingInputDirty = false;
   private isInputStateManaged = false;
   private standaloneInput = "";
   private visible = true;
@@ -83,7 +85,21 @@ export class AgentPromptAddon implements ITerminalAddon {
   ) {
     this.isInputStateManaged = true;
     this.inputEnabled = enabled;
-    this.hasInput = input.length > 0;
+    if (!enabled || options.hideCursor) {
+      this.pendingInput = "";
+      this.pendingInputDirty = false;
+      this.hasInput = input.length > 0;
+    } else if (this.pendingInputDirty) {
+      if (input === this.pendingInput) {
+        this.pendingInputDirty = false;
+      }
+      this.hasInput = this.pendingInput.length > 0;
+    } else if (input.length > 0) {
+      this.pendingInput = input;
+      this.hasInput = true;
+    } else {
+      this.hasInput = this.pendingInput.length > 0;
+    }
     const hideCursor = options.hideCursor ?? !enabled;
     this.terminal?.element?.classList.toggle(
       "ai-terminal-input-disabled",
@@ -154,21 +170,31 @@ export class AgentPromptAddon implements ITerminalAddon {
   }
 
   private handleStandaloneInput(data: string) {
-    if (this.isInputStateManaged || !this.inputEnabled) {
+    if (!this.inputEnabled) {
       return;
     }
 
     if (data === "\r") {
       this.standaloneInput = "";
+      this.pendingInput = "";
+      this.pendingInputDirty = true;
     } else if (data === "\u007f") {
       this.standaloneInput = Array.from(this.standaloneInput)
         .slice(0, -1)
         .join("");
+      this.pendingInput = Array.from(this.pendingInput)
+        .slice(0, -1)
+        .join("");
+      this.pendingInputDirty = true;
     } else if (!data.startsWith("\x1b")) {
       this.standaloneInput += data;
+      this.pendingInput += data;
+      this.pendingInputDirty = true;
     }
 
-    this.hasInput = this.standaloneInput.length > 0;
+    this.hasInput = this.isInputStateManaged
+      ? this.pendingInput.length > 0
+      : this.standaloneInput.length > 0;
     this.syncVisibility();
   }
 

@@ -125,6 +125,76 @@ describe("BlockAddon", () => {
     });
   });
 
+  describe("explain buttons", () => {
+    it("anchors a normal command button after the echoed command", () => {
+      const normalBlock = block({ startLine: 1, endLine: 4 });
+
+      harness.addon.addExplainButton(normalBlock);
+
+      expect(harness.terminal.registerDecoration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marker: normalBlock.commandMarker,
+          x: 13,
+        }),
+      );
+    });
+
+    it("does not match a short command inside the shell prompt", () => {
+      const shortCommand = block({
+        command: "ll",
+        commandStartColumn: 18,
+        startLine: 3,
+        endLine: 5,
+      });
+
+      harness.addon.addExplainButton(shortCommand);
+
+      expect(harness.terminal.registerDecoration).toHaveBeenCalledWith(
+        expect.objectContaining({
+          marker: shortCommand.commandMarker,
+          x: 20,
+        }),
+      );
+    });
+
+    it("does not render a button for the outer SSH command", () => {
+      const sshBlock = block({
+        id: "ssh-root",
+        startLine: 2,
+        endLine: 6,
+        command: "ssh root@47.94.174.122",
+      });
+
+      harness.addon.addExplainButton(sshBlock);
+
+      expect(harness.terminal.registerDecoration).not.toHaveBeenCalled();
+    });
+
+    it("does not render a button when the marker row identifies SSH", () => {
+      const blockWithStaleCommand = block({
+        id: "ssh-stale",
+        startLine: 2,
+        endLine: 6,
+        command: "remote-session",
+      });
+
+      harness.addon.addExplainButton(blockWithStaleCommand);
+
+      expect(harness.terminal.registerDecoration).not.toHaveBeenCalled();
+    });
+
+    it("does not render a button for a block without a reported command", () => {
+      const emptyCommandBlock = block({
+        id: "empty-command",
+        command: "",
+      });
+
+      harness.addon.addExplainButton(emptyCommandBlock);
+
+      expect(harness.terminal.registerDecoration).not.toHaveBeenCalled();
+    });
+  });
+
   describe("hover", () => {
     it("reveals the action bar over the hovered block", () => {
       harness.addon.addBlock(block({ startLine: 2, endLine: 5 }));
@@ -379,7 +449,15 @@ let blockSequence = 0;
 
 function block(
   overrides: Partial<
-    Pick<TerminalCommandBlock, "id" | "exitCode" | "startLine" | "endLine">
+    Pick<
+      TerminalCommandBlock,
+      | "id"
+      | "command"
+      | "exitCode"
+      | "startLine"
+      | "endLine"
+      | "commandStartColumn"
+    >
   > = {},
 ): TerminalCommandBlock {
   blockSequence += 1;
@@ -387,10 +465,12 @@ function block(
 
   return {
     id,
-    command: `cmd-${id}`,
+    command: overrides.command ?? `cmd-${id}`,
     exitCode: overrides.exitCode ?? 0,
     cwd: "/workspace",
+    commandStartColumn: overrides.commandStartColumn ?? 2,
     promptMarker: { line: overrides.startLine ?? 0 } as never,
+    commandMarker: { line: overrides.startLine ?? 0 } as never,
     outputMarker: { line: (overrides.startLine ?? 0) + 1 } as never,
     endMarker: { line: overrides.endLine ?? 2 } as never,
     startLine: overrides.startLine ?? 0,
@@ -435,6 +515,21 @@ function setup(overrides: Partial<BlockAddonOptions> = {}) {
     },
     buffer: {
       active: {
+        length: 200,
+        getLine: (line: number) => ({
+          translateToString: () => {
+            if (line === 1) {
+              return "$ cmd-block-1";
+            }
+            if (line === 2) {
+              return "$ ssh root@47.94.174.122";
+            }
+            if (line === 3) {
+              return "$ feature/scroll) ll";
+            }
+            return "";
+          },
+        }),
         get viewportY() {
           return viewportY;
         },

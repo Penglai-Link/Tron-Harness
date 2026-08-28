@@ -297,6 +297,7 @@ describe("InputRouterAddon", () => {
 
       expect(harness.key(event)).toBe(false);
       // Clearing xterm's buffer directly would orphan the prompt.
+      expect(harness.options.onClearScreen).toHaveBeenCalledOnce();
       expect(harness.options.write).toHaveBeenCalledWith(REDRAW);
     });
 
@@ -341,6 +342,7 @@ function setup(overrides: Partial<InputRouterAddonOptions> = {}) {
     clearInputLine: vi.fn(() => {
       input = "";
     }),
+    onClearScreen: vi.fn(),
     onAgentInputSubmitted: vi.fn(),
     onAgentRequest: vi.fn((_request: string) => Promise.resolve()),
     onInputStateChange: vi.fn(),

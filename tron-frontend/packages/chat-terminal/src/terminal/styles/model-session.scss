@@ -40,7 +40,6 @@
 .ai-terminal-model-session--complete {
   min-height: 0;
   overflow-y: auto;
-  overscroll-behavior: contain;
 }
 
 .ai-terminal-model-session--running .ai-terminal-model-session__activity-item > summary {

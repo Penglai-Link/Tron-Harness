@@ -17,12 +17,16 @@ export interface TerminalCommandBlock {
   exitCode: number | null;
   /** Working directory the command ran in. */
   cwd: string;
+  /** Column where the shell started accepting the command text. */
+  commandStartColumn?: number;
   /**
    * Markers, not row numbers: absolute rows shift once the scrollback starts
    * trimming, and xterm keeps markers pointed at the right line. They are owned
    * by `ShellIntegrationAddon`, which disposes them when the block is evicted.
    */
   promptMarker?: IMarker;
+  /** Marker at the beginning of the command text after the shell prompt. */
+  commandMarker?: IMarker;
   outputMarker?: IMarker;
   endMarker?: IMarker;
   /** First row of the block, or -1 once the line has been trimmed away. */
@@ -69,6 +73,8 @@ export interface PendingCommand {
   id: string;
   command: string;
   cwd: string;
+  commandStartColumn?: number;
   promptMarker?: IMarker;
+  commandMarker?: IMarker;
   outputMarker?: IMarker;
 }

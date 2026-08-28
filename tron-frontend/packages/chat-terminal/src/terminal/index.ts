@@ -202,6 +202,10 @@ export class Terminal {
           this.shellIntegrationAddon?.isInUnintegratedSubshell() ?? false,
         onAgentInputSubmitted: () =>
           this.modelSessionAddon?.prepareNextSessionAnchor(),
+        onClearScreen: () => {
+          this.modelSessionAddon?.clear();
+          this.terminal.clear();
+        },
         onInputStateChange: (state) => {
           inputRouter.onInputStateChange?.(state);
           this.agentPromptAddon?.setInputState(state.enabled, state.input, {

@@ -27,6 +27,7 @@ export interface ExplainControllerOptions {
   /** Element the dialog is appended to, resolved lazily. */
   host: () => HTMLElement | undefined;
   onExplain: CommandExplain;
+  onCancel?: (signal: AbortSignal) => void | Promise<void>;
   i18n?: ChatTerminalI18n;
   explainTitle?: string;
 }
@@ -49,6 +50,7 @@ export class ExplainController {
   private requestVersion = 0;
   private abortController?: AbortController;
   private renderTimer?: number;
+  private pendingCancellation?: Promise<void>;
   private currentDialog?: HTMLElement;
   private activeDialog?: ActiveDialog;
   private readonly handleDocumentPointerDown = (event: PointerEvent) => {
@@ -110,8 +112,8 @@ export class ExplainController {
       return;
     }
 
+    void this.cancelActiveRequest();
     this.requestVersion += 1;
-    this.cancel();
     this.currentDialog.remove();
     this.currentDialog = undefined;
     this.activeDialog = undefined;
@@ -136,6 +138,32 @@ export class ExplainController {
     this.abortController?.abort();
     this.abortController = undefined;
     this.clearRenderTimer();
+  }
+
+  private cancelActiveRequest() {
+    const signal = this.abortController?.signal;
+    this.cancel();
+    if (!signal || !this.options.onCancel) {
+      return this.pendingCancellation ?? Promise.resolve();
+    }
+
+    const cancel = async () => {
+      try {
+        await this.options.onCancel(signal);
+      } catch {
+        // Closing the dialog must not be blocked by a failed stop request.
+      }
+    };
+    const previous = this.pendingCancellation ?? Promise.resolve();
+    const next = previous.then(cancel, cancel);
+    let pending: Promise<void>;
+    pending = next.finally(() => {
+      if (this.pendingCancellation === pending) {
+        this.pendingCancellation = undefined;
+      }
+    });
+    this.pendingCancellation = pending;
+    return pending;
   }
 
   private clearRenderTimer() {
@@ -180,7 +208,7 @@ export class ExplainController {
     output: string,
     position: ExplainDialogPosition,
   ) {
-    this.cancel();
+    await this.cancelActiveRequest();
     const requestVersion = ++this.requestVersion;
     const abortController = new AbortController();
     this.abortController = abortController;

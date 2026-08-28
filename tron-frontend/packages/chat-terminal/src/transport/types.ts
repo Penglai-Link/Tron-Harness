@@ -89,6 +89,8 @@ export interface AIRequestOptions {
 
 export interface AITransport {
   dispose?(): void;
+  /** Cancels the request associated with the signal, including its server run. */
+  cancel?(signal: AbortSignal): void | Promise<void>;
   request(content: string, options?: AIRequestOptions): Promise<string>;
   stream(content: string, options: AIStreamOptions): Promise<AIStreamResult>;
 }

@@ -25,6 +25,8 @@ export interface InputRouterAddonOptions {
   readInputLine: () => string;
   /** Discards the pending input line in the shell. */
   clearInputLine: () => void;
+  /** Removes inline model-session cards when the terminal screen is cleared. */
+  onClearScreen?: () => void;
   /** Called before submitting a natural-language line to prepare the agent card. */
   onAgentInputSubmitted?: () => void;
   /** Hands a natural-language request to the agent. */

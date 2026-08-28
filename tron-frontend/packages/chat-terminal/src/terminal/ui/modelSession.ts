@@ -13,11 +13,80 @@ import { renderMarkdown as renderMarkdownContent } from "../utils/markdown";
 
 export function createModelSessionHost() {
   const host = document.createElement("div");
+  let lastTouchY: number | null = null;
   host.className = "ai-terminal-model-session-host";
-  host.addEventListener("mousedown", (event) => {
-    event.stopPropagation();
-  });
+  const handleWheel = (event: WheelEvent) => {
+    if (canConsumeScroll(host, event.target, event.deltaY, event.deltaX)) {
+      event.stopPropagation();
+    }
+  };
+  const handleTouchStart = (event: TouchEvent) => {
+    lastTouchY = readTouchY(event);
+  };
+  const handleTouchMove = (event: TouchEvent) => {
+    const touchY = readTouchY(event);
+    const deltaY = lastTouchY !== null && touchY !== null
+      ? lastTouchY - touchY
+      : 0;
+    if (canConsumeScroll(host, event.target, deltaY, 0)) {
+      event.stopPropagation();
+    }
+    lastTouchY = touchY;
+  };
+  const resetTouch = () => {
+    lastTouchY = null;
+  };
+  host.addEventListener("mousedown", (event) => event.stopPropagation());
+  host.addEventListener("wheel", handleWheel);
+  host.addEventListener("touchstart", handleTouchStart, { passive: true });
+  host.addEventListener("touchmove", handleTouchMove);
+  host.addEventListener("touchend", resetTouch, { passive: true });
+  host.addEventListener("touchcancel", resetTouch, { passive: true });
   return host;
+}
+
+function canConsumeScroll(
+  host: HTMLElement,
+  target: EventTarget | null,
+  deltaY: number,
+  deltaX: number,
+) {
+  let element = target instanceof HTMLElement ? target : null;
+  while (element && element !== host) {
+    if (elementCanConsumeScroll(element, deltaY, deltaX)) {
+      return true;
+    }
+    element = element.parentElement;
+  }
+  return element === host && elementCanConsumeScroll(host, deltaY, deltaX);
+}
+
+function elementCanConsumeScroll(
+  element: HTMLElement,
+  deltaY: number,
+  deltaX: number,
+) {
+  const canScrollVertically = element.scrollHeight > element.clientHeight;
+  const canScrollHorizontally = element.scrollWidth > element.clientWidth;
+  if (!canScrollVertically && !canScrollHorizontally) {
+    return false;
+  }
+
+  if (deltaY !== 0 && canScrollVertically) {
+    return deltaY < 0
+      ? element.scrollTop > 0
+      : element.scrollTop + element.clientHeight < element.scrollHeight;
+  }
+  if (deltaX !== 0 && canScrollHorizontally) {
+    return deltaX < 0
+      ? element.scrollLeft > 0
+      : element.scrollLeft + element.clientWidth < element.scrollWidth;
+  }
+  return deltaY === 0 && deltaX === 0;
+}
+
+function readTouchY(event: TouchEvent) {
+  return event.touches[0]?.clientY ?? event.changedTouches[0]?.clientY ?? null;
 }
 
 export function renderModelSession(

@@ -1649,6 +1649,7 @@
   box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2), 0 4px 16px rgba(15, 23, 42, 0.08);
   backdrop-filter: blur(16px);
   animation: tron-chat-user-input-pop 180ms ease-out both;
+  overscroll-behavior: contain;
 }
 .tron-chat__user-input-body { display: grid; min-height: 0; gap: 0.5rem; overflow-y: auto; padding-right: 0.125rem; overscroll-behavior: contain; }
 .tron-chat__user-input-header { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }

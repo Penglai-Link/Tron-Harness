@@ -274,6 +274,24 @@ describe("ShellIntegrationAddon", () => {
   });
 
   describe("subshell detection", () => {
+    it("finishes the SSH command block when the remote prompt starts", () => {
+      const blocks = harness.collectBlocks();
+
+      harness.osc133("A");
+      harness.showPrompt("$ ");
+      harness.osc133("B");
+      harness.osc633("E;ssh root@host");
+      harness.osc133("C");
+      harness.osc133("A");
+
+      expect(blocks).toHaveLength(1);
+      expect(blocks[0]).toMatchObject({
+        command: "ssh root@host",
+        commandStartColumn: 2,
+      });
+      expect(blocks[0].commandMarker?.line).toBe(0);
+    });
+
     it("offers to bootstrap a remote shell that never reports a prompt", () => {
       const detected = vi.fn();
       harness.addon.subshellDetected.on(detected);
