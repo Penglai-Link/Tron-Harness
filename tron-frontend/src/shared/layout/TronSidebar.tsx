@@ -161,7 +161,7 @@ export function TronSidebar({
           <SidebarMenuButton
             aria-expanded={open}
             aria-label={translate(open ? "shell:aria.collapseNavigationItem" : "shell:aria.expandNavigationItem", { item: itemLabel })}
-            className="gap-2 px-3 text-sidebar-foreground/70"
+            className="gap-2 px-3 text-sidebar-foreground"
             type="button"
             onClick={() => {
               setOpenNavigationItems((current) => ({ ...current, [itemKey]: !current[itemKey] }));
