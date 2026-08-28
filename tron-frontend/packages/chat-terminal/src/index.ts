@@ -343,7 +343,8 @@ function isAgentActivityEvent(event: AIStreamEvent) {
     type.startsWith("REASONING_") ||
     type.startsWith("TOOL_CALL_") ||
     type === "ACTIVITY_DELTA" ||
-    type === "ACTIVITY_SNAPSHOT"
+    type === "ACTIVITY_SNAPSHOT" ||
+    type === "RUN_ERROR"
   );
 }
 

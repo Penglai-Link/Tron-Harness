@@ -116,7 +116,42 @@ describe("renderModelSession agent activity", () => {
     );
 
     expect(host.textContent).toContain("Thinking");
+    expect(host.textContent).toContain("Thinking 0m 3s");
     expect(host.querySelector(".ai-terminal-model-session__activity-status--running")).toBeTruthy();
+  });
+
+  it("shows a failed state for a snapshot-only RUN_ERROR", () => {
+    const host = document.createElement("div");
+    const i18n = createChatTerminalI18n({ locale: "zh-CN" });
+
+    renderModelSession(
+      host,
+      {
+        activityEvents: [
+          { activity: "THINKING", runId: "run-error", summary: "正在检查", timestamp: 1, type: "ACTIVITY_SNAPSHOT" },
+          { code: "AGENT_MODEL_FAILED", runId: "run-error", timestamp: 2, type: "RUN_ERROR" },
+        ],
+        activityStartedAt: 0,
+        activityNow: 2_000,
+        activityComplete: true,
+        commandStates: new Map(),
+        i18n,
+        tokens: [],
+      },
+      {
+        onDraftCommandChange: vi.fn(),
+        onExecuteCommand: vi.fn(),
+        onCancelCommandEdit: vi.fn(),
+        onRejectCommand: vi.fn(),
+        onSaveCommandEdit: vi.fn(),
+        onStartEditCommand: vi.fn(),
+      },
+    );
+
+    expect(host.textContent).toContain("运行失败");
+    expect(host.textContent).toContain("运行失败 0分钟 2秒");
+    expect(host.textContent).not.toContain("耗时");
+    expect(host.querySelector("summary svg")).toBeNull();
   });
 
   it("shows processed time after reasoning ends while the model is still running", () => {
@@ -228,6 +263,41 @@ describe("renderModelSession agent activity", () => {
     expect(host.querySelector(".ai-terminal-model-session__activity-item--nested")).toBeTruthy();
     (host.querySelector("summary") as HTMLElement).click();
     expect(host.querySelector("details")?.open).toBe(true);
+  });
+
+  it("shows a failed state when the run emits RUN_ERROR", () => {
+    const host = document.createElement("div");
+    const i18n = createChatTerminalI18n({ locale: "zh-CN" });
+
+    renderModelSession(
+      host,
+      {
+        activityEvents: [
+          { runId: "run-error", timestamp: 1, type: "REASONING_START" },
+          { delta: "正在检查", runId: "run-error", timestamp: 2, type: "REASONING_MESSAGE_CONTENT" },
+          { code: "AGENT_MODEL_FAILED", runId: "run-error", timestamp: 3, type: "RUN_ERROR" },
+        ],
+        activityStartedAt: 0,
+        activityNow: 3_000,
+        activityComplete: true,
+        commandStates: new Map(),
+        i18n,
+        tokens: [],
+      },
+      {
+        onDraftCommandChange: vi.fn(),
+        onExecuteCommand: vi.fn(),
+        onCancelCommandEdit: vi.fn(),
+        onRejectCommand: vi.fn(),
+        onSaveCommandEdit: vi.fn(),
+        onStartEditCommand: vi.fn(),
+      },
+    );
+
+    expect(host.textContent).toContain("运行失败");
+    expect(host.textContent).toContain("运行失败 0分钟 3秒");
+    expect(host.textContent).not.toContain("耗时");
+    expect(host.querySelector("summary svg")).toBeNull();
   });
 
   it("keeps tool details collapsed while a session is running", () => {

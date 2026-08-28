@@ -27,6 +27,7 @@ export default {
   activitySecond: "秒",
   activityPreparing: "正在准备",
   activityResponding: "正在组织回答",
+  activityFailed: "运行失败",
   reasoningCaptured: "已完成分析",
   reasoningThinking: "思考中",
   toolsRan: "已调用工具",

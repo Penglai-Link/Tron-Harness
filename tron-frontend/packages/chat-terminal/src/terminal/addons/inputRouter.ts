@@ -26,6 +26,8 @@ const REDRAW = "\x0c";
 export class InputRouterAddon implements ITerminalAddon {
   private terminal?: XTerminal;
   private dataDisposable?: IDisposable;
+  private writeParsedDisposable?: IDisposable;
+  private cursorMoveDisposable?: IDisposable;
   private agentRequestInFlight = false;
 
   constructor(private readonly options: InputRouterAddonOptions) {}
@@ -35,6 +37,17 @@ export class InputRouterAddon implements ITerminalAddon {
     this.dataDisposable = terminal.onData((data) => {
       void this.handleData(data);
     });
+    this.writeParsedDisposable = terminal.onWriteParsed(() => {
+      // Shell completion redraws the current line without producing another
+      // user-input event. Re-read it after xterm has parsed the redraw so the
+      // prompt hint follows the completed command instead of reappearing.
+      this.notifyInputState();
+    });
+    this.cursorMoveDisposable = terminal.onCursorMove(() => {
+      // Completion and history navigation can move the cursor after the
+      // shell redraws the line. Re-read the rendered input at that point too.
+      this.notifyInputState();
+    });
     terminal.attachCustomKeyEventHandler((event) => this.handleKeyEvent(event));
     this.notifyInputState();
   }
@@ -42,6 +55,10 @@ export class InputRouterAddon implements ITerminalAddon {
   dispose() {
     this.dataDisposable?.dispose();
     this.dataDisposable = undefined;
+    this.writeParsedDisposable?.dispose();
+    this.writeParsedDisposable = undefined;
+    this.cursorMoveDisposable?.dispose();
+    this.cursorMoveDisposable = undefined;
     this.terminal = undefined;
   }
 

@@ -28,6 +28,7 @@ export default {
   activitySecond: "s",
   activityPreparing: "Preparing request",
   activityResponding: "Drafting response",
+  activityFailed: "Run failed",
   reasoningCaptured: "Reasoning captured",
   reasoningThinking: "Thinking",
   toolsRan: "Tools called",

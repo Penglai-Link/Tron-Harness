@@ -21,9 +21,9 @@ export interface AgentActivityState {
 
 export function renderAgentActivity(state: AgentActivityState) {
   const events = state.activityEvents as readonly TranscriptAguiEvent[];
-  const cards = buildAguiUserWorkCards(
+  const cards = mergeReasoningCards(buildAguiUserWorkCards(
     events.filter((event) => event.type.toUpperCase() !== "REASONING_TEXT_CONTENT"),
-  );
+  ));
   const orderedCards = [...cards].sort((left, right) => {
     const leftRank = left.kind === "reasoning" ? 0 : 1;
     const rightRank = right.kind === "reasoning" ? 0 : 1;
@@ -61,18 +61,51 @@ export function renderAgentActivity(state: AgentActivityState) {
   </section>`;
 }
 
+function mergeReasoningCards(
+  cards: ReturnType<typeof buildAguiUserWorkCards>,
+): ReturnType<typeof buildAguiUserWorkCards> {
+  const reasoningCards = cards.filter((card) => card.kind === "reasoning");
+  if (reasoningCards.length < 2) return cards;
+
+  const first = reasoningCards[0].value;
+  const merged = {
+    kind: "reasoning" as const,
+    value: {
+      ...first,
+      content: reasoningCards
+        .map((card) => card.value.content.trim())
+        .filter(Boolean)
+        .join("\n\n"),
+      ended: reasoningCards.every((card) => card.value.ended),
+      endMillis: reasoningCards.reduce((latest, card) => (
+        Math.max(latest ?? 0, card.value.endMillis ?? 0) || null
+      ), null as number | null),
+      firstMillis: Math.min(...reasoningCards.map((card) => card.value.firstMillis)),
+      id: `${first.runCode}:reasoning`,
+      toolCards: reasoningCards.flatMap((card) => card.value.toolCards),
+    },
+  };
+
+  return [
+    merged,
+    ...cards.filter((card) => card.kind !== "reasoning"),
+  ].sort((left, right) => left.value.firstMillis - right.value.firstMillis);
+}
+
 function renderActivitySnapshot(
   snapshot: NonNullable<ReturnType<typeof currentAguiWorkSnapshot>>,
   state: AgentActivityState,
 ) {
   const { i18n } = state;
-  const summary = state.activityComplete
-    ? formatElapsedDuration(activityElapsedMilliseconds(state), i18n)
-    : snapshot.activity === "THINKING"
-      ? i18n.t("reasoningThinking")
-      : `${i18n.t("activityProcessed")} ${formatDurationValue(activityElapsedMilliseconds(state), i18n)}`;
+  const summary = hasRunError(state.activityEvents)
+    ? formatActivityStatus(i18n.t("activityFailed"), state, i18n)
+    : state.activityComplete
+      ? formatActivityStatus(i18n.t("activityElapsed"), state, i18n)
+      : snapshot.activity === "THINKING"
+      ? formatActivityStatus(i18n.t("reasoningThinking"), state, i18n)
+      : formatActivityStatus(i18n.t("activityProcessed"), state, i18n);
   return html`<div class="ai-terminal-model-session__activity-item ai-terminal-model-session__activity-item--snapshot" aria-live="polite">
-    ${renderActivityChevron()}
+    ${hasRunError(state.activityEvents) ? nothing : renderActivityChevron()}
     <span class=${activityStatusClass(state)}>${summary}</span>
   </div>`;
 }
@@ -87,7 +120,7 @@ function renderActivityCard(
     const summary = activityStatusLabel(state, events, i18n);
     return html`<details class="ai-terminal-model-session__activity-item" ?open=${state.activityComplete ? nothing : false} @toggle=${(event: Event) => closeActivityToggle(event, state)}>
       <summary @click=${(event: MouseEvent) => preventActivityToggle(event, state)}>
-        ${renderActivityChevron()}
+        ${hasRunError(events) ? nothing : renderActivityChevron()}
         <span class=${activityStatusClass(state)}>${summary}</span>
       </summary>
       ${card.value.content
@@ -197,13 +230,28 @@ function activityStatusLabel(
   events: readonly TranscriptAguiEvent[],
   i18n: ChatTerminalI18n,
 ) {
+  if (hasRunError(events)) {
+    return formatActivityStatus(i18n.t("activityFailed"), state, i18n);
+  }
   if (state.activityComplete) {
-    return formatElapsedDuration(activityElapsedMilliseconds(state), i18n);
+    return formatActivityStatus(i18n.t("activityElapsed"), state, i18n);
   }
   if (hasActiveReasoning(events)) {
-    return i18n.t("reasoningThinking");
+    return formatActivityStatus(i18n.t("reasoningThinking"), state, i18n);
   }
-  return `${i18n.t("activityProcessed")} ${formatDurationValue(activityElapsedMilliseconds(state), i18n)}`;
+  return formatActivityStatus(i18n.t("activityProcessed"), state, i18n);
+}
+
+function hasRunError(events: readonly TranscriptAguiEvent[]) {
+  return events.some((event) => event.type.toUpperCase() === "RUN_ERROR");
+}
+
+function formatActivityStatus(
+  status: string,
+  state: AgentActivityState,
+  i18n: ChatTerminalI18n,
+) {
+  return `${status} ${formatDurationValue(activityElapsedMilliseconds(state), i18n)}`;
 }
 
 function activityStatusClass(state: AgentActivityState) {

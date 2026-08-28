@@ -262,6 +262,34 @@ describe("InputRouterAddon", () => {
     });
   });
 
+  it("re-reads input after shell completion redraws the line", () => {
+    harness.atPrompt(true, "ls");
+    harness.readInput("LS_COLORS=");
+    harness.options.onInputStateChange.mockClear();
+
+    harness.emitWriteParsed();
+
+    expect(harness.options.onInputStateChange).toHaveBeenLastCalledWith({
+      agentRequestInFlight: false,
+      enabled: true,
+      input: "LS_COLORS=",
+    });
+  });
+
+  it("re-reads input after completion moves the cursor", () => {
+    harness.atPrompt(true, "ls");
+    harness.readInput("LS_COLORS=");
+    harness.options.onInputStateChange.mockClear();
+
+    harness.emitCursorMove();
+
+    expect(harness.options.onInputStateChange).toHaveBeenLastCalledWith({
+      agentRequestInFlight: false,
+      enabled: true,
+      input: "LS_COLORS=",
+    });
+  });
+
   describe("shortcuts", () => {
     it("sends the pending line to the agent on Cmd+Shift+I", () => {
       harness.atPrompt(true, "why is this slow");
@@ -350,12 +378,22 @@ function setup(overrides: Partial<InputRouterAddonOptions> = {}) {
 
   const dataDisposable = { dispose: vi.fn() };
   let dataListener: ((data: string) => void) | undefined;
+  let writeParsedListener: (() => void) | undefined;
+  let cursorMoveListener: (() => void) | undefined;
   let keyHandler: ((event: KeyboardEvent) => boolean) | undefined;
 
   const terminal = {
     onData: vi.fn((listener: (data: string) => void) => {
       dataListener = listener;
       return dataDisposable;
+    }),
+    onWriteParsed: vi.fn((listener: () => void) => {
+      writeParsedListener = listener;
+      return { dispose: vi.fn() };
+    }),
+    onCursorMove: vi.fn((listener: () => void) => {
+      cursorMoveListener = listener;
+      return { dispose: vi.fn() };
     }),
     attachCustomKeyEventHandler: vi.fn(
       (handler: (event: KeyboardEvent) => boolean) => {
@@ -382,6 +420,12 @@ function setup(overrides: Partial<InputRouterAddonOptions> = {}) {
     },
     readInput(next: string) {
       input = next;
+    },
+    emitWriteParsed() {
+      writeParsedListener?.();
+    },
+    emitCursorMove() {
+      cursorMoveListener?.();
     },
     async type(data: string) {
       dataListener?.(data);
