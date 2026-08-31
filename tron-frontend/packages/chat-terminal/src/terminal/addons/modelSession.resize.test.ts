@@ -12,10 +12,34 @@ function resizeEntry(target: HTMLElement, width: number) {
 }
 
 class TerminalStub {
-  readonly buffer = { active: { baseY: 0, cursorY: 0, viewportY: 0 } };
+  readonly buffer = {
+    active: {
+      type: "normal" as "normal" | "alternate",
+      baseY: 0,
+      cursorX: 0,
+      cursorY: 0,
+      viewportY: 0,
+    },
+  };
   readonly element = document.createElement("div");
   readonly markers: Array<{ dispose: ReturnType<typeof vi.fn>; line: number }> = [];
+  readonly clearScreenDisposable = { dispose: vi.fn() };
+  private clearScreenHandler?: (
+    params: (number | number[])[],
+  ) => boolean | Promise<boolean>;
   private resizeHandler?: () => void;
+
+  readonly parser = {
+    registerCsiHandler: vi.fn(
+      (
+        _id: unknown,
+        handler: (params: (number | number[])[]) => boolean | Promise<boolean>,
+      ) => {
+        this.clearScreenHandler = handler;
+        return this.clearScreenDisposable;
+      },
+    ),
+  };
 
   onScroll(): IDisposable {
     return { dispose: vi.fn() };
@@ -34,6 +58,10 @@ class TerminalStub {
 
   emitResize() {
     this.resizeHandler?.();
+  }
+
+  emitEraseInDisplay(params: (number | number[])[] = []) {
+    return this.clearScreenHandler?.(params);
   }
 
   write = vi.fn((_data: string, callback?: () => void) => callback?.());
@@ -265,6 +293,98 @@ describe("ModelSessionAddon card resize tracking", () => {
 
     addon.dispose();
     expect(terminal.markers[0].dispose).toHaveBeenCalledOnce();
+  });
+});
+
+describe("ModelSessionAddon terminal clear synchronization", () => {
+  beforeEach(() => {
+    animationFrames = [];
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      vi.fn((callback: FrameRequestCallback) => {
+        animationFrames.push(callback);
+        return animationFrames.length;
+      }),
+    );
+    vi.stubGlobal("cancelAnimationFrame", vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it("removes model cards for full-display erase sequences", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+    expect(terminal.parser.registerCsiHandler).toHaveBeenCalledWith(
+      { final: "J" },
+      expect.any(Function),
+    );
+    addon.appendMessageChunk({
+      conversationId: "one",
+      requestId: "one",
+      response: "one",
+    });
+
+    const host = terminal.element.querySelector(
+      ".ai-terminal-model-session-host",
+    );
+    expect(host).not.toBeNull();
+    expect(terminal.emitEraseInDisplay([2])).toBe(false);
+    expect(terminal.element.contains(host)).toBe(false);
+    addon.dispose();
+  });
+
+  it("recognizes a default erase after the cursor moved to the top-left", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+    addon.appendMessageChunk({
+      conversationId: "one",
+      requestId: "one",
+      response: "one",
+    });
+
+    const host = terminal.element.querySelector(
+      ".ai-terminal-model-session-host",
+    );
+    expect(terminal.emitEraseInDisplay([])).toBe(false);
+    expect(terminal.element.contains(host)).toBe(false);
+    addon.dispose();
+  });
+
+  it("ignores partial and alternate-buffer erases", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+    addon.appendMessageChunk({
+      conversationId: "one",
+      requestId: "one",
+      response: "one",
+    });
+
+    const host = terminal.element.querySelector(
+      ".ai-terminal-model-session-host",
+    );
+    terminal.buffer.active.cursorX = 4;
+    expect(terminal.emitEraseInDisplay([0])).toBe(false);
+    expect(terminal.element.contains(host)).toBe(true);
+
+    terminal.buffer.active.type = "alternate";
+    expect(terminal.emitEraseInDisplay([2])).toBe(false);
+    expect(terminal.element.contains(host)).toBe(true);
+    addon.dispose();
+  });
+
+  it("disposes the clear-sequence listener", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+
+    addon.dispose();
+
+    expect(terminal.clearScreenDisposable.dispose).toHaveBeenCalledOnce();
   });
 });
 

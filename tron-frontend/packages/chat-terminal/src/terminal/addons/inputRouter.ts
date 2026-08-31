@@ -8,8 +8,6 @@ import { TerminalCommandDetector } from "../utils/terminalCommandDetector";
 
 const DEFAULT_AGENT_PREFIX = "#";
 const ENTER_KEYS = new Set(["\r", "\n", "\r\n"]);
-/** Readline redraw, used to clear the screen the way the shell expects. */
-const REDRAW = "\x0c";
 
 /**
  * Routes keystrokes between the shell and the agent.
@@ -188,17 +186,6 @@ export class InputRouterAddon implements ITerminalAddon {
         void this.runAgentRequest(line);
         return false;
       }
-    }
-
-    // Cmd+K: clear host-owned overlays and scrollback, then ask the shell to
-    // redraw its prompt so readline state stays synchronized.
-    const isClearShortcut =
-      key === "k" && event.metaKey && !event.altKey && !event.ctrlKey;
-    if (isClearShortcut && canUseShortcuts) {
-      event.preventDefault();
-      this.options.onClearScreen?.();
-      this.options.write(REDRAW);
-      return false;
     }
 
     return true;

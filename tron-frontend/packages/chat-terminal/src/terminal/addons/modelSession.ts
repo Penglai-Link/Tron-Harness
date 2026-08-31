@@ -93,6 +93,7 @@ export class ModelSessionAddon implements ITerminalAddon {
   private terminal?: XTerminal;
   private scrollDisposable?: IDisposable;
   private resizeDisposable?: IDisposable;
+  private clearScreenDisposable?: IDisposable;
   private viewportElement?: HTMLElement;
   private sessionResizeObserver?: ResizeObserver;
   private readonly sessionWidths = new Map<string, number>();
@@ -150,6 +151,14 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.resizeDisposable = terminal.onResize(() => {
       this.scheduleInlineLayoutUpdate(this.hasCompletedSessions());
     });
+    this.clearScreenDisposable = terminal.parser.registerCsiHandler(
+      { final: "J" },
+      (params) => {
+        this.handleEraseInDisplay(params);
+        // Keep the native xterm handler responsible for erasing the buffer.
+        return false;
+      },
+    );
     this.viewportElement =
       terminal.element.querySelector<HTMLElement>(".xterm-viewport") ??
       undefined;
@@ -166,6 +175,8 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.scrollDisposable = undefined;
     this.resizeDisposable?.dispose();
     this.resizeDisposable = undefined;
+    this.clearScreenDisposable?.dispose();
+    this.clearScreenDisposable = undefined;
     this.viewportElement?.removeEventListener(
       "scroll",
       this.handleViewportScroll,
@@ -400,6 +411,28 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.activeSessionKey = undefined;
     this.preparedSessionAnchor = false;
     this.isVisible.value = false;
+  }
+
+  private handleEraseInDisplay(params: (number | number[])[]) {
+    const terminal = this.terminal;
+    const buffer = terminal?.buffer.active;
+    if (!buffer || buffer.type !== "normal") {
+      return;
+    }
+
+    const firstParam = params[0];
+    const mode =
+      typeof firstParam === "number"
+        ? firstParam
+        : firstParam?.[0] ?? 0;
+    const clearsDisplay =
+      mode === 2 ||
+      mode === 3 ||
+      (mode === 0 && buffer.cursorX === 0 && buffer.cursorY === 0);
+
+    if (clearsDisplay) {
+      this.clear();
+    }
   }
 
   show() {

@@ -5,8 +5,6 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { InputRouterAddon } from "./inputRouter";
 import type { InputRouterAddonOptions } from "../types/inputRouter";
 
-const REDRAW = "\x0c";
-
 describe("InputRouterAddon", () => {
   let harness: ReturnType<typeof setup>;
 
@@ -316,14 +314,13 @@ describe("InputRouterAddon", () => {
       expect(harness.options.onAgentRequest).not.toHaveBeenCalled();
     });
 
-    it("asks the shell to redraw on Cmd+K instead of clearing behind its back", () => {
+    it("passes Cmd+K through after application clear handling is removed", () => {
       harness.atPrompt(true);
       const event = keydown("k", { metaKey: true });
 
-      expect(harness.key(event)).toBe(false);
-      // Clearing xterm's buffer directly would orphan the prompt.
-      expect(harness.options.onClearScreen).toHaveBeenCalledOnce();
-      expect(harness.options.write).toHaveBeenCalledWith(REDRAW);
+      expect(harness.key(event)).toBe(true);
+      expect(event.defaultPrevented).toBe(false);
+      expect(harness.options.onClearScreen).not.toHaveBeenCalled();
     });
 
     it("passes unclaimed keys through so shell keybindings keep working", () => {
@@ -331,6 +328,7 @@ describe("InputRouterAddon", () => {
 
       expect(harness.key(keydown("a", { ctrlKey: true }))).toBe(true);
       expect(harness.key(keydown("k", { ctrlKey: true }))).toBe(true);
+      expect(harness.key(keydown("l", { ctrlKey: true }))).toBe(true);
       expect(harness.key(keydown("i", { ctrlKey: true }))).toBe(true);
       expect(harness.options.write).not.toHaveBeenCalled();
     });
