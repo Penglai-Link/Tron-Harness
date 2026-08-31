@@ -405,7 +405,14 @@ describe("ShellIntegrationAddon", () => {
       const detected = vi.fn();
       harness.addon.subshellDetected.on(detected);
 
-      for (const command of ["ls -la", "docker ps", "kubectl get pods", "git ssh"]) {
+      for (const command of [
+        "ls -la",
+        "docker ps",
+        "docker exec -it api python",
+        "docker attach api",
+        "kubectl get pods",
+        "git ssh",
+      ]) {
         harness.osc633(`E;${command}`);
         harness.osc133("C");
         vi.advanceTimersByTime(SUBSHELL_DELAY_MS * 2);
@@ -428,6 +435,18 @@ describe("ShellIntegrationAddon", () => {
         command: "docker exec -it api bash",
         host: "api",
       });
+    });
+
+    it("does not watch a container shell command with -c", () => {
+      const detected = vi.fn();
+      harness.addon.subshellDetected.on(detected);
+
+      harness.osc633("E;docker exec -it api bash -c whoami");
+      harness.osc133("C");
+      harness.showPrompt("root@api:/# ");
+      vi.advanceTimersByTime(SUBSHELL_DELAY_MS * 2);
+
+      expect(detected).not.toHaveBeenCalled();
     });
 
     it("ignores output notes when nothing is being watched", () => {

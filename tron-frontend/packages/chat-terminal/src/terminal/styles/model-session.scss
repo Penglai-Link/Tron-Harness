@@ -16,7 +16,6 @@
   pointer-events: auto;
   transform: translate3d(0, 0, 0);
   will-change: transform;
-  margin: 0 10px;
 }
 
 .ai-terminal-model-session-host[hidden] {
@@ -74,11 +73,6 @@
 .ai-terminal-model-session__cancel-button {
   position: absolute;
   right: 10px;
-  min-height: 28px;
-  padding: 0 10px;
-  border: 1px solid var(--ai-terminal-border);
-  border-radius: 4px;
-  background: transparent;
   color: var(--ai-terminal-primary);
   cursor: pointer;
   font: inherit;
@@ -86,7 +80,7 @@
 }
 
 .ai-terminal-model-session__cancel-button:hover {
-  background: color-mix(in srgb, var(--ai-terminal-primary) 9%, transparent);
+  opacity: 0.8;
 }
 
 .ai-terminal-model-session__body {

@@ -111,17 +111,14 @@ describe("InputRouterAddon", () => {
     ]);
   });
 
-  it("clears natural language before reserving rows in an unintegrated SSH shell", async () => {
+  it("does not expose AI inside an unintegrated SSH shell", async () => {
     harness = setup({ isInUnintegratedSubshell: () => true });
     harness.atPrompt(false, "你好");
 
     await harness.type("\r");
 
-    expect(harness.options.onAgentRequest).toHaveBeenCalledWith("你好");
-    expect(harness.options.write.mock.calls).toEqual([
-      ["", true],
-      ["\r"],
-    ]);
+    expect(harness.options.onAgentRequest).not.toHaveBeenCalled();
+    expect(harness.options.write).toHaveBeenCalledWith("\r");
   });
 
   it("leaves every byte to Vim inside an unintegrated SSH shell", async () => {

@@ -39,8 +39,7 @@ const DEFAULT_MAX_OUTPUT_LINES = 400;
 const MAX_TRACKED_BLOCKS = 200;
 
 /** Commands that hand the PTY to a nested shell we do not control. */
-const SUBSHELL_COMMAND =
-  /^\s*(?:(?:[\w./-]*\/)?(?:ssh|mosh)\b|(?:[\w./-]*\/)?(?:docker|kubectl|podman)\s+(?:exec|attach|run)\b)/;
+const SHELL_PROGRAMS = new Set(["bash", "dash", "fish", "ksh", "sh", "zsh"]);
 
 /**
  * Turns the OSC 133 markers the shell emits into prompt state and command blocks.
@@ -194,7 +193,7 @@ export class ShellIntegrationAddon implements ITerminalAddon {
     if (
       this.pending &&
       this.state === "executing" &&
-      SUBSHELL_COMMAND.test(this.pending.command)
+      isInteractiveSubshellCommand(this.pending.command)
     ) {
       this.finishPendingCommand(null);
     }
@@ -351,7 +350,7 @@ export class ShellIntegrationAddon implements ITerminalAddon {
   private watchForSubshell(command: string) {
     this.clearSubshellWatch();
 
-    if (!SUBSHELL_COMMAND.test(command)) {
+    if (!isInteractiveSubshellCommand(command)) {
       return;
     }
 
@@ -575,6 +574,84 @@ export function parseSubshellHost(command: string) {
 
   // Strip a user prefix and any trailing path or port.
   return target.split("@").pop()?.split(":")[0] ?? "";
+}
+
+/** Returns true only for commands that are expected to expose an interactive shell. */
+function isInteractiveSubshellCommand(command: string) {
+  const tokens = command.trim().split(/\s+/).filter(Boolean);
+  const executable = tokens[0]?.split("/").pop();
+  if (executable === "ssh" || executable === "mosh") {
+    let targetSeen = false;
+    let optionValueExpected = false;
+    const optionsWithValues = new Set([
+      "-B",
+      "-b",
+      "-c",
+      "-D",
+      "-E",
+      "-e",
+      "-F",
+      "-I",
+      "-i",
+      "-J",
+      "-L",
+      "-l",
+      "-m",
+      "-o",
+      "-P",
+      "-p",
+      "-R",
+      "-S",
+      "-w",
+    ]);
+    for (const token of tokens.slice(1)) {
+      if (optionValueExpected) {
+        optionValueExpected = false;
+        continue;
+      }
+      if (optionsWithValues.has(token)) {
+        optionValueExpected = true;
+        continue;
+      }
+      if (token.startsWith("-") && !targetSeen) {
+        continue;
+      }
+      if (!targetSeen) {
+        targetSeen = true;
+        continue;
+      }
+      // A positional argument after the host is a remote command, not a shell.
+      if (!token.startsWith("-")) {
+        return false;
+      }
+    }
+    return targetSeen;
+  }
+
+  if (
+    executable !== "docker" &&
+    executable !== "podman" &&
+    executable !== "kubectl"
+  ) {
+    return false;
+  }
+
+  const action = tokens[1];
+  if (action !== "exec" && action !== "run") {
+    return false;
+  }
+
+  const shellIndex = tokens.findIndex((token, index) => {
+    if (index < 2) return false;
+    return SHELL_PROGRAMS.has(token.split("/").pop() ?? "");
+  });
+  if (shellIndex < 0) {
+    return false;
+  }
+
+  // `-c` hands the shell a non-interactive command; there is no prompt to
+  // expose to the AI in that mode.
+  return !tokens.slice(shellIndex + 1).includes("-c");
 }
 
 const SUBSHELL_VERBS = new Set(["exec", "attach", "run", "-it", "compose"]);

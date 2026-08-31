@@ -18,10 +18,9 @@ const REDRAW = "\x0c";
  * is authoritative, so the shell renders the prompt and the typed line itself.
  * The only thing decided here is where a submitted line goes.
  *
- * Routing is only attempted while the shell reports a prompt. That single check
- * is what fixes AI over SSH: a remote shell with the integration installed
- * reports its own prompts, so the agent stays reachable there, while a
- * full-screen program like `vim` keeps every byte to itself.
+ * Routing is only attempted while the shell reports a prompt. A shell without
+ * OSC 133 integration is deliberately treated as a plain terminal: without a
+ * trustworthy input boundary, offering AI could swallow commands.
  */
 export class InputRouterAddon implements ITerminalAddon {
   private terminal?: XTerminal;
@@ -67,8 +66,7 @@ export class InputRouterAddon implements ITerminalAddon {
     const enabled =
       !this.isAlternateScreen() &&
       !this.agentRequestInFlight &&
-      (this.options.isAtPrompt() ||
-        this.options.isInUnintegratedSubshell?.() === true);
+      this.options.isAtPrompt();
     const state: InputRouterInputState = {
       agentRequestInFlight: this.agentRequestInFlight,
       enabled,
@@ -88,13 +86,9 @@ export class InputRouterAddon implements ITerminalAddon {
     }
 
     // A command is running, a full-screen program is up, or the shell has not
-    // reported a prompt yet: the shell owns every byte.
-    // Exception: if we're in an unintegrated subshell (e.g., SSH without shell
-    // integration), we still need to check for natural language to route to agent.
-    const shouldCheckRouting =
-      this.options.isAtPrompt() ||
-      this.options.isInUnintegratedSubshell?.() === true;
-    if (!shouldCheckRouting) {
+    // reported a prompt yet: the shell owns every byte. Unsupported nested
+    // shells stay in this path and therefore do not expose AI.
+    if (!this.options.isAtPrompt()) {
       this.options.write(data);
       return;
     }
@@ -185,8 +179,7 @@ export class InputRouterAddon implements ITerminalAddon {
       key === "i" && (event.metaKey || (event.ctrlKey && event.shiftKey));
     const canUseShortcuts =
       !this.isAlternateScreen() &&
-      (this.options.isAtPrompt() ||
-        this.options.isInUnintegratedSubshell?.() === true);
+      this.options.isAtPrompt();
     if (isAgentShortcut && canUseShortcuts) {
       const line = this.options.readInputLine().trim();
       if (line) {
