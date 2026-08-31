@@ -369,4 +369,47 @@ describe("renderModelSession agent activity", () => {
     expect(host.querySelectorAll("summary")).toHaveLength(1);
     expect(host.textContent).toContain("Thinking");
   });
+
+  it("renders answered user questions in the session activity", () => {
+    const host = document.createElement("div");
+    const i18n = createChatTerminalI18n({ locale: "zh-CN" });
+
+    renderModelSession(host, {
+      activityEvents: [],
+      activityStartedAt: 0,
+      activityNow: 0,
+      activityComplete: true,
+      commandStates: new Map(),
+      i18n,
+      tokens: [],
+      userInputHistory: [{
+        request: {
+          requestCode: "INPUT-1",
+          intro: "",
+          questions: [{
+            questionCode: "Q-1",
+            question: "你想测试什么？",
+            options: [{ optionCode: "FILE", label: "文件操作" }],
+          }],
+        },
+        answers: [{
+          questionCode: "Q-1",
+          answerKind: "Option",
+          optionCode: "FILE",
+          otherText: null,
+        }],
+      }],
+    }, {
+      onDraftCommandChange: vi.fn(),
+      onExecuteCommand: vi.fn(),
+      onCancelCommandEdit: vi.fn(),
+      onRejectCommand: vi.fn(),
+      onSaveCommandEdit: vi.fn(),
+      onStartEditCommand: vi.fn(),
+    });
+
+    expect(host.textContent).toContain("已询问 1 个问题");
+    expect(host.textContent).toContain("你想测试什么？");
+    expect(host.textContent).toContain("文件操作");
+  });
 });

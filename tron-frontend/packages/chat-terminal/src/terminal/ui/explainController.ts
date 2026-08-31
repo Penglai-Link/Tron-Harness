@@ -9,6 +9,7 @@ import type {
   ExplainDialogPosition,
   ExplainDialogState,
 } from "../types/ui";
+import { getTerminalElementInsets } from "../utils";
 import { createExplainDialog, renderExplainDialog } from "./explainDialog";
 
 const DIALOG_WIDTH = 400;
@@ -326,8 +327,15 @@ export class ExplainController {
     anchor: ExplainAnchor,
     host: HTMLElement,
   ): ExplainDialogPosition {
-    const containerWidth = host.clientWidth || DIALOG_WIDTH;
-    const containerHeight = host.clientHeight || DIALOG_MAX_HEIGHT;
+    const insets = getTerminalElementInsets(host);
+    const containerWidth = Math.max(
+      DIALOG_WIDTH,
+      (host.clientWidth || DIALOG_WIDTH) - insets.right,
+    );
+    const containerHeight = Math.max(
+      DIALOG_MAX_HEIGHT,
+      (host.clientHeight || DIALOG_MAX_HEIGHT) - insets.bottom,
+    );
     const maxLeft = Math.max(
       DIALOG_MARGIN,
       containerWidth - DIALOG_WIDTH - DIALOG_MARGIN,

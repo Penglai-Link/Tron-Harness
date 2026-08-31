@@ -59,9 +59,15 @@ export interface ModelSessionUserInputRequest {
 
 export interface ModelSessionUserInputState {
   request: ModelSessionUserInputRequest;
+  currentIndex: number;
   selected: Readonly<Record<string, string>>;
   otherText: Readonly<Record<string, string>>;
   submitting: boolean;
+}
+
+export interface ModelSessionUserInputSummary {
+  request: ModelSessionUserInputRequest;
+  answers: ModelSessionUserInputAnswer[];
 }
 
 export interface ModelSessionCommandActionPayload {
@@ -129,6 +135,7 @@ export interface ModelSessionRenderState {
   activityComplete: boolean;
   commandStates: ReadonlyMap<string, ModelSessionCommandCardState>;
   userInput?: ModelSessionUserInputState;
+  userInputHistory?: readonly ModelSessionUserInputSummary[];
   i18n: ChatTerminalI18n;
 }
 
@@ -146,8 +153,10 @@ export interface ModelSessionRenderActions {
   onGenerateCommand?: (token: ModelSessionCommandToken) => void;
   onCancelCommandEdit: (token: ModelSessionCommandToken) => void;
   onRejectCommand: (token: ModelSessionCommandToken) => void;
-  onUserInputSelect: (questionCode: string, optionCode: string) => void;
-  onUserInputOtherText: (questionCode: string, value: string) => void;
-  onUserInputSubmit: () => void;
+  onUserInputSelect?: (questionCode: string, optionCode: string) => void;
+  onUserInputOtherText?: (questionCode: string, value: string) => void;
+  onUserInputNavigate?: (delta: number) => void;
+  onUserInputSkip?: () => void;
+  onUserInputSubmit?: () => void;
   onCancelSession?: () => void;
 }

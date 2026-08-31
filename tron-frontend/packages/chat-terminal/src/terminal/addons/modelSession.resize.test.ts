@@ -143,6 +143,42 @@ describe("ModelSessionAddon card resize tracking", () => {
     addon.dispose();
   });
 
+  it("renders user input in a terminal-level host separate from the session card", () => {
+    const addon = new ModelSessionAddon();
+    const terminal = new TerminalStub();
+    addon.activate(terminal as unknown as XTerminal);
+    addon.startSession({ conversationId: "one", requestId: "one" });
+    addon.appendUserInputRequest({
+      conversationId: "one",
+      requestId: "one",
+      response: "",
+      request: {
+        requestCode: "INPUT-1",
+        intro: "Please choose an option",
+        questions: [{
+          questionCode: "Q-1",
+          question: "What should I do next?",
+          options: [{ optionCode: "ONE", label: "Option one" }],
+        }],
+      },
+    });
+
+    const sessionHost = terminal.element.querySelector<HTMLElement>(
+      ".ai-terminal-model-session-host",
+    );
+    const inputHost = terminal.element.querySelector<HTMLElement>(
+      ".ai-terminal-model-session-user-input-host",
+    );
+    expect(sessionHost?.parentElement).toBe(terminal.element);
+    expect(inputHost?.parentElement).toBe(terminal.element);
+    expect(sessionHost?.querySelector(".ai-terminal-model-session__user-input")).toBeNull();
+    expect(sessionHost?.textContent).toContain("Please choose an option");
+    expect(inputHost?.hidden).toBe(false);
+    expect(inputHost?.querySelector(".ai-terminal-model-session__user-input-intro")).toBeNull();
+    expect(inputHost?.querySelector(".ai-terminal-model-session__user-input")).not.toBeNull();
+    addon.dispose();
+  });
+
   it("reserves additional terminal rows as a streaming card grows", () => {
     const addon = new ModelSessionAddon();
     const terminal = new TerminalStub();

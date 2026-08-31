@@ -27,6 +27,33 @@ export function getTerminalCellMetrics(terminal: XTerminal): CellMetrics {
   };
 }
 
+export interface TerminalElementInsets {
+  top: number;
+  right: number;
+  bottom: number;
+  left: number;
+}
+
+/** Reads the xterm element padding used to inset terminal text and overlays. */
+export function getTerminalElementInsets(element: HTMLElement): TerminalElementInsets {
+  if (typeof window === "undefined") {
+    return { top: 0, right: 0, bottom: 0, left: 0 };
+  }
+
+  const style = window.getComputedStyle(element);
+  return {
+    top: parseCssPixels(style.paddingTop),
+    right: parseCssPixels(style.paddingRight),
+    bottom: parseCssPixels(style.paddingBottom),
+    left: parseCssPixels(style.paddingLeft),
+  };
+}
+
+function parseCssPixels(value: string) {
+  const pixels = Number.parseFloat(value);
+  return Number.isFinite(pixels) ? pixels : 0;
+}
+
 export function normalizeTerminalOutput(output: string) {
   return output.replace(/\r?\n/g, "\r\n");
 }

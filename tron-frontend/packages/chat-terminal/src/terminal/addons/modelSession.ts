@@ -11,8 +11,17 @@ import {
   type ReadonlySignal,
   type Signal,
 } from "@preact/signals-core";
-import { createModelSessionHost, renderModelSession } from "../ui/modelSession";
-import { getTerminalCellMetrics, writeTerminalAsync } from "../utils";
+import {
+  createModelSessionHost,
+  createModelSessionUserInputHost,
+  renderModelSession,
+  renderModelSessionUserInput,
+} from "../ui/modelSession";
+import {
+  getTerminalCellMetrics,
+  getTerminalElementInsets,
+  writeTerminalAsync,
+} from "../utils";
 import { createChatTerminalI18n, type ChatTerminalI18n } from "../i18n";
 import type {
   ModelSessionActivityEvent,
@@ -26,6 +35,7 @@ import type {
   ModelSessionUserInputAnswer,
   ModelSessionUserInputRequest,
   ModelSessionUserInputState,
+  ModelSessionUserInputSummary,
 } from "../types/modelSession";
 import type { AIStreamEvent } from "../../transport/types";
 
@@ -62,8 +72,10 @@ interface ModelSessionInstance {
   reservedRows: number;
   fixedHeight?: number;
   host: HTMLElement;
+  userInputHost: HTMLElement;
   commandStates: Signal<ReadonlyMap<string, ModelSessionCommandCardState>>;
   userInput: Signal<ModelSessionUserInputState | undefined>;
+  userInputHistory: Signal<readonly ModelSessionUserInputSummary[]>;
   actions: ModelSessionRenderActions;
   renderAnimationFrame?: number;
   disposeRenderEffect: () => void;
@@ -270,6 +282,7 @@ export class ModelSessionAddon implements ITerminalAddon {
 
     session.userInput.value = {
       request: chunk.request,
+      currentIndex: 0,
       selected: {},
       otherText: {},
       submitting: false,
@@ -282,9 +295,15 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.scheduleInlineLayoutUpdate(true);
   }
 
-  clearUserInputRequest(requestId: string, requestCode: string) {
+  clearUserInputRequest(requestId: string, requestCode: string, answers?: ModelSessionUserInputAnswer[]) {
     const session = this.findSession(requestId);
     if (!session || session.userInput.peek()?.request.requestCode !== requestCode) return;
+    if (answers) {
+      session.userInputHistory.value = [
+        ...session.userInputHistory.peek(),
+        { request: session.userInput.peek()!.request, answers },
+      ];
+    }
     session.userInput.value = undefined;
     session.activityComplete.value = false;
     session.activityNow.value = Date.now();
@@ -391,6 +410,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.isVisible.value = true;
     this.sessions.forEach((session) => {
       session.host.hidden = false;
+      session.userInputHost.hidden = !session.userInput.peek();
     });
     this.scheduleInlineLayoutUpdate(this.hasCompletedSessions());
   }
@@ -403,6 +423,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.isVisible.value = false;
     this.sessions.forEach((session) => {
       session.host.hidden = true;
+      session.userInputHost.hidden = true;
     });
   }
 
@@ -451,6 +472,7 @@ export class ModelSessionAddon implements ITerminalAddon {
 
     const buffer = this.terminal.buffer.active;
     const host = createModelSessionHost();
+    const userInputHost = createModelSessionUserInputHost();
     const rawMessage = signal("");
     const activityEvents = signal<readonly AIStreamEvent[]>([]);
     const activityStartedAt = Date.now();
@@ -460,6 +482,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       ReadonlyMap<string, ModelSessionCommandCardState>
     >(new Map());
     const userInput = signal<ModelSessionUserInputState | undefined>(undefined);
+    const userInputHistory = signal<readonly ModelSessionUserInputSummary[]>([]);
     const tokens = computed(() =>
       this.parseTokens(rawMessage.value, chunk.requestId, chunk.conversationId),
     );
@@ -494,6 +517,42 @@ export class ModelSessionAddon implements ITerminalAddon {
       onUserInputOtherText: (questionCode, value) => {
         this.updateUserInputOtherText(session.requestId, questionCode, value);
       },
+      onUserInputNavigate: (delta) => {
+        const current = session.userInput.peek();
+        if (!current) return;
+        const currentQuestion = current.request.questions[current.currentIndex];
+        if (!currentQuestion) return;
+        const selected = current.selected[currentQuestion.questionCode];
+        const otherText = current.otherText[currentQuestion.questionCode]?.trim();
+        if (delta > 0 && !selected && !otherText) return;
+        session.userInput.value = {
+          ...current,
+          currentIndex: Math.min(
+            Math.max(current.currentIndex + delta, 0),
+            current.request.questions.length - 1,
+          ),
+        };
+      },
+      onUserInputSkip: () => {
+        const current = session.userInput.peek();
+        const question = current?.request.questions[current.currentIndex ?? 0];
+        if (!current || !question || current.submitting) return;
+        const selected = { ...current.selected, [question.questionCode]: `SKIP-${question.questionCode}` };
+        session.userInput.value = { ...current, selected, otherText: { ...current.otherText, [question.questionCode]: "" } };
+        if ((current.currentIndex ?? 0) >= current.request.questions.length - 1) {
+          const input = this.getUserInputAnswers(session.requestId);
+          if (input && this.options.onUserInputSubmit) {
+            this.setUserInputSubmitting(session.requestId, true);
+            void Promise.resolve(this.options.onUserInputSubmit({
+              requestId: session.requestId,
+              conversationId: session.conversationId,
+              ...input,
+            })).catch(() => this.setUserInputSubmitting(session.requestId, false));
+          }
+        } else {
+          session.userInput.value = { ...session.userInput.peek()!, currentIndex: current.currentIndex + 1 };
+        }
+      },
       onUserInputSubmit: () => {
         const input = this.getUserInputAnswers(session.requestId);
         if (!input || !this.options.onUserInputSubmit) return;
@@ -527,15 +586,19 @@ export class ModelSessionAddon implements ITerminalAddon {
       anchorPending: true,
       reservedRows: 0,
       host,
+      userInputHost,
       commandStates,
       userInput,
+      userInputHistory,
       actions,
       disposeRenderEffect: () => {},
     };
 
     host.dataset.sessionKey = key;
     host.hidden = !this.isVisible.peek();
+    userInputHost.hidden = true;
     this.terminal.element.appendChild(host);
+    this.terminal.element.appendChild(userInputHost);
     this.observeSessionHost(key, host);
     this.sessions.set(key, session);
     this.activeSessionKey = key;
@@ -552,6 +615,7 @@ export class ModelSessionAddon implements ITerminalAddon {
       activityComplete.value;
       commandStates.value;
       userInput.value;
+      userInputHistory.value;
       this.scheduleSessionRender(session);
     });
     return session;
@@ -590,10 +654,18 @@ export class ModelSessionAddon implements ITerminalAddon {
         activityComplete: session.activityComplete.peek(),
         commandStates: session.commandStates.peek(),
         userInput: session.userInput.peek(),
+        userInputHistory: session.userInputHistory.peek(),
         i18n: this.i18n,
       },
       session.actions,
     );
+    renderModelSessionUserInput(
+      session.userInputHost,
+      session.userInput.peek(),
+      session.actions,
+      this.i18n,
+    );
+    session.userInputHost.hidden = !this.isVisible.peek() || !session.userInput.peek();
 
     if (!session.activityComplete.peek()) {
       void this.reserveStreamingRows(session);
@@ -616,6 +688,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.sessionWidths.delete(session.key);
     session.anchorMarker?.dispose();
     session.host.remove();
+    session.userInputHost.remove();
   }
 
   private findSession(requestId: string) {
@@ -713,7 +786,8 @@ export class ModelSessionAddon implements ITerminalAddon {
         return;
       }
 
-      const viewportTop = (anchorRow - viewportY) * cell.height;
+      const viewportTop = getTerminalElementInsets(this.terminal.element).top
+        + (anchorRow - viewportY) * cell.height;
       session.host.style.transform = `translate3d(0, ${viewportTop}px, 0)`;
     });
   }
@@ -775,9 +849,9 @@ export class ModelSessionAddon implements ITerminalAddon {
       return session.fixedHeight;
     }
 
-    return (
-      session.host.firstElementChild?.scrollHeight ?? session.host.scrollHeight
-    );
+    const contentHeight =
+      session.host.firstElementChild?.scrollHeight ?? session.host.scrollHeight;
+    return contentHeight + getTerminalElementInsets(this.terminal?.element ?? session.host).top;
   }
 
   private lockSessionHeight(session: ModelSessionInstance) {

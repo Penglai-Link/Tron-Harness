@@ -1,5 +1,6 @@
 import { createInternalChatAdapter, createInternalTerminalAdapter } from "@tron/chat-internal-adapter";
 import { type AITransport, createTerminalTransport, initTerminal } from "@tron/chat-terminal";
+import type { ChatAguiStreamEvent, ChatUserInputAnswer } from "@tron/chat-core";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useLocale } from "@/i18n";
@@ -126,7 +127,7 @@ const Terminal = ({ onExit }: TerminalProps) => {
         url: socketConnection.socketUrl,
       });
       const aiTransport: AITransport = {
-        async stream(content, { onChunk, onEvent, signal }) {
+        async stream(content, { onChunk, onEvent, resume, signal }) {
           const controller = new AbortController();
           const abort = () => controller.abort(signal?.reason);
           if (signal?.aborted) {
@@ -140,17 +141,33 @@ const Terminal = ({ onExit }: TerminalProps) => {
           }
           const requestId = crypto.randomUUID();
           try {
-            await chatAdapter.streamMessage(session, {
-              content,
-              workspaceCode,
-            }, {
-              onDelta(delta) {
+            const handlers = {
+              onDelta(delta: string) {
                 onChunk({ delta, requestId });
               },
-              onAguiEvent(event) {
+              onAguiEvent(event: ChatAguiStreamEvent) {
                 onEvent?.(event);
               },
-            }, controller.signal);
+            };
+            const resumeEntry = resume?.[0];
+            if (resumeEntry && chatAdapter.answerUserInputRequestStream) {
+              const payload = resumeEntry.payload as { answers?: ChatUserInputAnswer[] };
+              await chatAdapter.answerUserInputRequestStream(
+                session,
+                resumeEntry.interruptId,
+                {
+                  answers: Array.isArray(payload?.answers) ? payload.answers : [],
+                  resume,
+                },
+                handlers,
+                controller.signal,
+              );
+            } else {
+              await chatAdapter.streamMessage(session, {
+                content,
+                workspaceCode,
+              }, handlers, controller.signal);
+            }
             return { requestId };
           } finally {
             signal?.removeEventListener("abort", abort);
@@ -260,7 +277,7 @@ const Terminal = ({ onExit }: TerminalProps) => {
     );
   }
 
-  return <div ref={terminalRef} className="relative h-full w-full py-2.5 pl-2.5" />;
+  return <div ref={terminalRef} className="relative h-full w-full" />;
 };
 
 export default Terminal;

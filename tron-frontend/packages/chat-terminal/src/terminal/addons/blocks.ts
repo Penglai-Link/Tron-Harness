@@ -8,7 +8,7 @@ import type {
 import { createChatTerminalI18n, type ChatTerminalI18n } from "../i18n";
 import type { BlockActionKey, BlockAddonOptions } from "../types/blocks";
 import type { TerminalCommandBlock } from "../types/shellIntegration";
-import { getTerminalCellMetrics } from "../utils";
+import { getTerminalCellMetrics, getTerminalElementInsets } from "../utils";
 import { ExplainController } from "../ui/explainController";
 import { createBlockActionBar, type BlockActionBar } from "../ui/blockActionBar";
 import { createExplainButton } from "../ui/explainButton";
@@ -238,6 +238,7 @@ export class BlockAddon implements ITerminalAddon {
     }
 
     const cell = getTerminalCellMetrics(terminal);
+    const insets = getTerminalElementInsets(terminal.element);
     const markerLine = buttonDecoration.marker.line;
     const buttonColumn = buttonDecoration.options.x ?? 0;
 
@@ -245,9 +246,9 @@ export class BlockAddon implements ITerminalAddon {
     const viewportY = terminal.buffer.active.viewportY;
     const buttonTop = Math.max(
       0,
-      (markerLine - viewportY) * cell.height,
+      insets.top + (markerLine - viewportY) * cell.height,
     );
-    const buttonLeft = buttonColumn * cell.width + 10; // 10 is the left offset from createExplainButton
+    const buttonLeft = insets.left + buttonColumn * cell.width + 10; // 10 is the left offset from createExplainButton
     const buttonSize = Math.max(14, cell.height - 2);
 
     // Pass the button anchor to explain controller
@@ -377,9 +378,10 @@ export class BlockAddon implements ITerminalAddon {
     }
 
     const cell = getTerminalCellMetrics(terminal);
+    const insets = getTerminalElementInsets(terminal.element);
     const top = Math.max(
       0,
-      (block.startLine - terminal.buffer.active.viewportY) * cell.height,
+      insets.top + (block.startLine - terminal.buffer.active.viewportY) * cell.height,
     );
     this.actionBar.show({ exitCode: block.exitCode, top, copied });
   }
@@ -441,12 +443,13 @@ export class BlockAddon implements ITerminalAddon {
     }
 
     const cell = getTerminalCellMetrics(terminal);
+    const insets = getTerminalElementInsets(terminal.element);
     const top = Math.max(
       0,
-      (block.startLine - terminal.buffer.active.viewportY) * cell.height,
+      insets.top + (block.startLine - terminal.buffer.active.viewportY) * cell.height,
     );
     await this.explain.open(block.command, block.readOutput(), {
-      left: terminal.element?.clientWidth ?? 0,
+      left: (terminal.element?.clientWidth ?? 0) - insets.right,
       size: cell.height,
       top,
     });

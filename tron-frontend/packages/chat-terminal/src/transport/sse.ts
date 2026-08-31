@@ -168,13 +168,19 @@ export class SseAITransport implements AITransport {
     stream: boolean,
     resume?: AIStreamOptions["resume"],
   ) {
-    return (
-      this.options.body?.({ content, stream, resume }) ?? {
-        ...(content ? { messages: [{ content, role: "user" }] } : {}),
-        ...(resume?.length ? { resume } : {}),
-        stream,
+    const configuredBody = this.options.body?.({ content, stream, resume });
+    if (configuredBody !== undefined) {
+      if (resume?.length && isRecord(configuredBody)) {
+        return { ...configuredBody, resume };
       }
-    );
+      return configuredBody;
+    }
+
+    return {
+      ...(content ? { messages: [{ content, role: "user" }] } : {}),
+      ...(resume?.length ? { resume } : {}),
+      stream,
+    };
   }
 
   private async createHeaders(stream: boolean) {
@@ -253,4 +259,8 @@ function getRequestError(signal: AbortSignal, error: unknown) {
   return signal.reason instanceof Error
     ? signal.reason
     : new DOMException("请求已取消", "AbortError");
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null;
 }

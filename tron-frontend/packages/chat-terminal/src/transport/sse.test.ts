@@ -109,6 +109,33 @@ describe("SseAITransport", () => {
     });
   });
 
+  it("preserves resume entries when a custom body builder is configured", async () => {
+    sseHarness.fetchEventSource.mockImplementation(
+      async (_url: string, options: Record<string, unknown>) => {
+        const onmessage = options.onmessage as (event: { data: string }) => void;
+        onmessage({ data: JSON.stringify(message("TEXT_MESSAGE_END", "")) });
+      },
+    );
+    const resume = [{
+      interruptId: "INPUT-1",
+      status: "resolved" as const,
+      payload: { answers: [{ questionCode: "Q-1", answerKind: "Option", optionCode: "A-1" }] },
+    }];
+    const transport = createAITransport({
+      url: "http://terminal.test/chat",
+      body: ({ content, stream }) => ({ input: content, streaming: stream }),
+    });
+
+    await transport.stream("", { onChunk: vi.fn(), resume });
+
+    const [, options] = sseHarness.fetchEventSource.mock.calls[0];
+    expect(JSON.parse(options.body as string)).toEqual({
+      input: "",
+      streaming: true,
+      resume,
+    });
+  });
+
   it("parses non-streaming gateway responses", async () => {
     const fetchMock = vi.fn(async () => ({
       json: async () => message("TEXT_MESSAGE_SUGGESTION", "npm test"),

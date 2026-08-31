@@ -95,6 +95,7 @@ export function initTerminal(options: ChatTerminalOptions) {
   let disposed = false;
   const termRef: { current?: Terminal } = {};
   const pendingContinuations = new Map<string, (requestCode: string, answers: ModelSessionUserInputAnswer[]) => Promise<void>>();
+  const pendingContinuationResolvers = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>();
   const activeChatControllers = new Map<string, AbortController>();
   const cancelledChatRequests = new Set<string>();
 
@@ -167,9 +168,19 @@ export function initTerminal(options: ChatTerminalOptions) {
           }
         }
         if (interrupted && !disposed) {
+          let resolveContinuation!: () => void;
+          let rejectContinuation!: (error: unknown) => void;
+          const continuationDone = new Promise<void>((resolve, reject) => {
+            resolveContinuation = resolve;
+            rejectContinuation = reject;
+          });
+          pendingContinuationResolvers.set(requestId, {
+            resolve: resolveContinuation,
+            reject: rejectContinuation,
+          });
           pendingContinuations.set(requestId, async (requestCode, answers) => {
             const addon = termRef.current?.modelSessionAddon;
-            addon?.clearUserInputRequest(requestId, requestCode);
+            addon?.clearUserInputRequest(requestId, requestCode, answers);
             interrupted = undefined;
             try {
               await stream([{
@@ -177,12 +188,22 @@ export function initTerminal(options: ChatTerminalOptions) {
                 status: "resolved",
                 payload: { answers },
               }]);
-              if (!interrupted) await addon?.complete(requestId);
+              if (!interrupted) {
+                await addon?.complete(requestId);
+                resolveContinuation();
+              }
+            } catch (error) {
+              rejectContinuation(error);
+              throw error;
             } finally {
               addon?.setUserInputSubmitting(requestId, false);
-              if (!interrupted) pendingContinuations.delete(requestId);
+              if (!interrupted) {
+                pendingContinuations.delete(requestId);
+                pendingContinuationResolvers.delete(requestId);
+              }
             }
           });
+          await continuationDone;
         }
       }
     : undefined;
@@ -284,6 +305,8 @@ export function initTerminal(options: ChatTerminalOptions) {
             onCancelSession: async ({ requestId: inputRequestId }) => {
               cancelledChatRequests.add(inputRequestId);
               pendingContinuations.delete(inputRequestId);
+              pendingContinuationResolvers.get(inputRequestId)?.resolve();
+              pendingContinuationResolvers.delete(inputRequestId);
               const controller = activeChatControllers.get(inputRequestId);
               controller?.abort(new DOMException("会话已终止", "AbortError"));
               await aiTransport?.cancel?.(controller?.signal ?? new AbortController().signal);

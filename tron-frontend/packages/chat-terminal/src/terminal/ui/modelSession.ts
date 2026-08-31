@@ -7,6 +7,7 @@ import type {
   ModelSessionRenderState,
   ModelSessionToken,
   ModelSessionUserInputQuestion,
+  ModelSessionUserInputSummary,
 } from "../types/modelSession";
 import type { ChatTerminalI18n } from "../i18n";
 import { renderAgentActivity } from "./agentActivity";
@@ -14,8 +15,20 @@ import { renderMarkdown as renderMarkdownContent } from "../utils/markdown";
 
 export function createModelSessionHost() {
   const host = document.createElement("div");
-  let lastTouchY: number | null = null;
   host.className = "ai-terminal-model-session-host";
+  attachModelSessionHostInteractions(host);
+  return host;
+}
+
+export function createModelSessionUserInputHost() {
+  const host = document.createElement("div");
+  host.className = "ai-terminal-model-session-user-input-host";
+  attachModelSessionHostInteractions(host);
+  return host;
+}
+
+function attachModelSessionHostInteractions(host: HTMLElement) {
+  let lastTouchY: number | null = null;
   const handleWheel = (event: WheelEvent) => {
     if (canConsumeScroll(host, event.target, event.deltaY, event.deltaX)) {
       event.stopPropagation();
@@ -43,7 +56,6 @@ export function createModelSessionHost() {
   host.addEventListener("touchmove", handleTouchMove);
   host.addEventListener("touchend", resetTouch, { passive: true });
   host.addEventListener("touchcancel", resetTouch, { passive: true });
-  return host;
 }
 
 function canConsumeScroll(
@@ -113,8 +125,11 @@ export function renderModelSession(
               </button>`
             : null}
           ${renderAgentActivity(state)}
-          ${state.userInput
-            ? renderUserInput(state.userInput, actions, state.i18n)
+          ${state.userInput?.request.intro
+            ? html`<p class="ai-terminal-model-session__user-input-intro">${state.userInput.request.intro}</p>`
+            : null}
+          ${state.userInputHistory?.length
+            ? renderUserInputHistory(state.userInputHistory, state.i18n)
             : null}
           ${state.tokens.map((token) =>
             renderModelSessionToken(token, state, actions),
@@ -126,36 +141,83 @@ export function renderModelSession(
   );
 }
 
+export function renderModelSessionUserInput(
+  host: HTMLElement,
+  userInput: ModelSessionRenderState["userInput"],
+  actions: ModelSessionRenderActions,
+  i18n: ChatTerminalI18n,
+) {
+  host.hidden = !userInput;
+  render(userInput ? renderUserInput(userInput, actions, i18n, false) : html``, host);
+}
+
+function renderUserInputHistory(
+  history: readonly ModelSessionUserInputSummary[],
+  i18n: ChatTerminalI18n,
+) {
+  const questionCount = history.reduce((count, item) => count + item.answers.length, 0);
+  return html`
+    <section class="ai-terminal-model-session__user-input-history" aria-label="${i18n.t("userInputAsked")} ${questionCount}">
+      <div class="ai-terminal-model-session__user-input-history-title">
+        <span aria-hidden="true" class="ai-terminal-model-session__user-input-history-icon">
+          <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-message-square-text-icon lucide-message-square-text"><path d="M22 17a2 2 0 0 1-2 2H6.828a2 2 0 0 0-1.414.586l-2.202 2.202A.71.71 0 0 1 2 21.286V5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2z"/><path d="M7 11h10"/><path d="M7 15h6"/><path d="M7 7h8"/></svg>
+        </span>
+        <strong>${i18n.t("userInputAsked")} ${questionCount} ${i18n.t("userInputQuestionSuffix")}</strong>
+      </div>
+      <div class="ai-terminal-model-session__user-input-history-list">
+        ${history.flatMap((item) => item.answers.map((answer) => {
+          const question = item.request.questions.find((entry) => entry.questionCode === answer.questionCode);
+          const option = question?.options.find((entry) => entry.optionCode === answer.optionCode);
+          const answerText = answer.answerKind === "Other"
+            ? answer.otherText || i18n.t("userInputNoAnswer")
+            : answer.answerKind === "Skipped"
+              ? i18n.t("userInputSkip")
+              : option?.label || answer.optionCode || i18n.t("userInputNoAnswer");
+          return html`<div class="ai-terminal-model-session__user-input-history-item">
+            <span class="ai-terminal-model-session__user-input-history-question">${question?.question || answer.questionCode}</span>
+            <span class="ai-terminal-model-session__user-input-history-answer">${answerText}</span>
+          </div>`;
+        }))}
+      </div>
+    </section>
+  `;
+}
+
 function renderUserInput(
   state: NonNullable<ModelSessionRenderState["userInput"]>,
   actions: ModelSessionRenderActions,
   i18n: ChatTerminalI18n,
+  includeIntro = true,
 ) {
   const { request } = state;
-  const complete = request.questions.every((question) => {
-    const selected = state.selected[question.questionCode];
-    return Boolean(selected || state.otherText[question.questionCode]?.trim());
-  });
+  const question = request.questions[state.currentIndex] ?? request.questions[0];
+  const selected = state.selected[question.questionCode] ?? "";
+  const otherText = state.otherText[question.questionCode] ?? "";
+  const complete = Boolean(selected || otherText.trim());
+  const isFirst = state.currentIndex === 0;
+  const isLast = state.currentIndex >= request.questions.length - 1;
 
   return html`
-    <section class="ai-terminal-model-session__user-input" role="dialog" aria-label="${request.intro || "User input required"}">
-      ${request.intro ? html`<p class="ai-terminal-model-session__user-input-intro">${request.intro}</p>` : null}
-      <div class="ai-terminal-model-session__user-input-questions">
-        ${request.questions.map((question, index) => renderUserInputQuestion(question, index, state, actions))}
-      </div>
-      <div class="ai-terminal-model-session__user-input-actions">
-        <span class="ai-terminal-model-session__user-input-progress">
-          ${request.questions.length} ${request.questions.length === 1 ? "question" : "questions"}
-        </span>
-        <button
-          class="ai-terminal-model-session__user-input-submit"
-          type="button"
-          ?disabled=${state.submitting || !complete}
-          @click=${() => actions.onUserInputSubmit()}
-        >
-          ${state.submitting ? i18n.t("userInputContinuing") : i18n.t("userInputContinue")}
-        </button>
-      </div>
+    ${includeIntro && request.intro
+      ? html`<p class="ai-terminal-model-session__user-input-intro">${request.intro}</p>`
+      : null}
+    <section class="ai-terminal-model-session__user-input" role="dialog" aria-modal="true" aria-label="${question.question}">
+      <header class="ai-terminal-model-session__user-input-header">
+        <strong>${question.question}</strong>
+        <nav class="ai-terminal-model-session__user-input-navigation" aria-label="Question navigation">
+          <button type="button" aria-label="Previous question" ?disabled=${state.submitting || isFirst || !actions.onUserInputNavigate} @click=${() => actions.onUserInputNavigate?.(-1)}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-left-icon lucide-chevron-left"><path d="m15 18-6-6 6-6"/></svg>
+          </button>
+          <span>${state.currentIndex + 1} / ${request.questions.length}</span>
+          <button type="button" aria-label="Next question" ?disabled=${state.submitting || isLast || !complete || !actions.onUserInputNavigate} @click=${() => actions.onUserInputNavigate?.(1)}>
+            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right-icon lucide-chevron-right"><path d="m9 18 6-6-6-6"/></svg>
+          </button>
+        </nav>
+      </header>
+      ${renderUserInputQuestion(question, state.currentIndex, state, actions, i18n)}
+      ${isLast ? html`<div class="ai-terminal-model-session__user-input-actions">
+        <button class="ai-terminal-model-session__user-input-submit" type="button" ?disabled=${state.submitting || !complete} @click=${actions.onUserInputSubmit}>${state.submitting ? i18n.t("userInputContinuing") : i18n.t("userInputContinue")}</button>
+      </div>` : null}
     </section>
   `;
 }
@@ -165,15 +227,15 @@ function renderUserInputQuestion(
   index: number,
   state: NonNullable<ModelSessionRenderState["userInput"]>,
   actions: ModelSessionRenderActions,
+  i18n: ChatTerminalI18n,
 ) {
   const selected = state.selected[question.questionCode] ?? "";
   const otherText = state.otherText[question.questionCode] ?? "";
-  const skipCode = `SKIP-${question.questionCode}`;
   return html`
     <fieldset class="ai-terminal-model-session__user-input-question">
-      <legend>${index + 1}. ${question.question}</legend>
+      <legend class="ai-terminal-model-session__user-input-question-label">${question.question}</legend>
       <div class="ai-terminal-model-session__user-input-options">
-        ${question.options.map((option) => html`
+        ${question.options.filter((option) => !option.optionCode.startsWith("OTHER-") && !option.optionCode.startsWith("SKIP-")).map((option, optionIndex) => html`
           <label class="ai-terminal-model-session__user-input-option${selected === option.optionCode ? " is-selected" : ""}">
             <input
               type="radio"
@@ -181,8 +243,9 @@ function renderUserInputQuestion(
               value="${option.optionCode}"
               .checked=${selected === option.optionCode}
               ?disabled=${state.submitting}
-              @change=${() => actions.onUserInputSelect(question.questionCode, option.optionCode)}
+              @change=${() => actions.onUserInputSelect?.(question.questionCode, option.optionCode)}
             />
+            <span class="ai-terminal-model-session__user-input-option-index">${optionIndex + 1}</span>
             <span class="ai-terminal-model-session__user-input-option-content">
               <strong>${option.label}</strong>
               ${option.description ? html`<small>${option.description}</small>` : null}
@@ -191,21 +254,19 @@ function renderUserInputQuestion(
         `)}
       </div>
       <div class="ai-terminal-model-session__user-input-other-row">
-        <textarea
+        <input
           aria-label="${`Custom answer for question ${index + 1}`}"
-          placeholder="${"Type your answer"}"
-          rows="1"
-          maxlength="2000"
+          placeholder="${i18n.t("userInputOtherPlaceholder")}"
           .value=${otherText}
           ?disabled=${state.submitting}
-          @input=${(event: Event) => actions.onUserInputOtherText(question.questionCode, (event.currentTarget as HTMLTextAreaElement).value)}
-        ></textarea>
+          @input=${(event: Event) => actions.onUserInputOtherText?.(question.questionCode, (event.currentTarget as HTMLTextAreaElement).value)}
+        ></input>
         <button
           class="ai-terminal-model-session__user-input-skip"
           type="button"
           ?disabled=${state.submitting}
-          @click=${() => actions.onUserInputSelect(question.questionCode, skipCode)}
-        >${"Skip"}</button>
+          @click=${actions.onUserInputSkip}
+        >${i18n.t("userInputSkip")}</button>
       </div>
     </fieldset>
   `;
