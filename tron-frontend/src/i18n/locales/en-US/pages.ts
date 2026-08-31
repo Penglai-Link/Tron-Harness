@@ -577,6 +577,16 @@ export const pages = {
       annotationPreview: "Annotation preview",
       attachments: "Attachments",
     },
+    markdownLink: {
+      openInternal: "Open in internal browser",
+      openExternal: "Open in external browser",
+      openExternalFailed: "Failed to open in external browser",
+      copyLink: "Copy link",
+      copied: "Link copied",
+      copyFailed: "Failed to copy link",
+      browserTitle: "Link browser",
+      browserClose: "Close",
+    },
     userInput: {
       ariaLabel: "Assistant questions",
       progress: "Question {{current}} of {{total}}",

@@ -43,7 +43,7 @@ import {
   type ReactNode,
   type SetStateAction,
 } from "react";
-import { TronChatPanel } from "./TronChatPanel";
+import { TronChatPanel, type ChatMarkdownLinkRenderer } from "./TronChatPanel";
 import { TronChatWindow } from "./TronChatWindow";
 import { isImageAttachment, useAttachmentImageSource } from "./chatAttachments";
 
@@ -88,6 +88,7 @@ export interface TronChatRuntimeWindowProps {
   sidebarContent?: ReactNode;
   windowState?: ChatFloatingState;
   onWindowStateChange?: (state: ChatFloatingState) => void;
+  renderMarkdownLink?: ChatMarkdownLinkRenderer;
 }
 
 function defaultErrorReporter(message: string) {
@@ -191,6 +192,7 @@ export function TronChatRuntimeWindow({
   sidebarContent,
   windowState,
   onWindowStateChange,
+  renderMarkdownLink,
 }: TronChatRuntimeWindowProps) {
   const activeAdapter = useMemo(
     () => adapter ?? createMockChatAdapter(),
@@ -1428,6 +1430,7 @@ export function TronChatRuntimeWindow({
       userInputAnswerPending={userInputAnswerPending}
       userInputRequest={userInputRequest}
       onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
+      renderMarkdownLink={renderMarkdownLink}
     />
   );
 

@@ -34,6 +34,7 @@ export interface TargetPageFrameInspectionResult {
 
 interface TargetPageFrameProps {
   onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
+  showChrome?: boolean;
 }
 
 const FRAME_TIMEOUT_MS = 3500;
@@ -94,6 +95,7 @@ function preserveUrlHash(originalUrl: string, resolvedUrl: string): string {
 
 export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrameProps>(function TargetPageFrame({
   onInspectionConfirm,
+  showChrome = true,
 }, ref) {
   const bridge = useMemo(() => new DesktopBridge(), []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
@@ -671,6 +673,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
 
   return (
     <section className="overflow-hidden h-full flex flex-col">
+      {showChrome ? (
       <div className="flex h-14 border-b border-b-gray-200  items-center justify-between bg-[var(--color-elevated-surface-strong)] px-4">
         <div className="flex items-center gap-5 text-[var(--color-on-surface-variant)]">
           <button
@@ -752,6 +755,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
           </button>
         </div>
       </div>
+      ) : null}
       {unsupportedPageActive ? (
         <div className="flex min-h-[560px] flex-auto items-center justify-center bg-[var(--color-elevated-surface-strong)] text-[var(--color-on-surface-variant)]">
           <div className="flex max-w-[420px] flex-col items-center gap-4 text-center">
