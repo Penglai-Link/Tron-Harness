@@ -1,7 +1,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
-const { spawn } = require("node:child_process");
+const { spawn, exec } = require("node:child_process");
 const { app, BrowserWindow, WebContentsView, ipcMain, shell } = require("electron");
 
 const {
@@ -74,6 +74,16 @@ function createMainWindow() {
   });
 
   state.mainWindow = window;
+
+  window.webContents.setWindowOpenHandler(({ url }) => {
+    const targetUrl = sanitizeUrl(url);
+    if (!isHttpUrl(targetUrl)) {
+      return { action: "deny" };
+    }
+    openUrlInSystemBrowser(targetUrl);
+    return { action: "deny" };
+  });
+
   window.on("closed", () => {
     if (state.mainWindow === window) {
       state.mainWindow = null;
@@ -375,6 +385,108 @@ function describeError(error) {
     return error.message;
   }
   return String(error || "unknown error");
+}
+
+function isWSL() {
+  try {
+    return /microsoft/i.test(fs.readFileSync("/proc/version", "utf8"));
+  } catch {
+    return false;
+  }
+}
+
+// ShellExecuteEx 的 P/Invoke 声明，供 WSL 场景经 PowerShell 调用
+const TRON_SHELL_OPEN_CSHARP = `using System;
+using System.Runtime.InteropServices;
+public static class TronShellOpen
+{
+  [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
+  private struct SHELLEXECUTEINFO
+  {
+    public int cbSize;
+    public uint fMask;
+    public IntPtr hwnd;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpVerb;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpFile;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpParameters;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpDirectory;
+    public int nShow;
+    public IntPtr hInstApp;
+    public IntPtr lpIDList;
+    [MarshalAs(UnmanagedType.LPWStr)] public string lpClass;
+    public IntPtr hkeyClass;
+    public uint dwHotKey;
+    public IntPtr hIcon;
+    public IntPtr hProcess;
+  }
+
+  [DllImport("shell32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+  private static extern bool ShellExecuteEx(ref SHELLEXECUTEINFO info);
+
+  public static void Open(string target)
+  {
+    SHELLEXECUTEINFO info = new SHELLEXECUTEINFO();
+    info.cbSize = Marshal.SizeOf(typeof(SHELLEXECUTEINFO));
+    info.fMask = 0x04000000u; // SEE_MASK_FLAG_LOG_USAGE
+    info.lpFile = target;
+    info.nShow = 1; // SW_SHOWNORMAL
+    if (!ShellExecuteEx(ref info))
+    {
+      throw new Exception("ShellExecuteEx failed: " + Marshal.GetLastWin32Error());
+    }
+  }
+}`;
+
+function buildWslPowerShellOpenCommand(url) {
+  const safeUrl = url.replace(/'/g, "''");
+  const script = `$csharp = @'
+${TRON_SHELL_OPEN_CSHARP}
+'@
+Add-Type -TypeDefinition $csharp
+[TronShellOpen]::Open('${safeUrl}')`;
+  const encoded = Buffer.from(script, "utf16le").toString("base64");
+  return `powershell.exe -NoProfile -NonInteractive -EncodedCommand ${encoded}`;
+}
+
+function releaseMainWindowFocus() {
+  const window = state.mainWindow;
+  if (!window || window.isDestroyed() || !window.isFocused()) {
+    return;
+  }
+  window.blur();
+}
+
+function openUrlInSystemBrowser(url) {
+  const escapedUrl = url.replace(/"/g, "");
+  if (isWSL()) {
+    releaseMainWindowFocus();
+    exec(buildWslPowerShellOpenCommand(url), { windowsHide: true }, (error) => {
+      if (!error) {
+        return;
+      }
+      exec(`cmd.exe /c start "" "${escapedUrl}"`, { windowsHide: true }, (cmdError) => {
+        if (cmdError) {
+          exec(`wslview "${escapedUrl}"`, { windowsHide: true }, (wslviewError) => {
+            if (wslviewError) {
+              shell.openExternal(url).catch(() => {});
+            }
+          });
+        }
+      });
+    });
+    return;
+  }
+
+  if (process.platform === "win32") {
+    releaseMainWindowFocus();
+    shell.openExternal(url, { logUsage: true }).catch(() => {
+      exec(`start "" "${escapedUrl}"`, { windowsHide: true }, () => {});
+    });
+    return;
+  }
+
+  // macOS / 原生 Linux
+  shell.openExternal(url).catch(() => {});
 }
 
 function normalizeRequest(payload) {
@@ -709,7 +821,9 @@ function registerIpcHandlers() {
       }
 
       if (mode === "browser") {
-        await shell.openExternal(url);
+        // fire-and-forget：立即返回，不等浏览器打开
+        // 避免渲染进程后续处理抢回焦点导致浏览器窗口层级变低
+        openUrlInSystemBrowser(url);
         return { pageId, opened: true, mode: "browser", backendUrl: state.backendUrl };
       }
 

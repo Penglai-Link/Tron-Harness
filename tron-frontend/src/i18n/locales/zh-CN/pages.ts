@@ -580,6 +580,7 @@ export const pages = {
     markdownLink: {
       openInternal: "在内置浏览器中打开",
       openExternal: "在外部浏览器中打开",
+      openExternalFailed: "外部浏览器打开失败",
       copyLink: "复制链接",
       copied: "链接已复制",
       copyFailed: "复制链接失败",

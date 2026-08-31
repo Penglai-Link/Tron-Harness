@@ -61,12 +61,17 @@ export function MarkdownLink({ children, href, onOpenInternal }: MarkdownLinkPro
       return;
     }
 
-    if (bridge.isDesktop()) {
-      void bridge.openTargetPage({ mode: "browser", url });
+    if (!bridge.isDesktop()) {
+      window.open(url, "_blank", "noopener,noreferrer");
       return;
     }
 
-    window.open(url, "_blank", "noopener,noreferrer");
+    // 桌面端：走 IPC 让主进程打开系统浏览器
+    // fire-and-forget：主进程立即返回，不等浏览器打开，
+    // 避免渲染进程后续处理抢回焦点导致浏览器窗口层级变低
+    void bridge.openTargetPage({ mode: "browser", url }).catch(() => {
+      toast.error(t("chat.markdownLink.openExternalFailed"));
+    });
   }
 
   function openInternal() {
@@ -114,7 +119,7 @@ export function MarkdownLink({ children, href, onOpenInternal }: MarkdownLinkPro
         <ContextMenuItem onClick={openInternal}>
           {t("chat.markdownLink.openInternal")}
         </ContextMenuItem>
-        <ContextMenuItem onClick={openExternal}>
+        <ContextMenuItem onClick={() => setTimeout(openExternal, 0)}>
           {t("chat.markdownLink.openExternal")}
         </ContextMenuItem>
         <ContextMenuItem onClick={copyLink}>
