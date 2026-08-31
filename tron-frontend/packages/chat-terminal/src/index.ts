@@ -84,7 +84,9 @@ export function initTerminal(options: ChatTerminalOptions) {
   const i18n = createChatTerminalI18n({
     locale: options.locale,
     messages: {
-      ...(terminalOptions?.agentTips ? { agentTips: terminalOptions.agentTips } : {}),
+      ...(terminalOptions?.agentTips
+        ? { agentTips: terminalOptions.agentTips }
+        : {}),
       ...(terminalOptions?.explainTitle
         ? { explainTitle: terminalOptions.explainTitle }
         : {}),
@@ -94,8 +96,17 @@ export function initTerminal(options: ChatTerminalOptions) {
   let session: TerminalSession | undefined;
   let disposed = false;
   const termRef: { current?: Terminal } = {};
-  const pendingContinuations = new Map<string, (requestCode: string, answers: ModelSessionUserInputAnswer[]) => Promise<void>>();
-  const pendingContinuationResolvers = new Map<string, { resolve: () => void; reject: (error: unknown) => void }>();
+  const pendingContinuations = new Map<
+    string,
+    (
+      requestCode: string,
+      answers: ModelSessionUserInputAnswer[],
+    ) => Promise<void>
+  >();
+  const pendingContinuationResolvers = new Map<
+    string,
+    { resolve: () => void; reject: (error: unknown) => void }
+  >();
   const activeChatControllers = new Map<string, AbortController>();
   const cancelledChatRequests = new Set<string>();
 
@@ -118,39 +129,42 @@ export function initTerminal(options: ChatTerminalOptions) {
         activeChatControllers.set(requestId, controller);
         let interrupted: ModelSessionUserInputRequest | undefined;
         const stream = async (resume?: AIStreamResumeEntry[]) => {
-          await aiTransport.stream(resume ? "" : (options.prompts?.chat?.(content) ?? content), {
-            resume,
-            signal: controller.signal,
-            onChunk: ({ delta }) => {
-              if (disposed) return;
-              termRef.current?.modelSessionAddon?.appendMessageChunk({
-                conversationId: "default",
-                requestId,
-                response: delta,
-              });
-            },
-            onEvent: (event) => {
-              if (disposed) return;
-              const request = parseUserInputRequest(event);
-              if (request) {
-                interrupted = request;
-                termRef.current?.modelSessionAddon?.appendUserInputRequest({
+          await aiTransport.stream(
+            resume ? "" : options.prompts?.chat?.(content) ?? content,
+            {
+              resume,
+              signal: controller.signal,
+              onChunk: ({ delta }) => {
+                if (disposed) return;
+                termRef.current?.modelSessionAddon?.appendMessageChunk({
                   conversationId: "default",
                   requestId,
-                  request,
-                  response: "",
+                  response: delta,
                 });
-                return;
-              }
-              if (isAgentActivityEvent(event)) {
-                termRef.current?.modelSessionAddon?.appendActivityEvent({
-                  conversationId: "default",
-                  event,
-                  requestId,
-                });
-              }
+              },
+              onEvent: (event) => {
+                if (disposed) return;
+                const request = parseUserInputRequest(event);
+                if (request) {
+                  interrupted = request;
+                  termRef.current?.modelSessionAddon?.appendUserInputRequest({
+                    conversationId: "default",
+                    requestId,
+                    request,
+                    response: "",
+                  });
+                  return;
+                }
+                if (isAgentActivityEvent(event)) {
+                  termRef.current?.modelSessionAddon?.appendActivityEvent({
+                    conversationId: "default",
+                    event,
+                    requestId,
+                  });
+                }
+              },
             },
-          });
+          );
         };
         try {
           termRef.current?.modelSessionAddon?.startSession({
@@ -160,11 +174,13 @@ export function initTerminal(options: ChatTerminalOptions) {
           await stream();
         } finally {
           activeChatControllers.delete(requestId);
-          if (!disposed && !interrupted && !cancelledChatRequests.has(requestId)) {
-            await (
-              termRef.current?.modelSessionAddon?.complete(requestId) ??
-              Promise.resolve()
-            );
+          if (
+            !disposed &&
+            !interrupted &&
+            !cancelledChatRequests.has(requestId)
+          ) {
+            await (termRef.current?.modelSessionAddon?.complete(requestId) ??
+              Promise.resolve());
           }
         }
         if (interrupted && !disposed) {
@@ -183,11 +199,13 @@ export function initTerminal(options: ChatTerminalOptions) {
             addon?.clearUserInputRequest(requestId, requestCode, answers);
             interrupted = undefined;
             try {
-              await stream([{
-                interruptId: requestCode,
-                status: "resolved",
-                payload: { answers },
-              }]);
+              await stream([
+                {
+                  interruptId: requestCode,
+                  status: "resolved",
+                  payload: { answers },
+                },
+              ]);
               if (!interrupted) {
                 await addon?.complete(requestId);
                 resolveContinuation();
@@ -211,7 +229,10 @@ export function initTerminal(options: ChatTerminalOptions) {
   const commandExplain = aiTransport
     ? async (
         payload: { command: string; output: string },
-        { onChunk, signal }: { onChunk?: (delta: string) => void; signal: AbortSignal },
+        {
+          onChunk,
+          signal,
+        }: { onChunk?: (delta: string) => void; signal: AbortSignal },
       ) => {
         let content = "";
         await aiTransport.stream(
@@ -246,15 +267,20 @@ export function initTerminal(options: ChatTerminalOptions) {
   // from its initial state notification.
   const termInstance = new Terminal(options.el, {
     cursorBlink: true,
+    cursorStyle: "bar",
+    cursorWidth: 2,
     ...terminalOptions,
     shellIntegration: {
       write: writeToShell,
     },
     inputRouter: {
       write: writeToShell,
-      isAtPrompt: () => termRef.current?.shellIntegrationAddon?.isAtPrompt() ?? false,
-      readInputLine: () => termRef.current?.shellIntegrationAddon?.readInputLine() ?? "",
-      clearInputLine: () => termRef.current?.shellIntegrationAddon?.clearInputLine(),
+      isAtPrompt: () =>
+        termRef.current?.shellIntegrationAddon?.isAtPrompt() ?? false,
+      readInputLine: () =>
+        termRef.current?.shellIntegrationAddon?.readInputLine() ?? "",
+      clearInputLine: () =>
+        termRef.current?.shellIntegrationAddon?.clearInputLine(),
       onAgentRequest: (request) => commandChat?.(request),
       agentPrefix: options.agentPrefix,
       shouldRouteToAgent: options.shouldRouteToAgent,
@@ -265,7 +291,8 @@ export function initTerminal(options: ChatTerminalOptions) {
       onExplain: commandExplain,
       onExplainCancel: aiTransport?.cancel,
       onAskAgent: commandChat
-        ? (block) => commandChat(buildBlockQuestion(block, i18n.t("blockAskPrompt")))
+        ? (block) =>
+            commandChat(buildBlockQuestion(block, i18n.t("blockAskPrompt")))
         : undefined,
       onRerun: async (command) => {
         await executeCommand(command);
@@ -297,7 +324,11 @@ export function initTerminal(options: ChatTerminalOptions) {
               }
               return commandGenerate(command);
             },
-            onUserInputSubmit: async ({ requestId: inputRequestId, requestCode, answers }) => {
+            onUserInputSubmit: async ({
+              requestId: inputRequestId,
+              requestCode,
+              answers,
+            }) => {
               const continuation = pendingContinuations.get(inputRequestId);
               if (!continuation) return;
               await continuation(requestCode, answers);
@@ -309,8 +340,12 @@ export function initTerminal(options: ChatTerminalOptions) {
               pendingContinuationResolvers.delete(inputRequestId);
               const controller = activeChatControllers.get(inputRequestId);
               controller?.abort(new DOMException("会话已终止", "AbortError"));
-              await aiTransport?.cancel?.(controller?.signal ?? new AbortController().signal);
-              await termRef.current?.modelSessionAddon?.complete(inputRequestId);
+              await aiTransport?.cancel?.(
+                controller?.signal ?? new AbortController().signal,
+              );
+              await termRef.current?.modelSessionAddon?.complete(
+                inputRequestId,
+              );
               cancelledChatRequests.delete(inputRequestId);
             },
           }
@@ -396,7 +431,10 @@ export function initTerminal(options: ChatTerminalOptions) {
     refreshTheme() {
       termInstance.refreshTheme();
     },
-    setLocale(locale: ChatTerminalLocale, messages?: ChatTerminalMessageOverrides) {
+    setLocale(
+      locale: ChatTerminalLocale,
+      messages?: ChatTerminalMessageOverrides,
+    ) {
       i18n.setLocale(locale);
       if (messages) {
         i18n.setMessages(messages);
@@ -433,17 +471,25 @@ function isAgentActivityEvent(event: AIStreamEvent) {
   );
 }
 
-function parseUserInputRequest(event: AIStreamEvent): ModelSessionUserInputRequest | undefined {
+function parseUserInputRequest(
+  event: AIStreamEvent,
+): ModelSessionUserInputRequest | undefined {
   if (event.type.toUpperCase() !== "RUN_FINISHED") return undefined;
   const outcome = event.outcome;
-  const interrupt = isRecord(outcome) && outcome.type === "interrupt"
-    ? (Array.isArray(outcome.interrupts) ? outcome.interrupts[0] : undefined)
-    : isRecord(event.result) && isRecord(event.result.userInputRequest)
+  const interrupt =
+    isRecord(outcome) && outcome.type === "interrupt"
+      ? Array.isArray(outcome.interrupts)
+        ? outcome.interrupts[0]
+        : undefined
+      : isRecord(event.result) && isRecord(event.result.userInputRequest)
       ? event.result.userInputRequest
       : undefined;
   if (!isRecord(interrupt)) return undefined;
-  const metadata = isRecord(interrupt.metadata) ? interrupt.metadata : interrupt;
-  const requestCode = readString(metadata.requestCode) ?? readString(interrupt.id);
+  const metadata = isRecord(interrupt.metadata)
+    ? interrupt.metadata
+    : interrupt;
+  const requestCode =
+    readString(metadata.requestCode) ?? readString(interrupt.id);
   const questions = metadata.questions;
   if (!requestCode || !Array.isArray(questions)) return undefined;
   const normalizedQuestions = questions
@@ -452,11 +498,14 @@ function parseUserInputRequest(event: AIStreamEvent): ModelSessionUserInputReque
       questionCode: readString(question.questionCode) ?? "",
       question: readString(question.question) ?? "",
       options: Array.isArray(question.options)
-        ? question.options.filter(isRecord).map((option) => ({
-            optionCode: readString(option.optionCode) ?? "",
-            label: readString(option.label) ?? "",
-            description: readString(option.description),
-          })).filter((option) => option.optionCode && option.label)
+        ? question.options
+            .filter(isRecord)
+            .map((option) => ({
+              optionCode: readString(option.optionCode) ?? "",
+              label: readString(option.label) ?? "",
+              description: readString(option.description),
+            }))
+            .filter((option) => option.optionCode && option.label)
         : [],
     }))
     .filter((question) => question.questionCode && question.question);
