@@ -707,7 +707,7 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
         json!("Summarize the workspace problem before acting.")
     );
 
-    let main_run = request_with_headers(
+    let main_run = request_with_locale(
         &app,
         Method::POST,
         "/api/v1/agents/runs",
@@ -722,8 +722,8 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
                 "modelName": "gpt-test"
             }
         })),
-        None,
-        Some(&authorization),
+        &authorization,
+        "en-US",
     )
     .await;
     assert_eq!(main_run.status(), StatusCode::OK);
@@ -1485,13 +1485,13 @@ async fn tool_catalog_read_apis_are_available() {
         vec![json!("workspace.page"), json!("workspace.get")]
     );
 
-    let tool_response = request_with_headers(
+    let tool_response = request_with_locale(
         &app,
         Method::GET,
         "/api/v1/tools/bash.exec",
         None,
-        None,
-        Some(&authorization),
+        &authorization,
+        "en-US",
     )
     .await;
     assert_eq!(tool_response.status(), StatusCode::OK);

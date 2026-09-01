@@ -16,6 +16,14 @@ impl<T> ApiResponse<T> {
             data,
         }
     }
+
+    pub fn protocol_success(data: T) -> Self {
+        Self {
+            code: "0",
+            message: "ok".into(),
+            data,
+        }
+    }
 }
 
 #[derive(Debug, Serialize, ToSchema)]
@@ -23,6 +31,14 @@ pub struct EmptyData {}
 
 impl ApiResponse<EmptyData> {
     pub fn error(code: &'static str, message: impl Into<String>) -> Self {
+        Self {
+            code,
+            message: message.into(),
+            data: EmptyData {},
+        }
+    }
+
+    pub fn protocol_error(code: &'static str, message: impl Into<String>) -> Self {
         Self {
             code,
             message: message.into(),

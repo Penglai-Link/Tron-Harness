@@ -9,6 +9,10 @@ pub enum ConfigError {
         key: String,
         value: String,
     },
+    InvalidConfigValue {
+        key: String,
+        value: String,
+    },
     InvalidResourceConfig {
         message: String,
     },
@@ -36,6 +40,9 @@ impl fmt::Display for ConfigError {
             Self::InvalidEnvValue { key, value } => {
                 write!(formatter, "invalid value `{value}` for backend env `{key}`")
             }
+            Self::InvalidConfigValue { key, value } => {
+                write!(formatter, "invalid value `{value}` for config `{key}`")
+            }
             Self::InvalidResourceConfig { message } => {
                 write!(formatter, "invalid resource configuration: {message}")
             }
@@ -60,6 +67,7 @@ impl Error for ConfigError {
         match self {
             Self::MissingConfigField { .. }
             | Self::InvalidEnvValue { .. }
+            | Self::InvalidConfigValue { .. }
             | Self::InvalidResourceConfig { .. } => None,
             Self::InvalidSocketAddr { source, .. } => Some(source),
             Self::ConfigFileReadFailed { source, .. } => Some(source),

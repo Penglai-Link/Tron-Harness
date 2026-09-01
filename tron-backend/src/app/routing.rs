@@ -10,6 +10,7 @@ use crate::adapters::{
         account::routes as account_routes,
         admin::{
             models::routes::routes as admin_model_routes,
+            navigation::routes as admin_navigation_routes,
             open_apps::routes::routes as admin_open_app_routes,
             prompts::routes::routes as admin_prompt_routes, roles::routes as role_routes,
             users::routes as user_routes, variables::routes::routes as admin_variable_routes,
@@ -22,6 +23,7 @@ use crate::adapters::{
         chats::routes::routes as chat_routes,
         knowledge_graph::routes as knowledge_graph_routes,
         mcp::routes::management_routes as mcp_management_routes,
+        navigation::routes as navigation_routes,
         memory::routes as memory_routes,
         models::routes::routes as model_routes,
         prompts::routes::routes as prompt_routes,
@@ -46,6 +48,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
     account_routes()
         .merge(user_routes())
         .merge(admin_model_routes())
+        .merge(admin_navigation_routes())
         .merge(admin_prompt_routes())
         .merge(admin_open_app_routes())
         .merge(admin_variable_routes())
@@ -66,6 +69,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(knowledge_graph_routes::routes())
         .merge(skill_routes())
         .merge(system_config_routes())
+        .merge(navigation_routes())
         .merge(terminal_routes())
         .route(
             "/api/v1/setup/complete",

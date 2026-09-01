@@ -20,6 +20,7 @@ import {
   SidebarGroup,
   SidebarGroupContent,
   SidebarGroupLabel,
+  SidebarHeader,
   SidebarMenu,
   SidebarMenuButton,
   SidebarMenuItem,
@@ -45,11 +46,13 @@ import type {
 
 interface TronSidebarProps {
   activeItem: string;
+  activeHref?: string;
   navigation: TronNavSection[];
   onNavigate: () => void;
   onToggleSection: (sectionLabel: string) => void;
   openNavigationItems: Record<string, boolean>;
   openSections: Record<string, boolean>;
+  renderDomainSelector: (compact: boolean, mobile: boolean) => ReactNode;
   renderFooter: (compact: boolean, mobile: boolean) => ReactNode;
   setOpenNavigationItems: Dispatch<SetStateAction<Record<string, boolean>>>;
   translate: (key: string, options?: Record<string, string>) => string;
@@ -57,11 +60,13 @@ interface TronSidebarProps {
 
 export function TronSidebar({
   activeItem,
+  activeHref,
   navigation,
   onNavigate,
   onToggleSection,
   openNavigationItems,
   openSections,
+  renderDomainSelector,
   renderFooter,
   setOpenNavigationItems,
   translate,
@@ -88,8 +93,8 @@ export function TronSidebar({
 
   function renderNavigationItem(item: TronNavItem, itemKey: string, nestingLevel = 0): ReactNode {
     const Icon = item.icon;
-    const active = item.label === activeItem;
-    const itemLabel = translate(item.translationKey);
+    const active = item.label === activeItem || Boolean(item.href && activeHref && (item.href === activeHref || activeHref.startsWith(`${item.href}/`)));
+    const itemLabel = item.translationKey ? translate(item.translationKey) : item.label;
     const hasChildren = Boolean(item.children?.length);
     const open = hasChildren && openNavigationItems[itemKey];
     if (nestingLevel > 0 && !hasChildren) {
@@ -97,7 +102,7 @@ export function TronSidebar({
         <SidebarMenuSubItem key={itemKey}>
           <SidebarMenuSubButton
             isActive={active}
-            render={<Link to={item.href} />}
+            render={item.external ? <a href={item.href} target="_blank" rel="noreferrer" /> : <Link to={item.href} />}
             onClick={() => {
               if (isMobile) {
                 setOpenMobile(false);
@@ -137,8 +142,8 @@ export function TronSidebar({
                 <DropdownMenuSeparator className="mx-0 my-1 bg-[var(--color-card-border)]" />
                 {item.children?.map((child) => {
                   const ChildIcon = child.icon;
-                  const childActive = child.label === activeItem;
-                  const childLabel = translate(child.translationKey);
+                  const childActive = child.label === activeItem || Boolean(child.href && activeHref && (child.href === activeHref || activeHref.startsWith(`${child.href}/`)));
+                  const childLabel = child.translationKey ? translate(child.translationKey) : child.label;
 
                   return (
                     <DropdownMenuItem
@@ -147,7 +152,9 @@ export function TronSidebar({
                         childActive && "bg-[var(--color-hover-surface)] font-medium text-[var(--color-on-surface)]",
                       )}
                       key={`${itemKey}/${child.label}`}
-                      render={<Link aria-current={childActive ? "page" : undefined} to={child.href} />}
+                      render={child.external
+                        ? <a aria-current={childActive ? "page" : undefined} href={child.href} target="_blank" rel="noreferrer" />
+                        : <Link aria-current={childActive ? "page" : undefined} to={child.href} />}
                     >
                       <ChildIcon size={16} aria-hidden="true" />
                       <span className="truncate">{childLabel}</span>
@@ -176,7 +183,9 @@ export function TronSidebar({
             isActive={active}
             tooltip={compact ? itemLabel : undefined}
             className={cn(compact ? "justify-center px-0" : "gap-2 px-3")}
-            render={<Link aria-current={active ? "page" : undefined} aria-label={compact ? itemLabel : undefined} to={item.href} />}
+            render={item.external
+              ? <a aria-current={active ? "page" : undefined} aria-label={compact ? itemLabel : undefined} href={item.href} target="_blank" rel="noreferrer" />
+              : <Link aria-current={active ? "page" : undefined} aria-label={compact ? itemLabel : undefined} to={item.href} />}
             onClick={() => {
               if (isMobile) {
                 setOpenMobile(false);
@@ -205,21 +214,25 @@ export function TronSidebar({
       dir={undefined}
       className="pt-14"
     >
+      <SidebarHeader className="gap-1.5 border-b border-[var(--color-card-border)] px-2 py-2.5">
+        {renderDomainSelector(compact, isMobile)}
+      </SidebarHeader>
       <SidebarContent className="p-2">
         <nav className={cn("flex flex-1 flex-col gap-2", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
           {navigation.map((section) => {
-            const open = openSections[section.label];
+            const sectionKey = section.id ?? section.label;
+            const open = openSections[sectionKey] ?? true;
 
             return (
-              <SidebarGroup className="p-0" key={section.label}>
+              <SidebarGroup className="p-0" key={sectionKey}>
                 {compact ? null : (
                   <SidebarGroupLabel
                     aria-expanded={open}
                     className="h-8 w-full justify-between px-2 text-[15px] font-semibold text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     render={<button type="button" />}
-                    onClick={() => onToggleSection(section.label)}
+                    onClick={() => onToggleSection(sectionKey)}
                   >
-                    {translate(section.translationKey)}
+                    {section.translationKey ? translate(section.translationKey) : section.label}
                     <ChevronRight className={cn("transition-transform", open ? "rotate-90" : "")} size={14} aria-hidden="true" />
                   </SidebarGroupLabel>
                 )}

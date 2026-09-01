@@ -102,6 +102,17 @@ impl AppConfig {
         if let Some(value) = overrides.event_bus {
             self.event_bus.apply_overrides(value);
         }
+        if let Some(value) = overrides.navigation
+            && let Some(max_depth) = value.max_depth
+        {
+            self.navigation.max_depth = max_depth;
+        }
+        if self.navigation.max_depth == 0 {
+            return Err(ConfigError::InvalidConfigValue {
+                key: "navigation.maxDepth".into(),
+                value: "must be greater than zero".into(),
+            });
+        }
         Ok(())
     }
 }
@@ -159,6 +170,13 @@ struct AppConfigFile {
     short_term_memory: Option<ShortTermMemoryFileConfig>,
     auth: Option<AuthFileConfig>,
     event_bus: Option<EventBusFileConfig>,
+    navigation: Option<NavigationFileConfig>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase")]
+struct NavigationFileConfig {
+    max_depth: Option<usize>,
 }
 
 impl AppConfigFile {

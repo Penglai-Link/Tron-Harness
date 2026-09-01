@@ -13,7 +13,7 @@
     "build": "npm run packages:build && tsc -b && vite build",
     "predev": "npm run packages:build",
     "preview": "vite preview",
-    "test:unit": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run packages src/domain/resource",
+    "test:unit": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run packages src/domain/resource src/shared/lib",
     "typecheck": "tsc -b --pretty false",
     "version-packages": "changeset version",
     "packages:build": "turbo run build --filter='./packages/*'",

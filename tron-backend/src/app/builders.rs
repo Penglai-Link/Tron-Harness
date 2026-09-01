@@ -152,6 +152,12 @@ fn build_memory_work_domain_service(database_url: &str) -> MemoryWorkDomainServi
     MemoryWorkDomainService::new(repository)
 }
 
+fn build_navigation_service(database_url: &str, max_depth: usize) -> NavigationService {
+    let repository = SqliteNavigationRepository::connect(database_url)
+        .expect("navigation SQLite repository should initialize");
+    NavigationService::new(repository, max_depth)
+}
+
 fn build_mcp_service(
     database_url: &str,
     workspaces: WorkspaceService,

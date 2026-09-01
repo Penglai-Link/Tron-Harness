@@ -8,8 +8,8 @@ use crate::{
 };
 
 use super::migrations::{
-    RESOURCE_ROLE_DEFAULTS_MIGRATION, RESOURCE_ROLE_PERMISSION_DOMAIN_MIGRATION,
-    ROLE_PERMISSIONS_MIGRATION, ROLES_MIGRATION,
+    NAVIGATION_ROLE_PERMISSION_MIGRATION, RESOURCE_ROLE_DEFAULTS_MIGRATION,
+    RESOURCE_ROLE_PERMISSION_DOMAIN_MIGRATION, ROLE_PERMISSIONS_MIGRATION, ROLES_MIGRATION,
 };
 
 pub struct SqliteRoleRepository {
@@ -50,6 +50,9 @@ impl SqliteRoleRepository {
         }
         self.connection
             .execute_batch(RESOURCE_ROLE_DEFAULTS_MIGRATION)
+            .map_err(storage_error)?;
+        self.connection
+            .execute_batch(NAVIGATION_ROLE_PERMISSION_MIGRATION)
             .map_err(storage_error)
     }
 

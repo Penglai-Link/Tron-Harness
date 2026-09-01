@@ -28,6 +28,7 @@ import {
   Hammer,
   ListTodo,
   LoaderCircle,
+  MessageCircleQuestionMark,
   MessageSquareText,
   Pause,
   Pencil,
@@ -1899,7 +1900,7 @@ function SessionRunIndicator({
   if (needsUserInput) {
     return (
       <span className="inline-flex size-5 items-center justify-center" aria-label={t("chat.management.runIndicator.waitingAnswer")} title={t("chat.management.runIndicator.waitingAnswer")}>
-        <CircleAlert className="text-[var(--color-warning)]" size={15} />
+        <MessageCircleQuestionMark className="text-[var(--color-focus-ring)]" size={15} />
       </span>
     );
   }
@@ -3314,7 +3315,7 @@ function SessionSidebar({
                 onBlur={hideCollapsedTooltip}
               >
                 {pendingUserInputSessionCodes.has(session.sessionCode) ? (
-                  <CircleAlert className="text-[var(--color-warning)]" size={17} />
+                  <MessageCircleQuestionMark className="text-[var(--color-focus-ring)]" size={17} />
                 ) : (
                   <MessageSquareText className={sessionAgentIconTone(session.agentCode)} size={17} />
                 )}

@@ -53,3 +53,5 @@ Pagable response body format:
 <!-- SSH/container subshells may emit OSC 133;A before the outer command returns; preserve that outer block before tracking the nested prompt. -->
 <!-- Aborting the terminal explanation SSE only detaches the browser observer; close/cancel must also stop the ChatService active run. -->
 <!-- Explain-button command matching must start at commandStartColumn; short commands such as `ll` can also occur in the Git branch shown by the shell prompt. -->
+<!-- Navigation visibleRoles intentionally stores role codes without foreign keys; role recreation must not invalidate menu visibility data. -->
+<!-- SQLite navigation sibling positions have a non-negative CHECK; normalization uses a positive temporary offset before assigning contiguous positions. -->

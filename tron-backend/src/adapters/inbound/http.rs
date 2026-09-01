@@ -10,6 +10,7 @@ pub mod knowledge_graph;
 pub mod mcp;
 pub mod memory;
 pub mod models;
+pub mod navigation;
 pub mod prompts;
 pub mod rag;
 pub mod resources;

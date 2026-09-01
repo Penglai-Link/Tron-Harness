@@ -13,7 +13,7 @@ impl SupportedLocale {
     }
 
     pub fn from_request(value: Option<&str>) -> Self {
-        value.map(Self::from_raw).unwrap_or(Self::EnUs)
+        value.map(Self::from_raw).unwrap_or(Self::ZhCn)
     }
 
     pub fn from_raw(value: &str) -> Self {
@@ -34,7 +34,7 @@ impl SupportedLocale {
                 return Self::EnUs;
             }
         }
-        Self::EnUs
+        Self::ZhCn
     }
 }
 

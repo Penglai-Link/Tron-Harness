@@ -7,6 +7,7 @@ pub mod llm;
 pub mod mcp;
 pub mod memory;
 pub mod model;
+pub mod navigation;
 pub mod open_app;
 pub mod prompt;
 pub mod rag;

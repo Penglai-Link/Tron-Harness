@@ -18,6 +18,7 @@ pub use sqlite::SqliteAutomationRepository;
 pub use sqlite::SqliteChatRepository;
 pub use sqlite::SqliteMcpRepository;
 pub use sqlite::SqliteMemoryWorkDomainRepository;
+pub use sqlite::SqliteNavigationRepository;
 pub use sqlite::SqliteModelRepository;
 pub use sqlite::SqliteOpenAppRepository;
 pub use sqlite::SqlitePromptRepository;

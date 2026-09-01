@@ -6,8 +6,8 @@ use super::{
     AppConfig, AuthConfig, DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS, DEFAULT_AUTH_DEV_OAUTH2_NAME,
     DEFAULT_AUTH_JWT_SECRET, DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS, DEFAULT_BIND_ADDRESS,
     DEFAULT_PORT, DEFAULT_SYSTEM_AGENT_CODEX_COMMAND, DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND,
-    HttpClientProfilesConfig, MineruConfig, ResourceConfig, SystemAgentConfig, TEST_DATABASE_URL,
-    VariableCryptoConfig,
+    HttpClientProfilesConfig, MineruConfig, NavigationConfig, ResourceConfig, SystemAgentConfig,
+    TEST_DATABASE_URL, VariableCryptoConfig,
 };
 
 impl Default for AppConfig {
@@ -51,6 +51,7 @@ impl Default for AppConfig {
                 ldap: None,
             },
             event_bus: EventBusConfig::default(),
+            navigation: NavigationConfig { max_depth: 3 },
         }
     }
 }

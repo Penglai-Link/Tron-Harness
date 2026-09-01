@@ -1,6 +1,7 @@
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import { AnchoredToastProvider, ToastProvider } from "@/components/ui/toast"
+import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "./providers/QueryProvider";
 import { App } from "./App";
 import "@/i18n";
@@ -17,9 +18,11 @@ createRoot(root).render(
   <StrictMode>
     <ToastProvider position="top-center">
       <AnchoredToastProvider>
-        <QueryProvider>
-          <App />
-        </QueryProvider>
+        <TooltipProvider delay={0}>
+          <QueryProvider>
+            <App />
+          </QueryProvider>
+        </TooltipProvider>
       </AnchoredToastProvider>
     </ToastProvider>
   </StrictMode>,

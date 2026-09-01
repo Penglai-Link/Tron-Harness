@@ -36,7 +36,8 @@ async fn list_permission_domains_returns_supported_matrix_headers() {
             "Memory",
             "Skills",
             "MCP",
-            "Resources"
+            "Resources",
+            "Navigation"
         ]),
     );
 }

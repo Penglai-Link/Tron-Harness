@@ -29,6 +29,7 @@ use crate::{
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository, SqliteOpenAppRepository,
                 SqlitePromptRepository, SqliteResourceRepository, SqliteRoleRepository,
+                SqliteNavigationRepository,
                 SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository, bootstrap_platform_admin,
@@ -51,6 +52,7 @@ use crate::{
     application::mcp::McpService,
     application::memory::{MemoryService, MemoryWorkDomainService},
     application::model::ModelService,
+    application::navigation::NavigationService,
     application::open_app::OpenAppService,
     application::prompt::PromptService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
@@ -96,6 +98,7 @@ static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
 static GLOBAL_SHORT_TERM_MEMORY_SERVICE: OnceLock<ShortTermMemoryService> = OnceLock::new();
 static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_MEMORY_WORK_DOMAIN_SERVICE: OnceLock<MemoryWorkDomainService> = OnceLock::new();
+static GLOBAL_NAVIGATION_SERVICE: OnceLock<NavigationService> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
 static GLOBAL_GRAPH_SERVICES: OnceLock<(GraphService, OntologyService, GraphExplorerService)> =
     OnceLock::new();
@@ -146,6 +149,7 @@ pub struct AppState {
     pub mcp: McpService,
     pub memory: AppMemoryService,
     pub memory_work_domains: MemoryWorkDomainService,
+    pub navigation: NavigationService,
     pub rag: AppRagService,
 }
 
@@ -213,6 +217,13 @@ impl AppState {
         };
         bootstrap_platform_admin(&config.database_url)
             .expect("bootstrap platform admin data should initialize");
+        let navigation = if config.database_url == ":memory:" {
+            GLOBAL_NAVIGATION_SERVICE
+                .get_or_init(|| build_navigation_service(":memory:", config.navigation.max_depth))
+                .clone()
+        } else {
+            build_navigation_service(&config.database_url, config.navigation.max_depth)
+        };
         let apps = if config.database_url == ":memory:" {
             GLOBAL_APP_SERVICE
                 .get_or_init(|| build_app_service(":memory:", workspaces.clone()))
@@ -492,6 +503,7 @@ impl AppState {
             mcp,
             memory,
             memory_work_domains,
+            navigation,
             rag,
             skills,
             setup_transaction,

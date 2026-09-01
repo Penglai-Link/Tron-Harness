@@ -77,6 +77,12 @@ pub struct AppConfig {
     pub short_term_memory: ShortTermMemoryConfig,
     pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
+    pub navigation: NavigationConfig,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct NavigationConfig {
+    pub max_depth: usize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -185,6 +191,7 @@ impl AppConfig {
                 ldap: None,
             },
             event_bus: EventBusConfig::default(),
+            navigation: NavigationConfig { max_depth: 3 },
         }
     }
 

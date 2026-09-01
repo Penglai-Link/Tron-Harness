@@ -35,6 +35,7 @@ import {
 
 import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
 import { fetchAccountProfile } from "@/domain/account/api";
+import { fetchNavigationDomains, fetchNavigationMenuTree } from "@/domain/navigation/api";
 import { useAuthSession } from "@/domain/auth";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
 import { isUnauthorizedApiError } from "@/shared/api/httpClient";
@@ -48,6 +49,7 @@ import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/shared/ui/Button";
 import { useLocale } from "@/i18n";
 import { useAppShellStore } from "@/store/appShellStore";
+import { useNavigationStore } from "@/store/navigationStore";
 import {
   buildWorkspaceTree,
   findWorkspaceNodePath,
@@ -59,6 +61,7 @@ import {
   isEditableShortcutTarget,
 } from "@/shared/lib/keyboardShortcuts";
 import { cn } from "@/shared/lib/utils";
+import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/shared/ui/Forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
@@ -145,29 +148,35 @@ export function useOpenRightSidebar() {
   }, [setRightSidebarCollapsed]);
 }
 
-function navigationItemHasActiveItem(item: TronNavItem, activeItem: string): boolean {
+function navigationHrefMatches(itemHref: string, activeHref?: string) {
+  return Boolean(itemHref && activeHref && (activeHref === itemHref || activeHref.startsWith(`${itemHref}/`)));
+}
+
+function navigationItemHasActiveItem(item: TronNavItem, activeItem: string, activeHref?: string): boolean {
   return item.label === activeItem
-    || item.children?.some((child) => navigationItemHasActiveItem(child, activeItem))
+    || navigationHrefMatches(item.href, activeHref)
+    || item.children?.some((child) => navigationItemHasActiveItem(child, activeItem, activeHref))
     || false;
 }
 
-function sectionHasActiveItem(section: TronNavSection, activeItem?: string) {
-  return Boolean(activeItem && section.items.some((item) => navigationItemHasActiveItem(item, activeItem)));
+function sectionHasActiveItem(section: TronNavSection, activeItem?: string, activeHref?: string) {
+  return Boolean(activeItem && section.items.some((item) => navigationItemHasActiveItem(item, activeItem, activeHref)));
 }
 
 function findActiveNavigationParentKeys(
   items: TronNavItem[],
   activeItem: string,
+  activeHref: string,
   parentKey: string,
 ): string[] {
   for (const item of items) {
     const itemKey = `${parentKey}/${item.label}`;
-    if (item.label === activeItem) {
+    if (item.label === activeItem || navigationHrefMatches(item.href, activeHref)) {
       return [];
     }
 
-    if (item.children?.some((child) => navigationItemHasActiveItem(child, activeItem))) {
-      return [itemKey, ...findActiveNavigationParentKeys(item.children, activeItem, itemKey)];
+    if (item.children?.some((child) => navigationItemHasActiveItem(child, activeItem, activeHref))) {
+      return [itemKey, ...findActiveNavigationParentKeys(item.children, activeItem, activeHref, itemKey)];
     }
   }
 
@@ -204,6 +213,12 @@ export function TronShell({
   const openSections = useAppShellStore((state) => state.openSections);
   const selectedPrimarySpaceId = useAppShellStore((state) => state.selectedPrimarySpaceId);
   const selectedSecondarySpaceId = useAppShellStore((state) => state.selectedSecondarySpaceId);
+  const navigationDomains = useNavigationStore((state) => state.domains);
+  const navigationMenuTree = useNavigationStore((state) => state.menuTree);
+  const selectedDomainCode = useNavigationStore((state) => state.selectedDomainCode);
+  const setNavigationDomains = useNavigationStore((state) => state.setDomains);
+  const setNavigationMenuTree = useNavigationStore((state) => state.setMenuTree);
+  const setSelectedDomainCode = useNavigationStore((state) => state.setSelectedDomainCode);
   const rightSidebarCollapsed = useAppShellStore((state) => state.rightSidebarCollapsed);
   const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
   const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
@@ -224,14 +239,18 @@ export function TronShell({
 
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
+  const [navigationLoading, setNavigationLoading] = useState(false);
   const [mainAgentWindowState, setMainAgentWindowState] = useState<ChatFloatingState>(() => ({
     ...readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultFloatingState),
     open: false,
   }));
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
+  const navigationDomainsControllerRef = useRef<AbortController | null>(null);
+  const navigationTreeControllerRef = useRef<AbortController | null>(null);
   const utilityPanelRef = useRef<HTMLDivElement | null>(null);
   const workspaceTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const domainTriggerRef = useRef<HTMLButtonElement | null>(null);
   const userMenuTriggerRef = useRef<HTMLButtonElement | null>(null);
   const topbarToolsMenuRef = useRef<HTMLDivElement | null>(null);
   const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
@@ -252,7 +271,7 @@ export function TronShell({
   }, [authSession?.user.userCode, updateSessionUser]);
 
   const visibleNavigation = useMemo(
-    () => tronNavigation.filter((section) => {
+    () => (navigationMenuTree ? mapNavigationTree(navigationMenuTree) : tronNavigation).filter((section) => {
       if (!section.requiredRoleCodes?.length) {
         return true;
       }
@@ -263,8 +282,11 @@ export function TronShell({
 
       return section.requiredRoleCodes.some((roleCode) => roleCodes.includes(roleCode));
     }),
-    [roleCodes],
+    [navigationMenuTree, roleCodes],
   );
+
+  const selectedNavigationDomain = navigationDomains.find((domain) => domain.domainCode === selectedDomainCode)
+    ?? navigationDomains[0];
 
   const primarySpaces = workspaceSwitcher.primarySpaces;
   const selectedPrimarySpace = primarySpaces.find((space) => space.workspaceCode === selectedPrimarySpaceId)
@@ -356,14 +378,106 @@ export function TronShell({
   }, [refreshWorkspaceSwitcher]);
 
   useEffect(() => {
-    const activeSection = visibleNavigation.find((section) => sectionHasActiveItem(section, activeItem));
-    ensureSectionOpen(activeSection?.label);
+    navigationDomainsControllerRef.current?.abort();
+    navigationTreeControllerRef.current?.abort();
+
+    if (!authSession) {
+      setNavigationDomains([]);
+      setNavigationMenuTree(null);
+      setNavigationLoading(false);
+      return;
+    }
+
+    if (dataSource !== "api") {
+      setNavigationDomains([{
+        builtIn: true,
+        description: t("shell:navigation.defaultDescription"),
+        domainCode: "ADVANCED",
+        isDefault: true,
+        name: t("shell:navigation.defaultName"),
+        position: 0,
+      }]);
+      setNavigationMenuTree(null);
+      setSelectedDomainCode("ADVANCED");
+      setNavigationLoading(false);
+      return;
+    }
+
+    const controller = new AbortController();
+    navigationDomainsControllerRef.current = controller;
+    setNavigationLoading(true);
+
+    void fetchNavigationDomains(controller.signal)
+      .then((domains) => {
+        if (controller.signal.aborted) return;
+        const availableDomains = [...domains].sort((left, right) => left.position - right.position);
+        setNavigationDomains(availableDomains);
+        const storedDomainCode = useNavigationStore.getState().selectedDomainCode;
+        const nextDomain = availableDomains.find((domain) => domain.domainCode === storedDomainCode)
+          ?? availableDomains.find((domain) => domain.isDefault)
+          ?? availableDomains[0];
+        setSelectedDomainCode(nextDomain?.domainCode ?? "");
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || isUnauthorizedApiError(error)) return;
+        console.warn("[shell] Navigation domains refresh failed.", error);
+        setNavigationDomains([]);
+        setNavigationMenuTree(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setNavigationLoading(false);
+        }
+        if (navigationDomainsControllerRef.current === controller) {
+          navigationDomainsControllerRef.current = null;
+        }
+      });
+
+    return () => controller.abort();
+  }, [authSession?.user.userCode, currentLocale, dataSource, setNavigationDomains, setNavigationMenuTree, setSelectedDomainCode, t]);
+
+  useEffect(() => {
+    navigationTreeControllerRef.current?.abort();
+    if (!authSession || dataSource !== "api" || !selectedDomainCode || !navigationDomains.some((domain) => domain.domainCode === selectedDomainCode)) {
+      return;
+    }
+
+    const controller = new AbortController();
+    navigationTreeControllerRef.current = controller;
+    setNavigationLoading(true);
+
+    void fetchNavigationMenuTree(selectedDomainCode, controller.signal)
+      .then((tree) => {
+        if (!controller.signal.aborted) {
+          setNavigationMenuTree(tree);
+        }
+      })
+      .catch((error: unknown) => {
+        if (controller.signal.aborted || isUnauthorizedApiError(error)) return;
+        console.warn("[shell] Navigation menu tree refresh failed.", error);
+        setNavigationMenuTree(null);
+      })
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setNavigationLoading(false);
+        }
+        if (navigationTreeControllerRef.current === controller) {
+          navigationTreeControllerRef.current = null;
+        }
+      });
+
+    return () => controller.abort();
+  }, [authSession?.user.userCode, currentLocale, dataSource, navigationDomains, selectedDomainCode, setNavigationMenuTree]);
+
+  useEffect(() => {
+    const activeSection = visibleNavigation.find((section) => sectionHasActiveItem(section, activeItem, pathname));
+    ensureSectionOpen(activeSection?.id ?? activeSection?.label);
 
     if (!activeSection) {
       return;
     }
 
-    const activeParentKeys = findActiveNavigationParentKeys(activeSection.items, activeItem, activeSection.label);
+    const activeParentKeys = findActiveNavigationParentKeys(activeSection.items, activeItem, pathname, activeSection.label);
     if (!activeParentKeys.length) {
       return;
     }
@@ -377,7 +491,7 @@ export function TronShell({
         Object.prototype.hasOwnProperty.call(next, key) ? next : { ...next, [key]: true }
       ), current);
     });
-  }, [activeItem, ensureSectionOpen, visibleNavigation]);
+  }, [activeItem, ensureSectionOpen, pathname, visibleNavigation]);
 
   useEffect(() => {
     if (!effectivePrimarySpaceId) {
@@ -488,7 +602,9 @@ export function TronShell({
     },
     popupRef: utilityPanelRef,
     triggerElement:
-      utilityPanel === "workspace"
+      utilityPanel === "domain"
+        ? domainTriggerRef.current
+        : utilityPanel === "workspace"
         ? workspaceTriggerRef.current
         : utilityPanel === "user"
           ? userMenuTriggerRef.current
@@ -620,6 +736,12 @@ export function TronShell({
     toggleUtilityPanel("workspace");
   }
 
+  function handleNavigationDomainSwitcherClick() {
+    setAgentOpen(false);
+    setTopbarToolsMenuOpen(false);
+    toggleUtilityPanel("domain");
+  }
+
   function handleUtilityPanelClick(panel: string) {
     setAgentOpen(false);
     setTopbarToolsMenuOpen(false);
@@ -735,6 +857,42 @@ export function TronShell({
     );
   }
 
+  function renderNavigationDomainSwitcherContent() {
+    return (
+      <div className="space-y-1" role="listbox" aria-label={t("shell:navigation.selectorTitle")}>
+        {navigationLoading ? <p className="px-2 py-1 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:navigation.refreshing")}</p> : null}
+        {navigationDomains.length ? navigationDomains.map((domain) => {
+          const selected = domain.domainCode === selectedDomainCode;
+          return (
+            <button
+              aria-selected={selected}
+              className={cn(
+                "flex w-full min-w-0 items-start rounded-lg border px-2.5 py-2 text-left transition-colors",
+                selected
+                  ? "border-[var(--color-primary)] bg-[var(--color-surface-container)]"
+                  : "border-transparent hover:bg-[var(--color-hover-surface)]",
+              )}
+              key={domain.domainCode}
+              role="option"
+              type="button"
+              onClick={() => {
+                setSelectedDomainCode(domain.domainCode);
+                toggleUtilityPanel("domain");
+              }}
+            >
+              <span className="min-w-0">
+                <span className="block truncate text-sm font-medium">{domain.name}</span>
+                {domain.description ? <span className="mt-0.5 block truncate text-[12px] text-[var(--color-on-surface-variant)]">{domain.description}</span> : null}
+              </span>
+            </button>
+          );
+        }) : (
+          <p className="px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">{t("shell:navigation.noDomains")}</p>
+        )}
+      </div>
+    );
+  }
+
   function renderUserPanelContent() {
     return (
       <>
@@ -837,6 +995,52 @@ export function TronShell({
               </span>
             </div>
             <div className="border-t border-[var(--color-card-border)]">{renderUserPanelContent()}</div>
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  function renderNavigationDomainSelector(compact: boolean, mobile: boolean) {
+    const domainName = selectedNavigationDomain?.name ?? t("shell:navigation.defaultName");
+    return (
+      <div className="relative">
+        <button
+          ref={domainTriggerRef}
+          className={cn(
+            "flex h-10 w-full min-w-0 items-center rounded-lg text-left text-sm font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
+            compact ? "justify-center px-1.5" : "justify-between gap-2 px-2.5 text-[15px]",
+          )}
+          type="button"
+          id="tron-domain-trigger"
+          aria-busy={navigationLoading}
+          aria-expanded={utilityPanel === "domain"}
+          aria-haspopup="dialog"
+          aria-label={utilityPanel === "domain" ? t("shell:aria.closeDomainSelector") : t("shell:aria.openDomainSelector")}
+          onClick={handleNavigationDomainSwitcherClick}
+          title={domainName}
+        >
+          {compact ? (
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-[var(--color-surface-container)] text-sm font-semibold" aria-hidden="true">
+              {domainName.slice(0, 1)}
+            </span>
+          ) : (
+            <span className="min-w-0 truncate">{domainName}</span>
+          )}
+          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)]", compact ? "hidden" : "")} size={15} aria-hidden="true" />
+        </button>
+        {utilityPanel === "domain" ? (
+          <div
+            ref={utilityPanelRef}
+            id="tron-domain-selector-panel"
+            className={cn(
+              "absolute z-[70] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              compact && !mobile ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]",
+            )}
+            role="dialog"
+            aria-label={t("shell:navigation.selectorTitle")}
+          >
+            {renderNavigationDomainSwitcherContent()}
           </div>
         ) : null}
       </div>
@@ -1018,9 +1222,11 @@ export function TronShell({
 
           <TronSidebar
             activeItem={activeItem}
+            activeHref={pathname}
             navigation={visibleNavigation}
             openNavigationItems={openNavigationItems}
             openSections={openSections}
+            renderDomainSelector={renderNavigationDomainSelector}
             renderFooter={renderSidebarUserSection}
             setOpenNavigationItems={setOpenNavigationItems}
             translate={(key, options) => t(key, options)}
