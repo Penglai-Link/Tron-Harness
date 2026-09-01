@@ -262,7 +262,7 @@ export function PlatformOpenAppsPage() {
               width: "20%",
               cellClassName: "py-4",
               render: (row) => (
-                <div className="flex items-center gap-2">
+                <div className="flex items-center gap-[12px]">
                   <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">
                     {row.openAppCode}
                   </span>

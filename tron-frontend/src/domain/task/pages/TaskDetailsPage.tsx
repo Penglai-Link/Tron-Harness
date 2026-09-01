@@ -823,7 +823,7 @@ export function TaskDetailsPage() {
             </div>
           </div>
           <div className="mt-4 grid gap-1.5">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-[12px]">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("fields.description", "Description")}</span>
               <Button
                 size="lg"
@@ -842,7 +842,7 @@ export function TaskDetailsPage() {
             )}
           </div>
           <div className="mt-4 grid gap-1.5 border-t border-[var(--color-outline-variant)] pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-[12px]">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("detail.executionResult", "Execution Result")}</span>
               <Button
                 size="lg"

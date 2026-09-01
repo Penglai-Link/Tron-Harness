@@ -133,7 +133,7 @@ function AssignmentChips({
   selected: string[];
 }) {
   return (
-    <div className="flex flex-wrap gap-2" aria-label={label}>
+    <div className="flex flex-wrap gap-[12px]" aria-label={label}>
       {options.map((item) => {
         const active = selected.includes(item);
         const pending = pendingValue === item;
@@ -519,7 +519,7 @@ export function UserDetailsPage() {
               <h2 className="text-base font-semibold">Basic Information</h2>
               <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{user.username}</p>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-[12px]">
               <Badge tone={getStatusTone(currentStatus)}>{currentStatus}</Badge>
               <div className="flex size-9 items-center justify-center rounded-xl bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">
                 <ShieldCheck size={18} aria-hidden="true" />
@@ -623,7 +623,7 @@ export function UserDetailsPage() {
         <div className="grid gap-4">
           <SurfaceCard className="grid gap-5">
             <section>
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex items-center gap-[12px]">
                 <KeyRound size={16} aria-hidden="true" />
                 <h2 className="text-base font-semibold">Role Codes</h2>
               </div>
@@ -638,7 +638,7 @@ export function UserDetailsPage() {
               />
             </section>
             <section className="border-t border-[var(--color-outline-variant)] pt-5">
-              <div className="mb-3 flex items-center gap-2">
+              <div className="mb-3 flex items-center gap-[12px]">
                 <BriefcaseBusiness size={16} aria-hidden="true" />
                 <h2 className="text-base font-semibold">Space Codes</h2>
               </div>
@@ -672,7 +672,7 @@ export function UserDetailsPage() {
                 <p className="text-sm text-[var(--color-on-surface)]">
                   The backend will generate a temporary password and no email verification will be sent.
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-[12px]">
                   <Button size="sm" disabled={resettingPassword} aria-busy={resettingPassword} onClick={() => void confirmPasswordReset(user)}>{resettingPassword ? "Resetting..." : "Confirm Reset"}</Button>
                   <Button size="sm" variant="ghost" disabled={resettingPassword} onClick={() => setResetState(null)}>Cancel</Button>
                 </div>
@@ -682,7 +682,7 @@ export function UserDetailsPage() {
             {currentResetState?.mode === "result" ? (
               <div className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
                 <p className="text-sm font-medium text-[var(--color-on-surface)]">Temporary password</p>
-                <div className="mt-2 flex flex-wrap items-center gap-2">
+                <div className="mt-2 flex flex-wrap items-center gap-[12px]">
                   <code className="rounded-md bg-white px-3 py-2 text-sm font-semibold text-[var(--color-on-surface)]">
                     {currentResetState.temporaryPassword}
                   </code>

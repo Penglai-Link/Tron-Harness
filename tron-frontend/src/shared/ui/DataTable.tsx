@@ -75,7 +75,7 @@ export function DataTable<T>({
           {toolbar ? (
             <div
               className={cn(
-                "flex min-w-0 flex-wrap items-center gap-2",
+                "flex min-w-0 flex-wrap items-center gap-[12px]",
                 title ? "justify-end" : "w-full justify-start",
               )}
             >

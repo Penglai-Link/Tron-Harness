@@ -165,7 +165,7 @@ export function KnowledgeBasePage() {
           </div>
         </div>
 
-        <div className="mt-auto flex gap-2">
+        <div className="mt-auto flex gap-[12px]">
           <Button size="lg" className="flex-1" variant="outline" onClick={() => {
             if (dataSource === "api") {
               navigate(`/rag/corpora/${encodeURIComponent(selectedKnowledgeBase.id)}/edit`);
@@ -284,8 +284,8 @@ export function KnowledgeBasePage() {
               knowledgeBase.id === selectedKnowledgeBase?.id ? "bg-[var(--color-surface-container-low)]" : undefined
             )}
             toolbar={(
-              <div className="flex w-full flex-col items-end gap-2">
-                <div className="flex items-center gap-2">
+              <div className="flex w-full flex-col items-end gap-[12px]">
+                <div className="flex items-center gap-[12px]">
                   <div className="min-w-[310px]">
                     <TextInput
                       placeholder={pageT("filters.searchPlaceholder", "Search knowledge bases, retrieval...")}

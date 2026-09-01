@@ -146,7 +146,7 @@ export function JsonSchemaDraft7Editor({
   const jsonPane = (
     <div className="flex min-h-[540px] min-w-0 flex-col bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)]">
       <div className="flex items-center justify-between border-b border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-2.5">
-        <span className="inline-flex items-center gap-2 text-[12px] font-medium text-[var(--color-on-surface-variant)]">
+        <span className="inline-flex items-center gap-[12px] text-[12px] font-medium text-[var(--color-on-surface-variant)]">
           <Code2 aria-hidden="true" size={14} />
           {jsonFileName}
         </span>
@@ -179,14 +179,14 @@ export function JsonSchemaDraft7Editor({
     >
       <header className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-4 py-3">
         <div className="min-w-0">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-[12px]">
             <h2 className="text-base font-semibold">{tr("title", "Information fields")}</h2>
             <Badge tone="success">Draft 7</Badge>
             {readOnly ? <Badge tone="outline">{tr("readOnly", "READ ONLY")}</Badge> : null}
           </div>
           <p className="mt-0.5 text-[12px] text-[var(--color-on-surface-variant)]">{tr("subtitle", "Visual fields and JSON edit the same field settings.")}</p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-[12px]">
           <Button size="sm" variant="outline" onClick={() => { setTestResult(null); setTestOpen(true); }}>
             <FlaskConical aria-hidden="true" size={14} />
             {tr("actions.test", "Test entry")}
@@ -236,13 +236,13 @@ export function JsonSchemaDraft7Editor({
                 <TextArea className="min-h-64 font-mono text-[12px] leading-6" spellCheck={false} value={testData} onChange={(event) => { setTestData(event.target.value); setTestResult(null); }} />
               </Field>
               {testResult ? (
-                <div className={cn("flex items-start gap-2 whitespace-pre-line rounded-xl px-3 py-2.5 text-sm", testResult.tone === "success" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700")}>
+                <div className={cn("flex items-start gap-[12px] whitespace-pre-line rounded-xl px-3 py-2.5 text-sm", testResult.tone === "success" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700")}>
                   {testResult.tone === "success" ? <CheckCircle2 aria-hidden="true" className="mt-0.5 shrink-0" size={16} /> : <AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={16} />}
                   {testResult.text}
                 </div>
               ) : null}
             </div>
-            <footer className="flex justify-end gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4">
+            <footer className="flex justify-end gap-[12px] border-t border-[var(--color-outline-variant)] px-5 py-4">
               <Button variant="outline" onClick={() => setTestOpen(false)}>{tr("test.cancel", "Cancel")}</Button>
               <Button onClick={validateTestData}>{tr("test.validate", "Validate")}</Button>
             </footer>

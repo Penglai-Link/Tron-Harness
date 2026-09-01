@@ -120,7 +120,7 @@ export function EditAppPage() {
         )}
       />
       <SurfaceCard>
-        <div className="mb-5 flex flex-wrap gap-2">
+        <div className="mb-5 flex flex-wrap gap-[12px]">
           <AppRuntimeRoleBadge runtimeRole={form.runtimeRole} />
           <AppStatusBadge status={app.status} />
         </div>

@@ -515,7 +515,7 @@ export function AutomationDetailsPage() {
             </Field>
           </div>
           <div className="mt-5 grid gap-1.5 border-t border-[var(--color-outline-variant)] pt-4">
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-[12px]">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pt("Prompt body")}</span>
               <Button size="sm" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
                 <Maximize2 size={15} aria-hidden="true" />

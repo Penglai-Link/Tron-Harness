@@ -314,7 +314,7 @@ export function InstalledSkillsPage() {
                 onChange={setSearchInput}
               />
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-[12px]">
               <Button
                 size="lg"
                 disabled={syncing !== null}
@@ -443,7 +443,7 @@ export function InstalledSkillsPage() {
 
           {selectedSkill ? (
             <>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-[12px]">
                 <Badge tone={getSourceTone(selectedSkill.sourceType)}>
                   {selectedSkill.sourceType}
                 </Badge>
@@ -468,7 +468,7 @@ export function InstalledSkillsPage() {
                 <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                   Files
                 </p>
-                <div className="mt-3 flex flex-wrap gap-2">
+                <div className="mt-3 flex flex-wrap gap-[12px]">
                   {selectedSkill.files.length ? (
                     selectedSkill.files.map((file) => (
                       <Badge key={file.path} tone={file.isMarkdown ? "info" : "outline"}>
@@ -484,7 +484,7 @@ export function InstalledSkillsPage() {
               </div>
 
               <div>
-                <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center justify-between gap-[12px]">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                     SKILL.md Preview
                   </p>

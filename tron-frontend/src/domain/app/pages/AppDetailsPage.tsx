@@ -152,7 +152,7 @@ export function AppDetailsPage() {
         )}
       />
       <SurfaceCard>
-        <div className="mb-5 flex flex-wrap items-center gap-2">
+        <div className="mb-5 flex flex-wrap items-center gap-[12px]">
           <AppRuntimeRoleBadge runtimeRole={app.runtimeRole} />
           <AppStatusBadge status={app.status} />
         </div>

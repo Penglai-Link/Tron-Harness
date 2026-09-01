@@ -459,7 +459,7 @@ export function ModelRegistryPage() {
               id: "status",
               header: pageT("columns.status", "Status"),
               render: (row) => (
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-[12px]">
                   <Badge tone={row.enabled ? "success" : "info"}>{row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
                   {row.isDefault ? <Badge tone="info">{pageT("status.default", "Default")}</Badge> : null}
                 </div>

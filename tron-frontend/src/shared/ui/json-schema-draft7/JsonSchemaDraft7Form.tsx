@@ -312,7 +312,7 @@ function AdditionalPropertiesEditor({
   return (
     <section className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface)]">
       <div className="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-4 py-2">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-[12px]">
           <Braces aria-hidden="true" className="shrink-0 text-[var(--color-on-surface-variant)]" size={15} />
           <h3 className="truncate text-sm font-medium">{label}</h3>
           <span className="rounded-full bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{entries.length}</span>
@@ -326,7 +326,7 @@ function AdditionalPropertiesEditor({
       </div>
       <div className="space-y-2 p-3">
         {entries.map(([name, entryValue]) => (
-          <div className="grid min-w-0 gap-2 rounded-md border border-[var(--color-outline-variant)] p-2 sm:grid-cols-[minmax(120px,0.7fr)_minmax(180px,1.3fr)_32px] sm:items-start" key={name}>
+          <div className="grid min-w-0 gap-[12px] rounded-md border border-[var(--color-outline-variant)] p-2 sm:grid-cols-[minmax(120px,0.7fr)_minmax(180px,1.3fr)_32px] sm:items-start" key={name}>
             <TextInput
               aria-label={t("jsonSchemaForm.propertyName", { defaultValue: "Property name" })}
               className="h-9 font-mono text-[12px]"
@@ -460,7 +460,7 @@ function ArrayValueEditor({
     <section className="rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]">
       <div className="flex min-h-11 items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-4 py-2">
         <div className="min-w-0">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-[12px]">
             <h3 className="truncate text-sm font-medium">{fieldLabel(label, required)}</h3>
             <span className="rounded-full bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{arrayValue.length}</span>
           </div>
@@ -483,7 +483,7 @@ function ArrayValueEditor({
           const itemType = inferredType(asSchemaObject(itemSchema), item);
           const complexItem = itemType === "array" || itemType === "object";
           return (
-            <div className={cn("flex min-w-0 gap-2 rounded-md border border-[var(--color-outline-variant)] p-2.5", complexItem ? "items-start" : "items-center")} key={index}>
+            <div className={cn("flex min-w-0 gap-[12px] rounded-md border border-[var(--color-outline-variant)] p-2.5", complexItem ? "items-start" : "items-center")} key={index}>
               <span className={cn("w-5 shrink-0 text-right font-mono text-[11px] text-[var(--color-on-surface-variant)]", complexItem && "mt-2")}>{index + 1}</span>
               <div className={cn(
                 "min-w-0 flex-1",
@@ -533,7 +533,7 @@ function ValueEditor(props: ValueEditorProps) {
 
   if (types.length > 1) {
     return (
-      <div className="grid min-w-0 gap-2 sm:grid-cols-[112px_minmax(0,1fr)]">
+      <div className="grid min-w-0 gap-[12px] sm:grid-cols-[112px_minmax(0,1fr)]">
         <SelectInput
           aria-label={`${props.label} type`}
           className="w-full font-mono text-[12px]"

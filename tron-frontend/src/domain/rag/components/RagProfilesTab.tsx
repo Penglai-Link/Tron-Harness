@@ -167,7 +167,7 @@ export function RagProfilesTab({
               header: pageT("table.columns.profile", "Profile"),
               render: (profile) => (
                 <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
+                  <div className="flex flex-wrap items-center gap-[12px]">
                     <button
                       aria-label={pageT("row.editAria", "Edit {{id}}", { id: profile.id })}
                       className="truncate text-left font-medium hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)] focus-visible:ring-offset-2 focus-visible:ring-offset-[var(--color-elevated-surface)]"
@@ -264,7 +264,7 @@ function RetrievalProfileSummary({ profile }: { profile: RetrievalProfileRecord 
   const enabledRoutes = activeRetrievalRoutes(profile);
   const routeTypes = routeTypeCounts(enabledRoutes);
   return (
-    <div className="grid content-start gap-2">
+    <div className="grid content-start gap-[12px]">
       <span className="text-[12px] text-[var(--color-on-surface-variant)]">
         {pageT("row.enabledRoutes", "{{count}} routes", { count: enabledRoutes.length })}
       </span>

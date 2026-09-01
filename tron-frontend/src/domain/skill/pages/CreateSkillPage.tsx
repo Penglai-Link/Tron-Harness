@@ -92,7 +92,7 @@ function SearchInput({
     searchModeOptions[0];
 
   return (
-    <div className="flex gap-2">
+    <div className="flex gap-[12px]">
       <Field label>
         <SelectInput
           aria-label="Runtime role"
@@ -180,7 +180,7 @@ function CandidateCard({
           onChange={onToggle}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-[12px]">
             <Badge tone="info">{candidate.skillName}</Badge>
             {installed ? <Badge tone="success">{t("pages:skills.status.installed", "Installed")}</Badge> : null}
             {installState?.state === "installing" ? (
@@ -640,7 +640,7 @@ export function CreateSkillPage() {
                     >
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-[12px]">
                             <Badge tone="info">{candidate.skillName}</Badge>
                             {isInstalledCandidate(candidate) ? (
                               <Badge tone="success">Installed</Badge>

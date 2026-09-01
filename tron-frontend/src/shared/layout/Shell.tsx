@@ -1066,7 +1066,7 @@ export function TronShell({
                 />
                 <button
                   ref={workspaceTriggerRef}
-                  className="ml-1 inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 cursor-pointer items-center gap-2 rounded-[4px] border border-[#d9d9d9] bg-white px-3 text-sm font-medium text-[var(--color-on-surface)]"
+                  className="ml-1 inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 cursor-pointer items-center gap-[12px] rounded-[4px] border border-[#d9d9d9] bg-white px-3 text-sm font-medium text-[var(--color-on-surface)]"
                   type="button"
                   id="tron-workspace-trigger"
                   aria-busy={workspaceSwitcherLoading}
@@ -1080,7 +1080,7 @@ export function TronShell({
                   <ChevronDown size={15} aria-hidden="true" />
                 </button>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-[12px]">
                 {topbarActions}
                 <Button
                   className="hidden min-[900px]:inline-flex"
@@ -1108,11 +1108,11 @@ export function TronShell({
                   </Button>
                   {topbarToolsMenuOpen ? (
                     <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
-                      <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
+                      <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
                         <Settings2 size={16} aria-hidden="true" />
                         {t("shell:utilityPanel.settings")}
                       </button>
-                      <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
+                      <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
                         <Bot size={16} aria-hidden="true" />
                         {t("shell:assistant.title")}
                       </button>

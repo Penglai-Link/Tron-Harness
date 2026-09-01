@@ -297,7 +297,7 @@ export function VariablesPage() {
           const revealedValue = revealedValues[row.original.key];
           const sensitive = isSensitiveRecord(row.original);
           return (
-            <div className="flex min-w-0 max-w-full items-center gap-2">
+            <div className="flex min-w-0 max-w-full items-center gap-[12px]">
               <span className="min-w-0 flex-1 truncate font-mono text-[13px]">
                 <SensitiveValueCode
                   className="!block !truncate !whitespace-nowrap !text-[13px] !leading-5"
@@ -483,7 +483,7 @@ export function VariablesPage() {
         <DataTable<VariableRecord>
           title={pageT("title", "Variables")}
           toolbar={
-            <div className="flex gap-2">
+            <div className="flex gap-[12px]">
               <SearchField
                 ariaLabel={pageT("aria.search", "Search variables")}
                 className="w-full"

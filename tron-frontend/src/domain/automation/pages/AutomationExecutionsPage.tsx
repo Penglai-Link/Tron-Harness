@@ -160,7 +160,7 @@ export function AutomationExecutionsPage() {
             </div>
             {selectedSessionCode ? (
               <>
-                <div className="flex items-center justify-between gap-2 border-t border-[var(--color-outline-variant)] pt-4">
+                <div className="flex items-center justify-between gap-[12px] border-t border-[var(--color-outline-variant)] pt-4">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                     {pt("Conversation")}
                   </p>
@@ -180,7 +180,7 @@ export function AutomationExecutionsPage() {
                       )}
                       key={message.messageCode}
                     >
-                      <div className="mb-2 flex items-center justify-between gap-2">
+                      <div className="mb-2 flex items-center justify-between gap-[12px]">
                         <span className="text-xs font-semibold text-[var(--color-on-surface)]">
                           {chatRoleLabel(message.role)}
                         </span>
@@ -477,7 +477,7 @@ export function AutomationExecutionsPage() {
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center gap-[12px] rounded-lg px-3 py-2 text-left hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={!openExecutionMenuRow.sessionCode}
               onClick={() => handleOpenExecutionSession(openExecutionMenuRow)}
             >
@@ -487,7 +487,7 @@ export function AutomationExecutionsPage() {
             <button
               type="button"
               role="menuitem"
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
+              className="flex w-full items-center gap-[12px] rounded-lg px-3 py-2 text-left text-[var(--color-error)] hover:bg-[var(--color-hover-surface)] disabled:cursor-not-allowed disabled:opacity-60"
               disabled={executionRowBusyKey === `delete:${openExecutionMenuRow.executionCode}`}
               onClick={() => requestDeleteExecution(openExecutionMenuRow)}
             >

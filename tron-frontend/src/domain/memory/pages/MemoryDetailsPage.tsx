@@ -287,7 +287,7 @@ export function MemoryDetailsPage() {
         ) : (
           <>
             <SurfaceCard className="space-y-5">
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-[12px]">
                 <Badge className="font-bold" tone={getTypeTone(memory)}>{memory.memoryType}</Badge>
                 <Badge tone={memory.memoryStatus === "ACTIVE" ? "success" : "info"}>{memory.memoryStatus}</Badge>
                 <Badge tone={memory.reviewStatus === "APPROVED" ? "success" : "info"}>{formatReviewStatus(memory.reviewStatus)}</Badge>

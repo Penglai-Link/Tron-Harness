@@ -87,7 +87,7 @@ export function DataTable<T extends RowData>({
           title && toolbar ? "justify-between" : "justify-start",
         )}>
           {title ? <h2 className="text-base font-semibold">{title}</h2> : null}
-          {toolbar ? <div className={cn("flex min-w-0 flex-wrap items-center gap-2", title ? "justify-end" : "w-full justify-start")}>{toolbar}</div> : null}
+          {toolbar ? <div className={cn("flex min-w-0 flex-wrap items-center gap-[12px]", title ? "justify-end" : "w-full justify-start")}>{toolbar}</div> : null}
         </div>
       ) : null}
       <TablePrimitive className={cn(tableClassName)}>

@@ -149,7 +149,7 @@ export function ResourcesPage() {
             >
               {row.original.name}
             </p>
-            <div className="mt-1 flex min-w-0 items-center gap-2 text-[12px] text-[var(--color-on-surface-variant)]">
+            <div className="mt-1 flex min-w-0 items-center gap-[12px] text-[12px] text-[var(--color-on-surface-variant)]">
               <span
                 className="truncate font-mono"
                 title={row.original.resourceCode}

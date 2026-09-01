@@ -127,7 +127,7 @@ export function DiagnosticPreview({ rows }: { rows: [string, string][] }) {
       <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
         {t("rag.common.preview", { defaultValue: "Preview" })}
       </p>
-      <div className="mt-3 grid gap-2 text-sm">
+      <div className="mt-3 grid gap-[12px] text-sm">
         {rows.map(([label, value]) => <InspectorRow key={label} label={label} value={value} />)}
       </div>
     </div>

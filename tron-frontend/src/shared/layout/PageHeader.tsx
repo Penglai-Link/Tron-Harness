@@ -36,7 +36,7 @@ export function PageHeader({ actions, breadcrumbs, className, title }: PageHeade
       ) : null}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <p className="min-w-0 text-[16px] font-semibold leading-[1.3] tracking-normal text-[var(--color-on-surface)]">{title}</p>
-        {actions ? <div className="flex flex-wrap items-center gap-2">{actions}</div> : null}
+        {actions ? <div className="flex flex-wrap items-center gap-[12px]">{actions}</div> : null}
       </div>
     </header>
   );

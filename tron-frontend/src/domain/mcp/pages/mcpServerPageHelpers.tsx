@@ -392,7 +392,7 @@ function KeyValueListSection({
 }) {
   const { t } = useTranslation(["pages"]);
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-[12px]">
       <div className="flex items-center gap-1.5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</p>
         <InfoTooltip ariaLabel={`${label} help`}>
@@ -401,7 +401,7 @@ function KeyValueListSection({
       </div>
       <div className="space-y-2">
         {rows.map((row, index) => (
-          <div key={`${label}-${index}`} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
+          <div key={`${label}-${index}`} className="grid gap-[12px] md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]">
             <TextInput
               aria-label={`${label} key ${index + 1}`}
               placeholder={t("pages:mcp.form.key", "Key")}
@@ -457,7 +457,7 @@ function StringListSection({
 }) {
   const { t } = useTranslation(["pages"]);
   return (
-    <div className="grid gap-2">
+    <div className="grid gap-[12px]">
       <div className="flex items-center gap-1.5">
         <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{label}</p>
         <InfoTooltip ariaLabel={`${label} help`}>
@@ -466,7 +466,7 @@ function StringListSection({
       </div>
       <div className="space-y-2">
         {rows.map((row, index) => (
-          <div key={`${label}-${index}`} className="grid gap-2 md:grid-cols-[minmax(0,1fr)_auto]">
+          <div key={`${label}-${index}`} className="grid gap-[12px] md:grid-cols-[minmax(0,1fr)_auto]">
             <TextInput
               aria-label={`${label} item ${index + 1}`}
               placeholder={placeholder === "Value" ? t("pages:mcp.form.value", "Value") : placeholder}

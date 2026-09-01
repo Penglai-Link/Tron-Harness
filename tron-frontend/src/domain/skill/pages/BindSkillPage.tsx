@@ -110,7 +110,7 @@ function CandidateCard({
           onChange={onToggle}
         />
         <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-[12px]">
             <Badge tone="info">{candidate.skillName}</Badge>
             {installed ? (
               <Badge tone="success">{t("pages:skills.status.installed", "Installed")}</Badge>
@@ -350,7 +350,7 @@ export function BindSkillPage() {
                       key={candidate.skillName}
                       className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4"
                     >
-                      <div className="flex flex-wrap items-center gap-2">
+                      <div className="flex flex-wrap items-center gap-[12px]">
                         <Badge tone="info">{candidate.skillName}</Badge>
                         <Badge tone="info">{candidate.sourceType}</Badge>
                         {candidate.declaredVersion ? (

@@ -65,8 +65,8 @@ export function TablePagination({
             : formatNumber(0)}
         </span>
       ) : null}
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-[12px]">
+        <label className="flex items-center gap-[12px]">
           <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.rows")}</span>
           <SelectInput
             aria-label={t("pagination.rowsPerPage")}
@@ -81,7 +81,7 @@ export function TablePagination({
         <Button size="icon" variant="secondary" aria-label={t("pagination.previousPage")} disabled={!canGoPrevious} onClick={() => onPageChange?.(page - 1)}>
           <ChevronLeft size={14} aria-hidden="true" />
         </Button>
-        <label className="flex items-center gap-2">
+        <label className="flex items-center gap-[12px]">
           <span className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pagination.page")}</span>
           <TextInput
             aria-label={t("pagination.goToPage")}

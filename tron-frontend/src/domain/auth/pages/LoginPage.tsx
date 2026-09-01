@@ -308,7 +308,7 @@ export function LoginPage() {
                   variant="secondary"
                   onClick={() => void handleExternalSignIn(provider)}
                 >
-                  <span className="flex items-center gap-2">
+                  <span className="flex items-center gap-[12px]">
                     {providerSubmitting ? <LoaderCircle className="animate-spin" size={16} aria-hidden="true" /> : <Orbit size={16} aria-hidden="true" />}
                     {provider.name}
                   </span>

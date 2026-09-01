@@ -2269,7 +2269,7 @@ function ContextStructurePanel({
   const { t } = useTranslation("pages");
   return (
     <section className="space-y-2">
-      <div className="flex min-w-0 items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-[12px]">
         <div className="flex min-w-0 items-center gap-1">
           <h3 className="truncate text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
             {t("chat.shortTermMemory.contextPanel.structure")}
@@ -2310,7 +2310,7 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
   return (
     <div className="rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-2.5">
       <div className="min-w-0">
-        <div className="flex min-w-0 items-baseline justify-between gap-2">
+        <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
           <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
           <div className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface)]">
             {formatTokenLimit(block.tokens, block.limitTokens)}
@@ -2322,7 +2322,7 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
             style={{ width: `${fallbackPercent}%` }}
           />
         </div>
-        <div className="mt-1.5 flex min-w-0 items-center justify-between gap-2 text-[10px] text-[var(--color-on-surface-variant)]">
+        <div className="mt-1.5 flex min-w-0 items-center justify-between gap-[12px] text-[10px] text-[var(--color-on-surface-variant)]">
           <span className="min-w-0 truncate">{block.meta}</span>
           {block.stat ? <span className="shrink-0">{block.stat}</span> : null}
         </div>
@@ -2414,7 +2414,7 @@ function ProviderUsageLine({
   value: string;
 }) {
   return (
-    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)_3.75rem] items-center gap-2 text-[11px] text-[var(--color-on-surface-variant)]">
+    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)_3.75rem] items-center gap-[12px] text-[11px] text-[var(--color-on-surface-variant)]">
       <span className="truncate">{label}</span>
       <span className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
         <span
@@ -2765,7 +2765,7 @@ function RightWorkspaceSidebar({
             {activeTodos.map((todo) => (
               <div
                 key={todo.todoCode}
-                className="grid min-w-0 grid-cols-[0.5rem_minmax(0,1fr)_auto_auto] items-center gap-2 py-1 text-xs"
+                className="grid min-w-0 grid-cols-[0.5rem_minmax(0,1fr)_auto_auto] items-center gap-[12px] py-1 text-xs"
                 title={todo.content}
               >
                 <span className={cn("size-2 rounded-full", todoStatusDotClass(todo.status))} aria-hidden="true" />
@@ -2887,7 +2887,7 @@ function ContextBlock({
 }) {
   return (
     <section className={cn("space-y-2 border-b border-[var(--color-outline-variant)] pb-4 last:border-b-0", className)}>
-      <div className="flex min-w-0 items-center justify-between gap-2">
+      <div className="flex min-w-0 items-center justify-between gap-[12px]">
         <h3 className="truncate text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">{title}</h3>
         {actions ? <div className="shrink-0">{actions}</div> : null}
       </div>
@@ -2952,7 +2952,7 @@ function ChatModelSelector({
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
           aria-label={t("chat.management.modelSelector.selectAria")}
-          className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex h-8 w-full min-w-0 items-center gap-[12px] rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled}
           title={selectedModelLabel}
         >
@@ -3053,7 +3053,7 @@ function ChatAgentSelector({
       <DropdownMenu open={open} onOpenChange={setOpen}>
         <DropdownMenuTrigger
           aria-label={t("chat.management.agentSelector.selectAria")}
-          className="inline-flex h-8 w-full min-w-0 items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
+          className="inline-flex h-8 w-full min-w-0 items-center gap-[12px] rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] disabled:pointer-events-none disabled:opacity-50"
           disabled={disabled}
           title={locked ? t("chat.management.agentSelector.locked") : undefined}
         >
@@ -3214,7 +3214,7 @@ function SessionSidebar({
     return (
       <div
         className={cn(
-          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-2 rounded-md px-3 py-2 text-left transition",
+          "grid w-full grid-cols-[minmax(0,1fr)_auto_auto] items-center gap-[12px] rounded-md px-3 py-2 text-left transition",
           activeSessionCode === session.sessionCode
             ? "bg-[var(--color-surface-container-high)]"
             : "hover:bg-[var(--color-surface-container-high)]",
@@ -3340,7 +3340,7 @@ function SessionSidebar({
       ) : (
         <>
           <div className="flex h-14 items-center justify-between px-4 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-[12px]">
               <MessageSquareText size={17} />
               <h2 className="text-sm font-semibold">{t("chat.management.sidebar.sessions")}</h2>
             </div>
@@ -3458,7 +3458,7 @@ function ChatBubble({
   return (
     <article className={cn("max-w-[920px] rounded-md bg-white px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-[12px]">
           {isUser ? <UserRound size={16} /> : <Bot size={16} />}
           <span className="truncate text-sm font-semibold">{actorName}</span>
         </div>
@@ -3550,7 +3550,7 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
-        <div className="flex min-w-0 items-start gap-2">
+        <div className="flex min-w-0 items-start gap-[12px]">
           <span className="mt-0.5 inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
             <BrainCircuit className={card.ended ? undefined : "animate-pulse"} size={16} />
           </span>
@@ -3689,7 +3689,7 @@ function CompactToolRow({
         aria-expanded={expanded}
         onClick={() => setExpanded((current) => !current)}
       >
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-[12px]">
           <span className={cn(
             "inline-flex shrink-0 items-center justify-center text-[11px] font-semibold text-[var(--color-on-surface-variant)]",
             nested ? "size-4" : "size-6 rounded-md bg-[var(--color-surface-container-low)]",
@@ -3701,7 +3701,7 @@ function CompactToolRow({
                 : <Hammer className="animate-pulse" size={14} />}
           </span>
           <div className="min-w-0">
-            <div className="flex min-w-0 items-center gap-2">
+            <div className="flex min-w-0 items-center gap-[12px]">
               <span className={cn("truncate", nested ? "font-normal" : "font-semibold")}>
                 {nested ? nestedToolLabel : toolLabel}
               </span>
@@ -3721,7 +3721,7 @@ function CompactToolRow({
           <div className="space-y-2">
             {hasParameters ? (
               <section className="flex min-h-0 flex-col gap-1">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-[12px]">
                   <button
                     aria-expanded={parametersExpanded}
                     className="inline-flex min-w-0 items-center gap-1 rounded py-0.5 pr-1 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)] transition hover:text-[var(--color-on-surface)] focus:outline-none focus-visible:bg-[var(--color-surface-container-low)] focus-visible:text-[var(--color-on-surface)]"
@@ -3742,7 +3742,7 @@ function CompactToolRow({
             ) : null}
             {complete ? (
               <section className="flex min-h-0 flex-col gap-1">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center justify-between gap-[12px]">
                   <h3 className="text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{t("chat.management.tool.result")}</h3>
                   <CopyValueButton ariaLabel={t("chat.management.tool.copyResult")} title={t("chat.management.tool.copyResult")} value={resultText} />
                 </div>
@@ -3807,7 +3807,7 @@ function ToolGroupUserCard({ card }: { card: ToolGroupWorkCard }) {
         type="button"
         onClick={() => setExpanded((current) => !current)}
       >
-        <span className="flex min-w-0 items-center gap-2">
+        <span className="flex min-w-0 items-center gap-[12px]">
           <span className="inline-flex size-5 shrink-0 items-center justify-center rounded text-[var(--color-on-surface-variant)] transition group-hover:bg-[var(--color-surface-container-low)] group-hover:text-[var(--color-on-surface)]">
             <Terminal className={hasRunningTool ? "animate-pulse" : undefined} size={15} />
           </span>
@@ -4964,7 +4964,7 @@ export function ChatManagementPage() {
     recentTurnLimit: aguiWorkReplayPreferences.recentTurnLimit,
   }), [aguiWorkReplayPreferences.recentTurnLimit]);
   const transcriptAttachmentHeader = pendingAttachments.length ? (
-    <div className="flex max-w-full flex-wrap gap-2">
+    <div className="flex max-w-full flex-wrap gap-[12px]">
       {pendingAttachments.map((attachment) => (
         <ChatAttachmentChip
           attachment={attachment}
@@ -4978,7 +4978,7 @@ export function ChatManagementPage() {
     </div>
   ) : null;
   const transcriptFooterAddon = useMemo(() => (
-    <div className="flex w-full min-w-0 max-w-full flex-col items-start gap-2">
+    <div className="flex w-full min-w-0 max-w-full flex-col items-start gap-[12px]">
       <div className="flex w-full min-w-0 max-w-full flex-wrap items-center gap-1">
         <input
           className="hidden"
@@ -5023,7 +5023,7 @@ export function ChatManagementPage() {
           <DropdownMenu>
             <DropdownMenuTrigger
               aria-label={t("common:reasoningEffort.chatLabel", "Reasoning effort")}
-              className="inline-flex h-8 flex-none items-center gap-2 rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+              className="inline-flex h-8 flex-none items-center gap-[12px] rounded-md border-0 bg-transparent px-2 text-xs text-[var(--color-on-surface-variant)] shadow-none transition hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
             >
               <BrainCircuit aria-hidden="true" className="size-3.5 shrink-0" />
               <span className="min-w-0 truncate">{selectedReasoningEffortLabel}</span>
@@ -6387,7 +6387,7 @@ export function ChatManagementPage() {
               </h1>
             )}
             {hasActiveSession ? (
-              <p className="mt-0.5 flex items-center gap-2 text-xs text-[var(--color-on-surface-variant)]">
+              <p className="mt-0.5 flex items-center gap-[12px] text-xs text-[var(--color-on-surface-variant)]">
                 <CircleDot size={12} />
                 {activeSession?.sessionCode}
                 <span

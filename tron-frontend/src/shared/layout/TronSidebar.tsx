@@ -148,7 +148,7 @@ export function TronSidebar({
                   return (
                     <DropdownMenuItem
                       className={cn(
-                        "h-9 gap-2 rounded-md px-2 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
+                        "h-9 gap-[12px] rounded-md px-2 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
                         childActive && "bg-[var(--color-hover-surface)] font-medium text-[var(--color-on-surface)]",
                       )}
                       key={`${itemKey}/${child.label}`}
@@ -168,7 +168,7 @@ export function TronSidebar({
           <SidebarMenuButton
             aria-expanded={open}
             aria-label={translate(open ? "shell:aria.collapseNavigationItem" : "shell:aria.expandNavigationItem", { item: itemLabel })}
-            className="gap-2 px-3 text-sidebar-foreground"
+            className="gap-[12px] px-3 text-sidebar-foreground"
             type="button"
             onClick={() => {
               setOpenNavigationItems((current) => ({ ...current, [itemKey]: !current[itemKey] }));
@@ -182,7 +182,7 @@ export function TronSidebar({
           <SidebarMenuButton
             isActive={active}
             tooltip={compact ? itemLabel : undefined}
-            className={cn(compact ? "justify-center px-0" : "gap-2 px-3")}
+            className={cn(compact ? "justify-center px-0" : "gap-[12px] px-3")}
             render={item.external
               ? <a aria-current={active ? "page" : undefined} aria-label={compact ? itemLabel : undefined} href={item.href} target="_blank" rel="noreferrer" />
               : <Link aria-current={active ? "page" : undefined} aria-label={compact ? itemLabel : undefined} to={item.href} />}
@@ -218,7 +218,7 @@ export function TronSidebar({
         {renderDomainSelector(compact, isMobile)}
       </SidebarHeader>
       <SidebarContent className="p-2">
-        <nav className={cn("flex flex-1 flex-col gap-2", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
+        <nav className={cn("flex flex-1 flex-col gap-[12px]", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
           {navigation.map((section) => {
             const sectionKey = section.id ?? section.label;
             const open = openSections[sectionKey] ?? true;

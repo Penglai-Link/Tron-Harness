@@ -441,7 +441,7 @@ export function VariableDetailsPage() {
                 <SensitiveDataBadge sensitive={isSensitiveRecord(selectedRecord)} />
               </Field>
               <Field label={t("pages:variables.detail.source", "Source")}>
-                <div className="flex min-h-6 flex-wrap items-center gap-2">
+                <div className="flex min-h-6 flex-wrap items-center gap-[12px]">
                   <Badge tone={getVariableSourceTone(selectedRecord.sourceKind)}>{selectedRecord.sourceKind}</Badge>
                   <span className="text-sm text-[var(--color-on-surface)]">{sourceLabel(selectedRecord)}</span>
                 </div>

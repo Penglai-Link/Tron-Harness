@@ -235,7 +235,7 @@ function RagStatusCell({
 
   return (
     <div className="min-w-[12rem] space-y-2" title={warning || undefined}>
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="flex flex-wrap items-center gap-[12px]">
         <RagStageBadge
           label={t("pages:skills.rag.vector", { defaultValue: "Vector" })}
           status={indexing ? "PENDING" : ragStageStatus(ragIndex, "vector", enabled)}
@@ -298,7 +298,7 @@ function RagIndexDetailCard({
   return (
     <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-[12px]">
           <Database size={16} aria-hidden="true" className="text-[var(--color-on-surface-variant)]" />
           <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
             {t("pages:skills.rag.title", { defaultValue: "RAG Index" })}
@@ -317,7 +317,7 @@ function RagIndexDetailCard({
       {indexing ? <RagProgressBar /> : null}
 
       {ragIndex ? (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-[12px]">
           <RagStageBadge label={t("pages:skills.rag.vector", { defaultValue: "Vector" })} status={ragIndex.vectorStatus} />
           <RagStageBadge label={t("pages:skills.rag.graph", { defaultValue: "Graph" })} status={ragIndex.graphStatus} />
         </div>
@@ -333,7 +333,7 @@ function RagIndexDetailCard({
       </div>
 
       {warning ? (
-        <div className="flex items-start gap-2 rounded-2xl bg-[var(--color-warning-container)] p-3 text-sm text-[var(--color-on-warning-container)]">
+        <div className="flex items-start gap-[12px] rounded-2xl bg-[var(--color-warning-container)] p-3 text-sm text-[var(--color-on-warning-container)]">
           <CircleAlert size={15} aria-hidden="true" className="mt-0.5 shrink-0" />
           <span>{warning}</span>
         </div>
@@ -699,7 +699,7 @@ export function SkillsPage() {
         </div>
       ) : (
         <>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-[12px]">
             {selectedSkill.sourceType ? (
               <Badge tone={getSourceTone(selectedSkill.sourceType)}>
                 {pageT(`source.${selectedSkill.sourceType}`, selectedSkill.sourceType)}
@@ -774,7 +774,7 @@ export function SkillsPage() {
 
           {selectedSkill.registryState === "Deleted" ? (
             <div className="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
-              <div className="flex min-w-0 items-start gap-2">
+              <div className="flex min-w-0 items-start gap-[12px]">
                 <CircleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
                 <div>
                   <p className="font-medium">{pageT("registryMissing.title", "The registry copy for this skill is missing.")}</p>
@@ -783,7 +783,7 @@ export function SkillsPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-[12px]">
                 <Button
                   size="sm"
                   type="button"
@@ -798,7 +798,7 @@ export function SkillsPage() {
           ) : null}
 
           {selectedSkill.lastError ? (
-            <div className="flex items-start gap-2 rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
+            <div className="flex items-start gap-[12px] rounded-2xl bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
               <CircleAlert size={16} aria-hidden="true" className="mt-0.5 shrink-0" />
               <span>{selectedSkill.lastError}</span>
             </div>
@@ -808,7 +808,7 @@ export function SkillsPage() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
               Files
             </p>
-            <div className="mt-2 flex flex-wrap gap-2">
+            <div className="mt-2 flex flex-wrap gap-[12px]">
               {selectedSkill.files.map((file) => (
                 <Badge key={file.path} tone={file.isMarkdown ? "info" : "outline"}>
                   {file.path}
@@ -823,7 +823,7 @@ export function SkillsPage() {
           </div>
 
           <div>
-            <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center justify-between gap-[12px]">
               <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                 SKILL.md Preview
               </p>
@@ -895,7 +895,7 @@ export function SkillsPage() {
           </div>
           {ragOperation ? (
             <div className="border-b border-[var(--color-outline-variant)] px-4 py-3">
-              <div className="flex min-w-0 items-center gap-2 text-sm text-[var(--color-on-surface-variant)]">
+              <div className="flex min-w-0 items-center gap-[12px] text-sm text-[var(--color-on-surface-variant)]">
                 <LoaderCircle className="shrink-0 animate-spin text-[var(--color-primary)]" size={15} aria-hidden="true" />
                 <span className="truncate">{ragOperation.label}</span>
               </div>

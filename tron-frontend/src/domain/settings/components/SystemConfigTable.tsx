@@ -82,7 +82,7 @@ export function SystemConfigTable() {
           </button>
           <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.help")}>{t("settingsGeneral.systemConfig.description")}</InfoTooltip>
         </div>
-        <div className="flex gap-2">
+        <div className="flex gap-[12px]">
           <Button disabled={loading || saving} onClick={refresh} variant="secondary">{t("settingsGeneral.systemConfig.actions.refresh")}</Button>
           {dirtyItems.length > 0 && <Button disabled={saving || (hasMigration && !confirmMigration)} onClick={() => void handleSave()}>
             {saving ? t("settingsGeneral.systemConfig.actions.saving") : t("settingsGeneral.systemConfig.actions.save", { count: dirtyItems.length })}
@@ -106,7 +106,7 @@ export function SystemConfigTable() {
                   onClick={() => toggleGroup(group)}
                 >
                   <span>{t(`settingsGeneral.systemConfig.categories.${group}.label`, { defaultValue: group })}</span>
-                  <span className="flex items-center gap-2 text-xs font-normal text-[var(--color-on-surface-variant)]">
+                  <span className="flex items-center gap-[12px] text-xs font-normal text-[var(--color-on-surface-variant)]">
                     {t("settingsGeneral.systemConfig.itemCount", { count: items.length })}
                     <ChevronRight className={`size-4 transition-transform ${expandedGroups.has(group) ? "rotate-90" : ""}`} />
                   </span>
