@@ -258,19 +258,19 @@ export function CreateTaskPage() {
         <div className="grid gap-6 xl:grid-cols-2">
           <Field label={pageT("fields.priority", "Priority")}>
             <SelectInput aria-label={pageT("fields.priority", "Priority")} value={priority} onValueChange={(event) => setPriority(event as TaskPriority)}>
-              {options.priorities.map((item) => <SelectItem key={item}>{pageT(`priorities.${item}`, item)}</SelectItem>)}
+              {options.priorities.map((item) => <SelectItem key={item} value={item}>{pageT(`priorities.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
         </div>
         <div className="grid gap-4 lg:grid-cols-2">
           <Field label={pageT("fields.taskType", "Task Type")}>
             <SelectInput aria-label={pageT("fields.taskType", "Task Type")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
-              {options.taskTypes.map((item) => <SelectItem key={item}>{pageT(`types.${item}`, item)}</SelectItem>)}
+              {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{pageT(`types.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
           <Field label={pageT("fields.sourceType", "Source Type")}>
             <SelectInput aria-label={pageT("fields.sourceType", "Source Type")} value={sourceType} onValueChange={(event) => setSourceType(event as TaskSourceType)}>
-              {options.sourceTypes.map((item) => <SelectItem key={item}>{pageT(`sourceTypes.${item}`, item)}</SelectItem>)}
+              {options.sourceTypes.map((item) => <SelectItem key={item} value={item}>{pageT(`sourceTypes.${item}`, item)}</SelectItem>)}
             </SelectInput>
           </Field>
           <Field label={pageT("fields.sourceUrl", "Source URL")}>
