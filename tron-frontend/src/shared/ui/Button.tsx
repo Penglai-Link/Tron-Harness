@@ -15,7 +15,7 @@ import {
 import { cn } from "@/shared/lib/utils";
 
 export const buttonVariants = cva(
-  "inline-flex h-10 items-center justify-center gap-2 rounded-lg px-4 text-sm font-medium tracking-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
+  "inline-flex h-10 items-center justify-center gap-2 rounded-[4px] px-4 text-sm font-medium tracking-normal transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)] focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50",
   {
     variants: {
       variant: {

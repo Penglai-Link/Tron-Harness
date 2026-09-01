@@ -76,7 +76,7 @@ export function DataTable<T extends RowData>({
       className={cn(
         "overflow-hidden",
         variant === "default"
-          ? "rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
+          ? "rounded-[8px] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
           : "rounded-none border-0 bg-transparent",
         className,
       )}
