@@ -59,6 +59,7 @@ import {
   MarkdownLink,
   type TargetPageFrameInspectionResult,
 } from "@/shared";
+import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
 import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
@@ -4015,6 +4016,27 @@ export function ChatManagementPage() {
   const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
   const [linkBrowserUrl, setLinkBrowserUrl] = useState<string | null>(null);
+  const desktopBridge = useMemo(() => new DesktopBridge(), []);
+  const openMarkdownInternalLink = useCallback((url: string) => {
+    if (desktopBridge.isDesktop()) {
+      setLinkBrowserUrl(url);
+      return;
+    }
+    window.open(url, "_blank", "noopener,noreferrer");
+  }, [desktopBridge]);
+  const openMarkdownExternalLink = useCallback((url: string) => {
+    if (!desktopBridge.isDesktop()) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // 桌面端：走 IPC 让主进程打开系统浏览器
+    // fire-and-forget：主进程立即返回，不等浏览器打开，
+    // 避免渲染进程后续处理抢回焦点导致浏览器窗口层级变低
+    void desktopBridge.openTargetPage({ mode: "browser", url }).catch(() => {
+      toast.error(t("chat.markdownLink.openExternalFailed"));
+    });
+  }, [desktopBridge, toast, t]);
   const activeSessionCodeRef = useRef("");
   const modelSelectionSessionRef = useRef("");
   const streamOwnershipRegistryRef = useRef(new ChatStreamOwnershipRegistry());
@@ -6421,7 +6443,11 @@ export function ChatManagementPage() {
           showHeader={false}
           footerAddon={transcriptFooterAddon}
           renderMarkdownLink={({ href, children }) => (
-            <MarkdownLink href={href} onOpenInternal={(url) => setLinkBrowserUrl(url)}>
+            <MarkdownLink
+              href={href}
+              onOpenInternal={openMarkdownInternalLink}
+              onOpenExternal={openMarkdownExternalLink}
+            >
               {children}
             </MarkdownLink>
           )}
