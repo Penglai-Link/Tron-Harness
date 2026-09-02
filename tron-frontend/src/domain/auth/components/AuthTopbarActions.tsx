@@ -29,6 +29,7 @@ export function AuthUserMenuPanel() {
     setSubmitting(true);
 
     try {
+      closeFloatingPanels();
       const logoutTask = logout();
       navigate(LOGIN_PATH, {
         replace: true,

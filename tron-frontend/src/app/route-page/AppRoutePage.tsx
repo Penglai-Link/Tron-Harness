@@ -129,21 +129,6 @@ export default function AppRoutePage() {
   const addToCache = useTabStore((state) => state.addToCache);
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
   const activeTabId = useTabStore((state) => state.activeTabId);
-  const suppressNextTabCreation = useTabStore(
-    (state) => state.suppressNextTabCreation,
-  );
-  const tabCreationSuppressionReachedTarget = useTabStore(
-    (state) => state.tabCreationSuppressionReachedTarget,
-  );
-  const tabCreationSuppressionTargetPath = useTabStore(
-    (state) => state.tabCreationSuppressionTargetPath,
-  );
-  const clearTabCreationSuppression = useTabStore(
-    (state) => state.clearTabCreationSuppression,
-  );
-  const markTabCreationSuppressionTargetReached = useTabStore(
-    (state) => state.markTabCreationSuppressionTargetReached,
-  );
   const resolved = resolveAppRoute(pathname, search);
   const routeRenderKey = routeRenderKeyForLocation(
     pathname,
@@ -221,18 +206,6 @@ export default function AppRoutePage() {
 
   useEffect(() => {
     if (resolved && resolved.route.layout !== "settings") {
-      if (suppressNextTabCreation) {
-        if (!tabCreationSuppressionReachedTarget) {
-          if (pathname === tabCreationSuppressionTargetPath) {
-            markTabCreationSuppressionTargetReached();
-          }
-          return;
-        }
-
-        if (pathname === tabCreationSuppressionTargetPath) return;
-
-        clearTabCreationSuppression();
-      }
       const currentPath = `${pathname}${search}`;
       const navItem =
         resolveActiveItem(pathname) ??
@@ -292,14 +265,9 @@ export default function AppRoutePage() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
-    clearTabCreationSuppression,
-    markTabCreationSuppressionTargetReached,
     pathname,
     search,
     resolved?.route.pageId,
-    suppressNextTabCreation,
-    tabCreationSuppressionReachedTarget,
-    tabCreationSuppressionTargetPath,
   ]);
 
   useEffect(() => {
