@@ -651,7 +651,7 @@ export function TronShell({
   }
 
   function closeCurrentWorkspaceTab() {
-    const { activeTabId, removeTab, suppressNextTab, tabs } = useTabStore.getState();
+    const { activeTabId, removeTab, tabs } = useTabStore.getState();
     const activeTab = tabs.find((tab) => tab.id === activeTabId);
     if (!activeTab?.closable) return false;
 
@@ -660,10 +660,7 @@ export function TronShell({
     const nextTab = remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)];
 
     removeTab(activeTab.id);
-    if (!nextTab) {
-      suppressNextTab();
-    }
-    navigate(nextTab?.path ?? "/apps");
+    navigate(nextTab?.path ?? "/shared-shell-preview");
     return true;
   }
 

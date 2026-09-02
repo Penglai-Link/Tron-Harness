@@ -30,7 +30,6 @@ export function TabBar({ className }: TabBarProps) {
   const removeTabs = useTabStore((state) => state.removeTabs);
   const refreshTab = useTabStore((state) => state.refreshTab);
   const setActiveTab = useTabStore((state) => state.setActiveTab);
-  const suppressNextTab = useTabStore((state) => state.suppressNextTab);
 
   const handleTabClick = (tab: TabItem) => {
     setActiveTab(tab.id);
@@ -47,10 +46,9 @@ export function TabBar({ className }: TabBarProps) {
 
     removeTab(tabId);
     if (closingActiveTab) {
-      if (!nextTab) {
-        suppressNextTab();
-      }
-      navigate(nextTab?.path ?? "/apps");
+      // /shared-shell-preview is not a console route, so no tab is auto-created
+      // for it and the sidebar stays fully clickable afterwards.
+      navigate(nextTab?.path ?? "/shared-shell-preview");
     }
   };
 

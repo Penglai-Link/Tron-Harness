@@ -23,6 +23,7 @@ import {
   setApiAccessToken,
   setApiUnauthorizedHandler,
 } from "@/shared/api/httpClient";
+import { useTabStore } from "@/store/tabStore";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
@@ -102,6 +103,8 @@ function transitionToUnauthenticated(set: AuthStateSetter, status: AuthStatus = 
   clearSessionRefreshTimer();
   accessTokenExpiresAtMs = null;
   setApiAccessToken(null);
+  // 会话失效后清理导航标签，避免残留到下一次登录
+  useTabStore.getState().clearAllTabs();
   set({
     session: null,
     status,
