@@ -202,6 +202,9 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    scrollbar-gutter: stable;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
   }
   body {
     @apply bg-background text-foreground;
@@ -209,6 +212,33 @@
   html {
     @apply font-sans;
   }
+  ::-webkit-scrollbar {
+    width: 4px;
+    height: 4px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    border-radius: 9999px;
+    background: var(--border);
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: var(--muted-foreground);
+  }
+  ::-webkit-scrollbar-button {
+    display: none;
+    width: 0;
+    height: 0;
+  }
+}
+
+.tron-scrollbar-none {
+  scrollbar-width: none;
+}
+
+.tron-scrollbar-none::-webkit-scrollbar {
+  display: none;
 }
 
 @keyframes tron-auth-enter {

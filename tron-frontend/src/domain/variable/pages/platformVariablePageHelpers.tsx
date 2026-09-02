@@ -237,7 +237,7 @@ export function StepUpRevealDialog({
               onChange={(event) => setPassword(event.target.value)}
             />
           </Field>
-          <div className="flex justify-end gap-2">
+          <div className="flex justify-end gap-[12px]">
             <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
               {pageT("dialog.cancel", "Cancel")}
             </Button>
@@ -269,7 +269,7 @@ export function SensitiveDataCheckbox({
   return (
     <label
       className={cn(
-        "inline-flex min-h-8 w-fit items-center gap-2 text-sm text-[var(--color-on-surface)]",
+        "inline-flex min-h-8 w-fit items-center gap-[12px] text-sm text-[var(--color-on-surface)]",
         disabled ? "cursor-not-allowed opacity-60" : "cursor-pointer",
       )}
     >

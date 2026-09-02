@@ -705,7 +705,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
         </div>
         <form
           ref={addressFormRef}
-          className={`${addressEditing ? 'border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)]' : 'justify-center'} flex h-9 min-w-[220px] mx-2 w-1/2 flex-1 items-center gap-2 rounded-full px-4 text-sm text-[var(--color-on-surface)] md:flex-none`}
+          className={`${addressEditing ? 'border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)]' : 'justify-center'} flex h-9 min-w-[220px] mx-2 w-1/2 flex-1 items-center gap-[12px] rounded-full px-4 text-sm text-[var(--color-on-surface)] md:flex-none`}
           onSubmit={(event) => {
             event.preventDefault();
             const formData = new FormData(event.currentTarget);
@@ -765,7 +765,7 @@ export const TargetPageFrame = forwardRef<TargetPageFrameHandle, TargetPageFrame
               <p className="text-xs">请使用系统浏览器打开该页面。</p>
             </div>
             <button
-              className="inline-flex h-9 items-center gap-2 rounded-full border border-[var(--color-outline-variant)] px-4 text-sm text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-elevated-surface)]"
+              className="inline-flex h-9 items-center gap-[12px] rounded-full border border-[var(--color-outline-variant)] px-4 text-sm text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-elevated-surface)]"
               type="button"
               onClick={handleOpenInSystemBrowser}
             >

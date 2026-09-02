@@ -12,7 +12,7 @@ function LegacyChip({
   onRemove?: (code: string) => void;
 }) {
   return (
-    <span className="inline-flex items-center gap-2 rounded-full border border-[var(--color-warning-container)] bg-[var(--color-warning-container)] px-3 py-1 text-sm text-[var(--color-on-warning-container)]">
+    <span className="inline-flex items-center gap-[12px] rounded-full border border-[var(--color-warning-container)] bg-[var(--color-warning-container)] px-3 py-1 text-sm text-[var(--color-on-warning-container)]">
       <span>{code}</span>
       {onRemove ? (
         <button
@@ -76,7 +76,7 @@ export function TaskAppSelectionField({
           <p className="text-[12px] text-[var(--color-on-surface-variant)]">
             {text("legacyHint", "Legacy app codes are not registered in the current workspace. They stay visible until you explicitly remove or replace them.")}
           </p>
-          <div className="flex flex-wrap gap-2" aria-label={text("legacyLabel", "Legacy app codes")}>
+          <div className="flex flex-wrap gap-[12px]" aria-label={text("legacyLabel", "Legacy app codes")}>
             {legacyAppCodes.map((code) => (
               <LegacyChip key={code} code={code} disabled={disabled} onRemove={onRemoveLegacy} />
             ))}

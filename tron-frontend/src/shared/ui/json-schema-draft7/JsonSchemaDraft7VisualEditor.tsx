@@ -265,11 +265,11 @@ function SchemaPropertyRow({
       expanded && "border-[var(--color-outline)]",
     )}
     >
-      <div className="flex min-h-12 min-w-0 flex-wrap items-center gap-2 px-3 py-2 sm:flex-nowrap">
+      <div className="flex min-h-12 min-w-0 flex-wrap items-center gap-[12px] px-3 py-2 sm:flex-nowrap">
         <button aria-label={expanded ? tr("actions.collapse", "Collapse {{code}}", { code: name }) : tr("actions.expand", "Expand {{code}}", { code: name })} className="shrink-0 text-[var(--color-on-surface-variant)]" type="button" onClick={() => setExpanded((current) => !current)}>
           {expanded ? <ChevronDown aria-hidden="true" size={17} /> : <ChevronRight aria-hidden="true" size={17} />}
         </button>
-        <div className="flex min-w-0 flex-1 basis-[calc(100%-26px)] items-center gap-2 sm:basis-auto">
+        <div className="flex min-w-0 flex-1 basis-[calc(100%-26px)] items-center gap-[12px] sm:basis-auto">
           {editingName && !readOnly ? (
             <DenseTextInput
               aria-label={tr("fields.code", "Field code")}
@@ -305,7 +305,7 @@ function SchemaPropertyRow({
           )}
         </div>
 
-        <div className="ml-6 flex w-[calc(100%-24px)] shrink-0 items-center justify-end gap-2 sm:ml-0 sm:w-auto">
+        <div className="ml-6 flex w-[calc(100%-24px)] shrink-0 items-center justify-end gap-[12px] sm:ml-0 sm:w-auto">
           <SchemaTypeSelect compact readOnly={readOnly} schema={value} onChange={(type) => onSchemaChange(replaceSchemaType(value, type))} />
           {pattern ? (
             <span className="inline-flex h-8 min-w-[84px] items-center justify-center gap-1 rounded-xl bg-amber-50 px-3 text-[12px] font-medium text-amber-700"><Regex aria-hidden="true" size={12} />regex</span>
@@ -420,7 +420,7 @@ function ObjectPropertiesEditor({ depth, formatOptions, onChange, readOnly, root
 
   const additionalProperties = schema.additionalProperties !== false;
   const objectFooter = (
-    <div className={cn("flex flex-wrap items-center gap-2", !root && "pt-1")}>
+    <div className={cn("flex flex-wrap items-center gap-[12px]", !root && "pt-1")}>
       <Button disabled={readOnly} size="sm" variant={root ? "default" : "outline"} onClick={() => addProperty(false)}><Plus aria-hidden="true" size={14} />{tr("actions.add", "Add field")}</Button>
       <Button disabled={readOnly} size="sm" variant="ghost" onClick={() => addProperty(true)}><Regex aria-hidden="true" size={14} />{tr("actions.addPattern", "Add pattern")}</Button>
       <button
@@ -440,7 +440,7 @@ function ObjectPropertiesEditor({ depth, formatOptions, onChange, readOnly, root
     <div className="space-y-2">
       {root ? objectFooter : null}
       {propertyError ? (
-        <div className="flex items-start gap-2 rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700"><AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={14} />{propertyError}</div>
+        <div className="flex items-start gap-[12px] rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700"><AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={14} />{propertyError}</div>
       ) : null}
       {entries.length ? entries.map(({ name, pattern, value }) => {
         const sameKindEntries = pattern ? Object.keys(patternProperties) : Object.keys(properties);

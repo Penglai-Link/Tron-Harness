@@ -21,7 +21,7 @@ export function VerifyStatusCard({ record }: { record: ModelRecord | null }) {
     : pageT("verify.noModelSelected", "No model selected");
 
   return (
-    <div className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
+    <div className="rounded-[8px] border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-sm font-medium text-[var(--color-on-surface)]">{statusLabel}</p>

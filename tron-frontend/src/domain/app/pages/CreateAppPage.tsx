@@ -69,7 +69,7 @@ export function CreateAppPage() {
       <SurfaceCard>
         <form className="space-y-6" onSubmit={handleSubmit}>
           <AppFormFields disabled={submitting} form={form} onChange={updateForm} />
-          <div className="flex flex-wrap justify-end gap-2">
+          <div className="flex flex-wrap justify-end gap-[12px]">
             <Button size="lg" type="button" variant="outline" onClick={() => navigate("/apps")}>{pageT("actions.cancel")}</Button>
             <Button size="lg" type="submit" disabled={submitting || !activeWorkspaceCode || !canSubmitAppForm(form)}>
               {submitting ? pageT("actions.saving") : pageT("actions.save")}

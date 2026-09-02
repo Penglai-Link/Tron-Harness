@@ -72,7 +72,7 @@ export function ConfirmDialog({
             ) : null}
           </div>
         </div>
-        <div className="flex justify-end gap-2 px-5 py-4">
+        <div className="flex justify-end gap-[12px] px-5 py-4">
           <Button
             type="button"
             variant="ghost"

@@ -794,10 +794,7 @@ export function TronShell({
     const expanded = hasChildren && expandedWorkspaceCodes.includes(space.workspaceCode);
     const selected = space.workspaceCode === selectedWorkspaceNode?.workspaceCode;
     const rowClassName = cn(
-      "flex min-w-0 flex-1 items-center rounded-lg border px-2.5 py-1.5 text-left transition-colors",
-      selected
-        ? "border-[var(--color-primary)] bg-[var(--color-surface-container)]"
-        : "border-transparent hover:bg-[var(--color-hover-surface)]",
+      "flex min-w-0 flex-1 cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--color-hover-surface)]",
     );
     const content = (
       <>
@@ -1062,14 +1059,14 @@ export function TronShell({
           <header className="fixed inset-x-0 top-0 z-[60] h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
             <div className="flex h-full items-center justify-between gap-4">
               <div className="flex min-w-0 flex-1 items-center gap-3">
-                <SidebarTrigger aria-label={t("shell:aria.openNavigation")} className="-ml-3 md:hidden" />
+                <SidebarTrigger aria-label={t("shell:aria.openNavigation")} className="-ml-3 size-9 cursor-pointer md:hidden" />
                 <SidebarTrigger
                   aria-label={sidebarCollapsed ? t("shell:aria.openNavigation") : t("shell:aria.closeNavigation")}
-                  className="-ml-3 hidden md:flex"
+                  className="-ml-3 hidden size-9 cursor-pointer md:flex"
                 />
                 <button
                   ref={workspaceTriggerRef}
-                  className="inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 items-center gap-2 rounded-lg bg-[var(--color-surface-container)] px-3 text-sm font-medium text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
+                  className="ml-1 inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 cursor-pointer items-center gap-[12px] rounded-[4px] border border-[#d9d9d9] bg-white px-3 text-sm font-medium text-[var(--color-on-surface)]"
                   type="button"
                   id="tron-workspace-trigger"
                   aria-busy={workspaceSwitcherLoading}
@@ -1083,7 +1080,7 @@ export function TronShell({
                   <ChevronDown size={15} aria-hidden="true" />
                 </button>
               </div>
-              <div className="flex shrink-0 items-center gap-2">
+              <div className="flex shrink-0 items-center gap-[12px]">
                 {topbarActions}
                 <Button
                   className="hidden min-[900px]:inline-flex"
@@ -1111,11 +1108,11 @@ export function TronShell({
                   </Button>
                   {topbarToolsMenuOpen ? (
                     <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
-                      <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
+                      <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
                         <Settings2 size={16} aria-hidden="true" />
                         {t("shell:utilityPanel.settings")}
                       </button>
-                      <button className="flex h-9 w-full items-center gap-2 rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
+                      <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
                         <Bot size={16} aria-hidden="true" />
                         {t("shell:assistant.title")}
                       </button>
@@ -1172,7 +1169,7 @@ export function TronShell({
               <div
                 ref={utilityPanelRef}
                 id="tron-workspace-selector-panel"
-                className="absolute left-4 top-[calc(100%+8px)] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
+                className="absolute left-4 top-[calc(100%+8px)] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
                 role="dialog"
                 aria-label={t("shell:workspace.selectorTitle")}
               >

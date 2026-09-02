@@ -1470,11 +1470,11 @@ export function GraphCanvas({
         </button>
       </div>
 
-      <div className="absolute bottom-4 right-4 z-20 flex max-w-[min(42rem,calc(100%-1rem))] flex-col items-end gap-2">
+      <div className="absolute bottom-4 right-4 z-20 flex max-w-[min(42rem,calc(100%-1rem))] flex-col items-end gap-[12px]">
         <GraphLegend items={legendItems} />
         <div
           aria-label={pageT("canvas.metricsAria", "Graph canvas metrics")}
-          className="flex items-center gap-2 rounded-xl border border-[var(--color-card-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
+          className="flex items-center gap-[12px] rounded-xl border border-[var(--color-card-border)] px-3 py-1.5 font-mono text-[11px] text-[var(--color-on-surface-variant)] shadow-[0_10px_28px_rgba(15,23,42,0.08)] backdrop-blur-sm"
           style={floatingCanvasPanelStyle}
         >
           <span>{pageT("canvas.metrics.nodes", "{{count}} nodes", { count: numberText(metrics.nodeCount, locale) })}</span>

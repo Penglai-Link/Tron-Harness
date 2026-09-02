@@ -287,7 +287,7 @@ export function PromptVariablePicker({
       </div>
       <div className="min-h-0 overflow-y-auto p-1">
         {loading ? (
-          <div className="flex items-center gap-2 px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">
+          <div className="flex items-center gap-[12px] px-3 py-2 text-sm text-[var(--color-on-surface-variant)]">
             <LoaderCircle size={15} className="animate-spin" aria-hidden="true" />
             {labels.loading}
           </div>
@@ -308,7 +308,7 @@ export function PromptVariablePicker({
               onMouseDown={(event) => event.preventDefault()}
               onClick={() => onSelect(option)}
             >
-              <span className="flex items-center gap-2">
+              <span className="flex items-center gap-[12px]">
                 <span className="font-mono text-sm font-medium text-[var(--color-on-surface)]">{option.key}</span>
                 <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${isRuntime
                   ? "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200"

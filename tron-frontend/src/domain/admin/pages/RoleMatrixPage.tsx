@@ -660,7 +660,7 @@ export function RoleMatrixPage() {
             <h2 className="text-xl font-semibold">{t("pages:admin.roles.matrixTitle", "Platform Permissions")}</h2>
             <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{t("pages:admin.roles.matrixDescription", "Search roles, focus domains, and edit permission grants directly from the matrix.")}</p>
           </div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center gap-[12px]">
             <SearchField ariaLabel={t("pages:admin.roles.search", "Search roles")} placeholder={t("pages:admin.roles.searchPlaceholder", "Search roles, codes, or descriptions...")} value={query} onChange={setQuery} />
             <SelectInput aria-label={t("pages:admin.roles.roleTypeFilter", "Filter by role type")} className="h-9 min-w-36" value={roleType} onValueChange={(event) => setRoleType(event as RoleTypeFilter)}>
               {ROLE_TYPE_OPTIONS.map((option) => <SelectItem key={option}>{t(`pages:admin.roles.roleTypes.${option}`, option)}</SelectItem>)}
@@ -697,7 +697,7 @@ export function RoleMatrixPage() {
                           selected ? "bg-[var(--color-surface-container-low)]" : "bg-white",
                         )}
                       >
-                        <div className="flex flex-wrap items-center gap-2">
+                        <div className="flex flex-wrap items-center gap-[12px]">
                           {selected && role.kind === "Custom" ? (
                             <TextInput
                               aria-label={`Edit role name for ${role.code}`}
@@ -779,7 +779,7 @@ export function RoleMatrixPage() {
         ) : (
           <div className="p-10 text-center">
             <p className="text-sm text-[var(--color-on-surface-variant)]">{t("pages:admin.roles.empty", "No roles match the current filters.")}</p>
-            <div className="mt-4 flex justify-center gap-2">
+            <div className="mt-4 flex justify-center gap-[12px]">
               <Button variant="secondary" onClick={() => runDebouncedAction("empty-clear-role-filters", clearFilters)}>
                 {t("pages:admin.roles.actions.clear", "Clear Filters")}
               </Button>

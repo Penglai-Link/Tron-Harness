@@ -745,7 +745,7 @@ function ThemeOption({
           <span className={cn("size-1.5 rounded-full", dark ? "bg-[#7ee787]" : "bg-[#2f5f9f]")} />
           <span className={cn("h-1 w-8 rounded", dark ? "bg-[#395a40]" : "bg-[#d7d7d7]")} />
         </div>
-        <div className="grid h-[60px] grid-cols-[18px_1fr] gap-2 p-2">
+        <div className="grid h-[60px] grid-cols-[18px_1fr] gap-[12px] p-2">
           <div className={cn("rounded-sm", dark ? "bg-[#1b271e]" : "bg-[#eeeeee]")} />
           <div className="space-y-1.5 pt-0.5">
             <div className={cn("h-1.5 w-1/2 rounded", dark ? "bg-[#7ee787]" : "bg-[#242424]")} />

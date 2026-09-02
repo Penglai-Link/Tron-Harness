@@ -44,7 +44,7 @@ export function AuthUserMenuPanel() {
     <div>
       <div className="border-t border-[var(--color-card-border)] p-2">
         <Link
-          className="flex h-10 items-center gap-2 rounded-lg px-2 text-[13px] font-medium text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+          className="flex h-10 items-center gap-[12px] rounded-lg px-2 text-[13px] font-medium text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
           to="/account"
           onClick={closeFloatingPanels}
         >

@@ -412,7 +412,7 @@ export function QuickResourceUploadDialog({
               </details>
 
               {blockedMessage ? (
-                <div className="flex items-start gap-2 rounded-lg border border-[var(--color-error)]/35 bg-[var(--color-error-container)] px-3 py-2 text-[12px] text-[var(--color-on-error-container)]" role="alert">
+                <div className="flex items-start gap-[12px] rounded-lg border border-[var(--color-error)]/35 bg-[var(--color-error-container)] px-3 py-2 text-[12px] text-[var(--color-on-error-container)]" role="alert">
                   <CircleAlert aria-hidden="true" className="mt-0.5 shrink-0" size={15} />
                   <span>{blockedMessage}</span>
                 </div>
@@ -431,14 +431,14 @@ export function QuickResourceUploadDialog({
             </div>
           ) : null}
           {error ? (
-            <div className="mt-4 flex items-start gap-2 rounded-lg border border-[var(--color-error)]/35 bg-[var(--color-error-container)] px-3 py-2 text-[12px] text-[var(--color-on-error-container)]" role="alert">
+            <div className="mt-4 flex items-start gap-[12px] rounded-lg border border-[var(--color-error)]/35 bg-[var(--color-error-container)] px-3 py-2 text-[12px] text-[var(--color-on-error-container)]" role="alert">
               <CircleAlert aria-hidden="true" className="mt-0.5 shrink-0" size={15} />
               <span>{error}</span>
             </div>
           ) : null}
         </div>
 
-        <footer className="flex justify-end gap-2 border-t border-[var(--color-outline-variant)] px-5 py-4">
+        <footer className="flex justify-end gap-[12px] border-t border-[var(--color-outline-variant)] px-5 py-4">
           <Button disabled={submitting} type="button" variant="ghost" onClick={close}>{quickT("actions.cancel")}</Button>
           <Button
             aria-busy={submitting}

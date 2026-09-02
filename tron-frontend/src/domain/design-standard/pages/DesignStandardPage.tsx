@@ -61,7 +61,7 @@ export function DesignStandardPage() {
                 </p>
                 <h1 className="mt-1 text-2xl font-semibold tracking-normal">{t("pages:designStandard.title", "Workspace UI foundation")}</h1>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-[12px]">
                 <Button size="icon" variant="secondary" aria-label={t("pages:designStandard.search", "Search design standard")}>
                   <Search size={17} aria-hidden="true" />
                 </Button>

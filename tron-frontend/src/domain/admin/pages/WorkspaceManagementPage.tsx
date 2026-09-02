@@ -251,7 +251,7 @@ function TreeNode({
           aria-label={pt("Select workspace {{code}}", { code: record.workspaceCode })}
           onClick={() => onSelect(record.workspaceCode)}
         >
-          <div className="flex min-w-0 items-center gap-2">
+          <div className="flex min-w-0 items-center gap-[12px]">
             <span className="truncate text-sm font-medium text-[var(--color-on-surface)]">{record.name}</span>
             <span className="inline-flex shrink-0 items-center gap-1 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
               <span className={cn(
@@ -261,7 +261,7 @@ function TreeNode({
               {pt(record.status)}
             </span>
           </div>
-          <div className="mt-0.5 flex min-w-0 items-center gap-2 text-[12px] text-[var(--color-on-surface-variant)]">
+          <div className="mt-0.5 flex min-w-0 items-center gap-[12px] text-[12px] text-[var(--color-on-surface-variant)]">
             <span className="truncate font-mono">{record.workspaceCode}</span>
             {record.childCount ? <span className="shrink-0">· {record.childCount === 1 ? pt("{{count}} child", { count: formatNumber(record.childCount) }) : pt("{{count}} children", { count: formatNumber(record.childCount) })}</span> : null}
           </div>
@@ -818,7 +818,7 @@ export function WorkspaceManagementPage() {
                   {detail && inspectorTab !== "create" ? <Badge tone={getStatusTone(detail.status)}>{pt(detail.status)}</Badge> : null}
                 </div>
               </div>
-              <div className="flex flex-wrap items-center gap-2">
+              <div className="flex flex-wrap items-center gap-[12px]">
                 {inspectorTab === "create" ? (
                   <Button disabled={creatingWorkspace} aria-busy={creatingWorkspace} onClick={() => void handleCreateWorkspace()}>
                     <Plus size={16} aria-hidden="true" />
@@ -938,7 +938,7 @@ export function WorkspaceManagementPage() {
                     <DetailField label={pt("Path")} value={detail.path.map((item) => item.name).join(" / ")} />
                     <div>
                       <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pt("Child Workspaces")}</p>
-                      <div className="mt-3 flex flex-wrap gap-2">
+                      <div className="mt-3 flex flex-wrap gap-[12px]">
                         {detail.children.length ? detail.children.map((child) => (
                           <button
                             className="rounded-full border border-[var(--color-outline-variant)] px-3 py-1 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
@@ -953,7 +953,7 @@ export function WorkspaceManagementPage() {
                     </div>
                   </div>
                 </div>
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex flex-wrap items-center gap-[12px]">
                   <Button disabled={savingMetadata || detail.status === "Archived"} aria-busy={savingMetadata} onClick={() => void handleSaveMetadata()}>
                     <Save size={16} aria-hidden="true" />
                     {savingMetadata ? pt("Saving...") : pt("Save")}

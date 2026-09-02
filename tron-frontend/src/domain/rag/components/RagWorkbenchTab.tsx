@@ -739,7 +739,7 @@ function StageResultsList({
   return (
     <details className="group mt-5 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] text-sm">
       <summary className="flex cursor-pointer list-none flex-wrap items-center justify-between gap-3 p-4 marker:hidden [&::-webkit-details-marker]:hidden">
-        <div className="flex min-w-0 items-center gap-2">
+        <div className="flex min-w-0 items-center gap-[12px]">
           <ChevronDown
             className="shrink-0 transition-transform group-open:rotate-180"
             size={16}
@@ -747,7 +747,7 @@ function StageResultsList({
           />
           <h2 className="truncate text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{title}</h2>
         </div>
-        <div className="flex flex-wrap items-center justify-end gap-2">
+        <div className="flex flex-wrap items-center justify-end gap-[12px]">
           <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 text-[12px] text-[var(--color-on-surface-variant)]">
             {pageT("stageResults.stageDuration", "{{count}} stages · {{duration}}ms", { count: results.length, duration: totalDurationMs })}
           </span>
@@ -773,12 +773,12 @@ function StageResultsList({
                   {result.stageType} · {result.strategyId}
                 </p>
               </div>
-              <div className="mt-3 flex flex-wrap items-center gap-2">
+              <div className="mt-3 flex flex-wrap items-center gap-[12px]">
                 <span className="rounded-full border border-[var(--color-outline-variant)] px-2.5 py-1 font-mono text-[12px] text-[var(--color-on-surface-variant)]">
                   {formatRagStatusLabel(result.status, t)} · {result.durationMs ?? 0}ms
                 </span>
               </div>
-              <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3 sm:grid-cols-2">
+              <dl className="mt-3 grid gap-[12px] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3 sm:grid-cols-2">
                 <div>
                   <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("stageResults.inputArtifacts", "Input artifacts")}</dt>
                   <dd className="mt-1 break-all font-mono text-[12px]">{formatArtifactKeys(result.inputArtifactKeys)}</dd>
@@ -1380,7 +1380,7 @@ export function RagWorkbenchTab({
                 <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-3">
                   <div className="flex flex-wrap items-center justify-between gap-3">
                     <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("relatedGraph.title", "Related graph")}</p>
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-[12px]">
                       <Button
                         size="sm"
                         type="button"
@@ -1596,7 +1596,7 @@ export function RagWorkbenchTab({
                   ) : null}
                   {relatedGraphPreview ? (
                     <details className="group mt-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] text-sm">
-                      <summary className="flex cursor-pointer list-none items-center gap-2 p-3 marker:hidden [&::-webkit-details-marker]:hidden">
+                      <summary className="flex cursor-pointer list-none items-center gap-[12px] p-3 marker:hidden [&::-webkit-details-marker]:hidden">
                         <ChevronDown
                           className="shrink-0 transition-transform group-open:rotate-180"
                           size={16}
@@ -1632,7 +1632,7 @@ export function RagWorkbenchTab({
             {ingestResult ? (
               <div className="mt-5 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-4">
                 <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("ingest.resultTitle", "Ingest result")}</p>
-                <div className="mt-3 grid gap-2 text-sm">
+                <div className="mt-3 grid gap-[12px] text-sm">
                   <InspectorRow label={pageT("result.status", "Status")} value={formatRagStatusLabel(ingestResult.status ?? "unknown", t)} />
                   <InspectorRow label={pageT("result.sourceCode", "Source code")} value={ingestResult.sourceCode ?? sourcePayloadForm.sourceCode} />
                   <InspectorRow label={pageT("result.textUnits", "Text units")} value={String(ingestResult.textUnitCount ?? 0)} />
@@ -1836,7 +1836,7 @@ export function RagWorkbenchTab({
                         </span>
                       </div>
                       {returnedFields.length > 0 ? (
-                        <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
+                        <dl className="mt-3 grid gap-[12px] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
                           {returnedFields.map(([field, value]) => (
                             <div key={field}>
                               <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{field}</dt>
@@ -1846,7 +1846,7 @@ export function RagWorkbenchTab({
                         </dl>
                       ) : null}
                       {treeMetadataRows.length > 0 ? (
-                        <dl className="mt-3 grid gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
+                        <dl className="mt-3 grid gap-[12px] rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] p-3 sm:grid-cols-2">
                           {treeMetadataRows.map((row) => (
                             <div key={row.label}>
                               <dt className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{row.label}</dt>

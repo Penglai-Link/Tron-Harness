@@ -436,7 +436,7 @@ export function PlatformMcpServersPage() {
             style={{ left: openRowMenu.left, top: openRowMenu.top }}
           >
             <button
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
+              className="flex w-full items-center gap-[12px] rounded-lg px-3 py-2 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
               type="button"
               onClick={() => {
                 setOpenRowMenu(null);
@@ -447,7 +447,7 @@ export function PlatformMcpServersPage() {
               {pageT("table.actions.edit", "Edit")}
             </button>
             <button
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
+              className="flex w-full items-center gap-[12px] rounded-lg px-3 py-2 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
               type="button"
               onClick={() => void handleVerify(openMenuRow)}
             >
@@ -455,7 +455,7 @@ export function PlatformMcpServersPage() {
               {pageT("table.actions.verify", "Verify")}
             </button>
             <button
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
+              className="flex w-full items-center gap-[12px] rounded-lg px-3 py-2 text-sm text-[var(--color-on-surface)] hover:bg-[var(--color-hover-surface)]"
               type="button"
               onClick={() => void handleToggleEnabled(openMenuRow)}
             >
@@ -463,7 +463,7 @@ export function PlatformMcpServersPage() {
               {openMenuRow.enabled ? pageT("table.actions.disable", "Disable") : pageT("table.actions.enable", "Enable")}
             </button>
             <button
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-sm text-[var(--color-error)] hover:bg-[var(--color-error-container)]"
+              className="flex w-full items-center gap-[12px] rounded-lg px-3 py-2 text-sm text-[var(--color-error)] hover:bg-[var(--color-error-container)]"
               type="button"
               onClick={() => void handleDelete(openMenuRow)}
             >

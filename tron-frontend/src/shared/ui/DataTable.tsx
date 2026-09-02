@@ -59,7 +59,7 @@ export function DataTable<T>({
       className={cn(
         "overflow-hidden",
         variant === "default"
-          ? "rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
+          ? "rounded-[8px] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
           : "rounded-none border-0 bg-transparent",
         className,
       )}
@@ -75,7 +75,7 @@ export function DataTable<T>({
           {toolbar ? (
             <div
               className={cn(
-                "flex min-w-0 flex-wrap items-center gap-2",
+                "flex min-w-0 flex-wrap items-center gap-[12px]",
                 title ? "justify-end" : "w-full justify-start",
               )}
             >

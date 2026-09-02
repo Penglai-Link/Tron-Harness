@@ -273,7 +273,7 @@ function ValidationSummary({ errors }: { errors: string[] }) {
       <h2 className="text-base font-semibold">
         {t("rag.profileForm.validationSummary.title", { defaultValue: "Validation summary" })}
       </h2>
-      <div className="mt-4 grid gap-2 rounded-xl border border-[var(--color-error-container)] bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
+      <div className="mt-4 grid gap-[12px] rounded-xl border border-[var(--color-error-container)] bg-[var(--color-error-container)] p-4 text-sm text-[var(--color-on-error-container)]">
         {errors.map((error) => <p key={error}>{error}</p>)}
       </div>
     </SurfaceCard>
@@ -793,7 +793,7 @@ function IngestTemplateCard({
               {templateDescription(template) ? (
                 <p className="mt-2 break-words text-sm text-[var(--color-on-surface-variant)]">{templateDescription(template)}</p>
               ) : null}
-              <div className="mt-3 flex flex-wrap gap-2">
+              <div className="mt-3 flex flex-wrap gap-[12px]">
                 {capabilities.length > 0 ? capabilities.map((capability) => (
                   <span className={`rounded-full px-2 py-0.5 font-mono text-[11px] ${selected
                     ? "bg-[var(--color-primary-container)] text-[var(--color-on-primary-container)]"
@@ -1668,7 +1668,7 @@ export function RagIngestProfileFormPage() {
                             setExpandedAdvancedNodeId((current) => (current === stage.id ? null : stage.id));
                           }}
                         >
-                          <div className="flex flex-wrap items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-[12px]">
                             <span className="font-medium">{stageDisplayName(pipelineCatalog, stageType)}</span>
                             {required ? (
                               <span className="rounded-full bg-[var(--color-primary-container)] px-2 py-0.5 text-[11px] text-[var(--color-on-primary-container)]">{pageT("ingest.advancedNodes.required", "Required")}</span>

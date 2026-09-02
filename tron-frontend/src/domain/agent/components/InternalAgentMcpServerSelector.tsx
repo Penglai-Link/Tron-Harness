@@ -93,14 +93,14 @@ export function InternalAgentMcpServerSelector({
         />
       </Field>
 
-      <div className="flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-[12px]">
         <p className="text-xs text-[var(--color-on-surface-variant)]">
           {internalPageT("showing", "Showing {{visible}} of {{total}} servers", {
             visible: visibleServers.length,
             total: servers.length,
           })}
         </p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-[12px]">
           <Button
             disabled={busy || allVisibleSelected || assignableVisibleServers.length === 0}
             size="sm"
@@ -153,7 +153,7 @@ export function InternalAgentMcpServerSelector({
                     }}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-[12px]">
                       <p className="text-sm font-semibold text-[var(--color-on-surface)]">
                         {server.name}
                       </p>

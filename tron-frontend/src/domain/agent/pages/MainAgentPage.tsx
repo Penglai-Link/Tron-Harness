@@ -28,7 +28,7 @@ export function MainAgentPage() {
         <MainAgentChatWindow
           currentUserDisplayName={session?.user.displayName ?? ""}
           footerAddon={(
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-[12px]">
               <Badge>{pageT("workspace", "Workspace")}</Badge>
               <span className="text-xs text-[var(--color-on-surface-variant)]">
                 {activeWorkspaceCode || pageT("noWorkspace", "No workspace selected")}

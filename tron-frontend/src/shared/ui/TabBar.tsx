@@ -66,7 +66,7 @@ export function TabBar({ className }: TabBarProps) {
   return (
     <div
       className={cn(
-        "inline-flex w-full items-center gap-1 overflow-x-auto bg-[var(--color-surface-container)] p-1 border-b-[1px] border-[var(--color-card-border)]",
+        "inline-flex w-full items-center gap-1 overflow-x-auto overflow-y-hidden p-1",
         className,
       )}
       role="tablist"
@@ -87,7 +87,7 @@ export function TabBar({ className }: TabBarProps) {
           <ContextMenu key={tab.id}>
             <ContextMenuTrigger
               className={cn(
-                "group relative inline-flex h-8 max-w-[200px] shrink-0 cursor-pointer items-center rounded-md px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
+                "group relative inline-flex h-8 max-w-[200px] shrink-0 cursor-pointer items-center rounded-[4px] bg-[var(--color-surface-container)] px-1 text-sm font-medium whitespace-nowrap text-[var(--color-on-surface-variant)] transition-all",
                 isActive
                   ? "bg-[var(--color-elevated-surface)] text-foreground"
                   : "hover:bg-background/50 hover:text-foreground",

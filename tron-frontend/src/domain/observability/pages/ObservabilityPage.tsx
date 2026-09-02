@@ -41,7 +41,7 @@ function SimpleBarChart({ data }: { data: { label: string; value: number }[] }) 
   return (
     <div className="flex h-48 items-end gap-3 rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
       {data.map((item) => (
-        <div className="flex h-full min-w-8 flex-1 flex-col justify-end gap-2" key={item.label}>
+        <div className="flex h-full min-w-8 flex-1 flex-col justify-end gap-[12px]" key={item.label}>
           <div className="rounded-t-md bg-[var(--color-primary)]" style={{ height: `${(item.value / max) * 100}%` }} title={`${item.label}: ${item.value}`} />
           <span className="text-center text-[11px] text-[var(--color-on-surface-variant)]">{item.label}</span>
         </div>
@@ -103,7 +103,7 @@ export function ObservabilityPage() {
         <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">{pageT("fields.budget", "Budget")}</span><span>99.95%</span></div>
         <div className="flex justify-between"><span className="text-[var(--color-on-surface-variant)]">{pageT("fields.retries", "Retries")}</span><span>12</span></div>
       </div>
-      <div className="flex gap-2">
+      <div className="flex gap-[12px]">
         <Button className="flex-1" size="sm" onClick={() => setNotice(pageT("messages.agentPaused", "Agent paused"))}>
           {pageT("actions.pauseAgent", "Pause Agent")}
         </Button>
@@ -146,7 +146,7 @@ export function ObservabilityPage() {
         </SurfaceCard>
         <SurfaceCard>
           <h2 className="text-base font-semibold">{pageT("charts.errorHeatmap", "Error Heatmap")}</h2>
-          <div className="mt-4 grid grid-cols-6 gap-2">
+          <div className="mt-4 grid grid-cols-6 gap-[12px]">
             {data.heatmap.map((value, index) => (
               <button className="aspect-square rounded-md border border-[var(--color-outline-variant)] text-[11px]" style={{ background: `rgba(47,95,159,${0.15 + value / 120})` }} key={`${value}-${index}`} type="button" onClick={() => setNotice(pageT("messages.heatmapCell", "Heatmap cell {{index}}: {{value}} events", { index: index + 1, value }))}>
                 {value}

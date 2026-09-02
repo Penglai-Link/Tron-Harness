@@ -598,7 +598,7 @@ function MemoryRepository() {
           onOpen={openMemory}
           title={t("pages:memory.title", "Memory")}
           toolbar={
-            <div className="flex gap-2">
+            <div className="flex gap-[12px]">
               <SelectInput
                 aria-label={t("pages:memory.filters.target", "Filter memory target")}
                 className="w-full"

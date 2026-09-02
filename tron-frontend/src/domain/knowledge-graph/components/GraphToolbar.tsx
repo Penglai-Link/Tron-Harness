@@ -65,8 +65,8 @@ function ToolbarField({ children, className, hint, label }: ToolbarFieldProps) {
   const { t } = useTranslation(["pages"]);
 
   return (
-    <div className={`flex min-w-0 flex-col items-stretch gap-2 ${className}`}>
-      <div className="inline-flex self-start items-center gap-2 whitespace-nowrap font-medium text-base/4.5 text-foreground sm:text-sm/4">
+    <div className={`flex min-w-0 flex-col items-stretch gap-[12px] ${className}`}>
+      <div className="inline-flex self-start items-center gap-[12px] whitespace-nowrap font-medium text-base/4.5 text-foreground sm:text-sm/4">
         <span>{label}</span>
         <InfoTooltip ariaLabel={t("pages:knowledgeGraph.toolbar.fieldHelpAria", {
           defaultValue: "{{label}} field help",
@@ -303,7 +303,7 @@ export function GraphToolbar({
               ))}
             </SelectInput>
           </ToolbarField>
-          <div className="flex min-w-0 items-end gap-1 sm:col-span-2 sm:gap-2 lg:col-span-3">
+          <div className="flex min-w-0 items-end gap-1 sm:col-span-2 sm:gap-[12px] lg:col-span-3">
             <ToolbarField
               className="min-w-0 flex-1 sm:w-[220px] sm:flex-none lg:w-[148px]"
               label={pageT("toolbar.layout.label", "Layout")}
@@ -337,7 +337,7 @@ export function GraphToolbar({
                 </span>
               ) : null}
             </Button>
-            <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-2">
+            <div className="ml-auto flex shrink-0 items-center gap-1 sm:gap-[12px]">
               <Button className="size-8 sm:size-9" size="icon" variant="ghost" type="button" aria-label={pageT("toolbar.zoomIn", "Zoom in")} title={pageT("toolbar.zoomIn", "Zoom in")} onClick={() => onZoomChange(10)}>
                 <Plus size={16} aria-hidden="true" />
               </Button>
@@ -373,7 +373,7 @@ export function GraphToolbar({
       </div>
 
       {!filtersOpen && activeFilterCount ? (
-        <div className="flex flex-wrap items-center gap-2 px-0.5 text-[12px] text-[var(--color-on-surface-variant)]">
+        <div className="flex flex-wrap items-center gap-[12px] px-0.5 text-[12px] text-[var(--color-on-surface-variant)]">
           <span className="font-medium">{pageT("toolbar.filters.active", "Active filters")}</span>
           {selectedRelationships.map((relationship) => (
             <button
@@ -405,7 +405,7 @@ export function GraphToolbar({
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-[minmax(260px,360px)_minmax(260px,360px)]">
             {showRelationshipFilter ? (
               <div className="min-w-0">
-                <div className="mb-1.5 flex h-6 items-center justify-between gap-2">
+                <div className="mb-1.5 flex h-6 items-center justify-between gap-[12px]">
                   <p className="text-sm font-semibold text-[var(--color-on-surface)]">
                     {pageT("toolbar.relationships.label", "Relationship")}
                   </p>
@@ -428,7 +428,7 @@ export function GraphToolbar({
             ) : null}
             {showLabelFilter ? (
               <div className="min-w-0">
-                <div className="mb-1.5 flex h-6 items-center justify-between gap-2">
+                <div className="mb-1.5 flex h-6 items-center justify-between gap-[12px]">
                   <p className="text-sm font-semibold text-[var(--color-on-surface)]">
                     {pageT("toolbar.labels.label", "Labels")}
                   </p>

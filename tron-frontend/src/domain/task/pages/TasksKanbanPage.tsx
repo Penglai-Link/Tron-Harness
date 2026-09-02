@@ -207,11 +207,11 @@ function KanbanCard({
       onDragStart={onDragStart}
       onClick={onSelect}
     >
-      <div className={cn("flex min-w-0 items-center justify-between gap-2", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
+      <div className={cn("flex min-w-0 items-center justify-between gap-[12px]", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
         <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={task.priority} tone={taskPriorityTone(task.priority)}>{task.priority}</Badge>
       </div>
-      <div className={cn("flex min-w-0 items-start gap-2", dense ? "mb-1.5" : compact ? "mb-2" : "mb-3")}>
+      <div className={cn("flex min-w-0 items-start gap-[12px]", dense ? "mb-1.5" : compact ? "mb-2" : "mb-3")}>
         <span
           aria-label={task.taskType}
           className={cn("mt-1 h-3 w-1 shrink-0 rounded-full", taskTypeMarkerClass(task.taskType))}
@@ -220,7 +220,7 @@ function KanbanCard({
         <h3 className={cn("min-w-0 flex-1 font-medium leading-5", dense ? "text-[12px]" : compact ? "text-[13px]" : "text-sm")}>{task.title}</h3>
       </div>
       <ProgressBar value={task.progress} />
-      <div className={cn("flex items-center justify-between gap-2", dense ? "mt-2" : compact ? "mt-2.5" : "mt-3")}>
+      <div className={cn("flex items-center justify-between gap-[12px]", dense ? "mt-2" : compact ? "mt-2.5" : "mt-3")}>
         <span className="min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">{task.assigneeUserCodes[0] ?? t("pages:tasks.kanban.unassigned", "Unassigned")}</span>
         <span className="text-[11px] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.subtasks", "{{count}} subtasks", { count: task.subtaskCount })}</span>
       </div>

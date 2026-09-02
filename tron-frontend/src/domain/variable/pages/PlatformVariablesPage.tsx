@@ -366,7 +366,7 @@ export function PlatformVariablesPage() {
                 const revealedValue = revealedValues[row.key];
                 const sensitive = isSensitiveRecord(row);
                 return (
-                  <div className="flex min-w-0 max-w-full items-center gap-2">
+                  <div className="flex min-w-0 max-w-full items-center gap-[12px]">
                     <span className="min-w-0 flex-1 truncate font-mono text-[13px]">
                       <SensitiveValueCode
                         className="!block !truncate !whitespace-nowrap !text-[13px] !leading-5"

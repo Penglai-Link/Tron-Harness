@@ -256,7 +256,7 @@ function DomainEditorDialog({
         </div>
 
         {!readOnly && (
-          <DialogFooter className="m-0 shrink-0 flex-row justify-end gap-2 rounded-none border-0 bg-transparent p-0">
+          <DialogFooter className="m-0 shrink-0 flex-row justify-end gap-[12px] rounded-none border-0 bg-transparent p-0">
             <Button type="button" size="lg" variant="outline" onClick={onClose}>{t("pages:memoryDomains.actions.cancel", "Cancel")}</Button>
             <Button type="button" size="lg" disabled={submitting} aria-busy={submitting} onClick={onSubmit}>
               <Save size={16} aria-hidden="true" />

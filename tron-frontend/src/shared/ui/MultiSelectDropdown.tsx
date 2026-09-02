@@ -86,7 +86,7 @@ export function MultiSelectDropdown({
 
   if (loading) {
     return (
-      <div className={cn("flex w-full items-center rounded-lg border border-input bg-background px-3 py-2 text-sm text-muted-foreground", className)}>
+      <div className={cn("flex w-full items-center rounded-[4px] border border-input bg-background px-3 py-2 text-sm text-muted-foreground", className)}>
         {loadingMessage}
       </div>
     );
@@ -94,7 +94,7 @@ export function MultiSelectDropdown({
 
   if (!options.length) {
     return (
-      <div className={cn("flex w-full items-center rounded-lg border border-input bg-background px-3 py-2 text-sm text-muted-foreground", className)}>
+      <div className={cn("flex w-full items-center rounded-[4px] border border-input bg-background px-3 py-2 text-sm text-muted-foreground", className)}>
         {emptyMessage}
       </div>
     );

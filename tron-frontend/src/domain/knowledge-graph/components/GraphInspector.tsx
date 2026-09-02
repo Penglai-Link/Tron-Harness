@@ -56,7 +56,7 @@ export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: Gr
       <div className="flex items-start justify-between gap-3 border-b border-[var(--color-outline-variant)] pb-4">
         <div className="min-w-0">
           <h2 className="break-words text-xl font-semibold">{node.nodeCode}</h2>
-          <div className="mt-2 flex flex-wrap items-center gap-2">
+          <div className="mt-2 flex flex-wrap items-center gap-[12px]">
             <Badge tone={primaryLabel === "RagSkill" ? "info" : "outline"}>{primaryLabel}</Badge>
             <Badge tone={node.properties.status === "ACTIVE" ? "success" : "info"}>{formatValue(node.properties.status ?? "ACTIVE")}</Badge>
           </div>
@@ -148,7 +148,7 @@ export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: Gr
         ]} />
       </section>
 
-      <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-1">
+      <div className="grid grid-cols-1 gap-[12px] sm:grid-cols-2 lg:grid-cols-1">
         <Button type="button" variant="secondary" onClick={() => onExpandNode(node.nodeCode)}>
           <ExternalLink size={16} aria-hidden="true" />
           {pageT("inspector.actions.expand", "Expand Node")}

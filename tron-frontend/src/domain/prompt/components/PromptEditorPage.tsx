@@ -773,7 +773,7 @@ export function PromptEditorPage({
             </Field>
 
             <div className="grid gap-1.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
+              <div className="flex flex-wrap items-center justify-between gap-[12px]">
                 <span className="flex items-center gap-1.5 text-sm font-medium text-[var(--color-on-surface)]">
                   {requiredLabel(pt("fields.promptBody", "Prompt body"))}
                   <InfoTooltip ariaLabel={pt("aria.promptBodyVariablesHelp", "Prompt variable usage help")}>

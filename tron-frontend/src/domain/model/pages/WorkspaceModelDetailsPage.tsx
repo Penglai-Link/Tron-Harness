@@ -355,6 +355,7 @@ export function WorkspaceModelDetailsPage() {
   return (
     <>
       <PageHeader
+        className="max-w-5xl"
         breadcrumbs={[{ label: pageT("title", "Models"), href: "/models" }, { label: selectedRecord.displayName }]}
         title={selectedRecord.displayName}
         actions={editing ? (
@@ -459,7 +460,7 @@ export function WorkspaceModelDetailsPage() {
               />
             </div>
           ) : (
-            <div className="grid gap-x-8 gap-y-5 md:grid-cols-2">
+            <div className="grid gap-x-8 gap-y-5 md:grid-cols-3 [&_[data-slot=field-label]]:opacity-65">
               <Field label={pageT("form.displayName", "Display Name")}>
                 <ReadValue>{selectedRecord.displayName}</ReadValue>
               </Field>
@@ -484,7 +485,7 @@ export function WorkspaceModelDetailsPage() {
               <Field label={pageT("form.apiKey", "API Key")}>
                 <ReadValue>{maskApiKeyValue(selectedRecord.apiKeyRef)}</ReadValue>
               </Field>
-              <div className="md:col-span-2">
+              <div className="md:col-span-3">
                 <Field label={pageT("form.description", "Description")}>
                   <ReadValue>{formatOptionalText(selectedRecord.description)}</ReadValue>
                 </Field>

@@ -244,7 +244,7 @@ export function OpenAppSecretRevealCard({
     <SurfaceCard className="border-[var(--color-warning-container)] bg-[linear-gradient(135deg,rgba(255,237,196,0.65),rgba(255,255,255,0.9))]">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="inline-flex items-center gap-2 rounded-full bg-[var(--color-warning-container)] px-3 py-1 text-[12px] font-semibold text-[var(--color-on-warning-container)]">
+          <div className="inline-flex items-center gap-[12px] rounded-full bg-[var(--color-warning-container)] px-3 py-1 text-[12px] font-semibold text-[var(--color-on-warning-container)]">
             <KeyRound size={14} aria-hidden="true" />
             {pageT("reveal.badge", "One-time secret reveal")}
           </div>
@@ -703,7 +703,7 @@ function CapabilityGrantOperationCard({
           onClick={() => onToggleExpandedOperation(operationKey)}
         >
           <span className="min-w-0">
-            <span className="flex flex-wrap items-center gap-2">
+            <span className="flex flex-wrap items-center gap-[12px]">
               <span className="text-sm font-medium text-[var(--color-on-surface)]">{operation.operationName}</span>
               <span
                 className={`font-mono text-[12px] ${selected ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"
@@ -755,7 +755,7 @@ export function OpenAppUserGrantSummarySection({
           {pageT("userGrants.empty", "No users granted.")}
         </div>
       ) : (
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-[12px]">
           {detail.userGrants.map((grant) => (
             <span
               key={grant.userCode}
@@ -871,7 +871,7 @@ function CapabilityGrantSummaryGroupCard({
             {capabilityDisplayName}
           </span>
           {!expanded ? (
-            <span className="mt-2 flex flex-wrap gap-2">
+            <span className="mt-2 flex flex-wrap gap-[12px]">
               {group.operations.map((operation) => (
                 <span
                   key={`${group.capabilityCode}:${operation.operationCode}:summary`}
@@ -938,7 +938,7 @@ function CapabilityGrantSummaryOperationCard({
         onClick={() => onToggleExpandedOperation(operationKey)}
       >
         <span className="min-w-0">
-          <span className="flex flex-wrap items-center gap-2">
+          <span className="flex flex-wrap items-center gap-[12px]">
             <span className="text-sm font-medium text-[var(--color-on-surface)]">{operation.operationName}</span>
             <span className="font-mono text-[12px] text-[var(--color-on-surface-variant)]">{operation.operationCode}</span>
           </span>

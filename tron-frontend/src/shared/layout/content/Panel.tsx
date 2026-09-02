@@ -99,7 +99,7 @@ export function Panel({
   });
   return (
     <section className="flex h-full flex-col">
-      <TabBar className="h-10 flex-initial" />
+      <TabBar className="h-12 flex-initial" />
       <div className={cn("relative z-0 grid h-1/2 flex-1 grid-cols-1")}>
         <style>{`
           #resize-panel {

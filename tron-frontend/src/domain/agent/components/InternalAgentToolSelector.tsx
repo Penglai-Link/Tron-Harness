@@ -241,7 +241,7 @@ export function InternalAgentToolSelector({
                       </p>
                     </div>
 
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-[12px]">
                       <Button
                         disabled={busy || allActiveToolsSelected}
                         size="sm"
@@ -284,7 +284,7 @@ export function InternalAgentToolSelector({
                               }}
                             />
                             <div className="min-w-0">
-                              <div className="flex flex-wrap items-center gap-2">
+                              <div className="flex flex-wrap items-center gap-[12px]">
                                 <span className="text-sm font-medium text-[var(--color-on-surface)]">
                                   {tool.name}
                                 </span>

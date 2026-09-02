@@ -390,7 +390,7 @@ function FieldMappingSection({
             })}
           </p>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-[12px]">
           <Button type="button" variant="ghost" onClick={onToggleContractFields}>
             {toggleContractLabel}
           </Button>
@@ -1211,7 +1211,7 @@ export function RagCorpusFormPage() {
           </div>
 
           <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
-            <div className="mb-3 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+            <div className="mb-3 flex flex-col gap-[12px] sm:flex-row sm:items-center sm:justify-between">
               <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
                 <h3 className="text-sm font-semibold">{storageSummaryTitle}</h3>
                 <ToggleSwitch
@@ -1224,7 +1224,7 @@ export function RagCorpusFormPage() {
                 {pageT("storageSummary.targetCount", "{{count}} targets", { count: form.storageTargets.length })}
               </span>
             </div>
-            <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-5">
+            <div className="grid gap-[12px] md:grid-cols-2 xl:grid-cols-5">
               {storageSummaryRows.map((row) => (
                 <div key={row.key} className="min-w-0 rounded-lg bg-[var(--color-surface-container-low)] px-3 py-2">
                   <div className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{row.label}</div>
@@ -1316,7 +1316,7 @@ export function RagCorpusFormPage() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div className="space-y-3">
               <h2 className="text-base font-semibold">{pageT("sections.fieldConfig", "Field configuration")}</h2>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-[12px]">
                 {fieldConfigSummaryItems.map((item) => (
                   <span
                     key={item}
@@ -1338,7 +1338,7 @@ export function RagCorpusFormPage() {
 
           {showFieldConfig ? (
             <div className="mt-5 space-y-4 border-t border-[var(--color-outline-variant)] pt-4">
-              <div aria-label={pageT("fieldConfig.tabsAria", "Field configuration tabs")} className="flex flex-wrap gap-2" role="tablist">
+              <div aria-label={pageT("fieldConfig.tabsAria", "Field configuration tabs")} className="flex flex-wrap gap-[12px]" role="tablist">
                 {fieldConfigTabs.map((tab) => {
                   const selected = activeFieldConfigTab === tab.key;
                   return (

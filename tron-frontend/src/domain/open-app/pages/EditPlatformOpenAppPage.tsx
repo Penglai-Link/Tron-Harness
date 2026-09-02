@@ -270,7 +270,7 @@ export function EditPlatformOpenAppPage() {
 
           <OpenAppMetadataFormFields draft={metadataDraft} onChange={setMetadataDraft} />
 
-          <div className="flex flex-wrap gap-2">
+          <div className="flex flex-wrap gap-[12px]">
             <Button
               disabled={savingMetadata || !metadataDraft.name.trim()}
               aria-busy={savingMetadata}
@@ -286,7 +286,7 @@ export function EditPlatformOpenAppPage() {
           value={userCodesInput}
           onChange={setUserCodesInput}
           footer={(
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-[12px]">
               <Button
                 disabled={savingUsers}
                 aria-busy={savingUsers}
@@ -305,7 +305,7 @@ export function EditPlatformOpenAppPage() {
           onSetCapabilitySelection={setCapabilityGrantGroupSelection}
           onToggle={toggleCapabilityGrant}
           footer={(
-            <div className="flex flex-wrap gap-2">
+            <div className="flex flex-wrap gap-[12px]">
               <Button
                 disabled={savingCapabilities}
                 aria-busy={savingCapabilities}
