@@ -3,7 +3,7 @@ use crate::domain::navigation::{
     NavigationTreeItem,
 };
 
-use super::{CopyMenuTreeCommand, UpdateMenuItemCommand};
+use super::{CopyMenuTreeCommand, DefaultNavigationMenuTreeItem, UpdateMenuItemCommand};
 
 pub trait NavigationRepository: Send {
     fn next_id(&mut self) -> Result<i64, NavigationError>;
@@ -39,4 +39,8 @@ pub trait NavigationRepository: Send {
         target_domain_code: &str,
         command: &CopyMenuTreeCommand,
     ) -> Result<(), NavigationError>;
+    fn restore_default_menu_trees(
+        &mut self,
+        items: &[DefaultNavigationMenuTreeItem],
+    ) -> Result<i64, NavigationError>;
 }

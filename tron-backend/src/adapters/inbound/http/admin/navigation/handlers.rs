@@ -31,6 +31,10 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/admin/navigation/domains/{target_domain_code}/menu-tree/copy",
             post(copy_tree),
         )
+        .route(
+            "/api/v1/admin/navigation/menu-trees/default",
+            post(restore_default_menu_trees),
+        )
 }
 
 async fn query_domains(
@@ -343,6 +347,23 @@ async fn copy_tree(
         Ok(items) => Json(ApiResponse::protocol_success(
             items.into_iter().map(tree_item_vo).collect::<Vec<_>>(),
         ))
+        .into_response(),
+        Err(error) => navigation_error_response(error, &auth.locale),
+    }
+}
+
+async fn restore_default_menu_trees(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+) -> Response {
+    if let Err(response) = ensure_permission(&state, &auth, "A") {
+        return response;
+    }
+    match state.navigation.restore_default_menu_trees() {
+        Ok(result) => Json(ApiResponse::protocol_success(RestoreDefaultMenuTreesVo {
+            restored_domain_codes: result.restored_domain_codes,
+            restored_item_count: result.restored_item_count,
+        }))
         .into_response(),
         Err(error) => navigation_error_response(error, &auth.locale),
     }

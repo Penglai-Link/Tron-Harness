@@ -25,6 +25,7 @@ const navigationAdminApiEndpoints = {
   updateMenuItem: "PUT /api/v1/admin/navigation/domains/{domainCode}/menu-items/{menuCode}",
   deleteMenuItem: "DELETE /api/v1/admin/navigation/domains/{domainCode}/menu-items/{menuCode}",
   copyMenuTree: "POST /api/v1/admin/navigation/domains/{targetDomainCode}/menu-tree/copy",
+  restoreDefaultMenuTrees: "POST /api/v1/admin/navigation/menu-trees/default",
 } as const;
 
 export interface NavigationDomainQuery {
@@ -75,6 +76,11 @@ export interface NavigationCopyMenuTreePayload {
   sourceMenuCode: string | null;
   targetParentMenuCode: string | null;
   position: number;
+}
+
+export interface NavigationDefaultMenuTreeRestore {
+  restoredDomainCodes: string[];
+  restoredItemCount: number;
 }
 
 function normalizePage<T>(payload: unknown, fallback: Pick<NavigationAdminPage<T>, "current" | "size">): NavigationAdminPage<T> {
@@ -164,4 +170,8 @@ export function copyNavigationMenuTree(targetDomainCode: string, payload: Naviga
     body: payload,
     pathParams: { targetDomainCode },
   });
+}
+
+export function restoreNavigationDefaultMenuTrees() {
+  return requestApi<NavigationDefaultMenuTreeRestore>(navigationAdminApiEndpoints.restoreDefaultMenuTrees);
 }

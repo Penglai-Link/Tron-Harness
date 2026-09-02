@@ -52,3 +52,10 @@ struct MenuTreeItemVo {
     visible_roles: Vec<String>,
     children: Vec<MenuTreeItemVo>,
 }
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RestoreDefaultMenuTreesVo {
+    restored_domain_codes: Vec<String>,
+    restored_item_count: i64,
+}

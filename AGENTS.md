@@ -45,3 +45,4 @@ Pagable response body format:
 - The sidebar uses the persisted navigation tree whenever the API data source is active; change the built-in SQLite menu migration as well as `shellNavigation.ts` when a default sidebar hierarchy changes.
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
 - `ToggleSwitch` currently applies a hard-coded `title="12"` to every rendered label; do not treat it as user-facing copy when composing layouts around that control.
+- `cargo fmt` can reformat unrelated tracked files; review and retain only feature-owned changes before committing.

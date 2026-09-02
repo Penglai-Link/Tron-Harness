@@ -419,3 +419,114 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
         "ARRANGEMENT_PAGE"
     );
 }
+
+#[tokio::test]
+async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
+    let router = app();
+    let token = authenticated_bearer_token(&router).await;
+
+    for menu_code in [
+        "APPS",
+        "TASKS",
+        "AUTOMATIONS",
+        "CORE",
+        "CHATS",
+        "INTERNAL_AGENTS",
+        "SYSTEM_AGENTS",
+        "AGENTS",
+        "MCP_SERVERS",
+        "PROMPTS",
+        "MODELS",
+        "SKILLS",
+        "AGENT_OPERATIONS",
+        "MEMORY",
+        "KNOWLEDGE_GRAPH",
+        "KNOWLEDGE_BASE",
+        "RAG",
+        "FILE_MANAGEMENT",
+        "DATA_SOURCE_MANAGEMENT",
+        "SERVER_MANAGEMENT",
+        "SERVER_ACCOUNT_MANAGEMENT",
+        "RESOURCE_MANAGEMENT",
+        "VARIABLES",
+        "OBSERVABILITY",
+        "DATA",
+    ] {
+        let response = request_json(
+            &router,
+            Method::DELETE,
+            &format!("/api/v1/admin/navigation/domains/ADVANCED/menu-items/{menu_code}"),
+            None,
+            Some(&token),
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK, "remove {menu_code}");
+    }
+
+    let empty_tree = request_json(
+        &router,
+        Method::GET,
+        "/api/v1/admin/navigation/domains/ADVANCED/menu-tree",
+        None,
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(response_json(empty_tree).await["data"], json!([]));
+
+    let restore = request_json(
+        &router,
+        Method::POST,
+        "/api/v1/admin/navigation/menu-trees/default",
+        None,
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(restore.status(), StatusCode::OK);
+    let restore_payload = response_json(restore).await;
+    assert_eq!(restore_payload["code"], "0");
+    assert_eq!(
+        restore_payload["data"]["restoredDomainCodes"],
+        json!(["ADVANCED"])
+    );
+    assert_eq!(restore_payload["data"]["restoredItemCount"], 25);
+
+    let restored_tree = request_json(
+        &router,
+        Method::GET,
+        "/api/v1/admin/navigation/domains/ADVANCED/menu-tree",
+        None,
+        Some(&token),
+        None,
+    )
+    .await;
+    let restored_payload = response_json(restored_tree).await;
+    assert_eq!(restored_payload["data"].as_array().map(Vec::len), Some(3));
+    assert_eq!(restored_payload["data"][0]["menuCode"], "CORE");
+    assert_eq!(restored_payload["data"][1]["menuCode"], "AGENT_OPERATIONS");
+    assert_eq!(
+        restored_payload["data"][1]["children"][1]["children"][0]["menuCode"],
+        "INTERNAL_AGENTS"
+    );
+    assert_eq!(
+        restored_payload["data"][1]["children"][1]["children"][1]["menuCode"],
+        "SYSTEM_AGENTS"
+    );
+
+    let second_restore = request_json(
+        &router,
+        Method::POST,
+        "/api/v1/admin/navigation/menu-trees/default",
+        None,
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_eq!(second_restore.status(), StatusCode::OK);
+    assert_eq!(
+        response_json(second_restore).await["data"]["restoredItemCount"],
+        0
+    );
+}

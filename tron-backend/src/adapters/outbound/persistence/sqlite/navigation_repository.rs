@@ -7,7 +7,10 @@ use std::{
 use rusqlite::{Connection, ErrorCode, OptionalExtension, params};
 
 use crate::{
-    application::navigation::{CopyMenuTreeCommand, NavigationRepository, UpdateMenuItemCommand},
+    application::navigation::{
+        CopyMenuTreeCommand, DefaultNavigationMenuTreeItem, NavigationRepository,
+        UpdateMenuItemCommand,
+    },
     domain::navigation::{
         LocalizedText, MenuQuery, MenuSource, MenuType, NavigationDomain, NavigationError,
         NavigationMenu, NavigationPage, NavigationTreeItem,

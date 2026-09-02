@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
-import { ArrowDown, ArrowUp, Copy, FolderTree, Plus, RefreshCcw, Trash2 } from "lucide-react";
+import { ArrowDown, ArrowUp, Copy, FolderTree, Plus, RefreshCcw, RotateCcw, Trash2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 
 import {
@@ -22,6 +22,7 @@ import {
   fetchNavigationAdminDomains,
   fetchNavigationAdminMenuTree,
   fetchNavigationAdminMenus,
+  restoreNavigationDefaultMenuTrees,
   updateNavigationMenuItem,
 } from "@/domain/navigation/api";
 import type {
@@ -111,6 +112,7 @@ export function NavigationDomainMenuTreePage() {
   const [saving, setSaving] = useState(false);
   const [addMenuOpen, setAddMenuOpen] = useState(false);
   const [copyMenuOpen, setCopyMenuOpen] = useState(false);
+  const [restoreDefaultTreesOpen, setRestoreDefaultTreesOpen] = useState(false);
   const [itemToRemove, setItemToRemove] = useState<NavigationAdminTreeItem | null>(null);
   const [refreshKey, setRefreshKey] = useState(0);
 
@@ -150,7 +152,7 @@ export function NavigationDomainMenuTreePage() {
       if (!controller.signal.aborted) setLoading(false);
     });
     return () => controller.abort();
-  }, [isApiMode, selectedDomainCode, text, toast]);
+  }, [isApiMode, refreshKey, selectedDomainCode, text, toast]);
 
   useEffect(() => {
     if (!isApiMode || !sourceDomainCode) {
@@ -167,7 +169,7 @@ export function NavigationDomainMenuTreePage() {
       if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : text("errors.loadSourceTree", "源菜单树加载失败", "Source menu tree could not be loaded"));
     });
     return () => controller.abort();
-  }, [isApiMode, sourceDomainCode, text, toast]);
+  }, [isApiMode, refreshKey, sourceDomainCode, text, toast]);
 
   const existingCodes = useMemo(() => collectExistingCodes(tree), [tree]);
   const availableMenus = useMemo(() => menus.filter((menu) => !existingCodes.has(menu.menuCode)), [existingCodes, menus]);
@@ -253,9 +255,27 @@ export function NavigationDomainMenuTreePage() {
     }
   }
 
+  async function confirmRestoreDefaultMenuTrees() {
+    setSaving(true);
+    try {
+      const result = await restoreNavigationDefaultMenuTrees();
+      setRestoreDefaultTreesOpen(false);
+      setRefreshKey((value) => value + 1);
+      toast.success(text(
+        "messages.defaultTreesRestored",
+        `已生成 ${result.restoredItemCount} 个默认菜单节点`,
+        `${result.restoredItemCount} default menu nodes generated`,
+      ));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : text("errors.restoreDefaultTrees", "默认菜单树生成失败", "Default menu trees could not be generated"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
   return (
     <>
-      <PageHeader title={text("tree.title", "菜单编排", "Menu arrangement")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button><Button variant="secondary" disabled={!selectedDomainCode || saving} onClick={openAddMenu}><Plus size={16} aria-hidden="true" />{text("tree.addTitle", "加入菜单", "Add menu")}</Button><Button disabled={!selectedDomainCode || saving} onClick={openCopyMenu}><Copy size={16} aria-hidden="true" />{text("tree.copyTitle", "跨领域复制", "Copy across domains")}</Button></>} />
+      <PageHeader title={text("tree.title", "菜单编排", "Menu arrangement")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button><Button variant="secondary" disabled={!isApiMode || saving} onClick={() => setRestoreDefaultTreesOpen(true)}><RotateCcw size={16} aria-hidden="true" />{text("tree.restoreDefaultTrees", "生成所有默认菜单树", "Generate all default menu trees")}</Button><Button variant="secondary" disabled={!selectedDomainCode || saving} onClick={openAddMenu}><Plus size={16} aria-hidden="true" />{text("tree.addTitle", "加入菜单", "Add menu")}</Button><Button disabled={!selectedDomainCode || saving} onClick={openCopyMenu}><Copy size={16} aria-hidden="true" />{text("tree.copyTitle", "跨领域复制", "Copy across domains")}</Button></>} />
       <div className="mb-5 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-5"><SelectInput className="min-w-64" aria-label={text("tree.domain", "领域", "Domain")} value={selectedDomainCode} onValueChange={(value) => { if (value) changeDomain(value); }}>{domains.map((domain) => <SelectItem key={domain.domainCode} value={domain.domainCode}>{domain.name[locale]}</SelectItem>)}</SelectInput></div>
       <SurfaceCard>
         <div className="mb-4 flex items-start justify-between gap-3"><h2 className="text-base font-semibold">{text("tree.currentTitle", "当前领域菜单树", "Current domain menu tree")}</h2><Badge tone="info">{text("tree.maxDepth", "最多 3 级", "Up to 3 levels")}</Badge></div>
@@ -280,6 +300,7 @@ export function NavigationDomainMenuTreePage() {
             <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={saving} onClick={() => setCopyMenuOpen(false)}>{text("actions.cancel", "取消", "Cancel")}</Button><Button type="submit" disabled={!sourceDomainCode || saving} aria-busy={saving}><Copy size={15} aria-hidden="true" />{text("actions.copy", "复制", "Copy")}</Button></div>
           </form>
       </ModalDialog>
+      <ConfirmDialog open={restoreDefaultTreesOpen} title={text("tree.restoreDefaultTrees", "生成所有默认菜单树", "Generate all default menu trees")} description={text("tree.restoreDefaultTreesDescription", "会补齐所有缺失的内置默认菜单节点；已有菜单及自定义编排不会被删除或覆盖。", "This adds every missing built-in default menu node. Existing menus and custom arrangements are not deleted or overwritten.")} cancelText={text("actions.cancel", "取消", "Cancel")} confirmText={text("actions.generate", "生成", "Generate")} pending={saving} onCancel={() => setRestoreDefaultTreesOpen(false)} onConfirm={() => void confirmRestoreDefaultMenuTrees()} />
       <ConfirmDialog open={Boolean(itemToRemove)} title={text("tree.removeTitle", "从领域移除菜单", "Remove menu from domain")} description={text("tree.removeDescription", `确定移除 ${itemToRemove?.menuCode ?? ""}？这只会删除当前领域的编排关系，不会删除菜单池定义。`, `Remove ${itemToRemove?.menuCode ?? ""}? This deletes only the arrangement relation; the menu pool definition remains.`)} cancelText={text("actions.cancel", "取消", "Cancel")} confirmText={text("actions.remove", "移除", "Remove")} pending={saving} onCancel={() => setItemToRemove(null)} onConfirm={() => void confirmRemoveMenu()} />
     </>
   );

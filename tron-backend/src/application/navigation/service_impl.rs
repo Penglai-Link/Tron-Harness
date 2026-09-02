@@ -390,6 +390,30 @@ impl NavigationService {
         Ok(build_tree(repository.list_items(target_domain_code)?))
     }
 
+    pub fn restore_default_menu_trees(
+        &self,
+    ) -> Result<RestoreDefaultMenuTreesResult, NavigationError> {
+        let mut repository = self.lock_repository();
+        for domain_code in DEFAULT_NAVIGATION_MENU_TREE_DOMAINS {
+            repository.get_domain(domain_code)?;
+        }
+        for item in DEFAULT_NAVIGATION_MENU_TREE_ITEMS {
+            repository.get_menu(item.menu_code)?;
+        }
+        let restored_item_count =
+            repository.restore_default_menu_trees(DEFAULT_NAVIGATION_MENU_TREE_ITEMS)?;
+        for domain_code in DEFAULT_NAVIGATION_MENU_TREE_DOMAINS {
+            validate_flat_tree(&repository.list_items(domain_code)?, self.max_depth)?;
+        }
+        Ok(RestoreDefaultMenuTreesResult {
+            restored_domain_codes: DEFAULT_NAVIGATION_MENU_TREE_DOMAINS
+                .iter()
+                .map(|domain_code| (*domain_code).to_string())
+                .collect(),
+            restored_item_count,
+        })
+    }
+
     fn next_id(&self) -> Result<i64, NavigationError> {
         let mut repository = self.lock_repository();
         repository.next_id()
@@ -400,4 +424,10 @@ impl NavigationService {
             .lock()
             .expect("navigation repository mutex poisoned")
     }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RestoreDefaultMenuTreesResult {
+    pub restored_domain_codes: Vec<String>,
+    pub restored_item_count: i64,
 }

@@ -361,6 +361,105 @@ impl NavigationRepository for SqliteNavigationRepository {
         apply_position_assignments(&tx, target_domain_id, &mut assignments)?;
         tx.commit().map_err(storage_error)
     }
+
+    fn restore_default_menu_trees(
+        &mut self,
+        items: &[DefaultNavigationMenuTreeItem],
+    ) -> Result<i64, NavigationError> {
+        let domain_codes = items
+            .iter()
+            .map(|item| item.domain_code)
+            .collect::<BTreeSet<_>>();
+        let tx = self.connection.transaction().map_err(storage_error)?;
+        let mut domain_ids = BTreeMap::new();
+        for domain_code in domain_codes {
+            let domain_id = tx
+                .query_row(
+                    "SELECT id FROM navigation_domains WHERE domain_code = ?1",
+                    [domain_code],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .map_err(storage_error)?
+                .ok_or(NavigationError::DomainNotFound)?;
+            domain_ids.insert(domain_code, domain_id);
+        }
+        for domain_id in domain_ids.values() {
+            move_positions_out_of_way(&tx, *domain_id)?;
+        }
+
+        let mut next_id = Self::next_id_tx(&tx)?;
+        let mut restored_item_count = 0;
+        for item in items {
+            let domain_id = domain_ids
+                .get(item.domain_code)
+                .copied()
+                .ok_or(NavigationError::DomainNotFound)?;
+            let exists = tx
+                .query_row(
+                    "SELECT EXISTS(
+                        SELECT 1
+                        FROM navigation_domain_menu_items i
+                        JOIN navigation_menus m ON m.id = i.menu_id
+                        WHERE i.domain_id = ?1 AND m.menu_code = ?2
+                    )",
+                    params![domain_id, item.menu_code],
+                    |row| row.get::<_, i64>(0),
+                )
+                .map_err(storage_error)?
+                == 1;
+            if exists {
+                continue;
+            }
+            let parent_item_id = item
+                .parent_menu_code
+                .map(|parent_menu_code| {
+                    tx.query_row(
+                        "SELECT i.id
+                         FROM navigation_domain_menu_items i
+                         JOIN navigation_menus m ON m.id = i.menu_id
+                         WHERE i.domain_id = ?1 AND m.menu_code = ?2",
+                        params![domain_id, parent_menu_code],
+                        |row| row.get::<_, i64>(0),
+                    )
+                    .optional()
+                    .map_err(storage_error)?
+                    .ok_or(NavigationError::InvalidParent)
+                })
+                .transpose()?;
+            let menu_id = tx
+                .query_row(
+                    "SELECT id FROM navigation_menus WHERE menu_code = ?1",
+                    [item.menu_code],
+                    |row| row.get::<_, i64>(0),
+                )
+                .optional()
+                .map_err(storage_error)?
+                .ok_or(NavigationError::MenuNotFound)?;
+            tx.execute(
+                "INSERT INTO navigation_domain_menu_items
+                    (id, domain_id, menu_id, parent_item_id, position, visible_roles)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                params![
+                    next_id,
+                    domain_id,
+                    menu_id,
+                    parent_item_id,
+                    item.position,
+                    serde_json::to_string(item.visible_roles)
+                        .map_err(|_| NavigationError::StorageFailure)?,
+                ],
+            )
+            .map_err(storage_error)?;
+            next_id += 1;
+            restored_item_count += 1;
+        }
+        for domain_id in domain_ids.values() {
+            Self::normalize_domain_positions(&tx, *domain_id)?;
+        }
+        tx.commit().map_err(storage_error)?;
+        Ok(restored_item_count)
+    }
 }
 
 fn copy_position_assignments(
