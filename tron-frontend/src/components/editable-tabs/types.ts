@@ -24,6 +24,8 @@ export interface EditableTabAddTriggerProps {
 export interface EditableTabsProps {
   items: readonly EditableTab[];
   closeTabRequest?: EditableTabCloseRequest | null;
+  /** 受控激活的 tab key；传入后以该值同步内部激活态 */
+  activeKey?: string;
   defaultActiveKey?: string;
   createTab?: () => EditableTab | undefined;
   hideAdd?: boolean;

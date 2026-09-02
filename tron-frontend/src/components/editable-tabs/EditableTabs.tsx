@@ -19,6 +19,7 @@ function getInitialActiveKey(
 export function EditableTabs({
   items,
   closeTabRequest,
+  activeKey,
   defaultActiveKey,
   createTab,
   hideAdd = false,
@@ -30,13 +31,13 @@ export function EditableTabs({
 }: EditableTabsProps) {
   const processedCloseRequestId = useRef<number | undefined>(undefined);
   const [tabs, setTabs] = useState<EditableTab[]>(() => [...items]);
-  const [activeKey, setActiveKey] = useState<string | undefined>(() =>
+  const [activeTabKey, setActiveTabKey] = useState<string | undefined>(() =>
     getInitialActiveKey(items, defaultActiveKey),
   );
 
   useEffect(() => {
     setTabs([...items]);
-    setActiveKey((currentActiveKey) => {
+    setActiveTabKey((currentActiveKey) => {
       if (currentActiveKey && items.some((item) => item.key === currentActiveKey)) {
         return currentActiveKey;
       }
@@ -44,9 +45,17 @@ export function EditableTabs({
     });
   }, [defaultActiveKey, items]);
 
+  // 受控模式：外部 activeKey 变化时同步内部激活态
+  useEffect(() => {
+    if (activeKey === undefined || activeKey === null) {
+      return;
+    }
+    setActiveTabKey((currentActiveKey) => (currentActiveKey === activeKey ? currentActiveKey : activeKey));
+  }, [activeKey]);
+
   const handleValueChange = useCallback(
     (value: string) => {
-      setActiveKey(value);
+      setActiveTabKey(value);
       onChange?.(value);
     },
     [onChange],
@@ -59,7 +68,7 @@ export function EditableTabs({
     }
 
     setTabs((currentTabs) => [...currentTabs, tab]);
-    setActiveKey(tab.key);
+    setActiveTabKey(tab.key);
     onEdit?.(OperateType.Add, { key: tab.key });
     onChange?.(tab.key);
   }, [createTab, onChange, onEdit, tabs]);
@@ -74,18 +83,18 @@ export function EditableTabs({
 
       const nextTabs = tabs.filter((item) => item.key !== key);
       const nextActiveKey =
-        activeKey !== key
-          ? activeKey
+        activeTabKey !== key
+          ? activeTabKey
           : nextTabs[tabIndex]?.key ?? nextTabs[tabIndex - 1]?.key;
 
       setTabs(nextTabs);
-      if (activeKey === key) {
-        setActiveKey(nextActiveKey);
+      if (activeTabKey === key) {
+        setActiveTabKey(nextActiveKey);
         onChange?.(nextActiveKey);
       }
       onEdit?.(OperateType.Remove, { key, remainingTabs: nextTabs });
     },
-    [activeKey, onChange, onEdit, tabs],
+    [activeTabKey, onChange, onEdit, tabs],
   );
 
   useEffect(() => {
@@ -110,7 +119,7 @@ export function EditableTabs({
           handleValueChange(String(value));
         }
       }}
-      value={activeKey ?? null}
+      value={activeTabKey ?? null}
     >
       <EditableTabList
         hideAdd={hideAdd}
