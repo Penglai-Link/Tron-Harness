@@ -55,9 +55,9 @@ function SearchInput({
   return (
     <div className="flex flex-col gap-3 sm:flex-row">
       <SearchField
-        ariaLabel="Search installed skills"
+        ariaLabel={t("pages:skills.bind.fields.searchAriaLabel", "Search installed skills")}
         className="flex-1"
-        placeholder="Search installed skills..."
+        placeholder={t("pages:skills.bind.fields.searchPlaceholder", "Search installed skills...")}
         value={value}
         onChange={onChange}
         onKeyDown={(event) => {
@@ -105,7 +105,7 @@ function CandidateCard({
           className="mt-1 size-4 rounded border-[var(--color-outline-variant)]"
           checked={selectable && selected}
           disabled={!selectable}
-          aria-label={`Select ${candidate.skillName}`}
+          aria-label={t("pages:skills.aria.selectSkill", "Select {{name}}", { name: candidate.skillName })}
           type="checkbox"
           onChange={onToggle}
         />
@@ -201,7 +201,7 @@ export function BindSkillPage() {
       }
     } catch (error) {
       const message =
-        error instanceof Error ? error.message : "Installed skills could not be loaded";
+        error instanceof Error ? error.message : t("pages:skills.errors.loadInstalled", "Installed skills could not be loaded");
       toast.error(message);
       setCandidates([]);
       setSelectedSkillNames([]);
@@ -241,7 +241,7 @@ export function BindSkillPage() {
           }
         } catch (error) {
           const message =
-            error instanceof Error ? error.message : "Skill install failed";
+            error instanceof Error ? error.message : t("pages:skills.errors.install", "Skill install failed");
           failures.push(`${candidate.skillName}: ${message}`);
         }
       }
@@ -271,7 +271,7 @@ export function BindSkillPage() {
   return (
     <>
       <PageHeader
-        breadcrumbs={[{ label: "Skills", href: "/skills" }, { label: "Install" }]}
+        breadcrumbs={[{ label: t("pages:skills.bind.breadcrumbs.skills", "Skills"), href: "/skills" }, { label: t("pages:skills.bind.breadcrumbs.install", "Install") }]}
         title={t("pages:skills.installTitle", "Install Skills")}
         actions={(
           <>
@@ -301,9 +301,9 @@ export function BindSkillPage() {
 
         <div className="grid gap-5 xl:grid-cols-2">
           <SurfaceCard className="space-y-4">
-            <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
+            <p className="text-[16px] font-semibold tracking-tight text-[var(--color-on-surface)]">
               {t("pages:skills.title", "Skill Center")}
-            </h2>
+            </p>
 
             {!searched ? (
               <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
@@ -329,9 +329,9 @@ export function BindSkillPage() {
           </SurfaceCard>
 
           <SurfaceCard className="space-y-5">
-            <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
+            <p className="text-[16px] font-semibold tracking-tight text-[var(--color-on-surface)]">
               {t("pages:skills.sections.installPlan", "Install Plan")}
-            </h2>
+            </p>
 
             {!selectedCount ? (
               <div className="rounded-2xl border border-dashed border-[var(--color-outline-variant)] p-6 text-sm text-[var(--color-on-surface-variant)]">
@@ -340,8 +340,8 @@ export function BindSkillPage() {
             ) : (
               <>
                 <div className="grid gap-4 rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4">
-                  <DetailField label="Workspace" value={activeWorkspaceLabel} />
-                  <DetailField label="Selected" value={`${selectedCount} skill${selectedCount > 1 ? "s" : ""}`} />
+                  <DetailField label={t("pages:skills.bind.fields.workspace", "Workspace")} value={activeWorkspaceLabel} />
+                  <DetailField label={t("pages:skills.bind.fields.selected", "Selected")} value={t("pages:skills.bind.fields.selectedCount", "{{count}} skill(s)", { count: selectedCount })} />
                 </div>
 
                 <div className="space-y-3">

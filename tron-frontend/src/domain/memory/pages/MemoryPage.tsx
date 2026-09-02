@@ -74,12 +74,6 @@ function MemoryTargetIcon({ scope }: { scope: MemoryScopeKind }) {
   return <Boxes {...iconProps} />;
 }
 
-function getScopeLabel(scope: MemoryScopeKind) {
-  if (scope === "space") return "Space";
-  if (scope === "user") return "User";
-  return "Domain";
-}
-
 function getTypeTone(memory: MemoryRecord) {
   if (memory.memoryStatus === "DISABLED") return "error";
   if (memory.scope === "space") return "success";
@@ -219,7 +213,7 @@ function MemoryFilterControls({
       >
         {memoryStatusOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
-            {option.label}
+            {t(`pages:memory.filters.statusOptions.${option.value}`, option.label)}
           </SelectItem>
         ))}
       </SelectInput>
@@ -236,7 +230,7 @@ function MemoryFilterControls({
       >
         {memoryReviewOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
-            {option.label}
+            {t(`pages:memory.filters.reviewOptions.${option.value}`, option.label)}
           </SelectItem>
         ))}
       </SelectInput>
@@ -253,7 +247,7 @@ function MemoryFilterControls({
       >
         {memoryInjectableOptions.map((option) => (
           <SelectItem key={option.value} value={option.value}>
-            {option.label}
+            {t(`pages:memory.filters.useOptions.${option.value}`, option.label)}
           </SelectItem>
         ))}
       </SelectInput>
@@ -268,40 +262,21 @@ function EmptyResults({
   activeTarget: MemorySearchTarget;
   query: string;
 }) {
+  const { t } = useTranslation(["pages"]);
   const trimmedQuery = query.trim();
 
   return (
     <section className="rounded-xl border border-dashed border-[var(--color-outline-variant)] px-5 py-8 text-sm leading-6 text-[var(--color-on-surface-variant)]">
       <p className="font-medium text-[var(--color-on-surface)]">
-        No memories found
+        {t("pages:memory.empty.title", "No memories found")}
       </p>
       <p className="mt-1">
         {trimmedQuery
-          ? `No memories in ${activeTarget.label} match "${trimmedQuery}".`
-          : `No memories in ${activeTarget.label} match the current filters.`}
+          ? t("pages:memory.empty.withQuery", "No memories in {{target}} match \"{{query}}\".", { target: activeTarget.label, query: trimmedQuery })
+          : t("pages:memory.empty.withFilters", "No memories in {{target}} match the current filters.", { target: activeTarget.label })}
       </p>
     </section>
   );
-}
-
-function formatReviewStatus(reviewStatus: MemoryRecord["reviewStatus"]) {
-  return reviewStatus.replace("_", " ");
-}
-
-function getUseSummary(memory: MemoryRecord) {
-  if (memory.injectable) {
-    return {
-      detail: "added automatically",
-      label: "Auto context",
-      tone: "success" as const,
-    };
-  }
-
-  return {
-    detail: "manual lookup",
-    label: "Search only",
-    tone: "info" as const,
-  };
 }
 
 function MemoryRecordsTable({
@@ -361,10 +336,10 @@ function MemoryRecordsTable({
             <Badge
               tone={row.original.memoryStatus === "ACTIVE" ? "success" : "info"}
             >
-              {row.original.memoryStatus}
+              {t(`pages:memory.statusValue.${row.original.memoryStatus}`, row.original.memoryStatus)}
             </Badge>
             <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
-              {formatReviewStatus(row.original.reviewStatus)}
+              {t(`pages:memory.reviewValue.${row.original.reviewStatus}`, row.original.reviewStatus.replace("_", " "))}
             </span>
           </div>
         ),
@@ -377,12 +352,18 @@ function MemoryRecordsTable({
       },
       {
         cell: ({ row }) => {
-          const useSummary = getUseSummary(row.original);
+          const injectable = row.original.injectable;
           return (
             <div className="flex gap-1">
-              <Badge tone={useSummary.tone}>{useSummary.label}</Badge>
+              <Badge tone={injectable ? "success" : "info"}>
+                {injectable
+                  ? t("pages:memory.use.autoContext", "Auto context")
+                  : t("pages:memory.use.searchOnly", "Search only")}
+              </Badge>
               <span className="text-[12px] leading-4 text-[var(--color-on-surface-variant)]">
-                {useSummary.detail}
+                {injectable
+                  ? t("pages:memory.use.autoContextDetail", "added automatically")
+                  : t("pages:memory.use.searchOnlyDetail", "manual lookup")}
               </span>
             </div>
           );
@@ -408,7 +389,7 @@ function MemoryRecordsTable({
             <DropdownMenuTrigger
               render={
                 <Button
-                  aria-label={`Open actions for ${row.original.title}`}
+                  aria-label={t("pages:memory.aria.actionsFor", "Open actions for {{title}}", { title: row.original.title })}
                   size="icon"
                   variant="ghost"
                   onClick={(event) => event.stopPropagation()}
@@ -517,13 +498,13 @@ function MemoryRepository() {
   const fallbackTarget = useMemo<MemorySearchTarget>(
     () => ({
       code: workspaceCode || "space:current",
-      description: "Current space",
+      description: t("pages:memory.form.currentSpace", "Current space"),
       id: "space:current",
-      label: workspaceLabel || "Current space",
+      label: workspaceLabel || t("pages:memory.form.currentSpace", "Current space"),
       resultCount: 0,
       scope: "space",
     }),
-    [workspaceCode, workspaceLabel],
+    [workspaceCode, workspaceLabel, t],
   );
   const displayTargets = targets.length ? targets : [fallbackTarget];
   const activeTarget =
