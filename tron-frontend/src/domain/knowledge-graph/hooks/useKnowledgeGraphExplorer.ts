@@ -278,9 +278,10 @@ export function useKnowledgeGraphExplorer(
   const mockGraph = useMemo(() => getKnowledgeGraphMock(), []);
   const graph = dataSource === "api" ? apiGraph.graph : mockGraph;
   const filterOptionGraph = dataSource === "api" ? apiGraph.filterOptionGraph : mockGraph;
+  const mockExpandNode = useCallback(async () => undefined, []);
   const expandNode = dataSource === "api"
     ? apiGraph.expandNode
-    : async () => undefined;
+    : mockExpandNode;
   const loading = dataSource === "api" ? apiGraph.loading : false;
   const error = dataSource === "api" ? apiGraph.error : null;
 

@@ -199,8 +199,8 @@ export function GraphPage() {
     <div className="relative h-full min-h-0 min-w-0">
       <GraphCanvas
         edges={graph.visibleEdges}
-        highlightedEdgeCodes={selectedNodeCode ? graph.highlightedEdgeCodes : []}
-        highlightedNodeCodes={selectedNodeCode ? graph.highlightedNodeCodes : []}
+        highlightedEdgeCodes={graph.highlightedEdgeCodes}
+        highlightedNodeCodes={graph.highlightedNodeCodes}
         layoutMode={graphLayoutMode}
         metrics={graph.metrics}
         nodeLabelProperty={nodeLabelProperty}

@@ -991,6 +991,37 @@ function centerGraphAt(graph: Graph, point: ViewportPoint, duration: number) {
   ], duration ? { duration } : false);
 }
 
+function buildGraphDataSyncKey(
+  nodes: PositionedNode[],
+  edges: GraphEdgeView[],
+  bounds: GraphBounds,
+  selectedNodeCode: string,
+  highlightedNodeCodes: string[],
+  highlightedEdgeCodes: string[],
+  nodeLabelProperty: string,
+  theme: AppTheme,
+) {
+  return [
+    bounds.height,
+    bounds.minX,
+    bounds.minY,
+    bounds.width,
+    highlightedEdgeCodes.join(","),
+    highlightedNodeCodes.join(","),
+    nodeLabelProperty,
+    selectedNodeCode,
+    theme,
+    nodes.map((node) => [
+      node.nodeCode,
+      node.layoutX,
+      node.layoutY,
+      node.labels.join("/"),
+      resolveGraphNodeLabel(node, nodeLabelProperty),
+    ].join(":")).join(";"),
+    edges.map((edge) => `${edge.edgeCode}:${edge.relationship}`).join(";"),
+  ].join("|");
+}
+
 function graphViewportCenter(graph: Graph): Point {
   const [width, height] = graph.getSize();
   return [width / 2, height / 2];
@@ -1094,6 +1125,12 @@ export function GraphCanvas({
     () => buildG6Data(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoomRef.current, nodeLabelProperty, graphCanvasTheme),
     [graphBounds, graphCanvasTheme, highlightedEdgeCodes, highlightedNodeCodes, nodeLabelProperty, positionedNodes, renderEdges, selectedNodeCode],
   );
+  const g6DataSyncKey = useMemo(
+    () => buildGraphDataSyncKey(positionedNodes, renderEdges, graphBounds, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, nodeLabelProperty, theme),
+    [graphBounds, highlightedEdgeCodes, highlightedNodeCodes, nodeLabelProperty, positionedNodes, renderEdges, selectedNodeCode, theme],
+  );
+  const g6DataSyncRef = useRef({ bounds: graphBounds, data: g6Data, selectedNodeCode });
+  g6DataSyncRef.current = { bounds: graphBounds, data: g6Data, selectedNodeCode };
   const zoomStyleData = useMemo(
     () => buildG6ZoomStyleData(positionedNodes, renderEdges, selectedNodeCode, highlightedNodeCodes, highlightedEdgeCodes, cameraZoom),
     [cameraZoom, highlightedEdgeCodes, highlightedNodeCodes, positionedNodes, renderEdges, selectedNodeCode],
@@ -1340,18 +1377,19 @@ export function GraphCanvas({
   useEffect(() => {
     const graph = graphRef.current;
     if (!graph) return;
+    const { bounds, data, selectedNodeCode: currentSelectedNodeCode } = g6DataSyncRef.current;
 
     void trackGraphTask(graph, async () => {
-      graph.setData(g6Data);
+      graph.setData(data);
       await graph.draw();
       if (graphRef.current === graph) {
-        if (!selectedNodeCode) {
-          await centerGraphAt(graph, graphCenter(graphBounds), 0);
+        if (!currentSelectedNodeCode) {
+          await centerGraphAt(graph, graphCenter(bounds), 0);
         }
-        setMinimapViewport(buildMinimapViewport(graph, graphBounds));
+        setMinimapViewport(buildMinimapViewport(graph, bounds));
       }
     });
-  }, [g6Data, graphBounds, selectedNodeCode]);
+  }, [g6DataSyncKey]);
 
   useEffect(() => {
     const graph = graphRef.current;
