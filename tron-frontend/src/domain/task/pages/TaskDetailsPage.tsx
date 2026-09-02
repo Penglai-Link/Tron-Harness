@@ -34,7 +34,7 @@ import {
   SurfaceCard,
   TextArea,
   TextInput,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useToast,
 } from "@/shared";
 
@@ -405,7 +405,7 @@ export function TaskDetailsPage() {
     task,
   ]);
 
-  useConsoleShellConfig({ rightPanel });
+  useTabPanelConfig({ rightPanel });
   const breadcrumbs = [
     { label: pageT("title", "Tasks"), href: "/tasks" },
     ...(task.parent ? [{ label: task.parent.taskCode, href: taskDetailHref(task.parent.taskCode) }] : []),

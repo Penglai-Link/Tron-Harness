@@ -2,15 +2,13 @@ import { useAuthSession, AuthUserMenuPanel } from "@/domain/auth";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
 import {
   useToast,
-  ConsoleShellConfig,
   SettingsShell,
-  ConsoleShellConfigContext,
+  TabPanelRegistryProvider,
   TronShell,
 } from "@/shared";
 import { useTabStore } from "@/store/tabStore";
 import {
   useRef,
-  useState,
   useMemo,
   Activity,
   useEffect,
@@ -68,27 +66,6 @@ function isAdministrationRoute(pathname: string) {
   return pathname === "/admin" || pathname.startsWith("/admin/");
 }
 
-function isConsoleShellConfigEqual(
-  left: ConsoleShellConfig,
-  right: ConsoleShellConfig,
-) {
-  return (
-    left.contentClassName === right.contentClassName &&
-    left.rightPanel === right.rightPanel &&
-    left.searchPlaceholder === right.searchPlaceholder &&
-    left.topbarActions === right.topbarActions
-  );
-}
-
-function isConsoleShellConfigEmpty(config: ConsoleShellConfig) {
-  return (
-    !config.contentClassName &&
-    !config.rightPanel &&
-    !config.searchPlaceholder &&
-    !config.topbarActions
-  );
-}
-
 function resolveActiveItemByLabel(label: string) {
   return consoleNavigationItems.find((item) => item.label === label);
 }
@@ -138,10 +115,6 @@ export default function AppRoutePage() {
   const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
   const blocksAdministrationRoute = isAdministrationRoute(pathname) && !isAdmin;
   const blockedAdministrationToastPath = useRef<string | null>(null);
-  const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>(
-    {},
-  );
-
   // 渲染所有缓存的 tab 内容
   const cachedRouteContents = useMemo(() => {
     return cachedTabsList.map((cachedTab) => {
@@ -178,31 +151,20 @@ export default function AppRoutePage() {
           key={`${cachedTab.tabId}:${cachedTab.revision}`}
           mode={isCurrentTab ? "visible" : "hidden"}
         >
-          <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
-            <SuspendedRoute>
-              <Component key={key} />
-            </SuspendedRoute>
-          </CachedRouteLocationProvider>
+          <TabPanelRegistryProvider
+            key={`${cachedTab.tabId}:${key}`}
+            tabId={cachedTab.tabId}
+          >
+            <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
+              <SuspendedRoute>
+                <Component key={key} />
+              </SuspendedRoute>
+            </CachedRouteLocationProvider>
+          </TabPanelRegistryProvider>
         </Activity>
       );
     });
-  }, [cachedTabsList, activeTabId, search]);
-
-  const shellConfigController = useMemo(
-    () => ({
-      resetConfig: () => {
-        setPageShellConfig((current) =>
-          isConsoleShellConfigEmpty(current) ? current : {},
-        );
-      },
-      setConfig: (config: ConsoleShellConfig) => {
-        setPageShellConfig((current) =>
-          isConsoleShellConfigEqual(current, config) ? current : config,
-        );
-      },
-    }),
-    [],
-  );
+  }, [activeTabId, cachedTabsList, search]);
 
   useEffect(() => {
     if (resolved && resolved.route.layout !== "settings") {
@@ -271,12 +233,6 @@ export default function AppRoutePage() {
   ]);
 
   useEffect(() => {
-    setPageShellConfig((current) =>
-      isConsoleShellConfigEmpty(current) ? current : {},
-    );
-  }, [resolved?.route.pageId]);
-
-  useEffect(() => {
     if (!blocksAdministrationRoute) {
       blockedAdministrationToastPath.current = null;
       return;
@@ -298,16 +254,6 @@ export default function AppRoutePage() {
 
   if (resolved) {
     const { route } = resolved;
-    const effectiveShellConfig = {
-      ...route.shellConfig,
-      ...pageShellConfig,
-    };
-    if (
-      !pageShellConfig.searchPlaceholder &&
-      route.shellConfig?.searchPlaceholder
-    ) {
-      effectiveShellConfig.searchPlaceholder = t("shell:placeholders.search");
-    }
     if (route.layout === "settings") {
       // Settings 页面不使用 keep-alive，直接渲染
       return (
@@ -324,24 +270,21 @@ export default function AppRoutePage() {
       );
     }
     return (
-      <ConsoleShellConfigContext.Provider value={shellConfigController}>
+      <TabPanelRegistryProvider>
         <TronShell
           activeItem={route.activeNav}
-          contentClassName={effectiveShellConfig.contentClassName}
-          rightPanel={effectiveShellConfig.rightPanel}
+          contentClassName={route.shellConfig?.contentClassName}
           searchPlaceholder={
-            effectiveShellConfig.searchPlaceholder ??
-            (route.shellConfig?.searchPlaceholder
+            route.shellConfig?.searchPlaceholder
               ? t("shell:placeholders.search")
-              : undefined)
+              : undefined
           }
           roleCodes={session?.user.roleCodes}
-          topbarActions={effectiveShellConfig.topbarActions}
           userMenuContent={<AuthUserMenuPanel />}
         >
           {cachedRouteContents}
         </TronShell>
-      </ConsoleShellConfigContext.Provider>
+      </TabPanelRegistryProvider>
     );
   }
 

@@ -33,7 +33,7 @@ import {
   SearchField,
   SurfaceCard,
   TablePagination,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useLocaleFormatters,
   useOpenRightSidebar,
   useTablePagination,
@@ -851,7 +851,7 @@ export function SkillsPage() {
     </InspectorPanel>
   ), [detailLoading, formatDateTime, handleRetryRagIndex, navigate, pageT, ragOperation, selectedSkill, selectedSkillName]);
 
-  useConsoleShellConfig({ rightPanel });
+  useTabPanelConfig({ rightPanel });
 
   function selectSkill(skillName: string) {
     setSelectedSkillName(skillName);

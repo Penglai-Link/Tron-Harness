@@ -48,7 +48,7 @@ import {
   Field,
   PageHeader,
   SurfaceCard,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useToast,
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -121,7 +121,7 @@ export function MemoryDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [confirmAction, setConfirmAction] = useState<ConfirmAction>(null);
 
-  useConsoleShellConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
+  useTabPanelConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
 
   useEffect(() => {
     if (!memory) return;

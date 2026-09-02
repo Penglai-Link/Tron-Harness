@@ -28,7 +28,7 @@ import {
   SurfaceCard,
   TablePagination,
   useDismissibleLayer,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useLocaleText,
   useOpenRightSidebar,
   useToast,
@@ -212,7 +212,7 @@ export function AutomationExecutionsPage() {
     );
   }, [navigate, pt, selectedExecution, selectedSessionCode, transcriptMessages]);
 
-  useConsoleShellConfig({ rightPanel });
+  useTabPanelConfig({ rightPanel });
 
   useEffect(() => {
     if (!selectedExecution) return;

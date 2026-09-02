@@ -30,7 +30,7 @@ import {
   Button,
   PageHeader,
   SurfaceCard,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useWorkspaceSpaces,
 } from "@/shared";
 
@@ -101,7 +101,7 @@ export function GraphPage() {
     [graph.filterOptionNodes],
   );
 
-  useConsoleShellConfig({
+  useTabPanelConfig({
     searchPlaceholder: pageT("shellSearch", "Locate graph node code or title..."),
   });
 

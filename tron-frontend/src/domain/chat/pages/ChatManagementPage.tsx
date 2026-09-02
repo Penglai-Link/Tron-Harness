@@ -51,7 +51,7 @@ import {
   InfoTooltip,
   MarkdownContent,
   useWorkspaceSpaces,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useDismissibleLayer,
   useOpenRightSidebar,
   useToast,
@@ -2458,11 +2458,13 @@ function RightWorkspaceSidebar({
   const [editingGoal, setEditingGoal] = useState(false);
   const [goalDraft, setGoalDraft] = useState("");
   const [goalMaxRunsDraft, setGoalMaxRunsDraft] = useState("");
-  const goalDraftSignature = useMemo(() => JSON.stringify({
+  const syncedGoalDraftSourceRef = useRef<string | null>(null);
+  const goalDraftSource = useMemo(() => JSON.stringify({
     goalCode: goal?.goal.goalCode ?? "",
     maxRuns: goal?.goal.maxRuns ?? 0,
     objective: goal?.goal.objectiveMarkdown ?? "",
-  }), [goal?.goal.goalCode, goal?.goal.maxRuns, goal?.goal.objectiveMarkdown]);
+    sessionCode: sessionCode ?? "",
+  }), [goal?.goal.goalCode, goal?.goal.maxRuns, goal?.goal.objectiveMarkdown, sessionCode]);
   const activeTodos = (todos ?? []).filter((todo) => !isFoldedTodo(todo));
   const foldedTodoCount = (todos ?? []).length - activeTodos.length;
   const hasGoalLoadState = Boolean(goalStatus?.loading || goalStatus?.error);
@@ -2474,9 +2476,12 @@ function RightWorkspaceSidebar({
 
   useEffect(() => {
     if (creatingGoal || editingGoal) return;
+    if (syncedGoalDraftSourceRef.current === goalDraftSource) return;
+
+    syncedGoalDraftSourceRef.current = goalDraftSource;
     setGoalDraft(goal?.goal.objectiveMarkdown ?? "");
     setGoalMaxRunsDraft(goal ? String(goal.goal.maxRuns) : "20");
-  }, [creatingGoal, editingGoal, goalDraftSignature]);
+  }, [creatingGoal, editingGoal, goal, goalDraftSource]);
 
   function resetGoalDraft() {
     setGoalDraft(goal?.goal.objectiveMarkdown ?? "");
@@ -4345,6 +4350,8 @@ export function ChatManagementPage() {
     }
   }
 
+  const handleInspectionConfirmForRightPanel = useStableCallback(handleInspectionConfirm);
+
   const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
     const currentPathname = typeof window === "undefined" ? "/chats" : window.location.pathname;
     const currentSearch = typeof window === "undefined"
@@ -4908,7 +4915,7 @@ export function ChatManagementPage() {
           <div className="min-h-0 h-full">
             <PageView
               url={pageViewUrl}
-              onInspectionConfirm={(result) => { void handleInspectionConfirm(result); }}
+              onInspectionConfirm={(result) => { void handleInspectionConfirmForRightPanel(result); }}
             />
           </div>
         ),
@@ -4940,7 +4947,7 @@ export function ChatManagementPage() {
     handleCreateGoalForRightPanel,
     handlePauseGoalForRightPanel,
     handleResumeGoalForRightPanel,
-    handleInspectionConfirm,
+    handleInspectionConfirmForRightPanel,
     handleUpdateGoalForRightPanel,
     latestCompaction,
     latestCompactionStatus,
@@ -5091,7 +5098,7 @@ export function ChatManagementPage() {
     attachments: t("chat.attachments.attachments"),
   }), [i18n.language, t]);
 
-  useConsoleShellConfig({ rightPanel });
+  useTabPanelConfig({ rightPanel });
 
   useEffect(() => {
     if (!shouldPollActiveChatReplay) return;

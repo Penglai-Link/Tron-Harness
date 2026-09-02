@@ -81,6 +81,7 @@ import {
 } from "@/components/ui/sidebar";
 import { Content } from "./content";
 import { TronSidebar } from "./TronSidebar";
+import { useTabPanelRegistry } from "./content/TabPanelRegistry";
 
 
 interface TronShellProps {
@@ -88,6 +89,7 @@ interface TronShellProps {
   children: ReactNode;
   contentClassName?: string;
   rightPanel?: ReactNode;
+  rightPanelVisible?: boolean;
   roleCodes?: string[];
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
@@ -95,49 +97,10 @@ interface TronShellProps {
 }
 
 const TronShellFrameContext = createContext(false);
-export interface ConsoleShellConfig {
-  contentClassName?: string;
-  rightPanel?: ReactNode;
-  searchPlaceholder?: string;
-  topbarActions?: ReactNode;
-}
-
-interface ConsoleShellConfigController {
-  resetConfig: () => void;
-  setConfig: (config: ConsoleShellConfig) => void;
-}
 
 type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["secondarySpaces"][number]>;
 
 const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
-
-export const ConsoleShellConfigContext = createContext<ConsoleShellConfigController | null>(null);
-
-export function useConsoleShellConfig(config: ConsoleShellConfig) {
-  const shellConfigController = useContext(ConsoleShellConfigContext);
-
-  useEffect(() => {
-    if (!shellConfigController) {
-      return;
-    }
-
-    shellConfigController.setConfig(config);
-  }, [
-    config.contentClassName,
-    config.rightPanel,
-    config.searchPlaceholder,
-    config.topbarActions,
-    shellConfigController,
-  ]);
-
-  useEffect(() => {
-    if (!shellConfigController) {
-      return;
-    }
-
-    return () => shellConfigController.resetConfig();
-  }, [shellConfigController]);
-}
 
 export function useOpenRightSidebar() {
   const setRightSidebarCollapsed = useAppShellStore((state) => state.setRightSidebarCollapsed);
@@ -192,6 +155,7 @@ export function TronShell({
   children,
   contentClassName,
   rightPanel,
+  rightPanelVisible,
   roleCodes,
   searchPlaceholder,
   topbarActions,
@@ -206,7 +170,6 @@ export function TronShell({
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const shellFrameMounted = useContext(TronShellFrameContext);
-  const shellConfigController = useContext(ConsoleShellConfigContext);
   const agentOpen = useAppShellStore((state) => state.agentOpen);
   const closeFloatingPanels = useAppShellStore((state) => state.closeFloatingPanels);
   const ensureSectionOpen = useAppShellStore((state) => state.ensureSectionOpen);
@@ -232,10 +195,17 @@ export function TronShell({
   const syncSelectedWorkspace = useAppShellStore((state) => state.syncSelectedWorkspace);
   const setWorkspaceSwitcherSnapshot = useAppShellStore((state) => state.setWorkspaceSwitcherSnapshot);
   const workspaceSwitcher = useAppShellStore((state) => state.workspaceSwitcherSnapshot);
+  const tabPanelRegistry = useTabPanelRegistry();
+  const activeTabId = useTabStore((state) => state.activeTabId);
+  const activeTab = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId));
+  const activeShellConfig = activeTabId ? tabPanelRegistry.get(activeTabId) : undefined;
+  const hasRegistryConfig = Object.keys(tabPanelRegistry.cacheConfigs).length > 0;
+  const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
   const dataSource = getServiceDataSource("admin");
   const [openNavigationItems, setOpenNavigationItems] = useState<Record<string, boolean>>({});
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [rightDragglePanelOpen, setRightDragglePanelOpen] = useState(false);
+  const rightPanelOpen = activeTab?.rightPanelOpen ?? rightDragglePanelOpen;
 
   const handleRightPanelOpenChange = useCallback((open: boolean) => {
     setRightDragglePanelOpen(open);
@@ -340,7 +310,15 @@ export function TronShell({
     }),
     [effectivePrimarySpaceId, effectiveSecondarySpaceId, primarySpaces, secondarySpaces, selectedPrimarySpace, selectedSecondarySpace],
   );
-  const hasRightPanel = Boolean(rightPanel);
+
+  const hasRightPanel = hasRegistryConfig
+    ? Boolean(activeShellConfig?.rightPanel)
+    : rightPanelVisible ?? Boolean(rightPanel);
+  const renderedRightPanel = hasRegistryConfig
+    ? activeShellConfig?.rightPanel
+    : rightPanel;
+  const renderedContentClassName = activeShellConfig?.contentClassName ?? contentClassName;
+  const renderedTopbarActions = activeShellConfig?.topbarActions ?? topbarActions;
 
   const refreshWorkspaceSwitcher = useCallback(async () => {
     if (dataSource !== "api") {
@@ -525,34 +503,6 @@ export function TronShell({
   }, [mainAgentWindowState]);
 
   useEffect(() => {
-    if (!shellFrameMounted || !shellConfigController) {
-      return;
-    }
-
-    shellConfigController.setConfig({
-      contentClassName,
-      rightPanel,
-      searchPlaceholder,
-      topbarActions,
-    });
-  }, [
-    contentClassName,
-    rightPanel,
-    searchPlaceholder,
-    shellConfigController,
-    shellFrameMounted,
-    topbarActions,
-  ]);
-
-  useEffect(() => {
-    if (!shellFrameMounted || !shellConfigController) {
-      return;
-    }
-
-    return () => shellConfigController.resetConfig();
-  }, [shellConfigController, shellFrameMounted]);
-
-  useEffect(() => {
     window.dispatchEvent(new Event("tron:close-sidebar"));
     setRightDrawerOpen(false);
     setTopbarToolsMenuOpen(false);
@@ -569,6 +519,10 @@ export function TronShell({
   }, [hasRightPanel]);
 
   useEffect(() => {
+    setRightDrawerOpen(Boolean(hasRightPanel && activeTab?.rightPanelOpen));
+  }, [activeTab?.id, activeTab?.rightPanelOpen, hasRightPanel]);
+
+  useEffect(() => {
     if (!hasRightPanel || rightSidebarCollapsed) {
       return;
     }
@@ -576,7 +530,7 @@ export function TronShell({
     window.requestAnimationFrame(() => {
       window.dispatchEvent(new Event("tron:open-right-sidebar"));
     });
-  }, [hasRightPanel, rightPanel, rightSidebarCollapsed]);
+  }, [hasRightPanel, renderedRightPanel, rightSidebarCollapsed]);
 
   useEffect(() => {
     if (!rightDrawerOpen) {
@@ -628,10 +582,16 @@ export function TronShell({
     setTopbarToolsMenuOpen(false);
     window.dispatchEvent(new Event("tron:close-sidebar"));
     setRightDrawerOpen(true);
+    if (activeTab?.id) {
+      updateRightPanelState(activeTab.id, { open: true });
+    }
   }
 
   function closeRightDrawer() {
     setRightDrawerOpen(false);
+    if (activeTab?.id) {
+      updateRightPanelState(activeTab.id, { open: false });
+    }
   }
 
   function toggleSidebarPanel() {
@@ -1083,7 +1043,7 @@ export function TronShell({
                 </button>
               </div>
               <div className="flex shrink-0 items-center gap-[12px]">
-                {topbarActions}
+                {renderedTopbarActions}
                 <Button
                   className="hidden min-[900px]:inline-flex"
                   size="icon"
@@ -1156,12 +1116,12 @@ export function TronShell({
                       type="button"
                       variant="ghost"
                       aria-controls="tron-mobile-right-sidebar"
-                      aria-expanded={rightDragglePanelOpen}
-                      aria-label={rightDragglePanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                      aria-expanded={rightPanelOpen}
+                      aria-label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
                       data-testid="tron-mobile-right-sidebar-toggle"
                       onClick={toggleRightSidebarPanel}
                     >
-                      {rightDragglePanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+                      {rightPanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
                     </Button>
                   </>
                 ) : null}
@@ -1214,7 +1174,7 @@ export function TronShell({
                     <X size={17} aria-hidden="true" />
                   </Button>
                 </div>
-                {rightPanel}
+                {renderedRightPanel}
               </aside>
             </>
           ) : null}
@@ -1235,8 +1195,8 @@ export function TronShell({
 
           <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14">
             <Content
-              contentClassName={contentClassName}
-              onRightPanelOpenChange={handleRightPanelOpenChange}
+              contentClassName={renderedContentClassName}
+              onRightPanelOpenChange={setRightDragglePanelOpen}
               rightPanel={rightPanel}
               showBottomPanel={showBottomPanel}
 

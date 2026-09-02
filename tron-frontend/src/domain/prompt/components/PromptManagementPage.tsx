@@ -28,7 +28,7 @@ import {
   SelectInput,
   SurfaceCard,
   TablePagination,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useLocaleFormatters,
   useToast,
   useWorkspaceSpaces,
@@ -121,7 +121,7 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
   const pageCount = Math.max(1, Math.ceil(page.total / Math.max(1, page.size)));
   const bounds = pageBounds(page.current, page.size, page.total, page.records.length);
 
-  useConsoleShellConfig({
+  useTabPanelConfig({
     searchPlaceholder: pt("shell.searchPlaceholder", "Search prompts..."),
   });
 

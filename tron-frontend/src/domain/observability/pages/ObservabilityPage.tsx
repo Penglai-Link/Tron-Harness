@@ -19,7 +19,7 @@ import {
   PageHeader,
   SurfaceCard,
   TablePagination,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useOpenRightSidebar,
   useTablePagination,
 } from "@/shared";
@@ -111,9 +111,9 @@ export function ObservabilityPage() {
       </div>
       <Notice value={notice} />
     </InspectorPanel>
-  ) : undefined), [inspectorOpen, inspectorTab, notice]);
+  ) : null), [inspectorOpen, inspectorTab, notice]);
 
-  useConsoleShellConfig({ rightPanel });
+  useTabPanelConfig({ rightPanel });
 
   function openInspector() {
     setInspectorOpen(true);

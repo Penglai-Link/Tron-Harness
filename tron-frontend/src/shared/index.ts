@@ -5,6 +5,7 @@ export * from "./ui/TabBar";
 export * from "./layout/PageHeader";
 export * from "./layout/SettingsShell";
 export * from "./layout/Shell";
+export * from "./layout/content/TabPanelRegistry";
 export * from "./layout/SurfaceCard";
 export * from "./hooks/useWorkspaceSpaces";
 export * from "./hooks/useManagedAvatar";

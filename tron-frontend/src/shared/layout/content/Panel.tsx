@@ -1,3 +1,4 @@
+import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Command } from "lucide-react";
 import type { ReactNode } from "react";
@@ -17,6 +18,7 @@ import { cn } from "@/shared/lib/utils";
 import { TabBar } from "@/shared/ui/TabBar";
 import { useAppShellStore } from "@/store/appShellStore";
 import { useTabStore } from "@/store/tabStore";
+import { TabPanelHost, useTabPanelRegistry } from "./TabPanelRegistry";
 
 interface IPanelProps {
   children: ReactNode;
@@ -84,7 +86,28 @@ export function Panel({
 }: IPanelProps) {
   const { pathname, search } = useLocation();
   const hasOpenTabs = useTabStore((state) => state.tabs.length > 0);
-  const hasRightPanel = Boolean(rightPanel);
+  const activeTabId = useTabStore((state) => state.activeTabId);
+  const activeTab = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId));
+  const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
+  const tabPanelRegistry = useTabPanelRegistry();
+  const hasActiveRegisteredRightPanel = activeTabId
+    ? Boolean(tabPanelRegistry.get(activeTabId)?.rightPanel)
+    : false;
+  const hasRegisteredRightPanel = Object.values(tabPanelRegistry.cacheConfigs)
+    .some((config) => Boolean(config.rightPanel));
+  // Keep cached Activity panel trees mounted while the active tab has no panel.
+  const hasCachedRightPanel = hasRegisteredRightPanel || Boolean(rightPanel);
+  const handleRightPanelOpenChange = useCallback((open: boolean) => {
+    if (activeTabId) {
+      updateRightPanelState(activeTabId, { open });
+    }
+    onRightPanelOpenChange?.(open);
+  }, [activeTabId, onRightPanelOpenChange, updateRightPanelState]);
+  const handleRightPanelSizeChange = useCallback((size: number) => {
+    if (activeTabId && Number.isFinite(size) && size > 0) {
+      updateRightPanelState(activeTabId, { size: Math.round(size) });
+    }
+  }, [activeTabId, updateRightPanelState]);
   const {
     bindRightPanelHandleRef,
     handleRightPanelPointerDown,
@@ -94,8 +117,13 @@ export function Panel({
     panelResize,
     panelOpen,
   } = usePanel({
-    onOpenChange: onRightPanelOpenChange,
-    resetKey: `${pathname}${search}`,
+    initiallyOpen: activeTab?.rightPanelOpen ?? false,
+    initialSize: activeTab?.rightPanelSize,
+    onOpenChange: handleRightPanelOpenChange,
+    onSizeChange: handleRightPanelSizeChange,
+    resetKey: activeTabId
+      ? `${activeTabId}:${hasActiveRegisteredRightPanel ? "with-right-panel" : "without-right-panel"}`
+      : `${pathname}${search}:${hasCachedRightPanel ? "with-right-panel" : "without-right-panel"}`,
   });
   return (
     <section className="flex h-full flex-col">
@@ -123,7 +151,7 @@ export function Panel({
               {hasOpenTabs ? children : <EmptyTabWorkspace />}
             </main>
           </ResizablePanel>
-          {hasRightPanel ? (
+          {hasCachedRightPanel ? (
             <>
               <ResizableHandle
                 elementRef={bindRightPanelHandleRef}
@@ -152,7 +180,9 @@ export function Panel({
                   className="relative z-10 hidden h-full overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
                   data-testid="tron-right-sidebar"
                 >
-                  {rightPanel}
+                  {hasRegisteredRightPanel
+                    ? <TabPanelHost />
+                    : rightPanel}
                 </aside>
               </ResizablePanel>
             </>

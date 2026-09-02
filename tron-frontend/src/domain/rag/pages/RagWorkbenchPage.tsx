@@ -10,7 +10,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   PageHeader,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useWorkspaceSpaces,
 } from "@/shared";
 import { Button } from "@/shared/ui/Button";
@@ -60,7 +60,7 @@ export function RagIngestTestPage() {
   const selectedCorpus = data.corpora.find((corpus) => corpus.code === corpusCode);
   const title = pageT("workbench.testPages.ingestTitle", "Ingest test");
 
-  useConsoleShellConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora and retrieval profiles...") });
+  useTabPanelConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora and retrieval profiles...") });
 
   return (
     <>
@@ -100,7 +100,7 @@ export function RagRetrievalTestPage() {
   const data = useRagWorkbenchPageData();
   const title = pageT("workbench.testPages.retrievalTitle", "Retrieval test");
 
-  useConsoleShellConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora and retrieval profiles...") });
+  useTabPanelConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora and retrieval profiles...") });
 
   return (
     <>

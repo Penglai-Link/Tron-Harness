@@ -8,7 +8,9 @@ const RIGHT_PANEL_TOGGLE_EVENT = "tron:toggle-right-sidebar"
 interface UsePanelOptions {
     collapseThreshold?: number
     initiallyOpen?: boolean
+    initialSize?: number
     onOpenChange?: (open: boolean) => void
+    onSizeChange?: (size: number) => void
     openEventName?: string | null
     resetKey?: string | number | null
     toggleEventName?: string | null
@@ -17,13 +19,17 @@ interface UsePanelOptions {
 export function usePanel({
     collapseThreshold = RIGHT_PANEL_COLLAPSE_THRESHOLD,
     initiallyOpen = false,
+    initialSize,
     onOpenChange,
+    onSizeChange,
     openEventName = RIGHT_PANEL_OPEN_EVENT,
     resetKey = null,
     toggleEventName = RIGHT_PANEL_TOGGLE_EVENT,
 }: UsePanelOptions = {}) {
     const [panelOpen, setPanelOpen] = useState(initiallyOpen)
     const panelRef = useRef<PanelImperativeHandle>(null)
+    // Keep callback identity changes from replaying the previous tab's state.
+    const onOpenChangeRef = useRef(onOpenChange)
     const panelDraggingRef = useRef(false)
     const panelCollapseRequestedRef = useRef(false)
     const panelHandleRef = useRef<HTMLDivElement | null>(null)
@@ -31,12 +37,12 @@ export function usePanel({
     const expandPanel = useCallback(() => {
         const panelElement = document.getElementById("resize-panel")
         const groupWidth = panelElement?.parentElement?.getBoundingClientRect().width || window.innerWidth
-        const targetPixels = Math.min(680, Math.max(520, groupWidth * 0.42))
+        const targetPixels = initialSize ?? Math.min(680, Math.max(520, groupWidth * 0.42))
 
         setPanelOpen(true)
         panelRef.current?.expand()
         panelRef.current?.resize(`${targetPixels}px`)
-    }, [])
+    }, [initialSize])
 
     useEffect(() => {
         const frame = window.requestAnimationFrame(() => {
@@ -45,6 +51,9 @@ export function usePanel({
             if (resetKey !== null) {
                 if (initiallyOpen) {
                     panelRef.current?.expand()
+                    if (initialSize !== undefined) {
+                        panelRef.current?.resize(`${initialSize}px`)
+                    }
                 } else {
                     panelRef.current?.collapse()
                 }
@@ -57,7 +66,7 @@ export function usePanel({
         })
 
         return () => window.cancelAnimationFrame(frame)
-    }, [initiallyOpen, resetKey])
+    }, [initialSize, initiallyOpen, resetKey])
 
     useEffect(() => {
         if (!openEventName) {
@@ -78,10 +87,11 @@ export function usePanel({
             return
         }
 
+        onSizeChange?.(panelSize.inPixels)
         if (panelSize.inPixels < collapseThreshold) {
             panelCollapseRequestedRef.current = true
         }
-    }, [collapseThreshold])
+    }, [collapseThreshold, onSizeChange])
 
     const handleRightPanelPointerDown = useCallback(() => {
         panelDraggingRef.current = true
@@ -165,7 +175,7 @@ export function usePanel({
             const nextOpen = !currentOpen
 
             if (nextOpen) {
-                panelRef.current?.resize(400)
+                panelRef.current?.resize(initialSize ?? 400)
                 panelRef.current?.expand()
             } else {
                 panelRef.current?.collapse()
@@ -173,7 +183,7 @@ export function usePanel({
 
             return nextOpen
         })
-    }, [])
+    }, [initialSize])
 
     useEffect(() => {
         if (!toggleEventName) {
@@ -185,8 +195,12 @@ export function usePanel({
     }, [changePanel, toggleEventName])
 
     useEffect(() => {
-        onOpenChange?.(panelOpen)
-    }, [onOpenChange, panelOpen])
+        onOpenChangeRef.current = onOpenChange
+    }, [onOpenChange])
+
+    useEffect(() => {
+        onOpenChangeRef.current?.(panelOpen)
+    }, [panelOpen])
 
     return {
         bindRightPanelHandleRef,

@@ -29,7 +29,7 @@ import {
   SurfaceCard,
   TextArea,
   TextInput,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
@@ -228,7 +228,7 @@ export function PromptEditorPage({
   const detailHref = scopeKind === "WORKSPACE" ? "/prompts/detail" : "/settings/prompts/detail";
   const editHref = scopeKind === "WORKSPACE" ? "/prompts/edit" : "/settings/prompts/edit";
 
-  useConsoleShellConfig({
+  useTabPanelConfig({
     searchPlaceholder: pt("shell.searchPlaceholder", "Search prompts..."),
   });
 

@@ -21,7 +21,7 @@ import {
   TablePagination,
   TextInput,
   useTablePagination,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useOpenRightSidebar,
 } from "@/shared";
 import { Badge } from "@/shared/ui/Badge";
@@ -190,7 +190,7 @@ export function KnowledgeBasePage() {
     );
   }, [dataSource, navigate, refreshCorpora, selectedKnowledgeBase]);
 
-  useConsoleShellConfig({ rightPanel });
+  useTabPanelConfig({ rightPanel });
 
   function selectKnowledgeBase(knowledgeBase: KnowledgeBaseRecord) {
     setSelectedId(knowledgeBase.id);

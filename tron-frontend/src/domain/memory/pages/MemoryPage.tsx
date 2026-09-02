@@ -40,7 +40,7 @@ import {
   SearchField,
   SelectInput,
   SurfaceCard,
-  useConsoleShellConfig,
+  useTabPanelConfig,
 } from "@/shared";
 import { Button } from "@/components/ui/button";
 import {
@@ -494,7 +494,7 @@ function MemoryRepository() {
   const [notice, setNotice] = useState("");
   const [archiveTarget, setArchiveTarget] = useState<MemoryRecord | null>(null);
 
-  useConsoleShellConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
+  useTabPanelConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
 
   const workspaceLabel =
     selectedSecondarySpace?.name ?? selectedPrimarySpace?.name;

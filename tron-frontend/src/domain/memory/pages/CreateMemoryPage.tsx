@@ -22,7 +22,7 @@ import { createMemoryFragment } from "@/domain/memory/mock";
 import {
   PageHeader,
   SurfaceCard,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useToast,
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -93,7 +93,7 @@ export function CreateMemoryPage() {
   const domainTargets = targetOptions.filter((target) => target.scope === "domain");
   const selectedTarget = targetOptions.find((target) => target.id === form.targetId) ?? fallbackTarget;
 
-  useConsoleShellConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
+  useTabPanelConfig({ searchPlaceholder: t("pages:memory.searchPlaceholder", "Search memories...") });
 
   async function saveMemory() {
     const validationError = validateMemoryForm(form, selectedTarget);

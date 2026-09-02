@@ -14,7 +14,7 @@ import {
   PageHeader,
   SurfaceCard,
   useLocaleFormatters,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useToast,
 } from "@/shared";
 
@@ -72,7 +72,7 @@ export function AppDetailsPage() {
     </InspectorPanel>
   ) : undefined), [app, currentLocale]);
 
-  useConsoleShellConfig({ rightPanel });
+  useTabPanelConfig({ rightPanel });
 
   async function handleLifecycle(action: "archive" | "restore") {
     if (!app) return;

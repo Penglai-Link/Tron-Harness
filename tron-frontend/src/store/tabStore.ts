@@ -7,6 +7,13 @@ export interface TabItem {
   path: string;
   closable: boolean;
   activeNav?: string;
+  rightPanelOpen?: boolean;
+  rightPanelSize?: number;
+}
+
+export interface TabRightPanelState {
+  open?: boolean;
+  size?: number;
 }
 
 // 缓存的 tab 信息
@@ -29,6 +36,7 @@ interface TabState {
   removeTabs: (tabIds: readonly string[]) => void;
   refreshTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
+  updateRightPanelState: (tabId: string, panelState: TabRightPanelState) => void;
   updateTab: (tabId: string, updates: Partial<Omit<TabItem, "id">>) => void;
   clearAllTabs: () => void;
   getTabByPath: (path: string) => TabItem | undefined;
@@ -76,6 +84,8 @@ export const useTabStore = create<TabState>()((set, get) => ({
     const newTab: TabItem = {
       ...tab,
       id: generateTabId(),
+      rightPanelOpen: tab.rightPanelOpen ?? false,
+      rightPanelSize: tab.rightPanelSize ?? 520,
     };
 
     set({
@@ -143,6 +153,30 @@ export const useTabStore = create<TabState>()((set, get) => ({
     if (tab) {
       set({ activeTabId: tabId });
     }
+  },
+
+  updateRightPanelState: (tabId, panelState) => {
+    set((state) => {
+      let changed = false;
+      const tabs = state.tabs.map((tab) => {
+        if (tab.id !== tabId) return tab;
+
+        const nextOpen = panelState.open ?? tab.rightPanelOpen;
+        const nextSize = panelState.size ?? tab.rightPanelSize;
+        if (nextOpen === tab.rightPanelOpen && nextSize === tab.rightPanelSize) {
+          return tab;
+        }
+
+        changed = true;
+        return {
+          ...tab,
+          rightPanelOpen: nextOpen,
+          rightPanelSize: nextSize,
+        };
+      });
+
+      return changed ? { tabs } : state;
+    });
   },
 
   updateTab: (tabId, updates) => {

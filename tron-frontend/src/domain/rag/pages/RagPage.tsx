@@ -12,7 +12,7 @@ import { useTranslation } from "react-i18next";
 
 import {
   PageHeader,
-  useConsoleShellConfig,
+  useTabPanelConfig,
   useTablePagination,
   useToast,
 } from "@/shared";
@@ -158,7 +158,7 @@ export function RagPage() {
 
   const corpusPagination = useTablePagination(filteredCorpora, 10);
 
-  useConsoleShellConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora and retrieval profiles...") });
+  useTabPanelConfig({ searchPlaceholder: pageT("search.placeholder", "Search RAG corpora and retrieval profiles...") });
 
   return (
     <>
