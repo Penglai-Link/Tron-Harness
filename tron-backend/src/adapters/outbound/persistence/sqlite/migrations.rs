@@ -21,6 +21,9 @@ pub(super) const NAVIGATION_ROLE_PERMISSION_MIGRATION: &str = include_str!(
 pub(super) const NAVIGATION_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260829_0002_create_navigation_management.sql"
 );
+pub(super) const NAVIGATION_AGENTS_SPLIT_MIGRATION: &str = include_str!(
+    "../../../../../migrations/20260902_0001_split_workspace_agents_navigation.sql"
+);
 pub(super) const RESOURCE_ROLE_PERMISSION_DOMAIN_MIGRATION: &str =
     include_str!("../../../../../migrations/20260716_0001_add_resource_permission_domain.sql");
 pub(super) const RESOURCE_ROLE_DEFAULTS_MIGRATION: &str =

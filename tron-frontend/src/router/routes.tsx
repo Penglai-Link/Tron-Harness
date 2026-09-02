@@ -34,6 +34,8 @@ export interface AppRoute {
 export const appRoutes: AppRoute[] = [
   { pageId: "account.center", route: "/account", activeNav: "Account", title: "Personal Center", titleTranslationKey: "account:title", archetype: "settings", shellConfig: { searchPlaceholder: "Search Tron..." } },
   { pageId: "agents.index", route: "/agents", activeNav: "Agents", title: "Agents", archetype: "data-table", shellConfig: { searchPlaceholder: "Search agents..." } },
+  { pageId: "agents.internal", route: "/agents/internal", activeNav: "Agents", title: "Internal Agents", archetype: "form", shellConfig: { searchPlaceholder: "Search internal agents..." } },
+  { pageId: "agents.system", route: "/agents/system", activeNav: "Agents", title: "System Agents", archetype: "data-table", shellConfig: { searchPlaceholder: "Search system agents..." } },
   { pageId: "models.new", route: "/models/new", activeNav: "Models", title: "Create Workspace Model", archetype: "form" },
   { pageId: "models.detail", route: "/models/detail", activeNav: "Models", title: "Workspace Model Detail", archetype: "detail" },
   { pageId: "apps.index", route: "/apps", activeNav: "Apps", title: "App Management", archetype: "data-table", shellConfig: { searchPlaceholder: "Search apps, repositories, and tags..." } },

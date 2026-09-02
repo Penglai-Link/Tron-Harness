@@ -1894,6 +1894,7 @@ export const pages = {
     title: "Agent Management",
   },
   workspaceAgents: {
+    emptyInternalWorkspace: "Select a workspace to manage internal agents.",
     emptyWorkspace: "Select a workspace to manage inherited system-agent policy.",
     errors: {
       load: "Workspace agents could not be loaded",

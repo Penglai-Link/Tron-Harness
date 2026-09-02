@@ -197,36 +197,30 @@ test("agent management works fully in mock mode without backend requests", async
   });
 
   await page.goto(`${frontendBaseUrl}/agents`);
-  await expect(page).toHaveURL(/\/agents$/);
-  await expect(page.getByRole("heading", { name: "Agents", exact: true })).toBeVisible();
+  await expect(page).toHaveURL(/\/agents\/internal$/);
+  await expect(page.getByRole("button", { name: "Collapse Agents submenu" })).toBeVisible();
+  await expect(page.getByRole("link", { name: "Internal Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("link", { name: "System Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Internal Agents", exact: true })).toBeVisible();
   await expect(page.getByText("Manage internal agent policy and tool assignment for the selected workspace.")).toHaveCount(0);
   await expect(page.getByText("Current Workspace")).toHaveCount(0);
   await expect(page.getByText("All platform tools are available for this agent.")).toHaveCount(0);
 
-  const workspaceTable = page.locator("table").first();
-  await expect(workspaceTable).not.toContainText("Main Agent");
-
-  const openCodeWorkspaceRow = rowByName(page, "OpenCode");
-  await expect(openCodeWorkspaceRow.locator("td").nth(4)).toContainText("Disabled");
-  await expect(openCodeWorkspaceRow.locator("td").nth(5)).toContainText("Platform disabled");
-  await expect(openCodeWorkspaceRow.getByRole("button")).toHaveCount(0);
-
-  const mainAgentSection = page.locator("section").filter({ has: page.getByRole("heading", { name: "Internal Agents", exact: true }) });
-  const mainAgentHeader = mainAgentSection.getByRole("heading", { name: "Main Agent", exact: true }).first();
-  const mcpAccessSelect = mainAgentSection.getByRole("combobox", { name: /^mcp access mode/i });
-  const toolAssignmentSelect = mainAgentSection.getByRole("combobox", { name: /^tool assignment mode/i });
-  const toolExposureSelect = mainAgentSection.getByRole("combobox", { name: /^tool exposure mode/i });
-  const expandedPersistenceSelect = mainAgentSection.getByRole("combobox", { name: /^expanded domain persistence mode/i });
-  const toolExposureHelpButton = mainAgentSection.getByRole("button", { name: "Explain tool exposure mode" });
+  const mainAgentHeader = page.getByRole("heading", { name: "Main Agent", exact: true }).first();
+  const mcpAccessSelect = page.getByRole("combobox", { name: /^mcp access mode/i });
+  const toolAssignmentSelect = page.getByRole("combobox", { name: /^tool assignment mode/i });
+  const toolExposureSelect = page.getByRole("combobox", { name: /^tool exposure mode/i });
+  const expandedPersistenceSelect = page.getByRole("combobox", { name: /^expanded domain persistence mode/i });
+  const toolExposureHelpButton = page.getByRole("button", { name: "Explain tool exposure mode" });
   await expect(mainAgentHeader).toBeVisible();
   await expect(mcpAccessSelect).toBeVisible();
   await expect(toolAssignmentSelect).toBeVisible();
   await expect(toolExposureSelect).toBeVisible();
   await expect(expandedPersistenceSelect).toBeVisible();
   await expect(mcpAccessSelect).toHaveValue("all_enabled_servers");
-  await expect(mainAgentSection.getByRole("button", { name: "Explain tool assignment mode" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Explain tool assignment mode" })).toBeVisible();
   await expect(toolExposureHelpButton).toBeVisible();
-  await expect(mainAgentSection.getByRole("button", { name: "Explain expanded domain persistence mode" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Explain expanded domain persistence mode" })).toBeVisible();
   await toolExposureHelpButton.hover();
   const toolExposureTooltip = page.getByRole("tooltip").filter({
     hasText: "Direct list: send the concrete tool schemas",
@@ -240,11 +234,24 @@ test("agent management works fully in mock mode without backend requests", async
   }
   expect(tooltipBox.x).toBeGreaterThanOrEqual(mainBox.x + 15);
   expect(tooltipBox.x + tooltipBox.width).toBeLessThanOrEqual(viewport.width - 15);
-  await expect(mainAgentSection.getByRole("button", { name: /^save$/i })).toHaveCount(0);
-  await expect(mainAgentSection.getByRole("button", { name: /^reset$/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^save$/i })).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /^reset$/i })).toHaveCount(0);
   await expect(toolAssignmentSelect).toHaveValue("all_platform_tools");
   await expect(toolExposureSelect).toHaveValue("direct_list");
   await expect(expandedPersistenceSelect).toHaveValue("sticky_expanded");
+
+  await page.goto(`${frontendBaseUrl}/agents/system`);
+  await expect(page).toHaveURL(/\/agents\/system$/);
+  await expect(page.getByRole("heading", { name: "Inherited System Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Main Agent", exact: true })).toHaveCount(0);
+
+  const workspaceTable = page.locator("table").first();
+  await expect(workspaceTable).not.toContainText("Main Agent");
+
+  const openCodeWorkspaceRow = rowByName(page, "OpenCode");
+  await expect(openCodeWorkspaceRow.locator("td").nth(4)).toContainText("Disabled");
+  await expect(openCodeWorkspaceRow.locator("td").nth(5)).toContainText("Platform disabled");
+  await expect(openCodeWorkspaceRow.getByRole("button")).toHaveCount(0);
 
   const codexWorkspaceRow = rowByName(page, "Codex");
   await expect(rowActionButton(codexWorkspaceRow)).toHaveAttribute("aria-label", /Disable Codex/i);

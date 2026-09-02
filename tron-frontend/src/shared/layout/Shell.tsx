@@ -171,12 +171,12 @@ function findActiveNavigationParentKeys(
 ): string[] {
   for (const item of items) {
     const itemKey = `${parentKey}/${item.label}`;
-    if (item.label === activeItem || navigationHrefMatches(item.href, activeHref)) {
-      return [];
-    }
-
     if (item.children?.some((child) => navigationItemHasActiveItem(child, activeItem, activeHref))) {
       return [itemKey, ...findActiveNavigationParentKeys(item.children, activeItem, activeHref, itemKey)];
+    }
+
+    if (item.label === activeItem || navigationHrefMatches(item.href, activeHref)) {
+      return [];
     }
   }
 

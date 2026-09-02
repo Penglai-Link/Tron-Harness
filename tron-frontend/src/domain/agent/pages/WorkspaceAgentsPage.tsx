@@ -167,7 +167,13 @@ function buildDraft(
   };
 }
 
-export function WorkspaceAgentsPage() {
+export type WorkspaceAgentCategory = "internal" | "system";
+
+interface WorkspaceAgentsPageProps {
+  category: WorkspaceAgentCategory;
+}
+
+export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
   const { t } = useTranslation(["pages"]);
   const toast = useToast();
   const dataSource = getServiceDataSource("agent");
@@ -206,6 +212,10 @@ export function WorkspaceAgentsPage() {
   const systemTableT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:workspaceAgents.table.${key}`, { defaultValue, ...options })
   );
+  const internalAgentsPage = category === "internal";
+  const pageTitle = internalAgentsPage
+    ? internalPageT("title", "Internal Agents")
+    : systemTableT("title", "Inherited System Agents");
 
   function fieldLabel(
     key:
@@ -311,7 +321,7 @@ export function WorkspaceAgentsPage() {
 
   useEffect(() => {
     void refreshWorkspaceData();
-  }, [activeWorkspaceCode, dataSource, mcpDataSource]);
+  }, [activeWorkspaceCode, category, dataSource, mcpDataSource]);
 
   useEffect(() => (
     () => {
@@ -520,8 +530,8 @@ export function WorkspaceAgentsPage() {
 
     setLoading(true);
     try {
-      const [nextInternalAgents, nextToolDomains, nextTools, nextSystemAgents, nextWorkspaceMcpServers] =
-        await Promise.all([
+      if (internalAgentsPage) {
+        const [nextInternalAgents, nextToolDomains, nextTools, nextWorkspaceMcpServers] = await Promise.all([
           dataSource === "api"
             ? fetchWorkspaceInternalAgents(activeWorkspaceCode)
             : Promise.resolve(listWorkspaceInternalAgentsMock(activeWorkspaceCode)),
@@ -531,21 +541,23 @@ export function WorkspaceAgentsPage() {
           dataSource === "api"
             ? listTools()
             : Promise.resolve(listToolsMock()),
-          dataSource === "api"
-            ? fetchWorkspaceSystemAgents(activeWorkspaceCode)
-            : Promise.resolve(listWorkspaceSystemAgentsMock(activeWorkspaceCode)),
           mcpDataSource === "api"
             ? fetchWorkspaceMcpServers(activeWorkspaceCode)
             : Promise.resolve(listWorkspaceMcpServersMock(activeWorkspaceCode)),
         ]);
 
-      setInternalAgents(nextInternalAgents);
-      setToolDomains(nextToolDomains);
-      setTools(nextTools);
-      setWorkspaceMcpServers(nextWorkspaceMcpServers);
-      setSystemAgents(nextSystemAgents);
-      updateDraftMap(nextInternalAgents);
-      setInternalSaveStates({});
+        setInternalAgents(nextInternalAgents);
+        setToolDomains(nextToolDomains);
+        setTools(nextTools);
+        setWorkspaceMcpServers(nextWorkspaceMcpServers);
+        updateDraftMap(nextInternalAgents);
+        setInternalSaveStates({});
+      } else {
+        const nextSystemAgents = dataSource === "api"
+          ? await fetchWorkspaceSystemAgents(activeWorkspaceCode)
+          : await Promise.resolve(listWorkspaceSystemAgentsMock(activeWorkspaceCode));
+        setSystemAgents(nextSystemAgents);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : pageT("errors.load", "Workspace agent policy could not be loaded"));
     } finally {
@@ -687,10 +699,12 @@ export function WorkspaceAgentsPage() {
     return (
       <SurfaceCard>
         <h1 className="text-2xl font-semibold text-[var(--color-on-surface)]">
-          {pageT("title", "Agents")}
+          {pageTitle}
         </h1>
         <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">
-          {pageT("emptyWorkspace", "Select a workspace to manage inherited system-agent policy.")}
+          {internalAgentsPage
+            ? pageT("emptyInternalWorkspace", "Select a workspace to manage internal agents.")
+            : pageT("emptyWorkspace", "Select a workspace to manage inherited system-agent policy.")}
         </p>
       </SurfaceCard>
     );
@@ -698,15 +712,10 @@ export function WorkspaceAgentsPage() {
 
   return (
     <div className="space-y-5">
-      <PageHeader title={pageT("title", "Agents")} />
+      <PageHeader title={pageTitle} />
 
-      <SurfaceCard className="space-y-3 p-4">
-        <div className="px-1 py-1">
-          <h2 className="text-base font-semibold text-[var(--color-on-surface)]">
-            {internalPageT("title", "Internal Agents")}
-          </h2>
-        </div>
-
+      {internalAgentsPage ? (
+        <SurfaceCard className="space-y-3 p-4">
         {internalAgents.length === 0 ? (
           <p className="px-1 py-2 text-sm text-[var(--color-on-surface-variant)]">
             {internalPageT("empty", "No internal agents found for this workspace.")}
@@ -901,9 +910,11 @@ export function WorkspaceAgentsPage() {
             </section>
           );
         })}
-      </SurfaceCard>
+        </SurfaceCard>
+      ) : null}
 
-      <DataTable<WorkspaceSystemAgentRecord>
+      {!internalAgentsPage ? (
+        <DataTable<WorkspaceSystemAgentRecord>
         title={systemTableT("title", "Inherited System Agents")}
         rows={systemPagination.visibleItems}
         rowKey={(row) => `${activeWorkspaceCode}-${row.agentCode}`}
@@ -988,7 +999,8 @@ export function WorkspaceAgentsPage() {
             ),
           },
         ]}
-      />
+        />
+      ) : null}
     </div>
   );
 }

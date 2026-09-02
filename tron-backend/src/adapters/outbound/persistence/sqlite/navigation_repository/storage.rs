@@ -15,6 +15,9 @@ impl SqliteNavigationRepository {
         connection
             .execute_batch(NAVIGATION_MIGRATION)
             .map_err(storage_error)?;
+        connection
+            .execute_batch(NAVIGATION_AGENTS_SPLIT_MIGRATION)
+            .map_err(storage_error)?;
         Ok(Self { connection })
     }
 

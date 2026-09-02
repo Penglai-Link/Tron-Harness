@@ -38,7 +38,26 @@ export const tronNavigation: TronNavSection[] = [
     translationKey: "shell:nav.sections.agentOperations",
     items: [
       { label: "Chats", href: "/chats", icon: MessageSquareText, translationKey: "shell:nav.items.chats" },
-      { label: "Agents", href: "/agents", icon: Bot, translationKey: "shell:nav.items.agents" },
+      {
+        label: "Agents",
+        href: "/agents/internal",
+        icon: Bot,
+        translationKey: "shell:nav.items.agents",
+        children: [
+          {
+            label: "Internal Agents",
+            href: "/agents/internal",
+            icon: Bot,
+            translationKey: "shell:nav.items.internalAgents",
+          },
+          {
+            label: "System Agents",
+            href: "/agents/system",
+            icon: Server,
+            translationKey: "shell:nav.items.systemAgents",
+          },
+        ],
+      },
       { label: "MCP Servers", href: "/mcp-servers", icon: PlugZap, translationKey: "shell:nav.items.mcpServers" },
       { label: "Prompts", href: "/prompts", icon: ScrollText, translationKey: "shell:nav.items.prompts" },
       { label: "Models", href: "/models", icon: Sparkles, translationKey: "shell:nav.items.models" },

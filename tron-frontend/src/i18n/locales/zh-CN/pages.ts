@@ -2016,6 +2016,7 @@ export const pages = {
     title: "智能体管理",
   },
   workspaceAgents: {
+    emptyInternalWorkspace: "请选择一个工作区来管理内部智能体。",
     emptyWorkspace: "请选择一个工作区来管理继承的系统智能体策略。",
     errors: {
       load: "无法加载工作区智能体",
