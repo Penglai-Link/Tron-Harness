@@ -1,0 +1,385 @@
+import { useAuthSession, AuthUserMenuPanel } from "@/domain/auth";
+import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
+import {
+  useToast,
+  ConsoleShellConfig,
+  SettingsShell,
+  ConsoleShellConfigContext,
+  TronShell,
+} from "@/shared";
+import { useTabStore } from "@/store/tabStore";
+import {
+  useRef,
+  useState,
+  useMemo,
+  Activity,
+  useEffect,
+  ReactNode,
+} from "react";
+import { useTranslation } from "react-i18next";
+import {
+  matchPath,
+  Navigate,
+  UNSAFE_LocationContext,
+  useLocation,
+  useNavigationType,
+} from "react-router";
+import ConsoleFallbackPage from "./ConsoleFallbackPage";
+import SuspendedRoute from "./SuspendedRoute";
+import { appRoutes } from "@/router/routes";
+import { routePages } from "@/router/pageRegistry";
+import { consoleNavigationItems, resolveActiveItem } from "./ConsoleFallbackRoutePage";
+
+function usesInPlaceSearch(pageId?: string) {
+  return (
+    pageId === "chats.index" ||
+    pageId === "resources.detail" ||
+    pageId === "settings.resourcesDetail"
+  );
+}
+
+function routeRenderKeyForLocation(
+  pathname: string,
+  search: string,
+  pageId?: string,
+) {
+  return usesInPlaceSearch(pageId) ? pathname : `${pathname}${search}`;
+}
+
+function resolveAppRoute(pathname: string, search: string) {
+  const exactRoute = `${pathname}${search}`;
+  const route =
+    appRoutes.find((item) => item.route === exactRoute) ??
+    appRoutes.find((item) => item.route === pathname) ??
+    appRoutes.find((item) => {
+      const routePathname = new URL(item.route, "https://tron.local").pathname;
+      return (
+        routePathname.includes(":") &&
+        Boolean(matchPath({ end: true, path: routePathname }, pathname))
+      );
+    });
+
+  const Component = route ? routePages[route.pageId] : undefined;
+
+  return route && Component ? { Component, route } : undefined;
+}
+
+function isAdministrationRoute(pathname: string) {
+  return pathname === "/admin" || pathname.startsWith("/admin/");
+}
+
+function isConsoleShellConfigEqual(
+  left: ConsoleShellConfig,
+  right: ConsoleShellConfig,
+) {
+  return (
+    left.contentClassName === right.contentClassName &&
+    left.rightPanel === right.rightPanel &&
+    left.searchPlaceholder === right.searchPlaceholder &&
+    left.topbarActions === right.topbarActions
+  );
+}
+
+function isConsoleShellConfigEmpty(config: ConsoleShellConfig) {
+  return (
+    !config.contentClassName &&
+    !config.rightPanel &&
+    !config.searchPlaceholder &&
+    !config.topbarActions
+  );
+}
+
+function resolveActiveItemByLabel(label: string) {
+  return consoleNavigationItems.find((item) => item.label === label);
+}
+
+function CachedRouteLocationProvider({
+  children,
+  path,
+}: {
+  children: ReactNode;
+  path: string;
+}) {
+  const navigationType = useNavigationType();
+  const location = useMemo(() => {
+    const url = new URL(path, "https://tron.local");
+
+    return {
+      hash: url.hash,
+      key: `cached:${path}`,
+      pathname: url.pathname,
+      search: url.search,
+      state: null,
+    };
+  }, [path]);
+
+  return (
+    <UNSAFE_LocationContext.Provider value={{ location, navigationType }}>
+      {children}
+    </UNSAFE_LocationContext.Provider>
+  );
+}
+
+export default function AppRoutePage() {
+  const { pathname, search } = useLocation();
+  const { session } = useAuthSession();
+  const toast = useToast();
+  const { t } = useTranslation();
+  const addTab = useTabStore((state) => state.addTab);
+  const addToCache = useTabStore((state) => state.addToCache);
+  const cachedTabsList = useTabStore((state) => state.cachedTabsList);
+  const activeTabId = useTabStore((state) => state.activeTabId);
+  const suppressNextTabCreation = useTabStore(
+    (state) => state.suppressNextTabCreation,
+  );
+  const tabCreationSuppressionReachedTarget = useTabStore(
+    (state) => state.tabCreationSuppressionReachedTarget,
+  );
+  const tabCreationSuppressionTargetPath = useTabStore(
+    (state) => state.tabCreationSuppressionTargetPath,
+  );
+  const clearTabCreationSuppression = useTabStore(
+    (state) => state.clearTabCreationSuppression,
+  );
+  const markTabCreationSuppressionTargetReached = useTabStore(
+    (state) => state.markTabCreationSuppressionTargetReached,
+  );
+  const resolved = resolveAppRoute(pathname, search);
+  const routeRenderKey = routeRenderKeyForLocation(
+    pathname,
+    search,
+    resolved?.route.pageId,
+  );
+  const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
+  const blocksAdministrationRoute = isAdministrationRoute(pathname) && !isAdmin;
+  const blockedAdministrationToastPath = useRef<string | null>(null);
+  const [pageShellConfig, setPageShellConfig] = useState<ConsoleShellConfig>(
+    {},
+  );
+
+  // 渲染所有缓存的 tab 内容
+  const cachedRouteContents = useMemo(() => {
+    return cachedTabsList.map((cachedTab) => {
+      // These editors own version selection in the query string. Keep their
+      // instance alive while injecting the current query into the active tab.
+      const isCurrentTab = cachedTab.tabId === activeTabId;
+      const useCurrentSearch =
+        isCurrentTab && usesInPlaceSearch(cachedTab.pageId);
+
+      // cachedTab.path 可能包含查询参数，需要拆分为 pathname 和 search
+      const questionMarkIndex = cachedTab.path.indexOf("?");
+      const cachedPathname =
+        questionMarkIndex === -1
+          ? cachedTab.path
+          : cachedTab.path.slice(0, questionMarkIndex);
+      const cachedSearch =
+        questionMarkIndex === -1 ? "" : cachedTab.path.slice(questionMarkIndex);
+      const searchParam = useCurrentSearch ? search : cachedSearch;
+
+      const cachedResolved = resolveAppRoute(cachedPathname, searchParam);
+      if (!cachedResolved) {
+        return null;
+      }
+
+      const { Component } = cachedResolved;
+      const key = routeRenderKeyForLocation(
+        cachedPathname,
+        searchParam,
+        cachedResolved.route.pageId,
+      );
+
+      return (
+        <Activity
+          key={`${cachedTab.tabId}:${cachedTab.revision}`}
+          mode={isCurrentTab ? "visible" : "hidden"}
+        >
+          <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
+            <SuspendedRoute>
+              <Component key={key} />
+            </SuspendedRoute>
+          </CachedRouteLocationProvider>
+        </Activity>
+      );
+    });
+  }, [cachedTabsList, activeTabId, search]);
+
+  const shellConfigController = useMemo(
+    () => ({
+      resetConfig: () => {
+        setPageShellConfig((current) =>
+          isConsoleShellConfigEmpty(current) ? current : {},
+        );
+      },
+      setConfig: (config: ConsoleShellConfig) => {
+        setPageShellConfig((current) =>
+          isConsoleShellConfigEqual(current, config) ? current : config,
+        );
+      },
+    }),
+    [],
+  );
+
+  useEffect(() => {
+    if (resolved && resolved.route.layout !== "settings") {
+      if (suppressNextTabCreation) {
+        if (!tabCreationSuppressionReachedTarget) {
+          if (pathname === tabCreationSuppressionTargetPath) {
+            markTabCreationSuppressionTargetReached();
+          }
+          return;
+        }
+
+        if (pathname === tabCreationSuppressionTargetPath) return;
+
+        clearTabCreationSuppression();
+      }
+      const currentPath = `${pathname}${search}`;
+      const navItem =
+        resolveActiveItem(pathname) ??
+        resolveActiveItemByLabel(resolved.route.activeNav);
+      const titleTranslationKey =
+        navItem?.translationKey ?? resolved.route.titleTranslationKey;
+      const tabTitle = titleTranslationKey
+        ? t(titleTranslationKey)
+        : resolved.route.title;
+      const activeNav = resolved.route.activeNav;
+
+      // Stateful detail pages react to their query themselves. Replacing their
+      // cache entry on every version change races with that page-level reload.
+      const shouldIgnoreSearch = usesInPlaceSearch(resolved.route.pageId);
+      const lookupPath = shouldIgnoreSearch ? pathname : currentPath;
+
+      // 调用 addTab，它会根据 activeNav 复用已存在的 tab，或创建新 tab
+      const tabId = addTab({
+        title: tabTitle,
+        titleTranslationKey,
+        path: lookupPath,
+        closable: true,
+        activeNav,
+      });
+
+      // 获取这个 tab 的当前状态
+      const tab = useTabStore.getState().tabs.find((t) => t.id === tabId);
+
+      if (tab) {
+        // 检查 path 是否改变
+        const pathChanged = tab.path !== lookupPath;
+
+        // 如果 path 改变了，需要清除该 tab 的缓存，让组件重新渲染
+        if (pathChanged) {
+          useTabStore.getState().removeFromCache(tabId);
+        }
+
+        // 更新 tab 的 path 和 title（如果它们与当前路径不一致）
+        if (tab.path !== lookupPath) {
+          useTabStore.getState().updateTab(tabId, { path: lookupPath });
+        }
+        if (
+          tab.title !== tabTitle ||
+          tab.titleTranslationKey !== titleTranslationKey
+        ) {
+          useTabStore
+            .getState()
+            .updateTab(tabId, { title: tabTitle, titleTranslationKey });
+        }
+
+        // 设置为当前活动的 tab
+        useTabStore.getState().setActiveTab(tabId);
+
+        // 更新缓存
+        addToCache(tabId, lookupPath, resolved.route.pageId);
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    clearTabCreationSuppression,
+    markTabCreationSuppressionTargetReached,
+    pathname,
+    search,
+    resolved?.route.pageId,
+    suppressNextTabCreation,
+    tabCreationSuppressionReachedTarget,
+    tabCreationSuppressionTargetPath,
+  ]);
+
+  useEffect(() => {
+    setPageShellConfig((current) =>
+      isConsoleShellConfigEmpty(current) ? current : {},
+    );
+  }, [resolved?.route.pageId]);
+
+  useEffect(() => {
+    if (!blocksAdministrationRoute) {
+      blockedAdministrationToastPath.current = null;
+      return;
+    }
+
+    if (blockedAdministrationToastPath.current === pathname) {
+      return;
+    }
+
+    blockedAdministrationToastPath.current = pathname;
+    toast.warning("Only Admin role users can access administration pages.", {
+      title: "Access restricted",
+    });
+  }, [blocksAdministrationRoute, pathname, toast]);
+
+  if (blocksAdministrationRoute) {
+    return <Navigate replace to="/apps" />;
+  }
+
+  if (resolved) {
+    const { route } = resolved;
+    const effectiveShellConfig = {
+      ...route.shellConfig,
+      ...pageShellConfig,
+    };
+    if (
+      !pageShellConfig.searchPlaceholder &&
+      route.shellConfig?.searchPlaceholder
+    ) {
+      effectiveShellConfig.searchPlaceholder = t("shell:placeholders.search");
+    }
+    if (route.layout === "settings") {
+      // Settings 页面不使用 keep-alive，直接渲染
+      return (
+        <SettingsShell
+          activeItem={route.settingsNav ?? route.title}
+          contentClassName={route.shellConfig?.contentClassName}
+          items={settingsNavigation}
+          roleCodes={session?.user.roleCodes}
+        >
+          <SuspendedRoute>
+            <resolved.Component key={routeRenderKey} />
+          </SuspendedRoute>
+        </SettingsShell>
+      );
+    }
+    return (
+      <ConsoleShellConfigContext.Provider value={shellConfigController}>
+        <TronShell
+          activeItem={route.activeNav}
+          contentClassName={effectiveShellConfig.contentClassName}
+          rightPanel={effectiveShellConfig.rightPanel}
+          searchPlaceholder={
+            effectiveShellConfig.searchPlaceholder ??
+            (route.shellConfig?.searchPlaceholder
+              ? t("shell:placeholders.search")
+              : undefined)
+          }
+          roleCodes={session?.user.roleCodes}
+          topbarActions={effectiveShellConfig.topbarActions}
+          userMenuContent={<AuthUserMenuPanel />}
+        >
+          {cachedRouteContents}
+        </TronShell>
+      </ConsoleShellConfigContext.Provider>
+    );
+  }
+
+  return (
+    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Apps"}>
+      <ConsoleFallbackPage />
+    </TronShell>
+  );
+}
