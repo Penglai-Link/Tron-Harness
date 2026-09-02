@@ -281,12 +281,12 @@ export function PlatformMcpServersPage() {
       <div className="space-y-5">
         <SurfaceCard className="space-y-4">
           <div className="flex items-center justify-between gap-3">
-            <div>
-              <h2 className="text-lg font-semibold">{pageT("gateway.title", "Internal modules")}</h2>
-              <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-                {pageT("gateway.description", "Manage platform-internal MCP modules exposed through the gateway.")}
-              </p>
-            </div>
+            <h2
+              className="cursor-help text-lg font-semibold"
+              title={pageT("gateway.description", "Manage platform-internal MCP modules exposed through the gateway.")}
+            >
+              {pageT("gateway.title", "Internal modules")}
+            </h2>
             <p className="text-xs text-[var(--color-on-surface-variant)]">
               {gateway ? pageT("gateway.updatedAt", "Updated {{value}}", {
                 value: formatDateTime(gateway.updatedAt, { dateStyle: "medium", timeStyle: "short" }),

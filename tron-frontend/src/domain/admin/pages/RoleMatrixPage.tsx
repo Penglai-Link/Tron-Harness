@@ -574,7 +574,7 @@ export function RoleMatrixPage() {
   return (
     <>
       <PageHeader
-        title={t("pages:admin.roles.title", "Users & Roles")}
+        title={t("pages:admin.roles.title", "Roles & Permissions")}
         actions={
           <>
             <Button
@@ -655,21 +655,19 @@ export function RoleMatrixPage() {
         }
       />
       <SurfaceCard className="overflow-hidden p-0">
-        <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] p-5">
-          <div>
-            <h2 className="text-xl font-semibold">{t("pages:admin.roles.matrixTitle", "Platform Permissions")}</h2>
-            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{t("pages:admin.roles.matrixDescription", "Search roles, focus domains, and edit permission grants directly from the matrix.")}</p>
-          </div>
-          <div className="flex flex-wrap items-center gap-[12px]">
-            <SearchField ariaLabel={t("pages:admin.roles.search", "Search roles")} placeholder={t("pages:admin.roles.searchPlaceholder", "Search roles, codes, or descriptions...")} value={query} onChange={setQuery} />
-            <SelectInput aria-label={t("pages:admin.roles.roleTypeFilter", "Filter by role type")} className="h-9 min-w-36" value={roleType} onValueChange={(event) => setRoleType(event as RoleTypeFilter)}>
+        <div className="border-b border-[var(--color-outline-variant)] p-5">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(16rem,1fr)_11rem_14rem_auto] xl:items-center">
+            <SearchField ariaLabel={t("pages:admin.roles.search", "Search roles")} className="min-w-0" placeholder={t("pages:admin.roles.searchPlaceholder", "Search roles, codes, or descriptions...")} value={query} onChange={setQuery} />
+            <SelectInput aria-label={t("pages:admin.roles.roleTypeFilter", "Filter by role type")} className="h-9 w-full" value={roleType} onValueChange={(event) => setRoleType(event as RoleTypeFilter)}>
               {ROLE_TYPE_OPTIONS.map((option) => <SelectItem key={option}>{t(`pages:admin.roles.roleTypes.${option}`, option)}</SelectItem>)}
             </SelectInput>
-            <SelectInput aria-label={t("pages:admin.roles.domainFilter", "Filter by permission domain")} className="h-9 min-w-40" value={domainFilter} onValueChange={(event) => setDomainFilter(event!)}>
+            <SelectInput aria-label={t("pages:admin.roles.domainFilter", "Filter by permission domain")} className="h-9 w-full" value={domainFilter} onValueChange={(event) => setDomainFilter(event!)}>
               <SelectItem value={ALL_DOMAINS}>{t("pages:admin.roles.allDomains", ALL_DOMAINS)}</SelectItem>
               {allDomains.map((domain) => <SelectItem key={domain} value={domain}>{domain}</SelectItem>)}
             </SelectInput>
-            <ToggleSwitch checked={showChangedOnly} label={t("pages:admin.roles.showChanged", "Show changed only")} onCheckedChange={setShowChangedOnly} />
+            <div className="flex h-9 items-center sm:col-span-2 xl:col-span-1">
+              <ToggleSwitch checked={showChangedOnly} label={t("pages:admin.roles.showChanged", "Show changed only")} onCheckedChange={setShowChangedOnly} />
+            </div>
           </div>
         </div>
         {filteredRoles.length ? (
@@ -794,7 +792,6 @@ export function RoleMatrixPage() {
           <div className="flex flex-wrap items-center gap-3">
             {adminPermissionLegend.map((item) => <span key={item}>{item}</span>)}
           </div>
-          <span>{dataSource === "api" ? t("pages:admin.roles.persistence.api", "Saved drafts persist through the backend role catalog.") : t("pages:admin.roles.persistence.mock", "Saved drafts persist in this browser for mock mode.")}</span>
         </div>
       </SurfaceCard>
     </>

@@ -146,7 +146,6 @@ export function WorkspaceMcpServersPage() {
       <PageHeader title={pageT("title", "MCP Servers")} />
 
       <DataTable<WorkspaceMcpServerRecord>
-        title={pageT("table.title", "Effective MCP servers")}
         rows={pagination.visibleItems}
         rowKey={(row) => `${activeWorkspaceCode}-${row.serverCode}`}
         pagination={<TablePagination itemLabel={pageT("table.itemLabel", "MCP servers")} {...pagination.paginationProps} />}

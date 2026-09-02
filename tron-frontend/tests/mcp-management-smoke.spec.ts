@@ -190,7 +190,9 @@ test("mcp settings, workspace policy, and agent assignment work in mock mode", a
 
   await page.goto(`${frontendBaseUrl}/settings/mcp-servers`);
   await expect(page.getByRole("heading", { name: "Platform MCP Servers" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Internal modules" })).toBeVisible();
+  const internalModulesTitle = page.getByRole("heading", { name: "Internal modules" });
+  await expect(internalModulesTitle).toBeVisible();
+  await expect(internalModulesTitle).toHaveAttribute("title", "Manage platform-internal MCP modules exposed through the gateway.");
   await expect(page.getByRole("button", { name: "Gateway" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Variables endpoint" })).toBeVisible();
   await page.getByRole("button", { name: "Variables endpoint" }).click();
@@ -227,6 +229,7 @@ test("mcp settings, workspace policy, and agent assignment work in mock mode", a
 
   await page.goto(`${frontendBaseUrl}/mcp-servers`);
   await expect(page.getByRole("heading", { name: "MCP Servers", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Effective MCP servers", exact: true })).toHaveCount(0);
   await expect(page.getByText("Current workspace")).toBeVisible();
   const workspaceKnowledgeRow = rowByName(page, "Knowledge Tools");
   await workspaceKnowledgeRow.getByRole("switch").click();

@@ -460,8 +460,10 @@ test("role matrix interactions stay real across the simplified matrix workspace"
   await page.goto(`${frontendBaseUrl}/admin/roles`);
 
   const pageHeader = page.locator("main > header").first();
-  await expect(page.getByRole("heading", { name: "Users & Roles" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Platform Permissions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Roles & Permissions" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Platform Permissions" })).toHaveCount(0);
+  await expect(page.getByText("Search roles, focus domains, and edit permission grants directly from the matrix.", { exact: true })).toHaveCount(0);
+  await expect(page.getByText("Saved drafts persist through the backend role catalog.", { exact: true })).toHaveCount(0);
   await expect(page.locator("tbody").getByText("Admin", { exact: true }).first()).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/roles")).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/permission-domains")).toBe(true);

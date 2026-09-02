@@ -2940,7 +2940,7 @@ export const pages = {
   admin: {
     actions: { cancel: "取消" },
     audit: { columns: { action: "操作", actor: "操作者", ip: "IP 地址", resource: "资源 ID", status: "状态", timestamp: "时间" }, entries: "条记录", export: "导出", exported: "已导出 {{count}} 条审计记录", search: "搜索审计日志...", title: "审计日志" },
-    roles: { actions: { add: "添加角色", clear: "清除筛选", clone: "克隆", confirm: "确认", delete: "删除", discard: "放弃", new: "新建", reset: "重置", save: "保存", saving: "保存中..." }, allDomains: "全部领域", domainFilter: "按权限领域筛选", empty: "当前筛选条件下没有角色。", matrixDescription: "搜索角色、聚焦领域，并直接编辑矩阵中的权限授予。", matrixTitle: "平台权限", messages: { discarded: "已放弃未保存的更改", saved: "角色矩阵草稿已保存" }, persistence: { api: "已保存草稿会持久化到后端角色目录。", mock: "模拟模式下已保存草稿会保存在当前浏览器。" }, role: "角色", roleTypeFilter: "按角色类型筛选", roleTypes: { All: "全部", Custom: "自定义", System: "系统" }, search: "搜索角色", searchPlaceholder: "搜索角色、编码或描述...", showChanged: "仅显示已更改", title: "用户与角色", unsaved: "未保存", updated: "更新于 {{value}}", usersLinked: "已关联 {{count}} 个用户" },
+    roles: { actions: { add: "添加角色", clear: "清除筛选", clone: "克隆", confirm: "确认", delete: "删除", discard: "放弃", new: "新建", reset: "重置", save: "保存", saving: "保存中..." }, allDomains: "全部领域", domainFilter: "按权限领域筛选", empty: "当前筛选条件下没有角色。", messages: { discarded: "已放弃未保存的更改", saved: "角色矩阵草稿已保存" }, role: "角色", roleTypeFilter: "按角色类型筛选", roleTypes: { All: "全部", Custom: "自定义", System: "系统" }, search: "搜索角色", searchPlaceholder: "搜索角色、编码或描述...", showChanged: "仅显示已更改", title: "角色与权限", unsaved: "未保存", updated: "更新于 {{value}}", usersLinked: "已关联 {{count}} 个用户" },
     users: {
       createTitle: "新建用户",
       creating: "创建中...",

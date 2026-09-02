@@ -915,7 +915,6 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
 
       {!internalAgentsPage ? (
         <DataTable<WorkspaceSystemAgentRecord>
-        title={systemTableT("title", "Inherited System Agents")}
         rows={systemPagination.visibleItems}
         rowKey={(row) => `${activeWorkspaceCode}-${row.agentCode}`}
         pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "workspace agents")} {...systemPagination.paginationProps} />}

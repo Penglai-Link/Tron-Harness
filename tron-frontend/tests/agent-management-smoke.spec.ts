@@ -242,7 +242,7 @@ test("agent management works fully in mock mode without backend requests", async
 
   await page.goto(`${frontendBaseUrl}/agents/system`);
   await expect(page).toHaveURL(/\/agents\/system$/);
-  await expect(page.getByRole("heading", { name: "Inherited System Agents", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Inherited System Agents", exact: true })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: "Main Agent", exact: true })).toHaveCount(0);
 
   const workspaceTable = page.locator("table").first();
