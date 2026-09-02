@@ -237,6 +237,11 @@ export function TronShell({
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const [rightDragglePanelOpen, setRightDragglePanelOpen] = useState(false);
 
+  const handleRightPanelOpenChange = useCallback((open: boolean) => {
+    setRightDragglePanelOpen(open);
+    setRightSidebarCollapsed(!open);
+  }, [setRightSidebarCollapsed]);
+
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const [navigationLoading, setNavigationLoading] = useState(false);
@@ -1231,7 +1236,7 @@ export function TronShell({
           <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14">
             <Content
               contentClassName={contentClassName}
-              onRightPanelOpenChange={setRightDragglePanelOpen}
+              onRightPanelOpenChange={handleRightPanelOpenChange}
               rightPanel={rightPanel}
               showBottomPanel={showBottomPanel}
 

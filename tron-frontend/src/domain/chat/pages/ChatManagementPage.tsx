@@ -56,7 +56,6 @@ import {
   useOpenRightSidebar,
   useToast,
   PageView,
-  LinkBrowserDialog,
   MarkdownLink,
   type TargetPageFrameInspectionResult,
 } from "@/shared";
@@ -4016,15 +4015,15 @@ export function ChatManagementPage() {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
-  const [linkBrowserUrl, setLinkBrowserUrl] = useState<string | null>(null);
+  const [pageViewUrl, setPageViewUrl] = useState("https://www.baidu.com");
+  const [rightPanelActiveTab, setRightPanelActiveTab] = useState("workspace");
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
   const openMarkdownInternalLink = useCallback((url: string) => {
-    if (desktopBridge.isDesktop()) {
-      setLinkBrowserUrl(url);
-      return;
-    }
-    window.open(url, "_blank", "noopener,noreferrer");
-  }, [desktopBridge]);
+    // 在右侧边栏"页面"标签的内置浏览器中打开链接
+    setPageViewUrl(url);
+    setRightPanelActiveTab("page");
+    openRightSidebar();
+  }, [openRightSidebar]);
   const openMarkdownExternalLink = useCallback((url: string) => {
     if (!desktopBridge.isDesktop()) {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -4908,7 +4907,7 @@ export function ChatManagementPage() {
         children: (
           <div className="min-h-0 h-full">
             <PageView
-              url="https://www.baidu.com"
+              url={pageViewUrl}
               onInspectionConfirm={(result) => { void handleInspectionConfirm(result); }}
             />
           </div>
@@ -4919,10 +4918,12 @@ export function ChatManagementPage() {
     return (
       <EditableTabs
         key={activeSession?.sessionCode}
+        activeKey={rightPanelActiveTab}
         className="h-full min-h-0"
         defaultActiveKey="workspace"
         hideAdd
         items={tabs}
+        onChange={(key) => setRightPanelActiveTab(key ?? "workspace")}
       />
     );
   }, [
@@ -4945,6 +4946,8 @@ export function ChatManagementPage() {
     latestCompactionStatus,
     latestRequestEstimatesBySessionCode,
     latestUsageAuditsBySessionCode,
+    pageViewUrl,
+    rightPanelActiveTab,
     selectedMainAgentModel,
     selectedModel,
     shortTermMemoryTodos,
@@ -6454,12 +6457,6 @@ export function ChatManagementPage() {
           )}
         />
       </main>
-      {linkBrowserUrl ? (
-        <LinkBrowserDialog
-          url={linkBrowserUrl}
-          onClose={() => setLinkBrowserUrl(null)}
-        />
-      ) : null}
       <ConfirmDialog
         ariaLabel={t("chat.management.deleteDialog.aria")}
         cancelText={t("chat.management.deleteDialog.cancel")}
