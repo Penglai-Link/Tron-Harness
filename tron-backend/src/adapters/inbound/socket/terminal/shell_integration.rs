@@ -12,7 +12,6 @@ use tempfile::TempDir;
 const INTEGRATION_SCRIPT: &str = include_str!("shell_integration.sh");
 const SSH_HELPER_SCRIPT: &str = include_str!("ssh_helper.sh");
 const SSH_BOOTSTRAP_SCRIPT: &str = include_str!("ssh_bootstrap.sh");
-const INTEGRATION_PLACEHOLDER: &str = "__TRON_INTEGRATION_BASE64__";
 
 const ZSH_CANDIDATES: [&str; 2] = ["/bin/zsh", "/usr/bin/zsh"];
 const BASH_CANDIDATES: [&str; 3] = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"];
@@ -103,9 +102,10 @@ impl ShellIntegration {
         let directory = self.directory.as_ref().map(TempDir::path);
         command.env("__TRON_SUBSHELL_BOOTSTRAP", subshell_bootstrap());
         if let (Some(directory), Some(real_ssh)) = (directory, resolve_ssh_program()) {
+            command.env("__TRON_SSH_INTEGRATION", directory.join("integration.sh"));
             command.env("__TRON_SSH_HELPER", directory.join("ssh-helper.sh"));
+            command.env("__TRON_SSH_BOOTSTRAP", directory.join("ssh-bootstrap.sh"));
             command.env("__TRON_REAL_SSH", real_ssh);
-            command.env("__TRON_SSH_BOOTSTRAP", ssh_bootstrap());
         }
 
         match (self.kind, directory) {
@@ -136,12 +136,6 @@ impl ShellIntegration {
 pub(super) fn subshell_bootstrap() -> String {
     let encoded = STANDARD.encode(minified_integration_script());
     decode_and_eval(&encoded)
-}
-
-fn ssh_bootstrap() -> String {
-    let integration = STANDARD.encode(minified_integration_script());
-    let launcher = SSH_BOOTSTRAP_SCRIPT.replace(INTEGRATION_PLACEHOLDER, &integration);
-    decode_and_eval(&STANDARD.encode(launcher))
 }
 
 fn decode_and_eval(encoded: &str) -> String {
@@ -202,6 +196,10 @@ fn write_shell_files(kind: ShellKind) -> std::io::Result<TempDir> {
     let script_path = directory.path().join("integration.sh");
     fs::write(&script_path, INTEGRATION_SCRIPT)?;
     fs::write(directory.path().join("ssh-helper.sh"), SSH_HELPER_SCRIPT)?;
+    fs::write(
+        directory.path().join("ssh-bootstrap.sh"),
+        SSH_BOOTSTRAP_SCRIPT,
+    )?;
     let script = shell_single_quote(&script_path.to_string_lossy());
 
     match kind {
@@ -261,7 +259,15 @@ mod tests {
 
     #[test]
     fn integration_script_reports_every_semantic_marker() {
-        for marker in ["133;A", "133;B", "133;C", "133;D;", "633;E;", "7;file://"] {
+        for marker in [
+            "133;A",
+            "133;B",
+            "133;C",
+            "133;D;",
+            "633;E;",
+            "7;file://",
+            "?2026l",
+        ] {
             assert!(
                 INTEGRATION_SCRIPT.contains(marker),
                 "integration script should report {marker}"
@@ -331,24 +337,21 @@ mod tests {
     }
 
     #[test]
-    fn ssh_bootstrap_creates_a_remote_interactive_shell() {
-        let bootstrap = ssh_bootstrap();
-        let encoded = bootstrap
-            .split_once('\'')
-            .and_then(|(_, rest)| rest.split_once('\''))
-            .map(|(encoded, _)| encoded)
-            .expect("bootstrap should carry a single-quoted payload");
-        let launcher = String::from_utf8(
-            STANDARD
-                .decode(encoded)
-                .expect("SSH bootstrap should be valid base64"),
-        )
-        .expect("SSH bootstrap should be UTF-8");
-
-        assert!(!launcher.contains(INTEGRATION_PLACEHOLDER));
-        assert!(launcher.contains("--init-file"));
-        assert!(launcher.contains("ZDOTDIR"));
-        assert!(launcher.contains("integration.sh"));
+    fn ssh_bootstrap_restores_the_recursive_ssh_files_on_the_remote_host() {
+        for variable in [
+            "__TRON_INTEGRATION_BASE64",
+            "__TRON_SSH_HELPER_BASE64",
+            "__TRON_SSH_BOOTSTRAP_BASE64",
+        ] {
+            assert!(
+                SSH_BOOTSTRAP_SCRIPT.contains(variable),
+                "bootstrap should restore {variable}"
+            );
+        }
+        assert!(SSH_BOOTSTRAP_SCRIPT.contains("ssh-helper.sh"));
+        assert!(SSH_BOOTSTRAP_SCRIPT.contains("ssh-bootstrap.sh"));
+        assert!(SSH_BOOTSTRAP_SCRIPT.contains("--init-file"));
+        assert!(SSH_BOOTSTRAP_SCRIPT.contains("ZDOTDIR"));
     }
 
     #[test]
@@ -381,6 +384,7 @@ mod tests {
             .expect("hooks should be sourced");
         assert!(user_rc < hooks, "user configuration must load first");
         assert!(directory.path().join("ssh-helper.sh").is_file());
+        assert!(directory.path().join("ssh-bootstrap.sh").is_file());
     }
 
     #[test]
@@ -416,25 +420,43 @@ mod tests {
         permissions.set_mode(0o755);
         fs::set_permissions(&fake_ssh, permissions).expect("fake SSH should be executable");
 
+        fs::write(directory.path().join("ssh-helper.sh"), SSH_HELPER_SCRIPT)
+            .expect("helper should be written");
+        fs::write(directory.path().join("integration.sh"), INTEGRATION_SCRIPT)
+            .expect("integration should be written");
+        fs::write(
+            directory.path().join("ssh-bootstrap.sh"),
+            SSH_BOOTSTRAP_SCRIPT,
+        )
+        .expect("bootstrap should be written");
+
         let run = |arguments: &[&str]| {
             Command::new("/bin/sh")
                 .arg(directory.path().join("ssh-helper.sh"))
                 .args(arguments)
                 .env("__TRON_REAL_SSH", &fake_ssh)
-                .env("__TRON_SSH_BOOTSTRAP", "remote bootstrap")
+                .env(
+                    "__TRON_SSH_INTEGRATION",
+                    directory.path().join("integration.sh"),
+                )
+                .env("__TRON_SSH_HELPER", directory.path().join("ssh-helper.sh"))
+                .env(
+                    "__TRON_SSH_BOOTSTRAP",
+                    directory.path().join("ssh-bootstrap.sh"),
+                )
                 .env("LANG", "invalid.UTF-8")
                 .env("LC_ALL", "invalid.UTF-8")
                 .output()
                 .expect("helper should run")
         };
-        fs::write(directory.path().join("ssh-helper.sh"), SSH_HELPER_SCRIPT)
-            .expect("helper should be written");
 
         let interactive = run(&["-p", "2222", "build@host"]);
         assert!(interactive.status.success());
         let stdout = String::from_utf8(interactive.stdout).expect("output should be UTF-8");
         assert!(stdout.contains("ARG=-t\nARG=-p\nARG=2222\nARG=build@host\n"));
-        assert!(stdout.contains("ARG=remote bootstrap\n"));
+        assert!(stdout.contains("ARG=__TRON_INTEGRATION_BASE64="));
+        assert!(stdout.contains("__TRON_SSH_HELPER_BASE64="));
+        assert!(stdout.contains("__TRON_SSH_BOOTSTRAP_BASE64="));
         assert!(stdout.contains("LANG=unset\nLC_ALL=unset\n"));
 
         for arguments in [
@@ -447,5 +469,60 @@ mod tests {
             let stdout = String::from_utf8(bypassed.stdout).expect("output should be UTF-8");
             assert!(!stdout.contains("ARG=remote bootstrap\n"));
         }
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn ssh_bootstrap_reinstalls_the_ssh_wrapper_for_the_next_hop() {
+        use std::os::unix::fs::PermissionsExt;
+
+        let directory = tempfile::tempdir().expect("temp directory should be created");
+        let fake_bash = directory.path().join("bash");
+        fs::write(
+            &fake_bash,
+            "#!/bin/sh\n\
+             exec /bin/bash --noprofile --norc -i -c '\n\
+             . \"$1\"\n\
+             test -r \"$__TRON_SSH_INTEGRATION\" &&\n\
+             test -r \"$__TRON_SSH_HELPER\" &&\n\
+             test -r \"$__TRON_SSH_BOOTSTRAP\" &&\n\
+             test \"$(type -t ssh)\" = function\n\
+             ' bash \"$2\"\n",
+        )
+        .expect("fake Bash should be written");
+        let mut permissions = fs::metadata(&fake_bash)
+            .expect("fake Bash metadata should exist")
+            .permissions();
+        permissions.set_mode(0o755);
+        fs::set_permissions(&fake_bash, permissions).expect("fake Bash should be executable");
+
+        let launcher = decode_and_eval(&STANDARD.encode(SSH_BOOTSTRAP_SCRIPT));
+        let output = Command::new("/bin/sh")
+            .arg("-c")
+            .arg(launcher)
+            .env("HOME", directory.path())
+            .env("SHELL", &fake_bash)
+            .env("TERM", "dumb")
+            .env(
+                "__TRON_INTEGRATION_BASE64",
+                STANDARD.encode(INTEGRATION_SCRIPT),
+            )
+            .env(
+                "__TRON_SSH_HELPER_BASE64",
+                STANDARD.encode(SSH_HELPER_SCRIPT),
+            )
+            .env(
+                "__TRON_SSH_BOOTSTRAP_BASE64",
+                STANDARD.encode(SSH_BOOTSTRAP_SCRIPT),
+            )
+            .output()
+            .expect("remote bootstrap should run");
+
+        assert!(
+            output.status.success(),
+            "remote bootstrap failed; stdout: {}; stderr: {}",
+            String::from_utf8_lossy(&output.stdout),
+            String::from_utf8_lossy(&output.stderr)
+        );
     }
 }

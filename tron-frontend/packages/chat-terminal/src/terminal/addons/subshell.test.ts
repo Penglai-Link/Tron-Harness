@@ -1,16 +1,31 @@
 // @vitest-environment jsdom
 
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
 import { SubshellBootstrapAddon } from "./subshell";
 
 describe("SubshellBootstrapAddon", () => {
-  beforeEach(() => vi.useFakeTimers());
-  afterEach(() => vi.useRealTimers());
-
   it("automatically bootstraps a detected interactive shell", () => {
     const write = vi.fn();
-    const terminal = { clear: vi.fn() };
+    const addon = new SubshellBootstrapAddon({
+      write,
+      getBootstrap: () => "eval bootstrap",
+      isNestedShellActive: () => true,
+    });
+    addon.activate({} as never);
+
+    addon.handleDetection({ command: "ssh host", host: "host" });
+
+    expect(write).toHaveBeenCalledWith(
+      "\x15\x0b eval bootstrap && printf '\\033]133;A\\007\\033]133;B\\007\\033[H\\033[2J\\033[3J'\r",
+    );
+  });
+
+  it("defers rendering while bootstrapping a Docker Bash shell", () => {
+    const write = vi.fn();
+    const terminal = {
+      write: vi.fn((_data: string, callback: () => void) => callback()),
+    };
     const addon = new SubshellBootstrapAddon({
       write,
       getBootstrap: () => "eval bootstrap",
@@ -18,13 +33,12 @@ describe("SubshellBootstrapAddon", () => {
     });
     addon.activate(terminal as never);
 
-    addon.handleDetection({ command: "ssh host", host: "host" });
+    addon.handleDetection({ command: "docker exec -it api bash", host: "api" });
 
+    expect(terminal.write).toHaveBeenCalledWith("\x1b[?2026h", expect.any(Function));
     expect(write).toHaveBeenCalledWith(
-      "\x15\x0b eval bootstrap && printf '\\033[H\\033[2J'\r",
+      "\x15\x0b __TRON_SYNCED_BOOTSTRAP=1; if eval bootstrap; then printf '\\033]133;A\\007\\033]133;B\\007\\033[H\\033[2J\\033[3J'; else printf '\\033[?2026l'; fi\r",
     );
-    vi.advanceTimersByTime(150);
-    expect(terminal.clear).toHaveBeenCalledOnce();
   });
 
   it("does not write after the nested shell has exited", () => {

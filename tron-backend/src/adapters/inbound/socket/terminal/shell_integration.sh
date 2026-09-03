@@ -79,7 +79,13 @@ if [ -n "${ZSH_VERSION-}" ]; then
 
   if [ -z "${__TRON_PROMPT_WRAPPED-}" ]; then
     __TRON_PROMPT_WRAPPED=1
-    PS1="%{$(__tron_osc '133;A')%}${PS1}%{$(__tron_osc '133;B')%}"
+    __tron_prompt_sync_end=
+    if [ -n "${__TRON_SYNCED_BOOTSTRAP-}" ]; then
+      __tron_prompt_sync_end='%{\e[?2026l%}'
+      unset __TRON_SYNCED_BOOTSTRAP
+    fi
+    PS1="%{$(__tron_osc '133;A')%}${PS1}%{$(__tron_osc '133;B')%}${__tron_prompt_sync_end}"
+    unset __tron_prompt_sync_end
   fi
 
   __tron_report_cwd
@@ -147,7 +153,13 @@ elif [ -n "${BASH_VERSION-}" ]; then
     # Works for both the scalar and the bash 5.1 array form of PROMPT_COMMAND.
     __tron_original_prompt_command="$(IFS=';'; printf '%s' "${PROMPT_COMMAND[*]-}")"
     PROMPT_COMMAND=__tron_prompt_command
-    PS1="\[$(__tron_osc '133;A')\]${PS1}\[$(__tron_osc '133;B')\]"
+    __tron_prompt_sync_end=
+    if [ -n "${__TRON_SYNCED_BOOTSTRAP-}" ]; then
+      __tron_prompt_sync_end='\[\e[?2026l\]'
+      unset __TRON_SYNCED_BOOTSTRAP
+    fi
+    PS1="\[$(__tron_osc '133;A')\]${PS1}\[$(__tron_osc '133;B')\]${__tron_prompt_sync_end}"
+    unset __tron_prompt_sync_end
     trap '__tron_preexec' DEBUG
   fi
 
@@ -156,8 +168,12 @@ elif [ -n "${BASH_VERSION-}" ]; then
 fi
 
 if [ -n "${__TRON_SSH_HELPER-}" ] &&
+  [ -n "${__TRON_SSH_INTEGRATION-}" ] &&
   [ -n "${__TRON_REAL_SSH-}" ] &&
-  [ -n "${__TRON_SSH_BOOTSTRAP-}" ]; then
+  [ -n "${__TRON_SSH_BOOTSTRAP-}" ] &&
+  [ -r "$__TRON_SSH_INTEGRATION" ] &&
+  [ -r "$__TRON_SSH_HELPER" ] &&
+  [ -r "$__TRON_SSH_BOOTSTRAP" ]; then
   unalias ssh 2>/dev/null || true
   ssh() {
     command /bin/sh "$__TRON_SSH_HELPER" "$@"
