@@ -180,6 +180,15 @@ fn resolve_shell_program() -> PathBuf {
 }
 
 fn resolve_ssh_program() -> Option<PathBuf> {
+    if let Some(path) = std::env::var_os("PATH") {
+        for directory in std::env::split_paths(&path) {
+            let candidate = directory.join("ssh");
+            if candidate.is_file() {
+                return Some(candidate);
+            }
+        }
+    }
+
     SSH_CANDIDATES
         .iter()
         .map(PathBuf::from)
@@ -424,8 +433,8 @@ mod tests {
         let interactive = run(&["-p", "2222", "build@host"]);
         assert!(interactive.status.success());
         let stdout = String::from_utf8(interactive.stdout).expect("output should be UTF-8");
-        assert!(stdout.contains("ARG=-p\nARG=2222\nARG=build@host\n"));
-        assert!(stdout.contains("ARG=-t\nARG=remote bootstrap\n"));
+        assert!(stdout.contains("ARG=-t\nARG=-p\nARG=2222\nARG=build@host\n"));
+        assert!(stdout.contains("ARG=remote bootstrap\n"));
         assert!(stdout.contains("LANG=unset\nLC_ALL=unset\n"));
 
         for arguments in [

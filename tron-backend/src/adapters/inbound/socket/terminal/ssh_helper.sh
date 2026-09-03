@@ -57,7 +57,9 @@ if [ "$target_seen" -ne 1 ] || [ -z "$bootstrap" ]; then
 fi
 
 if [ "$interactive" -eq 1 ]; then
-  exec "$real_ssh" "$@" -t "$bootstrap"
+  # SSH options must precede the destination. Keep the bootstrap as the
+  # single remote command after all caller-supplied options and destination.
+  exec "$real_ssh" -t "$@" "$bootstrap"
 fi
 
 exec "$real_ssh" "$@"
