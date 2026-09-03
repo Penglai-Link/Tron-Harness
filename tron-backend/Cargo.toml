@@ -48,3 +48,10 @@ windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }
+
+[profile.release]
+# The desktop sidecar is distributed to end users.  These settings remove
+# symbol names and enable cross-crate optimization, raising the cost of
+# reverse engineering without changing the executable's public behavior.
+strip = "symbols"
+lto = "thin"

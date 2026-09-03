@@ -16,12 +16,19 @@ export default defineConfig(({ mode }) => {
 
   return {
     plugins: [react(), tailwindcss()],
-    build: frontendOutDir
-      ? {
-          emptyOutDir: true,
-          outDir: frontendOutDir,
-        }
-      : undefined,
+    build: {
+      // Desktop packages are distributed to end users.  Keep source maps out
+      // of every production build, and state the minifier explicitly so a
+      // future Vite default change cannot expose readable source by accident.
+      sourcemap: false,
+      minify: "esbuild",
+      ...(frontendOutDir
+        ? {
+            emptyOutDir: true,
+            outDir: frontendOutDir,
+          }
+        : {}),
+    },
     server: {
       host: "0.0.0.0",
       proxy: apiBaseUrl
