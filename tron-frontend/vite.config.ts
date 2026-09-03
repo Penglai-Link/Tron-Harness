@@ -22,6 +22,18 @@ export default defineConfig(({ mode }) => {
       // future Vite default change cannot expose readable source by accident.
       sourcemap: false,
       minify: "esbuild",
+      rollupOptions: {
+        output: {
+          // Force lucide-react to be fully bundled for Electron compatibility
+          inlineDynamicImports: false,
+          manualChunks: (id) => {
+            // Bundle lucide-react into a single chunk to avoid module resolution issues
+            if (id.includes('node_modules/lucide-react')) {
+              return 'lucide-react';
+            }
+          },
+        },
+      },
       ...(frontendOutDir
         ? {
             emptyOutDir: true,
