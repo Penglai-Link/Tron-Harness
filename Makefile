@@ -374,7 +374,9 @@ desktop-build: desktop-clean web-build
 endif
 
 .PHONY: desktop-dev
-desktop-dev: desktop-build
+desktop-dev:
+	$(MAKE) install
+	$(MAKE) desktop-build
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_DEV_ENV),$(NPM) run -s dev))
 
 .PHONY: desktop-clean
