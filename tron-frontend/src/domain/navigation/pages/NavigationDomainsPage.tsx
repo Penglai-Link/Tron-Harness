@@ -250,7 +250,7 @@ export function NavigationDomainsPage() {
   return (
     <>
       <PageHeader
-        title={text("domains.title", "领域管理", "Navigation Domains")}
+        title={text("domains.title", "菜单领域", "Navigation Domains")}
         actions={<>
           <Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button>
           <Button onClick={openCreate}><Plus size={16} aria-hidden="true" />{text("actions.newDomain", "新建领域", "New domain")}</Button>

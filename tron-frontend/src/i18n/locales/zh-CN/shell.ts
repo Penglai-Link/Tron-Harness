@@ -82,7 +82,7 @@ export const shell = {
       menuPool: "菜单池",
       memoryDomains: "记忆领域",
       models: "模型",
-      navigationDomains: "领域管理",
+      navigationDomains: "菜单领域",
       openapi: "OpenAPI",
       prompts: "提示词",
       resources: "资源",
