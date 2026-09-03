@@ -30,11 +30,9 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Button } from "@/shared/ui/Button";
 import {
   DataTable,
-  Field,
   PageHeader,
   SearchField,
   SelectInput,
-  SurfaceCard,
   TablePagination,
   useTablePagination,
   useToast,
@@ -307,21 +305,24 @@ export function PlatformVariablesPage() {
       />
 
       <div className="space-y-5">
-        <SurfaceCard className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2">
-            <Field label={pageT("fields.search", "Search")}>
+        <DataTable<PlatformVariableRecord>
+          rows={pagination.visibleItems}
+          rowKey={(row) => row.key}
+          tableClassName="table-fixed min-w-[1080px]"
+          onRowClick={(row) => navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(row.key)}`)}
+          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "platform variables")} {...pagination.paginationProps} />}
+          toolbar={(
+            <>
               <SearchField
                 ariaLabel={pageT("aria.search", "Search platform variables")}
-                className="w-full"
+                className="min-w-0 grow basis-full sm:basis-0 sm:max-w-[360px]"
                 placeholder={pageT("filters.searchPlaceholder", "Search platform variables...")}
                 value={query}
                 onChange={setQuery}
               />
-            </Field>
-            <Field label={pageT("fields.sensitive", "Sensitive Data")}>
               <SelectInput
                 aria-label={pageT("aria.sensitiveFilter", "Filter platform variables by sensitive data")}
-                className="w-full"
+                className="w-full sm:w-auto"
                 value={sensitiveFilter}
                 onValueChange={(event) => setSensitiveFilter(sensitiveFilterValue(event!))}
               >
@@ -331,16 +332,8 @@ export function PlatformVariablesPage() {
                   </SelectItem>
                 ))}
               </SelectInput>
-            </Field>
-          </div>
-        </SurfaceCard>
-
-        <DataTable<PlatformVariableRecord>
-          rows={pagination.visibleItems}
-          rowKey={(row) => row.key}
-          tableClassName="table-fixed min-w-[1080px]"
-          onRowClick={(row) => navigate(`/settings/variables/detail?variableKey=${encodeURIComponent(row.key)}`)}
-          pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "platform variables")} {...pagination.paginationProps} />}
+            </>
+          )}
           emptyState={pageT("empty.filtered", "No platform variables match the current filters.")}
           columns={[
             {

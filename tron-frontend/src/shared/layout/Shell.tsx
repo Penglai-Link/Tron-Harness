@@ -738,7 +738,10 @@ export function TronShell({
     const expanded = hasChildren && expandedWorkspaceCodes.includes(space.workspaceCode);
     const selected = space.workspaceCode === selectedWorkspaceNode?.workspaceCode;
     const rowClassName = cn(
-      "flex min-w-0 flex-1 cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-left transition-colors hover:bg-[var(--color-hover-surface)]",
+      "flex min-w-0 flex-1 cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-left transition-colors",
+      selected
+        ? "bg-[var(--color-surface-container)]"
+        : "hover:bg-[var(--color-hover-surface)]",
     );
     const content = (
       <>
@@ -808,10 +811,10 @@ export function TronShell({
             <button
               aria-selected={selected}
               className={cn(
-                "flex w-full min-w-0 items-start rounded-lg border px-2.5 py-2 text-left transition-colors",
+                "flex w-full min-w-0 items-start rounded-lg px-2.5 py-2 text-left transition-colors",
                 selected
-                  ? "border-[var(--color-primary)] bg-[var(--color-surface-container)]"
-                  : "border-transparent hover:bg-[var(--color-hover-surface)]",
+                  ? "bg-[var(--color-surface-container)]"
+                  : "hover:bg-[var(--color-hover-surface)]",
               )}
               key={domain.domainCode}
               role="option"
@@ -975,7 +978,7 @@ export function TronShell({
             ref={utilityPanelRef}
             id="tron-domain-selector-panel"
             className={cn(
-              "absolute z-[70] w-[min(360px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
+              "absolute z-[70] w-[min(260px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
               compact && !mobile ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]",
             )}
             role="dialog"
@@ -1113,7 +1116,7 @@ export function TronShell({
               <div
                 ref={utilityPanelRef}
                 id="tron-workspace-selector-panel"
-                className="absolute left-4 top-[calc(100%+8px)] w-[min(360px,calc(100vw-2rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
+                className="absolute left-4 top-[calc(100%+8px)] w-[min(260px,calc(100vw-2rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
                 role="dialog"
                 aria-label={t("shell:workspace.selectorTitle")}
               >
