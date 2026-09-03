@@ -42,6 +42,10 @@ vi.mock("@/components/ui/resizable", () => ({
 
 vi.mock("@/shared/hooks/usePanel", () => ({
   usePanel: () => ({
+    handlePanelPointerDown: vi.fn(),
+    handlePanelPointerEnd: vi.fn(),
+    handlePanelPointerMove: vi.fn(),
+    panelOpen: true,
     panelRef: { current: panelControls },
     panelResize: vi.fn(),
   }),
@@ -65,7 +69,6 @@ describe("BottomPanel", () => {
     rerender(<BottomPanel visible />);
     await waitFor(() => expect(screen.getByTestId("terminal-instance")).toBeTruthy());
     expect(terminalLifecycle.mounts).toBe(1);
-    expect(panelControls.resize).toHaveBeenLastCalledWith("25%");
 
     rerender(<BottomPanel visible={false} />);
 

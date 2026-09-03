@@ -46,22 +46,19 @@ export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelP
     };
   }, [requestTabClose]);
   const items = useMemo(() => (hasTerminal ? [createTab()] : []), [createTab, hasTerminal]);
-  const { panelRef, panelResize } = usePanel({
+  const {
+    handlePanelPointerDown,
+    handlePanelPointerEnd,
+    handlePanelPointerMove,
+    panelOpen,
+    panelRef,
+    panelResize,
+  } = usePanel({
     collapseThreshold: BOTTOM_PANEL_COLLAPSE_THRESHOLD,
-    initiallyOpen: visible,
-    openEventName: null,
-    toggleEventName: null,
+    initialSize: BOTTOM_PANEL_DEFAULT_SIZE,
+    onOpenChange: (open) => changeBottomPanel?.(open),
+    open: visible,
   });
-
-  useEffect(() => {
-    if (visible) {
-      panelRef.current?.resize(BOTTOM_PANEL_DEFAULT_SIZE);
-      panelRef.current?.expand();
-      return;
-    }
-
-    panelRef.current?.collapse();
-  }, [panelRef, visible]);
 
   useEffect(() => {
     if (visible && !hasTerminal) {
@@ -78,14 +75,20 @@ export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelP
 
   return (
     <>
-      <ResizableHandle className={visible ? "w-full" : "hidden"} />
+      <ResizableHandle
+        className={panelOpen ? "w-full" : "hidden"}
+        onPointerDown={handlePanelPointerDown}
+        onPointerMove={handlePanelPointerMove}
+        onPointerUp={handlePanelPointerEnd}
+        onPointerCancel={handlePanelPointerEnd}
+      />
       <ResizablePanel
         panelRef={panelRef}
         collapsible
         collapsedSize={0}
-        defaultSize={visible ? BOTTOM_PANEL_DEFAULT_SIZE : 0}
+        defaultSize={panelOpen ? BOTTOM_PANEL_DEFAULT_SIZE : 0}
         maxSize="70%"
-        minSize={10}
+        minSize={100}
         onResize={panelResize}
       >
         <EditableTabs

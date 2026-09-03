@@ -103,12 +103,14 @@ type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["second
 const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 
 export function useOpenRightSidebar() {
-  const setRightSidebarCollapsed = useAppShellStore((state) => state.setRightSidebarCollapsed);
+  const activeTabId = useTabStore((state) => state.activeTabId);
+  const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
 
   return useCallback(() => {
-    setRightSidebarCollapsed(false);
-    window.dispatchEvent(new Event("tron:open-right-sidebar"));
-  }, [setRightSidebarCollapsed]);
+    if (activeTabId) {
+      updateRightPanelState(activeTabId, { open: true });
+    }
+  }, [activeTabId, updateRightPanelState]);
 }
 
 function navigationHrefMatches(itemHref: string, activeHref?: string) {
@@ -182,10 +184,8 @@ export function TronShell({
   const setNavigationDomains = useNavigationStore((state) => state.setDomains);
   const setNavigationMenuTree = useNavigationStore((state) => state.setMenuTree);
   const setSelectedDomainCode = useNavigationStore((state) => state.setSelectedDomainCode);
-  const rightSidebarCollapsed = useAppShellStore((state) => state.rightSidebarCollapsed);
   const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
   const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
-  const setRightSidebarCollapsed = useAppShellStore((state) => state.setRightSidebarCollapsed);
   const setSidebarCollapsed = useAppShellStore((state) => state.setSidebarCollapsed);
   const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
   const toggleSection = useAppShellStore((state) => state.toggleSection);
@@ -204,13 +204,7 @@ export function TronShell({
   const dataSource = getServiceDataSource("admin");
   const [openNavigationItems, setOpenNavigationItems] = useState<Record<string, boolean>>({});
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
-  const [rightDragglePanelOpen, setRightDragglePanelOpen] = useState(false);
-  const rightPanelOpen = activeTab?.rightPanelOpen ?? rightDragglePanelOpen;
-
-  const handleRightPanelOpenChange = useCallback((open: boolean) => {
-    setRightDragglePanelOpen(open);
-    setRightSidebarCollapsed(!open);
-  }, [setRightSidebarCollapsed]);
+  const rightPanelOpen = activeTab?.rightPanelOpen ?? false;
 
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
@@ -509,10 +503,6 @@ export function TronShell({
   }, [pathname]);
 
   useEffect(() => {
-    setRightSidebarCollapsed(true);
-  }, [pathname, setRightSidebarCollapsed]);
-
-  useEffect(() => {
     if (!hasRightPanel) {
       setRightDrawerOpen(false);
     }
@@ -521,16 +511,6 @@ export function TronShell({
   useEffect(() => {
     setRightDrawerOpen(Boolean(hasRightPanel && activeTab?.rightPanelOpen));
   }, [activeTab?.id, activeTab?.rightPanelOpen, hasRightPanel]);
-
-  useEffect(() => {
-    if (!hasRightPanel || rightSidebarCollapsed) {
-      return;
-    }
-
-    window.requestAnimationFrame(() => {
-      window.dispatchEvent(new Event("tron:open-right-sidebar"));
-    });
-  }, [hasRightPanel, renderedRightPanel, rightSidebarCollapsed]);
 
   useEffect(() => {
     if (!rightDrawerOpen) {
@@ -608,7 +588,9 @@ export function TronShell({
       }
       return;
     }
-    window.dispatchEvent(new Event("tron:toggle-right-sidebar"));
+    if (activeTab?.id) {
+      updateRightPanelState(activeTab.id, { open: !rightPanelOpen });
+    }
   }
 
   function toggleBottomPanel() {
@@ -1196,7 +1178,6 @@ export function TronShell({
           <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14">
             <Content
               contentClassName={renderedContentClassName}
-              onRightPanelOpenChange={setRightDragglePanelOpen}
               rightPanel={rightPanel}
               showBottomPanel={showBottomPanel}
 

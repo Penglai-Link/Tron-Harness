@@ -57,12 +57,6 @@ export function SharedShellPreviewPage() {
       activeItem="Tasks"
       searchPlaceholder={t("pages:sharedShell.search", "Search tasks, agents, traces...")}
       userMenuContent={<AuthUserMenuPanel />}
-      topbarActions={
-        <Button variant="secondary" size="sm" onClick={() => setNotice("Top bar filter action opened")}>
-          <Filter size={15} aria-hidden="true" />
-          {t("pages:sharedShell.actions.filter", "Filter")}
-        </Button>
-      }
       rightPanel={
         <InspectorPanel title={t("pages:sharedShell.inspector.title", "Resource Pattern")}>
           <SurfaceCard className="rounded-xl p-4 shadow-none">

@@ -23,7 +23,6 @@ import { TabPanelHost, useTabPanelRegistry } from "./TabPanelRegistry";
 interface IPanelProps {
   children: ReactNode;
   contentClassName?: string;
-  onRightPanelOpenChange?: (open: boolean) => void;
   rightPanel?: ReactNode;
 }
 
@@ -81,7 +80,6 @@ function EmptyTabWorkspace() {
 export function Panel({
   children,
   contentClassName,
-  onRightPanelOpenChange,
   rightPanel,
 }: IPanelProps) {
   const { pathname, search } = useLocation();
@@ -97,27 +95,29 @@ export function Panel({
     .some((config) => Boolean(config.rightPanel));
   // Keep cached Activity panel trees mounted while the active tab has no panel.
   const hasCachedRightPanel = hasRegisteredRightPanel || Boolean(rightPanel);
+  const storedPanelOpen = Boolean(
+    activeTab?.rightPanelOpen
+    && (hasActiveRegisteredRightPanel || (!hasRegisteredRightPanel && rightPanel)),
+  );
   const handleRightPanelOpenChange = useCallback((open: boolean) => {
     if (activeTabId) {
       updateRightPanelState(activeTabId, { open });
     }
-    onRightPanelOpenChange?.(open);
-  }, [activeTabId, onRightPanelOpenChange, updateRightPanelState]);
+  }, [activeTabId, updateRightPanelState]);
   const handleRightPanelSizeChange = useCallback((size: number) => {
     if (activeTabId && Number.isFinite(size) && size > 0) {
       updateRightPanelState(activeTabId, { size: Math.round(size) });
     }
   }, [activeTabId, updateRightPanelState]);
   const {
-    bindRightPanelHandleRef,
-    handleRightPanelPointerDown,
-    handleRightPanelPointerEnd,
-    handleRightPanelPointerMove,
+    handlePanelPointerDown,
+    handlePanelPointerEnd,
+    handlePanelPointerMove,
+    panelOpen,
     panelRef,
     panelResize,
-    panelOpen,
   } = usePanel({
-    initiallyOpen: activeTab?.rightPanelOpen ?? false,
+    open: storedPanelOpen,
     initialSize: activeTab?.rightPanelSize,
     onOpenChange: handleRightPanelOpenChange,
     onSizeChange: handleRightPanelSizeChange,
@@ -154,17 +154,16 @@ export function Panel({
           {hasCachedRightPanel ? (
             <>
               <ResizableHandle
-                elementRef={bindRightPanelHandleRef}
                 withHandle
                 disabled={!panelOpen}
                 className={cn(
                   "hidden lg:flex",
                   !panelOpen && "pointer-events-none opacity-0",
                 )}
-                onPointerDown={handleRightPanelPointerDown}
-                onPointerMove={handleRightPanelPointerMove}
-                onPointerUp={handleRightPanelPointerEnd}
-                onPointerCancel={handleRightPanelPointerEnd}
+                onPointerDown={handlePanelPointerDown}
+                onPointerMove={handlePanelPointerMove}
+                onPointerUp={handlePanelPointerEnd}
+                onPointerCancel={handlePanelPointerEnd}
               />
               <ResizablePanel
                 panelRef={panelRef}
