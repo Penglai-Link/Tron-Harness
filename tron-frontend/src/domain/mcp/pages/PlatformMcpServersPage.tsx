@@ -54,7 +54,6 @@ import {
 
 import {
   formatPlatformMcpEndpoint,
-  formatPlatformMcpTransportLabel,
   platformMcpServerEnabledTone,
   platformMcpServerStateTone,
 } from "./mcpServerPageHelpers";
@@ -67,10 +66,6 @@ interface RowMenuState {
   serverCode: string;
   top: number;
   triggerElement: HTMLButtonElement;
-}
-
-function healthLabel(status: PlatformMcpServerRecord["lastHealthStatus"]) {
-  return status.replaceAll("_", " ");
 }
 
 export function PlatformMcpServersPage() {
@@ -92,6 +87,23 @@ export function PlatformMcpServersPage() {
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:settingsMcpServers.${key}`, { defaultValue, ...options })
   );
+
+  function healthLabel(status: PlatformMcpServerRecord["lastHealthStatus"]) {
+    switch (status) {
+      case "HEALTHY":
+        return pageT("table.status.healthy", "Healthy");
+      case "UNHEALTHY":
+        return pageT("table.status.unhealthy", "Unhealthy");
+      default:
+        return pageT("table.status.neverChecked", "Never checked");
+    }
+  }
+
+  function transportLabel(transportKind: PlatformMcpServerRecord["transportKind"]) {
+    return transportKind === "stdio"
+      ? pageT("table.transport.stdio", "STDIO")
+      : pageT("table.transport.streamableHttp", "Streamable HTTP");
+  }
 
   const pagination = useTablePagination(records);
   const openMenuRow = openRowMenu
@@ -359,7 +371,7 @@ export function PlatformMcpServersPage() {
               width: "14%",
               render: (row) => (
                 <Badge tone="info">
-                  {formatPlatformMcpTransportLabel(row.transportKind)}
+                  {transportLabel(row.transportKind)}
                 </Badge>
               ),
             },
