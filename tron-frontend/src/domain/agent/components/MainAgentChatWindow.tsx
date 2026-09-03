@@ -17,9 +17,14 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { useTranslation } from "react-i18next";
+import { useLocation } from "react-router";
 
+import { MarkdownLink } from "@/shared";
 import { getApiAccessToken } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
+import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { useToast } from "@/shared/ui/Toast";
 
 interface MainAgentChatWindowProps {
@@ -72,6 +77,9 @@ function isMissingPersistedSessionError(message: string, title?: string) {
     && message.trim().toLowerCase() === "chat session was not found";
 }
 
+// 支持在右侧边栏 PageView 内置浏览器中"内部打开"链接的路由（精确匹配）
+const INTERNAL_OPEN_ROUTES = ["/chats"];
+
 export function MainAgentChatWindow({
   currentUserDisplayName,
   floatingSubtitle = "Workspace Coordinator",
@@ -82,6 +90,28 @@ export function MainAgentChatWindow({
   onWindowStateChange,
 }: MainAgentChatWindowProps) {
   const toast = useToast();
+  const { t } = useTranslation("pages");
+  const { pathname } = useLocation();
+  const desktopBridge = useMemo(() => new DesktopBridge(), []);
+  // 仅路由列表中的页面存在带 PageView 内置浏览器的右侧边栏，此时提供"内部打开"
+  const internalSidebarAvailable = INTERNAL_OPEN_ROUTES.includes(pathname);
+  const openMarkdownLinkInChatsSidebar = useCallback((url: string) => {
+    window.dispatchEvent(new CustomEvent(OPEN_CHATS_PAGE_VIEW_EVENT, { detail: url }));
+  }, []);
+  // 悬浮窗没有右侧边栏 PageView，链接统一走系统浏览器打开
+  const openMarkdownLink = useCallback((url: string) => {
+    if (!desktopBridge.isDesktop()) {
+      window.open(url, "_blank", "noopener,noreferrer");
+      return;
+    }
+
+    // 桌面端：走 IPC 让主进程打开系统浏览器
+    // fire-and-forget：主进程立即返回，不等浏览器打开，
+    // 避免渲染进程后续处理抢回焦点导致浏览器窗口层级变低
+    void desktopBridge.openTargetPage({ mode: "browser", url }).catch(() => {
+      toast.error(t("chat.markdownLink.openExternalFailed"));
+    });
+  }, [desktopBridge, t, toast]);
   const adapter = useMemo(
     () =>
       getServiceDataSource("chat") === "mock"
@@ -228,6 +258,15 @@ export function MainAgentChatWindow({
         onSessionChange={handleSessionChange}
         windowState={resolvedWindowState}
         onWindowStateChange={handleWindowStateChange}
+        renderMarkdownLink={({ href, children }) => (
+          <MarkdownLink
+            href={href}
+            onOpenInternal={internalSidebarAvailable ? openMarkdownLinkInChatsSidebar : undefined}
+            onOpenExternal={openMarkdownLink}
+          >
+            {children}
+          </MarkdownLink>
+        )}
       />
     </>
   );
