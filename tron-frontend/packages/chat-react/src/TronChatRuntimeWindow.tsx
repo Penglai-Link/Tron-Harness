@@ -1489,6 +1489,7 @@ export function TronChatRuntimeWindow({
         userInputRequest={userInputRequest}
         onAnswerUserInput={(answers) => { void handleAnswerUserInput(answers); }}
         onStateChange={onWindowStateChange}
+        renderMarkdownLink={renderMarkdownLink}
       />
     );
   }

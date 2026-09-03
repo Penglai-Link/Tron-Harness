@@ -243,10 +243,10 @@ export function MarkdownLink({
 
   function handleClick(event: MouseEvent<HTMLAnchorElement>) {
     event.preventDefault();
-    if (event.ctrlKey || event.metaKey) {
-      openExternal();
-    } else {
+    if (onOpenInternal && !event.ctrlKey && !event.metaKey) {
       openInternal();
+    } else {
+      openExternal();
     }
   }
 
@@ -258,9 +258,11 @@ export function MarkdownLink({
           render={<a href={url} onClick={handleClick}>{resolveAnchorContent()}</a>}
         />
         <ContextMenuContent>
-          <ContextMenuItem onClick={openInternal}>
-            {t("chat.markdownLink.openInternal")}
-          </ContextMenuItem>
+          {onOpenInternal ? (
+            <ContextMenuItem onClick={openInternal}>
+              {t("chat.markdownLink.openInternal")}
+            </ContextMenuItem>
+          ) : null}
           <ContextMenuItem onClick={() => setTimeout(openExternal, 0)}>
             {t("chat.markdownLink.openExternal")}
           </ContextMenuItem>
