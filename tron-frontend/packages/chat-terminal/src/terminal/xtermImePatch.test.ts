@@ -102,7 +102,7 @@ describe("xterm Apple Pinyin keyCode=229 patch", () => {
     terminal.dispose();
   });
 
-  it("commits the composition-end snapshot without waiting for another key", async () => {
+  it("falls back to the composition-end snapshot when the browser omits a final InputEvent", async () => {
     const { Terminal } = await import("@xterm/xterm");
     const terminal = new Terminal();
     const output: string[] = [];
@@ -120,12 +120,12 @@ describe("xterm Apple Pinyin keyCode=229 patch", () => {
     dispatchKey(textarea!, "Process", 229);
     dispatchComposition(textarea!, "compositionend", "你好");
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
+    await new Promise((resolve) => setTimeout(resolve, 60));
     expect(output.join("")).toBe("你好");
     terminal.dispose();
   });
 
-  it("keeps an unconfirmed Apple Pinyin preedit contiguous before English input", async () => {
+  it("prefers a delayed final input over a spaced Apple Pinyin preedit", async () => {
     const { Terminal } = await import("@xterm/xterm");
     const terminal = new Terminal();
     const output: string[] = [];
@@ -138,19 +138,20 @@ describe("xterm Apple Pinyin keyCode=229 patch", () => {
     expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
 
     dispatchComposition(textarea!, "compositionstart");
-    setTextareaValue(textarea!, "nihao");
-    dispatchComposition(textarea!, "compositionupdate", "nihao");
+    setTextareaValue(textarea!, "a s d f");
+    dispatchComposition(textarea!, "compositionupdate", "a s d f");
     dispatchKey(textarea!, "Process", 229);
-    dispatchComposition(textarea!, "compositionend", "nihao");
+    dispatchComposition(textarea!, "compositionend", "a s d f");
 
-    // Switching to ABC can deliver the first English InputEvent before the
-    // composition timer. The frozen preedit must precede it exactly once.
-    setTextareaValue(textarea!, "nihaoa");
-    dispatchInsertText(textarea!, "a");
-    dispatchKey(textarea!, "a", 229);
+    // Chromium can deliver the authoritative InputEvent after compositionend.
+    // Its data wins over the spaced text used to render the former preedit.
+    await new Promise((resolve) => setTimeout(resolve, 10));
+    setTextareaValue(textarea!, "asdf");
+    dispatchInsertText(textarea!, "asdf");
+    dispatchKey(textarea!, "Process", 229);
 
-    await new Promise((resolve) => setTimeout(resolve, 0));
-    expect(output.join("")).toBe("nihaoa");
+    await new Promise((resolve) => setTimeout(resolve, 60));
+    expect(output.join("")).toBe("asdf");
     terminal.dispose();
   });
 });

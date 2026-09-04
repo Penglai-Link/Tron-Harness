@@ -47,18 +47,22 @@ index 9ebc55d..c01d7c3 100644
    keydown(ev: KeyboardEvent): boolean;
  }
 diff --git a/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts b/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
-index 7542969..ba842c6 100644
+index 7542969..a685cbd 100644
 --- a/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
 +++ b/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
-@@ -5,7 +5,6 @@
+@@ -5,7 +5,10 @@
 
  import { IRenderService } from 'browser/services/Services';
  import { IBufferService, ICoreService, IOptionsService } from 'common/services/Services';
 -import { C0 } from 'common/data/EscapeSequences';
++
++// Chromium can deliver the final InputEvent after compositionend returns. Keep
++// the fallback short, while allowing that authoritative event to arrive first.
++const COMPOSITION_END_FALLBACK_DELAY = 50;
 
  interface IPosition {
    start: number;
-@@ -36,10 +35,8 @@ export class CompositionHelper {
+@@ -36,10 +39,8 @@ export class CompositionHelper {
     */
    private _isSendingComposition: boolean;
 
@@ -71,7 +75,7 @@ index 7542969..ba842c6 100644
 
    constructor(
      private readonly _textarea: HTMLTextAreaElement,
-@@ -51,8 +48,8 @@ export class CompositionHelper {
+@@ -51,8 +52,8 @@ export class CompositionHelper {
    ) {
      this._isComposing = false;
      this._isSendingComposition = false;
@@ -81,7 +85,7 @@ index 7542969..ba842c6 100644
    }
 
    /**
-@@ -60,9 +57,10 @@ export class CompositionHelper {
+@@ -60,9 +61,10 @@ export class CompositionHelper {
     */
    public compositionstart(): void {
      this._isComposing = true;
@@ -93,7 +97,7 @@ index 7542969..ba842c6 100644
      this._compositionView.classList.add('active');
    }
 
-@@ -82,8 +80,27 @@ export class CompositionHelper {
+@@ -82,8 +84,21 @@ export class CompositionHelper {
     * Handles the compositionend event, hiding the composition view and sending the composition to
     * the handler.
     */
@@ -107,23 +111,17 @@ index 7542969..ba842c6 100644
 +   * Reconciles a browser input event with a frozen composition-end value
 +   * before another key can be misattributed to the finished composition.
 +   */
-+  public inputHandled(data: string): void {
++  public inputHandled(_data: string): void {
 +    if (!this._isSendingComposition) {
 +      return;
 +    }
 +
-+    const pending = this._pendingCompositionData;
 +    this._isSendingComposition = false;
 +    this._pendingCompositionData = '';
-+    if (pending && pending !== data) {
-+      // A new key has arrived before the queued composition send. Emit the
-+      // frozen composition first, then let Terminal forward the new key.
-+      this._coreService.triggerDataEvent(pending, true);
-+    }
    }
 
    /**
-@@ -107,9 +124,10 @@ export class CompositionHelper {
+@@ -107,9 +122,10 @@ export class CompositionHelper {
      }
 
      if (ev.keyCode === 229) {
@@ -137,7 +135,7 @@ index 7542969..ba842c6 100644
        return false;
      }
 
-@@ -124,86 +142,36 @@ export class CompositionHelper {
+@@ -124,84 +140,34 @@ export class CompositionHelper {
     *   compositionend event is triggered, such as enter, so that the composition is sent before
     *   the command is executed.
     */
@@ -196,17 +194,11 @@ index 7542969..ba842c6 100644
 -          }
 +        if (!this._isSendingComposition) {
 +          return;
-+        }
-+        const input = this._pendingCompositionData;
-+        this._isSendingComposition = false;
-+        this._pendingCompositionData = '';
-+        if (input) {
-+          this._coreService.triggerDataEvent(input, true);
          }
-       }, 0);
-     }
-   }
-
+-      }, 0);
+-    }
+-  }
+-
 -  /**
 -   * Apply any changes made to the textarea after the current event chain is allowed to complete.
 -   * This should be called when not currently composing but a keydown event with the "composition
@@ -230,12 +222,17 @@ index 7542969..ba842c6 100644
 -          this._coreService.triggerDataEvent(`${C0.DEL}`, true);
 -        } else if ((newValue.length === oldValue.length) && (newValue !== oldValue)) {
 -          this._coreService.triggerDataEvent(newValue, true);
--        }
++        const input = this._pendingCompositionData;
++        this._isSendingComposition = false;
++        this._pendingCompositionData = '';
++        if (input) {
++          this._coreService.triggerDataEvent(input, true);
+         }
 -
 -      }
 -    }, 0);
--  }
--
++      }, COMPOSITION_END_FALLBACK_DELAY);
++    }
+   }
+
    /**
-    * Positions the composition view on top of the cursor and the textarea just below it (so the
-    * IME helper dialog is positioned correctly).
