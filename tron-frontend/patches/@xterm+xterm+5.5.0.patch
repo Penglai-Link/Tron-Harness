@@ -47,7 +47,7 @@ index 9ebc55d..c01d7c3 100644
    keydown(ev: KeyboardEvent): boolean;
  }
 diff --git a/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts b/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
-index 7542969..a685cbd 100644
+index 7542969..2eb68e7 100644
 --- a/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
 +++ b/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
 @@ -5,7 +5,10 @@
@@ -62,7 +62,7 @@ index 7542969..a685cbd 100644
 
  interface IPosition {
    start: number;
-@@ -36,10 +39,8 @@ export class CompositionHelper {
+@@ -36,10 +39,14 @@ export class CompositionHelper {
     */
    private _isSendingComposition: boolean;
 
@@ -72,38 +72,61 @@ index 7542969..a685cbd 100644
 -  private _dataAlreadySent: string;
 +  /** The immutable composition-end value waiting to be emitted. */
 +  private _pendingCompositionData: string;
++
++  /** The latest preedit text, used to distinguish it from a committed value. */
++  private _lastCompositionUpdateData: string;
++
++  /** Whether Caps Lock cancelled the active preedit while the source changes. */
++  private _isCompositionCancelled: boolean;
 
    constructor(
      private readonly _textarea: HTMLTextAreaElement,
-@@ -51,8 +52,8 @@ export class CompositionHelper {
+@@ -51,8 +58,10 @@ export class CompositionHelper {
    ) {
      this._isComposing = false;
      this._isSendingComposition = false;
 +    this._pendingCompositionData = '';
++    this._lastCompositionUpdateData = '';
++    this._isCompositionCancelled = false;
      this._compositionPosition = { start: 0, end: 0 };
 -    this._dataAlreadySent = '';
    }
 
    /**
-@@ -60,9 +61,10 @@ export class CompositionHelper {
+@@ -60,9 +69,12 @@ export class CompositionHelper {
     */
    public compositionstart(): void {
      this._isComposing = true;
 +    this._isSendingComposition = false;
 +    this._pendingCompositionData = '';
++    this._lastCompositionUpdateData = '';
++    this._isCompositionCancelled = false;
      this._compositionPosition.start = this._textarea.value.length;
      this._compositionView.textContent = '';
 -    this._dataAlreadySent = '';
      this._compositionView.classList.add('active');
    }
 
-@@ -82,8 +84,21 @@ export class CompositionHelper {
+@@ -71,6 +83,7 @@ export class CompositionHelper {
+    * @param ev The event.
+    */
+   public compositionupdate(ev: Pick<CompositionEvent, 'data'>): void {
++    this._lastCompositionUpdateData = ev.data;
+     this._compositionView.textContent = ev.data;
+     this.updateCompositionElements();
+     setTimeout(() => {
+@@ -82,8 +95,35 @@ export class CompositionHelper {
     * Handles the compositionend event, hiding the composition view and sending the composition to
     * the handler.
     */
 -  public compositionend(): void {
 -    this._finalizeComposition(true);
 +  public compositionend(ev: Pick<CompositionEvent, 'data'>): void {
++    if (this._isCompositionCancelled) {
++      this._isCompositionCancelled = false;
++      this._clearComposition();
++      return;
++    }
 +    this._finalizeComposition(true, ev.data);
 +  }
 +
@@ -111,17 +134,50 @@ index 7542969..a685cbd 100644
 +   * Reconciles a browser input event with a frozen composition-end value
 +   * before another key can be misattributed to the finished composition.
 +   */
-+  public inputHandled(_data: string): void {
++  public inputHandled(data: string): void {
 +    if (!this._isSendingComposition) {
 +      return;
 +    }
 +
++    const pending = this._pendingCompositionData;
++    const pendingIsPreedit = pending === this._lastCompositionUpdateData;
 +    this._isSendingComposition = false;
 +    this._pendingCompositionData = '';
++
++    // A final input event is authoritative only when compositionend captured
++    // the preedit rather than a committed value. If it is the next ASCII key,
++    // forward the pending committed text first.
++    if (pending && pending !== data && !pendingIsPreedit) {
++      this._coreService.triggerDataEvent(pending, true);
++    }
    }
 
    /**
-@@ -107,9 +122,10 @@ export class CompositionHelper {
+@@ -92,7 +132,14 @@ export class CompositionHelper {
+    * @returns Whether the Terminal should continue processing the keydown event.
+    */
+   public keydown(ev: KeyboardEvent): boolean {
+-    if (this._isComposing || this._isSendingComposition) {
++    if (this._isComposing) {
++      if (ev.keyCode === 20 || ev.key === 'CapsLock' || ev.code === 'CapsLock') {
++        // macOS can use Caps Lock to change input sources. That cancels the
++        // preedit; it must never be sent as a shell command fragment.
++        this._isCompositionCancelled = true;
++        this._clearComposition();
++        return false;
++      }
+       if (ev.keyCode === 229) {
+         // Continue composing if the keyCode is the "composition character"
+         return false;
+@@ -104,18 +151,34 @@ export class CompositionHelper {
+       // Finish composition immediately. This is mainly here for the case where enter is
+       // pressed and the handler needs to be triggered before the command is executed.
+       this._finalizeComposition(false);
++    } else if (this._isSendingComposition) {
++      if (ev.keyCode === 229 || ev.keyCode === 16 || ev.keyCode === 17 || ev.keyCode === 18) {
++        return false;
++      }
++      this._finalizeComposition(false);
      }
 
      if (ev.keyCode === 229) {
@@ -135,7 +191,23 @@ index 7542969..a685cbd 100644
        return false;
      }
 
-@@ -124,84 +140,34 @@ export class CompositionHelper {
+     return true;
+   }
+
++  private _clearComposition(): void {
++    this._compositionView.classList.remove('active');
++    this._isComposing = false;
++    this._isSendingComposition = false;
++    this._pendingCompositionData = '';
++    this._lastCompositionUpdateData = '';
++    this._compositionPosition.end = this._compositionPosition.start;
++    this._textarea.value = this._textarea.value.substring(0, this._compositionPosition.start);
++  }
++
+   /**
+    * Finalizes the composition, resuming regular input actions. This is called when a composition
+    * is ending.
+@@ -124,84 +187,34 @@ export class CompositionHelper {
     *   compositionend event is triggered, such as enter, so that the composition is sent before
     *   the command is executed.
     */

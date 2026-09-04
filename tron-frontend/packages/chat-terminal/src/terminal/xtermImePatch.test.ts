@@ -15,8 +15,8 @@ Object.defineProperty(window, "matchMedia", {
   }),
 });
 
-function dispatchKey(target: EventTarget, key: string, keyCode: number) {
-  const event = new KeyboardEvent("keydown", { bubbles: true, key });
+function dispatchKey(target: EventTarget, key: string, keyCode: number, code = "") {
+  const event = new KeyboardEvent("keydown", { bubbles: true, code, key });
   Object.defineProperties(event, {
     keyCode: { value: keyCode },
     which: { value: keyCode },
@@ -152,6 +152,86 @@ describe("xterm Apple Pinyin keyCode=229 patch", () => {
 
     await new Promise((resolve) => setTimeout(resolve, 60));
     expect(output.join("")).toBe("asdf");
+    terminal.dispose();
+  });
+
+  it("drops the active Apple Pinyin preedit when Caps Lock switches to ABC", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+    const terminal = new Terminal();
+    const output: string[] = [];
+    terminal.onData((data) => output.push(data));
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    terminal.open(host);
+
+    const textarea = host.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+    expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
+
+    dispatchComposition(textarea!, "compositionstart");
+    setTextareaValue(textarea!, "a s d f");
+    dispatchComposition(textarea!, "compositionupdate", "a s d f");
+
+    // macOS delivers this before the source change's compositionend event.
+    // Some Chromium IME paths report Process (229) for this physical key.
+    dispatchKey(textarea!, "CapsLock", 229, "CapsLock");
+    dispatchComposition(textarea!, "compositionend", "a s d f");
+    await new Promise((resolve) => setTimeout(resolve, 60));
+
+    // The first ABC input must be the only data sent to the PTY.
+    setTextareaValue(textarea!, "asdf");
+    dispatchInsertText(textarea!, "asdf");
+    expect(output.join("")).toBe("asdf");
+    terminal.dispose();
+  });
+
+  it("does not strand the first ABC input when Chromium omits compositionend", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+    const terminal = new Terminal();
+    const output: string[] = [];
+    terminal.onData((data) => output.push(data));
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    terminal.open(host);
+
+    const textarea = host.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+    expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
+
+    dispatchComposition(textarea!, "compositionstart");
+    setTextareaValue(textarea!, "a s d f");
+    dispatchComposition(textarea!, "compositionupdate", "a s d f");
+    dispatchKey(textarea!, "CapsLock", 20, "CapsLock");
+
+    // The cancellation flag must not block the first ABC input.
+    setTextareaValue(textarea!, "a");
+    dispatchInsertText(textarea!, "a");
+
+    expect(output.join("")).toBe("a");
+    terminal.dispose();
+  });
+
+  it("forwards a confirmed Chinese composition before immediate following ASCII", async () => {
+    const { Terminal } = await import("@xterm/xterm");
+    const terminal = new Terminal();
+    const output: string[] = [];
+    terminal.onData((data) => output.push(data));
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    terminal.open(host);
+
+    const textarea = host.querySelector<HTMLTextAreaElement>(".xterm-helper-textarea");
+    expect(textarea).toBeInstanceOf(HTMLTextAreaElement);
+
+    dispatchComposition(textarea!, "compositionstart");
+    setTextareaValue(textarea!, "ni hao");
+    dispatchComposition(textarea!, "compositionupdate", "ni hao");
+    dispatchComposition(textarea!, "compositionend", "你好");
+
+    // This is a new ASCII key, not the IME's final InputEvent. The committed
+    // Chinese must be flushed ahead of it instead of being discarded.
+    setTextareaValue(textarea!, "a");
+    dispatchInsertText(textarea!, "a");
+
+    expect(output.join("")).toBe("你好a");
     terminal.dispose();
   });
 });

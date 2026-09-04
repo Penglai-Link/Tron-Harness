@@ -17,7 +17,21 @@ const LEGACY_PATCHED_INPUT_EVENT =
   '_inputEvent(e){if(e.data&&"insertText"===e.inputType&&(!e.composed||!this._keyDownSeen||!this._compositionHelper.isComposing&&!this._compositionHelper.isSendingComposition)&&!this.optionsService.rawOptions.screenReaderMode){if(this._keyPressHandled)return!1;this._unprocessedDeadKey=!1;const t=e.data;return this.coreService.triggerDataEvent(t,!0),this._compositionHelper.inputHandled(t),this.cancel(e),!0}return!1}';
 const ORIGINAL_COMPOSITION =
   'compositionstart(){this._isComposing=!0,this._compositionPosition.start=this._textarea.value.length,this._compositionView.textContent="",this._dataAlreadySent="",this._compositionView.classList.add("active")}compositionupdate(e){this._compositionView.textContent=e.data,this.updateCompositionElements(),setTimeout((()=>{this._compositionPosition.end=this._textarea.value.length}),0)}compositionend(){this._finalizeComposition(!0)}keydown(e){if(this._isComposing||this._isSendingComposition){if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;this._finalizeComposition(!1)}return 229!==e.keyCode||(this._handleAnyTextareaChanges(),!1)}';
-const PATCHED_COMPOSITION =
+const PREVIOUS_CANCELLED_COMPOSITION =
+  'compositionstart(){this._isComposing=!0,this._isSendingComposition=!1,this._pendingCompositionData="",this._lastCompositionUpdateData="",this._isCompositionCancelled=!1,this._compositionPosition.start=this._textarea.value.length,this._compositionView.textContent="",this._compositionView.classList.add("active")}compositionupdate(e){this._lastCompositionUpdateData=e.data,this._compositionView.textContent=e.data,this.updateCompositionElements(),setTimeout((()=>{this._compositionPosition.end=this._textarea.value.length}),0)}compositionend(e){if(this._isCompositionCancelled)return this._isCompositionCancelled=!1,void this._clearComposition();this._finalizeComposition(!0,e.data)}inputHandled(e){if(!this._isSendingComposition)return;const t=this._pendingCompositionData,s=t===this._lastCompositionUpdateData;this._isSendingComposition=!1,this._pendingCompositionData="",t&&t!==e&&!s&&this._coreService.triggerDataEvent(t,!0)}keydown(e){if(this._isComposing){if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;if(20===e.keyCode||"CapsLock"===e.key||"CapsLock"===e.code)return this._isCompositionCancelled=!0,this._clearComposition(),!1;this._finalizeComposition(!1)}else if(this._isSendingComposition){if(229===e.keyCode||16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;this._finalizeComposition(!1)}return 229!==e.keyCode}_clearComposition(){this._compositionView.classList.remove("active"),this._isComposing=!1,this._isSendingComposition=!1,this._pendingCompositionData="",this._lastCompositionUpdateData="",this._compositionPosition.end=this._compositionPosition.start,this._textarea.value=this._textarea.value.substring(0,this._compositionPosition.start)}';
+const PREVIOUS_RECOVERY_COMPOSITION = PREVIOUS_CANCELLED_COMPOSITION.replace(
+  'keydown(e){if(this._isComposing){',
+  'keydown(e){if(this._isCompositionCancelled&&229!==e.keyCode)return this._isCompositionCancelled=!1,!0;if(this._isComposing){',
+);
+const PATCHED_COMPOSITION = PREVIOUS_CANCELLED_COMPOSITION.replace(
+  'if(this._isComposing){if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;if(20===e.keyCode||"CapsLock"===e.key||"CapsLock"===e.code)return this._isCompositionCancelled=!0,this._clearComposition(),!1;',
+  'if(this._isComposing){if(20===e.keyCode||"CapsLock"===e.key||"CapsLock"===e.code)return this._isCompositionCancelled=!0,this._clearComposition(),!1;if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;',
+);
+const PREVIOUS_CAPS_LOCK_COMPOSITION =
+  'compositionstart(){this._isComposing=!0,this._isSendingComposition=!1,this._compositionCancelled=!1,this._pendingCompositionData="",this._compositionPosition.start=this._textarea.value.length,this._compositionView.textContent="",this._compositionView.classList.add("active")}compositionupdate(e){this._compositionView.textContent=e.data,this.updateCompositionElements(),setTimeout((()=>{this._compositionPosition.end=this._textarea.value.length}),0)}compositionend(e){this._compositionCancelled?(this._compositionCancelled=!1,this._isComposing=!1,this._isSendingComposition=!1,this._pendingCompositionData="",this._compositionPosition.end=this._compositionPosition.start,this._textarea.value=this._textarea.value.substring(0,this._compositionPosition.start),this._compositionView.classList.remove("active")):this._finalizeComposition(!0,e.data)}inputHandled(){if(!this._isSendingComposition)return;this._isSendingComposition=!1,this._pendingCompositionData=""}_cancelComposition(){this._isComposing=!1,this._isSendingComposition=!1,this._compositionCancelled=!0,this._pendingCompositionData="",this._compositionPosition.end=this._compositionPosition.start,this._textarea.value=this._textarea.value.substring(0,this._compositionPosition.start),this._compositionView.classList.remove("active")}keydown(e){if(this._isComposing||this._isSendingComposition){if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;if(20===e.keyCode||"CapsLock"===e.key||"CapsLock"===e.code)return this._cancelComposition(),!1;this._finalizeComposition(!1)}return 229!==e.keyCode}';
+const PREVIOUS_CAPS_LOCK_IGNORE_COMPOSITION =
+  'compositionstart(){this._isComposing=!0,this._isSendingComposition=!1,this._pendingCompositionData="",this._compositionPosition.start=this._textarea.value.length,this._compositionView.textContent="",this._compositionView.classList.add("active")}compositionupdate(e){this._compositionView.textContent=e.data,this.updateCompositionElements(),setTimeout((()=>{this._compositionPosition.end=this._textarea.value.length}),0)}compositionend(e){this._finalizeComposition(!0,e.data)}inputHandled(){if(!this._isSendingComposition)return;this._isSendingComposition=!1,this._pendingCompositionData=""}keydown(e){if(this._isComposing||this._isSendingComposition){if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode||20===e.keyCode||"CapsLock"===e.key)return!1;this._finalizeComposition(!1)}return 229!==e.keyCode}';
+const PREVIOUS_PERSISTED_COMPOSITION =
   'compositionstart(){this._isComposing=!0,this._isSendingComposition=!1,this._pendingCompositionData="",this._compositionPosition.start=this._textarea.value.length,this._compositionView.textContent="",this._compositionView.classList.add("active")}compositionupdate(e){this._compositionView.textContent=e.data,this.updateCompositionElements(),setTimeout((()=>{this._compositionPosition.end=this._textarea.value.length}),0)}compositionend(e){this._finalizeComposition(!0,e.data)}inputHandled(){if(!this._isSendingComposition)return;this._isSendingComposition=!1,this._pendingCompositionData=""}keydown(e){if(this._isComposing||this._isSendingComposition){if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;this._finalizeComposition(!1)}return 229!==e.keyCode}';
 const PREVIOUS_SNAPSHOT_COMPOSITION =
   'compositionstart(){this._isComposing=!0,this._isSendingComposition=!1,this._pendingCompositionData="",this._compositionPosition.start=this._textarea.value.length,this._compositionView.textContent="",this._compositionView.classList.add("active")}compositionupdate(e){this._compositionView.textContent=e.data,this.updateCompositionElements(),setTimeout((()=>{this._compositionPosition.end=this._textarea.value.length}),0)}compositionend(e){this._finalizeComposition(!0,e.data)}inputHandled(e){if(!this._isSendingComposition)return;const t=this._pendingCompositionData;this._isSendingComposition=!1,this._pendingCompositionData="",t&&t!==e&&this._coreService.triggerDataEvent(t,!0)}keydown(e){if(this._isComposing||this._isSendingComposition){if(229===e.keyCode)return!1;if(16===e.keyCode||17===e.keyCode||18===e.keyCode)return!1;this._finalizeComposition(!1)}return 229!==e.keyCode}';
@@ -37,6 +51,10 @@ const ORIGINAL_COMPOSITION_END_LISTENER =
   '"compositionend",(()=>this._compositionHelper.compositionend())';
 const PATCHED_COMPOSITION_END_LISTENER =
   '"compositionend",(e=>this._compositionHelper.compositionend(e))';
+const ORIGINAL_IS_COMPOSING_GETTER =
+  'get isComposing(){return this._isComposing}';
+const PATCHED_IS_COMPOSING_GETTER =
+  'get isComposing(){return this._isComposing||this._isCompositionCancelled}';
 
 function replaceExactly(bundle, original, patched, name, legacy = []) {
   if (bundle.includes(patched)) {
@@ -54,23 +72,38 @@ function replaceExactly(bundle, original, patched, name, legacy = []) {
 }
 
 function patchXtermImeBundle(bundle) {
-  return replaceExactly(
-    replaceExactly(
-      replaceExactly(
-        replaceExactly(bundle, ORIGINAL_INPUT_EVENT, PATCHED_INPUT_EVENT, "input event", [PREVIOUS_PATCHED_INPUT_EVENT, LEGACY_PATCHED_INPUT_EVENT]),
-        ORIGINAL_COMPOSITION,
-        PATCHED_COMPOSITION,
-        "composition helper",
-        [PREVIOUS_SNAPSHOT_COMPOSITION, PREVIOUS_PATCHED_COMPOSITION, LEGACY_PATCHED_COMPOSITION],
-      ),
-      ORIGINAL_FINALIZE_AND_DIFF,
-      PATCHED_FINALIZE,
-      "composition finalizer",
-      [PREVIOUS_SNAPSHOT_FINALIZE, PREVIOUS_PATCHED_FINALIZE],
-    ),
+  let patched = replaceExactly(
+    bundle,
+    ORIGINAL_INPUT_EVENT,
+    PATCHED_INPUT_EVENT,
+    "input event",
+    [PREVIOUS_PATCHED_INPUT_EVENT, LEGACY_PATCHED_INPUT_EVENT],
+  );
+  patched = replaceExactly(
+    patched,
+    ORIGINAL_COMPOSITION,
+    PATCHED_COMPOSITION,
+    "composition helper",
+    [PREVIOUS_CANCELLED_COMPOSITION, PREVIOUS_RECOVERY_COMPOSITION, PREVIOUS_CAPS_LOCK_COMPOSITION, PREVIOUS_CAPS_LOCK_IGNORE_COMPOSITION, PREVIOUS_PERSISTED_COMPOSITION, PREVIOUS_SNAPSHOT_COMPOSITION, PREVIOUS_PATCHED_COMPOSITION, LEGACY_PATCHED_COMPOSITION],
+  );
+  patched = replaceExactly(
+    patched,
+    ORIGINAL_FINALIZE_AND_DIFF,
+    PATCHED_FINALIZE,
+    "composition finalizer",
+    [PREVIOUS_SNAPSHOT_FINALIZE, PREVIOUS_PATCHED_FINALIZE],
+  );
+  patched = replaceExactly(
+    patched,
     ORIGINAL_COMPOSITION_END_LISTENER,
     PATCHED_COMPOSITION_END_LISTENER,
     "composition-end listener",
+  );
+  return replaceExactly(
+    patched,
+    PATCHED_IS_COMPOSING_GETTER,
+    ORIGINAL_IS_COMPOSING_GETTER,
+    "composition state getter",
   );
 }
 
