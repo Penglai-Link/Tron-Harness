@@ -13,7 +13,10 @@ const SSH_BOOTSTRAP_SCRIPT = fs.readFileSync(
   path.join(HERE, "ssh-bootstrap.sh"),
   "utf8",
 );
-const INTEGRATION_PLACEHOLDER = "__TRON_INTEGRATION_BASE64__";
+const CONTAINER_HELPER_SCRIPT = fs.readFileSync(
+  path.join(HERE, "container-helper.sh"),
+  "utf8",
+);
 
 const ZSH_CANDIDATES = ["/bin/zsh", "/usr/bin/zsh"];
 const BASH_CANDIDATES = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"];
@@ -62,11 +65,26 @@ export function prepareShell({ env = process.env, shell } = {}) {
     };
   }
 
-  const realSsh = resolveSshProgram();
+  integrationEnv.__TRON_SSH_INTEGRATION = path.join(directory, "integration.sh");
+  integrationEnv.__TRON_SSH_HELPER = path.join(directory, "ssh-helper.sh");
+  integrationEnv.__TRON_SSH_BOOTSTRAP = path.join(directory, "ssh-bootstrap.sh");
+  integrationEnv.__TRON_CONTAINER_HELPER = path.join(directory, "container-helper.sh");
+
+  const realSsh = resolveSshProgram(env);
   if (realSsh) {
-    integrationEnv.__TRON_SSH_HELPER = path.join(directory, "ssh-helper.sh");
     integrationEnv.__TRON_REAL_SSH = realSsh;
-    integrationEnv.__TRON_SSH_BOOTSTRAP = sshBootstrap();
+  }
+  const realBash = resolveBashProgram(env);
+  if (realBash) {
+    integrationEnv.__TRON_CONTAINER_BASH = realBash;
+  }
+  const realDocker = resolveProgramInPath("docker", env);
+  if (realDocker) {
+    integrationEnv.__TRON_REAL_DOCKER = realDocker;
+  }
+  const realPodman = resolveProgramInPath("podman", env);
+  if (realPodman) {
+    integrationEnv.__TRON_REAL_PODMAN = realPodman;
   }
 
   if (kind === "bash") {
@@ -109,14 +127,7 @@ export function subshellBootstrap() {
 }
 
 export function sshBootstrap() {
-  const integration = Buffer.from(minifiedIntegrationScript(), "utf8").toString(
-    "base64",
-  );
-  const launcher = SSH_BOOTSTRAP_SCRIPT.replace(
-    INTEGRATION_PLACEHOLDER,
-    integration,
-  );
-  return decodeAndEval(Buffer.from(launcher, "utf8").toString("base64"));
+  return decodeAndEval(Buffer.from(SSH_BOOTSTRAP_SCRIPT, "utf8").toString("base64"));
 }
 
 function decodeAndEval(encoded) {
@@ -152,8 +163,20 @@ function resolveShellProgram(env, shell) {
   );
 }
 
-function resolveSshProgram() {
-  return SSH_CANDIDATES.find(isFile);
+function resolveSshProgram(env) {
+  return resolveProgramInPath("ssh", env) ?? SSH_CANDIDATES.find(isFile);
+}
+
+function resolveBashProgram(env) {
+  return resolveProgramInPath("bash", env) ?? BASH_CANDIDATES.find(isFile);
+}
+
+function resolveProgramInPath(program, env) {
+  return (env.PATH ?? "")
+    .split(path.delimiter)
+    .filter(Boolean)
+    .map((directory) => path.join(directory, program))
+    .find(isFile);
 }
 
 function writeShellFiles(kind) {
@@ -161,6 +184,8 @@ function writeShellFiles(kind) {
   const scriptPath = path.join(directory, "integration.sh");
   fs.writeFileSync(scriptPath, INTEGRATION_SCRIPT);
   fs.writeFileSync(path.join(directory, "ssh-helper.sh"), SSH_HELPER_SCRIPT);
+  fs.writeFileSync(path.join(directory, "ssh-bootstrap.sh"), SSH_BOOTSTRAP_SCRIPT);
+  fs.writeFileSync(path.join(directory, "container-helper.sh"), CONTAINER_HELPER_SCRIPT);
   const script = shellSingleQuote(scriptPath);
 
   if (kind === "bash") {

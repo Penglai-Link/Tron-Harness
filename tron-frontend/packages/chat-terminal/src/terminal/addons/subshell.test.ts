@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from "vitest";
 import { SubshellBootstrapAddon } from "./subshell";
 
 describe("SubshellBootstrapAddon", () => {
-  it("automatically bootstraps a detected interactive shell", () => {
+  it("never writes a bootstrap command into a detected nested shell", () => {
     const write = vi.fn();
     const addon = new SubshellBootstrapAddon({
       write,
@@ -16,12 +16,10 @@ describe("SubshellBootstrapAddon", () => {
 
     addon.handleDetection({ command: "ssh host", host: "host" });
 
-    expect(write).toHaveBeenCalledWith(
-      "\x15\x0b eval bootstrap && printf '\\033]133;A\\007\\033]133;B\\007\\033[H\\033[2J\\033[3J'\r",
-    );
+    expect(write).not.toHaveBeenCalled();
   });
 
-  it("defers rendering while bootstrapping a Docker Bash shell", () => {
+  it("does not change rendering for a Docker shell", () => {
     const write = vi.fn();
     const terminal = {
       write: vi.fn((_data: string, callback: () => void) => callback()),
@@ -35,13 +33,11 @@ describe("SubshellBootstrapAddon", () => {
 
     addon.handleDetection({ command: "docker exec -it api bash", host: "api" });
 
-    expect(terminal.write).toHaveBeenCalledWith("\x1b[?2026h", expect.any(Function));
-    expect(write).toHaveBeenCalledWith(
-      "\x15\x0b __TRON_SYNCED_BOOTSTRAP=1; if eval bootstrap; then printf '\\033]133;A\\007\\033]133;B\\007\\033[H\\033[2J\\033[3J'; else printf '\\033[?2026l'; fi\r",
-    );
+    expect(terminal.write).not.toHaveBeenCalled();
+    expect(write).not.toHaveBeenCalled();
   });
 
-  it("does not write after the nested shell has exited", () => {
+  it("keeps unrecognized shells in ordinary terminal mode", () => {
     const write = vi.fn();
     const addon = new SubshellBootstrapAddon({
       write,
@@ -50,7 +46,7 @@ describe("SubshellBootstrapAddon", () => {
     });
     addon.activate({ clear: vi.fn() } as never);
 
-    addon.handleDetection({ command: "ssh host", host: "host" });
+    addon.handleDetection({ command: "su -", host: "host" });
 
     expect(write).not.toHaveBeenCalled();
   });

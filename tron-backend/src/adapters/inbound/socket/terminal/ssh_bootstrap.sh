@@ -1,10 +1,12 @@
 __tron_remote_dir=${TMPDIR:-/tmp}/tron-terminal-$$
-__tron_remote_shell=${SHELL:-/bin/bash}
+__tron_remote_shell=${__TRON_REMOTE_SHELL:-${SHELL:-/bin/bash}}
+unset __TRON_REMOTE_SHELL
 umask 077
 
 if [ -z "${__TRON_INTEGRATION_BASE64-}" ] ||
   [ -z "${__TRON_SSH_HELPER_BASE64-}" ] ||
   [ -z "${__TRON_SSH_BOOTSTRAP_BASE64-}" ] ||
+  [ -z "${__TRON_CONTAINER_HELPER_BASE64-}" ] ||
   ! command mkdir "$__tron_remote_dir" 2>/dev/null; then
   exit 1
 fi
@@ -15,7 +17,8 @@ __tron_decode() {
 
 if ! __tron_decode "$__TRON_INTEGRATION_BASE64" >"$__tron_remote_dir/integration.sh" ||
   ! __tron_decode "$__TRON_SSH_HELPER_BASE64" >"$__tron_remote_dir/ssh-helper.sh" ||
-  ! __tron_decode "$__TRON_SSH_BOOTSTRAP_BASE64" >"$__tron_remote_dir/ssh-bootstrap.sh"; then
+  ! __tron_decode "$__TRON_SSH_BOOTSTRAP_BASE64" >"$__tron_remote_dir/ssh-bootstrap.sh" ||
+  ! __tron_decode "$__TRON_CONTAINER_HELPER_BASE64" >"$__tron_remote_dir/container-helper.sh"; then
   command rm -rf "$__tron_remote_dir"
   exit 1
 fi
@@ -23,6 +26,7 @@ fi
 export __TRON_SSH_INTEGRATION="$__tron_remote_dir/integration.sh"
 export __TRON_SSH_HELPER="$__tron_remote_dir/ssh-helper.sh"
 export __TRON_SSH_BOOTSTRAP="$__tron_remote_dir/ssh-bootstrap.sh"
+export __TRON_CONTAINER_HELPER="$__tron_remote_dir/container-helper.sh"
 export __TRON_REMOTE_DIR="$__tron_remote_dir"
 __tron_remote_ssh=$(command -v ssh 2>/dev/null || true)
 if [ -n "$__tron_remote_ssh" ] && [ -x "$__tron_remote_ssh" ]; then
@@ -31,6 +35,30 @@ else
   unset __TRON_REAL_SSH
 fi
 unset __tron_remote_ssh
+
+__tron_remote_bash=$(command -v bash 2>/dev/null || true)
+if [ -n "$__tron_remote_bash" ] && [ -x "$__tron_remote_bash" ]; then
+  export __TRON_CONTAINER_BASH="$__tron_remote_bash"
+else
+  unset __TRON_CONTAINER_BASH
+fi
+unset __tron_remote_bash
+
+__tron_remote_docker=$(command -v docker 2>/dev/null || true)
+if [ -n "$__tron_remote_docker" ] && [ -x "$__tron_remote_docker" ]; then
+  export __TRON_REAL_DOCKER="$__tron_remote_docker"
+else
+  unset __TRON_REAL_DOCKER
+fi
+unset __tron_remote_docker
+
+__tron_remote_podman=$(command -v podman 2>/dev/null || true)
+if [ -n "$__tron_remote_podman" ] && [ -x "$__tron_remote_podman" ]; then
+  export __TRON_REAL_PODMAN="$__tron_remote_podman"
+else
+  unset __TRON_REAL_PODMAN
+fi
+unset __tron_remote_podman
 
 case "${__tron_remote_shell##*/}" in
   bash)

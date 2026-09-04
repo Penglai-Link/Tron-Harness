@@ -171,11 +171,34 @@ if [ -n "${__TRON_SSH_HELPER-}" ] &&
   [ -n "${__TRON_SSH_INTEGRATION-}" ] &&
   [ -n "${__TRON_REAL_SSH-}" ] &&
   [ -n "${__TRON_SSH_BOOTSTRAP-}" ] &&
+  [ -n "${__TRON_CONTAINER_HELPER-}" ] &&
   [ -r "$__TRON_SSH_INTEGRATION" ] &&
   [ -r "$__TRON_SSH_HELPER" ] &&
-  [ -r "$__TRON_SSH_BOOTSTRAP" ]; then
+  [ -r "$__TRON_SSH_BOOTSTRAP" ] &&
+  [ -r "$__TRON_CONTAINER_HELPER" ]; then
   unalias ssh 2>/dev/null || true
   ssh() {
     command /bin/sh "$__TRON_SSH_HELPER" "$@"
   }
+fi
+
+# Container helpers execute the generated bootstrap before the interactive
+# shell starts, so only the command the user typed is eligible for history.
+if [ -n "${__TRON_CONTAINER_HELPER-}" ] &&
+  [ -n "${__TRON_CONTAINER_BASH-}" ] &&
+  [ -r "$__TRON_CONTAINER_HELPER" ] &&
+  [ -x "$__TRON_CONTAINER_BASH" ]; then
+  if [ -n "${__TRON_REAL_DOCKER-}" ] && [ -x "$__TRON_REAL_DOCKER" ]; then
+    unalias docker 2>/dev/null || true
+    docker() {
+      command "$__TRON_CONTAINER_BASH" "$__TRON_CONTAINER_HELPER" "$__TRON_REAL_DOCKER" "$@"
+    }
+  fi
+
+  if [ -n "${__TRON_REAL_PODMAN-}" ] && [ -x "$__TRON_REAL_PODMAN" ]; then
+    unalias podman 2>/dev/null || true
+    podman() {
+      command "$__TRON_CONTAINER_BASH" "$__TRON_CONTAINER_HELPER" "$__TRON_REAL_PODMAN" "$@"
+    }
+  fi
 fi

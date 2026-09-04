@@ -31,7 +31,7 @@
     "@preact/signals-core": "^1.14.4",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0",
-    "@xterm/xterm": "^5.5.0",
+    "@xterm/xterm": "5.5.0",
     "lit-html": "^3.3.3",
     "markdown-it": "^14.2.0",
     "socket.io-client": "^4.8.3"
@@ -45,7 +45,7 @@
   },
   "peerDependencies": {
     "markdown-it": "^14.2.0",
-    "@xterm/xterm": "^5.5.0",
+    "@xterm/xterm": "5.5.0",
     "@xterm/addon-fit": "^0.10.0",
     "@xterm/addon-web-links": "^0.11.0"
   },

@@ -1,8 +1,7 @@
-# Tron terminal shell integration (dev reference copy).
+# Tron terminal shell integration.
 #
-# Kept byte-for-byte equivalent to the production script at
-# tron-backend/src/adapters/inbound/socket/terminal/shell_integration.sh, so the
-# dev server exercises the same protocol the Rust backend speaks:
+# Reports semantic prompt boundaries so the client can split the raw PTY stream
+# into command blocks:
 #
 #   OSC 133 ; A ST          prompt start
 #   OSC 133 ; B ST          prompt end / command input starts
@@ -80,7 +79,13 @@ if [ -n "${ZSH_VERSION-}" ]; then
 
   if [ -z "${__TRON_PROMPT_WRAPPED-}" ]; then
     __TRON_PROMPT_WRAPPED=1
-    PS1="%{$(__tron_osc '133;A')%}${PS1}%{$(__tron_osc '133;B')%}"
+    __tron_prompt_sync_end=
+    if [ -n "${__TRON_SYNCED_BOOTSTRAP-}" ]; then
+      __tron_prompt_sync_end='%{\e[?2026l%}'
+      unset __TRON_SYNCED_BOOTSTRAP
+    fi
+    PS1="%{$(__tron_osc '133;A')%}${PS1}%{$(__tron_osc '133;B')%}${__tron_prompt_sync_end}"
+    unset __tron_prompt_sync_end
   fi
 
   __tron_report_cwd
@@ -148,7 +153,13 @@ elif [ -n "${BASH_VERSION-}" ]; then
     # Works for both the scalar and the bash 5.1 array form of PROMPT_COMMAND.
     __tron_original_prompt_command="$(IFS=';'; printf '%s' "${PROMPT_COMMAND[*]-}")"
     PROMPT_COMMAND=__tron_prompt_command
-    PS1="\[$(__tron_osc '133;A')\]${PS1}\[$(__tron_osc '133;B')\]"
+    __tron_prompt_sync_end=
+    if [ -n "${__TRON_SYNCED_BOOTSTRAP-}" ]; then
+      __tron_prompt_sync_end='\[\e[?2026l\]'
+      unset __TRON_SYNCED_BOOTSTRAP
+    fi
+    PS1="\[$(__tron_osc '133;A')\]${PS1}\[$(__tron_osc '133;B')\]${__tron_prompt_sync_end}"
+    unset __tron_prompt_sync_end
     trap '__tron_preexec' DEBUG
   fi
 
@@ -157,10 +168,37 @@ elif [ -n "${BASH_VERSION-}" ]; then
 fi
 
 if [ -n "${__TRON_SSH_HELPER-}" ] &&
+  [ -n "${__TRON_SSH_INTEGRATION-}" ] &&
   [ -n "${__TRON_REAL_SSH-}" ] &&
-  [ -n "${__TRON_SSH_BOOTSTRAP-}" ]; then
+  [ -n "${__TRON_SSH_BOOTSTRAP-}" ] &&
+  [ -n "${__TRON_CONTAINER_HELPER-}" ] &&
+  [ -r "$__TRON_SSH_INTEGRATION" ] &&
+  [ -r "$__TRON_SSH_HELPER" ] &&
+  [ -r "$__TRON_SSH_BOOTSTRAP" ] &&
+  [ -r "$__TRON_CONTAINER_HELPER" ]; then
   unalias ssh 2>/dev/null || true
   ssh() {
     command /bin/sh "$__TRON_SSH_HELPER" "$@"
   }
+fi
+
+# Container helpers execute the generated bootstrap before the interactive
+# shell starts, so only the command the user typed is eligible for history.
+if [ -n "${__TRON_CONTAINER_HELPER-}" ] &&
+  [ -n "${__TRON_CONTAINER_BASH-}" ] &&
+  [ -r "$__TRON_CONTAINER_HELPER" ] &&
+  [ -x "$__TRON_CONTAINER_BASH" ]; then
+  if [ -n "${__TRON_REAL_DOCKER-}" ] && [ -x "$__TRON_REAL_DOCKER" ]; then
+    unalias docker 2>/dev/null || true
+    docker() {
+      command "$__TRON_CONTAINER_BASH" "$__TRON_CONTAINER_HELPER" "$__TRON_REAL_DOCKER" "$@"
+    }
+  fi
+
+  if [ -n "${__TRON_REAL_PODMAN-}" ] && [ -x "$__TRON_REAL_PODMAN" ]; then
+    unalias podman 2>/dev/null || true
+    podman() {
+      command "$__TRON_CONTAINER_BASH" "$__TRON_CONTAINER_HELPER" "$__TRON_REAL_PODMAN" "$@"
+    }
+  fi
 fi

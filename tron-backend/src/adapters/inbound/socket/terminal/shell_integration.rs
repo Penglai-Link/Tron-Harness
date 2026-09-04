@@ -12,10 +12,12 @@ use tempfile::TempDir;
 const INTEGRATION_SCRIPT: &str = include_str!("shell_integration.sh");
 const SSH_HELPER_SCRIPT: &str = include_str!("ssh_helper.sh");
 const SSH_BOOTSTRAP_SCRIPT: &str = include_str!("ssh_bootstrap.sh");
+const CONTAINER_HELPER_SCRIPT: &str = include_str!("container_helper.sh");
 
 const ZSH_CANDIDATES: [&str; 2] = ["/bin/zsh", "/usr/bin/zsh"];
 const BASH_CANDIDATES: [&str; 3] = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"];
 const SSH_CANDIDATES: [&str; 3] = ["/usr/bin/ssh", "/bin/ssh", "/usr/local/bin/ssh"];
+const BASH_EXECUTABLE_CANDIDATES: [&str; 3] = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"];
 const POSIX_FALLBACK: &str = "/bin/sh";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -101,11 +103,26 @@ impl ShellIntegration {
         let mut command = CommandBuilder::new(&self.program);
         let directory = self.directory.as_ref().map(TempDir::path);
         command.env("__TRON_SUBSHELL_BOOTSTRAP", subshell_bootstrap());
-        if let (Some(directory), Some(real_ssh)) = (directory, resolve_ssh_program()) {
+        if let Some(directory) = directory {
             command.env("__TRON_SSH_INTEGRATION", directory.join("integration.sh"));
             command.env("__TRON_SSH_HELPER", directory.join("ssh-helper.sh"));
             command.env("__TRON_SSH_BOOTSTRAP", directory.join("ssh-bootstrap.sh"));
-            command.env("__TRON_REAL_SSH", real_ssh);
+            command.env(
+                "__TRON_CONTAINER_HELPER",
+                directory.join("container-helper.sh"),
+            );
+            if let Some(real_ssh) = resolve_ssh_program() {
+                command.env("__TRON_REAL_SSH", real_ssh);
+            }
+            if let Some(real_bash) = resolve_bash_program() {
+                command.env("__TRON_CONTAINER_BASH", real_bash);
+            }
+            if let Some(real_docker) = resolve_program_in_path("docker") {
+                command.env("__TRON_REAL_DOCKER", real_docker);
+            }
+            if let Some(real_podman) = resolve_program_in_path("podman") {
+                command.env("__TRON_REAL_PODMAN", real_podman);
+            }
         }
 
         match (self.kind, directory) {
@@ -174,19 +191,32 @@ fn resolve_shell_program() -> PathBuf {
 }
 
 fn resolve_ssh_program() -> Option<PathBuf> {
+    resolve_program_in_path("ssh").or_else(|| {
+        SSH_CANDIDATES
+            .iter()
+            .map(PathBuf::from)
+            .find(|candidate| candidate.is_file())
+    })
+}
+
+fn resolve_bash_program() -> Option<PathBuf> {
+    BASH_EXECUTABLE_CANDIDATES
+        .iter()
+        .map(PathBuf::from)
+        .find(|candidate| candidate.is_file())
+}
+
+fn resolve_program_in_path(program: &str) -> Option<PathBuf> {
     if let Some(path) = std::env::var_os("PATH") {
         for directory in std::env::split_paths(&path) {
-            let candidate = directory.join("ssh");
+            let candidate = directory.join(program);
             if candidate.is_file() {
                 return Some(candidate);
             }
         }
     }
 
-    SSH_CANDIDATES
-        .iter()
-        .map(PathBuf::from)
-        .find(|candidate| candidate.is_file())
+    None
 }
 
 fn write_shell_files(kind: ShellKind) -> std::io::Result<TempDir> {
@@ -199,6 +229,10 @@ fn write_shell_files(kind: ShellKind) -> std::io::Result<TempDir> {
     fs::write(
         directory.path().join("ssh-bootstrap.sh"),
         SSH_BOOTSTRAP_SCRIPT,
+    )?;
+    fs::write(
+        directory.path().join("container-helper.sh"),
+        CONTAINER_HELPER_SCRIPT,
     )?;
     let script = shell_single_quote(&script_path.to_string_lossy());
 
@@ -251,6 +285,10 @@ fn shell_single_quote(value: &str) -> String {
     format!("'{}'", value.replace('\'', "'\"'\"'"))
 }
 
+#[cfg(all(test, unix))]
+#[path = "shell_integration_history_tests.rs"]
+mod shell_integration_history_tests;
+
 #[cfg(test)]
 mod tests {
     use std::process::Command;
@@ -295,6 +333,15 @@ mod tests {
         assert!(INTEGRATION_SCRIPT.contains("unalias ssh"));
         assert!(INTEGRATION_SCRIPT.contains("ssh()"));
         assert!(INTEGRATION_SCRIPT.contains("$__TRON_SSH_HELPER"));
+    }
+
+    #[test]
+    fn integration_script_installs_container_helpers_without_prompt_injection() {
+        assert!(INTEGRATION_SCRIPT.contains("__TRON_CONTAINER_HELPER"));
+        assert!(INTEGRATION_SCRIPT.contains("docker()"));
+        assert!(INTEGRATION_SCRIPT.contains("podman()"));
+        assert!(CONTAINER_HELPER_SCRIPT.contains("__TRON_REMOTE_SHELL"));
+        assert!(CONTAINER_HELPER_SCRIPT.contains("/bin/sh"));
     }
 
     #[test]
@@ -350,6 +397,7 @@ mod tests {
         }
         assert!(SSH_BOOTSTRAP_SCRIPT.contains("ssh-helper.sh"));
         assert!(SSH_BOOTSTRAP_SCRIPT.contains("ssh-bootstrap.sh"));
+        assert!(SSH_BOOTSTRAP_SCRIPT.contains("container-helper.sh"));
         assert!(SSH_BOOTSTRAP_SCRIPT.contains("--init-file"));
         assert!(SSH_BOOTSTRAP_SCRIPT.contains("ZDOTDIR"));
     }
@@ -385,6 +433,7 @@ mod tests {
         assert!(user_rc < hooks, "user configuration must load first");
         assert!(directory.path().join("ssh-helper.sh").is_file());
         assert!(directory.path().join("ssh-bootstrap.sh").is_file());
+        assert!(directory.path().join("container-helper.sh").is_file());
     }
 
     #[test]
@@ -429,6 +478,11 @@ mod tests {
             SSH_BOOTSTRAP_SCRIPT,
         )
         .expect("bootstrap should be written");
+        fs::write(
+            directory.path().join("container-helper.sh"),
+            CONTAINER_HELPER_SCRIPT,
+        )
+        .expect("container helper should be written");
 
         let run = |arguments: &[&str]| {
             Command::new("/bin/sh")
@@ -444,6 +498,10 @@ mod tests {
                     "__TRON_SSH_BOOTSTRAP",
                     directory.path().join("ssh-bootstrap.sh"),
                 )
+                .env(
+                    "__TRON_CONTAINER_HELPER",
+                    directory.path().join("container-helper.sh"),
+                )
                 .env("LANG", "invalid.UTF-8")
                 .env("LC_ALL", "invalid.UTF-8")
                 .output()
@@ -457,6 +515,7 @@ mod tests {
         assert!(stdout.contains("ARG=__TRON_INTEGRATION_BASE64="));
         assert!(stdout.contains("__TRON_SSH_HELPER_BASE64="));
         assert!(stdout.contains("__TRON_SSH_BOOTSTRAP_BASE64="));
+        assert!(stdout.contains("__TRON_CONTAINER_HELPER_BASE64="));
         assert!(stdout.contains("LANG=unset\nLC_ALL=unset\n"));
 
         for arguments in [
@@ -514,6 +573,10 @@ mod tests {
             .env(
                 "__TRON_SSH_BOOTSTRAP_BASE64",
                 STANDARD.encode(SSH_BOOTSTRAP_SCRIPT),
+            )
+            .env(
+                "__TRON_CONTAINER_HELPER_BASE64",
+                STANDARD.encode(CONTAINER_HELPER_SCRIPT),
             )
             .output()
             .expect("remote bootstrap should run");

@@ -1,0 +1,81 @@
+diff --git a/node_modules/@xterm/xterm/src/browser/Terminal.ts b/node_modules/@xterm/xterm/src/browser/Terminal.ts
+index 0e945aa..c9535a5 100644
+--- a/node_modules/@xterm/xterm/src/browser/Terminal.ts
++++ b/node_modules/@xterm/xterm/src/browser/Terminal.ts
+@@ -1173,7 +1173,11 @@ export class Terminal extends CoreTerminal implements ITerminal {
+     // Only support emoji IMEs when screen reader mode is disabled as the event must bubble up to
+     // support reading out character input which can doubling up input characters
+     // Based on these event traces: https://github.com/xtermjs/xterm.js/issues/3679
+-    if (ev.data && ev.inputType === 'insertText' && (!ev.composed || !this._keyDownSeen) && !this.optionsService.rawOptions.screenReaderMode) {
++    if (ev.data && ev.inputType === 'insertText' && (
++      !ev.composed ||
++      !this._keyDownSeen ||
++      (!this._compositionHelper?.isComposing && !this._compositionHelper?.isSendingComposition)
++    ) && !this.optionsService.rawOptions.screenReaderMode) {
+       if (this._keyPressHandled) {
+         return false;
+       }
+@@ -1184,6 +1188,7 @@ export class Terminal extends CoreTerminal implements ITerminal {
+ 
+       const text = ev.data;
+       this.coreService.triggerDataEvent(text, true);
++      this._compositionHelper?.inputHandled(text);
+ 
+       this.cancel(ev);
+       return true;
+diff --git a/node_modules/@xterm/xterm/src/browser/Types.d.ts b/node_modules/@xterm/xterm/src/browser/Types.d.ts
+index 9ebc55d..c06c833 100644
+--- a/node_modules/@xterm/xterm/src/browser/Types.d.ts
++++ b/node_modules/@xterm/xterm/src/browser/Types.d.ts
+@@ -37,6 +37,8 @@ export type LineData = CharData[];
+ 
+ export interface ICompositionHelper {
+   readonly isComposing: boolean;
++  readonly isSendingComposition: boolean;
++  inputHandled(data: string): void;
+   compositionstart(): void;
+   compositionupdate(ev: CompositionEvent): void;
+   compositionend(): void;
+diff --git a/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts b/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
+index 7542969..028b698 100644
+--- a/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
++++ b/node_modules/@xterm/xterm/src/browser/input/CompositionHelper.ts
+@@ -25,6 +25,7 @@ export class CompositionHelper {
+   private _isComposing: boolean;
+   public get isComposing(): boolean { return this._isComposing; }
+ 
++  public get isSendingComposition(): boolean { return this._isSendingComposition; }
+   /**
+    * The position within the input textarea's value of the current composition.
+    */
+@@ -86,6 +87,16 @@ export class CompositionHelper {
+     this._finalizeComposition(true);
+   }
+ 
++  /**
++   * Records an insertText event already dispatched by Terminal before a
++   * keyCode=229 keydown arrives. Apple Pinyin uses this event ordering.
++   */
++  public inputHandled(data: string): void {
++    if (!this._isComposing && !this._isSendingComposition) {
++      this._dataAlreadySent = data;
++    }
++  }
++
+   /**
+    * Handles the keydown event, routing any necessary events to the CompositionHelper functions.
+    * @param ev The keydown event.
+@@ -108,6 +119,13 @@ export class CompositionHelper {
+ 
+     if (ev.keyCode === 229) {
+       // If the "composition character" is used but gets to this point it means a non-composition
++      // Apple Pinyin can emit insertText before this keydown. Its data was
++      // already sent by Terminal, so do not run a deferred textarea diff that
++      // would resend it or capture the next ASCII key.
++      if (this._dataAlreadySent) {
++        this._dataAlreadySent = '';
++        return false;
++      }
+       // character (eg. numbers and punctuation) was pressed when the IME was active.
+       this._handleAnyTextareaChanges();
+       return false;

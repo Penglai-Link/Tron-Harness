@@ -295,9 +295,9 @@ test(
         encoding: "utf8",
         env: {
           ...process.env,
+          ...shell.env,
           ...extraEnv,
           __TRON_REAL_SSH: fakeSsh,
-          __TRON_SSH_BOOTSTRAP: "remote bootstrap",
           LANG: "invalid.UTF-8",
           LC_ALL: "invalid.UTF-8",
         },
@@ -308,7 +308,11 @@ test(
       const interactive = run(["-p", "2222", "build@host"]);
       assert.equal(interactive.status, 0, interactive.stderr);
       assert.ok(interactive.stdout.includes("ARG=-p\nARG=2222\nARG=build@host\n"));
-      assert.ok(interactive.stdout.includes("ARG=-t\nARG=remote bootstrap\n"));
+      assert.ok(interactive.stdout.includes("ARG=-t\n"));
+      assert.ok(interactive.stdout.includes("ARG=__TRON_INTEGRATION_BASE64="));
+      assert.ok(interactive.stdout.includes("__TRON_SSH_HELPER_BASE64="));
+      assert.ok(interactive.stdout.includes("__TRON_SSH_BOOTSTRAP_BASE64="));
+      assert.ok(interactive.stdout.includes("__TRON_CONTAINER_HELPER_BASE64="));
       assert.ok(interactive.stdout.includes("LANG=unset\nLC_ALL=unset\n"));
 
       for (const args of [
@@ -317,13 +321,77 @@ test(
         ["-N", "host"],
         ["-W", "target:22", "host"],
       ]) {
-        assert.ok(!run(args).stdout.includes("ARG=remote bootstrap\n"));
+        assert.ok(!run(args).stdout.includes("ARG=__TRON_INTEGRATION_BASE64="));
       }
 
       assert.equal(run(["host"], { TRON_TEST_EXIT: "23" }).status, 23);
     } finally {
       shell.cleanup?.();
       await fs.rm(directory, { force: true, recursive: true });
+    }
+  },
+);
+
+test(
+  "the container helper starts integration before the interactive shell",
+  { skip: process.platform === "win32" },
+  async () => {
+    const shell = prepareShell({ env: {}, shell: "/bin/bash" });
+    const directory = await fs.mkdtemp(path.join(os.tmpdir(), "tron-container-helper-test-"));
+    const fakeRuntime = path.join(directory, "fake-runtime");
+    await fs.writeFile(
+      fakeRuntime,
+      '#!/bin/sh\nfor argument do printf "ARG=%s\\n" "$argument"; done\n',
+    );
+    await fs.chmod(fakeRuntime, 0o755);
+
+    try {
+      const result = spawnSync(
+        shell.env.__TRON_CONTAINER_BASH,
+        [shell.env.__TRON_CONTAINER_HELPER, fakeRuntime, "exec", "-it", "api", "bash"],
+        { encoding: "utf8", env: { ...process.env, ...shell.env } },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(result.stdout.includes("ARG=exec\nARG=-it\n"));
+      assert.ok(result.stdout.includes("ARG=__TRON_INTEGRATION_BASE64="));
+      assert.ok(result.stdout.includes("__TRON_CONTAINER_HELPER_BASE64="));
+      assert.ok(result.stdout.includes("ARG=api\nARG=/bin/sh\nARG=-c\n"));
+      assert.ok(!result.stdout.includes("ARG=bash\n"));
+    } finally {
+      shell.cleanup?.();
+      await fs.rm(directory, { force: true, recursive: true });
+    }
+  },
+);
+
+test(
+  "the generated Bash session reads native history without bootstrap entries",
+  { skip: process.platform === "win32" },
+  async () => {
+    const shell = prepareShell({ env: {}, shell: "/bin/bash" });
+    const home = await fs.mkdtemp(path.join(os.tmpdir(), "tron-native-history-test-"));
+    await fs.writeFile(path.join(home, ".bash_history"), "pre-existing-command\n");
+    await fs.writeFile(
+      path.join(home, ".bashrc"),
+      "HISTFILE=$HOME/.bash_history\nHISTSIZE=100\nHISTFILESIZE=100\nhistory -r\n",
+    );
+
+    try {
+      const result = spawnSync(
+        shell.command,
+        [...shell.args, "-c", "history -s user-command; history"],
+        { encoding: "utf8", env: { ...process.env, ...shell.env, HOME: home, TERM: "dumb" } },
+      );
+
+      assert.equal(result.status, 0, result.stderr);
+      assert.ok(result.stdout.includes("pre-existing-command"));
+      assert.ok(result.stdout.includes("user-command"));
+      assert.ok(!result.stdout.includes("__TRON_INTEGRATION_BASE64"));
+      assert.ok(!result.stdout.includes('eval "$(printf %s'));
+    } finally {
+      shell.cleanup?.();
+      await fs.rm(home, { force: true, recursive: true });
     }
   },
 );

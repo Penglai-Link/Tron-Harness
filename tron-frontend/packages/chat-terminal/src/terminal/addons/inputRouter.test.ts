@@ -23,6 +23,16 @@ describe("InputRouterAddon", () => {
     expect(harness.options.onAgentRequest).not.toHaveBeenCalled();
   });
 
+  it("forwards xterm's finalized IME data exactly once", async () => {
+    harness.atPrompt(true);
+
+    // xterm owns composition and emits one final onData payload. The router
+    // must not inspect composition events or synthesize a second PTY write.
+    await harness.type("中文");
+
+    expect(harness.options.write.mock.calls).toEqual([["中文"]]);
+  });
+
   it("lets a shell command run instead of routing it to the agent", async () => {
     harness.atPrompt(true, "ls -la");
 
