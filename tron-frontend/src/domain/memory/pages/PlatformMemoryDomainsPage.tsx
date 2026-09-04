@@ -34,7 +34,6 @@ import {
   Field,
   PageHeader,
   SearchField,
-  SurfaceCard,
   TablePagination,
   TextArea,
   TextInput,
@@ -502,21 +501,26 @@ export function PlatformMemoryDomainsPage() {
       />
 
       <div className="space-y-5">
-        <SurfaceCard className="space-y-4">
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            <Field label={t("pages:memoryDomains.fields.search", "Search")}>
+        <DataTable<MemoryWorkDomainRecord>
+          onRowClick={(row) => openPreviewDialog(row)}
+          rowKey={(row) => row.domainCode}
+          rows={pagination.visibleItems}
+          tableClassName="table-fixed min-w-[900px]"
+          pagination={<TablePagination itemLabel={t("pages:memoryDomains.pagination.itemLabel", "memory domains")} {...pagination.paginationProps} />}
+          title={t("pages:memoryDomains.table.title", "Domains")}
+          toolbar={(
+            <>
               <SearchField
                 ariaLabel={t("pages:memoryDomains.aria.search", "Search memory domains")}
-                className="w-full"
+                className="min-w-0 grow basis-full sm:basis-0 sm:max-w-[360px]"
                 disabled={loading}
                 placeholder={t("pages:memoryDomains.placeholders.search", "Search domains")}
                 value={query}
                 onChange={setQuery}
               />
-            </Field>
-            <Field label={t("pages:memoryDomains.fields.status", "Status")}>
               <SelectInput
                 aria-label={t("pages:memoryDomains.aria.status", "Filter memory domains by status")}
+                className="w-full sm:w-auto"
                 disabled={loading}
                 value={statusFilter}
                 onValueChange={(event) => setStatusFilter(event as DomainStatusFilter)}
@@ -525,10 +529,9 @@ export function PlatformMemoryDomainsPage() {
                   <SelectItem key={option.value} value={option.value}>{t(`pages:memoryDomains.status.${option.value}`, option.label)}</SelectItem>
                 ))}
               </SelectInput>
-            </Field>
-            <Field label={t("pages:memoryDomains.fields.sort", "Sort")}>
               <SelectInput
                 aria-label={t("pages:memoryDomains.aria.sort", "Sort memory domains")}
+                className="w-full sm:w-auto"
                 disabled={loading}
                 value={sortMode}
                 onValueChange={(event) => setSortMode(event as DomainSortMode)}
@@ -537,17 +540,8 @@ export function PlatformMemoryDomainsPage() {
                   <SelectItem key={option.value} value={option.value}>{t(`pages:memoryDomains.sort.${option.value}`, option.label)}</SelectItem>
                 ))}
               </SelectInput>
-            </Field>
-          </div>
-        </SurfaceCard>
-
-        <DataTable<MemoryWorkDomainRecord>
-          onRowClick={(row) => openPreviewDialog(row)}
-          rowKey={(row) => row.domainCode}
-          rows={pagination.visibleItems}
-          tableClassName="table-fixed min-w-[900px]"
-          pagination={<TablePagination itemLabel={t("pages:memoryDomains.pagination.itemLabel", "memory domains")} {...pagination.paginationProps} />}
-          title={t("pages:memoryDomains.table.title", "Domains")}
+            </>
+          )}
           emptyState={t("pages:memoryDomains.table.empty", "No domains match the current filters.")}
           columns={[
             {
