@@ -33,14 +33,13 @@ function ResizableHandle({
     <ResizablePrimitive.Separator
       data-slot="resizable-handle"
       className={cn(
-        "group relative flex w-px shrink-0 items-center justify-center bg-transparent",
+        "relative flex w-px items-center justify-center bg-border ring-offset-background after:absolute after:inset-y-0 after:left-1/2 after:w-1 after:-translate-x-1/2 focus-visible:ring-1 focus-visible:ring-ring focus-visible:outline-hidden aria-[orientation=horizontal]:h-px aria-[orientation=horizontal]:w-full aria-[orientation=horizontal]:after:left-0 aria-[orientation=horizontal]:after:h-1 aria-[orientation=horizontal]:after:w-full aria-[orientation=horizontal]:after:translate-x-0 aria-[orientation=horizontal]:after:-translate-y-1/2 [&[aria-orientation=horizontal]>div]:rotate-90",
         className
       )}
       {...props}
     >
-      <div className="pointer-events-none absolute inset-y-0 left-1/2 w-px -translate-x-1/2 bg-[var(--color-card-border)] hover:w-1 hover:bg-[var(--color-outline-variant)] transition-colors group-hover:bg-[var(--color-outline)] group-aria-[orientation=horizontal]:inset-x-0 group-aria-[orientation=horizontal]:inset-y-auto group-aria-[orientation=horizontal]:top-1/2 group-aria-[orientation=horizontal]:h-px group-aria-[orientation=horizontal]:w-full group-aria-[orientation=horizontal]:-translate-y-1/2 group-aria-[orientation=horizontal]:translate-x-0" />
       {withHandle && (
-        <div className="z-20 flex h-12 w-2 shrink-0 rounded-lg bg-[var(--color-card-border)] transition-colors group-hover:bg-[var(--color-outline)] group-aria-[orientation=horizontal]:h-1 group-aria-[orientation=horizontal]:w-6" />
+        <div className="z-10 w-full h-full !rotate-0" />
       )}
     </ResizablePrimitive.Separator>
   )

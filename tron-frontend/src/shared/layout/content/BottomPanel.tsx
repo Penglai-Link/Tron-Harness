@@ -26,11 +26,15 @@ interface IPanelProps {
   visible: boolean;
 }
 
-export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelProps) {
+export default memo(function BottomPanel({
+  changeBottomPanel,
+  visible,
+}: IPanelProps) {
   const nextTabIdRef = useRef(1);
   const nextCloseRequestIdRef = useRef(1);
   const [hasTerminal, setHasTerminal] = useState(visible);
-  const [closeTabRequest, setCloseTabRequest] = useState<EditableTabCloseRequest | null>(null);
+  const [closeTabRequest, setCloseTabRequest] =
+    useState<EditableTabCloseRequest | null>(null);
   const requestTabClose = useCallback((key: string) => {
     setCloseTabRequest({ id: nextCloseRequestIdRef.current++, key });
   }, []);
@@ -45,7 +49,10 @@ export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelP
       closable: true,
     };
   }, [requestTabClose]);
-  const items = useMemo(() => (hasTerminal ? [createTab()] : []), [createTab, hasTerminal]);
+  const items = useMemo(
+    () => (hasTerminal ? [createTab()] : []),
+    [createTab, hasTerminal],
+  );
   const {
     handlePanelPointerDown,
     handlePanelPointerEnd,
@@ -76,7 +83,7 @@ export default memo(function BottomPanel({ changeBottomPanel, visible }: IPanelP
   return (
     <>
       <ResizableHandle
-        className={panelOpen ? "w-full" : "hidden"}
+        withHandle
         onPointerDown={handlePanelPointerDown}
         onPointerMove={handlePanelPointerMove}
         onPointerUp={handlePanelPointerEnd}
