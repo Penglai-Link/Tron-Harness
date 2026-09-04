@@ -58,7 +58,7 @@ export function TargetPageChrome({
           <RefreshCw className="size-[18px]" />
         </button>
       </div>
-      <form autoComplete="off" ref={addressFormRef} className={`${addressEditing ? "border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface-strong)]" : "justify-center"} flex h-9 min-w-[220px] mx-2 w-1/2 flex-1 items-center gap-[12px] rounded-full px-4 text-sm text-[var(--color-on-surface)] md:flex-none absolute -translate-1/2 left-1/2 top-1/2`} onSubmit={onAddressSubmit} onBlur={onAddressBlur}>
+      <form autoComplete="off" ref={addressFormRef} className={`${addressEditing ? "border border-[var(--color-outline-variant)] bg-none" : "justify-center"} flex h-9 min-w-[220px] mx-2 w-1/2 flex-1 items-center gap-[12px] rounded-full px-4 text-sm text-[var(--color-on-surface)] md:flex-none absolute -translate-1/2 left-1/2 top-1/2`} onSubmit={onAddressSubmit} onBlur={onAddressBlur}>
         <input autoComplete="off" autoCapitalize="none" autoCorrect="off" placeholder={t('common:content.inputUrlTips')} aria-label="Target address" ref={addressInputRef} name="targetAddress" className={`${addressEditing ? "text-left" : ""} min-w-0 h-full flex-1 bg-transparent text-center text-sm text-[var(--color-on-surface)] outline-none`} spellCheck={false} value={addressValue} onChange={(event) => onAddressChange(event.target.value)} onFocus={onAddressFocus} onKeyDown={onAddressKeyDown} />
         {addressEditing ? (
           <button aria-label="Load target address" className="inline-flex shrink-0 items-center justify-center text-[var(--color-on-surface-variant)] transition-colors hover:text-[var(--color-on-surface)]" type="submit" onPointerDown={onSubmitPointerDown}>

@@ -1,67 +1,141 @@
-import { memo, useCallback, useMemo, useRef } from "react";
+import {
+  Activity,
+  memo,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { useTranslation } from "react-i18next";
 
-import { EditableTabs, type EditableTab } from "@/components/editable-tabs";
-import { useTabStore } from "@/store/tabStore";
-import { TabPanelHost, useTabPanelRegistry } from "./TabPanelRegistry";
+import {
+  EditableTabs,
+  type EditableTab,
+  type EditableTabEditInfo,
+} from "@/components/editable-tabs";
+import { OperateType } from "@/components/editable-tabs/types";
 import { PageView } from "@/shared/ui/page-view/Index";
+import { useTabStore, type CachedTabInfo } from "@/store/tabStore";
+import { useTabPanelRegistry } from "./TabPanelRegistry";
 
-const RightPanelContainer = memo(function RightPanelContainer() {
+interface RightPanelTabsProps {
+  tab: CachedTabInfo;
+}
+
+function EmptyPanelContent() {
   const { t } = useTranslation("common");
-  const nextTabId = useRef(1);
-  const activeTabId = useTabStore((state) => state.activeTabId);
-  const { get } = useTabPanelRegistry();
-  const hasPageAttributes = Boolean(
-    activeTabId && get(activeTabId)?.rightPanel,
-  );
 
+  return (
+    <div
+      className="flex h-full min-h-32 items-center justify-center px-6 text-sm text-[var(--color-on-surface-variant)]"
+      data-testid="tron-right-sidebar-empty"
+    >
+      {t("content.noData", "暂无属性")}
+    </div>
+  );
+}
+
+const RightPanelTabs = memo(function RightPanelTabs({
+  tab,
+}: RightPanelTabsProps) {
+  const { t } = useTranslation("common");
+  const { get, registerRightPanelTabHandler } = useTabPanelRegistry();
+  const nextTabId = useRef(1);
+  const panelConfig = get(tab.tabId);
+  const [dynamicTabs, setDynamicTabs] = useState<EditableTab[]>([]);
   const pageAttributesTab = useMemo<EditableTab>(
     () => ({
-      key: "page-attributes",
+      key: `page-attributes:${tab.tabId}`,
       label: "页面属性",
       closable: false,
-      children: hasPageAttributes ? (
-        <TabPanelHost />
-      ) : (
-        <div
-          className="flex h-full min-h-32 items-center justify-center px-6 text-sm text-[var(--color-on-surface-variant)]"
-          data-testid="tron-right-sidebar-empty"
-        >
-          {t("content.noData", "暂无属性")}
-        </div>
-      ),
+      children: panelConfig?.rightPanel ?? <EmptyPanelContent />,
     }),
-    [hasPageAttributes, t],
+    [panelConfig?.rightPanel, tab.tabId],
   );
 
+  const addRightPanelTab = useCallback(
+    (newTab: EditableTab) => {
+      if (newTab.key === `page-attributes:${tab.tabId}`) {
+        return;
+      }
 
+      setDynamicTabs((currentTabs) => {
+        const existingIndex = currentTabs.findIndex(
+          (item) => item.key === newTab.key,
+        );
+        if (existingIndex < 0) return [...currentTabs, newTab];
+        const nextTabs = [...currentTabs];
+        nextTabs[existingIndex] = newTab;
+        return nextTabs;
+      });
+    },
+    [tab.tabId],
+  );
 
+  useEffect(
+    () => registerRightPanelTabHandler(tab.tabId, addRightPanelTab),
+    [addRightPanelTab, registerRightPanelTabHandler, tab.tabId],
+  );
 
-  const createTab = useCallback((url:string): EditableTab => {
-    const tabId = nextTabId.current++;
-    return {
-      key: `right-panel-${tabId}`,
-      label: url || '新标签页',
+  const createTab = useCallback((): EditableTab => {
+    const id = nextTabId.current++;
+    const key = `right-panel-page-${tab.tabId}-${id}`;
+    const newTab: EditableTab = {
+      key,
+      label: t("content.newTab", "新标签页"),
       closable: true,
-      children: (
-        <PageView
-          url={url}
-          onInspectionConfirm={(result) => {
-            console.log('result',result)
-          }}
-        />
-      ),
+      children: <PageView url="" />,
     };
-  }, [t]);
-  const items = useMemo(() => [pageAttributesTab], [pageAttributesTab]);
+    addRightPanelTab(newTab);
+    return newTab;
+  }, [addRightPanelTab, t, tab.tabId]);
+
+  const handleEdit = useCallback(
+    (action: OperateType, info: EditableTabEditInfo) => {
+      if (action !== OperateType.Remove || !info.key) return;
+      setDynamicTabs((currentTabs) =>
+        currentTabs.filter((item) => item.key !== info.key),
+      );
+    },
+    [],
+  );
+
+  const items = useMemo(
+    () => [pageAttributesTab, ...dynamicTabs],
+    [dynamicTabs, pageAttributesTab],
+  );
 
   return (
     <EditableTabs
       className="h-full min-h-0"
-      createTab={() => createTab('')}
+      createTab={createTab}
       items={items}
       keepMounted
+      onEdit={handleEdit}
     />
+  );
+});
+
+const RightPanelContainer = memo(function RightPanelContainer() {
+  const activeTabId = useTabStore((state) => state.activeTabId);
+  const cachedTabs = useTabStore((state) => state.cachedTabsList);
+
+  if (!cachedTabs.length) {
+    return <EmptyPanelContent />;
+  }
+
+  return (
+    <>
+      {cachedTabs.map((tab) => (
+        <Activity
+          key={tab.tabId}
+          mode={tab.tabId === activeTabId ? "visible" : "hidden"}
+        >
+          <RightPanelTabs tab={tab} />
+        </Activity>
+      ))}
+    </>
   );
 });
 

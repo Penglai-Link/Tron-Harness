@@ -58,6 +58,7 @@ import {
   PageView,
   MarkdownLink,
   type TargetPageFrameInspectionResult,
+  useRightPanelTabs,
 } from "@/shared";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
@@ -4021,14 +4022,23 @@ export function ChatManagementPage() {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
-  const [pageViewUrl, setPageViewUrl] = useState("https://www.baidu.com");
   const [rightPanelActiveTab, setRightPanelActiveTab] = useState("workspace");
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
+
+  const { openTab } = useRightPanelTabs()
+
   const openMarkdownInternalLink = useCallback((url: string) => {
-    // 在右侧边栏"页面"标签的内置浏览器中打开链接
-    setPageViewUrl(url);
-    setRightPanelActiveTab("page");
-    openRightSidebar();
+    openTab({
+      key:"2222",
+      label:url,
+      children:
+        <div className="min-h-0 h-full">
+          <PageView
+            url={url}
+            onInspectionConfirm={(result) => { void handleInspectionConfirmForRightPanel(result); }}
+          />
+        </div>
+    })
   }, [openRightSidebar]);
   const openMarkdownExternalLink = useCallback((url: string) => {
     if (!desktopBridge.isDesktop()) {
@@ -4818,7 +4828,6 @@ export function ChatManagementPage() {
   const effectiveActiveRunCode = runUiState.runCode;
   const canSteerCurrentRun = runUiState.canSteer;
   const canStopCurrentRun = runUiState.canStop;
-  const runningSubmitModes = runUiState.runningSubmitModes;
   const visibleQueuedSubmissions = useMemo(
     () => queuedSubmissions.filter((submission) => (
       submission.sessionCode === activeSession?.sessionCode
@@ -4925,20 +4934,7 @@ export function ChatManagementPage() {
             </div>
           </div>
         ),
-      },
-      {
-        key: "page",
-        label: t("chat.shortTermMemory.page"),
-        closable: false,
-        children: (
-          <div className="min-h-0 h-full">
-            <PageView
-              url={pageViewUrl}
-              onInspectionConfirm={(result) => { void handleInspectionConfirmForRightPanel(result); }}
-            />
-          </div>
-        ),
-      },
+      }
     ];
 
     return (
@@ -4972,7 +4968,6 @@ export function ChatManagementPage() {
     latestCompactionStatus,
     latestRequestEstimatesBySessionCode,
     latestUsageAuditsBySessionCode,
-    pageViewUrl,
     rightPanelActiveTab,
     selectedMainAgentModel,
     selectedModel,

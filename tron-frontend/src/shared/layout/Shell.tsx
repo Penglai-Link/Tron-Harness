@@ -596,7 +596,6 @@ export function TronShell({
       window.dispatchEvent(new Event("tron:toggle-sidebar"));
     },
     toggleRightSidebar: () => {
-      if (!hasRightPanel) return false;
       toggleRightSidebarPanel();
     },
   });

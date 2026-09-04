@@ -5,11 +5,13 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
 
 import { useTabStore } from "@/store/tabStore";
+import type { EditableTab } from "@/components/editable-tabs";
 
 export interface TabPanelConfig {
   contentClassName?: string;
@@ -23,6 +25,11 @@ interface TabPanelRegistryValue {
   clear: (tabId: string) => void;
   get: (tabId: string) => TabPanelConfig | undefined;
   register: (tabId: string, config: TabPanelConfig) => void;
+  registerRightPanelTabHandler: (
+    tabId: string,
+    handler: (tab: EditableTab) => void,
+  ) => () => void;
+  openRightPanelTab: (tabId: string, tab: EditableTab) => void;
 }
 
 const emptyRegistry: TabPanelRegistryValue = {
@@ -30,9 +37,12 @@ const emptyRegistry: TabPanelRegistryValue = {
   clear: () => undefined,
   get: () => undefined,
   register: () => undefined,
+  registerRightPanelTabHandler: () => () => undefined,
+  openRightPanelTab: () => undefined,
 };
 
-const TabPanelRegistryContext = createContext<TabPanelRegistryValue>(emptyRegistry);
+const TabPanelRegistryContext =
+  createContext<TabPanelRegistryValue>(emptyRegistry);
 const TabPanelScopeContext = createContext<string | null>(null);
 
 interface TabPanelRegistryProviderProps {
@@ -48,10 +58,7 @@ export function TabPanelRegistryProvider({
 
   if (tabId !== undefined) {
     return (
-      <TabPanelRegistryScope
-        parentRegistry={parentRegistry}
-        tabId={tabId}
-      >
+      <TabPanelRegistryScope parentRegistry={parentRegistry} tabId={tabId}>
         {children}
       </TabPanelRegistryScope>
     );
@@ -62,11 +69,33 @@ export function TabPanelRegistryProvider({
 
 function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
-  const [cacheConfigs, setCacheConfigs] = useState<Record<string, TabPanelConfig>>({});
+  const [cacheConfigs, setCacheConfigs] = useState<
+    Record<string, TabPanelConfig>
+  >({});
+  const rightPanelTabHandlersRef = useRef(
+    new Map<string, (tab: EditableTab) => void>(),
+  );
+
+  const registerRightPanelTabHandler = useCallback(
+    (tabId: string, handler: (tab: EditableTab) => void) => {
+      rightPanelTabHandlersRef.current.set(tabId, handler);
+      return () => {
+        if (rightPanelTabHandlersRef.current.get(tabId) === handler) {
+          rightPanelTabHandlersRef.current.delete(tabId);
+        }
+      };
+    },
+    [],
+  );
+
+  const openRightPanelTab = useCallback((tabId: string, tab: EditableTab) => {
+    rightPanelTabHandlersRef.current.get(tabId)?.(tab);
+  }, []);
 
   const register = useCallback((tabId: string, config: TabPanelConfig) => {
-    const definedConfigEntries = Object.entries(config)
-      .filter(([, value]) => value !== undefined);
+    const definedConfigEntries = Object.entries(config).filter(
+      ([, value]) => value !== undefined,
+    );
     if (!definedConfigEntries.length) return;
 
     setCacheConfigs((current) => {
@@ -76,11 +105,11 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
         ...Object.fromEntries(definedConfigEntries),
       };
       if (
-        previous
-        && previous.contentClassName === nextConfig.contentClassName
-        && previous.rightPanel === nextConfig.rightPanel
-        && previous.searchPlaceholder === nextConfig.searchPlaceholder
-        && previous.topbarActions === nextConfig.topbarActions
+        previous &&
+        previous.contentClassName === nextConfig.contentClassName &&
+        previous.rightPanel === nextConfig.rightPanel &&
+        previous.searchPlaceholder === nextConfig.searchPlaceholder &&
+        previous.topbarActions === nextConfig.topbarActions
       ) {
         return current;
       }
@@ -101,7 +130,9 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
   useEffect(() => {
     const cachedTabIds = new Set(cachedTabsList.map((tab) => tab.tabId));
     setCacheConfigs((current) => {
-      const staleTabIds = Object.keys(current).filter((tabId) => !cachedTabIds.has(tabId));
+      const staleTabIds = Object.keys(current).filter(
+        (tabId) => !cachedTabIds.has(tabId),
+      );
       if (!staleTabIds.length) return current;
 
       const next = { ...current };
@@ -110,14 +141,29 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     });
   }, [cachedTabsList]);
 
-  const get = useCallback((tabId: string) => cacheConfigs[tabId], [cacheConfigs]);
+  const get = useCallback(
+    (tabId: string) => cacheConfigs[tabId],
+    [cacheConfigs],
+  );
 
-  const value = useMemo<TabPanelRegistryValue>(() => ({
-    cacheConfigs,
-    clear,
-    get,
-    register,
-  }), [cacheConfigs, clear, get, register]);
+  const value = useMemo<TabPanelRegistryValue>(
+    () => ({
+      cacheConfigs,
+      clear,
+      get,
+      openRightPanelTab,
+      register,
+      registerRightPanelTabHandler,
+    }),
+    [
+      cacheConfigs,
+      clear,
+      get,
+      openRightPanelTab,
+      register,
+      registerRightPanelTabHandler,
+    ],
+  );
 
   return (
     <TabPanelRegistryContext.Provider value={value}>
@@ -157,7 +203,34 @@ export function useTabPanelConfig(config: TabPanelConfig) {
     if (scopeTabId) {
       register(scopeTabId, config);
     }
-  }, [config.contentClassName, config.rightPanel, config.searchPlaceholder, config.topbarActions, register, scopeTabId]);
+  }, [
+    config.contentClassName,
+    config.rightPanel,
+    config.searchPlaceholder,
+    config.topbarActions,
+    register,
+    scopeTabId,
+  ]);
+}
+
+export function useRightPanelTabs() {
+  const registry = useTabPanelRegistry();
+  const scopeTabId = useContext(TabPanelScopeContext);
+  const updateRightPanelState = useTabStore(
+    (state) => state.updateRightPanelState,
+  );
+
+  const openTab = useCallback(
+    (tab: EditableTab) => {
+      if (scopeTabId) {
+        registry.openRightPanelTab(scopeTabId, tab);
+        updateRightPanelState(scopeTabId, { open: true });
+      }
+    },
+    [registry, scopeTabId, updateRightPanelState],
+  );
+
+  return useMemo(() => ({ openTab }), [openTab]);
 }
 
 export function TabPanelHost() {

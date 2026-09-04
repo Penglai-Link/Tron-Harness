@@ -28,7 +28,7 @@ export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
     >
       <TabsTrigger
         value={tab.key}
-        className="bg-transparent! shadow-none! data-active:bg-transparent! data-active:text-inherit! dark:data-active:border-transparent! dark:data-active:bg-transparent! dark:data-active:text-inherit!"
+        className="flex-auto w-1/2 bg-transparent! shadow-none! data-active:bg-transparent! data-active:text-inherit! dark:data-active:border-transparent! dark:data-active:bg-transparent! dark:data-active:text-inherit!"
       >
         <span className="max-w-40 truncate">{tab.label}</span>
       </TabsTrigger>
@@ -37,7 +37,7 @@ export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
           aria-label="Close tab"
           size="icon-sm"
           variant="ghost"
-          className=""
+          className="flex-shrink-0"
           onClick={handleClose}
         >
           <X size={12} aria-hidden="true" />
