@@ -18,27 +18,29 @@ import { cn } from "@/shared/lib/utils";
 import { TabBar } from "@/shared/ui/TabBar";
 import { useAppShellStore } from "@/store/appShellStore";
 import { useTabStore } from "@/store/tabStore";
-import { TabPanelHost, useTabPanelRegistry } from "./TabPanelRegistry";
+import RightPanelContainer from "./RightPanelContainer";
 
 interface IPanelProps {
   children: ReactNode;
   contentClassName?: string;
-  rightPanel?: ReactNode;
 }
 
 function EmptyTabWorkspace() {
   const { t: pageT } = useTranslation("pages");
   const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
-  const useMacSymbols = typeof navigator !== "undefined"
-    && /Mac|iPhone|iPad/i.test(navigator.userAgent);
+  const useMacSymbols =
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad/i.test(navigator.userAgent);
   const shortcuts = shellShortcutActions.flatMap((action) => {
     const binding = shortcutBindings[action];
     if (!binding) return [];
 
-    return [{
-      action,
-      keys: formatShortcutKeys(binding, useMacSymbols),
-    }];
+    return [
+      {
+        action,
+        keys: formatShortcutKeys(binding, useMacSymbols),
+      },
+    ];
   });
 
   return (
@@ -53,13 +55,22 @@ function EmptyTabWorkspace() {
           className="mb-10 size-40 text-[var(--color-surface-container)] sm:size-52"
           strokeWidth={1}
         />
-        <div className="w-full space-y-2.5" data-testid="tron-empty-tab-shortcuts">
+        <div
+          className="w-full space-y-2.5"
+          data-testid="tron-empty-tab-shortcuts"
+        >
           {shortcuts.map(({ action, keys }) => (
-            <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-5" key={action}>
+            <div
+              className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-5"
+              key={action}
+            >
               <span className="text-sm text-[var(--color-on-surface-variant)]">
                 {pageT(`settingsShortcuts.shortcuts.${action}.label`)}
               </span>
-              <span className="flex items-center gap-1" aria-label={keys.join(" ")}>
+              <span
+                className="flex items-center gap-1"
+                aria-label={keys.join(" ")}
+              >
                 {keys.map((key, index) => (
                   <kbd
                     className="min-w-6 rounded border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-1.5 py-0.5 text-center text-xs font-medium text-[var(--color-on-surface-variant)] shadow-[0_1px_0_rgba(15,23,42,0.05)]"
@@ -77,38 +88,33 @@ function EmptyTabWorkspace() {
   );
 }
 
-export function Panel({
-  children,
-  contentClassName,
-  rightPanel,
-}: IPanelProps) {
+export function Panel({ children, contentClassName }: IPanelProps) {
   const { pathname, search } = useLocation();
   const hasOpenTabs = useTabStore((state) => state.tabs.length > 0);
   const activeTabId = useTabStore((state) => state.activeTabId);
-  const activeTab = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId));
-  const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
-  const tabPanelRegistry = useTabPanelRegistry();
-  const hasActiveRegisteredRightPanel = activeTabId
-    ? Boolean(tabPanelRegistry.get(activeTabId)?.rightPanel)
-    : false;
-  const hasRegisteredRightPanel = Object.values(tabPanelRegistry.cacheConfigs)
-    .some((config) => Boolean(config.rightPanel));
-  // Keep cached Activity panel trees mounted while the active tab has no panel.
-  const hasCachedRightPanel = hasRegisteredRightPanel || Boolean(rightPanel);
-  const storedPanelOpen = Boolean(
-    activeTab?.rightPanelOpen
-    && (hasActiveRegisteredRightPanel || (!hasRegisteredRightPanel && rightPanel)),
+  const activeTab = useTabStore((state) =>
+    state.tabs.find((tab) => tab.id === state.activeTabId),
   );
-  const handleRightPanelOpenChange = useCallback((open: boolean) => {
-    if (activeTabId) {
-      updateRightPanelState(activeTabId, { open });
-    }
-  }, [activeTabId, updateRightPanelState]);
-  const handleRightPanelSizeChange = useCallback((size: number) => {
-    if (activeTabId && Number.isFinite(size) && size > 0) {
-      updateRightPanelState(activeTabId, { size: Math.round(size) });
-    }
-  }, [activeTabId, updateRightPanelState]);
+  const updateRightPanelState = useTabStore(
+    (state) => state.updateRightPanelState,
+  );
+  const storedPanelOpen = Boolean(activeTab?.rightPanelOpen);
+  const handleRightPanelOpenChange = useCallback(
+    (open: boolean) => {
+      if (activeTabId) {
+        updateRightPanelState(activeTabId, { open });
+      }
+    },
+    [activeTabId, updateRightPanelState],
+  );
+  const handleRightPanelSizeChange = useCallback(
+    (size: number) => {
+      if (activeTabId && Number.isFinite(size) && size > 0) {
+        updateRightPanelState(activeTabId, { size: Math.round(size) });
+      }
+    },
+    [activeTabId, updateRightPanelState],
+  );
   const {
     handlePanelPointerDown,
     handlePanelPointerEnd,
@@ -121,9 +127,7 @@ export function Panel({
     initialSize: activeTab?.rightPanelSize,
     onOpenChange: handleRightPanelOpenChange,
     onSizeChange: handleRightPanelSizeChange,
-    resetKey: activeTabId
-      ? `${activeTabId}:${hasActiveRegisteredRightPanel ? "with-right-panel" : "without-right-panel"}`
-      : `${pathname}${search}:${hasCachedRightPanel ? "with-right-panel" : "without-right-panel"}`,
+    resetKey: activeTabId ?? `${pathname}${search}`,
   });
   return (
     <section className="flex h-full flex-col">
@@ -151,41 +155,34 @@ export function Panel({
               {hasOpenTabs ? children : <EmptyTabWorkspace />}
             </main>
           </ResizablePanel>
-          {hasCachedRightPanel ? (
-            <>
-              <ResizableHandle
-                withHandle
-                disabled={!panelOpen}
-                className={cn(
-                  "hidden lg:flex",
-                  !panelOpen && "pointer-events-none opacity-0",
-                )}
-                onPointerDown={handlePanelPointerDown}
-                onPointerMove={handlePanelPointerMove}
-                onPointerUp={handlePanelPointerEnd}
-                onPointerCancel={handlePanelPointerEnd}
-              />
-              <ResizablePanel
-                panelRef={panelRef}
-                id="resize-panel"
-                collapsible
-                collapsedSize={0}
-                defaultSize="0%"
-                minSize={400}
-                maxSize="80%"
-                onResize={panelResize}
+          <>
+            <ResizableHandle
+              withHandle
+              className={!panelOpen ? 'opacity-0' : ''}
+              disabled={!panelOpen}
+              onPointerDown={handlePanelPointerDown}
+              onPointerMove={handlePanelPointerMove}
+              onPointerUp={handlePanelPointerEnd}
+              onPointerCancel={handlePanelPointerEnd}
+            />
+            <ResizablePanel
+              panelRef={panelRef}
+              id="resize-panel"
+              collapsible
+              collapsedSize={0}
+              defaultSize="0%"
+              minSize={400}
+              maxSize="80%"
+              onResize={panelResize}
+            >
+              <aside
+                className="relative z-10 hidden h-full overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
+                data-testid="tron-right-sidebar"
               >
-                <aside
-                  className="relative z-10 hidden h-full overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
-                  data-testid="tron-right-sidebar"
-                >
-                  {hasRegisteredRightPanel
-                    ? <TabPanelHost />
-                    : rightPanel}
-                </aside>
-              </ResizablePanel>
-            </>
-          ) : null}
+                <RightPanelContainer />
+              </aside>
+            </ResizablePanel>
+          </>
         </ResizablePanelGroup>
       </div>
     </section>

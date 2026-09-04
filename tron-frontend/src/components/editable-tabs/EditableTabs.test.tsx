@@ -118,4 +118,40 @@ describe("EditableTabs", () => {
 
     expect((input as HTMLInputElement).value).toBe("draft command");
   });
+
+  it("preserves added tabs and their state when base tabs update", async () => {
+    const { rerender } = render(
+      <EditableTabs
+        createTab={() => ({
+          key: "added",
+          label: "Added",
+          children: <input aria-label="Added input" defaultValue="" />,
+        })}
+        items={initialTabs}
+        keepMounted
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("button", { name: "Add tab" }));
+    const input = await screen.findByRole("textbox", { name: "Added input" });
+    fireEvent.change(input, { target: { value: "preserved state" } });
+
+    rerender(
+      <EditableTabs
+        createTab={() => ({
+          key: "added",
+          label: "Added",
+          children: <input aria-label="Added input" defaultValue="" />,
+        })}
+        items={[{ ...initialTabs[0], children: <p>Updated content</p> }, initialTabs[1]]}
+        keepMounted
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "One" }));
+    expect(screen.getByText("Updated content")).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: "Added" }));
+    expect((screen.getByRole("textbox", { name: "Added input" }) as HTMLInputElement).value)
+      .toBe("preserved state");
+  });
 });

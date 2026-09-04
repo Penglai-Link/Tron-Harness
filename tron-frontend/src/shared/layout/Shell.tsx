@@ -77,6 +77,7 @@ import {
   SidebarTrigger,
 } from "@/components/ui/sidebar";
 import { Content } from "./content";
+import RightPanelContainer from "./content/RightPanelContainer";
 import { TronSidebar } from "./TronSidebar";
 import { useTabPanelRegistry } from "./content/TabPanelRegistry";
 
@@ -85,8 +86,6 @@ interface TronShellProps {
   activeItem?: string;
   children: ReactNode;
   contentClassName?: string;
-  rightPanel?: ReactNode;
-  rightPanelVisible?: boolean;
   roleCodes?: string[];
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
@@ -153,8 +152,6 @@ export function TronShell({
   activeItem = "Apps",
   children,
   contentClassName,
-  rightPanel,
-  rightPanelVisible,
   roleCodes,
   searchPlaceholder,
   topbarActions,
@@ -302,12 +299,6 @@ export function TronShell({
     [effectivePrimarySpaceId, effectiveSecondarySpaceId, primarySpaces, secondarySpaces, selectedPrimarySpace, selectedSecondarySpace],
   );
 
-  const hasRightPanel = hasRegistryConfig
-    ? Boolean(activeShellConfig?.rightPanel)
-    : rightPanelVisible ?? Boolean(rightPanel);
-  const renderedRightPanel = hasRegistryConfig
-    ? activeShellConfig?.rightPanel
-    : rightPanel;
   const renderedContentClassName = activeShellConfig?.contentClassName ?? contentClassName;
   const renderedTopbarActions = activeShellConfig?.topbarActions ?? topbarActions;
 
@@ -500,14 +491,8 @@ export function TronShell({
   }, [pathname]);
 
   useEffect(() => {
-    if (!hasRightPanel) {
-      setRightDrawerOpen(false);
-    }
-  }, [hasRightPanel]);
-
-  useEffect(() => {
-    setRightDrawerOpen(Boolean(hasRightPanel && activeTab?.rightPanelOpen));
-  }, [activeTab?.id, activeTab?.rightPanelOpen, hasRightPanel]);
+    setRightDrawerOpen(Boolean(activeTab?.rightPanelOpen));
+  }, [activeTab?.id, activeTab?.rightPanelOpen]);
 
   useEffect(() => {
     if (!rightDrawerOpen) {
@@ -572,7 +557,6 @@ export function TronShell({
   }
 
   function toggleRightSidebarPanel() {
-    if (!hasRightPanel) return;
     if (window.innerWidth < 1024) {
       if (rightDrawerOpen) {
         closeRightDrawer();
@@ -1029,36 +1013,34 @@ export function TronShell({
                 >
                   {showBottomPanel ? <PanelBottomClose size={17} /> : <PanelBottomOpen size={17} />}
                 </Button>
-                {hasRightPanel ? (
-                  <>
-                    <Button
-                      className="lg:hidden"
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      aria-controls="tron-mobile-right-sidebar"
-                      aria-expanded={rightDrawerOpen}
-                      aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
-                      data-testid="tron-mobile-right-sidebar-toggle"
-                      onClick={toggleRightSidebarPanel}
-                    >
-                      {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
-                    </Button>
-                    <Button
-                      className="hidden lg:flex"
-                      size="icon"
-                      type="button"
-                      variant="ghost"
-                      aria-controls="tron-mobile-right-sidebar"
-                      aria-expanded={rightPanelOpen}
-                      aria-label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
-                      data-testid="tron-mobile-right-sidebar-toggle"
-                      onClick={toggleRightSidebarPanel}
-                    >
-                      {rightPanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
-                    </Button>
+                <>
+                  <Button
+                    className="lg:hidden"
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                    aria-controls="tron-mobile-right-sidebar"
+                    aria-expanded={rightDrawerOpen}
+                    aria-label={rightDrawerOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                    data-testid="tron-mobile-right-sidebar-toggle"
+                    onClick={toggleRightSidebarPanel}
+                  >
+                    {rightDrawerOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+                  </Button>
+                  <Button
+                    className="hidden lg:flex"
+                    size="icon"
+                    type="button"
+                    variant="ghost"
+                    aria-controls="tron-mobile-right-sidebar"
+                    aria-expanded={rightPanelOpen}
+                    aria-label={rightPanelOpen ? t("shell:aria.closeRightSidebar") : t("shell:aria.openRightSidebar")}
+                    data-testid="tron-mobile-right-sidebar-toggle"
+                    onClick={toggleRightSidebarPanel}
+                  >
+                    {rightPanelOpen ? <PanelRightClose size={17} aria-hidden="true" /> : <PanelRightOpen size={17} aria-hidden="true" />}
+                  </Button>
                   </>
-                ) : null}
               </div>
             </div>
             {utilityPanel === "workspace" ? (
@@ -1083,7 +1065,7 @@ export function TronShell({
             />
           ) : null}
 
-          {hasRightPanel && rightDrawerOpen ? (
+          {rightDrawerOpen ? (
             <>
               <button
                 className="fixed inset-x-0 bottom-0 top-14 z-40 bg-[var(--color-backdrop-scrim)] lg:hidden"
@@ -1108,7 +1090,7 @@ export function TronShell({
                     <X size={17} aria-hidden="true" />
                   </Button>
                 </div>
-                {renderedRightPanel}
+                <RightPanelContainer />
               </aside>
             </>
           ) : null}
@@ -1130,7 +1112,6 @@ export function TronShell({
           <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14">
             <Content
               contentClassName={renderedContentClassName}
-              rightPanel={rightPanel}
               showBottomPanel={showBottomPanel}
 
               changeBottomPanel={setBottomPanel}

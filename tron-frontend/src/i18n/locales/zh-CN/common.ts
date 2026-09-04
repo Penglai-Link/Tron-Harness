@@ -11,6 +11,9 @@ export const common = {
   },
   content: {
     none: "无",
+    noData: "暂无属性",
+    openUrl: "输入 URL 打开页面",
+    inputUrlTips:"请输入 URL"
   },
   jsonSchemaEditor: {
     actions: {

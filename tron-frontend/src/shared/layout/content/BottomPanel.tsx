@@ -84,6 +84,8 @@ export default memo(function BottomPanel({
     <>
       <ResizableHandle
         withHandle
+        disabled={!panelOpen}
+        className={!panelOpen ? 'opacity-0' : ''}
         onPointerDown={handlePanelPointerDown}
         onPointerMove={handlePanelPointerMove}
         onPointerUp={handlePanelPointerEnd}

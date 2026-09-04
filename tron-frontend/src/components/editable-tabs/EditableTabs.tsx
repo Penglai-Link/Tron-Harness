@@ -31,14 +31,23 @@ export function EditableTabs({
 }: EditableTabsProps) {
   const processedCloseRequestId = useRef<number | undefined>(undefined);
   const [tabs, setTabs] = useState<EditableTab[]>(() => [...items]);
+  const tabsRef = useRef(tabs);
   const [activeTabKey, setActiveTabKey] = useState<string | undefined>(() =>
     getInitialActiveKey(items, defaultActiveKey),
   );
+  tabsRef.current = tabs;
 
   useEffect(() => {
-    setTabs([...items]);
+    setTabs((currentTabs) => {
+      const incomingKeys = new Set(items.map((item) => item.key));
+      const internalTabs = currentTabs.filter((item) => !incomingKeys.has(item.key));
+      return [...items, ...internalTabs];
+    });
     setActiveTabKey((currentActiveKey) => {
-      if (currentActiveKey && items.some((item) => item.key === currentActiveKey)) {
+      if (currentActiveKey && (
+        items.some((item) => item.key === currentActiveKey)
+        || tabsRef.current.some((item) => item.key === currentActiveKey)
+      )) {
         return currentActiveKey;
       }
       return getInitialActiveKey(items, defaultActiveKey);

@@ -17,9 +17,6 @@ export function PageView({ onInspectionConfirm, showChrome = true, url }: PageVi
 
     useEffect(() => {
         const normalizedUrl = url.trim();
-        if (!normalizedUrl) {
-            return;
-        }
         frameRef.current?.open(normalizedUrl);
     }, [url]);
 

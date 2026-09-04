@@ -26,6 +26,7 @@ import {
   TextInput,
   ToggleSwitch,
   TronShell,
+  useTabPanelConfig,
   useTablePagination,
   useToast,
 } from "@/shared";
@@ -52,29 +53,31 @@ export function SharedShellPreviewPage() {
   }, [query, tab]);
   const resourcePagination = useTablePagination(filteredRows);
 
+  const rightPanel = useMemo(() => (
+    <InspectorPanel title={t("pages:sharedShell.inspector.title", "Resource Pattern")}>
+      <SurfaceCard className="rounded-xl p-4 shadow-none">
+        <p className="text-sm font-semibold">{t("pages:sharedShell.inspector.components", "Step 2 shared components")}</p>
+        <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">
+          {t("pages:sharedShell.inspector.description", "Shell, page headers, tables, forms, tabs, badges, toggles, cards, and inspector panels are ready for console-page composition.")}
+        </p>
+      </SurfaceCard>
+      <div className="space-y-3 rounded-xl bg-[var(--color-surface-container-low)] p-4">
+        <ToggleSwitch checked={enabled} label={t("pages:sharedShell.inspector.inheritance", "Inheritance controls enabled")} onCheckedChange={setEnabled} />
+        <p className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pages:sharedShell.inspector.switchHint", "Visible switch state is reserved for Step 3 interaction smoke checks.")}</p>
+      </div>
+      <div className="rounded-xl border border-[var(--color-card-border)] p-4">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{t("pages:sharedShell.inspector.lastInteraction", "Last interaction")}</p>
+        <p className="mt-1 text-sm">{notice}</p>
+      </div>
+    </InspectorPanel>
+  ), [enabled, notice, t]);
+  useTabPanelConfig({ rightPanel });
+
   return (
     <TronShell
       activeItem="Tasks"
       searchPlaceholder={t("pages:sharedShell.search", "Search tasks, agents, traces...")}
       userMenuContent={<AuthUserMenuPanel />}
-      rightPanel={
-        <InspectorPanel title={t("pages:sharedShell.inspector.title", "Resource Pattern")}>
-          <SurfaceCard className="rounded-xl p-4 shadow-none">
-            <p className="text-sm font-semibold">{t("pages:sharedShell.inspector.components", "Step 2 shared components")}</p>
-            <p className="mt-2 text-[13px] leading-5 text-[var(--color-on-surface-variant)]">
-              {t("pages:sharedShell.inspector.description", "Shell, page headers, tables, forms, tabs, badges, toggles, cards, and inspector panels are ready for console-page composition.")}
-            </p>
-          </SurfaceCard>
-          <div className="space-y-3 rounded-xl bg-[var(--color-surface-container-low)] p-4">
-            <ToggleSwitch checked={enabled} label={t("pages:sharedShell.inspector.inheritance", "Inheritance controls enabled")} onCheckedChange={setEnabled} />
-            <p className="text-[12px] text-[var(--color-on-surface-variant)]">{t("pages:sharedShell.inspector.switchHint", "Visible switch state is reserved for Step 3 interaction smoke checks.")}</p>
-          </div>
-          <div className="rounded-xl border border-[var(--color-card-border)] p-4">
-            <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{t("pages:sharedShell.inspector.lastInteraction", "Last interaction")}</p>
-            <p className="mt-1 text-sm">{notice}</p>
-          </div>
-        </InspectorPanel>
-      }
     >
       <PageHeader
         breadcrumbs={[

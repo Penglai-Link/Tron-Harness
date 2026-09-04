@@ -8,7 +8,6 @@ import BottomPanel from "./BottomPanel";
 interface ContentProps {
   children: ReactNode;
   contentClassName?: string;
-  rightPanel?: ReactNode;
   showBottomPanel?: boolean;
   changeBottomPanel?: Dispatch<SetStateAction<boolean>>;
 }
@@ -16,7 +15,6 @@ interface ContentProps {
 export const Content = memo(function Content({
   children,
   contentClassName,
-  rightPanel,
   showBottomPanel,
   changeBottomPanel
 }: ContentProps) {
@@ -25,7 +23,6 @@ export const Content = memo(function Content({
       <ResizablePanel defaultSize="75%">
         <Panel
           contentClassName={contentClassName}
-          rightPanel={rightPanel}
         >
           {children}
         </Panel>
