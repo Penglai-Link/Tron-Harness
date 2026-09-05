@@ -19,6 +19,16 @@ NPM_NODE_DIR := $(if $(wildcard $(NVM_NPM)),$(NVM_NODE_DIR),$(if $(wildcard $(LO
 ifneq ($(strip $(NPM_NODE_DIR)),)
 export PATH := $(subst /,\,$(NPM_NODE_DIR));$(PATH)
 endif
+# openssl-sys uses the vendored OpenSSL build on Windows.  Strawberry Perl
+# provides the Perl and Unix-like tools required by that build; add its
+# conventional install location when it is present so a fresh terminal can
+# run make without a manually adjusted PATH.
+STRAWBERRY_PERL_DIR ?= C:/Strawberry
+STRAWBERRY_PERL_BIN := $(STRAWBERRY_PERL_DIR)/perl/bin
+STRAWBERRY_C_BIN := $(STRAWBERRY_PERL_DIR)/c/bin
+ifneq ($(wildcard $(STRAWBERRY_PERL_BIN)/perl.exe),)
+export PATH := $(subst /,\,$(STRAWBERRY_PERL_BIN));$(subst /,\,$(STRAWBERRY_C_BIN));$(PATH)
+endif
 # npm is a .cmd batch file on Windows.  `call` is required so control returns
 # to cmd.exe when npm runs inside a parenthesized or chained recipe.
 NPM = call $(NPM_BIN)
