@@ -154,4 +154,69 @@ describe("EditableTabs", () => {
     expect((screen.getByRole("textbox", { name: "Added input" }) as HTMLInputElement).value)
       .toBe("preserved state");
   });
+
+  it("replaces a tab key without leaving the old tab behind", async () => {
+    const { rerender } = render(
+      <EditableTabs
+        activeKey="page:old"
+        items={[{
+          key: "page:old",
+          stableId: "page-1",
+          label: "old",
+          children: <p>Old page</p>,
+        }]}
+      />,
+    );
+
+    rerender(
+      <EditableTabs
+        activeKey="page:new"
+        items={[{
+          key: "page:new",
+          stableId: "page-1",
+          label: "new",
+          children: <p>New page</p>,
+        }]}
+      />,
+    );
+
+    await waitFor(() => expect(screen.getByText("New page")).toBeTruthy());
+    expect(screen.queryByRole("tab", { name: "old" })).toBeNull();
+    expect(screen.getByRole("tab", { name: "new" })).toBeTruthy();
+  });
+
+  it("keeps panel content mounted when a stable tab changes its key", async () => {
+    const { rerender } = render(
+      <EditableTabs
+        activeKey="page:old"
+        items={[{
+          key: "page:old",
+          stableId: "page-1",
+          label: "old",
+          children: <input aria-label="page input" defaultValue="" />,
+        }]}
+      />,
+    );
+
+    fireEvent.change(screen.getByRole("textbox", { name: "page input" }), {
+      target: { value: "draft" },
+    });
+
+    rerender(
+      <EditableTabs
+        activeKey="page:new"
+        items={[{
+          key: "page:new",
+          stableId: "page-1",
+          label: "new",
+          children: <input aria-label="page input" defaultValue="" />,
+        }]}
+      />,
+    );
+
+    await waitFor(() => {
+      expect((screen.getByRole("textbox", { name: "page input" }) as HTMLInputElement).value)
+        .toBe("draft");
+    });
+  });
 });

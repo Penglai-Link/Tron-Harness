@@ -4,6 +4,7 @@ import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { cn } from "@/lib/utils";
 
 import { EditableTabList } from "./EditableTabList";
+import { TabVisibilityProvider } from "./TabVisibilityContext";
 import { OperateType, type EditableTab, type EditableTabsProps } from "./types";
 
 function getInitialActiveKey(
@@ -28,6 +29,7 @@ export function EditableTabs({
   onEdit,
   className,
   keepMounted,
+  provideTabVisibility = false,
 }: EditableTabsProps) {
   const processedCloseRequestId = useRef<number | undefined>(undefined);
   const [tabs, setTabs] = useState<EditableTab[]>(() => [...items]);
@@ -40,8 +42,23 @@ export function EditableTabs({
   useEffect(() => {
     setTabs((currentTabs) => {
       const incomingKeys = new Set(items.map((item) => item.key));
-      const internalTabs = currentTabs.filter((item) => !incomingKeys.has(item.key));
-      return [...items, ...internalTabs];
+      const incomingStableIds = new Set(
+        items
+          .map((item) => item.stableId)
+          .filter((stableId): stableId is string => Boolean(stableId)),
+      );
+      const internalTabs = currentTabs.filter(
+        (item) =>
+          !incomingKeys.has(item.key) &&
+          !(item.stableId && incomingStableIds.has(item.stableId)),
+      );
+      const nextTabs = items.map((item) => {
+        const previous = currentTabs.find(
+          (current) => current.stableId && current.stableId === item.stableId,
+        );
+        return previous ? { ...previous, ...item } : item;
+      });
+      return [...nextTabs, ...internalTabs];
     });
     setActiveTabKey((currentActiveKey) => {
       if (currentActiveKey && (
@@ -116,7 +133,11 @@ export function EditableTabs({
   }, [closeTabRequest, handleClose]);
 
   const panels = useMemo(
-    () => tabs.map((tab) => ({ key: tab.key, children: tab.children })),
+    () => tabs.map((tab) => ({
+      instanceKey: tab.stableId ?? tab.key,
+      key: tab.key,
+      children: tab.children,
+    })),
     [tabs],
   );
 
@@ -138,16 +159,36 @@ export function EditableTabs({
         tabs={tabs}
         className="flex-none"
       />
-      {panels.map((panel) => (
-        <TabsContent
-          className="w-full flex-1 h-1/2"
-          key={panel.key}
-          keepMounted={keepMounted}
-          value={panel.key}
-        >
-          {panel.children}
-        </TabsContent>
-      ))}
+      <div className="relative min-h-0 flex-1 overflow-hidden">
+        {panels.map((panel) => {
+          const isActive = activeTabKey === panel.key;
+
+          return (
+            <TabsContent
+              className={cn(
+                keepMounted
+                  ? isActive
+                    ? "relative h-full w-full"
+                    : "absolute inset-0 z-0 h-full w-full invisible pointer-events-none"
+                  : "h-1/2 w-full flex-1",
+              )}
+              key={panel.instanceKey}
+              keepMounted={keepMounted}
+              hidden={keepMounted ? false : undefined}
+              aria-hidden={keepMounted ? !isActive : undefined}
+              value={panel.key}
+            >
+              {provideTabVisibility ? (
+                <TabVisibilityProvider visible={isActive}>
+                  {panel.children}
+                </TabVisibilityProvider>
+              ) : (
+                panel.children
+              )}
+            </TabsContent>
+          );
+        })}
+      </div>
     </Tabs>
   );
 }

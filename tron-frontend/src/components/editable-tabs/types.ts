@@ -2,6 +2,8 @@ import type { ReactNode } from "react";
 
 export interface EditableTab {
   key: string;
+  stableId?: string;
+  url?: string;
   label: ReactNode;
   children: ReactNode;
   closable?: boolean;
@@ -34,6 +36,8 @@ export interface EditableTabsProps {
   onEdit?: (action: OperateType, info: EditableTabEditInfo) => void;
   className?: string;
   keepMounted?: boolean;
+  /** 为 Tab 子内容提供当前可见性上下文，适用于需要同步外部视图显隐的内容。 */
+  provideTabVisibility?: boolean;
 }
 
 export enum OperateType {

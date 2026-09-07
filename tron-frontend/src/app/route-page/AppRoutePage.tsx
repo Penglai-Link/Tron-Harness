@@ -10,7 +10,6 @@ import { useTabStore } from "@/store/tabStore";
 import {
   useRef,
   useMemo,
-  Activity,
   useEffect,
   ReactNode,
 } from "react";
@@ -140,28 +139,24 @@ export default function AppRoutePage() {
       }
 
       const { Component } = cachedResolved;
-      const key = routeRenderKeyForLocation(
-        cachedPathname,
-        searchParam,
-        cachedResolved.route.pageId,
-      );
-
       return (
-        <Activity
+        <div
           key={`${cachedTab.tabId}:${cachedTab.revision}`}
-          mode={isCurrentTab ? "visible" : "hidden"}
+          hidden={!isCurrentTab}
+          aria-hidden={!isCurrentTab}
+          className="h-full"
         >
           <TabPanelRegistryProvider
-            key={`${cachedTab.tabId}:${key}`}
+            key={cachedTab.tabId}
             tabId={cachedTab.tabId}
           >
             <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
               <SuspendedRoute>
-                <Component key={key} />
+                <Component />
               </SuspendedRoute>
             </CachedRouteLocationProvider>
           </TabPanelRegistryProvider>
-        </Activity>
+        </div>
       );
     });
   }, [activeTabId, cachedTabsList, search]);

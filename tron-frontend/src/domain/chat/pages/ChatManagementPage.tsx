@@ -4025,21 +4025,23 @@ export function ChatManagementPage() {
   const [rightPanelActiveTab, setRightPanelActiveTab] = useState("workspace");
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
 
-  const { openTab } = useRightPanelTabs()
+  const { openTab } = useRightPanelTabs();
 
   const openMarkdownInternalLink = useCallback((url: string) => {
+    const normalizedUrl = url.trim();
+    if (!normalizedUrl) return;
     openTab({
-      key:`${+new Date()}`,
-      label: url,
+      key: `markdown-page:${normalizedUrl}`,
+      label: normalizedUrl,
       children:
         <div className="min-h-0 h-full">
           <PageView
-            url={url}
+            url={normalizedUrl}
             onInspectionConfirm={(result) => { void handleInspectionConfirmForRightPanel(result); }}
           />
         </div>
-    })
-  }, [openRightSidebar]);
+    });
+  }, [openTab]);
   const openMarkdownExternalLink = useCallback((url: string) => {
     if (!desktopBridge.isDesktop()) {
       window.open(url, "_blank", "noopener,noreferrer");

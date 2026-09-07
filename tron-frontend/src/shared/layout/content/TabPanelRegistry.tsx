@@ -24,21 +24,30 @@ interface TabPanelRegistryValue {
   cacheConfigs: Readonly<Record<string, TabPanelConfig>>;
   clear: (tabId: string) => void;
   get: (tabId: string) => TabPanelConfig | undefined;
+  getRightPanelActiveKey: (tabId: string) => string | undefined;
+  getRightPanelTabs: (tabId: string) => readonly EditableTab[];
   register: (tabId: string, config: TabPanelConfig) => void;
-  registerRightPanelTabHandler: (
-    tabId: string,
-    handler: (tab: EditableTab) => void,
-  ) => () => void;
   openRightPanelTab: (tabId: string, tab: EditableTab) => void;
+  updateRightPanelTab: (
+    tabId: string,
+    stableId: string,
+    updates: Partial<EditableTab>,
+  ) => void;
+  removeRightPanelTab: (tabId: string, key: string) => void;
+  setRightPanelActiveKey: (tabId: string, key: string) => void;
 }
 
 const emptyRegistry: TabPanelRegistryValue = {
   cacheConfigs: {},
   clear: () => undefined,
   get: () => undefined,
+  getRightPanelActiveKey: () => undefined,
+  getRightPanelTabs: () => [],
   register: () => undefined,
-  registerRightPanelTabHandler: () => () => undefined,
   openRightPanelTab: () => undefined,
+  updateRightPanelTab: () => undefined,
+  removeRightPanelTab: () => undefined,
+  setRightPanelActiveKey: () => undefined,
 };
 
 const TabPanelRegistryContext =
@@ -72,24 +81,62 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
   const [cacheConfigs, setCacheConfigs] = useState<
     Record<string, TabPanelConfig>
   >({});
-  const rightPanelTabHandlersRef = useRef(
-    new Map<string, (tab: EditableTab) => void>(),
-  );
-
-  const registerRightPanelTabHandler = useCallback(
-    (tabId: string, handler: (tab: EditableTab) => void) => {
-      rightPanelTabHandlersRef.current.set(tabId, handler);
-      return () => {
-        if (rightPanelTabHandlersRef.current.get(tabId) === handler) {
-          rightPanelTabHandlersRef.current.delete(tabId);
-        }
-      };
-    },
-    [],
-  );
+  const [rightPanelTabs, setRightPanelTabs] = useState<
+    Record<string, readonly EditableTab[]>
+  >({});
+  const [rightPanelActiveKeys, setRightPanelActiveKeys] = useState<
+    Record<string, string>
+  >({});
 
   const openRightPanelTab = useCallback((tabId: string, tab: EditableTab) => {
-    rightPanelTabHandlersRef.current.get(tabId)?.(tab);
+    setRightPanelTabs((current) => {
+      const currentTabs = current[tabId] ?? [];
+      if (currentTabs.some((item) => item.key === tab.key)) return current;
+      return { ...current, [tabId]: [...currentTabs, tab] };
+    });
+    setRightPanelActiveKeys((current) => (
+      current[tabId] === tab.key ? current : { ...current, [tabId]: tab.key }
+    ));
+  }, []);
+
+  const updateRightPanelTab = useCallback(
+    (tabId: string, stableId: string, updates: Partial<EditableTab>) => {
+      setRightPanelTabs((current) => {
+        const currentTabs = current[tabId] ?? [];
+        const previous = currentTabs.find((tab) => tab.stableId === stableId);
+        if (!previous) return current;
+
+        const nextTabs = currentTabs.map((tab) =>
+          tab.stableId === stableId ? { ...tab, ...updates } : tab,
+        );
+        return { ...current, [tabId]: nextTabs };
+      });
+      setRightPanelActiveKeys((current) => {
+        const previous = (rightPanelTabs[tabId] ?? []).find(
+          (tab) => tab.stableId === stableId,
+        );
+        if (!previous || current[tabId] !== previous.key || !updates.key) {
+          return current;
+        }
+        return { ...current, [tabId]: updates.key };
+      });
+    },
+    [rightPanelTabs],
+  );
+
+  const removeRightPanelTab = useCallback((tabId: string, key: string) => {
+    setRightPanelTabs((current) => {
+      const currentTabs = current[tabId] ?? [];
+      const nextTabs = currentTabs.filter((tab) => tab.key !== key);
+      if (nextTabs.length === currentTabs.length) return current;
+      return { ...current, [tabId]: nextTabs };
+    });
+  }, []);
+
+  const setRightPanelActiveKey = useCallback((tabId: string, key: string) => {
+    setRightPanelActiveKeys((current) => (
+      current[tabId] === key ? current : { ...current, [tabId]: key }
+    ));
   }, []);
 
   const register = useCallback((tabId: string, config: TabPanelConfig) => {
@@ -137,6 +184,16 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
 
       const next = { ...current };
       staleTabIds.forEach((tabId) => delete next[tabId]);
+      setRightPanelTabs((currentTabs) => {
+        const remaining = { ...currentTabs };
+        staleTabIds.forEach((tabId) => delete remaining[tabId]);
+        return remaining;
+      });
+      setRightPanelActiveKeys((currentKeys) => {
+        const remaining = { ...currentKeys };
+        staleTabIds.forEach((tabId) => delete remaining[tabId]);
+        return remaining;
+      });
       return next;
     });
   }, [cachedTabsList]);
@@ -145,23 +202,39 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     (tabId: string) => cacheConfigs[tabId],
     [cacheConfigs],
   );
+  const getRightPanelTabs = useCallback(
+    (tabId: string) => rightPanelTabs[tabId] ?? [],
+    [rightPanelTabs],
+  );
+  const getRightPanelActiveKey = useCallback(
+    (tabId: string) => rightPanelActiveKeys[tabId],
+    [rightPanelActiveKeys],
+  );
 
   const value = useMemo<TabPanelRegistryValue>(
     () => ({
       cacheConfigs,
       clear,
       get,
+      getRightPanelActiveKey,
+      getRightPanelTabs,
       openRightPanelTab,
+      updateRightPanelTab,
       register,
-      registerRightPanelTabHandler,
+      removeRightPanelTab,
+      setRightPanelActiveKey,
     }),
     [
       cacheConfigs,
       clear,
       get,
+      getRightPanelActiveKey,
+      getRightPanelTabs,
       openRightPanelTab,
+      updateRightPanelTab,
       register,
-      registerRightPanelTabHandler,
+      removeRightPanelTab,
+      setRightPanelActiveKey,
     ],
   );
 

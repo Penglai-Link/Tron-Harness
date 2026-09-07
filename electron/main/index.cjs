@@ -531,6 +531,7 @@ function createTargetView(pageId, url, bounds) {
   const target = {
     bounds: sanitizeBounds(bounds),
     pageId,
+    attached: true,
     view
   };
   state.targetViews.set(pageId, target);
@@ -582,6 +583,31 @@ function resizeTargetView(pageId, bounds) {
   return true;
 }
 
+function setTargetViewVisibility(pageId, visible, bounds) {
+  const target = state.targetViews.get(pageId);
+  if (!target || target.view.webContents.isDestroyed()) {
+    return false;
+  }
+
+  if (visible) {
+    if (!target.attached && state.mainWindow && !state.mainWindow.isDestroyed()) {
+      state.mainWindow.contentView.addChildView(target.view);
+      target.attached = true;
+    }
+    if (bounds) {
+      target.bounds = sanitizeBounds(bounds);
+      target.view.setBounds(target.bounds);
+    }
+    return target.attached;
+  }
+
+  if (target.attached && state.mainWindow && !state.mainWindow.isDestroyed()) {
+    state.mainWindow.contentView.removeChildView(target.view);
+    target.attached = false;
+  }
+  return true;
+}
+
 function closeTargetView(pageId) {
   const target = state.targetViews.get(pageId);
   if (!target) {
@@ -589,7 +615,10 @@ function closeTargetView(pageId) {
   }
 
   if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-    state.mainWindow.contentView.removeChildView(target.view);
+    if (target.attached) {
+      state.mainWindow.contentView.removeChildView(target.view);
+      target.attached = false;
+    }
   }
   if (!target.view.webContents.isDestroyed()) {
     target.view.webContents.close();
@@ -857,6 +886,17 @@ function registerIpcHandlers() {
     if (command === "resizeTargetPageView") {
       const pageId = String(request.pageId || "");
       return { resized: resizeTargetView(pageId, request.bounds) };
+    }
+
+    if (command === "setTargetPageViewVisibility") {
+      const pageId = String(request.pageId || "");
+      return {
+        visible: setTargetViewVisibility(
+          pageId,
+          Boolean(request.visible),
+          request.bounds,
+        )
+      };
     }
 
     if (command === "setInjectionEnabled") {

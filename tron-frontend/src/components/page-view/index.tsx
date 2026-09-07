@@ -8,11 +8,12 @@ import {
 
 export interface PageViewProps {
     onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
+    onUrlChange?: (url: string) => void;
     showChrome?: boolean;
     url: string;
 }
 
-export function PageView({ onInspectionConfirm, showChrome = true, url }: PageViewProps) {
+export function PageView({ onInspectionConfirm, onUrlChange, showChrome = true, url }: PageViewProps) {
     const frameRef = useRef<TargetPageFrameHandle | null>(null);
 
     useEffect(() => {
@@ -20,7 +21,7 @@ export function PageView({ onInspectionConfirm, showChrome = true, url }: PageVi
         frameRef.current?.open(normalizedUrl);
     }, [url]);
 
-    return <TargetPageFrame ref={frameRef} onInspectionConfirm={onInspectionConfirm} showChrome={showChrome} />;
+    return <TargetPageFrame ref={frameRef} onInspectionConfirm={onInspectionConfirm} onUrlChange={onUrlChange} showChrome={showChrome} />;
 }
 
 export type { TargetPageFrameInspectionResult };

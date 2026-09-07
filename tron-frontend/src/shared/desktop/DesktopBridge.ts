@@ -3,6 +3,7 @@ const CHECK_TARGET_PAGE_EMBEDDING_COMMAND = "checkTargetPageEmbedding";
 const OPEN_TARGET_PAGE_COMMAND = "openTargetPage";
 const CLOSE_TARGET_PAGE_COMMAND = "closeTargetPage";
 const RESIZE_TARGET_PAGE_VIEW_COMMAND = "resizeTargetPageView";
+const SET_TARGET_PAGE_VIEW_VISIBILITY_COMMAND = "setTargetPageViewVisibility";
 const SET_INJECTION_ENABLED_COMMAND = "setInjectionEnabled";
 const INJECTION_EVENT_COMMAND = "desktopInjectionEvent";
 
@@ -57,6 +58,12 @@ export interface CloseTargetPageRequest {
 export interface ResizeTargetPageViewRequest {
   pageId: string;
   bounds: DesktopTargetBounds;
+}
+
+export interface SetTargetPageViewVisibilityRequest {
+  bounds?: DesktopTargetBounds;
+  pageId: string;
+  visible: boolean;
 }
 
 export interface DesktopInjectionEvent {
@@ -425,6 +432,28 @@ export class DesktopBridge {
     const payload = response as { resized?: boolean };
 
     return Boolean(normalizeCommandResponse(payload.resized, false));
+  }
+
+  public async setTargetPageViewVisibility(
+    request: SetTargetPageViewVisibilityRequest,
+  ): Promise<boolean> {
+    if (!this.invoke) {
+      return false;
+    }
+
+    const response = await this.invoke(SET_TARGET_PAGE_VIEW_VISIBILITY_COMMAND, {
+      request: {
+        bounds: request.bounds ? sanitizeBounds(request.bounds) : undefined,
+        pageId: sanitizeString(request.pageId),
+        visible: Boolean(request.visible),
+      },
+    });
+    if (typeof response === "boolean") {
+      return response;
+    }
+
+    const payload = response as { visible?: boolean };
+    return Boolean(normalizeCommandResponse(payload.visible, false));
   }
 
   public async setInjectionEnabled(enabled: boolean): Promise<boolean> {

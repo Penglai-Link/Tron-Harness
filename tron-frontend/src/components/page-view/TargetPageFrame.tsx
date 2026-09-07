@@ -20,6 +20,7 @@ import {
   type DesktopInjectionEventRequest,
   type DesktopTargetBounds,
 } from "@/shared/desktop/DesktopBridge";
+import { useTabVisibility } from "@/components/editable-tabs";
 import { TargetPageChrome } from "./TargetPageChrome";
 import { TargetPageEmpty } from "./TargetPageEmpty";
 import { TargetPageUnsupported } from "./TargetPageUnsupported";
@@ -36,6 +37,7 @@ export interface TargetPageFrameInspectionResult {
 
 interface TargetPageFrameProps {
   onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
+  onUrlChange?: (url: string) => void;
   showChrome?: boolean;
 }
 
@@ -101,7 +103,7 @@ function preserveUrlHash(originalUrl: string, resolvedUrl: string): string {
 export const TargetPageFrame = forwardRef<
   TargetPageFrameHandle,
   TargetPageFrameProps
->(function TargetPageFrame({ onInspectionConfirm, showChrome = true }, ref) {
+>(function TargetPageFrame({ onInspectionConfirm, onUrlChange, showChrome = true }, ref) {
   const bridge = useMemo(() => new DesktopBridge(), []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const targetViewportRef = useRef<HTMLDivElement | null>(null);
@@ -118,7 +120,6 @@ export const TargetPageFrame = forwardRef<
       ready: false,
       injectionEnabled: false,
     });
-  const [errorMessage, setErrorMessage] = useState("");
   const [frameReady, setFrameReady] = useState(false);
   const [frameId, setFrameId] = useState("");
   const [frameVersion, setFrameVersion] = useState(0);
@@ -133,6 +134,7 @@ export const TargetPageFrame = forwardRef<
   const activeUrl = historyEntries[historyIndex] ?? "";
   const activeDisplayAddress = displayAddress(activeUrl);
   const isDesktopHost = bridge.isDesktop();
+  const panelVisible = useTabVisibility();
 
   const clearTimeoutRef = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -144,8 +146,6 @@ export const TargetPageFrame = forwardRef<
   const openInSystemBrowser = useCallback(
     (url: string, targetPageId = pageId) => {
       void (async () => {
-        setErrorMessage("");
-
         let result;
         try {
           result = await bridge.openTargetPage({
@@ -154,7 +154,6 @@ export const TargetPageFrame = forwardRef<
             url,
           });
         } catch (error) {
-          setErrorMessage(`系统浏览器打开失败：${describeOpenError(error)}`);
           return;
         }
 
@@ -166,10 +165,6 @@ export const TargetPageFrame = forwardRef<
           window.open(url, "_blank");
           return;
         }
-
-        setErrorMessage(
-          `系统浏览器打开失败：${result.reason ?? "not available"}`,
-        );
       })();
     },
     [bridge, pageId],
@@ -184,7 +179,6 @@ export const TargetPageFrame = forwardRef<
     setUnsupportedPageActive(true);
     setFrameReady(false);
     setFrameId("");
-    setErrorMessage(`Target page likely blocks iframe embedding (${reason}).`);
   }, []);
 
   const checkEmbeddingSupport = useCallback(
@@ -231,7 +225,7 @@ export const TargetPageFrame = forwardRef<
   }, []);
 
   const syncTargetViewBounds = useCallback(() => {
-    if (!isDesktopHost || !visible || unsupportedPageActive || !pageId) {
+    if (!isDesktopHost || !panelVisible || !visible || unsupportedPageActive || !pageId) {
       return;
     }
 
@@ -248,6 +242,7 @@ export const TargetPageFrame = forwardRef<
     bridge,
     isDesktopHost,
     pageId,
+    panelVisible,
     readTargetViewportBounds,
     unsupportedPageActive,
     visible,
@@ -273,13 +268,6 @@ export const TargetPageFrame = forwardRef<
           setAddressDraft(displayAddress(url));
           setAddressEditing(false);
           setUnsupportedPageActive(!result.opened);
-          setErrorMessage(
-            result.opened
-              ? ""
-              : `Target page could not open in desktop window (${
-                  result.reason ?? "desktop-window-unavailable"
-                }).`,
-          );
           window.requestAnimationFrame(syncTargetViewBounds);
           return;
         }
@@ -301,16 +289,10 @@ export const TargetPageFrame = forwardRef<
 
         if (result.blocked) {
           setUnsupportedPageActive(true);
-          setErrorMessage(
-            `Target page does not support iframe embedding (${
-              result.reason ?? "response-policy"
-            }).`,
-          );
           return;
         }
 
         setUnsupportedPageActive(false);
-        setErrorMessage("");
         setFrameVersion((current) => current + 1);
       })();
     },
@@ -372,7 +354,6 @@ export const TargetPageFrame = forwardRef<
         fallbackDispatchedRef.current = false;
         setPageId(createPageId());
         setInjectionEnabled(false);
-        setErrorMessage("");
         setFrameReady(false);
         setFrameId("");
         setVisible(true);
@@ -400,7 +381,6 @@ export const TargetPageFrame = forwardRef<
       fallbackDispatchedRef.current = false;
       setPageId(nextPageId);
       setInjectionEnabled(false);
-      setErrorMessage("");
       setFrameReady(false);
       setFrameId("");
       setVisible(true);
@@ -479,6 +459,19 @@ export const TargetPageFrame = forwardRef<
   }, [isDesktopHost, syncTargetViewBounds, visible]);
 
   useEffect(() => {
+    if (!isDesktopHost || !visible || !pageId) {
+      return;
+    }
+
+    const shouldBeVisible = panelVisible && !unsupportedPageActive;
+    void bridge.setTargetPageViewVisibility({
+      bounds: shouldBeVisible ? readTargetViewportBounds() : undefined,
+      pageId,
+      visible: shouldBeVisible,
+    });
+  }, [bridge, isDesktopHost, pageId, panelVisible, readTargetViewportBounds, unsupportedPageActive, visible]);
+
+  useEffect(() => {
     if (injectionEnabled) {
       return;
     }
@@ -526,7 +519,6 @@ export const TargetPageFrame = forwardRef<
       if (sanitized.eventType === "tron:frame-ready") {
         clearTimeoutRef();
         setFrameReady(true);
-        setErrorMessage("");
         if (frameId !== sanitized.frameId) {
           setFrameId(sanitized.frameId);
         }
@@ -558,7 +550,6 @@ export const TargetPageFrame = forwardRef<
         const nextIndex = historyIndex + 1;
         fallbackDispatchedRef.current = false;
         setUnsupportedPageActive(false);
-        setErrorMessage("");
         setFrameReady(false);
         setFrameId("");
         setHistoryEntries((current) => {
@@ -572,6 +563,7 @@ export const TargetPageFrame = forwardRef<
         setHistoryIndex(nextIndex);
         setAddressDraft(displayAddress(requestedUrl));
         setAddressEditing(false);
+        onUrlChange?.(requestedUrl);
         applyEmbeddingResult(requestedUrl, nextIndex);
         return;
       }
@@ -592,7 +584,7 @@ export const TargetPageFrame = forwardRef<
     return () => {
       window.removeEventListener("message", handler);
     };
-  }, [activeUrl, applyEmbeddingResult, bridge, clearTimeoutRef, frameId, historyIndex, onInspectionConfirm, pageId]);
+  }, [activeUrl, applyEmbeddingResult, bridge, clearTimeoutRef, frameId, historyIndex, onInspectionConfirm, onUrlChange, pageId]);
 
   const iframeStyle: CSSProperties = {
     height: "100%",
@@ -730,6 +722,7 @@ export const TargetPageFrame = forwardRef<
     setHistoryIndex(nextIndex);
     setAddressDraft(displayAddress(normalized));
     setAddressEditing(false);
+    onUrlChange?.(normalized);
     blurAddressInput();
     applyEmbeddingResult(normalized, nextIndex);
   };
