@@ -105,7 +105,12 @@ export const TargetPageFrame = forwardRef<
   TargetPageFrameHandle,
   TargetPageFrameProps
 >(function TargetPageFrame(
-  { inspectionMode = false, onInspectionConfirm, onUrlChange },
+  {
+    inspectionMode = false,
+    onInspectionConfirm,
+    onUrlChange,
+    showChrome = true,
+  },
   ref,
 ) {
   const bridge = useMemo(() => new DesktopBridge(), []);
@@ -830,43 +835,45 @@ export const TargetPageFrame = forwardRef<
 
   return (
     <section className="overflow-hidden h-full flex flex-col">
-      <TargetPageChrome
-        addressEditing={addressEditing}
-        addressFormRef={addressFormRef}
-        addressInputRef={addressInputRef}
-        addressValue={addressValue}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
-        inspectionMode={inspectionMode}
-        injectionEnabled={injectionEnabled}
-        isDesktopHost={isDesktopHost}
-        onAddressBlur={handleAddressBlur}
-        onAddressChange={setAddressDraft}
-        onAddressFocus={handleAddressFocus}
-        onAddressKeyDown={handleAddressKeyDown}
-        onAddressSubmit={(event) => {
-          event.preventDefault();
-          const submittedAddress = new FormData(event.currentTarget).get(
-            "targetAddress",
-          );
-          addressSubmitPendingRef.current = false;
-          loadTargetAddress(
-            typeof submittedAddress === "string"
-              ? submittedAddress
-              : addressDraft,
-          );
-        }}
-        onBack={handleBack}
-        onForward={handleForward}
-        onInjectionToggle={handleInjectionToggle}
-        onRefresh={handleRefresh}
-        onSubmitPointerDown={() => {
-          addressSubmitPendingRef.current = true;
-          window.setTimeout(() => {
+      {showChrome ? (
+        <TargetPageChrome
+          addressEditing={addressEditing}
+          addressFormRef={addressFormRef}
+          addressInputRef={addressInputRef}
+          addressValue={addressValue}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          inspectionMode={inspectionMode}
+          injectionEnabled={injectionEnabled}
+          isDesktopHost={isDesktopHost}
+          onAddressBlur={handleAddressBlur}
+          onAddressChange={setAddressDraft}
+          onAddressFocus={handleAddressFocus}
+          onAddressKeyDown={handleAddressKeyDown}
+          onAddressSubmit={(event) => {
+            event.preventDefault();
+            const submittedAddress = new FormData(event.currentTarget).get(
+              "targetAddress",
+            );
             addressSubmitPendingRef.current = false;
-          }, 0);
-        }}
-      />
+            loadTargetAddress(
+              typeof submittedAddress === "string"
+                ? submittedAddress
+                : addressDraft,
+            );
+          }}
+          onBack={handleBack}
+          onForward={handleForward}
+          onInjectionToggle={handleInjectionToggle}
+          onRefresh={handleRefresh}
+          onSubmitPointerDown={() => {
+            addressSubmitPendingRef.current = true;
+            window.setTimeout(() => {
+              addressSubmitPendingRef.current = false;
+            }, 0);
+          }}
+        />
+      ) : null}
       {unsupportedPageActive ? (
         <TargetPageUnsupported
           onOpenInSystemBrowser={handleOpenInSystemBrowser}
