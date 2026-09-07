@@ -16,6 +16,12 @@ export interface TabRightPanelState {
   size?: number;
 }
 
+/**
+ * /shared-shell-preview is not a console route, so no tab is auto-created
+ * for it and the sidebar stays fully clickable afterwards.
+ */
+export const DEFAULT_TAB_CLOSE_REDIRECT_PATH = "/shared-shell-preview";
+
 // 缓存的 tab 信息
 export interface CachedTabInfo {
   tabId: string;
@@ -32,6 +38,7 @@ interface TabState {
   cachedTabsList: CachedTabInfo[]; // 缓存的 tab 列表，用于渲染
   maxCachedTabs: number; // 最大缓存数量
   addTab: (tab: Omit<TabItem, "id">) => string;
+  closeTab: (tabId: string) => string | null;
   removeTab: (tabId: string) => void;
   removeTabs: (tabIds: readonly string[]) => void;
   refreshTab: (tabId: string) => void;
@@ -94,6 +101,24 @@ export const useTabStore = create<TabState>()((set, get) => ({
     });
 
     return newTab.id;
+  },
+
+  /**
+   * Closes a closable tab. Returns the path the caller should navigate to
+   * when the closed tab was the active one, or null when there is nothing
+   * to navigate (tab not closable, or an inactive tab was closed).
+   */
+  closeTab: (tabId) => {
+    const state = get();
+    const target = state.tabs.find((tab) => tab.id === tabId);
+    if (!target?.closable) return null;
+
+    const wasActive = state.activeTabId === tabId;
+    get().removeTab(tabId);
+    if (!wasActive) return null;
+
+    const nextActiveTab = get().tabs.find((tab) => tab.id === get().activeTabId);
+    return nextActiveTab?.path ?? DEFAULT_TAB_CLOSE_REDIRECT_PATH;
   },
 
   removeTab: (tabId) => get().removeTabs([tabId]),

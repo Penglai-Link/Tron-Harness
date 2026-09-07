@@ -191,6 +191,16 @@ export function formatShortcut(binding: ShellShortcutBinding | null, useMacSymbo
   return formatShortcutKeys(binding, useMacSymbols).join(useMacSymbols ? "" : " + ");
 }
 
+/**
+ * Ctrl/Cmd/Alt combinations never insert text into editable surfaces, so
+ * bindings carrying at least one of them stay active while the user types
+ * (e.g. inside the chat composer). Shift-only bindings would swallow regular
+ * input and stay inert on editable targets instead.
+ */
+export function hasSystemModifier(binding: ShellShortcutBinding | null) {
+  return Boolean(binding?.modKey || binding?.altKey);
+}
+
 export function isEditableShortcutTarget(target: EventTarget | null) {
   if (typeof Element === "undefined" || !(target instanceof Element)) {
     return false;
