@@ -150,7 +150,7 @@ export class ExplainController {
 
     const cancel = async () => {
       try {
-        await this.options.onCancel(signal);
+        await this.options.onCancel?.(signal);
       } catch {
         // Closing the dialog must not be blocked by a failed stop request.
       }

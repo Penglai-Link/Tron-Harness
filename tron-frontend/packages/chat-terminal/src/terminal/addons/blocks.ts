@@ -203,7 +203,7 @@ export class BlockAddon implements ITerminalAddon {
       top: 1,
       size: buttonSize,
       onClick: () => {
-        void this.openExplainForBlock(block, decoration);
+        void this.openExplainForBlock(block, decoration, commandEndColumn);
       },
     });
 
@@ -231,16 +231,17 @@ export class BlockAddon implements ITerminalAddon {
   private async openExplainForBlock(
     block: TerminalCommandBlock,
     buttonDecoration: IDecoration,
+    buttonColumn: number,
   ) {
     const terminal = this.terminal;
-    if (!terminal) {
+    const terminalElement = terminal?.element;
+    if (!terminal || !terminalElement) {
       return;
     }
 
     const cell = getTerminalCellMetrics(terminal);
-    const insets = getTerminalElementInsets(terminal.element);
+    const insets = getTerminalElementInsets(terminalElement);
     const markerLine = buttonDecoration.marker.line;
-    const buttonColumn = buttonDecoration.options.x ?? 0;
 
     // Calculate button position in viewport
     const viewportY = terminal.buffer.active.viewportY;
@@ -373,12 +374,13 @@ export class BlockAddon implements ITerminalAddon {
 
   private showActionBar(block: TerminalCommandBlock, copied = false) {
     const terminal = this.terminal;
-    if (!terminal || !this.actionBar) {
+    const terminalElement = terminal?.element;
+    if (!terminal || !terminalElement || !this.actionBar) {
       return;
     }
 
     const cell = getTerminalCellMetrics(terminal);
-    const insets = getTerminalElementInsets(terminal.element);
+    const insets = getTerminalElementInsets(terminalElement);
     const top = Math.max(
       0,
       insets.top + (block.startLine - terminal.buffer.active.viewportY) * cell.height,
@@ -438,18 +440,19 @@ export class BlockAddon implements ITerminalAddon {
 
   private async openExplain(block: TerminalCommandBlock) {
     const terminal = this.terminal;
-    if (!terminal || !this.options.onExplain) {
+    const terminalElement = terminal?.element;
+    if (!terminal || !terminalElement || !this.options.onExplain) {
       return;
     }
 
     const cell = getTerminalCellMetrics(terminal);
-    const insets = getTerminalElementInsets(terminal.element);
+    const insets = getTerminalElementInsets(terminalElement);
     const top = Math.max(
       0,
       insets.top + (block.startLine - terminal.buffer.active.viewportY) * cell.height,
     );
     await this.explain.open(block.command, block.readOutput(), {
-      left: (terminal.element?.clientWidth ?? 0) - insets.right,
+      left: terminalElement.clientWidth - insets.right,
       size: cell.height,
       top,
     });

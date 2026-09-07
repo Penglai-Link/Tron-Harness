@@ -795,8 +795,14 @@ export class ModelSessionAddon implements ITerminalAddon {
       return;
     }
 
-    const cell = getTerminalCellMetrics(this.terminal);
-    const viewportY = this.terminal.buffer.active.viewportY;
+    const terminal = this.terminal;
+    const terminalElement = terminal.element;
+    if (!terminalElement) {
+      return;
+    }
+
+    const cell = getTerminalCellMetrics(terminal);
+    const viewportY = terminal.buffer.active.viewportY;
     if (shouldMeasure) {
       this.sessions.forEach((session) => {
         if (session.fixedHeight !== undefined) {
@@ -819,7 +825,7 @@ export class ModelSessionAddon implements ITerminalAddon {
         return;
       }
 
-      const viewportTop = getTerminalElementInsets(this.terminal.element).top
+      const viewportTop = getTerminalElementInsets(terminalElement).top
         + (anchorRow - viewportY) * cell.height;
       session.host.style.transform = `translate3d(0, ${viewportTop}px, 0)`;
     });
