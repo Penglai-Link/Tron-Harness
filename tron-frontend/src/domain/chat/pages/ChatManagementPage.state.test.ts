@@ -1,3 +1,4 @@
+// @vitest-environment jsdom
 import { describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
@@ -22,6 +23,7 @@ import {
   claimChatRunTerminalDrain,
   latestTerminalChatRunCode,
   resolveChatStreamSettlement,
+  shouldPollChatRecoveryData,
   shouldPollChatRunRecovery,
 } from "./ChatManagementPage";
 
@@ -41,6 +43,43 @@ describe("chat page run recovery state", () => {
       hasQueuedSubmission: false,
       sessionCode: "SESSION-1",
       shouldPollData: false,
+    })).toBe(false);
+  });
+
+  it("stops polling when recovery confirms that every active state is empty", () => {
+    expect(shouldPollChatRecoveryData({
+      activeRunConfirmedIdle: true,
+      hasActiveRun: false,
+      hasOpenReplayRun: false,
+      hasPendingUserInput: false,
+      hasQueuedSubmission: false,
+    })).toBe(false);
+  });
+
+  it("continues polling for a queued message or pending user input", () => {
+    expect(shouldPollChatRecoveryData({
+      activeRunConfirmedIdle: false,
+      hasActiveRun: false,
+      hasOpenReplayRun: false,
+      hasPendingUserInput: false,
+      hasQueuedSubmission: true,
+    })).toBe(true);
+    expect(shouldPollChatRecoveryData({
+      activeRunConfirmedIdle: false,
+      hasActiveRun: false,
+      hasOpenReplayRun: false,
+      hasPendingUserInput: true,
+      hasQueuedSubmission: false,
+    })).toBe(true);
+  });
+
+  it("stops polling when active-run status confirms idle despite stale replay events", () => {
+    expect(shouldPollChatRecoveryData({
+      activeRunConfirmedIdle: true,
+      hasActiveRun: false,
+      hasOpenReplayRun: true,
+      hasPendingUserInput: false,
+      hasQueuedSubmission: false,
     })).toBe(false);
   });
 

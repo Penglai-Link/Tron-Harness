@@ -9,6 +9,7 @@ interface TargetPageChromeProps {
   addressValue: string;
   canGoBack: boolean;
   canGoForward: boolean;
+  inspectionMode?: boolean;
   injectionEnabled: boolean;
   isDesktopHost: boolean;
   onAddressBlur: (event: FocusEvent<HTMLFormElement>) => void;
@@ -30,6 +31,7 @@ export function TargetPageChrome({
   addressValue,
   canGoBack,
   canGoForward,
+  inspectionMode = false,
   injectionEnabled,
   isDesktopHost,
   onAddressBlur,
@@ -66,7 +68,7 @@ export function TargetPageChrome({
           </button>
         ) : null}
       </form>
-      {isDesktopHost ? (
+      {isDesktopHost && inspectionMode ? (
         <div className="flex items-center text-[var(--color-on-surface-variant)] text-sm">
           <button aria-label={injectionEnabled ? "Disable inspection" : "Enable inspection"} aria-pressed={injectionEnabled} className={`inline-flex items-center justify-center transition-colors hover:text-[var(--color-on-surface)] gap-1 ${injectionEnabled ? "text-[var(--color-on-surface)]" : "text-[var(--color-on-surface-variant)]"}`} type="button" onClick={onInjectionToggle}>
             <MessageCirclePlus className="size-[18px]" /> {injectionEnabled && "正在注释"}

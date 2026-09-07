@@ -881,7 +881,6 @@ const chatScrollBottomThreshold = 96;
 const chatScrollJumpButtonThreshold = 160;
 const liveAguiStartToleranceMs = 5_000;
 const activeChatReplayPollIntervalMs = 1_000;
-const activeChatReplayPendingTurnMaxAgeMs = 30 * 60_000;
 
 export function shouldPollChatRunRecovery({
   currentRunActive,
@@ -898,6 +897,25 @@ export function shouldPollChatRunRecovery({
     sessionCode
     && (currentRunActive || hasQueuedSubmission || shouldPollData),
   );
+}
+
+export function shouldPollChatRecoveryData({
+  activeRunConfirmedIdle,
+  hasActiveRun,
+  hasOpenReplayRun,
+  hasPendingUserInput,
+  hasQueuedSubmission,
+}: {
+  activeRunConfirmedIdle: boolean;
+  hasActiveRun: boolean;
+  hasOpenReplayRun: boolean;
+  hasPendingUserInput: boolean;
+  hasQueuedSubmission: boolean;
+}) {
+  return hasActiveRun
+    || (hasOpenReplayRun && !activeRunConfirmedIdle)
+    || hasQueuedSubmission
+    || hasPendingUserInput;
 }
 
 export function claimChatRunTerminalDrain(
@@ -1147,14 +1165,6 @@ function latestChatMessage(messages: ChatMessage[]) {
 function messageCreatedMillis(message: ChatMessage) {
   const parsed = Date.parse(message.createdAt);
   return Number.isNaN(parsed) ? null : parsed;
-}
-
-function isRecentPendingUserTurn(messages: ChatMessage[], now = Date.now()) {
-  const latestMessage = latestChatMessage(messages);
-  if (!latestMessage || latestMessage.role !== "USER") return false;
-  const createdMillis = messageCreatedMillis(latestMessage);
-  if (createdMillis === null) return true;
-  return now - createdMillis <= activeChatReplayPendingTurnMaxAgeMs;
 }
 
 function replayRunCodesForPendingUserTurn(
@@ -4036,8 +4046,11 @@ export function ChatManagementPage() {
       children:
         <div className="min-h-0 h-full">
           <PageView
+            inspectionMode
             url={normalizedUrl}
-            onInspectionConfirm={(result) => { void handleInspectionConfirmForRightPanel(result); }}
+            onInspectionConfirm={(result) => { 
+              handleInspectionConfirmForRightPanel(result)
+             }}
           />
         </div>
     });
@@ -4846,15 +4859,22 @@ export function ChatManagementPage() {
   );
   const steerDisabled = queueDisabled || steering || !canSteerCurrentRun;
   const hasOpenReplayRun = Boolean(replayActiveRunHint);
+  const activeRunConfirmedIdle = Boolean(
+    activeRunQueryMatchesSession
+    && !activeRunState.loading
+    && !activeRunState.error
+    && !authoritativeActiveRun
+  );
   const shouldPollActiveChatData = Boolean(
     activeSession?.sessionCode
     && !(sending && runningSessionCode === activeSession.sessionCode)
-    && (
-      isRecentPendingUserTurn(visibleMessages)
-      || hasOpenReplayRun
-      || hasQueuedSubmissionForActiveSession
-      || Boolean(userInputRequest)
-    )
+    && shouldPollChatRecoveryData({
+      activeRunConfirmedIdle,
+      hasActiveRun: currentSessionRunActive,
+      hasOpenReplayRun,
+      hasPendingUserInput: Boolean(userInputRequest),
+      hasQueuedSubmission: hasQueuedSubmissionForActiveSession,
+    }),
   );
   const shouldPollActiveChatReplay = shouldPollChatRunRecovery({
     currentRunActive: currentSessionRunActive,

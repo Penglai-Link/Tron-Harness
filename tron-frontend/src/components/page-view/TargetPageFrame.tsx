@@ -36,6 +36,7 @@ export interface TargetPageFrameInspectionResult {
 }
 
 interface TargetPageFrameProps {
+  inspectionMode?: boolean;
   onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
   onUrlChange?: (url: string) => void;
   showChrome?: boolean;
@@ -103,7 +104,10 @@ function preserveUrlHash(originalUrl: string, resolvedUrl: string): string {
 export const TargetPageFrame = forwardRef<
   TargetPageFrameHandle,
   TargetPageFrameProps
->(function TargetPageFrame({ onInspectionConfirm, onUrlChange, showChrome = true }, ref) {
+>(function TargetPageFrame(
+  { inspectionMode = false, onInspectionConfirm, onUrlChange },
+  ref,
+) {
   const bridge = useMemo(() => new DesktopBridge(), []);
   const frameRef = useRef<HTMLIFrameElement | null>(null);
   const targetViewportRef = useRef<HTMLDivElement | null>(null);
@@ -135,6 +139,12 @@ export const TargetPageFrame = forwardRef<
   const activeDisplayAddress = displayAddress(activeUrl);
   const isDesktopHost = bridge.isDesktop();
   const panelVisible = useTabVisibility();
+
+  useEffect(() => {
+    if (!inspectionMode) {
+      setInjectionEnabled(false);
+    }
+  }, [inspectionMode]);
 
   const clearTimeoutRef = useCallback(() => {
     if (timeoutRef.current !== null) {
@@ -225,7 +235,13 @@ export const TargetPageFrame = forwardRef<
   }, []);
 
   const syncTargetViewBounds = useCallback(() => {
-    if (!isDesktopHost || !panelVisible || !visible || unsupportedPageActive || !pageId) {
+    if (
+      !isDesktopHost ||
+      !panelVisible ||
+      !visible ||
+      unsupportedPageActive ||
+      !pageId
+    ) {
       return;
     }
 
@@ -268,6 +284,15 @@ export const TargetPageFrame = forwardRef<
           setAddressDraft(displayAddress(url));
           setAddressEditing(false);
           setUnsupportedPageActive(!result.opened);
+          // The visibility effect can run before the main process creates the
+          // WebContentsView. Re-apply it after openTargetPage resolves so a
+          // hidden tab stays detached and a visible tab is attached promptly.
+          const shouldBeVisible = panelVisible && result.opened;
+          void bridge.setTargetPageViewVisibility({
+            bounds: shouldBeVisible ? readTargetViewportBounds() : undefined,
+            pageId: targetPageId,
+            visible: shouldBeVisible,
+          });
           window.requestAnimationFrame(syncTargetViewBounds);
           return;
         }
@@ -300,6 +325,7 @@ export const TargetPageFrame = forwardRef<
       bridge,
       checkEmbeddingSupport,
       pageId,
+      panelVisible,
       readTargetViewportBounds,
       syncTargetViewBounds,
     ],
@@ -469,7 +495,15 @@ export const TargetPageFrame = forwardRef<
       pageId,
       visible: shouldBeVisible,
     });
-  }, [bridge, isDesktopHost, pageId, panelVisible, readTargetViewportBounds, unsupportedPageActive, visible]);
+  }, [
+    bridge,
+    isDesktopHost,
+    pageId,
+    panelVisible,
+    readTargetViewportBounds,
+    unsupportedPageActive,
+    visible,
+  ]);
 
   useEffect(() => {
     if (injectionEnabled) {
@@ -499,7 +533,13 @@ export const TargetPageFrame = forwardRef<
     return () => {
       clearTimeoutRef();
     };
-  }, [desktopBackendStatus.ready, dispatchBlocked, frameReady, clearTimeoutRef, injectionEnabled]);
+  }, [
+    desktopBackendStatus.ready,
+    dispatchBlocked,
+    frameReady,
+    clearTimeoutRef,
+    injectionEnabled,
+  ]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
@@ -568,7 +608,7 @@ export const TargetPageFrame = forwardRef<
         return;
       }
 
-      if (sanitized.eventType === "tron:node-inspected") {
+      if (inspectionMode && sanitized.eventType === "tron:node-inspected") {
         const dom = asRecord(sanitized.payload) ?? {};
         void bridge.emitInjectionEvent(sanitized);
 
@@ -584,13 +624,18 @@ export const TargetPageFrame = forwardRef<
     return () => {
       window.removeEventListener("message", handler);
     };
-  }, [activeUrl, applyEmbeddingResult, bridge, clearTimeoutRef, frameId, historyIndex, onInspectionConfirm, onUrlChange, pageId]);
-
-  const iframeStyle: CSSProperties = {
-    height: "100%",
-    width: "100%",
-    border: "0",
-  };
+  }, [
+    activeUrl,
+    applyEmbeddingResult,
+    bridge,
+    clearTimeoutRef,
+    frameId,
+    historyIndex,
+    inspectionMode,
+    onInspectionConfirm,
+    onUrlChange,
+    pageId,
+  ]);
 
   const canGoBack = historyIndex > 0;
   const canGoForward = historyIndex < historyEntries.length - 1;
@@ -690,6 +735,10 @@ export const TargetPageFrame = forwardRef<
   };
 
   const handleInjectionToggle = () => {
+    if (!inspectionMode) {
+      return;
+    }
+
     setInjectionEnabled((current) => !current);
   };
 
@@ -716,9 +765,11 @@ export const TargetPageFrame = forwardRef<
     setInjectionEnabled(false);
     setUnsupportedPageActive(false);
     const nextIndex = historyEntries.length === 0 ? 0 : historyIndex + 1;
-    setHistoryEntries((current) => current.length === 0
-      ? [normalized]
-      : [...current.slice(0, historyIndex + 1), normalized]);
+    setHistoryEntries((current) =>
+      current.length === 0
+        ? [normalized]
+        : [...current.slice(0, historyIndex + 1), normalized],
+    );
     setHistoryIndex(nextIndex);
     setAddressDraft(displayAddress(normalized));
     setAddressEditing(false);
@@ -779,38 +830,47 @@ export const TargetPageFrame = forwardRef<
 
   return (
     <section className="overflow-hidden h-full flex flex-col">
-      {showChrome ? (
-        <TargetPageChrome
-          addressEditing={addressEditing}
-          addressFormRef={addressFormRef}
-          addressInputRef={addressInputRef}
-          addressValue={addressValue}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          injectionEnabled={injectionEnabled}
-          isDesktopHost={isDesktopHost}
-          onAddressBlur={handleAddressBlur}
-          onAddressChange={setAddressDraft}
-          onAddressFocus={handleAddressFocus}
-          onAddressKeyDown={handleAddressKeyDown}
-          onAddressSubmit={(event) => {
-            event.preventDefault();
-            const submittedAddress = new FormData(event.currentTarget).get("targetAddress");
+      <TargetPageChrome
+        addressEditing={addressEditing}
+        addressFormRef={addressFormRef}
+        addressInputRef={addressInputRef}
+        addressValue={addressValue}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        inspectionMode={inspectionMode}
+        injectionEnabled={injectionEnabled}
+        isDesktopHost={isDesktopHost}
+        onAddressBlur={handleAddressBlur}
+        onAddressChange={setAddressDraft}
+        onAddressFocus={handleAddressFocus}
+        onAddressKeyDown={handleAddressKeyDown}
+        onAddressSubmit={(event) => {
+          event.preventDefault();
+          const submittedAddress = new FormData(event.currentTarget).get(
+            "targetAddress",
+          );
+          addressSubmitPendingRef.current = false;
+          loadTargetAddress(
+            typeof submittedAddress === "string"
+              ? submittedAddress
+              : addressDraft,
+          );
+        }}
+        onBack={handleBack}
+        onForward={handleForward}
+        onInjectionToggle={handleInjectionToggle}
+        onRefresh={handleRefresh}
+        onSubmitPointerDown={() => {
+          addressSubmitPendingRef.current = true;
+          window.setTimeout(() => {
             addressSubmitPendingRef.current = false;
-            loadTargetAddress(typeof submittedAddress === "string" ? submittedAddress : addressDraft);
-          }}
-          onBack={handleBack}
-          onForward={handleForward}
-          onInjectionToggle={handleInjectionToggle}
-          onRefresh={handleRefresh}
-          onSubmitPointerDown={() => {
-            addressSubmitPendingRef.current = true;
-            window.setTimeout(() => { addressSubmitPendingRef.current = false; }, 0);
-          }}
-        />
-      ) : null}
+          }, 0);
+        }}
+      />
       {unsupportedPageActive ? (
-        <TargetPageUnsupported onOpenInSystemBrowser={handleOpenInSystemBrowser} />
+        <TargetPageUnsupported
+          onOpenInSystemBrowser={handleOpenInSystemBrowser}
+        />
       ) : !activeUrl ? (
         <TargetPageEmpty targetViewportRef={targetViewportRef} />
       ) : renderEmbeddedFrame ? (
@@ -822,11 +882,10 @@ export const TargetPageFrame = forwardRef<
           onError={handleError}
           name={pageId}
           src={activeUrl}
-          style={iframeStyle}
           referrerPolicy="no-referrer"
           sandbox="allow-forms allow-modals allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
           title={`Tron target ${pageId}`}
-          className="block min-h-[560px] flex-auto bg-[var(--color-elevated-surface-strong)]"
+          className="block border-0 w-full h-full  min-h-[560px] flex-auto bg-[var(--color-elevated-surface-strong)]"
         />
       ) : (
         <div

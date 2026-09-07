@@ -24,6 +24,7 @@ vi.mock("./TargetPageFrame", () => ({
   TargetPageFrame: forwardRef(({
     onInspectionConfirm,
   }: {
+    inspectionMode?: boolean;
     onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
   }, ref) => {
     useImperativeHandle(ref, () => ({
@@ -51,10 +52,20 @@ describe("PageView", () => {
     });
   });
 
-  it("forwards inspection results to the parent callback", async () => {
+  it("does not forward inspection results by default", async () => {
     const onInspectionConfirm = vi.fn();
 
     render(<PageView onInspectionConfirm={onInspectionConfirm} url="https://example.com" />);
+
+    await waitFor(() => {
+      expect(onInspectionConfirm).not.toHaveBeenCalled();
+    });
+  });
+
+  it("forwards inspection results when inspection mode is enabled", async () => {
+    const onInspectionConfirm = vi.fn();
+
+    render(<PageView inspectionMode onInspectionConfirm={onInspectionConfirm} url="https://example.com" />);
 
     await waitFor(() => {
       expect(onInspectionConfirm).toHaveBeenCalledWith(inspectionResult);
