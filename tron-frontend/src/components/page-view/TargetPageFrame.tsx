@@ -6,7 +6,6 @@ import {
   useMemo,
   useRef,
   useState,
-  type CSSProperties,
   type FocusEvent,
   type KeyboardEvent,
 } from "react";
@@ -39,7 +38,6 @@ interface TargetPageFrameProps {
   inspectionMode?: boolean;
   onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
   onUrlChange?: (url: string) => void;
-  showChrome?: boolean;
 }
 
 const FRAME_TIMEOUT_MS = 3500;
@@ -105,12 +103,7 @@ export const TargetPageFrame = forwardRef<
   TargetPageFrameHandle,
   TargetPageFrameProps
 >(function TargetPageFrame(
-  {
-    inspectionMode = false,
-    onInspectionConfirm,
-    onUrlChange,
-    showChrome = true,
-  },
+  { inspectionMode = false, onInspectionConfirm, onUrlChange },
   ref,
 ) {
   const bridge = useMemo(() => new DesktopBridge(), []);
@@ -835,45 +828,43 @@ export const TargetPageFrame = forwardRef<
 
   return (
     <section className="overflow-hidden h-full flex flex-col">
-      {showChrome ? (
-        <TargetPageChrome
-          addressEditing={addressEditing}
-          addressFormRef={addressFormRef}
-          addressInputRef={addressInputRef}
-          addressValue={addressValue}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
-          inspectionMode={inspectionMode}
-          injectionEnabled={injectionEnabled}
-          isDesktopHost={isDesktopHost}
-          onAddressBlur={handleAddressBlur}
-          onAddressChange={setAddressDraft}
-          onAddressFocus={handleAddressFocus}
-          onAddressKeyDown={handleAddressKeyDown}
-          onAddressSubmit={(event) => {
-            event.preventDefault();
-            const submittedAddress = new FormData(event.currentTarget).get(
-              "targetAddress",
-            );
+      <TargetPageChrome
+        addressEditing={addressEditing}
+        addressFormRef={addressFormRef}
+        addressInputRef={addressInputRef}
+        addressValue={addressValue}
+        canGoBack={canGoBack}
+        canGoForward={canGoForward}
+        inspectionMode={inspectionMode}
+        injectionEnabled={injectionEnabled}
+        isDesktopHost={isDesktopHost}
+        onAddressBlur={handleAddressBlur}
+        onAddressChange={setAddressDraft}
+        onAddressFocus={handleAddressFocus}
+        onAddressKeyDown={handleAddressKeyDown}
+        onAddressSubmit={(event) => {
+          event.preventDefault();
+          const submittedAddress = new FormData(event.currentTarget).get(
+            "targetAddress",
+          );
+          addressSubmitPendingRef.current = false;
+          loadTargetAddress(
+            typeof submittedAddress === "string"
+              ? submittedAddress
+              : addressDraft,
+          );
+        }}
+        onBack={handleBack}
+        onForward={handleForward}
+        onInjectionToggle={handleInjectionToggle}
+        onRefresh={handleRefresh}
+        onSubmitPointerDown={() => {
+          addressSubmitPendingRef.current = true;
+          window.setTimeout(() => {
             addressSubmitPendingRef.current = false;
-            loadTargetAddress(
-              typeof submittedAddress === "string"
-                ? submittedAddress
-                : addressDraft,
-            );
-          }}
-          onBack={handleBack}
-          onForward={handleForward}
-          onInjectionToggle={handleInjectionToggle}
-          onRefresh={handleRefresh}
-          onSubmitPointerDown={() => {
-            addressSubmitPendingRef.current = true;
-            window.setTimeout(() => {
-              addressSubmitPendingRef.current = false;
-            }, 0);
-          }}
-        />
-      ) : null}
+          }, 0);
+        }}
+      />
       {unsupportedPageActive ? (
         <TargetPageUnsupported
           onOpenInSystemBrowser={handleOpenInSystemBrowser}
