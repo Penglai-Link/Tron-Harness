@@ -15,7 +15,8 @@ export const common = {
     openUrl: "Enter the URL to open the page",
     inputUrlTips:"Please Enter the URL",
     newTab: "New Tab",
-    browser: "Browser"
+    browser: "Browser",
+    attributes: "Page Info"
   },
   jsonSchemaEditor: {
     actions: {

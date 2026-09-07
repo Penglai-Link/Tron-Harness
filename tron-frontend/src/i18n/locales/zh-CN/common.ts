@@ -16,6 +16,7 @@ export const common = {
     inputUrlTips:"请输入 URL",
     newTab: "新标签",
     browser: "浏览器",
+    attributes: "页面信息"
   },
   jsonSchemaEditor: {
     actions: {

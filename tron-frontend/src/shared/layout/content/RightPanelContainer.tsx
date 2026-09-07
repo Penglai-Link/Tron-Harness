@@ -72,7 +72,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
     return panelConfig?.rightPanel
       ? {
           key: `page-attributes:${tab.tabId}`,
-          label: "页面属性",
+          label: t('content.attributes'),
           closable: false,
           children: panelConfig?.rightPanel,
         }
