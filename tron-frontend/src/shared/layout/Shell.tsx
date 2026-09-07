@@ -55,17 +55,14 @@ import {
   findWorkspaceNodePath,
   type WorkspaceTreeNode,
 } from "@/shared/lib/workspaceTree";
-import {
-  CREATE_CHAT_SESSION_SHORTCUT_EVENT,
-  findMatchingShellShortcutAction,
-  isEditableShortcutTarget,
-} from "@/shared/lib/keyboardShortcuts";
+import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import { cn } from "@/shared/lib/utils";
 import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
 import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/shared/ui/Forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
+import { useShellShortcuts } from "@/shared/hooks/useShellShortcuts";
 import { useTabStore } from "@/store/tabStore";
 import { useAuthStore } from "@/store/authStore";
 import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
@@ -184,7 +181,6 @@ export function TronShell({
   const setNavigationDomains = useNavigationStore((state) => state.setDomains);
   const setNavigationMenuTree = useNavigationStore((state) => state.setMenuTree);
   const setSelectedDomainCode = useNavigationStore((state) => state.setSelectedDomainCode);
-  const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
   const setAgentOpen = useAppShellStore((state) => state.setAgentOpen);
   const setSidebarCollapsed = useAppShellStore((state) => state.setSidebarCollapsed);
   const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
@@ -198,6 +194,7 @@ export function TronShell({
   const tabPanelRegistry = useTabPanelRegistry();
   const activeTabId = useTabStore((state) => state.activeTabId);
   const activeTab = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId));
+  const closeTab = useTabStore((state) => state.closeTab);
   const activeShellConfig = activeTabId ? tabPanelRegistry.get(activeTabId) : undefined;
   const hasRegistryConfig = Object.keys(tabPanelRegistry.cacheConfigs).length > 0;
   const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
@@ -574,10 +571,6 @@ export function TronShell({
     }
   }
 
-  function toggleSidebarPanel() {
-    window.dispatchEvent(new Event("tron:toggle-sidebar"));
-  }
-
   function toggleRightSidebarPanel() {
     if (!hasRightPanel) return;
     if (window.innerWidth < 1024) {
@@ -597,76 +590,32 @@ export function TronShell({
     setBottomPanel((open) => !open);
   }
 
-  function closeCurrentWorkspaceTab() {
-    const { activeTabId, removeTab, tabs } = useTabStore.getState();
-    const activeTab = tabs.find((tab) => tab.id === activeTabId);
-    if (!activeTab?.closable) return false;
-
-    const closingIndex = tabs.findIndex((tab) => tab.id === activeTab.id);
-    const remainingTabs = tabs.filter((tab) => tab.id !== activeTab.id);
-    const nextTab = remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)];
-
-    removeTab(activeTab.id);
-    navigate(nextTab?.path ?? "/shared-shell-preview");
-    return true;
-  }
-
-  useEffect(() => {
-    const handleShortcut = (event: KeyboardEvent) => {
-      if (
-        event.defaultPrevented
-        || event.isComposing
-        || event.repeat
-        || isEditableShortcutTarget(event.target)
-      ) {
-        return;
+  useShellShortcuts({
+    closeCurrentTab: () => {
+      if (!activeTabId) return false;
+      const redirect = closeTab(activeTabId);
+      if (redirect === null) return false;
+      navigate(redirect);
+    },
+    newSession: () => {
+      if (pathname !== "/chats" && !pathname.startsWith("/chats/")) return false;
+      window.dispatchEvent(new Event(CREATE_CHAT_SESSION_SHORTCUT_EVENT));
+    },
+    toggleBottomPanel: () => toggleBottomPanel(),
+    toggleLeftSidebar: (event) => {
+      // SidebarProvider owns its built-in Ctrl/Cmd+B shortcut. Its listener
+      // re-registers whenever the sidebar state changes and may then run
+      // after ours, so leave that combination to it instead of toggling twice.
+      if (event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
+        return false;
       }
-
-      const action = findMatchingShellShortcutAction(shortcutBindings, event);
-      if (!action) return;
-
-      if (action === "toggleLeftSidebar") {
-        // SidebarProvider owns this built-in shortcut. Dispatching the custom
-        // event too would toggle twice when users bind the same combination.
-        if (event.key.toLowerCase() === "b" && (event.metaKey || event.ctrlKey)) {
-          return;
-        }
-        event.preventDefault();
-        toggleSidebarPanel();
-        return;
-      }
-      if (action === "toggleRightSidebar") {
-        if (!hasRightPanel) return;
-        event.preventDefault();
-        toggleRightSidebarPanel();
-        return;
-      }
-      if (action === "toggleBottomPanel") {
-        event.preventDefault();
-        toggleBottomPanel();
-        return;
-      }
-      if (action === "newSession") {
-        if (pathname !== "/chats" && !pathname.startsWith("/chats/")) return;
-        event.preventDefault();
-        window.dispatchEvent(new Event(CREATE_CHAT_SESSION_SHORTCUT_EVENT));
-        return;
-      }
-      if (action === "closeCurrentTab" && closeCurrentWorkspaceTab()) {
-        event.preventDefault();
-      }
-    };
-
-    window.addEventListener("keydown", handleShortcut);
-    return () => window.removeEventListener("keydown", handleShortcut);
-  }, [
-    hasRightPanel,
-    navigate,
-    pathname,
-    rightDrawerOpen,
-    shortcutBindings,
-    sidebarCollapsed,
-  ]);
+      window.dispatchEvent(new Event("tron:toggle-sidebar"));
+    },
+    toggleRightSidebar: () => {
+      if (!hasRightPanel) return false;
+      toggleRightSidebarPanel();
+    },
+  });
 
   function handleSidebarNavigationClick() {
     closeFloatingPanels();

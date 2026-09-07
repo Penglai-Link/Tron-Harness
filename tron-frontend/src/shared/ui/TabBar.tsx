@@ -26,7 +26,7 @@ export function TabBar({ className }: TabBarProps) {
   const navigate = useNavigate();
   const tabs = useTabStore((state) => state.tabs);
   const activeTabId = useTabStore((state) => state.activeTabId);
-  const removeTab = useTabStore((state) => state.removeTab);
+  const closeTab = useTabStore((state) => state.closeTab);
   const removeTabs = useTabStore((state) => state.removeTabs);
   const refreshTab = useTabStore((state) => state.refreshTab);
   const setActiveTab = useTabStore((state) => state.setActiveTab);
@@ -37,18 +37,9 @@ export function TabBar({ className }: TabBarProps) {
   };
 
   const handleTabClose = (tabId: string) => {
-    const closingActiveTab = tabId === activeTabId;
-    const closingIndex = tabs.findIndex((tab) => tab.id === tabId);
-    const remainingTabs = tabs.filter((tab) => tab.id !== tabId);
-    const nextTab = closingActiveTab
-      ? remainingTabs[Math.min(closingIndex, remainingTabs.length - 1)]
-      : undefined;
-
-    removeTab(tabId);
-    if (closingActiveTab) {
-      // /shared-shell-preview is not a console route, so no tab is auto-created
-      // for it and the sidebar stays fully clickable afterwards.
-      navigate(nextTab?.path ?? "/shared-shell-preview");
+    const redirect = closeTab(tabId);
+    if (redirect !== null) {
+      navigate(redirect);
     }
   };
 
