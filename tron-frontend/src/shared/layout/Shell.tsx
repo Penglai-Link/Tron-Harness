@@ -672,8 +672,8 @@ export function TronShell({
     const rowClassName = cn(
       "flex min-w-0 flex-1 cursor-pointer items-center rounded-lg px-2.5 py-1.5 text-left transition-colors",
       selected
-        ? "bg-[var(--color-surface-container)]"
-        : "hover:bg-[var(--color-hover-surface)]",
+        ? "bg-[var(--color-menu-selected-surface)]"
+        : "hover:bg-[var(--color-menu-hover-surface)]",
     );
     const content = (
       <>
@@ -686,7 +686,7 @@ export function TronShell({
         <div className="flex items-center gap-1" style={{ paddingLeft: `${nestingLevel * 12}px` }}>
           {hasChildren ? (
             <button
-              className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]"
+              className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-menu-hover-surface)] hover:text-[var(--color-on-surface)]"
               type="button"
               aria-label={`${expanded ? "Collapse" : "Expand"} ${workspacePathLabel}`}
               aria-expanded={expanded}
@@ -745,8 +745,8 @@ export function TronShell({
               className={cn(
                 "flex w-full min-w-0 items-start rounded-lg px-2.5 py-2 text-left transition-colors",
                 selected
-                  ? "bg-[var(--color-surface-container)]"
-                  : "hover:bg-[var(--color-hover-surface)]",
+                  ? "bg-[var(--color-menu-selected-surface)]"
+                  : "hover:bg-[var(--color-menu-hover-surface)]",
               )}
               key={domain.domainCode}
               role="option"
