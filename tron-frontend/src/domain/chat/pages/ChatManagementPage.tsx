@@ -4029,8 +4029,8 @@ export function ChatManagementPage() {
 
   const openMarkdownInternalLink = useCallback((url: string) => {
     openTab({
-      key:"2222",
-      label:url,
+      key:`${+new Date()}`,
+      label: url,
       children:
         <div className="min-h-0 h-full">
           <PageView
