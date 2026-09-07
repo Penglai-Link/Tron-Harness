@@ -13,7 +13,9 @@ export const common = {
     none: "None",
     noData: "No attributes",
     openUrl: "Enter the URL to open the page",
-    inputUrlTips:"Please Enter the URL"
+    inputUrlTips:"Please Enter the URL",
+    newTab: "New Tab",
+    browser: "Browser"
   },
   jsonSchemaEditor: {
     actions: {

@@ -24,4 +24,3 @@ export function PageView({ onInspectionConfirm, showChrome = true, url }: PageVi
 }
 
 export type { TargetPageFrameInspectionResult };
-export { LinkBrowserDialog } from "./LinkBrowserDialog";

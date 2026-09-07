@@ -3,7 +3,7 @@ import { render, waitFor } from "@testing-library/react";
 import { forwardRef, useEffect, useImperativeHandle } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { PageView, type TargetPageFrameInspectionResult } from "./Index";
+import { PageView, type TargetPageFrameInspectionResult } from ".";
 
 const openMock = vi.fn();
 const inspectionResult: TargetPageFrameInspectionResult = {
