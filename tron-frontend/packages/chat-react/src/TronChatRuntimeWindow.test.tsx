@@ -242,6 +242,67 @@ describe("TronChatRuntimeWindow", () => {
     expect(screen.queryByText("No persisted messages in this session.")).toBeNull();
   });
 
+  it("does not download a previous session's attachment while loading the next session", async () => {
+    const firstSession = restoredSession();
+    const secondSession: ChatSession = {
+      ...restoredSession(),
+      id: 2,
+      sessionCode: "SESSION-WITHOUT-ATTACHMENTS",
+      title: "Session without attachments",
+    };
+    const firstSessionMessages = [{
+      actor: "User",
+      attachments: [{
+        contentType: "image/png",
+        id: "ATTACHMENT-FROM-FIRST-SESSION",
+        kind: "image" as const,
+        metadata: {},
+        summary: "first-session-image.png",
+      }],
+      channel: "MAIN_AGENT" as const,
+      content: "A message with an attachment",
+      createdAt: "2026-06-10T00:00:00.000Z",
+      id: 1,
+      messageCode: "MESSAGE-WITH-ATTACHMENT",
+      role: "USER" as const,
+      sessionCode: firstSession.sessionCode,
+    }];
+    const loadMessages = vi.fn((sessionCode: string) => (
+      sessionCode === firstSession.sessionCode
+        ? Promise.resolve(firstSessionMessages)
+        : new Promise<typeof firstSessionMessages>(() => undefined)
+    ));
+    const downloadAttachment = vi.fn(() => new Promise<Blob>(() => undefined));
+    const adapter: ChatAdapter = {
+      ...createAdapter().adapter,
+      downloadAttachment,
+      loadMessages,
+    };
+    const { rerender } = render(
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        config={{ floating: false, workspaceCode: "WS-1" }}
+        initialSession={firstSession}
+      />,
+    );
+
+    await waitFor(() => expect(downloadAttachment).toHaveBeenCalledWith(
+      expect.objectContaining({ sessionCode: firstSession.sessionCode }),
+      firstSessionMessages[0].attachments[0],
+    ));
+
+    rerender(
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        config={{ floating: false, workspaceCode: "WS-1" }}
+        initialSession={secondSession}
+      />,
+    );
+
+    await waitFor(() => expect(loadMessages).toHaveBeenCalledWith(secondSession.sessionCode));
+    expect(downloadAttachment).toHaveBeenCalledTimes(1);
+  });
+
   it("detaches a switched session immediately without letting its stale finally clear the new observer", async () => {
     const firstSession = restoredSession();
     const secondSession: ChatSession = {
@@ -625,6 +686,59 @@ describe("TronChatRuntimeWindow", () => {
     await screen.findByRole("button", { name: "Send" });
     expect(screen.getByText("Keep queued after Stop")).toBeTruthy();
     expect(streamMessage).not.toHaveBeenCalled();
+  });
+
+  it("stops polling after active-run confirms idle despite a recent user message and open replay", async () => {
+    const getActiveRun = vi.fn().mockResolvedValue({
+      activeRun: null,
+      sessionCode: "SESSION-RESTORED",
+    });
+    const loadMessages = vi.fn().mockResolvedValue([
+      {
+        actor: "User",
+        channel: "MAIN_AGENT",
+        content: "A completed request",
+        createdAt: new Date().toISOString(),
+        id: 1,
+        messageCode: "MESSAGE-1",
+        role: "USER",
+        runCode: "RUN-STALE",
+        sessionCode: "SESSION-RESTORED",
+      },
+    ]);
+    const adapter: ChatAdapter = {
+      capabilities: {
+        supportsAbort: true,
+        supportsActiveRun: true,
+        supportsAgui: true,
+        supportsProtocolReplay: true,
+        supportsStreaming: true,
+      },
+      createSession: vi.fn(),
+      getActiveRun,
+      loadAguiEvents: vi.fn().mockResolvedValue([]),
+      loadMessages,
+      loadProtocolEvents: vi.fn().mockResolvedValue([
+        {
+          runId: "RUN-STALE",
+          threadId: "SESSION-RESTORED",
+          type: "RUN_STARTED",
+        },
+      ]),
+    };
+
+    render(
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        config={{ floating: false, workspaceCode: "WS-1" }}
+        initialSession={restoredSession()}
+      />,
+    );
+
+    await waitFor(() => expect(getActiveRun).toHaveBeenCalledTimes(1));
+    await new Promise((resolve) => window.setTimeout(resolve, 1_200));
+    expect(getActiveRun).toHaveBeenCalledTimes(1);
+    expect(loadMessages).toHaveBeenCalledTimes(1);
   });
 
   it("turns a send race into one queued message without retaining optimistic duplicates", async () => {

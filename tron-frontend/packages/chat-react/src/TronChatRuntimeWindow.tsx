@@ -3,12 +3,10 @@ import {
   createMockChatAdapter,
   enqueueChatSubmission,
   FetchTransportError,
-  isRecentPendingUserTurn,
   isSteerQueueFallbackCode,
   mergeChatMessagesChronologically,
   mergeTranscriptAguiEvents,
   normalizeChatSession,
-  openAguiProtocolRunCodes,
   removeQueuedChatSubmission,
   takeNextQueuedChatSubmission,
   type ChatFloatingState,
@@ -338,6 +336,13 @@ export function TronChatRuntimeWindow({
     )),
     [queuedSubmissions, session?.sessionCode],
   );
+  // Effects run after a session-change render. Keep messages from the prior
+  // session out of the transcript during that render so their attachments
+  // cannot be downloaded through the new session's adapter.
+  const visibleMessages = useMemo(
+    () => messages.filter((message) => message.sessionCode === session?.sessionCode),
+    [messages, session?.sessionCode],
+  );
 
   function setSendingState(value: boolean) {
     sendingRef.current = value;
@@ -517,6 +522,21 @@ export function TronChatRuntimeWindow({
       replaceRemoteActiveRun(null);
       replaceActiveRunStatusPending(false);
       observedRemoteRunRef.current = null;
+      activeRunCodeRef.current = "";
+      setActiveRunCode("");
+      setActiveRunSupportsSteer(null);
+      setSendingState(false);
+      setSteering(false);
+      steeringRef.current = false;
+      setMessages([]);
+      setAguiEvents([]);
+      setProtocolEvents([]);
+      setUserInputRequests([]);
+      setUserInputRequest(null);
+      setLiveAguiEvents([]);
+      setLiveAguiPending(false);
+      setLiveAguiAnchorMessageCodes({});
+      setLiveAguiPendingAnchorMessageCode("");
       setPendingAttachments([]);
     }
     activeSessionCodeRef.current = nextSessionCode;
@@ -595,19 +615,13 @@ export function TronChatRuntimeWindow({
     };
   }, [activeAdapter, aguiEnabled, onError, protocolReplayEnabled, session?.sessionCode]);
 
-  const awaitingRemoteTerminal = Boolean(
-    session?.sessionCode
-    && observedRemoteRunRef.current?.sessionCode === session.sessionCode,
-  );
   const shouldPollData = Boolean(
     session?.sessionCode
     && (
       runActive
       || activeRunStatusPending
-      || awaitingRemoteTerminal
-      || isRecentPendingUserTurn(messages)
       || Boolean(userInputRequest)
-      || (protocolReplayEnabled && openAguiProtocolRunCodes(protocolEvents, session.sessionCode).size > 0)
+      || visibleQueuedSubmissions.length > 0
     ),
   );
 
@@ -659,7 +673,7 @@ export function TronChatRuntimeWindow({
       }
     }, 1000);
     return () => window.clearInterval(intervalId);
-  }, [activeAdapter, aguiEnabled, messages, protocolEvents, protocolReplayEnabled, session?.sessionCode, shouldPollData, userInputRequest]);
+  }, [activeAdapter, aguiEnabled, protocolReplayEnabled, session?.sessionCode, shouldPollData, userInputRequest]);
 
   useEffect(() => {
     const sessionCode = session?.sessionCode;
@@ -1309,11 +1323,11 @@ export function TronChatRuntimeWindow({
       liveAguiEvents,
       liveAguiPendingAnchorMessageCode,
       liveAguiPending,
-      messages,
+      messages: visibleMessages,
       protocolEvents,
       sessionCode: session?.sessionCode ?? "",
     }).debugEventsByRunCode,
-    [debugOptions, liveAguiAnchorMessageCodes, liveAguiEvents, liveAguiPendingAnchorMessageCode, liveAguiPending, messages, protocolEvents, session?.sessionCode],
+    [debugOptions, liveAguiAnchorMessageCodes, liveAguiEvents, liveAguiPendingAnchorMessageCode, liveAguiPending, protocolEvents, session?.sessionCode, visibleMessages],
   );
 
   const resolvedDebugOptions = useMemo(() => ({
@@ -1401,7 +1415,7 @@ export function TronChatRuntimeWindow({
       liveAguiEvents={liveAguiEvents}
       liveAguiPendingAnchorMessageCode={liveAguiPendingAnchorMessageCode}
       liveAguiPending={liveAguiPending}
-      messages={messages}
+      messages={visibleMessages}
       onCreateSession={onCreateSession ?? (() => { void ensureSession(); })}
       onNewSession={handleNewSession}
       onDraftChange={setDraft}
@@ -1457,7 +1471,7 @@ export function TronChatRuntimeWindow({
       liveAguiEvents={liveAguiEvents}
       liveAguiPendingAnchorMessageCode={liveAguiPendingAnchorMessageCode}
       liveAguiPending={liveAguiPending}
-        messages={messages}
+        messages={visibleMessages}
         onCreateSession={onCreateSession ?? (() => { void ensureSession(); })}
         onNewSession={handleNewSession}
         onDraftChange={setDraft}
