@@ -12,9 +12,9 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DialogSelect } from "@/components/ui/dialog-select";
 import {
   Field,
-  MultiSelectDropdown,
   OptionSelect,
   PageHeader,
   SelectInput,
@@ -87,7 +87,7 @@ export function CreateTaskPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
-  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading } = useTaskWorkspaceOptions(activeWorkspaceCode);
+  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading, onUserPageChange, userPage, userPageCount } = useTaskWorkspaceOptions(activeWorkspaceCode);
   const executionAgentSelectOptions = useMemo(
     () => agentOptions.map((agent) => ({
       label: `${agent.name} (${agent.agentCode})`,
@@ -175,9 +175,8 @@ export function CreateTaskPage() {
   }, [activeWorkspaceCode, toast]);
 
   useEffect(() => {
-    const allowed = new Set(effectiveUsers.map((user) => user.userCode));
-    setAssigneeUserCodes((current) => current.filter((userCode) => allowed.has(userCode)));
-  }, [effectiveUsers]);
+    setAssigneeUserCodes([]);
+  }, [activeWorkspaceCode]);
 
   useEffect(() => {
     const allowed = new Set(appOptions.map((app) => app.appCode));
@@ -315,18 +314,21 @@ export function CreateTaskPage() {
           </div>
         </div>
         <Field label={pageT("fields.assignedUsers", "Assigned Users")} hint={pageT("hints.assignedUsers", "Only effective users from the current workspace can be assigned.")}>
-          <MultiSelectDropdown
+          <DialogSelect
             ariaLabel={pageT("aria.assignees", "Task assignees")}
-            emptyMessage={activeWorkspaceCode ? pageT("values.noUsers", "No effective users available for the active workspace.") : pageT("errors.workspaceRequiredUsers", "Select a workspace in the shell header to assign users.")}
             loading={workspaceOptionsLoading}
-            loadingMessage={pageT("values.loadingUsers", "Loading user options...")}
+            multiple
+            onChange={setAssigneeUserCodes}
+            onPageChange={onUserPageChange}
             options={userOptions}
-            placeholder={pageT("placeholders.assignedUsers", "Select assigned users")}
+            page={userPage}
+            pageCount={userPageCount}
+            pagination
             selectedValues={assigneeUserCodes}
-            onToggle={(userCode) => setAssigneeUserCodes((current) => toggleCode(current, userCode))}
+            title={pageT("fields.assignedUsers", "Assigned Users")}
           />
         </Field>
-        <SurfaceCard>
+        <SurfaceCard className="rounded-[4px]">
           <div className="grid gap-1.5">
             <div className="flex flex-wrap items-center justify-between gap-[12px]">
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">{pageT("fields.description", "Description")}</span>
