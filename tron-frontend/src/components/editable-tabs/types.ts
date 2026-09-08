@@ -3,6 +3,8 @@ import type { ReactNode } from "react";
 export interface EditableTab {
   key: string;
   stableId?: string;
+  ownerKey?: string;
+  hidden?: boolean;
   url?: string;
   label: ReactNode;
   children: ReactNode;
@@ -36,6 +38,12 @@ export interface EditableTabsProps {
   onEdit?: (action: OperateType, info: EditableTabEditInfo) => void;
   className?: string;
   keepMounted?: boolean;
+  /**
+   * Keep tabs created only by this component when the caller has not added
+   * them to `items`. Controlled tab groups should disable this so a removed
+   * external tab is unmounted immediately.
+   */
+  preserveInternalTabs?: boolean;
   /** 为 Tab 子内容提供当前可见性上下文，适用于需要同步外部视图显隐的内容。 */
   provideTabVisibility?: boolean;
 }

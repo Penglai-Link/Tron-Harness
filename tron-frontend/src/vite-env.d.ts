@@ -1,5 +1,4 @@
 /// <reference types="vite/client" />
-
 interface ImportMetaEnv {
   readonly VITE_TRON_API_BASE_URL?: string;
   readonly VITE_TRON_TERMINAL_APP_CODE?: string;
@@ -12,6 +11,7 @@ interface ImportMetaEnv {
 
 interface Window {
   tronDesktop?: {
+    targetPreloadUrl?: string;
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
   };
   __TAURI__?: {

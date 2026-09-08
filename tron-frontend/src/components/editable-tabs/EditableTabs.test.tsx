@@ -119,6 +119,26 @@ describe("EditableTabs", () => {
     expect((input as HTMLInputElement).value).toBe("draft command");
   });
 
+  it("keeps retained tab panels out of display:none", () => {
+    render(
+      <EditableTabs
+        items={[
+          { key: "one", label: "One", children: <p>One content</p> },
+          { key: "two", label: "Two", children: <p>Two content</p> },
+        ]}
+        keepMounted
+      />,
+    );
+
+    fireEvent.click(screen.getByRole("tab", { name: "Two" }));
+
+    const inactivePanel = screen.getByText("One content").closest("[role=tabpanel]");
+    expect(inactivePanel).toBeTruthy();
+    expect(inactivePanel?.hasAttribute("hidden")).toBe(false);
+    expect(inactivePanel?.className).toContain("invisible");
+    expect(inactivePanel?.className).toContain("pointer-events-none");
+  });
+
   it("preserves added tabs and their state when base tabs update", async () => {
     const { rerender } = render(
       <EditableTabs
@@ -218,5 +238,24 @@ describe("EditableTabs", () => {
       expect((screen.getByRole("textbox", { name: "page input" }) as HTMLInputElement).value)
         .toBe("draft");
     });
+  });
+
+  it("unmounts externally controlled tabs after the owner removes them", async () => {
+    const { rerender } = render(
+      <EditableTabs
+        items={[{
+          key: "page",
+          label: "Page",
+          children: <p>Target page</p>,
+        }]}
+        preserveInternalTabs={false}
+      />,
+    );
+
+    expect(screen.getByText("Target page")).toBeTruthy();
+
+    rerender(<EditableTabs items={[]} preserveInternalTabs={false} />);
+
+    await waitFor(() => expect(screen.queryByText("Target page")).toBeNull());
   });
 });

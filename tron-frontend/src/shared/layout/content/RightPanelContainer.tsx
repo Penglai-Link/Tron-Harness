@@ -56,6 +56,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const {
     get,
     getRightPanelActiveKey,
+    getRightPanelOwnerKey,
     getRightPanelTabs,
     openRightPanelTab,
     removeRightPanelTab,
@@ -68,6 +69,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const nextTabId = useRef(1);
   const panelConfig = get(tab.tabId);
   const dynamicTabs = getRightPanelTabs(tab.tabId);
+  const ownerKey = getRightPanelOwnerKey(tab.tabId);
   const pageAttributesKey = `page-attributes:${tab.tabId}`;
   const activeKey = getRightPanelActiveKey(tab.tabId) ?? pageAttributesKey;
   const pageAttributesTab = useMemo<EditableTab | null>(() => {
@@ -83,18 +85,19 @@ const RightPanelTabs = memo(function RightPanelTabs({
 
   const createTab = useCallback((): EditableTab => {
     const id = nextTabId.current++;
-    const stableId = `right-panel-page-${tab.tabId}-${id}`;
+    const stableId = `right-panel-page-${tab.tabId}-${ownerKey ?? "default"}-${id}`;
     const newTab: EditableTab = {
       key: stableId,
       stableId,
       url: "",
       label: t("content.newTab"),
+      ownerKey,
       closable: true,
       children: null,
     };
     openRightPanelTab(tab.tabId, newTab);
     return newTab;
-  }, [openRightPanelTab, t, tab.tabId]);
+  }, [openRightPanelTab, ownerKey, t, tab.tabId]);
 
   const dynamicItems = useMemo(
     () => dynamicTabs.map((item) => {
@@ -102,8 +105,12 @@ const RightPanelTabs = memo(function RightPanelTabs({
 
       return {
         ...item,
+        hidden: item.ownerKey !== ownerKey,
         children: (
           <PageView
+            inspectionMode={Boolean(panelConfig?.onPageInspectionConfirm)}
+            onInspectionConfirm={panelConfig?.onPageInspectionConfirm}
+            pageId={item.stableId}
             url={item.url}
             onUrlChange={(url) => {
               updateRightPanelTab(tab.tabId, item.stableId!, {
@@ -116,7 +123,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
         ),
       };
     }),
-    [dynamicTabs, tab.tabId, updateRightPanelTab],
+    [dynamicTabs, ownerKey, panelConfig?.onPageInspectionConfirm, tab.tabId, updateRightPanelTab],
   );
 
   const handleEdit = useCallback(
@@ -152,6 +159,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
       createTab={createTab}
       items={items}
       keepMounted
+      preserveInternalTabs={false}
       provideTabVisibility
       onEdit={handleEdit}
       onChange={(key) => {
@@ -170,20 +178,27 @@ const RightPanelContainer = memo(function RightPanelContainer() {
   }
 
   return (
-    <>
-      {cachedTabs.map((tab) => (
-        <div
-          key={tab.tabId}
-          hidden={tab.tabId !== activeTabId}
-          aria-hidden={tab.tabId !== activeTabId}
-          className="h-full"
-        >
-          <TabVisibilityProvider visible={tab.tabId === activeTabId}>
-            <RightPanelTabs tab={tab} />
-          </TabVisibilityProvider>
-        </div>
-      ))}
-    </>
+    <div className="relative h-full w-full overflow-hidden">
+      {cachedTabs.map((tab) => {
+        const isActive = tab.tabId === activeTabId;
+
+        return (
+          <div
+            key={tab.tabId}
+            aria-hidden={!isActive}
+            className={
+              isActive
+                ? "relative z-10 h-full w-full"
+                : "absolute inset-0 z-0 h-full w-full invisible pointer-events-none"
+            }
+          >
+            <TabVisibilityProvider visible={isActive}>
+              <RightPanelTabs tab={tab} />
+            </TabVisibilityProvider>
+          </div>
+        );
+      })}
+    </div>
   );
 });
 

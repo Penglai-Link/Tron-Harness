@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 const { spawn, exec } = require("node:child_process");
-const { app, BrowserWindow, WebContentsView, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, ipcMain, shell } = require("electron");
 
 const {
   HOST,
@@ -29,7 +29,8 @@ const ALLOWED_INJECTION_EVENTS = new Set([
   "tron:dom-event",
   "tron:node-inspected",
   "tron:inspection-exited",
-  "tron:navigation-requested"
+  "tron:navigation-requested",
+  "tron:navigation-changed"
 ]);
 
 const injectionTemplate = fs.readFileSync(
@@ -47,25 +48,25 @@ const state = {
   frontendDistDir: "",
   graphPath: "",
   injectionEnabled: false,
-  mainWindow: null,
-  targetViews: new Map()
+  mainWindow: null
 };
 
-function buildInjectionScript(pageId) {
-  const injectionFlag = state.injectionEnabled ? "true" : "false";
+function buildWebviewInjectionScript(pageId, enabled) {
   return injectionTemplate
     .replace("__TRON_APP_ORIGIN__", JSON.stringify(state.backendUrl))
     .replace("__TRON_PAGE_ID__", JSON.stringify(pageId))
-    .replace("__TRON_INJECTION_ENABLED__", injectionFlag);
+    .replace("__TRON_INJECTION_ENABLED__", enabled ? "true" : "false");
 }
 
 function createMainWindow() {
+  const targetPreloadPath = path.resolve(__dirname, "..", "preload", "target-preload.cjs");
   const window = new BrowserWindow({
     height: 920,
     show: false,
     title: "Tron",
     width: 1440,
     webPreferences: {
+      webviewTag: true,
       contextIsolation: true,
       nodeIntegration: false,
       preload: path.resolve(__dirname, "..", "preload", "app-preload.cjs"),
@@ -74,6 +75,24 @@ function createMainWindow() {
   });
 
   state.mainWindow = window;
+
+  window.webContents.on("will-attach-webview", (_event, webPreferences) => {
+    webPreferences.contextIsolation = true;
+    webPreferences.nodeIntegration = false;
+    webPreferences.preload = targetPreloadPath;
+    webPreferences.sandbox = false;
+    webPreferences.webSecurity = true;
+  });
+
+  window.webContents.on("did-attach-webview", (_event, guestContents) => {
+    guestContents.setWindowOpenHandler(({ url }) => {
+      const targetUrl = sanitizeUrl(url);
+      if (isHttpUrl(targetUrl)) {
+        void guestContents.loadURL(targetUrl);
+      }
+      return { action: "deny" };
+    });
+  });
 
   window.webContents.setWindowOpenHandler(({ url }) => {
     const targetUrl = sanitizeUrl(url);
@@ -341,6 +360,10 @@ function isDevMode() {
   return !app.isPackaged || process.env.TRON_ELECTRON_DEVTOOLS === "1";
 }
 
+function shouldOpenMainDevTools() {
+  return process.env.TRON_ELECTRON_DEVTOOLS === "1";
+}
+
 async function bootstrap() {
   const resourcesDir = resolveResourcesDir(app);
   const appDataDir = resolveDesktopDataDir();
@@ -374,7 +397,7 @@ async function bootstrap() {
 
   await keepStartupScreenVisible(startupScreenStartedAt);
   await mainWindow.loadURL(state.backendUrl);
-  if (isDevMode()) {
+  if (shouldOpenMainDevTools()) {
     mainWindow.webContents.openDevTools({ mode: "detach" });
   }
   mainWindow.focus();
@@ -498,133 +521,6 @@ function normalizeRequest(payload) {
 
 function nextPageId() {
   return `target-${Date.now()}`;
-}
-
-function sanitizeBounds(rawBounds) {
-  if (!rawBounds || typeof rawBounds !== "object") {
-    return { x: 0, y: 0, width: 0, height: 0 };
-  }
-
-  return {
-    height: Math.max(0, Math.round(Number(rawBounds.height) || 0)),
-    width: Math.max(0, Math.round(Number(rawBounds.width) || 0)),
-    x: Math.round(Number(rawBounds.x) || 0),
-    y: Math.round(Number(rawBounds.y) || 0)
-  };
-}
-
-function createTargetView(pageId, url, bounds) {
-  if (!state.mainWindow || state.mainWindow.isDestroyed()) {
-    throw new Error("main window is not available");
-  }
-
-  const view = new WebContentsView({
-    webPreferences: {
-      contextIsolation: true,
-      nodeIntegration: false,
-      preload: path.resolve(__dirname, "..", "preload", "target-preload.cjs"),
-      sandbox: false,
-      webSecurity: true
-    }
-  });
-
-  const target = {
-    bounds: sanitizeBounds(bounds),
-    pageId,
-    attached: true,
-    view
-  };
-  state.targetViews.set(pageId, target);
-  state.mainWindow.contentView.addChildView(view);
-  view.setBounds(target.bounds);
-
-  view.webContents.setWindowOpenHandler(({ url: childUrl }) => {
-    const targetUrl = sanitizeUrl(childUrl);
-    if (isHttpUrl(targetUrl)) {
-      void view.webContents.loadURL(targetUrl);
-    }
-    return { action: "deny" };
-  });
-
-  view.webContents.on("did-finish-load", () => {
-    void injectTargetView(target);
-  });
-  view.webContents.on("destroyed", () => {
-    state.targetViews.delete(pageId);
-  });
-
-  void view.webContents.loadURL(url);
-  if (process.env.TRON_ELECTRON_TARGET_DEVTOOLS === "1") {
-    view.webContents.openDevTools({ mode: "detach" });
-  }
-  return target;
-}
-
-async function injectTargetView(target) {
-  if (!target || target.view.webContents.isDestroyed()) {
-    return;
-  }
-  const script = buildInjectionScript(target.pageId);
-  try {
-    await target.view.webContents.executeJavaScript(script, true);
-  } catch (error) {
-    console.error("target injection failed", error);
-  }
-}
-
-function resizeTargetView(pageId, bounds) {
-  const target = state.targetViews.get(pageId);
-  if (!target || target.view.webContents.isDestroyed()) {
-    return false;
-  }
-
-  target.bounds = sanitizeBounds(bounds);
-  target.view.setBounds(target.bounds);
-  return true;
-}
-
-function setTargetViewVisibility(pageId, visible, bounds) {
-  const target = state.targetViews.get(pageId);
-  if (!target || target.view.webContents.isDestroyed()) {
-    return false;
-  }
-
-  if (visible) {
-    if (!target.attached && state.mainWindow && !state.mainWindow.isDestroyed()) {
-      state.mainWindow.contentView.addChildView(target.view);
-      target.attached = true;
-    }
-    if (bounds) {
-      target.bounds = sanitizeBounds(bounds);
-      target.view.setBounds(target.bounds);
-    }
-    return target.attached;
-  }
-
-  if (target.attached && state.mainWindow && !state.mainWindow.isDestroyed()) {
-    state.mainWindow.contentView.removeChildView(target.view);
-    target.attached = false;
-  }
-  return true;
-}
-
-function closeTargetView(pageId) {
-  const target = state.targetViews.get(pageId);
-  if (!target) {
-    return false;
-  }
-
-  if (state.mainWindow && !state.mainWindow.isDestroyed()) {
-    if (target.attached) {
-      state.mainWindow.contentView.removeChildView(target.view);
-      target.attached = false;
-    }
-  }
-  if (!target.view.webContents.isDestroyed()) {
-    target.view.webContents.close();
-  }
-  state.targetViews.delete(pageId);
-  return true;
 }
 
 function sanitizeInjectionEvent(raw) {
@@ -856,61 +752,13 @@ function registerIpcHandlers() {
         return { pageId, opened: true, mode: "browser", backendUrl: state.backendUrl };
       }
 
-      if (mode !== "view" && mode !== "window") {
-        return {
-          pageId,
-          opened: false,
-          mode,
-          reason: "requested-iframe-mode",
-          backendUrl: state.backendUrl
-        };
-      }
-
-      const existing = state.targetViews.get(pageId);
-      if (existing && !existing.view.webContents.isDestroyed()) {
-        resizeTargetView(pageId, request.bounds);
-        if (existing.view.webContents.getURL() !== url) {
-          void existing.view.webContents.loadURL(url);
-        }
-      } else {
-        createTargetView(pageId, url, request.bounds);
-      }
-      return { pageId, opened: true, mode: "view", backendUrl: state.backendUrl };
-    }
-
-    if (command === "closeTargetPage") {
-      const pageId = String(request.pageId || "");
-      return { closed: closeTargetView(pageId) };
-    }
-
-    if (command === "resizeTargetPageView") {
-      const pageId = String(request.pageId || "");
-      return { resized: resizeTargetView(pageId, request.bounds) };
-    }
-
-    if (command === "setTargetPageViewVisibility") {
-      const pageId = String(request.pageId || "");
       return {
-        visible: setTargetViewVisibility(
-          pageId,
-          Boolean(request.visible),
-          request.bounds,
-        )
+        pageId,
+        opened: false,
+        mode,
+        reason: "target-pages-use-webview",
+        backendUrl: state.backendUrl
       };
-    }
-
-    if (command === "setInjectionEnabled") {
-      state.injectionEnabled = Boolean(request.enabled);
-      for (const [pageId, target] of state.targetViews) {
-        if (!target.view.webContents.isDestroyed()) {
-          void injectTargetView(target);
-          target.view.webContents.send("tron-desktop:toggle-injection", {
-            enabled: state.injectionEnabled,
-            pageId
-          });
-        }
-      }
-      return state.injectionEnabled;
     }
 
     if (command === "desktopInjectionEvent") {
@@ -923,9 +771,30 @@ function registerIpcHandlers() {
 
   ipcMain.handle("tron-desktop:target-event", async (ipcEvent, rawEvent) => {
     const sanitized = sanitizeInjectionEvent(rawEvent);
+    if (process.env.TRON_ELECTRON_TARGET_DEBUG === "1" && sanitized.eventType !== "tron:dom-event") {
+      console.log(`[target-debug] page event eventType=${sanitized.eventType} pageId=${sanitized.pageId}`);
+    }
     const withImage = await withNativeAnnotationImage(sanitized, ipcEvent.sender);
     forwardTargetEvent(withImage);
     return true;
+  });
+
+  ipcMain.handle("tron-desktop:target-injection-script", (ipcEvent, payload = {}) => {
+    if (!state.mainWindow || state.mainWindow.isDestroyed()) {
+      return "";
+    }
+
+    const host = ipcEvent.sender.hostWebContents;
+    if (!host || host.id !== state.mainWindow.webContents.id) {
+      return "";
+    }
+
+    const pageId = String(payload.pageId || "").trim().slice(0, 160);
+    if (!pageId) {
+      return "";
+    }
+
+    return buildWebviewInjectionScript(pageId, Boolean(payload.enabled));
   });
 }
 

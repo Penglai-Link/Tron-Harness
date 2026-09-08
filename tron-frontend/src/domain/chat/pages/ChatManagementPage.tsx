@@ -4230,24 +4230,17 @@ export function ChatManagementPage() {
   const [rightPanelActiveTab, setRightPanelActiveTab] = useState("workspace");
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
 
-  const { openTab } = useRightPanelTabs();
+  const { openTab } = useRightPanelTabs(activeSession?.sessionCode);
 
   const openMarkdownInternalLink = useCallback((url: string) => {
     const normalizedUrl = url.trim();
     if (!normalizedUrl) return;
     openTab({
       key: `markdown-page:${normalizedUrl}`,
+      stableId: `markdown-page:${normalizedUrl}`,
       label: normalizedUrl,
-      children:
-        <div className="min-h-0 h-full">
-          <PageView
-            inspectionMode
-            url={normalizedUrl}
-            onInspectionConfirm={(result) => { 
-              handleInspectionConfirmForRightPanel(result)
-             }}
-          />
-        </div>
+      url: normalizedUrl,
+      children: null,
     });
   }, [openTab]);
   const openMarkdownExternalLink = useCallback((url: string) => {
@@ -5336,7 +5329,10 @@ export function ChatManagementPage() {
     attachments: t("chat.attachments.attachments"),
   }), [i18n.language, t]);
 
-  useTabPanelConfig({ rightPanel });
+  useTabPanelConfig({
+    onPageInspectionConfirm: handleInspectionConfirmForRightPanel,
+    rightPanel,
+  });
 
   useEffect(() => {
     if (!shouldPollActiveChatReplay) return;

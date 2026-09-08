@@ -1,20 +1,9 @@
 const DESKTOP_BACKEND_STATUS_COMMAND = "desktopBackendStatus";
 const CHECK_TARGET_PAGE_EMBEDDING_COMMAND = "checkTargetPageEmbedding";
 const OPEN_TARGET_PAGE_COMMAND = "openTargetPage";
-const CLOSE_TARGET_PAGE_COMMAND = "closeTargetPage";
-const RESIZE_TARGET_PAGE_VIEW_COMMAND = "resizeTargetPageView";
-const SET_TARGET_PAGE_VIEW_VISIBILITY_COMMAND = "setTargetPageViewVisibility";
-const SET_INJECTION_ENABLED_COMMAND = "setInjectionEnabled";
 const INJECTION_EVENT_COMMAND = "desktopInjectionEvent";
 
 export type DesktopTargetMode = "browser" | "iframe" | "view" | "window";
-
-export interface DesktopTargetBounds {
-  height: number;
-  width: number;
-  x: number;
-  y: number;
-}
 
 export interface DesktopBackendStatus {
   backendUrl: string;
@@ -29,7 +18,6 @@ export interface OpenTargetPageRequest {
   url: string;
   mode?: DesktopTargetMode;
   pageId?: string;
-  bounds?: DesktopTargetBounds;
 }
 
 export interface OpenTargetPageResponse {
@@ -51,21 +39,6 @@ export interface CheckTargetPageEmbeddingResponse {
   reason?: string;
 }
 
-export interface CloseTargetPageRequest {
-  pageId: string;
-}
-
-export interface ResizeTargetPageViewRequest {
-  pageId: string;
-  bounds: DesktopTargetBounds;
-}
-
-export interface SetTargetPageViewVisibilityRequest {
-  bounds?: DesktopTargetBounds;
-  pageId: string;
-  visible: boolean;
-}
-
 export interface DesktopInjectionEvent {
   eventType: DesktopInjectionEventType;
   pageId: string;
@@ -77,7 +50,7 @@ export interface DesktopInjectionEvent {
   };
 }
 
-export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event" | "tron:node-inspected" | "tron:inspection-exited" | "tron:navigation-requested";
+export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event" | "tron:node-inspected" | "tron:inspection-exited" | "tron:navigation-requested" | "tron:navigation-changed";
 
 export interface DesktopInjectionEventRequest {
   eventType: DesktopInjectionEventType;
@@ -92,6 +65,10 @@ type InvokeCommand<T> = (command: string, payload: Record<string, unknown>) => P
 
 type WindowWithElectronDesktop = Window & {
   tronDesktop?: {
+    targetPreloadUrl?: string;
+    invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+  };
+  __TAURI_INTERNALS__?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
   };
 };
@@ -102,6 +79,7 @@ const ALLOWED_INJECTION_EVENTS = new Set<DesktopInjectionEventType>([
   "tron:node-inspected",
   "tron:inspection-exited",
   "tron:navigation-requested",
+  "tron:navigation-changed",
 ]);
 const MAX_URL_LENGTH = 8192;
 const MAX_IMAGE_DATA_URL_LENGTH = 80_000_000;
@@ -116,6 +94,11 @@ function resolveInvoke(): InvokeCommand<unknown> | null {
   const electronInvoke = desktopWindow.tronDesktop?.invoke;
   if (typeof electronInvoke === "function") {
     return (command, payload) => electronInvoke(command, payload);
+  }
+
+  const tauriInvoke = desktopWindow.__TAURI_INTERNALS__?.invoke;
+  if (typeof tauriInvoke === "function") {
+    return (command, payload) => tauriInvoke(command, payload);
   }
 
   return null;
@@ -209,10 +192,6 @@ function sanitizePayload(payload: unknown, depth = 0): Record<string, unknown> |
   return Object.keys(output).length > 0 ? output : undefined;
 }
 
-function normalizeCommandResponse<T>(value: unknown, fallback: T): T {
-  return (value as T) ?? fallback;
-}
-
 function describeInvokeError(error: unknown): string {
   if (error instanceof Error && error.message) {
     return error.message;
@@ -227,6 +206,15 @@ function describeInvokeError(error: unknown): string {
 
 export function isDesktopHost(): boolean {
   return resolveInvoke() !== null;
+}
+
+export function resolveTargetWebviewPreloadUrl(): string {
+  if (typeof window === "undefined") {
+    return "";
+  }
+
+  const value = (window as WindowWithElectronDesktop).tronDesktop?.targetPreloadUrl;
+  return typeof value === "string" && value.startsWith("file:") ? value : "";
 }
 
 export function resolveDesktopPageId(pageSeed: string): string {
@@ -306,7 +294,6 @@ export class DesktopBridge {
     }
 
     const payload: {
-      bounds?: DesktopTargetBounds;
       mode: DesktopTargetMode;
       pageId: string;
       url: string;
@@ -315,9 +302,6 @@ export class DesktopBridge {
       pageId,
       url: sanitizeUrlInput(request.url),
     };
-    if (request.bounds) {
-      payload.bounds = sanitizeBounds(request.bounds);
-    }
     let response: unknown;
     try {
       response = await this.invoke(OPEN_TARGET_PAGE_COMMAND, { request: payload });
@@ -395,86 +379,6 @@ export class DesktopBridge {
     }
   }
 
-  public async closeTargetPage(request: CloseTargetPageRequest): Promise<boolean> {
-    if (!this.invoke) {
-      return false;
-    }
-
-    const response = await this.invoke(CLOSE_TARGET_PAGE_COMMAND, {
-      request: {
-        pageId: sanitizeString(request.pageId),
-      },
-    });
-    if (typeof response === "boolean") {
-      return response;
-    }
-
-    const payload = response as { closed?: boolean };
-
-    return Boolean(normalizeCommandResponse(payload.closed, false));
-  }
-
-  public async resizeTargetPageView(request: ResizeTargetPageViewRequest): Promise<boolean> {
-    if (!this.invoke) {
-      return false;
-    }
-
-    const response = await this.invoke(RESIZE_TARGET_PAGE_VIEW_COMMAND, {
-      request: {
-        bounds: sanitizeBounds(request.bounds),
-        pageId: sanitizeString(request.pageId),
-      },
-    });
-    if (typeof response === "boolean") {
-      return response;
-    }
-
-    const payload = response as { resized?: boolean };
-
-    return Boolean(normalizeCommandResponse(payload.resized, false));
-  }
-
-  public async setTargetPageViewVisibility(
-    request: SetTargetPageViewVisibilityRequest,
-  ): Promise<boolean> {
-    if (!this.invoke) {
-      return false;
-    }
-
-    const response = await this.invoke(SET_TARGET_PAGE_VIEW_VISIBILITY_COMMAND, {
-      request: {
-        bounds: request.bounds ? sanitizeBounds(request.bounds) : undefined,
-        pageId: sanitizeString(request.pageId),
-        visible: Boolean(request.visible),
-      },
-    });
-    if (typeof response === "boolean") {
-      return response;
-    }
-
-    const payload = response as { visible?: boolean };
-    return Boolean(normalizeCommandResponse(payload.visible, false));
-  }
-
-  public async setInjectionEnabled(enabled: boolean): Promise<boolean> {
-    if (!this.invoke) {
-      return enabled;
-    }
-
-    const response = await this.invoke(SET_INJECTION_ENABLED_COMMAND, {
-      request: {
-        enabled: Boolean(enabled),
-      },
-    });
-    if (typeof response === "boolean") {
-      return response;
-    }
-
-    const payload = response as { enabled?: boolean };
-
-    return Boolean(normalizeCommandResponse(payload.enabled, enabled));
-  }
-
   public async emitInjectionEvent(event: DesktopInjectionEventRequest): Promise<void> {
     if (!this.invoke) {
       return;
@@ -539,13 +443,4 @@ export function sanitizeUrlInput(value: string): string {
   } catch {
     return normalized;
   }
-}
-
-function sanitizeBounds(bounds: DesktopTargetBounds): DesktopTargetBounds {
-  return {
-    height: Math.max(0, Math.round(Number(bounds.height) || 0)),
-    width: Math.max(0, Math.round(Number(bounds.width) || 0)),
-    x: Math.round(Number(bounds.x) || 0),
-    y: Math.round(Number(bounds.y) || 0),
-  };
 }

@@ -29,6 +29,7 @@ export function EditableTabs({
   onEdit,
   className,
   keepMounted,
+  preserveInternalTabs = true,
   provideTabVisibility = false,
 }: EditableTabsProps) {
   const processedCloseRequestId = useRef<number | undefined>(undefined);
@@ -47,11 +48,13 @@ export function EditableTabs({
           .map((item) => item.stableId)
           .filter((stableId): stableId is string => Boolean(stableId)),
       );
-      const internalTabs = currentTabs.filter(
-        (item) =>
-          !incomingKeys.has(item.key) &&
-          !(item.stableId && incomingStableIds.has(item.stableId)),
-      );
+      const internalTabs = preserveInternalTabs
+        ? currentTabs.filter(
+            (item) =>
+              !incomingKeys.has(item.key) &&
+              !(item.stableId && incomingStableIds.has(item.stableId)),
+          )
+        : [];
       const nextTabs = items.map((item) => {
         const previous = currentTabs.find(
           (current) => current.stableId && current.stableId === item.stableId,
@@ -69,7 +72,7 @@ export function EditableTabs({
       }
       return getInitialActiveKey(items, defaultActiveKey);
     });
-  }, [defaultActiveKey, items]);
+  }, [defaultActiveKey, items, preserveInternalTabs]);
 
   // 受控模式：外部 activeKey 变化时同步内部激活态
   useEffect(() => {

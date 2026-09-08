@@ -15,6 +15,7 @@ import type { EditableTab } from "@/components/editable-tabs";
 
 export interface TabPanelConfig {
   contentClassName?: string;
+  onPageInspectionConfirm?: (result: import("@/components/page-view").TargetPageFrameInspectionResult) => void;
   rightPanel?: ReactNode;
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
@@ -25,6 +26,7 @@ interface TabPanelRegistryValue {
   clear: (tabId: string) => void;
   get: (tabId: string) => TabPanelConfig | undefined;
   getRightPanelActiveKey: (tabId: string) => string | undefined;
+  getRightPanelOwnerKey: (tabId: string) => string | undefined;
   getRightPanelTabs: (tabId: string) => readonly EditableTab[];
   register: (tabId: string, config: TabPanelConfig) => void;
   openRightPanelTab: (tabId: string, tab: EditableTab) => void;
@@ -35,6 +37,7 @@ interface TabPanelRegistryValue {
   ) => void;
   removeRightPanelTab: (tabId: string, key: string) => void;
   setRightPanelActiveKey: (tabId: string, key: string) => void;
+  setRightPanelOwnerKey: (tabId: string, ownerKey: string | undefined) => void;
 }
 
 const emptyRegistry: TabPanelRegistryValue = {
@@ -42,12 +45,14 @@ const emptyRegistry: TabPanelRegistryValue = {
   clear: () => undefined,
   get: () => undefined,
   getRightPanelActiveKey: () => undefined,
+  getRightPanelOwnerKey: () => undefined,
   getRightPanelTabs: () => [],
   register: () => undefined,
   openRightPanelTab: () => undefined,
   updateRightPanelTab: () => undefined,
   removeRightPanelTab: () => undefined,
   setRightPanelActiveKey: () => undefined,
+  setRightPanelOwnerKey: () => undefined,
 };
 
 const TabPanelRegistryContext =
@@ -87,6 +92,14 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
   const [rightPanelActiveKeys, setRightPanelActiveKeys] = useState<
     Record<string, string>
   >({});
+  const [rightPanelOwnerKeys, setRightPanelOwnerKeys] = useState<
+    Record<string, string | undefined>
+  >({});
+
+  const activeKeyScope = useCallback(
+    (tabId: string, ownerKey?: string) => `${tabId}\u0000${ownerKey ?? ""}`,
+    [],
+  );
 
   const openRightPanelTab = useCallback((tabId: string, tab: EditableTab) => {
     setRightPanelTabs((current) => {
@@ -94,10 +107,11 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       if (currentTabs.some((item) => item.key === tab.key)) return current;
       return { ...current, [tabId]: [...currentTabs, tab] };
     });
+    const scope = activeKeyScope(tabId, tab.ownerKey);
     setRightPanelActiveKeys((current) => (
-      current[tabId] === tab.key ? current : { ...current, [tabId]: tab.key }
+      current[scope] === tab.key ? current : { ...current, [scope]: tab.key }
     ));
-  }, []);
+  }, [activeKeyScope]);
 
   const updateRightPanelTab = useCallback(
     (tabId: string, stableId: string, updates: Partial<EditableTab>) => {
@@ -115,13 +129,14 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
         const previous = (rightPanelTabs[tabId] ?? []).find(
           (tab) => tab.stableId === stableId,
         );
-        if (!previous || current[tabId] !== previous.key || !updates.key) {
+        const scope = activeKeyScope(tabId, previous?.ownerKey);
+        if (!previous || current[scope] !== previous.key || !updates.key) {
           return current;
         }
-        return { ...current, [tabId]: updates.key };
+        return { ...current, [scope]: updates.key };
       });
     },
-    [rightPanelTabs],
+    [activeKeyScope, rightPanelTabs],
   );
 
   const removeRightPanelTab = useCallback((tabId: string, key: string) => {
@@ -134,8 +149,17 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
   }, []);
 
   const setRightPanelActiveKey = useCallback((tabId: string, key: string) => {
+    const ownerKey = rightPanelTabs[tabId]?.find((tab) => tab.key === key)?.ownerKey
+      ?? rightPanelOwnerKeys[tabId];
+    const scope = activeKeyScope(tabId, ownerKey);
     setRightPanelActiveKeys((current) => (
-      current[tabId] === key ? current : { ...current, [tabId]: key }
+      current[scope] === key ? current : { ...current, [scope]: key }
+    ));
+  }, [activeKeyScope, rightPanelOwnerKeys, rightPanelTabs]);
+
+  const setRightPanelOwnerKey = useCallback((tabId: string, ownerKey: string | undefined) => {
+    setRightPanelOwnerKeys((current) => (
+      current[tabId] === ownerKey ? current : { ...current, [tabId]: ownerKey }
     ));
   }, []);
 
@@ -154,6 +178,7 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       if (
         previous &&
         previous.contentClassName === nextConfig.contentClassName &&
+        previous.onPageInspectionConfirm === nextConfig.onPageInspectionConfirm &&
         previous.rightPanel === nextConfig.rightPanel &&
         previous.searchPlaceholder === nextConfig.searchPlaceholder &&
         previous.topbarActions === nextConfig.topbarActions
@@ -189,6 +214,11 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
         staleTabIds.forEach((tabId) => delete remaining[tabId]);
         return remaining;
       });
+      setRightPanelOwnerKeys((currentKeys) => {
+        const remaining = { ...currentKeys };
+        staleTabIds.forEach((tabId) => delete remaining[tabId]);
+        return remaining;
+      });
       setRightPanelActiveKeys((currentKeys) => {
         const remaining = { ...currentKeys };
         staleTabIds.forEach((tabId) => delete remaining[tabId]);
@@ -207,8 +237,12 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     [rightPanelTabs],
   );
   const getRightPanelActiveKey = useCallback(
-    (tabId: string) => rightPanelActiveKeys[tabId],
-    [rightPanelActiveKeys],
+    (tabId: string) => rightPanelActiveKeys[activeKeyScope(tabId, rightPanelOwnerKeys[tabId])],
+    [activeKeyScope, rightPanelActiveKeys, rightPanelOwnerKeys],
+  );
+  const getRightPanelOwnerKey = useCallback(
+    (tabId: string) => rightPanelOwnerKeys[tabId],
+    [rightPanelOwnerKeys],
   );
 
   const value = useMemo<TabPanelRegistryValue>(
@@ -217,24 +251,28 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       clear,
       get,
       getRightPanelActiveKey,
+      getRightPanelOwnerKey,
       getRightPanelTabs,
       openRightPanelTab,
       updateRightPanelTab,
       register,
       removeRightPanelTab,
       setRightPanelActiveKey,
+      setRightPanelOwnerKey,
     }),
     [
       cacheConfigs,
       clear,
       get,
       getRightPanelActiveKey,
+      getRightPanelOwnerKey,
       getRightPanelTabs,
       openRightPanelTab,
       updateRightPanelTab,
       register,
       removeRightPanelTab,
       setRightPanelActiveKey,
+      setRightPanelOwnerKey,
     ],
   );
 
@@ -278,6 +316,7 @@ export function useTabPanelConfig(config: TabPanelConfig) {
     }
   }, [
     config.contentClassName,
+    config.onPageInspectionConfirm,
     config.rightPanel,
     config.searchPlaceholder,
     config.topbarActions,
@@ -286,21 +325,33 @@ export function useTabPanelConfig(config: TabPanelConfig) {
   ]);
 }
 
-export function useRightPanelTabs() {
+export function useRightPanelTabs(ownerKey?: string) {
   const registry = useTabPanelRegistry();
   const scopeTabId = useContext(TabPanelScopeContext);
   const updateRightPanelState = useTabStore(
     (state) => state.updateRightPanelState,
   );
 
+  useEffect(() => {
+    if (scopeTabId) {
+      registry.setRightPanelOwnerKey(scopeTabId, ownerKey);
+    }
+  }, [ownerKey, registry, scopeTabId]);
+
   const openTab = useCallback(
     (tab: EditableTab) => {
       if (scopeTabId) {
-        registry.openRightPanelTab(scopeTabId, tab);
+        const scopedPrefix = ownerKey ? `${encodeURIComponent(ownerKey)}:` : "";
+        registry.openRightPanelTab(scopeTabId, {
+          ...tab,
+          key: `${scopedPrefix}${tab.key}`,
+          ownerKey,
+          stableId: tab.stableId ? `${scopedPrefix}${tab.stableId}` : undefined,
+        });
         updateRightPanelState(scopeTabId, { open: true });
       }
     },
-    [registry, scopeTabId, updateRightPanelState],
+    [ownerKey, registry, scopeTabId, updateRightPanelState],
   );
 
   return useMemo(() => ({ openTab }), [openTab]);

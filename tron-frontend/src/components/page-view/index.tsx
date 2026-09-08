@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 
 import {
     TargetPageFrame,
@@ -7,21 +7,33 @@ import {
 } from "./TargetPageFrame";
 
 export interface PageViewProps {
-    inspectionMode?: boolean;
-    onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
-    onUrlChange?: (url: string) => void;
-    url: string;
+  inspectionMode?: boolean;
+  onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
+  onUrlChange?: (url: string) => void;
+  pageId?: string;
+  partition?: string;
+  url: string;
 }
 
-export function PageView({ inspectionMode = false, onInspectionConfirm, onUrlChange, url }: PageViewProps) {
+export function PageView({ inspectionMode = false, onInspectionConfirm, onUrlChange, pageId, partition, url }: PageViewProps) {
     const frameRef = useRef<TargetPageFrameHandle | null>(null);
+    const reportedUrlRef = useRef("");
 
     useEffect(() => {
         const normalizedUrl = url.trim();
+        if (reportedUrlRef.current === normalizedUrl) {
+            reportedUrlRef.current = "";
+            return;
+        }
         frameRef.current?.open(normalizedUrl);
     }, [url]);
 
-    return <TargetPageFrame inspectionMode={inspectionMode} ref={frameRef} onInspectionConfirm={inspectionMode ? onInspectionConfirm : undefined} onUrlChange={onUrlChange} />;
+    const handleUrlChange = useCallback((nextUrl: string) => {
+        reportedUrlRef.current = nextUrl.trim();
+        onUrlChange?.(nextUrl);
+    }, [onUrlChange]);
+
+    return <TargetPageFrame initialUrl={url} inspectionMode={inspectionMode} ref={frameRef} onInspectionConfirm={inspectionMode ? onInspectionConfirm : undefined} onUrlChange={handleUrlChange} pageId={pageId} partition={partition} />;
 }
 
 export type { TargetPageFrameInspectionResult };

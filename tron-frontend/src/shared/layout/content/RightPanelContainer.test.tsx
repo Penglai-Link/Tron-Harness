@@ -9,10 +9,18 @@ import { useTabStore } from "@/store/tabStore";
 import RightPanelContainer from "./RightPanelContainer";
 import { TabPanelRegistryProvider, useRightPanelTabs } from "./TabPanelRegistry";
 
+const pageViewState = vi.hoisted(() => ({
+  unmountedUrls: [] as string[],
+}));
+
 vi.mock("@/components/page-view", () => ({
-  PageView: ({ url }: { url: string }) => (
-    <input aria-label={url} defaultValue="" />
-  ),
+  PageView: ({ url }: { url: string }) => {
+    useEffect(() => () => {
+      pageViewState.unmountedUrls.push(url);
+    }, [url]);
+
+    return <input aria-label={url} defaultValue="" />;
+  },
 }));
 
 function TabOpener({ onReady }: { onReady: (open: (tab: EditableTab) => void) => void }) {
@@ -26,6 +34,7 @@ describe("RightPanelContainer", () => {
   afterEach(() => {
     cleanup();
     useTabStore.getState().clearAllTabs();
+    pageViewState.unmountedUrls = [];
   });
 
   it("opens a separate dynamic tab for each URL in the current main content tab", () => {
@@ -123,6 +132,62 @@ describe("RightPanelContainer", () => {
       .toBe("second draft");
   });
 
+  it("keeps inactive main-tab panels mounted without hiding their native guests", () => {
+    const firstTabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/chats/first",
+      title: "First",
+    });
+    const secondTabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/chats/second",
+      title: "Second",
+    });
+    useTabStore.getState().addToCache(firstTabId, "/chats/first", "chats.index");
+    useTabStore.getState().addToCache(secondTabId, "/chats/second", "chats.index");
+    let openFirstTab: ((tab: EditableTab) => void) | undefined;
+    let openSecondTab: ((tab: EditableTab) => void) | undefined;
+
+    render(
+      <TabPanelRegistryProvider>
+        <TabPanelRegistryProvider tabId={firstTabId}>
+          <TabOpener onReady={(open) => { openFirstTab = open; }} />
+        </TabPanelRegistryProvider>
+        <TabPanelRegistryProvider tabId={secondTabId}>
+          <TabOpener onReady={(open) => { openSecondTab = open; }} />
+        </TabPanelRegistryProvider>
+        <RightPanelContainer />
+      </TabPanelRegistryProvider>,
+    );
+
+    act(() => {
+      openFirstTab?.({
+        children: null,
+        key: "first-page",
+        label: "First page",
+        stableId: "first-page",
+        url: "https://first.example.com",
+      });
+      openSecondTab?.({
+        children: null,
+        key: "second-page",
+        label: "Second page",
+        stableId: "second-page",
+        url: "https://second.example.com",
+      });
+      useTabStore.getState().setActiveTab(secondTabId);
+    });
+
+    const inactiveFirstPanel = screen.getByRole("textbox", {
+      hidden: true,
+      name: "https://first.example.com",
+    });
+
+    expect(inactiveFirstPanel.closest(".hidden")).toBeNull();
+    expect(inactiveFirstPanel.closest(".invisible")).toBeTruthy();
+    expect(pageViewState.unmountedUrls).toEqual([]);
+  });
+
   it("keeps an iframe tab mounted while switching between panel tabs", () => {
     const tabId = useTabStore.getState().addTab({
       closable: true,
@@ -167,5 +232,37 @@ describe("RightPanelContainer", () => {
 
     expect((screen.getByRole("textbox", { name: "https://first.example.com" }) as HTMLInputElement).value)
       .toBe("first draft");
+  });
+
+  it("unmounts the target page when its right-panel tab is closed", () => {
+    const tabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/chats",
+      title: "Chats",
+    });
+    useTabStore.getState().addToCache(tabId, "/chats", "chats.index");
+    let openTab: ((tab: EditableTab) => void) | undefined;
+
+    render(
+      <TabPanelRegistryProvider>
+        <TabPanelRegistryProvider tabId={tabId}>
+          <TabOpener onReady={(open) => { openTab = open; }} />
+        </TabPanelRegistryProvider>
+        <RightPanelContainer />
+      </TabPanelRegistryProvider>,
+    );
+
+    act(() => openTab?.({
+      children: null,
+      key: "target-page",
+      label: "Target page",
+      stableId: "target-page",
+      url: "https://target.example.com",
+    }));
+
+    fireEvent.click(screen.getByRole("button", { name: "Close tab" }));
+
+    expect(screen.queryByRole("textbox", { name: "https://target.example.com" })).toBeNull();
+    expect(pageViewState.unmountedUrls).toContain("https://target.example.com");
   });
 });

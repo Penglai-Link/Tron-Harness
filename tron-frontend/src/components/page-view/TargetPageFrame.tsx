@@ -10,16 +10,16 @@ import {
   type KeyboardEvent,
 } from "react";
 
+import { useTabVisibility } from "@/components/editable-tabs";
 import {
   DesktopBridge,
+  resolveDesktopPageId,
+  resolveTargetWebviewPreloadUrl,
   sanitizeInjectionEventPayload,
   sanitizeUrlInput,
-  type DesktopBackendStatus,
   type DesktopInjectionEvent,
   type DesktopInjectionEventRequest,
-  type DesktopTargetBounds,
 } from "@/shared/desktop/DesktopBridge";
-import { useTabVisibility } from "@/components/editable-tabs";
 import { TargetPageChrome } from "./TargetPageChrome";
 import { TargetPageEmpty } from "./TargetPageEmpty";
 import { TargetPageUnsupported } from "./TargetPageUnsupported";
@@ -35,29 +35,39 @@ export interface TargetPageFrameInspectionResult {
 }
 
 interface TargetPageFrameProps {
+  initialUrl?: string;
   inspectionMode?: boolean;
   onInspectionConfirm?: (result: TargetPageFrameInspectionResult) => void;
   onUrlChange?: (url: string) => void;
+  pageId?: string;
+  partition?: string;
 }
 
-const FRAME_TIMEOUT_MS = 3500;
+interface TronWebviewElement extends HTMLElement {
+  canGoBack: () => boolean;
+  canGoForward: () => boolean;
+  getURL: () => string;
+  goBack: () => void;
+  goForward: () => void;
+  reload: () => void;
+  send: (channel: string, ...args: unknown[]) => Promise<void>;
+}
+
+type WebviewNavigationEvent = Event & {
+  errorCode?: number;
+  isMainFrame?: boolean;
+  url?: string;
+};
+
 const BRIDGE_CHANNEL = "tron:frame-event";
-const DEFAULT_PAGE_ID_PREFIX = "desktop";
 
 function createPageId() {
-  return `${DEFAULT_PAGE_ID_PREFIX}-${Date.now()}`;
-}
+  const suffix =
+    typeof crypto !== "undefined" && typeof crypto.randomUUID === "function"
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.random().toString(36).slice(2)}`;
 
-function describeOpenError(error: unknown): string {
-  if (error instanceof Error && error.message) {
-    return error.message;
-  }
-
-  if (typeof error === "string" && error.trim()) {
-    return error.trim();
-  }
-
-  return "unknown error";
+  return `desktop-${suffix}`;
 }
 
 function asRecord(value: unknown): Record<string, unknown> | null {
@@ -68,16 +78,12 @@ function asRecord(value: unknown): Record<string, unknown> | null {
   return value as Record<string, unknown>;
 }
 
-function readString(
-  payload: Record<string, unknown> | null,
-  key: string,
-): string {
+function readString(payload: Record<string, unknown> | null, key: string) {
   const value = payload?.[key];
-
   return typeof value === "string" ? value : "";
 }
 
-function displayAddress(url: string): string {
+function displayAddress(url: string) {
   try {
     return new URL(url).host || url;
   } catch {
@@ -85,17 +91,28 @@ function displayAddress(url: string): string {
   }
 }
 
-function preserveUrlHash(originalUrl: string, resolvedUrl: string): string {
+function preserveUrlHash(originalUrl: string, resolvedUrl: string) {
   try {
     const original = new URL(originalUrl);
     const resolved = new URL(resolvedUrl || originalUrl);
     if (!resolved.hash && original.hash) {
       resolved.hash = original.hash;
     }
-
     return resolved.href;
   } catch {
     return resolvedUrl || originalUrl;
+  }
+}
+
+function safelyReadWebviewNavigation(webview: TronWebviewElement) {
+  try {
+    return {
+      canGoBack: webview.canGoBack(),
+      canGoForward: webview.canGoForward(),
+      url: webview.getURL(),
+    };
+  } catch {
+    return { canGoBack: false, canGoForward: false, url: "" };
   }
 }
 
@@ -103,40 +120,49 @@ export const TargetPageFrame = forwardRef<
   TargetPageFrameHandle,
   TargetPageFrameProps
 >(function TargetPageFrame(
-  { inspectionMode = false, onInspectionConfirm, onUrlChange },
+  {
+    initialUrl = "",
+    inspectionMode = false,
+    onInspectionConfirm,
+    onUrlChange,
+    pageId: requestedPageId,
+    partition,
+  },
   ref,
 ) {
+  const hasInitialUrl = Boolean(initialUrl.trim());
   const bridge = useMemo(() => new DesktopBridge(), []);
+  const generatedPageIdRef = useRef(createPageId());
+  const pageId = useMemo(
+    () => resolveDesktopPageId(requestedPageId || generatedPageIdRef.current),
+    [requestedPageId],
+  );
   const frameRef = useRef<HTMLIFrameElement | null>(null);
-  const targetViewportRef = useRef<HTMLDivElement | null>(null);
+  const emptyViewportRef = useRef<HTMLDivElement | null>(null);
   const addressFormRef = useRef<HTMLFormElement | null>(null);
   const addressInputRef = useRef<HTMLInputElement | null>(null);
   const addressSubmitPendingRef = useRef(false);
-  const [visible, setVisible] = useState(false);
-  const [pageId, setPageId] = useState(createPageId);
+  const injectionEnabledRef = useRef(false);
+  const webviewReadyRef = useRef(false);
+  const [webview, setWebview] = useState<TronWebviewElement | null>(null);
+  const [visible, setVisible] = useState(!hasInitialUrl);
+  const [activeUrl, setActiveUrl] = useState("");
   const [injectionEnabled, setInjectionEnabled] = useState(false);
-  const [desktopBackendStatus, setDesktopBackendStatus] =
-    useState<DesktopBackendStatus>({
-      backendUrl: "",
-      backendPort: 0,
-      ready: false,
-      injectionEnabled: false,
-    });
-  const [frameReady, setFrameReady] = useState(false);
-  const [frameId, setFrameId] = useState("");
   const [frameVersion, setFrameVersion] = useState(0);
   const [historyEntries, setHistoryEntries] = useState<string[]>([]);
   const [historyIndex, setHistoryIndex] = useState(0);
+  const [navigation, setNavigation] = useState({
+    canGoBack: false,
+    canGoForward: false,
+  });
   const [addressDraft, setAddressDraft] = useState("");
-  const [addressEditing, setAddressEditing] = useState(false);
-  const [unsupportedPageActive, setUnsupportedPageActive] = useState(false);
-  const fallbackDispatchedRef = useRef(false);
-  const embeddingCheckSequenceRef = useRef(0);
-  const timeoutRef = useRef<number | null>(null);
-  const activeUrl = historyEntries[historyIndex] ?? "";
-  const activeDisplayAddress = displayAddress(activeUrl);
+  const [addressEditing, setAddressEditing] = useState(!hasInitialUrl);
   const isDesktopHost = bridge.isDesktop();
+  const targetPreloadUrl = resolveTargetWebviewPreloadUrl();
   const panelVisible = useTabVisibility();
+  const activeDisplayAddress = displayAddress(activeUrl);
+
+  injectionEnabledRef.current = injectionEnabled && panelVisible;
 
   useEffect(() => {
     if (!inspectionMode) {
@@ -144,248 +170,70 @@ export const TargetPageFrame = forwardRef<
     }
   }, [inspectionMode]);
 
-  const clearTimeoutRef = useCallback(() => {
-    if (timeoutRef.current !== null) {
-      window.clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
-  }, []);
-
-  const openInSystemBrowser = useCallback(
-    (url: string, targetPageId = pageId) => {
-      void (async () => {
-        let result;
-        try {
-          result = await bridge.openTargetPage({
-            mode: "browser",
-            pageId: targetPageId,
-            url,
-          });
-        } catch (error) {
-          return;
-        }
-
-        if (result.opened) {
-          return;
-        }
-
-        if (result.reason === "running-in-browser") {
-          window.open(url, "_blank");
-          return;
-        }
-      })();
-    },
-    [bridge, pageId],
-  );
-
-  const dispatchBlocked = useCallback((reason: string) => {
-    if (fallbackDispatchedRef.current) {
+  useEffect(() => {
+    if (hasInitialUrl) {
       return;
     }
 
-    fallbackDispatchedRef.current = true;
-    setUnsupportedPageActive(true);
-    setFrameReady(false);
-    setFrameId("");
-  }, []);
+    setVisible(true);
+    setAddressEditing(true);
+  }, [hasInitialUrl]);
+
+  useEffect(() => {
+    if (!visible || activeUrl || !addressEditing) {
+      return undefined;
+    }
+
+    const frameId = window.requestAnimationFrame(() => {
+      addressInputRef.current?.focus();
+    });
+    return () => window.cancelAnimationFrame(frameId);
+  }, [activeUrl, addressEditing, visible]);
+
+  const setCurrentUrl = useCallback(
+    (url: string, notify = true) => {
+      const normalized = sanitizeUrlInput(url);
+      if (
+        !normalized.startsWith("http://") &&
+        !normalized.startsWith("https://")
+      ) {
+        return;
+      }
+
+      setActiveUrl(normalized);
+      setAddressDraft(displayAddress(normalized));
+      setAddressEditing(false);
+      if (notify) {
+        onUrlChange?.(normalized);
+      }
+    },
+    [onUrlChange],
+  );
 
   const checkEmbeddingSupport = useCallback(
     async (url: string) => {
       const result = await bridge.checkTargetPageEmbedding({ url });
-
       return {
         blocked: result.blocked,
-        reason: result.reason,
         url: preserveUrlHash(url, result.url || url),
       };
     },
     [bridge],
   );
 
-  const readTargetViewportBounds = useCallback(():
-    | DesktopTargetBounds
-    | undefined => {
-    const viewport = targetViewportRef.current;
-    if (!viewport) {
-      return undefined;
-    }
-
-    const rect = viewport.getBoundingClientRect();
-    const visibleWidth =
-      Math.min(rect.right, window.innerWidth) - Math.max(rect.left, 0);
-    const visibleHeight =
-      Math.min(rect.bottom, window.innerHeight) - Math.max(rect.top, 0);
-    if (visibleWidth <= 0 || visibleHeight <= 0) {
-      return {
-        height: 0,
-        width: 0,
-        x: 0,
-        y: 0,
-      };
-    }
-
-    return {
-      height: Math.max(0, Math.round(rect.height)),
-      width: Math.max(0, Math.round(rect.width)),
-      x: Math.round(rect.left),
-      y: Math.round(rect.top),
-    };
-  }, []);
-
-  const syncTargetViewBounds = useCallback(() => {
-    if (
-      !isDesktopHost ||
-      !panelVisible ||
-      !visible ||
-      unsupportedPageActive ||
-      !pageId
-    ) {
-      return;
-    }
-
-    const bounds = readTargetViewportBounds();
-    if (!bounds) {
-      return;
-    }
-
-    void bridge.resizeTargetPageView({
-      bounds,
-      pageId,
-    });
-  }, [
-    bridge,
-    isDesktopHost,
-    pageId,
-    panelVisible,
-    readTargetViewportBounds,
-    unsupportedPageActive,
-    visible,
-  ]);
-
-  const applyEmbeddingResult = useCallback(
-    (url: string, index: number, targetPageId = pageId) => {
-      const requestSequence = embeddingCheckSequenceRef.current + 1;
-      embeddingCheckSequenceRef.current = requestSequence;
-
-      void (async () => {
-        if (bridge.isDesktop()) {
-          const result = await bridge.openTargetPage({
-            bounds: readTargetViewportBounds(),
-            mode: "view",
-            pageId: targetPageId,
-            url,
-          });
-          if (requestSequence !== embeddingCheckSequenceRef.current) {
-            return;
-          }
-
-          setAddressDraft(displayAddress(url));
-          setAddressEditing(false);
-          setUnsupportedPageActive(!result.opened);
-          // The visibility effect can run before the main process creates the
-          // WebContentsView. Re-apply it after openTargetPage resolves so a
-          // hidden tab stays detached and a visible tab is attached promptly.
-          const shouldBeVisible = panelVisible && result.opened;
-          void bridge.setTargetPageViewVisibility({
-            bounds: shouldBeVisible ? readTargetViewportBounds() : undefined,
-            pageId: targetPageId,
-            visible: shouldBeVisible,
-          });
-          window.requestAnimationFrame(syncTargetViewBounds);
-          return;
-        }
-
-        const result = await checkEmbeddingSupport(url);
-        if (requestSequence !== embeddingCheckSequenceRef.current) {
-          return;
-        }
-
-        setHistoryEntries((current) => {
-          const next = [...current];
-          if (next[index] === url) {
-            next[index] = result.url;
-          }
-          return next;
-        });
-        setAddressDraft(displayAddress(result.url));
-        setAddressEditing(false);
-
-        if (result.blocked) {
-          setUnsupportedPageActive(true);
-          return;
-        }
-
-        setUnsupportedPageActive(false);
-        setFrameVersion((current) => current + 1);
-      })();
-    },
-    [
-      bridge,
-      checkEmbeddingSupport,
-      pageId,
-      panelVisible,
-      readTargetViewportBounds,
-      syncTargetViewBounds,
-    ],
-  );
-
-  const postInjectionToggle = useCallback(() => {
-    frameRef.current?.contentWindow?.postMessage(
-      {
-        channel: BRIDGE_CHANNEL,
-        type: "tron:toggle-injection",
-        pageId,
-        enabled: injectionEnabled,
-      },
-      "*",
-    );
-  }, [injectionEnabled, pageId]);
-
-  useEffect(() => {
-    let isMounted = true;
-
-    void (async () => {
-      const status = await bridge.getBackendStatus();
-      if (isMounted) {
-        setDesktopBackendStatus(status);
-      }
-    })();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [bridge]);
-
-  useEffect(() => {
-    void (async () => {
-      const enabled = await bridge.setInjectionEnabled(injectionEnabled);
-      setDesktopBackendStatus((current) => ({
-        ...current,
-        injectionEnabled: enabled,
-      }));
-    })();
-  }, [bridge, injectionEnabled]);
-
   const open = useCallback(
     (url: string) => {
       const normalized = sanitizeUrlInput(url);
+      setVisible(true);
+      setInjectionEnabled(false);
+      setNavigation({ canGoBack: false, canGoForward: false });
 
       if (!normalized) {
-        if (isDesktopHost && visible) {
-          void bridge.closeTargetPage({ pageId });
-        }
-        clearTimeoutRef();
-        fallbackDispatchedRef.current = false;
-        setPageId(createPageId());
-        setInjectionEnabled(false);
-        setFrameReady(false);
-        setFrameId("");
-        setVisible(true);
-        setUnsupportedPageActive(false);
-        setHistoryEntries([]);
-        setHistoryIndex(0);
+        setActiveUrl("");
         setAddressDraft("");
         setAddressEditing(true);
+        setHistoryEntries([]);
+        setHistoryIndex(0);
         addressInputRef.current?.focus();
         return;
       }
@@ -397,175 +245,134 @@ export const TargetPageFrame = forwardRef<
         return;
       }
 
-      const nextPageId = createPageId();
-      if (isDesktopHost && visible) {
-        void bridge.closeTargetPage({ pageId });
-      }
-      clearTimeoutRef();
-      fallbackDispatchedRef.current = false;
-      setPageId(nextPageId);
-      setInjectionEnabled(false);
-      setFrameReady(false);
-      setFrameId("");
-      setVisible(true);
-      setUnsupportedPageActive(false);
-      setHistoryEntries([normalized]);
-      setHistoryIndex(0);
+      setActiveUrl(normalized);
       setAddressDraft(normalized);
       setAddressEditing(false);
-      applyEmbeddingResult(normalized, 0, nextPageId);
+
+      if (isDesktopHost) {
+        return;
+      }
+
+      setHistoryEntries([normalized]);
+      setHistoryIndex(0);
+      void checkEmbeddingSupport(normalized).then((result) => {
+        if (!result.blocked) {
+          setActiveUrl(result.url);
+          setHistoryEntries([result.url]);
+          setFrameVersion((current) => current + 1);
+        }
+      });
     },
-    [
-      applyEmbeddingResult,
-      bridge,
-      clearTimeoutRef,
-      isDesktopHost,
-      pageId,
-      visible,
-    ],
+    [checkEmbeddingSupport, isDesktopHost],
   );
 
-  useImperativeHandle(
-    ref,
-    () => ({
-      open,
-    }),
-    [open],
+  useImperativeHandle(ref, () => ({ open }), [open]);
+
+  const handleWebviewRef = useCallback((element: HTMLElement | null) => {
+    webviewReadyRef.current = false;
+    setWebview(element as TronWebviewElement | null);
+  }, []);
+
+  const syncWebviewInspection = useCallback(
+    (configure = false) => {
+      if (!webview || !webviewReadyRef.current) {
+        return;
+      }
+
+      const channel = configure
+        ? "tron-desktop:configure-target"
+        : "tron-desktop:toggle-injection";
+      try {
+        void webview
+          .send(channel, {
+            enabled: injectionEnabledRef.current,
+            pageId,
+          })
+          .catch(() => undefined);
+      } catch {
+        webviewReadyRef.current = false;
+      }
+    },
+    [pageId, webview],
   );
 
   useEffect(() => {
-    postInjectionToggle();
-  }, [postInjectionToggle]);
-
-  useEffect(() => {
-    if (!isDesktopHost || !visible) {
+    if (!webview) {
       return undefined;
     }
 
-    const currentPageId = pageId;
+    const syncNavigation = (event?: WebviewNavigationEvent) => {
+      if (event?.isMainFrame === false) {
+        return;
+      }
+      const current = safelyReadWebviewNavigation(webview);
+      const nextUrl = sanitizeUrlInput(event?.url || current.url);
+      setNavigation({
+        canGoBack: current.canGoBack,
+        canGoForward: current.canGoForward,
+      });
+      if (nextUrl) {
+        setCurrentUrl(nextUrl);
+      }
+    };
+    const handleDomReady = () => {
+      webviewReadyRef.current = true;
+      syncNavigation();
+      syncWebviewInspection(true);
+    };
+    const handleDidStartLoading = () => {
+      webviewReadyRef.current = false;
+    };
+    const handleDidFailLoad = (event: WebviewNavigationEvent) => {
+      if (event.isMainFrame === false || event.errorCode === -3) {
+        return;
+      }
+    };
+
+    webview.addEventListener("dom-ready", handleDomReady);
+    webview.addEventListener("did-start-loading", handleDidStartLoading);
+    webview.addEventListener("did-navigate", syncNavigation as EventListener);
+    webview.addEventListener(
+      "did-navigate-in-page",
+      syncNavigation as EventListener,
+    );
+    webview.addEventListener(
+      "did-fail-load",
+      handleDidFailLoad as EventListener,
+    );
 
     return () => {
-      void bridge.closeTargetPage({ pageId: currentPageId });
+      webview.removeEventListener("dom-ready", handleDomReady);
+      webview.removeEventListener("did-start-loading", handleDidStartLoading);
+      webview.removeEventListener(
+        "did-navigate",
+        syncNavigation as EventListener,
+      );
+      webview.removeEventListener(
+        "did-navigate-in-page",
+        syncNavigation as EventListener,
+      );
+      webview.removeEventListener(
+        "did-fail-load",
+        handleDidFailLoad as EventListener,
+      );
     };
-  }, [bridge, isDesktopHost, pageId, visible]);
+  }, [setCurrentUrl, syncWebviewInspection, webview]);
 
   useEffect(() => {
-    if (!isDesktopHost || !visible) {
-      return undefined;
-    }
-
-    let animationFrame = 0;
-    const scheduleSync = () => {
-      if (animationFrame) {
-        window.cancelAnimationFrame(animationFrame);
-      }
-      animationFrame = window.requestAnimationFrame(syncTargetViewBounds);
-    };
-
-    const observer = new ResizeObserver(scheduleSync);
-    const viewport = targetViewportRef.current;
-    if (viewport) {
-      observer.observe(viewport);
-    }
-
-    scheduleSync();
-    window.addEventListener("resize", scheduleSync);
-    window.addEventListener("scroll", scheduleSync, true);
-
-    return () => {
-      if (animationFrame) {
-        window.cancelAnimationFrame(animationFrame);
-      }
-      observer.disconnect();
-      window.removeEventListener("resize", scheduleSync);
-      window.removeEventListener("scroll", scheduleSync, true);
-    };
-  }, [isDesktopHost, syncTargetViewBounds, visible]);
-
-  useEffect(() => {
-    if (!isDesktopHost || !visible || !pageId) {
-      return;
-    }
-
-    const shouldBeVisible = panelVisible && !unsupportedPageActive;
-    void bridge.setTargetPageViewVisibility({
-      bounds: shouldBeVisible ? readTargetViewportBounds() : undefined,
-      pageId,
-      visible: shouldBeVisible,
-    });
-  }, [
-    bridge,
-    isDesktopHost,
-    pageId,
-    panelVisible,
-    readTargetViewportBounds,
-    unsupportedPageActive,
-    visible,
-  ]);
-
-  useEffect(() => {
-    if (injectionEnabled) {
-      return;
-    }
-
-    clearTimeoutRef();
-    fallbackDispatchedRef.current = false;
-    setFrameReady(false);
-    setFrameId("");
-  }, [clearTimeoutRef, injectionEnabled]);
-
-  useEffect(() => {
-    if (!injectionEnabled || !desktopBackendStatus.ready) {
-      clearTimeoutRef();
-      return;
-    }
-
-    const timer = window.setTimeout(() => {
-      if (!frameReady) {
-        dispatchBlocked("frame-handshake-timeout");
-      }
-    }, FRAME_TIMEOUT_MS);
-
-    timeoutRef.current = timer;
-
-    return () => {
-      clearTimeoutRef();
-    };
-  }, [
-    desktopBackendStatus.ready,
-    dispatchBlocked,
-    frameReady,
-    clearTimeoutRef,
-    injectionEnabled,
-  ]);
+    syncWebviewInspection(false);
+  }, [injectionEnabled, panelVisible, syncWebviewInspection]);
 
   useEffect(() => {
     const handler = (event: MessageEvent) => {
-      const raw = event.data;
       const sanitized = sanitizeInjectionEventPayload(
-        raw as DesktopInjectionEventRequest,
+        event.data as DesktopInjectionEventRequest,
       );
-
-      if (!sanitized) {
-        return;
-      }
-
-      if (sanitized.pageId !== pageId) {
-        return;
-      }
-
-      if (sanitized.eventType === "tron:frame-ready") {
-        clearTimeoutRef();
-        setFrameReady(true);
-        if (frameId !== sanitized.frameId) {
-          setFrameId(sanitized.frameId);
-        }
+      if (!sanitized || sanitized.pageId !== pageId) {
         return;
       }
 
       if (sanitized.eventType === "tron:inspection-exited") {
-        clearTimeoutRef();
-        setFrameReady(false);
         setInjectionEnabled(false);
         return;
       }
@@ -574,42 +381,14 @@ export const TargetPageFrame = forwardRef<
         const requestedUrl = sanitizeUrlInput(
           readString(asRecord(sanitized.payload), "url"),
         );
-        if (
-          !requestedUrl.startsWith("http://") &&
-          !requestedUrl.startsWith("https://")
-        ) {
-          return;
+        if (!isDesktopHost && requestedUrl) {
+          setCurrentUrl(requestedUrl);
         }
-
-        if (activeUrl === requestedUrl) {
-          return;
-        }
-
-        const nextIndex = historyIndex + 1;
-        fallbackDispatchedRef.current = false;
-        setUnsupportedPageActive(false);
-        setFrameReady(false);
-        setFrameId("");
-        setHistoryEntries((current) => {
-          const currentUrl = current[historyIndex] ?? "";
-          if (currentUrl === requestedUrl) {
-            return current;
-          }
-
-          return [...current.slice(0, historyIndex + 1), requestedUrl];
-        });
-        setHistoryIndex(nextIndex);
-        setAddressDraft(displayAddress(requestedUrl));
-        setAddressEditing(false);
-        onUrlChange?.(requestedUrl);
-        applyEmbeddingResult(requestedUrl, nextIndex);
         return;
       }
 
       if (inspectionMode && sanitized.eventType === "tron:node-inspected") {
         const dom = asRecord(sanitized.payload) ?? {};
-        void bridge.emitInjectionEvent(sanitized);
-
         onInspectionConfirm?.({
           dom,
           event: sanitized,
@@ -619,202 +398,109 @@ export const TargetPageFrame = forwardRef<
     };
 
     window.addEventListener("message", handler);
-    return () => {
-      window.removeEventListener("message", handler);
-    };
+    return () => window.removeEventListener("message", handler);
   }, [
-    activeUrl,
-    applyEmbeddingResult,
-    bridge,
-    clearTimeoutRef,
-    frameId,
-    historyIndex,
     inspectionMode,
+    isDesktopHost,
     onInspectionConfirm,
-    onUrlChange,
     pageId,
+    setCurrentUrl,
   ]);
 
-  const canGoBack = historyIndex > 0;
-  const canGoForward = historyIndex < historyEntries.length - 1;
-  const addressValue = addressEditing ? addressDraft : activeDisplayAddress;
-
-  useEffect(() => {
-    if (document.activeElement === addressInputRef.current) {
+  const openInSystemBrowser = useCallback(() => {
+    if (!activeUrl) {
       return;
     }
-
-    if (!addressEditing) {
-      setAddressDraft(activeDisplayAddress);
-    }
-  }, [activeDisplayAddress, addressEditing]);
-
-  useEffect(() => {
-    if (!visible || activeUrl || !addressEditing) {
-      return;
-    }
-
-    const frame = window.requestAnimationFrame(() => {
-      addressInputRef.current?.focus();
-    });
-
-    return () => window.cancelAnimationFrame(frame);
-  }, [activeUrl, addressEditing, visible]);
-
-  const handleLoad = () => {
-    clearTimeoutRef();
-    postInjectionToggle();
-    window.setTimeout(postInjectionToggle, 0);
-    if (!frameReady && injectionEnabled) {
-      const timer = window.setTimeout(() => {
-        if (!frameReady) {
-          dispatchBlocked("frame-load-complete-without-ready");
+    void bridge
+      .openTargetPage({ mode: "browser", pageId, url: activeUrl })
+      .then((result) => {
+        if (!result.opened && result.reason === "running-in-browser") {
+          window.open(activeUrl, "_blank", "noopener,noreferrer");
         }
-      }, 1500);
-
-      timeoutRef.current = timer;
-    }
-  };
-
-  const handleError = () => {
-    dispatchBlocked("iframe-load-error");
-  };
+      });
+  }, [activeUrl, bridge, pageId]);
 
   const handleBack = () => {
-    if (!canGoBack) {
+    if (isDesktopHost) {
+      if (webview?.canGoBack()) webview.goBack();
       return;
     }
-
-    clearTimeoutRef();
-    fallbackDispatchedRef.current = false;
-    setFrameReady(false);
-    setFrameId("");
-    const nextIndex = Math.max(0, historyIndex - 1);
-    setUnsupportedPageActive(false);
+    if (historyIndex <= 0) return;
+    const nextIndex = historyIndex - 1;
     setHistoryIndex(nextIndex);
-    applyEmbeddingResult(historyEntries[nextIndex] ?? "", nextIndex);
+    setActiveUrl(historyEntries[nextIndex] ?? "");
   };
 
   const handleForward = () => {
-    if (!canGoForward) {
+    if (isDesktopHost) {
+      if (webview?.canGoForward()) webview.goForward();
       return;
     }
-
-    clearTimeoutRef();
-    fallbackDispatchedRef.current = false;
-    setFrameReady(false);
-    setFrameId("");
-    const nextIndex = Math.min(historyEntries.length - 1, historyIndex + 1);
-    setUnsupportedPageActive(false);
+    if (historyIndex >= historyEntries.length - 1) return;
+    const nextIndex = historyIndex + 1;
     setHistoryIndex(nextIndex);
-    applyEmbeddingResult(historyEntries[nextIndex] ?? "", nextIndex);
+    setActiveUrl(historyEntries[nextIndex] ?? "");
   };
 
   const handleRefresh = () => {
-    clearTimeoutRef();
-    fallbackDispatchedRef.current = false;
-    setFrameReady(false);
-    setFrameId("");
-    setInjectionEnabled(false);
-    if (unsupportedPageActive) {
-      return;
-    }
-
     if (isDesktopHost) {
-      applyEmbeddingResult(activeUrl, historyIndex, pageId);
+      webview?.reload();
       return;
     }
-
     setFrameVersion((current) => current + 1);
   };
 
-  const handleOpenInSystemBrowser = () => {
-    openInSystemBrowser(activeUrl);
-  };
-
-  const handleInjectionToggle = () => {
-    if (!inspectionMode) {
-      return;
-    }
-
-    setInjectionEnabled((current) => !current);
-  };
-
-  const blurAddressInput = () => {
-    addressInputRef.current?.blur();
-  };
-
-  const loadTargetAddress = (rawAddress = addressDraft) => {
-    const normalized = sanitizeUrlInput(rawAddress);
+  const submitAddress = (value = addressDraft) => {
+    const normalized = sanitizeUrlInput(value);
     if (
       !normalized.startsWith("http://") &&
       !normalized.startsWith("https://")
     ) {
       setAddressDraft(activeUrl);
       setAddressEditing(false);
-      blurAddressInput();
       return;
     }
 
-    clearTimeoutRef();
-    fallbackDispatchedRef.current = false;
-    setFrameReady(false);
-    setFrameId("");
     setInjectionEnabled(false);
-    setUnsupportedPageActive(false);
-    const nextIndex = historyEntries.length === 0 ? 0 : historyIndex + 1;
-    setHistoryEntries((current) =>
-      current.length === 0
-        ? [normalized]
-        : [...current.slice(0, historyIndex + 1), normalized],
-    );
-    setHistoryIndex(nextIndex);
-    setAddressDraft(displayAddress(normalized));
-    setAddressEditing(false);
-    onUrlChange?.(normalized);
-    blurAddressInput();
-    applyEmbeddingResult(normalized, nextIndex);
-  };
-
-  const handleAddressFocus = () => {
-    if (addressInputRef.current) {
-      addressInputRef.current.value = activeUrl;
+    setCurrentUrl(normalized);
+    if (!isDesktopHost) {
+      const nextIndex = historyIndex + 1;
+      setHistoryEntries((current) => [
+        ...current.slice(0, nextIndex),
+        normalized,
+      ]);
+      setHistoryIndex(nextIndex);
+      void checkEmbeddingSupport(normalized).then((result) => {
+        if (!result.blocked) {
+          setCurrentUrl(result.url);
+          setFrameVersion((current) => current + 1);
+        }
+      });
     }
-    setAddressDraft(activeUrl);
-    setAddressEditing(true);
+    addressInputRef.current?.blur();
   };
 
   const handleAddressBlur = (event: FocusEvent<HTMLFormElement>) => {
-    if (addressSubmitPendingRef.current) {
-      return;
-    }
-
+    if (addressSubmitPendingRef.current) return;
     const nextTarget = event.relatedTarget;
     if (
       nextTarget instanceof Node &&
       addressFormRef.current?.contains(nextTarget)
-    ) {
+    )
       return;
-    }
-
     window.setTimeout(() => {
-      if (addressFormRef.current?.contains(document.activeElement)) {
-        return;
+      if (!addressFormRef.current?.contains(document.activeElement)) {
+        setAddressDraft(activeDisplayAddress);
+        setAddressEditing(false);
       }
-
-      setAddressDraft(activeDisplayAddress);
-      setAddressEditing(false);
     }, 0);
   };
 
   const handleAddressKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
     if (event.key === "Enter") {
       event.preventDefault();
-      loadTargetAddress(event.currentTarget.value);
-      return;
-    }
-
-    if (event.key === "Escape") {
+      submitAddress(event.currentTarget.value);
+    } else if (event.key === "Escape") {
       setAddressDraft(activeDisplayAddress);
       setAddressEditing(false);
     }
@@ -824,39 +510,40 @@ export const TargetPageFrame = forwardRef<
     return null;
   }
 
-  const renderEmbeddedFrame = !isDesktopHost;
-
   return (
     <section className="overflow-hidden h-full flex flex-col">
       <TargetPageChrome
         addressEditing={addressEditing}
         addressFormRef={addressFormRef}
         addressInputRef={addressInputRef}
-        addressValue={addressValue}
-        canGoBack={canGoBack}
-        canGoForward={canGoForward}
+        addressValue={addressEditing ? addressDraft : activeDisplayAddress}
+        canGoBack={isDesktopHost ? navigation.canGoBack : historyIndex > 0}
+        canGoForward={
+          isDesktopHost
+            ? navigation.canGoForward
+            : historyIndex < historyEntries.length - 1
+        }
         inspectionMode={inspectionMode}
         injectionEnabled={injectionEnabled}
         isDesktopHost={isDesktopHost}
         onAddressBlur={handleAddressBlur}
         onAddressChange={setAddressDraft}
-        onAddressFocus={handleAddressFocus}
+        onAddressFocus={() => {
+          setAddressDraft(activeUrl);
+          setAddressEditing(true);
+        }}
         onAddressKeyDown={handleAddressKeyDown}
         onAddressSubmit={(event) => {
           event.preventDefault();
-          const submittedAddress = new FormData(event.currentTarget).get(
-            "targetAddress",
-          );
+          const value = new FormData(event.currentTarget).get("targetAddress");
           addressSubmitPendingRef.current = false;
-          loadTargetAddress(
-            typeof submittedAddress === "string"
-              ? submittedAddress
-              : addressDraft,
-          );
+          submitAddress(typeof value === "string" ? value : addressDraft);
         }}
         onBack={handleBack}
         onForward={handleForward}
-        onInjectionToggle={handleInjectionToggle}
+        onInjectionToggle={() => {
+          if (inspectionMode) setInjectionEnabled((current) => !current);
+        }}
         onRefresh={handleRefresh}
         onSubmitPointerDown={() => {
           addressSubmitPendingRef.current = true;
@@ -865,38 +552,41 @@ export const TargetPageFrame = forwardRef<
           }, 0);
         }}
       />
-      {unsupportedPageActive ? (
-        <TargetPageUnsupported
-          onOpenInSystemBrowser={handleOpenInSystemBrowser}
-        />
-      ) : !activeUrl ? (
-        <TargetPageEmpty targetViewportRef={targetViewportRef} />
-      ) : renderEmbeddedFrame ? (
-        <iframe
-          key={`${pageId}-${frameVersion}-${historyIndex}`}
-          data-frame-key={`${frameVersion}`}
-          ref={frameRef}
-          onLoad={handleLoad}
-          onError={handleError}
-          name={pageId}
-          src={activeUrl}
-          referrerPolicy="no-referrer"
-          sandbox="allow-forms allow-modals allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
-          title={`Tron target ${pageId}`}
-          className="block border-0 w-full h-full  min-h-[560px] flex-auto bg-[var(--color-elevated-surface-strong)]"
-        />
+      {activeUrl ? (
+        isDesktopHost && targetPreloadUrl ? (
+          <webview
+            key={pageId}
+            ref={handleWebviewRef}
+            style={{ display: "inline-flex", height: "100%" }}
+            partition={partition}
+            preload={targetPreloadUrl}
+            src={activeUrl}
+          />
+        ) : (
+          <iframe
+            key={`${pageId}-${frameVersion}-${historyIndex}`}
+            ref={frameRef}
+            className="block min-h-[560px] w-full flex-auto border-0 bg-[var(--color-elevated-surface-strong)]"
+            name={pageId}
+            referrerPolicy="no-referrer"
+            sandbox="allow-forms allow-modals allow-pointer-lock allow-same-origin allow-scripts allow-top-navigation-by-user-activation"
+            src={activeUrl}
+            title={`Tron target ${pageId}`}
+            onLoad={(e) => {
+              frameRef.current?.contentWindow?.postMessage(
+                {
+                  channel: BRIDGE_CHANNEL,
+                  enabled: injectionEnabled,
+                  pageId,
+                  type: "tron:toggle-injection",
+                },
+                "*",
+              );
+            }}
+          />
+        )
       ) : (
-        <div
-          ref={targetViewportRef}
-          aria-label={`Tron target ${pageId}`}
-          className="block min-h-[560px] flex-auto bg-[var(--color-elevated-surface-strong)]"
-        >
-          <div className="flex min-h-[560px] flex-auto items-center justify-center text-[var(--color-on-surface-variant)]">
-            <p className="text-sm text-[var(--color-on-surface)]">
-              目标页面正在当前窗口中加载
-            </p>
-          </div>
-        </div>
+        <TargetPageEmpty targetViewportRef={emptyViewportRef} />
       )}
     </section>
   );
