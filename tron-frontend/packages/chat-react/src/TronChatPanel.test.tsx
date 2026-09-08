@@ -88,6 +88,71 @@ function message(role: ChatMessage["role"], content: string): ChatMessage {
 }
 
 describe("TronChatPanel submit controls", () => {
+  it("shows budget failures without expanding the rail or adding an assistant message", () => {
+    const user = message("USER", "Inspect tools");
+    renderPanel({
+      messages: [user],
+      protocolEvents: [{
+        type: "RUN_ERROR", runId: "RUN-1", threadId: "SESSION-1", timestamp: Date.parse(user.createdAt) + 1,
+        code: "tool_schema_over_budget",
+        message: "TOOL_SCHEMA_OVER_BUDGET: estimatedTokens=27294, limitTokens=21597, toolCount=89; tool exposure was not changed",
+      }],
+    });
+    expect(screen.getByText(/^Run failed ·/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Run failed/ })).toBeNull();
+    const alert = screen.getByRole("alert");
+    expect(alert.textContent).toContain("Tool definitions exceed the context budget");
+    expect(alert.textContent).toContain("27,294");
+    expect(alert.textContent).toContain("21,597");
+    expect(alert.textContent).toContain("89 tools");
+    expect(screen.queryByText(/TOOL_SCHEMA_OVER_BUDGET:/)).toBeNull();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+  });
+
+  it("updates a single visible compaction status and keeps its result when the rail collapses", () => {
+    const user = message("USER", "Compact context");
+    const startedAt = Date.parse(user.createdAt) + 1;
+    const events: ChatAguiStreamEvent[] = [
+      { type: "RUN_STARTED", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt },
+      { type: "CUSTOM", name: "tron.short_term_memory.compaction.started", runId: "RUN-1", threadId: "SESSION-1", timestamp: startedAt + 1 },
+    ];
+    const props = { draft: "", onDraftChange: () => undefined, onSend: () => undefined, session: activeSession(), messages: [user] };
+    const { rerender } = render(<TronChatPanel {...props} liveAguiEvents={events} />);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status").textContent).toBe("Compacting context…");
+    expect(screen.queryByText("Thinking…")).toBeNull();
+    rerender(<TronChatPanel {...props} protocolEvents={[
+      ...events,
+      { ...events[1], name: "tron.short_term_memory.compaction.completed", timestamp: startedAt + 2 },
+      { ...events[0], type: "RUN_FINISHED", timestamp: startedAt + 3 },
+    ]} liveAguiEvents={events} />);
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+    expect(screen.getByRole("status").textContent).toBe("Context compacted");
+    expect(screen.getByText(/^Worked for/)).toBeTruthy();
+    expect(screen.queryByRole("button", { name: /Worked for/ })).toBeNull();
+  });
+
+  it("shows generic errors and compaction failures with custom localized labels", () => {
+    const user = message("USER", "Retry");
+    const base = { runId: "RUN-1", threadId: "SESSION-1", timestamp: Date.parse(user.createdAt) + 1 };
+    renderPanel({
+      messages: [user],
+      workRailLabels: {
+        ariaLabel: "智能体工作过程", preparing: "准备中", responding: "回复中", thinking: "思考中",
+        workedFor: (duration) => `已工作 ${duration}`, workingFor: (duration) => `正在工作 ${duration}`,
+        failed: "运行失败", notices: { compactionFailed: "上下文压缩失败" },
+      },
+      protocolEvents: [
+        { ...base, type: "CUSTOM", name: "tron.short_term_memory.compaction.failed", value: { errorCode: "COMPACTION_MODEL_FAILED" } },
+        { ...base, type: "RUN_ERROR", code: "model_unavailable", message: "Model is unavailable" },
+      ],
+    });
+    expect(screen.getByText("上下文压缩失败")).toBeTruthy();
+    expect(screen.getByText("COMPACTION_MODEL_FAILED")).toBeTruthy();
+    expect(screen.getByText("Model is unavailable")).toBeTruthy();
+    expect(screen.getByText(/^运行失败 ·/)).toBeTruthy();
+  });
+
   it("shows a stable activity stage while running and auto-collapses when complete", () => {
     const startedAt = Date.now() - 2_000;
     const messages = [{

@@ -97,6 +97,30 @@ function completedResult(
 }
 
 describe("TronChatRuntimeWindow", () => {
+  it("keeps streamed run errors visible when sending fails before an assistant reply", async () => {
+    const onError = vi.fn();
+    const adapter: ChatAdapter = {
+      ...createAdapter().adapter,
+      capabilities: { supportsAbort: true, supportsAgui: true, supportsProtocolReplay: true, supportsStreaming: true },
+      loadProtocolEvents: vi.fn().mockResolvedValue([]),
+      streamMessage: vi.fn(async (_sessionCode: string, _input: SendChatMessageInput, handlers: ChatStreamHandlers = {}) => {
+        const base = { runId: "RUN-ERROR", threadId: "SESSION-RESTORED", timestamp: Date.now() };
+        handlers.onAguiEvent?.({ ...base, type: "RUN_STARTED" });
+        handlers.onAguiEvent?.({ ...base, type: "RUN_ERROR", code: "model_unavailable", message: "Model is unavailable" });
+        throw new FetchTransportError("Model is unavailable", { code: "model_unavailable", status: 200 });
+      }),
+    };
+    render(<TronChatRuntimeWindow adapter={adapter} config={{ floating: false, workspaceCode: "WS-1" }} initialSession={restoredSession()} onError={onError} />);
+    await waitFor(() => expect(adapter.loadMessages).toHaveBeenCalled());
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Inspect context" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+    await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Model is unavailable"));
+    expect(onError).toHaveBeenCalled();
+    expect(screen.getByText(/^Run failed ·/)).toBeTruthy();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+  });
+
   it("shows pending images as thumbnails and files with name and type, then clears them after send", async () => {
     const uploadedAttachments = [
       {

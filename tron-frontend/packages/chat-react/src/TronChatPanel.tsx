@@ -3,6 +3,7 @@ import {
   Bot,
   BrainCircuit,
   CheckCircle2,
+  CircleAlert,
   ChevronDown,
   ChevronRight,
   Copy,
@@ -21,6 +22,7 @@ import {
   aguiWorkElapsedMilliseconds,
   aguiReasoningEffort,
   buildAguiUserWorkCards,
+  buildAguiRunNotices,
   buildTranscriptPresentation,
   currentAguiWorkSnapshot,
   describeDebugEvent,
@@ -30,12 +32,14 @@ import {
   sessionAgentTagLabel,
   toolSummaryLabel,
   type AguiUserWorkCard,
+  type AguiRunNotice,
   type ChatAguiStreamEvent,
   type ChatAttachmentLabels,
   type ChatDebugOptions,
   type ChatMessage,
   type ChatMessageAttachment,
   type ChatQueuedSubmission,
+  type ChatRunNoticeLabels,
   type ChatRunningSubmitMode,
   type ChatSession,
   type ChatUserInputAnswer,
@@ -513,17 +517,29 @@ function latestAguiRunCode(events: ChatAguiStreamEvent[]) {
   return "";
 }
 
-const defaultWorkRailLabels: ChatWorkRailLabels = {
+const defaultWorkRailLabels = {
   ariaLabel: "Agent work",
   preparing: "Preparing request…",
   responding: "Drafting response…",
   thinking: "Thinking…",
   workedFor: (duration) => `Worked for ${duration}`,
   workingFor: (duration) => `Working for ${duration}`,
-};
+  failed: "Run failed",
+  notices: {
+    compactionRequested: "Preparing to compact context…",
+    compactionStarted: "Compacting context…",
+    compactionCompleted: "Context compacted",
+    compactionFailed: "Context compaction failed",
+    compactionInterrupted: "Run ended before compaction completion was reported",
+    toolSchemaOverBudget: "Tool definitions exceed the context budget",
+    toolSchemaBudget: (actual, limit, count) => `Tool definitions use about ${actual.toLocaleString()} tokens, exceeding the ${limit.toLocaleString()} limit (${count.toLocaleString()} tools).`,
+    toolSchemaBudgetHint: "Reduce exposed tools or increase the Tool Schema budget.",
+  } satisfies ChatRunNoticeLabels,
+} satisfies ChatWorkRailLabels;
 
 interface TerminalWorkSummary {
   duration: string;
+  failed: boolean;
   runCode: string;
 }
 
@@ -904,6 +920,57 @@ function UserInputWorkCard({
   );
 }
 
+function AguiRunStatus({ notices, labels }: { notices: AguiRunNotice[]; labels: ChatWorkRailLabels }) {
+  const copy = { ...defaultWorkRailLabels.notices, ...labels.notices };
+  return notices.map((notice) => {
+    let pending = false;
+    let failed = false;
+    let title: string;
+    let detail = "";
+    let hint = "";
+    let Icon = CircleAlert;
+    if (notice.kind === "compaction") {
+      pending = notice.status === "requested" || notice.status === "started";
+      failed = notice.status === "failed";
+      title = {
+        requested: copy.compactionRequested,
+        started: copy.compactionStarted,
+        completed: copy.compactionCompleted,
+        failed: copy.compactionFailed,
+        interrupted: copy.compactionInterrupted,
+      }[notice.status];
+      detail = notice.code;
+      if (pending) Icon = LoaderCircle;
+      if (notice.status === "completed") Icon = CheckCircle2;
+    } else {
+      failed = true;
+      title = labels.failed ?? defaultWorkRailLabels.failed;
+      detail = notice.message || notice.code;
+      if (notice.code.toLowerCase() === "tool_schema_over_budget") {
+        title = copy.toolSchemaOverBudget;
+        const budget = notice.toolSchemaBudget;
+        detail = budget ? copy.toolSchemaBudget(budget.estimatedTokens, budget.limitTokens, budget.toolCount) : "";
+        hint = copy.toolSchemaBudgetHint;
+      }
+    }
+    return (
+      <div
+        className={cx("tron-chat__run-notice", failed && "tron-chat__run-notice--error")}
+        role={failed ? "alert" : "status"}
+        aria-atomic="true"
+        key={notice.kind}
+      >
+        <Icon size={16} aria-hidden="true" className={pending ? "animate-spin" : undefined} />
+        <div className="tron-chat__run-notice-content">
+          <div className="tron-chat__run-notice-title">{title}</div>
+          {detail ? <div className="tron-chat__run-notice-detail">{detail}</div> : null}
+          {hint ? <div className="tron-chat__run-notice-detail">{hint}</div> : null}
+        </div>
+      </div>
+    );
+  });
+}
+
 function AguiRunWorkRail({
   debugEvents,
   events,
@@ -917,6 +984,10 @@ function AguiRunWorkRail({
   messageCode?: string;
   userInputRequests?: ChatUserInputRequest[];
 }) {
+  const notices = useMemo(() => buildAguiRunNotices(events), [events]);
+  const compacting = notices.some((notice) => (
+    notice.kind === "compaction" && (notice.status === "requested" || notice.status === "started")
+  ));
   const userCards = useMemo<AguiUserWorkCard[]>(() => buildAguiUserWorkCards(events).flatMap((card): AguiUserWorkCard[] => {
     if (card.kind === "tool" && card.value.toolName === "chat_ask_user") return [];
     if (card.kind !== "toolGroup") return [card];
@@ -946,6 +1017,7 @@ function AguiRunWorkRail({
     if (!terminalEvent) return null;
     return {
       duration: formatAguiDuration(aguiWorkElapsedMilliseconds(events)),
+      failed: String(terminalEvent.type).toUpperCase() === "RUN_ERROR",
       runCode: aguiEventRunCode(terminalEvent),
     };
   }, [events, terminalEvent]);
@@ -984,24 +1056,37 @@ function AguiRunWorkRail({
 
   if (!displayedTerminalSummary && !events.length && !userCards.length && !debugEvents.length)
     return null;
+  const hasDetails = userCards.length > 0 || debugEvents.length > 0;
+  let summary = labels.workingFor(duration);
+  if (completed) {
+    summary = displayedTerminalSummary?.failed
+      ? `${labels.failed ?? defaultWorkRailLabels.failed} · ${duration}`
+      : labels.workedFor(duration);
+  }
+  const summaryContent = (
+    <span className="tron-chat__rail-summary-label">
+      <span>{summary}</span>
+      {reasoningEffort ? <span>{` · ${reasoningEffort}`}</span> : null}
+    </span>
+  );
   return (
     <section className="tron-chat__rail" aria-label={labels.ariaLabel}>
-      <button
-        className="tron-chat__rail-summary"
-        type="button"
-        aria-expanded={expanded}
-        onClick={() => setExpanded((value) => !value)}
-      >
-        <span className="tron-chat__rail-summary-label">
-          <span>{completed ? labels.workedFor(duration) : labels.workingFor(duration)}</span>
-          {reasoningEffort ? <span>{` · ${reasoningEffort}`}</span> : null}
-        </span>
-        {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-      </button>
+      {hasDetails ? (
+        <button
+          className="tron-chat__rail-summary"
+          type="button"
+          aria-expanded={expanded}
+          onClick={() => setExpanded((value) => !value)}
+        >
+          {summaryContent}
+          {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+        </button>
+      ) : <div className="tron-chat__rail-summary tron-chat__rail-summary--static">{summaryContent}</div>}
+      <AguiRunStatus notices={notices} labels={labels} />
       {answeredUserInputRequests.map((request) => (
         <UserInputWorkCard labels={labels} request={request} key={request.requestCode} />
       ))}
-      {!completed ? (
+      {!completed && !compacting ? (
         <div className="tron-chat__rail-current" aria-live="polite">
           {pendingUserInputRequest ? (
             <>
@@ -1021,7 +1106,7 @@ function AguiRunWorkRail({
           )}
         </div>
       ) : null}
-      {expanded ? (
+      {expanded && hasDetails ? (
         <div
           className="tron-chat__rail-stack"
           style={{ marginTop: 8 }}

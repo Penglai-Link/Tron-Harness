@@ -21,6 +21,7 @@ import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router";
 
 import { MarkdownLink } from "@/shared";
+import { useChatWorkRailLabels } from "@/domain/chat";
 import { getApiAccessToken } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
@@ -91,6 +92,7 @@ export function MainAgentChatWindow({
 }: MainAgentChatWindowProps) {
   const toast = useToast();
   const { t } = useTranslation("pages");
+  const workRailLabels = useChatWorkRailLabels();
   const { pathname } = useLocation();
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
   // 仅路由列表中的页面存在带 PageView 内置浏览器的右侧边栏，此时提供"内部打开"
@@ -172,8 +174,9 @@ export function MainAgentChatWindow({
     inputPlaceholder: "Message Main Agent...",
     storageKey: MAIN_AGENT_WINDOW_STORAGE_KEY,
     title: "Main Agent",
+    workRailLabels,
     workspaceCode,
-  }), [workspaceCode]);
+  }), [workRailLabels, workspaceCode]);
 
   const handleError = useCallback((message: string, title?: string) => {
     if (persistedSession && isMissingPersistedSessionError(message, title)) {

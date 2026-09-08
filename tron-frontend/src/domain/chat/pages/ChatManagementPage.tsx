@@ -90,6 +90,7 @@ import {
   useChatSessionLatestGoalState,
   useChatSessionTodosState,
   useChatSessionGroupList,
+  useChatWorkRailLabels,
 } from "@/domain/chat/hooks";
 import { useAuthSession } from "@/domain/auth";
 import { useTranslation } from "react-i18next";
@@ -119,7 +120,6 @@ import {
   type ChatAttachmentLabels,
   type ChatSubmitMode,
   type ChatUserInputLabels,
-  type ChatWorkRailLabels,
   type ChatRuntimeRunState,
   type ChatSession as RuntimeChatSession,
 } from "@tron/chat-core";
@@ -4117,19 +4117,7 @@ export function ChatManagementPage() {
     otherAnswerPlaceholder: t("chat.userInput.otherAnswerPlaceholder"),
     otherAnswerAriaLabel: (index) => t("chat.userInput.otherAnswerAriaLabel", { index }),
   }), [i18n.language, t]);
-  const workRailLabels = useMemo<ChatWorkRailLabels>(() => ({
-    ariaLabel: t("chat.workRail.ariaLabel"),
-    preparing: t("chat.workRail.preparing"),
-    responding: t("chat.workRail.responding"),
-    thinking: t("chat.workRail.thinking"),
-    workedFor: (duration) => t("chat.workRail.workedFor", { duration }),
-    workingFor: (duration) => t("chat.workRail.workingFor", { duration }),
-    failed: t("chat.workRail.failed"),
-    askingQuestions: (count) => t("chat.workRail.askingQuestions", { count }),
-    askedQuestions: (count) => t("chat.workRail.askedQuestions", { count }),
-    waitingForAnswer: t("chat.workRail.waitingForAnswer"),
-    skipped: t("chat.workRail.skipped"),
-  }), [i18n.language, t]);
+  const workRailLabels = useChatWorkRailLabels();
   const { session: authSession } = useAuthSession();
   const { preferences: aguiWorkReplayPreferences } = useAguiWorkReplayPreferences();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();

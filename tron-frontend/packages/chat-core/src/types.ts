@@ -182,6 +182,17 @@ export interface ChatUserInputLabels {
   otherAnswerAriaLabel: (index: number) => string;
 }
 
+export interface ChatRunNoticeLabels {
+  compactionRequested: string;
+  compactionStarted: string;
+  compactionCompleted: string;
+  compactionFailed: string;
+  compactionInterrupted: string;
+  toolSchemaOverBudget: string;
+  toolSchemaBudget: (estimatedTokens: number, limitTokens: number, toolCount: number) => string;
+  toolSchemaBudgetHint: string;
+}
+
 export interface ChatWorkRailLabels {
   ariaLabel: string;
   preparing: string;
@@ -189,6 +200,8 @@ export interface ChatWorkRailLabels {
   thinking: string;
   workedFor: (duration: string) => string;
   workingFor: (duration: string) => string;
+  failed?: string;
+  notices?: Partial<ChatRunNoticeLabels>;
   askingQuestions?: (count: number) => string;
   askedQuestions?: (count: number) => string;
   waitingForAnswer?: string;

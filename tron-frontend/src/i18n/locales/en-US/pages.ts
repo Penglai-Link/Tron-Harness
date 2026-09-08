@@ -608,6 +608,8 @@ export const pages = {
       thinking: "Thinking…",
       workedFor: "Worked for {{duration}}",
       workingFor: "Working for {{duration}}",
+      failed: "Run failed",
+      compactionInterrupted: "Run ended before compaction completion was reported",
       askingQuestions: "Asking {{count}} questions",
       askedQuestions: "Asked {{count}} questions",
       waitingForAnswer: "Waiting for your answer",

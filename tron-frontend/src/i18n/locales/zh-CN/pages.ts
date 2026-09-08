@@ -608,6 +608,8 @@ export const pages = {
       thinking: "正在思考…",
       workedFor: "已工作 {{duration}}",
       workingFor: "正在工作 {{duration}}",
+      failed: "运行失败",
+      compactionInterrupted: "本次运行已结束，未收到压缩完成事件",
       askingQuestions: "正在询问 {{count}} 个问题",
       askedQuestions: "已询问 {{count}} 个问题",
       waitingForAnswer: "等待你的回答",

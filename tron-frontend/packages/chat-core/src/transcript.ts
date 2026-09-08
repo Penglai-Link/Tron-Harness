@@ -7,6 +7,67 @@ import type {
   TranscriptAguiEvent,
 } from "./types";
 
+export type ChatCompactionStatus = "requested" | "started" | "completed" | "failed" | "interrupted";
+
+export interface ToolSchemaBudgetNotice {
+  estimatedTokens: number;
+  limitTokens: number;
+  toolCount: number;
+}
+
+export type AguiRunNotice =
+  | { kind: "compaction"; status: ChatCompactionStatus; code: string }
+  | { kind: "runError"; code: string; message: string; toolSchemaBudget?: ToolSchemaBudgetNotice };
+
+const compactionEventStatuses = new Map<string, ChatCompactionStatus>([
+  ["tron.short_term_memory.context.compaction_requested", "requested"],
+  ["tron.short_term_memory.compaction.started", "started"],
+  ["tron.short_term_memory.compaction.completed", "completed"],
+  ["tron.short_term_memory.compaction.failed", "failed"],
+]);
+
+function toolSchemaBudget(message: string): ToolSchemaBudgetNotice | undefined {
+  const match = /estimatedTokens=(\d+),\s*limitTokens=(\d+),\s*toolCount=(\d+)/i.exec(message);
+  if (!match) return undefined;
+  const [estimatedTokens, limitTokens, toolCount] = match.slice(1).map(Number);
+  if (![estimatedTokens, limitTokens, toolCount].every(Number.isSafeInteger)) return undefined;
+  return { estimatedTokens, limitTokens, toolCount };
+}
+
+// One compact lifecycle notice per run; detailed events remain available in replay.
+export function buildAguiRunNotices(events: TranscriptAguiEvent[]): AguiRunNotice[] {
+  let compaction: Extract<AguiRunNotice, { kind: "compaction" }> | undefined;
+  let error: Extract<AguiRunNotice, { kind: "runError" }> | undefined;
+  let terminal = false;
+  for (const event of events) {
+    const type = aguiEventType(event).toUpperCase();
+    if (type === "CUSTOM" && "name" in event && typeof event.name === "string") {
+      const status = compactionEventStatuses.get(event.name);
+      if (status) {
+        const value = "value" in event && event.value && typeof event.value === "object"
+          ? event.value as Record<string, unknown>
+          : {};
+        compaction = { kind: "compaction", status, code: typeof value.errorCode === "string" ? value.errorCode : "" };
+      }
+    }
+    if (type === "RUN_FINISHED" || type === "RUN_ERROR") terminal = true;
+    if (type === "RUN_ERROR") {
+      const code = "code" in event && typeof event.code === "string" ? event.code : "";
+      const message = "message" in event && typeof event.message === "string" ? event.message : "";
+      error = {
+        kind: "runError",
+        code,
+        message,
+        ...(code.toLowerCase() === "tool_schema_over_budget" ? { toolSchemaBudget: toolSchemaBudget(message) } : {}),
+      };
+    }
+  }
+  if (terminal && compaction && (compaction.status === "requested" || compaction.status === "started")) {
+    compaction = { ...compaction, status: "interrupted" };
+  }
+  return [...(compaction ? [compaction] : []), ...(error ? [error] : [])];
+}
+
 export interface ReasoningWorkCard {
   content: string;
   ended: boolean;
@@ -144,12 +205,15 @@ function aguiEventStableKey(event: TranscriptAguiEvent) {
   const messageId = "messageId" in event && typeof event.messageId === "string" ? event.messageId : "";
   const toolCallId = "toolCallId" in event && typeof event.toolCallId === "string" ? event.toolCallId : "";
   return [
+    aguiEventThreadId(event),
     aguiEventRunCode(event),
     aguiEventType(event),
     aguiEventTime(event),
     messageId,
     toolCallId,
     aguiEventSummary(event),
+    "name" in event ? event.name : "",
+    aguiEventType(event).toUpperCase() === "CUSTOM" && "value" in event ? JSON.stringify(event.value) : "",
   ].join("\u0000");
 }
 
@@ -617,6 +681,7 @@ function aguiRunsWithWorkDetails(events: TranscriptAguiEvent[], limit: number) {
   return Array.from(runs.values())
     .filter((run) => (
       buildAguiUserWorkCards(run.events).length > 0
+      || buildAguiRunNotices(run.events).length > 0
       || !run.events.some((event) => {
         const type = aguiEventType(event).toUpperCase();
         return type.includes("RUN_FINISHED") || type.includes("RUN_ERROR");
@@ -680,15 +745,21 @@ export function buildTranscriptPresentation(args: {
   protocolEvents?: ChatAguiStreamEvent[];
   sessionCode: string;
 }) {
-  const liveAnchorMessageCodes = args.liveAguiAnchorMessageCodes ?? {};
   const liveEvents = args.liveAguiEvents ?? [];
   const protocolEvents = args.protocolEvents ?? [];
+  const mergedEvents = mergeTranscriptAguiEvents(protocolEvents, liveEvents);
+  const liveAnchorMessageCodes = replayNoticeAnchorMessageCodes(mergedEvents, args.sessionCode, args.messages);
+  Object.entries(args.liveAguiAnchorMessageCodes ?? {}).forEach(([runCode, messageCode]) => {
+    if (args.messages.some((message) => message.messageCode === messageCode)) {
+      liveAnchorMessageCodes[runCode] = messageCode;
+    }
+  });
   const recentTurnLimit = args.debugOptions?.recentTurnLimit ?? 5;
   const debugEventTypes = args.debugOptions?.debugEventTypes ?? [];
   const transcriptAguiEvents = args.liveAguiPending && !protocolEvents.length && !liveEvents.length
     ? []
     : filterTranscriptAguiEventsForSession(
-      mergeTranscriptAguiEvents(protocolEvents, liveEvents),
+      mergedEvents,
       args.sessionCode,
       args.messages,
       liveAnchorMessageCodes,
@@ -732,6 +803,37 @@ export function buildTranscriptPresentation(args: {
     waitingForModelAnchorMessageCode,
     workRailsByMessageCode,
   } satisfies TranscriptPresentation;
+}
+
+function replayNoticeAnchorMessageCodes(
+  events: TranscriptAguiEvent[],
+  sessionCode: string,
+  messages: ChatMessage[],
+) {
+  const anchors: Record<string, string> = {};
+  const runs = new Map<string, TranscriptAguiEvent[]>();
+  events.forEach((event) => {
+    // Unknown replay runs need an explicit session match, not only a timestamp.
+    if (!sessionCode || aguiEventThreadId(event) !== sessionCode) return;
+    const runCode = aguiEventRunCode(event);
+    if (!runCode || runCode === "stream") return;
+    const runEvents = runs.get(runCode) ?? [];
+    runEvents.push(event);
+    runs.set(runCode, runEvents);
+  });
+  runs.forEach((runEvents, runCode) => {
+    if (!buildAguiRunNotices(runEvents).length) return;
+    const startedAt = aguiEventMillis(runEvents[0]);
+    if (startedAt === null) return;
+    // A failed run may have no assistant message and user messages have no runCode.
+    // Restore its original turn (including answer continuations), not the latest user turn.
+    const anchor = [...messages].reverse().find((message) => (
+      message.sessionCode === sessionCode
+      && (messageCreatedMillis(message) ?? Infinity) <= startedAt
+    ));
+    if (anchor) anchors[runCode] = anchor.messageCode;
+  });
+  return anchors;
 }
 
 export function buildMockStreamingEvents(

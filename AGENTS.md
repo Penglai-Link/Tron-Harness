@@ -49,3 +49,5 @@ Pagable response body format:
 
 <!-- Tool exposure is run-local: STICKY_EXPANDED does not persist expanded domains into a new run. EPHEMERAL_EXPANDED collapses all expanded domains after any successful non-discovery tool, without removing historical tool results. -->
 <!-- The broad right-context-sidebar Playwright file contains unrelated stale page-heading assertions; use --grep AC-STM-08 for the chat STM panel until those page fixtures are updated. -->
+<!-- The main chat sends through packages/chat-react/TronChatRuntimeWindow, not ChatManagementPage's legacy stream handlers. Runtime notices belong in the shared work rail; failed runs can lack an assistant message and persisted user messages have no runCode. -->
+<!-- Frontend package imports resolve built dist outputs. After changing packages, finish make packages-build (or make fe-check) before make fe-unit-test; running the build and tests concurrently can mix stale and rebuilt exports. -->

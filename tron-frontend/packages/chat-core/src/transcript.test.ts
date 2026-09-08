@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   aguiReasoningEffort,
+  buildAguiRunNotices,
+  mergeTranscriptAguiEvents,
   aguiWorkRailsByMessageCode,
   buildAguiUserWorkCards,
   buildTranscriptPresentation,
@@ -56,6 +58,64 @@ function event(overrides: Partial<ChatAguiStreamEvent> & Pick<ChatAguiStreamEven
     ...overrides,
   };
 }
+
+function compaction(name: string, timestamp = 1): ChatAguiStreamEvent {
+  return { type: "CUSTOM", name: `tron.short_term_memory.${name}`, timestamp, runId: "RUN-1", threadId: "SESSION-1", value: {} };
+}
+
+describe("AG-UI run notices", () => {
+  it("updates one compaction notice through its lifecycle and uses the latest attempt", () => {
+    const events = [compaction("context.compaction_requested"), compaction("compaction.started", 2)];
+    expect(buildAguiRunNotices(events)).toEqual([{ kind: "compaction", status: "started", code: "" }]);
+    events.push(compaction("compaction.completed", 3));
+    expect(buildAguiRunNotices(events)).toEqual([{ kind: "compaction", status: "completed", code: "" }]);
+    events.push(compaction("context.compaction_requested", 4));
+    expect(buildAguiRunNotices(events)).toEqual([{ kind: "compaction", status: "requested", code: "" }]);
+  });
+
+  it("retains failure codes without rendering full custom event payloads", () => {
+    expect(buildAguiRunNotices([{ ...compaction("compaction.failed"), value: { errorCode: "MODEL_UNAVAILABLE", privatePayload: "hidden" } }]))
+      .toEqual([{ kind: "compaction", status: "failed", code: "MODEL_UNAVAILABLE" }]);
+  });
+
+  it.each(["RUN_ERROR", "RUN_FINISHED"])("does not leave a compaction spinner after %s", (type) => {
+    expect(buildAguiRunNotices([compaction("compaction.started"), { type }])[0])
+      .toEqual({ kind: "compaction", status: "interrupted", code: "" });
+  });
+
+  it("ignores routine context assembly, rebasing and unknown custom events", () => {
+    expect(buildAguiRunNotices([
+      compaction("context.assembled"), compaction("context.rebased"),
+      { type: "CUSTOM", name: "unrelated.event", value: { text: "hidden" } },
+      { type: "CUSTOM", name: "toString" },
+    ])).toEqual([]);
+  });
+
+  it("extracts tool budget numbers and leaves other errors intact", () => {
+    expect(buildAguiRunNotices([{
+      type: "RUN_ERROR", code: "tool_schema_over_budget",
+      message: "TOOL_SCHEMA_OVER_BUDGET: estimatedTokens=27294, limitTokens=21597, toolCount=89; tool exposure was not changed",
+    }])[0]).toMatchObject({ kind: "runError", toolSchemaBudget: { estimatedTokens: 27294, limitTokens: 21597, toolCount: 89 } });
+    expect(buildAguiRunNotices([{ type: "RUN_ERROR", code: "model_unavailable", message: "Model is unavailable" }]))
+      .toEqual([{ kind: "runError", code: "model_unavailable", message: "Model is unavailable" }]);
+  });
+
+  it("handles missing or malformed budget details without making up numbers", () => {
+    for (const message of ["", "estimatedTokens=bad", "estimatedTokens=99999999999999999999999, limitTokens=1, toolCount=1"]) {
+      expect(buildAguiRunNotices([{ type: "RUN_ERROR", code: "tool_schema_over_budget", message }])[0])
+        .toMatchObject({ kind: "runError", toolSchemaBudget: undefined });
+    }
+  });
+
+  it("deduplicates live and replay without dropping distinct custom events in the same millisecond", () => {
+    const events = [compaction("compaction.started"), compaction("compaction.completed")];
+    const merged = mergeTranscriptAguiEvents(events, events);
+    expect(merged).toHaveLength(2);
+    expect(buildAguiRunNotices(merged)[0]).toMatchObject({ status: "completed" });
+    expect(mergeTranscriptAguiEvents(events, [{ ...events[0], value: { sourceStartSeq: 20 } }])).toHaveLength(3);
+    expect(mergeTranscriptAguiEvents(events, [{ ...events[0], threadId: "SESSION-2" }])).toHaveLength(3);
+  });
+});
 
 describe("buildAguiUserWorkCards", () => {
   it("prefers structured reasoning content over raw reasoning fallback and groups tools", () => {
@@ -254,6 +314,53 @@ describe("aguiWorkRailsByMessageCode", () => {
 });
 
 describe("pending run helpers", () => {
+  it("keeps an error-only run visible in live events and after replay", () => {
+    const messages = [userMessage()];
+    const events = [
+      event({ type: "RUN_STARTED", timestamp: Date.parse(messages[0].createdAt) + 1 }),
+      event({ type: "RUN_ERROR", message: "Tool budget exceeded", timestamp: Date.parse(messages[0].createdAt) + 2 }),
+    ];
+    for (const source of [{ liveAguiEvents: events }, { protocolEvents: events }]) {
+      const presentation = buildTranscriptPresentation({ messages, sessionCode: "SESSION-1", ...source });
+      expect(presentation.workRailsByMessageCode.get("MSG-USER")?.[0]?.runCode).toBe("RUN-1");
+    }
+  });
+
+  it("keeps historical failed runs attached to their original turn after a later successful reply", () => {
+    const messages = [
+      userMessage(),
+      userMessage({ id: 3, messageCode: "MSG-RETRY", createdAt: "2026-06-10T00:00:10.000Z" }),
+      assistantMessage({ messageCode: "MSG-RETRY-REPLY", runCode: "RUN-2", createdAt: "2026-06-10T00:00:12.000Z" }),
+    ];
+    const presentation = buildTranscriptPresentation({
+      messages, sessionCode: "SESSION-1",
+      liveAguiAnchorMessageCodes: { "RUN-1": "MSG-OPTIMISTIC-REPLACED" },
+      protocolEvents: [
+        event({ type: "RUN_STARTED", timestamp: Date.parse("2026-06-10T00:00:00.001Z") }),
+        event({ type: "RUN_ERROR", message: "Model unavailable", timestamp: Date.parse("2026-06-10T00:00:01.000Z") }),
+        event({ type: "RUN_ERROR", runId: "RUN-FOREIGN", threadId: "SESSION-2", timestamp: Date.parse("2026-06-10T00:00:01.000Z") }),
+        event({ type: "RUN_ERROR", runId: "RUN-OLD", timestamp: Date.parse("2026-06-09T00:00:01.000Z") }),
+      ],
+    });
+    expect(Array.from(presentation.workRailsByMessageCode.keys())).toEqual(["MSG-USER"]);
+    expect(presentation.workRailsByMessageCode.get("MSG-USER")).toHaveLength(1);
+  });
+
+  it("preserves completed compaction-only runs, applies the replay limit and prefers explicit live anchors", () => {
+    const messages = [userMessage(), assistantMessage({ runCode: "RUN-OTHER" })];
+    const events = ["RUN-1", "RUN-2"].flatMap((runId, index) => [
+      event({ type: "CUSTOM", name: "tron.short_term_memory.compaction.completed", runId, timestamp: Date.parse(messages[0].createdAt) + index }),
+      event({ type: "RUN_FINISHED", runId, timestamp: Date.parse(messages[0].createdAt) + index }),
+    ]);
+    const presentation = buildTranscriptPresentation({
+      messages, sessionCode: "SESSION-1", protocolEvents: events,
+      debugOptions: { recentTurnLimit: 1 },
+      liveAguiAnchorMessageCodes: { "RUN-2": "MSG-ASSISTANT" },
+    });
+    expect(Array.from(presentation.workRailsByMessageCode.keys())).toEqual(["MSG-ASSISTANT"]);
+    expect(presentation.workRailsByMessageCode.get("MSG-ASSISTANT")?.[0]?.runCode).toBe("RUN-2");
+  });
+
   it("anchors answer continuations to the interrupted assistant while events are pending", () => {
     const messages = [
       userMessage(),
