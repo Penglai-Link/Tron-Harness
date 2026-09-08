@@ -130,7 +130,7 @@ impl ShortTermMemoryService {
         self.append_event(
             &input.session_code,
             &input.workspace_code,
-            None,
+            input.run_code.as_deref(),
             None,
             None,
             None,

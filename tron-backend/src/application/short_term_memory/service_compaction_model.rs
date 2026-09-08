@@ -178,6 +178,7 @@ impl ShortTermMemoryService {
         let input = PreparedCompactionInput {
             session_code: session_code.to_string(),
             workspace_code: workspace_code.clone(),
+            run_code: pinned_run_code.map(str::to_string),
             reason: command.reason.clone(),
             note: command.note.clone(),
             todo_enabled: policy.todo_enabled,
@@ -213,7 +214,7 @@ impl ShortTermMemoryService {
         self.append_event(
             &input.session_code,
             &workspace_code,
-            None,
+            input.run_code.as_deref(),
             None,
             None,
             None,
@@ -286,6 +287,7 @@ impl ShortTermMemoryService {
             ],
             tools: Vec::new(),
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: None,
             previous_response_id: None,
         }
@@ -469,16 +471,20 @@ impl ShortTermMemoryService {
             summary_token_estimate,
             created_at: now,
         };
+        let event_payload = json!({
+            "checkpointMessageCode": message_code,
+            "metadata": compaction_metadata,
+        });
         let event = self.new_event(
             &input.session_code,
             &input.workspace_code,
-            None,
+            input.run_code.as_deref(),
             None,
             Some(&message_code),
             None,
             "agent.compaction.completed",
             "COMPACTION",
-            json!({"checkpointMessageCode": message_code, "metadata": compaction_metadata}),
+            event_payload.clone(),
             None,
         )?;
         self.repository().create_compaction(
@@ -488,6 +494,16 @@ impl ShortTermMemoryService {
             event.as_ref(),
             input.enforce_idle,
         )?;
+        self.publish_context_event(
+            &input.session_code,
+            &input.workspace_code,
+            input.run_code.as_deref(),
+            "agent.compaction.completed",
+            event
+                .as_ref()
+                .map(|item| &item.payload_json)
+                .unwrap_or(&event_payload),
+        );
         Ok(compaction)
     }
 }

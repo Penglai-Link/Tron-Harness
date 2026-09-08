@@ -1,6 +1,6 @@
 use crate::{
     application::short_term_memory::{ModelRequestTranscriptFacts, PreparedModelContext},
-    domain::agent::{AgentModelProtocol, AgentRunContext, EffectiveTool, ModelRequest},
+    domain::agent::{AgentModelProtocol, AgentRunContext, ModelRequest},
 };
 
 use super::runtime_helpers::hash_text;
@@ -18,7 +18,7 @@ pub(super) fn model_request_facts(
             .iter()
             .map(|message| hash_text(&message.text_content()))
             .collect(),
-        tool_schema_token_estimate: estimate_tool_schema_tokens(&request.tools),
+        tool_schema_token_estimate: prepared_context.tool_schema_token_estimate,
         protocol: protocol_code(context.model.protocol).into(),
         previous_response_id_present: request.previous_response_id.is_some(),
         context_window_estimate: context.model.context_window_tokens,
@@ -44,11 +44,29 @@ pub(super) fn prepared_context_event_payload(
     payload
 }
 
-pub(super) fn estimate_tool_schema_tokens(tools: &[EffectiveTool]) -> u32 {
-    serde_json::to_string(tools)
-        .ok()
-        .map(|text| ((text.len() as u32).saturating_add(3)) / 4)
-        .unwrap_or(0)
+impl super::ReactAgent {
+    pub(super) fn model_context_budget_plan(
+        &self,
+        context: &AgentRunContext,
+    ) -> crate::application::short_term_memory::ModelContextBudgetPlan {
+        self.short_term_memory
+            .as_ref()
+            .map(|service| service.model_context_budget_plan(&context.model))
+            .unwrap_or_else(|| {
+                crate::application::short_term_memory::ShortTermMemoryConfig::default()
+                    .model_context_budget_plan(
+                        context.model.context_window_tokens,
+                        context.model.max_tokens,
+                    )
+            })
+    }
+
+    pub(super) fn tool_schema_limit(&self, context: &AgentRunContext) -> u32 {
+        self.model_context_budget_plan(context)
+            .block_budgets
+            .tool_schema
+            .effective_limit_tokens
+    }
 }
 
 fn protocol_code(protocol: AgentModelProtocol) -> &'static str {

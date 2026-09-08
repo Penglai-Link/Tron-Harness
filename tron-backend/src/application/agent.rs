@@ -18,6 +18,7 @@ mod runtime_capability;
 mod system_agent_model_probe;
 mod system_cli_output_parser;
 mod tool_catalog;
+mod tool_schema;
 mod turn_state;
 mod usage_snapshots;
 
@@ -56,6 +57,7 @@ pub use runtime_adapter::{
     RuntimeAdapterSelection, RuntimeAdapterStage, RuntimeCapabilities, runtime_adapter_descriptors,
 };
 pub use tool_catalog::BusinessToolCatalog;
+pub use tool_schema::{ToolSchemaCache, request_tool_schema_payload, tool_schema_payload};
 pub(crate) use turn_state::{TurnStateAdapter, TurnStateKind};
 pub(crate) use usage_snapshots::{
     request_estimate_snapshot, usage_audit_snapshot, usage_event_payload,

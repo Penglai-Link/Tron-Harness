@@ -144,8 +144,22 @@ impl ReactAgent {
         let mut awaiting_user_input = false;
         match execution_result {
             Ok(execution) => {
+                if let Err(error_message) =
+                    self.apply_tool_context_delta(context, &execution.context_delta, turn_state)
+                {
+                    self.record_recoverable_tool_failure(
+                        context,
+                        &tool_call_id,
+                        &tool_name,
+                        model_call_id,
+                        turn_state,
+                        sequence,
+                        error_message,
+                        last_tool_failure,
+                    )?;
+                    return Ok(());
+                }
                 let observation = execution.observation;
-                apply_tool_context_delta(context, execution.context_delta);
                 self.publish_tool(
                     &context,
                     "agent.tool.completed",
@@ -350,6 +364,21 @@ impl ReactAgent {
             })?;
             match execution_result {
                 Ok(execution) => {
+                    if let Err(error_message) =
+                        self.apply_tool_context_delta(context, &execution.context_delta, turn_state)
+                    {
+                        self.record_recoverable_tool_failure(
+                            context,
+                            &tool_call_id,
+                            &tool_name,
+                            model_call_id,
+                            turn_state,
+                            sequence,
+                            error_message,
+                            last_tool_failure,
+                        )?;
+                        continue;
+                    }
                     self.finish_parallel_tool_call(
                         context,
                         &tool_call_id,
@@ -399,7 +428,6 @@ impl ReactAgent {
         execution: ToolExecutionResult,
     ) -> Result<(), AgentError> {
         let observation = execution.observation;
-        apply_tool_context_delta(context, execution.context_delta);
         self.publish_tool(
             &context,
             "agent.tool.completed",
@@ -513,30 +541,47 @@ struct ParallelToolCall {
     handle: tokio::task::JoinHandle<Result<ToolExecutionResult, ToolError>>,
 }
 
-fn apply_tool_context_delta(context: &mut AgentRunContext, delta: ToolContextDelta) {
-    if !delta.add_tools.is_empty() {
-        for tool in delta.add_tools {
-            if context
-                .tools
+impl ReactAgent {
+    fn apply_tool_context_delta(
+        &self,
+        context: &mut AgentRunContext,
+        delta: &ToolContextDelta,
+        turn_state: &mut TurnStateAdapter,
+    ) -> Result<(), String> {
+        if delta.add_tools.is_empty() && delta.expanded_domain_codes.is_empty() {
+            return Ok(());
+        }
+        let mut candidate_tools = context.tools.clone();
+        for tool in &delta.add_tools {
+            if candidate_tools
                 .iter()
                 .all(|existing| existing.tool_name != tool.tool_name)
             {
-                context.tools.push(tool);
+                candidate_tools.push(tool.clone());
             }
         }
-    }
-    for domain_code in delta.expanded_domain_codes {
-        if context
-            .tool_exposure
-            .expanded_domain_codes
-            .iter()
-            .all(|existing| !existing.eq_ignore_ascii_case(&domain_code))
-        {
-            context
+        // Validate the merged set against the current runtime state, including earlier
+        // results from the same parallel batch, before publishing expansion success.
+        turn_state.prepare_tool_schema(
+            context.model.protocol,
+            &candidate_tools,
+            self.tool_schema_limit(context),
+        )?;
+        context.tools = candidate_tools;
+        for domain_code in &delta.expanded_domain_codes {
+            if context
                 .tool_exposure
                 .expanded_domain_codes
-                .push(domain_code);
+                .iter()
+                .all(|existing| !existing.eq_ignore_ascii_case(&domain_code))
+            {
+                context
+                    .tool_exposure
+                    .expanded_domain_codes
+                    .push(domain_code.clone());
+            }
         }
+        Ok(())
     }
 }
 

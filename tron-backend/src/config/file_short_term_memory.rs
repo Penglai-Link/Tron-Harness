@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use crate::config::percentage::{optional_ratio, optional_weight};
+
 use crate::application::short_term_memory::{
     CompactionPolicyConfig, ContextBlockBudgetConfig, ContextBlockBudgets, ContextBudgetConfig,
     EventLogConfig, FamilyLoadConfig, GoalLoopConfig, ShortTermMemoryConfig, ToolOutputConfig,
@@ -144,6 +146,9 @@ impl ContextBlockBudgets {
         if let Some(value) = overrides.current_session_working_state {
             self.current_session_working_state.apply_overrides(value);
         }
+        if let Some(value) = overrides.tool_schema {
+            self.tool_schema.apply_overrides(value);
+        }
     }
 }
 
@@ -222,6 +227,12 @@ struct ToolOutputFileConfig {
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextBudgetFileConfig {
     default_context_window_tokens: Option<u32>,
+    #[serde(
+        default,
+        rename = "familyContextMaxRatio",
+        alias = "familyContextMaxRatioBps",
+        deserialize_with = "optional_ratio"
+    )]
     family_context_max_ratio_bps: Option<u32>,
     family_context_hard_cap_tokens: Option<u32>,
     family_context_max_chars: Option<usize>,
@@ -236,11 +247,18 @@ struct ContextBlockBudgetsFileConfig {
     current_session_checkpoint: Option<ContextBlockBudgetFileConfig>,
     session_family_context: Option<ContextBlockBudgetFileConfig>,
     current_session_working_state: Option<ContextBlockBudgetFileConfig>,
+    tool_schema: Option<ContextBlockBudgetFileConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ContextBlockBudgetFileConfig {
+    #[serde(
+        default,
+        rename = "maxRatio",
+        alias = "maxRatioBps",
+        deserialize_with = "optional_ratio"
+    )]
     max_ratio_bps: Option<u32>,
     max_tokens: Option<u32>,
 }
@@ -252,17 +270,59 @@ struct FamilyLoadFileConfig {
     default_max_sessions: Option<usize>,
     default_snapshot_max_chars: Option<usize>,
     default_ttl_hours: Option<u32>,
+    #[serde(
+        default,
+        rename = "taskWeight",
+        alias = "taskWeightBps",
+        deserialize_with = "optional_weight"
+    )]
     task_weight_bps: Option<u32>,
+    #[serde(
+        default,
+        rename = "requirementWeight",
+        alias = "requirementWeightBps",
+        deserialize_with = "optional_weight"
+    )]
     requirement_weight_bps: Option<u32>,
+    #[serde(
+        default,
+        rename = "workspaceChatWeight",
+        alias = "workspaceChatWeightBps",
+        deserialize_with = "optional_weight"
+    )]
     workspace_chat_weight_bps: Option<u32>,
+    #[serde(
+        default,
+        rename = "workspaceHeartbeatWeight",
+        alias = "workspaceHeartbeatWeightBps",
+        deserialize_with = "optional_weight"
+    )]
     workspace_heartbeat_weight_bps: Option<u32>,
+    #[serde(
+        default,
+        rename = "otherWeight",
+        alias = "otherWeightBps",
+        deserialize_with = "optional_weight"
+    )]
     other_weight_bps: Option<u32>,
 }
 
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CompactionPolicyFileConfig {
+    #[serde(
+        default,
+        rename = "triggerRatio",
+        alias = "triggerRatioBps",
+        deserialize_with = "optional_ratio"
+    )]
     trigger_ratio_bps: Option<u32>,
+    #[serde(
+        default,
+        rename = "retainedHistoryRatio",
+        alias = "retainedHistoryRatioBps",
+        deserialize_with = "optional_ratio"
+    )]
     retained_history_ratio_bps: Option<u32>,
 }
 

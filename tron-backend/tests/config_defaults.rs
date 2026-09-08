@@ -273,6 +273,223 @@ fn short_term_memory_block_ratios_use_effective_input_budget() {
     );
 }
 
+fn load_short_term_memory_yaml(yaml: &str) -> Result<AppConfig, tron_backend::config::ConfigError> {
+    let path = temp_config_path();
+    fs::write(&path, yaml).unwrap();
+    let result = AppConfig::from_yaml_file(&path);
+    fs::remove_file(path).unwrap();
+    result
+}
+
+#[test]
+fn short_term_memory_percentages_preserve_ratio_and_weight_meaning() {
+    let config = load_short_term_memory_yaml(
+        r#"
+shortTermMemory:
+  context:
+    familyContextMaxRatio: "7.50%"
+    blocks:
+      seedPromptPrefix:
+        maxRatio: "50%"
+      currentSessionCheckpoint:
+        maxRatio: "20%"
+      currentSessionWorkingState:
+        maxRatio: "0.01%"
+      toolSchema:
+        maxRatio: "20%"
+        maxTokens: 6000
+  familyLoad:
+    taskWeight: "65%"
+    requirementWeight: "25%"
+    workspaceChatWeight: "10%"
+    workspaceHeartbeatWeight: "10%"
+    otherWeight: "150%"
+  compaction:
+    triggerRatio: "80%"
+    retainedHistoryRatio: "12.34%"
+"#,
+    )
+    .unwrap()
+    .short_term_memory;
+    assert_eq!(config.context.family_context_max_ratio_bps, 750);
+    assert_eq!(
+        config.context.blocks.session_family_context.max_ratio_bps,
+        Some(750)
+    );
+    assert_eq!(
+        config.context.blocks.seed_prompt_prefix.max_ratio_bps,
+        Some(5000)
+    );
+    assert_eq!(
+        config
+            .context
+            .blocks
+            .current_session_checkpoint
+            .max_ratio_bps,
+        Some(2000)
+    );
+    assert_eq!(
+        config
+            .context
+            .blocks
+            .current_session_working_state
+            .max_ratio_bps,
+        Some(1)
+    );
+    assert_eq!(config.family_load.task_weight_bps, 6500);
+    assert_eq!(config.family_load.requirement_weight_bps, 2500);
+    assert_eq!(config.family_load.workspace_chat_weight_bps, 1000);
+    assert_eq!(config.family_load.workspace_heartbeat_weight_bps, 1000);
+    assert_eq!(
+        config.family_load.other_weight_bps, 15000,
+        "weights are relative, not capped ratios"
+    );
+    assert_eq!(config.compaction.trigger_ratio_bps, 8000);
+    assert_eq!(config.compaction.retained_history_ratio_bps, 1234);
+    assert_eq!(
+        config
+            .model_context_budget_plan(Some(32_000), Some(4_000))
+            .block_budgets
+            .tool_schema
+            .effective_limit_tokens,
+        5600
+    );
+    assert_eq!(
+        config
+            .model_context_budget_plan(Some(100_000), Some(0))
+            .block_budgets
+            .tool_schema
+            .effective_limit_tokens,
+        6000
+    );
+}
+
+#[test]
+fn short_term_memory_percentages_reject_conflicting_aliases_in_both_orders() {
+    for (section, name, legacy) in [
+        (
+            "  context:\n",
+            "familyContextMaxRatio",
+            "familyContextMaxRatioBps",
+        ),
+        (
+            "  context:\n    blocks:\n      toolSchema:\n",
+            "maxRatio",
+            "maxRatioBps",
+        ),
+        ("  familyLoad:\n", "taskWeight", "taskWeightBps"),
+        (
+            "  familyLoad:\n",
+            "requirementWeight",
+            "requirementWeightBps",
+        ),
+        (
+            "  familyLoad:\n",
+            "workspaceChatWeight",
+            "workspaceChatWeightBps",
+        ),
+        (
+            "  familyLoad:\n",
+            "workspaceHeartbeatWeight",
+            "workspaceHeartbeatWeightBps",
+        ),
+        ("  familyLoad:\n", "otherWeight", "otherWeightBps"),
+        ("  compaction:\n", "triggerRatio", "triggerRatioBps"),
+        (
+            "  compaction:\n",
+            "retainedHistoryRatio",
+            "retainedHistoryRatioBps",
+        ),
+    ] {
+        let indent = if name == "maxRatio" {
+            "        "
+        } else {
+            "    "
+        };
+        for fields in [
+            format!("{indent}{name}: \"20%\"\n{indent}{legacy}: 2000\n"),
+            format!("{indent}{legacy}: 2000\n{indent}{name}: \"20%\"\n"),
+            format!("{indent}{name}: null\n{indent}{legacy}: 2000\n"),
+        ] {
+            let error =
+                load_short_term_memory_yaml(&format!("shortTermMemory:\n{section}{fields}"))
+                    .unwrap_err();
+            match error {
+                tron_backend::config::ConfigError::ConfigFileInvalid { source, .. } => {
+                    assert!(
+                        source.to_string().contains("duplicate field"),
+                        "{name}: {source}"
+                    );
+                }
+                error => panic!("unexpected configuration error for {name}: {error:?}"),
+            }
+        }
+    }
+}
+
+#[test]
+fn short_term_memory_percentages_reject_invalid_or_rounded_values() {
+    for value in [
+        "\"101%\"",
+        "\"-1%\"",
+        "\"NaN%\"",
+        "\"20\"",
+        "\"1.234%\"",
+        "\"1e1%\"",
+        "\"1.%\"",
+        "\"%\"",
+        "\"999999999999999999999%\"",
+        "-1",
+        "1.5",
+    ] {
+        let yaml = format!(
+            "shortTermMemory:\n  context:\n    blocks:\n      toolSchema:\n        maxRatio: {value}\n"
+        );
+        assert!(
+            load_short_term_memory_yaml(&yaml).is_err(),
+            "accepted {value}"
+        );
+    }
+    let zero = load_short_term_memory_yaml(
+        "shortTermMemory:\n  context:\n    blocks:\n      toolSchema:\n        maxRatio: \"0%\"\n",
+    )
+    .unwrap();
+    assert_eq!(
+        zero.short_term_memory
+            .model_context_budget_plan(Some(32_000), None)
+            .block_budgets
+            .tool_schema
+            .effective_limit_tokens,
+        0
+    );
+}
+
+#[test]
+fn short_term_memory_tool_schema_legacy_bps_and_large_windows_remain_supported() {
+    let config = load_short_term_memory_yaml(
+        "shortTermMemory:\n  context:\n    blocks:\n      toolSchema:\n        maxRatioBps: 5000\n",
+    )
+    .unwrap();
+    assert_eq!(
+        config
+            .short_term_memory
+            .context
+            .blocks
+            .tool_schema
+            .max_ratio_bps,
+        Some(5000)
+    );
+    assert_eq!(
+        config
+            .short_term_memory
+            .model_context_budget_plan(Some(2_000_000), Some(0))
+            .block_budgets
+            .tool_schema
+            .effective_limit_tokens,
+        1_000_000
+    );
+}
+
 #[test]
 fn short_term_memory_yaml_rejects_removed_compaction_fields() {
     let config_path = temp_config_path();

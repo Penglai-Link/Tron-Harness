@@ -114,6 +114,7 @@ impl ShortTermMemoryService {
             ],
             tools: Vec::new(),
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: None,
             previous_response_id: None,
         }
@@ -136,6 +137,7 @@ impl ShortTermMemoryService {
             ],
             tools: Vec::new(),
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: None,
             previous_response_id: None,
         }

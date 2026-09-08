@@ -109,6 +109,7 @@ export interface ChatContextBudgetBreakdown {
   rawTailTranscriptTokens: number;
   compressedHistoryTokens: number;
   toolSchemaTokens: number;
+  toolSchemaBudgetTokens?: number | null;
   estimatedInputTokens: number;
   promptPrefixBudgetTokens?: number | null;
   checkpointBudgetTokens?: number | null;
@@ -354,6 +355,8 @@ export type ChatAguiStreamEventType =
 
 export interface ChatAguiStreamEvent {
   type: ChatAguiStreamEventType;
+  name?: string;
+  value?: unknown;
   threadId?: string;
   runId?: string;
   supportsSteer?: boolean;

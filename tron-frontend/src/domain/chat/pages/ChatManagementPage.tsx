@@ -555,8 +555,21 @@ function forgetMainAgentPersistedSession(workspaceCode: string, sessionCode: str
   }
 }
 
-function latestEventValue(events: ChatAguiEvent[], key: string) {
-  return [...events].reverse().find((event) => event.metadata[key])?.metadata[key] ?? null;
+type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
+
+function aguiEventMetadata(event: TranscriptAguiEvent) {
+  if (!("metadata" in event) || typeof event.metadata !== "object" || event.metadata === null) {
+    return null;
+  }
+  return event.metadata as Record<string, string>;
+}
+
+function latestEventValue(events: TranscriptAguiEvent[], key: string) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const metadata = aguiEventMetadata(events[index]);
+    if (metadata?.[key]) return metadata[key];
+  }
+  return null;
 }
 
 function contextValue(value: string | null | undefined) {
@@ -604,7 +617,7 @@ function normalizeUsageEstimate(parsed: Partial<ChatTokenEstimateSnapshot> | nul
   };
 }
 
-function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudgetBreakdown> | null | undefined): ChatContextBudgetBreakdown | null {
+export function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudgetBreakdown> | null | undefined): ChatContextBudgetBreakdown | null {
   if (typeof parsed?.estimatedInputTokens !== "number") return null;
   return {
     checkpointBudgetTokens: tokenField(parsed.checkpointBudgetTokens),
@@ -632,6 +645,7 @@ function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudgetBreakd
     retainedHistoryRatioBps: tokenField(parsed.retainedHistoryRatioBps),
     sessionFamilyContextBudgetTokens: tokenField(parsed.sessionFamilyContextBudgetTokens),
     sessionFamilyContextTokens: tokenField(parsed.sessionFamilyContextTokens) ?? 0,
+    toolSchemaBudgetTokens: tokenField(parsed.toolSchemaBudgetTokens),
     toolSchemaTokens: tokenField(parsed.toolSchemaTokens) ?? 0,
     workingStateBudgetTokens: tokenField(parsed.workingStateBudgetTokens),
     workingStateTokens: tokenField(parsed.workingStateTokens) ?? 0,
@@ -691,17 +705,47 @@ function parsedUsageAudit(value: string | null | undefined): ChatUsageAuditSnaps
   }
 }
 
-function latestUsageEstimateFromEvents(events: ChatAguiEvent[]) {
+function latestUsageEstimateFromEvents(events: TranscriptAguiEvent[]) {
   return parsedUsageEstimate(latestEventValue(events, "usage_estimate_json"))
     ?? parsedUsageEstimate(latestEventValue(events, "usageEstimate"));
 }
 
-function latestUsageAuditFromEvents(events: ChatAguiEvent[]) {
+function latestUsageAuditFromEvents(events: TranscriptAguiEvent[]) {
   return parsedUsageAudit(latestEventValue(events, "usage_audit_json"));
 }
 
-function latestContextBudgetBreakdownFromEvents(events: ChatAguiEvent[]) {
-  return parsedContextBudgetBreakdown(latestEventValue(events, "budgetBreakdown"));
+function shortTermMemoryEventPayload(event: TranscriptAguiEvent): Record<string, unknown> | null {
+  if ("value" in event && typeof event.value === "object" && event.value !== null) {
+    return event.value as Record<string, unknown>;
+  }
+  const encoded = aguiEventMetadata(event)?.context_event_json;
+  if (!encoded) return null;
+  try {
+    const parsed = JSON.parse(encoded) as unknown;
+    return typeof parsed === "object" && parsed !== null
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function latestContextBudgetBreakdownFromEvents(events: TranscriptAguiEvent[]) {
+  for (let index = events.length - 1; index >= 0; index -= 1) {
+    const payload = shortTermMemoryEventPayload(events[index]);
+    const breakdown = payload?.budgetBreakdown;
+    if (typeof breakdown === "object" && breakdown !== null) {
+      const normalized = normalizeContextBudgetBreakdown(
+        breakdown as Partial<ChatContextBudgetBreakdown>,
+      );
+      if (normalized) return normalized;
+    }
+    const normalized = parsedContextBudgetBreakdown(
+      aguiEventMetadata(events[index])?.budgetBreakdown,
+    );
+    if (normalized) return normalized;
+  }
+  return null;
 }
 
 function chatTokenUsage(messages: ChatMessage[]) {
@@ -795,7 +839,7 @@ function contextStatusLabel(estimate: ChatTokenEstimateSnapshot | null, breakdow
 function contextWindowLimitFromSources(
   model: ModelRecord | null | undefined,
   selectedModel: ChatModelOption | null | undefined,
-  events: ChatAguiEvent[],
+  events: TranscriptAguiEvent[],
 ) {
   const metadataWindow = tokenFieldFromMetadata(
     contextValue(latestEventValue(events, "contextWindowTokens"))
@@ -805,8 +849,6 @@ function contextWindowLimitFromSources(
   );
   return model?.contextWindowTokens ?? selectedModel?.contextWindowTokens ?? metadataWindow ?? null;
 }
-
-type TranscriptAguiEvent = ChatAguiEvent | ChatAguiStreamEvent;
 
 export interface ChatStreamOwner {
   controller: AbortController;
@@ -968,6 +1010,126 @@ function aguiEventMillis(event: TranscriptAguiEvent) {
   if ("timestamp" in event && typeof event.timestamp === "number") return event.timestamp;
   const parsed = Date.parse(aguiEventTime(event));
   return Number.isNaN(parsed) ? null : parsed;
+}
+
+export type ShortTermMemoryRuntimeNoticeKind =
+  | "compaction_requested"
+  | "compaction_started"
+  | "compaction_completed"
+  | "compaction_failed"
+  | "tool_schema_over_budget";
+
+export interface ShortTermMemoryRuntimeNotice {
+  kind: ShortTermMemoryRuntimeNoticeKind;
+  timestamp: number;
+  estimatedTokens?: number | null;
+  limitTokens?: number | null;
+  toolCount?: number | null;
+}
+
+function shortTermMemoryEventName(event: TranscriptAguiEvent) {
+  if ("name" in event && typeof event.name === "string") return event.name;
+  if ("eventName" in event && typeof event.eventName === "string") return event.eventName;
+  return "";
+}
+
+function numberFromUnknown(value: unknown) {
+  return typeof value === "number" && Number.isFinite(value) ? value : null;
+}
+
+function compactionNoticeKind(event: TranscriptAguiEvent): ShortTermMemoryRuntimeNoticeKind | null {
+  switch (shortTermMemoryEventName(event)) {
+    case "tron.short_term_memory.context.compaction_requested":
+    case "agent.context.compaction_requested":
+      return "compaction_requested";
+    case "tron.short_term_memory.compaction.started":
+    case "agent.compaction.started":
+      return "compaction_started";
+    case "tron.short_term_memory.compaction.completed":
+    case "agent.compaction.completed":
+      return "compaction_completed";
+    case "tron.short_term_memory.compaction.failed":
+    case "agent.compaction.failed":
+      return "compaction_failed";
+    default:
+      return null;
+  }
+}
+
+function isRunFinishedEvent(event: TranscriptAguiEvent) {
+  const type = aguiEventType(event).toUpperCase();
+  return type === "RUN_FINISHED" || type === "AGENT.RUN.COMPLETED";
+}
+
+function isRunErrorEvent(event: TranscriptAguiEvent) {
+  const type = aguiEventType(event).toUpperCase();
+  return type === "RUN_ERROR" || type === "AGENT.RUN.FAILED";
+}
+
+function toolSchemaBudgetFields(message: string) {
+  const matched = message.match(
+    /estimatedTokens=(\d+),\s*limitTokens=(\d+),\s*toolCount=(\d+)/i,
+  );
+  return {
+    estimatedTokens: matched ? Number.parseInt(matched[1], 10) : null,
+    limitTokens: matched ? Number.parseInt(matched[2], 10) : null,
+    toolCount: matched ? Number.parseInt(matched[3], 10) : null,
+  };
+}
+
+export function latestShortTermMemoryRuntimeNotice(
+  events: TranscriptAguiEvent[],
+): ShortTermMemoryRuntimeNotice | null {
+  let compactionNotice: ShortTermMemoryRuntimeNotice | null = null;
+  let toolSchemaNotice: ShortTermMemoryRuntimeNotice | null = null;
+  let latestSuccessfulRunAt = Number.NEGATIVE_INFINITY;
+
+  for (let index = 0; index < events.length; index += 1) {
+    const event = events[index];
+    const timestamp = aguiEventMillis(event) ?? index;
+    const kind = compactionNoticeKind(event);
+    if (kind) {
+      const payload = shortTermMemoryEventPayload(event);
+      compactionNotice = {
+        kind,
+        timestamp,
+        estimatedTokens: numberFromUnknown(payload?.compactionInputTokenEstimate)
+          ?? numberFromUnknown(payload?.estimatedTokens),
+        limitTokens: numberFromUnknown(payload?.maxInputTokens),
+      };
+    }
+
+    if (isRunFinishedEvent(event)) {
+      latestSuccessfulRunAt = Math.max(latestSuccessfulRunAt, timestamp);
+      continue;
+    }
+    if (!isRunErrorEvent(event)) continue;
+    const metadata = aguiEventMetadata(event);
+    const code = (
+      "code" in event && typeof event.code === "string"
+        ? event.code
+        : metadata?.failureCode ?? ""
+    ).toLowerCase();
+    const message = aguiEventSummary(event);
+    if (code !== "tool_schema_over_budget" && !message.includes("TOOL_SCHEMA_OVER_BUDGET")) {
+      continue;
+    }
+    const fields = toolSchemaBudgetFields(message);
+    toolSchemaNotice = {
+      kind: "tool_schema_over_budget",
+      timestamp,
+      ...fields,
+    };
+  }
+
+  if (toolSchemaNotice && toolSchemaNotice.timestamp < latestSuccessfulRunAt) {
+    toolSchemaNotice = null;
+  }
+  if (!toolSchemaNotice) return compactionNotice;
+  if (!compactionNotice) return toolSchemaNotice;
+  return toolSchemaNotice.timestamp >= compactionNotice.timestamp
+    ? toolSchemaNotice
+    : compactionNotice;
 }
 
 export function latestTerminalChatRunCode(
@@ -2079,7 +2241,7 @@ const contextBlockColorClasses: Record<ContextBlockColor, { dot: string; fill: s
   tool: mutedContextBlockColor,
 };
 
-function buildContextMemoryBlocks({
+export function buildContextMemoryBlocks({
   breakdown,
   goal,
   latestCompaction,
@@ -2119,7 +2281,7 @@ function buildContextMemoryBlocks({
       : translate("chat.shortTermMemory.contextPanel.none");
   const sharedInputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? null;
   const toolSchemaTokens = breakdown?.toolSchemaTokens ?? requestEstimate?.toolSchemaTokenEstimate ?? 0;
-  const toolSchemaLimit = sharedInputBudget ?? breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? null;
+  const toolSchemaLimit = breakdown?.toolSchemaBudgetTokens ?? sharedInputBudget ?? breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? null;
   const compressedCount = breakdown?.compressedHistoryMessageCount ?? 0;
   const rawTailCount = breakdown?.rawTailMessageCount ?? 0;
   const historyMeta = compressedCount > 0
@@ -2252,6 +2414,49 @@ function ContextOverviewPanel({
           )}
           style={{ width: `${percent}%` }}
         />
+      </div>
+    </section>
+  );
+}
+
+function ContextRuntimeNoticePanel({ notice }: { notice: ShortTermMemoryRuntimeNotice }) {
+  const { t } = useTranslation("pages");
+  const pending = notice.kind === "compaction_requested" || notice.kind === "compaction_started";
+  const success = notice.kind === "compaction_completed";
+  const title = t(`chat.shortTermMemory.contextPanel.runtimeNotices.${notice.kind}.title`);
+  const detail = notice.kind === "tool_schema_over_budget"
+    && notice.estimatedTokens != null
+    && notice.limitTokens != null
+    ? t("chat.shortTermMemory.contextPanel.runtimeNotices.tool_schema_over_budget.detailWithBudget", {
+      actual: formatCompactTokenCount(notice.estimatedTokens),
+      limit: formatCompactTokenCount(notice.limitTokens),
+      count: notice.toolCount ?? "-",
+    })
+    : t(`chat.shortTermMemory.contextPanel.runtimeNotices.${notice.kind}.detail`);
+
+  return (
+    <section
+      aria-live="polite"
+      className={cn(
+        "flex items-start gap-2.5 rounded-md border px-3 py-2.5 text-xs",
+        pending && "border-[var(--color-outline-variant)] bg-[var(--color-secondary-container)] text-[var(--color-on-secondary-container)]",
+        success && "border-[var(--color-success)]/30 bg-[var(--color-success-container)] text-[var(--color-on-success-container)]",
+        !pending && !success && "border-[var(--color-error)]/30 bg-[var(--color-error-container)] text-[var(--color-on-error-container)]",
+      )}
+      data-notice-kind={notice.kind}
+      data-testid="context-runtime-notice"
+      role={!pending && !success ? "alert" : "status"}
+    >
+      {pending ? (
+        <LoaderCircle className="mt-0.5 shrink-0 animate-spin" size={14} />
+      ) : success ? (
+        <CheckCircle2 className="mt-0.5 shrink-0" size={14} />
+      ) : (
+        <CircleAlert className="mt-0.5 shrink-0" size={14} />
+      )}
+      <div className="min-w-0 space-y-0.5">
+        <div className="font-medium">{title}</div>
+        <div className="break-words opacity-80">{detail}</div>
       </div>
     </section>
   );
@@ -2826,7 +3031,7 @@ function RightContextSidebar({
   session,
   todos,
 }: {
-  events: ChatAguiEvent[];
+  events: TranscriptAguiEvent[];
   goal?: ChatSessionGoalView | null;
   latestCompaction?: ChatSessionCompaction | null;
   latestCompactionStatus?: QueryStatus;
@@ -2854,6 +3059,7 @@ function RightContextSidebar({
   const usageAudit = latestUsageAudit ?? latestUsageAuditFromEvents(events);
   const requestEstimate = latestRequestEstimate ?? usageAudit?.requestEstimate ?? latestUsageEstimateFromEvents(events);
   const budgetBreakdown = latestContextBudgetBreakdownFromEvents(events);
+  const runtimeNotice = latestShortTermMemoryRuntimeNotice(events);
   const fallbackWindowLimit = contextWindowLimitFromSources(model, selectedModel, events);
   const contextBlocks = buildContextMemoryBlocks({
     breakdown: budgetBreakdown,
@@ -2871,6 +3077,7 @@ function RightContextSidebar({
         modelLabel={modelLabel}
         requestEstimate={requestEstimate}
       />
+      {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
       <ContextStructurePanel
         blocks={contextBlocks}
         compactionBusy={compactionBusy || latestCompactionStatus?.loading}
@@ -4760,6 +4967,13 @@ export function ChatManagementPage() {
   const liveAguiPendingAnchorMessageCode = activeSession?.sessionCode
     ? liveAguiPendingAnchorMessageCodesBySessionCode[activeSession.sessionCode] ?? ""
     : "";
+  const contextAguiEvents = useMemo<TranscriptAguiEvent[]>(() => (
+    mergeTranscriptAguiEvents<TranscriptAguiEvent>(
+      aguiEvents,
+      aguiProtocolEvents,
+      liveAguiEvents,
+    )
+  ), [aguiEvents, aguiProtocolEvents, liveAguiEvents]);
   const liveAguiPending = Boolean(
     sending
     && activeSession
@@ -4939,7 +5153,7 @@ export function ChatManagementPage() {
           <div className="min-h-0 overflow-y-auto">
             <div className="m-4">
               <RightContextSidebar
-                events={aguiEvents}
+                events={contextAguiEvents}
                 goal={activeGoal}
                 latestCompaction={latestCompaction}
                 latestCompactionStatus={latestCompactionStatus}
@@ -4973,8 +5187,8 @@ export function ChatManagementPage() {
   }, [
     activeSession,
     activeGoal,
-    aguiEvents,
     compactingSessionCode,
+    contextAguiEvents,
     goalActionSessionCode,
     goalStatus,
     hasActiveSession,

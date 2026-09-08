@@ -3,6 +3,7 @@ use sha2::{Digest, Sha256};
 
 use crate::{
     domain::short_term_memory::{ShortTermMemoryError, ShortTermMemoryEvent},
+    shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef},
     shared::time::{current_timestamp, current_timestamp_seconds},
 };
 
@@ -24,6 +25,7 @@ impl ShortTermMemoryService {
         payload_json: Value,
         metadata_json: Option<Value>,
     ) -> Result<(), ShortTermMemoryError> {
+        let payload_for_live_event = payload_json.clone();
         let Some(event) = self.new_event(
             session_code,
             workspace_code,
@@ -37,9 +39,24 @@ impl ShortTermMemoryService {
             metadata_json,
         )?
         else {
+            self.publish_context_event(
+                session_code,
+                workspace_code,
+                run_code,
+                event_type,
+                &self.bounded_event_payload(payload_for_live_event),
+            );
             return Ok(());
         };
-        self.repository().create_event(&event)
+        self.repository().create_event(&event)?;
+        self.publish_context_event(
+            session_code,
+            workspace_code,
+            run_code,
+            event_type,
+            &event.payload_json,
+        );
+        Ok(())
     }
 
     pub(super) fn append_run_lifecycle_event(
@@ -160,6 +177,123 @@ impl ShortTermMemoryService {
             preview_chars /= 2;
         }
     }
+
+    pub(super) fn publish_context_event(
+        &self,
+        session_code: &str,
+        workspace_code: &str,
+        run_code: Option<&str>,
+        event_type: &str,
+        payload_json: &Value,
+    ) {
+        let Some(outcome) = context_event_outcome(event_type) else {
+            return;
+        };
+        let mut draft = BusEventDraft::agui(event_type.to_string(), "short_term_memory")
+            .outcome(outcome)
+            .request(BusRequestRef::with_stream_key(session_code.to_string()))
+            .attr("workspace_code", workspace_code.to_string())
+            .attr("conversation_code", session_code.to_string())
+            .payload_field(
+                "context_event_json",
+                agui_context_payload(event_type, payload_json),
+            );
+        draft = match run_code {
+            Some(run_code) => draft.subject("agent_run", run_code.to_string()),
+            None => draft.subject("chat_session", session_code.to_string()),
+        };
+        let _ = self.event_bus.publish(draft);
+    }
+}
+
+fn context_event_outcome(event_type: &str) -> Option<BusOutcome> {
+    match event_type {
+        "agent.context.compaction_requested" => Some(BusOutcome::Progress),
+        "agent.compaction.started" => Some(BusOutcome::Started),
+        "agent.context.assembled" | "agent.context.rebased" | "agent.compaction.completed" => {
+            Some(BusOutcome::Completed)
+        }
+        "agent.compaction.failed" => Some(BusOutcome::Failure),
+        _ => None,
+    }
+}
+
+fn agui_context_payload(event_type: &str, payload_json: &Value) -> String {
+    const MAX_ENCODED_BYTES: usize = 7_000;
+    let safe_payload = match event_type {
+        "agent.context.assembled" => json!({
+            "estimatedTokens": payload_json.get("estimatedTokens"),
+            "toolSchemaTokenEstimate": payload_json.get("toolSchemaTokenEstimate"),
+            "rebased": payload_json.get("rebased"),
+            "overBudget": payload_json.get("overBudget"),
+            "budgetBreakdown": payload_json.get("budgetBreakdown"),
+            "overBudgetReason": payload_json.get("overBudgetReason"),
+        }),
+        "agent.context.compaction_requested" => json!({
+            "estimatedTokens": payload_json.get("estimatedTokens"),
+            "fullEstimatedTokens": payload_json.get("fullEstimatedTokens"),
+            "toolSchemaTokenEstimate": payload_json.get("toolSchemaTokenEstimate"),
+            "triggerTokens": payload_json.get("triggerTokens"),
+            "compactionTriggerReached": payload_json.get("compactionTriggerReached"),
+            "effectiveRetainedHistoryTokens": payload_json.get("effectiveRetainedHistoryTokens"),
+            "budgetBreakdown": payload_json.get("budgetBreakdown"),
+        }),
+        "agent.context.rebased" => json!({
+            "reason": payload_json.get("reason"),
+        }),
+        "agent.compaction.started" => json!({
+            "sourceStartSeq": payload_json.get("sourceStartSeq"),
+            "sourceEndSeq": payload_json.get("sourceEndSeq"),
+            "tailStartSeq": payload_json.get("tailStartSeq"),
+            "sourceMessageCount": payload_json.get("sourceMessageCount"),
+            "sourceTokenEstimate": payload_json.get("sourceTokenEstimate"),
+            "tailTokenEstimate": payload_json.get("tailTokenEstimate"),
+            "compactionInputTokenEstimate": payload_json.get("compactionInputTokenEstimate"),
+            "maxInputTokens": payload_json.get("maxInputTokens"),
+            "compactionMode": payload_json.get("compactionMode"),
+            "coverage": payload_json.get("coverage"),
+        }),
+        "agent.compaction.completed" => {
+            let metadata = payload_json.get("metadata").unwrap_or(&Value::Null);
+            json!({
+                "checkpointMessageCode": payload_json.get("checkpointMessageCode"),
+                "strategy": metadata.get("strategy"),
+                "triggeredBy": metadata.get("triggeredBy"),
+                "source": metadata.get("source"),
+                "sourceStartSeq": metadata.get("sourceStartSeq"),
+                "sourceEndSeq": metadata.get("sourceEndSeq"),
+                "tailStartSeq": metadata.get("tailStartSeq"),
+                "sourceMessageCount": metadata.get("sourceMessageCount"),
+                "sourceTokenEstimate": metadata.get("sourceTokenEstimate"),
+                "tailTokenEstimate": metadata.get("tailTokenEstimate"),
+                "compactionInputTokenEstimate": metadata.get("compactionInputTokenEstimate"),
+                "summaryTokenEstimate": metadata.get("summaryTokenEstimate"),
+                "coverage": metadata.get("coverage"),
+            })
+        }
+        "agent.compaction.failed" => json!({
+            "errorCode": payload_json.get("errorCode"),
+            "compactionInputTokenEstimate": payload_json.get("compactionInputTokenEstimate"),
+            "maxInputTokens": payload_json.get("maxInputTokens"),
+            "strategy": payload_json.get("strategy"),
+        }),
+        _ => json!({}),
+    };
+    let Ok(encoded) = serde_json::to_string(&safe_payload) else {
+        return "{}".to_string();
+    };
+    if encoded.len() <= MAX_ENCODED_BYTES {
+        return encoded;
+    }
+    let mut hasher = Sha256::new();
+    hasher.update(encoded.as_bytes());
+    json!({
+        "truncated": true,
+        "originalBytes": encoded.len(),
+        "sha256": format!("sha256:{}", hex::encode(hasher.finalize())),
+        "preview": truncate_chars(&encoded, 1_024),
+    })
+    .to_string()
 }
 
 fn is_run_lifecycle_event(event_type: &str) -> bool {

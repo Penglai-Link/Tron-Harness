@@ -40,9 +40,7 @@ use runtime_helpers::{
     model_stream_delta_payloads, record_failure_on_short_term_memory_error,
     short_term_memory_error, validate_context,
 };
-use runtime_model_request::{
-    estimate_tool_schema_tokens, model_request_facts, prepared_context_event_payload,
-};
+use runtime_model_request::{model_request_facts, prepared_context_event_payload};
 use runtime_steering::RuntimeSteering;
 
 pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;

@@ -46,6 +46,7 @@ const mockContextBudgetBreakdown: ChatContextBudgetBreakdown = {
   retainedHistoryRatioBps: 5_000,
   sessionFamilyContextBudgetTokens: 10_000,
   sessionFamilyContextTokens: 2_600,
+  toolSchemaBudgetTokens: 6_000,
   toolSchemaTokens: 1_800,
   workingStateBudgetTokens: 5_000,
   workingStateTokens: 1_400,
@@ -461,6 +462,21 @@ export function getChatAguiEvents(sessionCode: string): ChatAguiEvent[] {
       outcome: "COMPLETED",
       metadata: {
         skillName: "eliteforge-codex-superpower",
+      },
+    },
+    {
+      id: "EVT-3",
+      type: "agent.compaction.completed",
+      eventName: "agent.compaction.completed",
+      runCode: session.lastRunCode,
+      streamKey: sessionCode,
+      occurredAt: session.updatedAt,
+      outcome: "COMPLETED",
+      metadata: {
+        context_event_json: JSON.stringify({
+          checkpointMessageCode: "ATM-MOCK-1",
+          summaryTokenEstimate: 840,
+        }),
       },
     },
   ];

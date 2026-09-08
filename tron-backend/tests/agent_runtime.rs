@@ -2260,8 +2260,11 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
     .build()
     .expect("agent builder should succeed");
 
+    // Exercise event truncation without also overflowing the model input budget.
+    let mut context = base_context("RUN-TOOL-OVERSIZE");
+    context.model.context_window_tokens = Some(32_000);
     let result = agent
-        .run(base_context("RUN-TOOL-OVERSIZE"))
+        .run(context)
         .await
         .expect("oversize tool event payload should not fail the run");
 
@@ -2553,6 +2556,7 @@ async fn model_request_builders_use_frozen_model_config() {
             required_variable_keys: vec![],
         }],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };

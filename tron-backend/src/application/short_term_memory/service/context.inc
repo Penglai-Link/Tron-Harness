@@ -3,15 +3,35 @@ impl ShortTermMemoryService {
         &self,
         context: &AgentRunContext,
     ) -> Result<PreparedModelContext, ShortTermMemoryError> {
+        let schema = crate::application::agent::ToolSchemaCache::default()
+            .prepare(context.model.protocol, &context.tools, u32::MAX)
+            .map_err(|_| ShortTermMemoryError::ContextBudgetExceeded)?;
+        self.prepare_model_context_with_tool_schema_estimate(context, schema.estimated_tokens())
+    }
+
+    pub(crate) fn model_context_budget_plan(
+        &self,
+        model: &crate::domain::agent::AgentModelConfig,
+    ) -> super::ModelContextBudgetPlan {
+        self.config
+            .model_context_budget_plan(model.context_window_tokens, model.max_tokens)
+    }
+
+    pub(crate) fn prepare_model_context_with_tool_schema_estimate(
+        &self,
+        context: &AgentRunContext,
+        tool_schema_token_estimate: u32,
+    ) -> Result<PreparedModelContext, ShortTermMemoryError> {
+        let budget_plan = self.model_context_budget_plan(&context.model);
         let Some(memory) = context.short_term_memory.as_ref() else {
-            return Ok(PreparedModelContext {
+            let mut prepared = PreparedModelContext {
                 messages: context.messages.clone(),
                 rebased: false,
                 context_hash: None,
                 checkpoint_code: None,
                 estimated_tokens: estimate_messages_tokens(&context.messages),
                 message_token_estimate: estimate_messages_tokens(&context.messages),
-                tool_schema_token_estimate: 0,
+                tool_schema_token_estimate,
                 budget_breakdown: None,
                 over_budget_reason: None,
                 context_window_limit: context.model.context_window_tokens,
@@ -23,12 +43,15 @@ impl ShortTermMemoryService {
                 compaction_tail_start_seq: None,
                 compaction_trigger_tokens: None,
                 effective_retained_history_tokens: None,
-            });
+            };
+            apply_request_budget_fields(
+                &mut prepared,
+                &budget_plan,
+                &self.config,
+                tool_schema_token_estimate,
+            );
+            return Ok(prepared);
         };
-        let budget_plan = self.config.model_context_budget_plan(
-            context.model.context_window_tokens,
-            context.model.max_tokens,
-        );
         let mut repository = self.repository();
         let compaction = repository.latest_compaction(&memory.session_code)?;
         let min_seq = Self::checkpoint_replay_min_seq(compaction.as_ref());
@@ -61,7 +84,6 @@ impl ShortTermMemoryService {
             memory.todo_enabled,
         )?;
         let active_goal = self.load_active_goal_for_context(&memory.session_code)?;
-        let tool_schema_token_estimate = estimate_tool_schema_tokens(&context.tools);
         let mut full_prepared = assemble_context(
             &memory.prompt_prefix,
             memory.current_input_message.as_ref(),
@@ -82,6 +104,10 @@ impl ShortTermMemoryService {
             tool_schema_token_estimate,
         );
         full_prepared.checkpoint_code = checkpoint_code.clone();
+        if tool_schema_token_estimate > budget_plan.block_budgets.tool_schema.effective_limit_tokens
+        {
+            return Ok(full_prepared);
+        }
         let full_history_tokens = full_prepared
             .budget_breakdown
             .as_ref()
@@ -253,5 +279,4 @@ impl ShortTermMemoryService {
         )?;
         Ok(prepared)
     }
-
 }

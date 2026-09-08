@@ -56,29 +56,67 @@ impl ReactAgent {
             }
             steering.inject_at_loop_boundary(context, self.short_term_memory.as_ref())?;
             step_count += 1;
+            let tool_schema = match turn_state.prepare_tool_schema(
+                context.model.protocol,
+                &context.tools,
+                self.tool_schema_limit(context),
+            ) {
+                Ok(snapshot) => snapshot,
+                Err(message) => {
+                    let failure_code = if message.starts_with("TOOL_SCHEMA_OVER_BUDGET:") {
+                        "tool_schema_over_budget"
+                    } else {
+                        "tool_schema_prepare_failed"
+                    };
+                    self.publish_with_payload(
+                        context,
+                        "agent.run.failed",
+                        BusOutcome::Failure,
+                        Some(&message),
+                        vec![(
+                            "failureCode".to_string(),
+                            failure_code.to_string(),
+                        )],
+                    )?;
+                    self.record_short_term_memory_failure(context, &message)?;
+                    return Err(AgentError::InvalidConfiguration(message));
+                }
+            };
             let prepared_context = if let Some(short_term_memory) = self.short_term_memory.as_ref()
             {
                 record_failure_on_short_term_memory_error(
                     short_term_memory,
                     context,
                     "context_prepare_failed",
-                    short_term_memory.prepare_model_context(context),
+                    short_term_memory.prepare_model_context_with_tool_schema_estimate(
+                        context,
+                        tool_schema.estimated_tokens(),
+                    ),
                 )?
             } else {
+                let budget = self.model_context_budget_plan(context);
+                let message_token_estimate =
+                    crate::application::short_term_memory::estimate_messages_tokens(
+                        &context.messages,
+                    );
+                let estimated_tokens =
+                    message_token_estimate.saturating_add(tool_schema.estimated_tokens());
+                let over_budget = estimated_tokens > budget.effective_input_budget;
                 PreparedModelContext {
                     messages: context.messages.clone(),
                     rebased: false,
                     context_hash: None,
                     checkpoint_code: None,
-                    estimated_tokens: 0,
-                    message_token_estimate: 0,
-                    tool_schema_token_estimate: estimate_tool_schema_tokens(&context.tools),
+                    estimated_tokens,
+                    message_token_estimate,
+                    tool_schema_token_estimate: tool_schema.estimated_tokens(),
                     budget_breakdown: None,
-                    over_budget_reason: None,
-                    context_window_limit: context.model.context_window_tokens,
-                    effective_input_budget: None,
-                    output_token_reserve: context.model.max_tokens,
-                    over_budget: false,
+                    over_budget_reason: over_budget
+                        .then(|| "NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET".into()),
+                    context_window_limit: Some(budget.model_context_window),
+                    effective_input_budget: Some(budget.effective_input_budget),
+                    output_token_reserve: Some(budget.output_token_reserve),
+                    over_budget,
                     compaction_trigger_reached: false,
                     compaction_required: false,
                     compaction_tail_start_seq: None,

@@ -79,17 +79,9 @@ pub fn responses_request(config: &AgentModelConfig, request: &ModelRequest) -> V
         payload["reasoning"] = reasoning;
     }
     if !request.tools.is_empty() {
-        payload["tools"] = json!(
-            request
-                .tools
-                .iter()
-                .map(|tool| json!({
-                    "type": "function",
-                    "name": tool.tool_name,
-                    "description": tool.description,
-                    "parameters": tool.input_schema,
-                }))
-                .collect::<Vec<_>>()
+        payload["tools"] = crate::application::agent::request_tool_schema_payload(
+            AgentModelProtocol::Responses,
+            request,
         );
         payload["parallel_tool_calls"] = json!(true);
     }

@@ -502,6 +502,7 @@ mod tests {
             messages: vec![AgentMessage::user("测试多个工具并行调用")],
             tools: Vec::new(),
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: None,
             previous_response_id: None,
         }

@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
+
 import { describe, expect, it, vi } from "vitest";
 
 vi.hoisted(() => {
+  Object.defineProperty(HTMLCanvasElement.prototype, "getContext", {
+    value: () => null,
+  });
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
@@ -20,12 +24,111 @@ vi.hoisted(() => {
 
 import {
   ChatStreamOwnershipRegistry,
+  buildContextMemoryBlocks,
   claimChatRunTerminalDrain,
   latestTerminalChatRunCode,
+  latestContextBudgetBreakdownFromEvents,
+  latestShortTermMemoryRuntimeNotice,
+  normalizeContextBudgetBreakdown,
   resolveChatStreamSettlement,
   shouldPollChatRecoveryData,
   shouldPollChatRunRecovery,
 } from "./ChatManagementPage";
+
+describe("tool schema context budget", () => {
+  it.each([6_000, 0])("uses the independent schema limit %s", (limit) => {
+    const breakdown = normalizeContextBudgetBreakdown({
+      estimatedInputTokens: 10_000,
+      effectiveInputBudget: 28_000,
+      toolSchemaBudgetTokens: limit,
+      toolSchemaTokens: 1_000,
+    });
+    const blocks = buildContextMemoryBlocks({
+      breakdown,
+      requestEstimate: null,
+      translate: (key) => key,
+    });
+    expect(blocks.find((block) => block.color === "tool")).toMatchObject({
+      limitTokens: limit,
+      tokens: 1_000,
+    });
+  });
+
+  it("keeps the shared-budget fallback for historical records", () => {
+    const breakdown = normalizeContextBudgetBreakdown({
+      estimatedInputTokens: 10_000,
+      effectiveInputBudget: 28_000,
+    });
+    const blocks = buildContextMemoryBlocks({
+      breakdown,
+      requestEstimate: null,
+      translate: (key) => key,
+    });
+    expect(blocks.find((block) => block.color === "tool")?.limitTokens).toBe(28_000);
+  });
+
+  it("reads a live context budget from an AG-UI custom event", () => {
+    const breakdown = latestContextBudgetBreakdownFromEvents([{
+      name: "tron.short_term_memory.context.assembled",
+      threadId: "SESSION-1",
+      timestamp: 100,
+      type: "CUSTOM",
+      value: {
+        budgetBreakdown: {
+          estimatedInputTokens: 12_000,
+          effectiveInputBudget: 28_000,
+          toolSchemaBudgetTokens: 6_000,
+          toolSchemaTokens: 3_000,
+        },
+      },
+    }]);
+
+    expect(breakdown).toMatchObject({
+      estimatedInputTokens: 12_000,
+      toolSchemaBudgetTokens: 6_000,
+      toolSchemaTokens: 3_000,
+    });
+  });
+
+  it("shows the latest automatic compaction lifecycle from AG-UI", () => {
+    expect(latestShortTermMemoryRuntimeNotice([
+      {
+        name: "tron.short_term_memory.compaction.started",
+        timestamp: 100,
+        type: "CUSTOM",
+        value: { compactionInputTokenEstimate: 24_000, maxInputTokens: 28_000 },
+      },
+      {
+        name: "tron.short_term_memory.compaction.completed",
+        timestamp: 200,
+        type: "CUSTOM",
+        value: { checkpointMessageCode: "ATM-1" },
+      },
+    ])).toMatchObject({
+      kind: "compaction_completed",
+      timestamp: 200,
+    });
+  });
+
+  it("keeps a tool-schema budget error until a later run succeeds", () => {
+    const error = {
+      code: "tool_schema_over_budget",
+      message: "TOOL_SCHEMA_OVER_BUDGET: estimatedTokens=27294, limitTokens=19200, toolCount=93; tool exposure was not changed",
+      timestamp: 100,
+      type: "RUN_ERROR",
+    };
+    expect(latestShortTermMemoryRuntimeNotice([error])).toMatchObject({
+      estimatedTokens: 27_294,
+      kind: "tool_schema_over_budget",
+      limitTokens: 19_200,
+      toolCount: 93,
+    });
+    expect(latestShortTermMemoryRuntimeNotice([
+      error,
+      { timestamp: 200, type: "RUN_FINISHED" },
+    ])).toBeNull();
+  });
+});
 
 describe("chat page run recovery state", () => {
   it("keeps polling after a 409 queues the message even when status and replay are unresolved", () => {

@@ -940,6 +940,16 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
+    let expansion_result = second_messages
+        .iter()
+        .filter(|message| message["role"] == json!("user"))
+        .filter_map(|message| message["content"].as_str())
+        .find(|content| content.contains("discovery_expand_tool_domain"))
+        .expect("expansion result should be present");
+    assert!(expansion_result.contains("\"status\":\"expanded\""));
+    assert!(expansion_result.contains("\"toolCount\":"));
+    assert!(!expansion_result.contains("inputSchema"));
+    assert!(!expansion_result.contains("\"tools\":"));
     assert!(second_messages.iter().any(|message| {
         message["role"] == json!("user")
             && message["content"]

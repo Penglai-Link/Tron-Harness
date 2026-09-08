@@ -1,5 +1,7 @@
 use serde_json::Value;
 
+use super::ToolSchemaCache;
+
 use crate::domain::agent::{
     AgentMessage, AgentModelProtocol, AgentRunContext, ModelRequest, ModelResponse,
     ModelStreamEventKind, ToolObservation, responses_function_call_item_json,
@@ -31,12 +33,12 @@ pub enum TurnStateAdapter {
 impl TurnStateAdapter {
     pub fn new(protocol: AgentModelProtocol, responses_stateful_enabled: bool) -> Self {
         match protocol {
-            AgentModelProtocol::ChatCompletions => Self::Chat(ChatTranscriptState),
+            AgentModelProtocol::ChatCompletions => Self::Chat(ChatTranscriptState::default()),
             AgentModelProtocol::Responses => {
                 if responses_stateful_enabled {
                     Self::Responses(ResponsesItemState::default())
                 } else {
-                    Self::Chat(ChatTranscriptState)
+                    Self::Chat(ChatTranscriptState::default())
                 }
             }
             AgentModelProtocol::Embeddings => {
@@ -49,6 +51,24 @@ impl TurnStateAdapter {
         match self {
             Self::Chat(_) => TurnStateKind::Chat,
             Self::Responses(_) => TurnStateKind::Responses,
+        }
+    }
+
+    pub fn prepare_tool_schema(
+        &mut self,
+        protocol: AgentModelProtocol,
+        tools: &[crate::domain::agent::EffectiveTool],
+        limit_tokens: u32,
+    ) -> Result<std::sync::Arc<crate::domain::agent::PreparedToolSchema>, String> {
+        match self {
+            Self::Chat(state) => state
+                .tool_schema_cache
+                .prepare(protocol, tools, limit_tokens),
+            Self::Responses(state) => {
+                state
+                    .tool_schema_cache
+                    .prepare(protocol, tools, limit_tokens)
+            }
         }
     }
 
@@ -81,8 +101,10 @@ impl TurnStateAdapter {
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct ChatTranscriptState;
+#[derive(Debug, Clone, Default)]
+pub struct ChatTranscriptState {
+    tool_schema_cache: ToolSchemaCache,
+}
 
 impl ChatTranscriptState {
     pub fn build_request(
@@ -93,6 +115,7 @@ impl ChatTranscriptState {
         ModelRequest {
             messages: messages.to_vec(),
             tools: context.tools.clone(),
+            prepared_tool_schema: self.tool_schema_cache.current(),
             system_agent_session_id: context.system_agent_session_id.clone(),
             response_input_items: None,
             previous_response_id: None,
@@ -104,6 +127,7 @@ impl ChatTranscriptState {
 
 #[derive(Debug, Clone, Default)]
 pub struct ResponsesItemState {
+    tool_schema_cache: ToolSchemaCache,
     previous_response_id: Option<String>,
     consumed_message_count: usize,
     context_hash: Option<String>,
@@ -132,6 +156,7 @@ impl ResponsesItemState {
         ModelRequest {
             messages: current_messages.to_vec(),
             tools: context.tools.clone(),
+            prepared_tool_schema: self.tool_schema_cache.current(),
             system_agent_session_id: context.system_agent_session_id.clone(),
             response_input_items: Some(responses_input_items_from_messages(current_messages)),
             previous_response_id: self.previous_response_id.clone(),

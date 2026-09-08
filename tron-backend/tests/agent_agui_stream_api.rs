@@ -14,6 +14,7 @@ use axum::{
 use serde_json::{Value, json};
 use tokio::{net::TcpListener, task::JoinHandle};
 use tron_backend::{
+    adapters::outbound::persistence::SqliteAgentEventReplayStore,
     application::agent::AgentAguiStreamService,
     config::AppConfig,
     shared::{
@@ -26,6 +27,55 @@ use tron_backend::{
 };
 
 use common::{app, authenticated_bearer_token, request_with_headers, response_json};
+
+#[tokio::test]
+async fn short_term_memory_context_events_replay_as_agui_custom_events() {
+    let database_path = temp_database_path("stm-agui-replay");
+    let config = EventBusConfig::default();
+    let sink = Arc::new(AguiEventSink::new(&config));
+    let replay_store = Arc::new(
+        SqliteAgentEventReplayStore::connect(&database_path.to_string_lossy())
+            .expect("AG-UI replay store should connect"),
+    );
+    let event_bus = EventBusRuntimeBuilder::new(
+        config,
+        Arc::new(FixedSnowflakeIdProvider::new(480)),
+    )
+    .register_sink(sink.clone())
+    .register_sink(replay_store.clone())
+    .build();
+    let service = AgentAguiStreamService::with_replay_store(sink, replay_store);
+
+    let outcome = event_bus.publish(
+        BusEventDraft::agui("agent.context.assembled", "short_term_memory")
+            .outcome(BusOutcome::Completed)
+            .subject("agent_run", "RUN-STM-AGUI")
+            .request(BusRequestRef::with_stream_key("SESSION-STM-AGUI"))
+            .payload_field(
+                "context_event_json",
+                r#"{"estimatedTokens":12000,"budgetBreakdown":{"estimatedInputTokens":12000,"toolSchemaTokens":3000}}"#,
+            ),
+    );
+    assert!(matches!(outcome, PublishOutcome::Accepted { .. }));
+    tokio::time::sleep(std::time::Duration::from_millis(50)).await;
+
+    let events = service
+        .protocol_events("SESSION-STM-AGUI")
+        .expect("context event should replay");
+    let custom = events
+        .iter()
+        .find(|event| event.sse_event == "CUSTOM")
+        .expect("context event should use AG-UI CUSTOM");
+    assert_eq!(
+        custom.data["name"],
+        json!("tron.short_term_memory.context.assembled")
+    );
+    assert_eq!(custom.data["runId"], json!("RUN-STM-AGUI"));
+    assert_eq!(
+        custom.data["value"]["budgetBreakdown"]["toolSchemaTokens"],
+        json!(3000)
+    );
+}
 
 struct AgentModelMockServer {
     base_url: String,

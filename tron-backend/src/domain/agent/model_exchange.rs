@@ -2,21 +2,34 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use sha2::{Digest, Sha256};
 
-use super::{AgentMessage, AgentMessagePart, EffectiveTool};
+use super::{AgentMessage, AgentMessagePart, EffectiveTool, PreparedToolSchema};
 
 const GENERATED_TOOL_CALL_ID_PREFIX: &str = "generated_call_";
 
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ModelRequest {
     pub messages: Vec<AgentMessage>,
     pub tools: Vec<EffectiveTool>,
+    /// Run-local cache; never part of the serialized request contract.
+    #[serde(skip)]
+    pub prepared_tool_schema: Option<std::sync::Arc<PreparedToolSchema>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_agent_session_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub response_input_items: Option<Vec<Value>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub previous_response_id: Option<String>,
+}
+
+impl PartialEq for ModelRequest {
+    fn eq(&self, other: &Self) -> bool {
+        self.messages == other.messages
+            && self.tools == other.tools
+            && self.system_agent_session_id == other.system_agent_session_id
+            && self.response_input_items == other.response_input_items
+            && self.previous_response_id == other.previous_response_id
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

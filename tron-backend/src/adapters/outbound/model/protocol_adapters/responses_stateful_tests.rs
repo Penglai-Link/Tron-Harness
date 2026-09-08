@@ -36,6 +36,7 @@ fn responses_request_uses_previous_response_id_and_response_items_for_stateful_c
             ],
             tools: vec![],
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: Some(vec![json!({
                 "type": "function_call_output",
                 "call_id": "call-123",
@@ -95,6 +96,7 @@ fn responses_stateful_rebase_preserves_tool_call_and_tool_result_items() {
             ],
             tools: vec![],
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: None,
             previous_response_id: None,
         },

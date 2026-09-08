@@ -10,6 +10,7 @@ mod model_config;
 mod model_exchange;
 mod run;
 mod tool;
+mod tool_schema;
 
 pub use agui::{
     AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent, AgentAguiStreamState,
@@ -53,3 +54,4 @@ pub use tool::{
     InProcessTool, Tool, ToolContextDelta, ToolError, ToolExecutionResult, ToolObservation,
     ToolRegistry, ToolRequest,
 };
+pub use tool_schema::PreparedToolSchema;

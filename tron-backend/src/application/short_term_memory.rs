@@ -40,3 +40,4 @@ pub use dto::{
 };
 pub use port::ShortTermMemoryRepository;
 pub use service::ShortTermMemoryService;
+pub(crate) use assembler::estimate_messages_tokens;

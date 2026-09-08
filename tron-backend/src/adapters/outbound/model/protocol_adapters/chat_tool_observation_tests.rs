@@ -39,6 +39,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
         ],
         tools: vec![],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };
@@ -66,6 +67,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
         )],
         tools: vec![],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };
@@ -86,6 +88,7 @@ fn chat_request_downgrades_tool_observations_without_call_id_to_user_text() {
         )],
         tools: vec![],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };
@@ -108,6 +111,7 @@ fn request_builders_replay_invalid_tool_arguments_as_an_empty_json_object() {
         )])],
         tools: vec![],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };

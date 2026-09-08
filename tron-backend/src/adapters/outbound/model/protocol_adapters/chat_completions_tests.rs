@@ -32,6 +32,7 @@ fn chat_stream_request_asks_for_usage_chunk_and_thinking() {
                 messages: vec![AgentMessage::user("hello")],
                 tools: vec![],
                 system_agent_session_id: None,
+                prepared_tool_schema: None,
                 response_input_items: None,
                 previous_response_id: None,
             },

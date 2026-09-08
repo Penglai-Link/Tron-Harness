@@ -44,6 +44,8 @@ pub fn translate_agui_event(stream_key: &str, event: &BusEvent) -> Option<AgentA
                 | "context_window_limit"
                 | "model_name"
                 | "overBudgetReason"
+                | "context_event_json"
+                | "failureCode"
                 | "usage_audit_json"
                 | "usage_estimate_json"
         ) {
@@ -241,6 +243,7 @@ pub fn translate_protocol_events(
                 "type": "RUN_ERROR",
                 "threadId": stream_key,
                 "runId": run_code,
+                "code": payload_value(event, "failureCode"),
                 "message": event.summary.clone().unwrap_or_else(|| "agent run failed".into()),
                 "timestamp": timestamp,
             }),
@@ -355,6 +358,42 @@ pub fn translate_protocol_events(
                 }),
             )]
         }
+        CanonicalRuntimeEvent::ContextAssembled
+        | CanonicalRuntimeEvent::ContextCompactionRequested
+        | CanonicalRuntimeEvent::ContextRebased
+        | CanonicalRuntimeEvent::CompactionStarted
+        | CanonicalRuntimeEvent::CompactionCompleted
+        | CanonicalRuntimeEvent::CompactionFailed => {
+            let name = short_term_memory_custom_event_name(canonical_event);
+            let value = payload_value(event, "context_event_json")
+                .and_then(|payload| serde_json::from_str::<Value>(&payload).ok())
+                .unwrap_or_else(|| json!({}));
+            vec![protocol_event(
+                "CUSTOM",
+                json!({
+                    "type": "CUSTOM",
+                    "name": name,
+                    "value": value,
+                    "threadId": stream_key,
+                    "runId": run_code,
+                    "timestamp": timestamp,
+                }),
+            )]
+        }
+    }
+}
+
+fn short_term_memory_custom_event_name(event: CanonicalRuntimeEvent) -> &'static str {
+    match event {
+        CanonicalRuntimeEvent::ContextAssembled => "tron.short_term_memory.context.assembled",
+        CanonicalRuntimeEvent::ContextCompactionRequested => {
+            "tron.short_term_memory.context.compaction_requested"
+        }
+        CanonicalRuntimeEvent::ContextRebased => "tron.short_term_memory.context.rebased",
+        CanonicalRuntimeEvent::CompactionStarted => "tron.short_term_memory.compaction.started",
+        CanonicalRuntimeEvent::CompactionCompleted => "tron.short_term_memory.compaction.completed",
+        CanonicalRuntimeEvent::CompactionFailed => "tron.short_term_memory.compaction.failed",
+        _ => unreachable!("only short-term-memory events use custom AG-UI translation"),
     }
 }
 
@@ -443,6 +482,65 @@ mod tests {
         assert_eq!(protocol_events[0].data["reasoningEffort"], "High");
         assert_eq!(protocol_events[1].sse_event, "ACTIVITY_SNAPSHOT");
         assert_eq!(protocol_events[1].data["activity"], "PREPARING");
+    }
+
+    #[test]
+    fn short_term_memory_context_event_translates_to_agui_custom_event() {
+        let event = BusEvent::from_draft(
+            BusEventDraft::agui("agent.context.assembled", "short_term_memory")
+                .outcome(BusOutcome::Completed)
+                .subject("agent_run", "RUN-1")
+                .stream_key("SESSION-1")
+                .payload_field(
+                    "context_event_json",
+                    r#"{"estimatedTokens":12000,"budgetBreakdown":{"toolSchemaTokens":3000}}"#,
+                ),
+            &FixedSnowflakeIdProvider::new(1),
+            &EventBusConfig::default(),
+        )
+        .expect("event should validate");
+
+        let canonical = translate_agui_event("SESSION-1", &event)
+            .expect("context event should translate to canonical AG-UI");
+        assert_eq!(canonical.event_type, "agent.context.assembled");
+        assert_eq!(
+            canonical
+                .metadata
+                .get("context_event_json")
+                .map(String::as_str),
+            Some(r#"{"estimatedTokens":12000,"budgetBreakdown":{"toolSchemaTokens":3000}}"#),
+        );
+
+        let protocol_events = translate_protocol_events("SESSION-1", &event);
+        assert_eq!(protocol_events.len(), 1);
+        assert_eq!(protocol_events[0].sse_event, "CUSTOM");
+        assert_eq!(
+            protocol_events[0].data["name"],
+            "tron.short_term_memory.context.assembled"
+        );
+        assert_eq!(
+            protocol_events[0].data["value"]["budgetBreakdown"]["toolSchemaTokens"],
+            3000
+        );
+    }
+
+    #[test]
+    fn run_failed_exposes_machine_readable_failure_code() {
+        let event = BusEvent::from_draft(
+            BusEventDraft::agui("agent.run.failed", "agent_runtime")
+                .outcome(BusOutcome::Failure)
+                .subject("agent_run", "RUN-1")
+                .stream_key("SESSION-1")
+                .summary("TOOL_SCHEMA_OVER_BUDGET")
+                .payload_field("failureCode", "tool_schema_over_budget"),
+            &FixedSnowflakeIdProvider::new(1),
+            &EventBusConfig::default(),
+        )
+        .expect("event should validate");
+
+        let protocol_events = translate_protocol_events("SESSION-1", &event);
+        assert_eq!(protocol_events[0].sse_event, "RUN_ERROR");
+        assert_eq!(protocol_events[0].data["code"], "tool_schema_over_budget");
     }
 }
 

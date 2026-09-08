@@ -1,12 +1,5 @@
 use super::{ModelContextBudgetPlan, PreparedModelContext, ShortTermMemoryConfig};
 
-pub(super) fn estimate_tool_schema_tokens(tools: &[crate::domain::agent::EffectiveTool]) -> u32 {
-    serde_json::to_string(tools)
-        .ok()
-        .map(|text| ((text.len() as u32).saturating_add(3)) / 4)
-        .unwrap_or(0)
-}
-
 pub(super) fn apply_request_budget_fields(
     prepared: &mut PreparedModelContext,
     budget_plan: &ModelContextBudgetPlan,
@@ -24,9 +17,14 @@ pub(super) fn apply_request_budget_fields(
     prepared.compaction_trigger_tokens = Some(trigger_tokens);
     prepared.compaction_trigger_reached = prepared.estimated_tokens >= trigger_tokens;
     let input_budget_exceeded = prepared.estimated_tokens > budget_plan.effective_input_budget;
-    prepared.over_budget = input_budget_exceeded || prompt_prefix_budget_exceeded(prepared);
+    let tools_over_budget =
+        tool_schema_token_estimate > budget_plan.block_budgets.tool_schema.effective_limit_tokens;
+    prepared.over_budget =
+        input_budget_exceeded || prompt_prefix_budget_exceeded(prepared) || tools_over_budget;
     if let Some(breakdown) = prepared.budget_breakdown.as_mut() {
         breakdown.tool_schema_tokens = tool_schema_token_estimate;
+        breakdown.tool_schema_budget_tokens =
+            Some(budget_plan.block_budgets.tool_schema.effective_limit_tokens);
         breakdown.estimated_input_tokens = prepared.estimated_tokens;
         breakdown.effective_input_budget = Some(budget_plan.effective_input_budget);
         breakdown.context_window_limit = Some(budget_plan.model_context_window);
@@ -61,6 +59,10 @@ pub(super) fn apply_request_budget_fields(
         breakdown.input_budget_exceeded = input_budget_exceeded;
     }
     refresh_over_budget_reason(prepared);
+    if tools_over_budget {
+        prepared.over_budget_reason = Some("TOOL_SCHEMA_OVER_BUDGET".into());
+        prepared.compaction_required = false;
+    }
 }
 
 pub(super) fn annotate_compaction_budget(
@@ -87,7 +89,9 @@ pub(super) fn annotate_compaction_budget(
     prepared.compaction_trigger_reached = prepared.estimated_tokens >= trigger_tokens;
     prepared.effective_retained_history_tokens = Some(retained_history_tokens);
     let input_budget_exceeded = prepared.estimated_tokens > budget_plan.effective_input_budget;
-    prepared.over_budget = input_budget_exceeded || prompt_prefix_budget_exceeded(prepared);
+    prepared.over_budget = input_budget_exceeded
+        || prompt_prefix_budget_exceeded(prepared)
+        || tool_schema_budget_exceeded(prepared);
     if let Some(breakdown) = prepared.budget_breakdown.as_mut() {
         breakdown.raw_tail_transcript_tokens = raw_tail_tokens;
         breakdown.compressed_history_tokens = if compressed_history_message_count > 0 {
@@ -115,6 +119,10 @@ pub(super) fn annotate_compaction_budget(
 pub(super) fn refresh_over_budget_reason(prepared: &mut PreparedModelContext) {
     if !prepared.over_budget {
         prepared.over_budget_reason = None;
+        return;
+    }
+    if tool_schema_budget_exceeded(prepared) {
+        prepared.over_budget_reason = Some("TOOL_SCHEMA_OVER_BUDGET".into());
         return;
     }
     let Some(breakdown) = prepared.budget_breakdown.as_ref() else {
@@ -149,6 +157,14 @@ fn compaction_trigger_tokens(
         .unwrap_or(10_000)
         .min(10_000);
     budget_plan.effective_input_budget.saturating_mul(ratio) / 10_000
+}
+
+fn tool_schema_budget_exceeded(prepared: &PreparedModelContext) -> bool {
+    prepared
+        .budget_breakdown
+        .as_ref()
+        .and_then(|budget| budget.tool_schema_budget_tokens)
+        .is_some_and(|limit| prepared.tool_schema_token_estimate > limit)
 }
 
 pub(super) fn prompt_prefix_budget_exceeded(prepared: &PreparedModelContext) -> bool {

@@ -1,4 +1,4 @@
-use std::{fs, path::Path, process::Command, sync::Arc};
+use std::{fs, path::Path, process::Command, sync::Arc, time::Duration};
 
 use serde_json::json;
 use tron_backend::{
@@ -27,9 +27,102 @@ use tron_backend::{
             ShortTermMemoryTodo, TodoPriority, TodoStatus,
         },
     },
-    shared::id::FixedSnowflakeIdProvider,
-    shared::time::current_timestamp,
+    shared::{
+        event_bus::{EventBusConfig, EventBusRuntimeBuilder, RecordingEventSink},
+        id::FixedSnowflakeIdProvider,
+        time::current_timestamp,
+    },
 };
+
+#[test]
+fn context_assembly_publishes_agui_event_when_detailed_event_persistence_is_disabled() {
+    let database_url = temp_database_url("short-term-memory-agui-context");
+    let chats = ChatService::new(
+        SqliteChatRepository::connect(&database_url).expect("chat repository should connect"),
+    );
+    let session = chats
+        .create_session(
+            CreateChatSessionCommand {
+                workspace_code: Some("TRON_CORE".into()),
+                title: Some("AG-UI context status".into()),
+                app_code: None,
+                task_code: None,
+                source_type: None,
+                source_code: None,
+                agent_code: Some("main-agent".into()),
+            },
+            Some("USER-1".into()),
+        )
+        .expect("session should be created");
+    let id_provider = Arc::new(FixedSnowflakeIdProvider::new(801_000_000_000_000_000));
+    let recording_sink = Arc::new(RecordingEventSink::new("stm_agui_context"));
+    let event_bus = EventBusRuntimeBuilder::new(EventBusConfig::default(), id_provider.clone())
+        .register_sink(recording_sink.clone())
+        .build();
+    let mut config = ShortTermMemoryConfig::default();
+    config.event_log.mode = "lifecycleOnly".into();
+    let service = ShortTermMemoryService::with_id_provider(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        config,
+        id_provider,
+    )
+    .with_event_bus(event_bus);
+
+    let mut context = base_context(&session.session_code);
+    context.tools.clear();
+    let input_code = service
+        .record_user_input(&context, "show context status")
+        .expect("input should be recorded");
+    context.short_term_memory = Some(AgentShortTermMemoryRunContext {
+        session_code: session.session_code.clone(),
+        input_code,
+        input_kind: "USER_PROMPT".into(),
+        input_metadata: None,
+        prompt_prefix: vec![AgentMessage::system("system seed")],
+        current_input_message: None,
+        agent_code: Some("main-agent".into()),
+        todo_enabled: false,
+    });
+
+    service
+        .prepare_model_context(&context)
+        .expect("context should assemble");
+
+    assert!(recording_sink.wait_for_len(1, Duration::from_millis(300)));
+    let events = recording_sink.events();
+    let event = events
+        .iter()
+        .find(|event| event.event_name == "agent.context.assembled")
+        .expect("context assembly should reach the AG-UI event bus");
+    assert_eq!(event.stream_key(), Some(session.session_code.as_str()));
+    assert_eq!(
+        event
+            .subject
+            .as_ref()
+            .and_then(|subject| subject.subject_code.as_deref()),
+        Some(context.run_code.as_str())
+    );
+    let payload = event
+        .payload_fields
+        .iter()
+        .find(|field| field.key == "context_event_json")
+        .expect("context payload should be present");
+    let payload = serde_json::from_str::<serde_json::Value>(&payload.value)
+        .expect("context payload should be valid JSON");
+    assert!(payload.get("budgetBreakdown").is_some());
+
+    let connection = rusqlite::Connection::open(&database_url)
+        .expect("short-term memory database should be queryable");
+    let persisted_detail_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_transcript_events WHERE event_type = 'agent.context.assembled'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("context event count should be queryable");
+    assert_eq!(persisted_detail_count, 0);
+}
 
 #[test]
 fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
@@ -3595,6 +3688,11 @@ fn model_compaction_keeps_current_tool_pair_as_raw_tail() {
             None,
         )
         .expect("model compaction input should prepare");
+    assert_eq!(
+        compaction_input.run_code.as_deref(),
+        Some(context.run_code.as_str()),
+        "automatic compaction events must stay attached to the active AG-UI run",
+    );
     assert!(
         compaction_input
             .pinned_start_seq
@@ -4753,13 +4851,18 @@ fn tool_schema_tokens_participate_in_context_budget() {
     assert!(prepared.estimated_tokens > 300);
     assert_eq!(
         prepared.over_budget_reason.as_deref(),
-        Some("NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET")
+        Some("TOOL_SCHEMA_OVER_BUDGET")
     );
     let breakdown = prepared
         .budget_breakdown
         .as_ref()
         .expect("budget breakdown should be present");
-    assert_eq!(breakdown.compressed_history_message_count, Some(0));
+    assert_eq!(breakdown.tool_schema_budget_tokens, Some(900));
+    assert_eq!(
+        breakdown.compressed_history_message_count,
+        None,
+        "schema overflow is rejected before history selection"
+    );
     assert!(breakdown.tool_schema_tokens > breakdown.recent_transcript_tokens);
 }
 
@@ -5575,6 +5678,7 @@ fn create_legacy_full_source_stub_compaction(
     let input = PreparedCompactionInput {
         session_code,
         workspace_code,
+        run_code: None,
         reason: command.reason,
         note: command.note,
         todo_enabled: command.todo_enabled.unwrap_or(true),

@@ -73,19 +73,9 @@ pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelReques
         }
     }
     if !request.tools.is_empty() {
-        payload["tools"] = json!(
-            request
-                .tools
-                .iter()
-                .map(|tool| json!({
-                    "type": "function",
-                    "function": {
-                        "name": tool.tool_name,
-                        "description": tool.description,
-                        "parameters": tool.input_schema,
-                    }
-                }))
-                .collect::<Vec<_>>()
+        payload["tools"] = crate::application::agent::request_tool_schema_payload(
+            AgentModelProtocol::ChatCompletions,
+            request,
         );
         payload["parallel_tool_calls"] = json!(true);
     }

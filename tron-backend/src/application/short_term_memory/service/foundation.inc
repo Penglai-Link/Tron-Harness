@@ -11,6 +11,7 @@ use crate::{
         short_term_memory::{ShortTermMemoryError, ShortTermMemoryMessage, ShortTermMemoryPart},
     },
     shared::{
+        event_bus::EventBusHandle,
         id::{SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
         time::current_timestamp,
     },
@@ -22,8 +23,8 @@ use super::{
     history_retention::select_retained_history,
     service_budget::{
         annotate_compaction_budget, apply_request_budget_fields,
-        current_session_history_budget_tokens, estimate_tool_schema_tokens,
-        prompt_prefix_budget_exceeded, refresh_over_budget_reason,
+        current_session_history_budget_tokens, prompt_prefix_budget_exceeded,
+        refresh_over_budget_reason,
     },
     service_parts::transcript_part_from_agent_part,
 };
@@ -33,6 +34,7 @@ pub struct ShortTermMemoryService {
     pub(super) repository: Arc<Mutex<Box<dyn ShortTermMemoryRepository>>>,
     pub(super) id_provider: Arc<dyn SnowflakeIdProvider>,
     pub(super) config: ShortTermMemoryConfig,
+    pub(super) event_bus: EventBusHandle,
 }
 
 impl ShortTermMemoryService {
@@ -56,7 +58,13 @@ impl ShortTermMemoryService {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             id_provider,
             config,
+            event_bus: EventBusHandle::disabled(),
         }
+    }
+
+    pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
+        self.event_bus = event_bus;
+        self
     }
 
     pub fn clone_with_id_provider(&self, id_provider: Arc<dyn SnowflakeIdProvider>) -> Self {
@@ -64,6 +72,7 @@ impl ShortTermMemoryService {
             repository: self.repository.clone(),
             id_provider,
             config: self.config.clone(),
+            event_bus: self.event_bus.clone(),
         }
     }
 
@@ -164,5 +173,4 @@ impl ShortTermMemoryService {
             None,
         )
     }
-
 }

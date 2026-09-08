@@ -396,6 +396,7 @@ impl AppState {
                 id_provider.clone(),
             )
         };
+        let short_term_memory = short_term_memory.with_event_bus(event_bus.clone());
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         register_default_agent_tools(
             agent_tool_registry.as_ref(),

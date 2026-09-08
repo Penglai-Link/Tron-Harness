@@ -52,6 +52,7 @@ impl CompactionContextPolicy {
 pub struct PreparedCompactionInput {
     pub session_code: String,
     pub workspace_code: String,
+    pub run_code: Option<String>,
     pub reason: Option<String>,
     pub note: Option<String>,
     pub todo_enabled: bool,
@@ -265,6 +266,7 @@ pub struct ContextBudgetBreakdown {
     pub raw_tail_transcript_tokens: u32,
     pub compressed_history_tokens: u32,
     pub tool_schema_tokens: u32,
+    pub tool_schema_budget_tokens: Option<u32>,
     pub estimated_input_tokens: u32,
     pub prompt_prefix_budget_tokens: Option<u32>,
     pub checkpoint_budget_tokens: Option<u32>,

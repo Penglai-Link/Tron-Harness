@@ -74,6 +74,7 @@ pub struct ContextBlockBudgets {
     pub current_session_checkpoint: ContextBlockBudgetConfig,
     pub session_family_context: ContextBlockBudgetConfig,
     pub current_session_working_state: ContextBlockBudgetConfig,
+    pub tool_schema: ContextBlockBudgetConfig,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -125,6 +126,7 @@ pub struct ContextBlockBudgetPlans {
     pub current_session_checkpoint: ContextBlockBudgetPlan,
     pub session_family_context: ContextBlockBudgetPlan,
     pub current_session_working_state: ContextBlockBudgetPlan,
+    pub tool_schema: ContextBlockBudgetPlan,
     pub current_session_history: ContextBlockBudgetPlan,
 }
 
@@ -206,6 +208,11 @@ impl Default for ContextBlockBudgets {
                 max_ratio_bps: Some(DEFAULT_WORKING_STATE_CONTEXT_MAX_RATIO_BPS),
                 max_tokens: Some(DEFAULT_WORKING_STATE_CONTEXT_HARD_CAP_TOKENS),
             },
+            // Preserve existing DirectList agents until an explicit tool budget is configured.
+            tool_schema: ContextBlockBudgetConfig {
+                max_ratio_bps: Some(10_000),
+                max_tokens: None,
+            },
         }
     }
 }
@@ -252,6 +259,11 @@ impl ShortTermMemoryConfig {
                     priority: 60,
                     allow_borrow_unused_budget: true,
                 },
+                tool_schema: block_plan(
+                    "tool_schema",
+                    &self.context.blocks.tool_schema,
+                    effective_input_budget,
+                ),
             },
         }
     }
@@ -262,9 +274,9 @@ fn block_plan(
     config: &ContextBlockBudgetConfig,
     effective_input_budget: u32,
 ) -> ContextBlockBudgetPlan {
-    let ratio_cap = config
-        .max_ratio_bps
-        .map(|ratio| effective_input_budget.saturating_mul(ratio.min(10_000)) / 10_000);
+    let ratio_cap = config.max_ratio_bps.map(|ratio| {
+        ((u64::from(effective_input_budget) * u64::from(ratio.min(10_000))) / 10_000) as u32
+    });
     let effective_limit_tokens = match (ratio_cap, config.max_tokens) {
         (Some(ratio), Some(max_tokens)) => ratio.min(max_tokens),
         (Some(ratio), None) => ratio,

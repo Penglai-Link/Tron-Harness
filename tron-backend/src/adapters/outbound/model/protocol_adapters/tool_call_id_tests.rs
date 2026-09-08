@@ -64,6 +64,7 @@ fn missing_tool_call_id_is_stabilized_for_responses_replay() {
         ],
         tools: vec![],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };
@@ -134,6 +135,7 @@ fn responses_response_generates_stable_call_id_when_provider_omits_it() {
         ],
         tools: vec![],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };

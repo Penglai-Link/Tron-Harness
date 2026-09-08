@@ -168,8 +168,9 @@ impl Tool for DiscoveryExpandToolDomainTool {
         let observation = ToolObservation {
             tool_name: self.name().to_string(),
             output: serde_json::to_string(&json!({
-                "domain": domain,
-                "tools": tools,
+                "domainCode": domain.domain_code,
+                "status": "expanded",
+                "toolCount": tools.len(),
             }))
             .map_err(service_tool_error)?,
         };

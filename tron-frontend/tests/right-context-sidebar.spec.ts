@@ -439,6 +439,8 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
 
   await sidebar.getByRole("tab", { name: "Context" }).click();
   await expect(sidebar.getByText("Context Structure")).toBeVisible();
+  await expect(sidebar.getByTestId("context-runtime-notice")).toContainText("Context compacted");
+  await expect(sidebar.getByText("Tool Schema", { exact: true }).locator("..")).toContainText("1.8k / 6k");
   await expect(sidebar.getByText("Current Session Checkpoint")).toBeVisible();
   await expect(sidebar.getByText("seq 1-8", { exact: true })).toBeVisible();
 
@@ -446,6 +448,14 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
 
   await expect(sidebar.getByText("seq 1-2", { exact: true })).toBeVisible();
   await expect(sidebar.getByText("seq 1-8", { exact: true })).toHaveCount(0);
+
+  await page.getByRole("button", { name: "Open user menu" }).click();
+  await page.locator("#tron-locale-select").click();
+  await page.getByRole("option", { name: "Simplified Chinese" }).click();
+  await page.keyboard.press("Escape");
+  await expect(sidebar.getByText("上下文结构")).toBeVisible();
+  await expect(sidebar.getByTestId("context-runtime-notice")).toContainText("上下文已压缩");
+  await expect(sidebar.getByText("Tool Schema", { exact: true }).locator("..")).toContainText("1.8k / 6k");
 });
 
 test("AC-CHAT-SESSION-SIDEBAR-01: manual history collapse survives opening the right sidebar", async ({ page }) => {

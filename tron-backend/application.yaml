@@ -79,30 +79,34 @@ shortTermMemory:
     reasoningSummaryReplayEnabled: false
     blocks:
       seedPromptPrefix:
-        maxRatioBps: 5000
+        maxRatio: "50%"
         maxTokens: 16000
       currentSessionCheckpoint:
-        maxRatioBps: 2000
+        maxRatio: "20%"
         maxTokens: 6000
       sessionFamilyContext:
-        maxRatioBps: 1000
+        maxRatio: "10%"
         maxTokens: 12000
       currentSessionWorkingState:
-        maxRatioBps: 1000
+        maxRatio: "10%"
         maxTokens: 2000
+      toolSchema:
+        # Preserve existing DirectList agents. Set a tighter measured limit per deployment.
+        # Example: maxRatio: "20%" and maxTokens: 6000.
+        maxRatio: "60%"
   familyLoad:
     defaultMaxSnapshots: 3
     defaultMaxSessions: 3
     defaultSnapshotMaxChars: 2000
     defaultTtlHours: 72
-    taskWeightBps: 6500
-    requirementWeightBps: 2500
-    workspaceChatWeightBps: 1000
-    workspaceHeartbeatWeightBps: 1000
-    otherWeightBps: 500
+    taskWeight: "65%"
+    requirementWeight: "25%"
+    workspaceChatWeight: "10%"
+    workspaceHeartbeatWeight: "10%"
+    otherWeight: "5%"
   compaction:
-    triggerRatioBps: 8000
-    retainedHistoryRatioBps: 2000
+    triggerRatio: "80%"
+    retainedHistoryRatio: "20%"
   goalLoop:
     maxRuns: 20
     maxConsecutiveJudgeFailures: 3

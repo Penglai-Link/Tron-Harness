@@ -127,6 +127,7 @@ fn request_builders_default_parallel_tool_calls_to_true_when_tools_are_present()
             required_variable_keys: vec![],
         }],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };
@@ -180,6 +181,7 @@ fn request_builders_preserve_nested_data_source_schema_and_examples() {
             required_variable_keys: vec![],
         }],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };
@@ -236,6 +238,7 @@ fn request_builders_handle_tool_observations_per_protocol() {
         )],
         tools: vec![],
         system_agent_session_id: None,
+        prepared_tool_schema: None,
         response_input_items: None,
         previous_response_id: None,
     };
@@ -278,6 +281,7 @@ fn responses_request_uses_string_input_for_single_user_prompt() {
             ],
             tools: vec![],
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: None,
             previous_response_id: None,
         },
@@ -315,6 +319,7 @@ fn responses_request_uses_stateful_response_items_and_previous_response_id() {
             )],
             tools: vec![],
             system_agent_session_id: None,
+            prepared_tool_schema: None,
             response_input_items: Some(vec![json!({
                 "type": "function_call_output",
                 "call_id": "call-123",
@@ -393,6 +398,7 @@ fn responses_request_enables_reasoning_for_thinking_models() {
                 messages: vec![AgentMessage::user("hello")],
                 tools: vec![],
                 system_agent_session_id: None,
+                prepared_tool_schema: None,
                 response_input_items: None,
                 previous_response_id: None,
             },
