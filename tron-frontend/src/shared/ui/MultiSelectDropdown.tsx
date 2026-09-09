@@ -112,7 +112,7 @@ export function MultiSelectDropdown({
         onValueChange={handleValueChange}
         value={selectedOptions}
       >
-        <ComboboxChips className={triggerClassName}>
+        <ComboboxChips className={cn("rounded-[4px] shadow-none before:hidden focus-within:ring-1 focus-within:ring-ring/25", triggerClassName)}>
           <ComboboxValue>
             {(value: MultiSelectOption[]) => (
               <>

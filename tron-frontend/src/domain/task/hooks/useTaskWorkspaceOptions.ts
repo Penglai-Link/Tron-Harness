@@ -19,24 +19,38 @@ export interface TaskWorkspaceOptions {
   appOptions: AppOption[];
   effectiveUsers: WorkspaceEffectiveUserRecord[];
   loading: boolean;
+  onUserPageChange: (page: number) => void;
+  userPage: number;
+  userPageCount: number;
 }
+
+const USER_PAGE_SIZE = 100;
 
 export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOptions {
   const adminDataSource = getServiceDataSource("admin");
   const appDataSource = getServiceDataSource("app");
   const [loadingUsers, setLoadingUsers] = useState(false);
   const [loadingApps, setLoadingApps] = useState(false);
+  const [userPage, setUserPage] = useState(1);
+  const [userPageCount, setUserPageCount] = useState(1);
   const [appOptions, setAppOptions] = useState(() => (
     appDataSource === "api" ? [] : listAppOptions({ workspaceCode })
   ));
   const [effectiveUsers, setEffectiveUsers] = useState(() => (
-    adminDataSource === "api" ? [] : getWorkspaceEffectiveUsers(workspaceCode)
+    adminDataSource === "api" ? [] : getWorkspaceEffectiveUsers(workspaceCode).slice(0, USER_PAGE_SIZE)
   ));
 
   useEffect(() => {
+    setUserPage(1);
+  }, [workspaceCode]);
+
+  useEffect(() => {
     if (adminDataSource === "api") return;
-    setEffectiveUsers(getWorkspaceEffectiveUsers(workspaceCode));
-  }, [adminDataSource, workspaceCode]);
+    const users = getWorkspaceEffectiveUsers(workspaceCode);
+    const start = (userPage - 1) * USER_PAGE_SIZE;
+    setEffectiveUsers(users.slice(start, start + USER_PAGE_SIZE));
+    setUserPageCount(Math.max(1, Math.ceil(users.length / USER_PAGE_SIZE)));
+  }, [adminDataSource, workspaceCode, userPage]);
 
   useEffect(() => {
     if (appDataSource === "api") return;
@@ -49,24 +63,26 @@ export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOpt
     setLoadingUsers(true);
 
     const request = workspaceCode
-      ? fetchWorkspaceEffectiveUsers(workspaceCode, { current: 1, size: 100 }, controller.signal)
-      : Promise.resolve({ current: 1, size: 100, total: 0, records: [] });
+      ? fetchWorkspaceEffectiveUsers(workspaceCode, { current: userPage, size: USER_PAGE_SIZE }, controller.signal)
+      : Promise.resolve({ current: 1, size: USER_PAGE_SIZE, total: 0, records: [] as WorkspaceEffectiveUserRecord[] });
 
     request
-      .then((userPage) => {
-        setEffectiveUsers(userPage.records);
+      .then((page) => {
+        setEffectiveUsers(page.records);
+        setUserPageCount(Math.max(1, page.total));
       })
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
         console.warn("[task] Workspace users request failed.", error);
         setEffectiveUsers([]);
+        setUserPageCount(1);
       })
       .finally(() => {
         if (!controller.signal.aborted) setLoadingUsers(false);
       });
 
     return () => controller.abort();
-  }, [adminDataSource, workspaceCode]);
+  }, [adminDataSource, workspaceCode, userPage]);
 
   useEffect(() => {
     if (appDataSource !== "api") return;
@@ -93,9 +109,16 @@ export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOpt
     return () => controller.abort();
   }, [appDataSource, workspaceCode]);
 
+  const onUserPageChange = (page: number) => {
+    setUserPage(Math.max(1, page));
+  };
+
   return {
     appOptions,
     effectiveUsers,
     loading: loadingUsers || loadingApps,
+    onUserPageChange,
+    userPage,
+    userPageCount,
   };
 }

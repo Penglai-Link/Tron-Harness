@@ -23,11 +23,11 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { DialogSelect } from "@/components/ui/dialog-select";
 import {
   Field,
   InspectorPanel,
   MarkdownContent,
-  MultiSelectDropdown,
   OptionSelect,
   PageHeader,
   SelectInput,
@@ -139,7 +139,7 @@ export function TaskDetailsPage() {
   const options = useTaskOptions();
   const toast = useToast();
   const dataSource = getServiceDataSource("task");
-  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading } = useTaskWorkspaceOptions(task.workspaceCode);
+  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading, onUserPageChange, userPage, userPageCount } = useTaskWorkspaceOptions(task.workspaceCode);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [taskType, setTaskType] = useState<TaskType>(task.taskType);
@@ -596,8 +596,7 @@ export function TaskDetailsPage() {
     });
   }
 
-  function handleAssigneeToggle(userCode: string) {
-    const nextCodes = toggleCode(assigneeUserCodes, userCode);
+  function handleAssigneesChange(nextCodes: string[]) {
     setAssigneeUserCodes(nextCodes);
     void saveUpdateFields({ assigneeUserCodes: nextCodes });
   }
@@ -806,15 +805,18 @@ export function TaskDetailsPage() {
             <div className="md:col-span-2">
               <Field label={pageT("fields.assignedUsers", "Assigned Users")} hint={pageT("hints.assignedUsers", "Only effective users from the current workspace can be assigned.")}>
                 {updatesEditable ? (
-                  <MultiSelectDropdown
+                  <DialogSelect
                     ariaLabel={pageT("aria.assignees", "Task assignees")}
-                    emptyMessage={pageT("values.noUsers", "No effective users available for this workspace.")}
                     loading={workspaceOptionsLoading}
-                    loadingMessage={pageT("values.loadingUsers", "Loading user options...")}
+                    multiple
+                    onChange={handleAssigneesChange}
+                    onPageChange={onUserPageChange}
                     options={userOptions}
-                    placeholder={pageT("placeholders.assignedUsers", "Select assigned users")}
+                    page={userPage}
+                    pageCount={userPageCount}
+                    pagination
                     selectedValues={assigneeUserCodes}
-                    onToggle={handleAssigneeToggle}
+                    title={pageT("fields.assignedUsers", "Assigned Users")}
                   />
                 ) : (
                   <ReadValue noneLabel={pageT("detail.none", "None")}>{assignedUsers.join(", ")}</ReadValue>
