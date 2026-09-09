@@ -1,6 +1,11 @@
 use std::collections::BTreeSet;
 
-use crate::domain::{agent::AgentMessage, short_term_memory::ShortTermMemoryError};
+use chrono::{DateTime, Duration, Utc};
+
+use crate::domain::{
+    agent::AgentMessage,
+    short_term_memory::{ShortTermMemoryError, ShortTermMemoryFamilySnapshot},
+};
 
 use super::{
     ModelContextBudgetPlan, ShortTermMemoryService,
@@ -34,14 +39,6 @@ impl ShortTermMemoryService {
         }
         let mut entries = Vec::new();
         for (family, member) in members {
-            let max_snapshots = load_limit_usize(
-                member
-                    .load_limits_json
-                    .as_ref()
-                    .or(family.load_policy_json.as_ref()),
-                "maxSnapshots",
-                self.config.family_load.default_max_snapshots,
-            );
             let max_sessions = load_limit_usize(
                 member
                     .load_limits_json
@@ -74,16 +71,28 @@ impl ShortTermMemoryService {
                 "todoStateEnabled",
                 true,
             );
-            let snapshots = self.repository().list_completed_family_snapshots(
-                &family.family_code,
-                session_code,
-                max_snapshots.saturating_mul(max_sessions).max(1),
-            )?;
             let active_session_codes = self.repository().list_family_session_codes(
                 &family.family_code,
                 session_code,
                 max_sessions.max(1),
             )?;
+            let mut snapshots = Vec::with_capacity(active_session_codes.len());
+            for related_session_code in &active_session_codes {
+                let session_summary = self
+                    .repository()
+                    .latest_completed_session_summary(related_session_code)?
+                    .filter(|snapshot| snapshot_within_ttl(snapshot, ttl_hours));
+                let snapshot = match session_summary {
+                    Some(snapshot) => Some(snapshot),
+                    None => self
+                        .repository()
+                        .latest_completed_family_handoff(&family.family_code, related_session_code)?
+                        .filter(|snapshot| snapshot_within_ttl(snapshot, ttl_hours)),
+                };
+                if let Some(snapshot) = snapshot {
+                    snapshots.push(snapshot);
+                }
+            }
             let mut has_active_state = false;
             for related_session in &active_session_codes {
                 if self
@@ -387,4 +396,15 @@ fn append_bounded_block(
     *used_chars = used_chars.saturating_add(block.len());
     *family_used_chars = family_used_chars.saturating_add(block.len());
     true
+}
+
+fn snapshot_within_ttl(snapshot: &ShortTermMemoryFamilySnapshot, ttl_hours: u32) -> bool {
+    let timestamp = snapshot
+        .completed_at
+        .as_deref()
+        .unwrap_or(snapshot.created_at.as_str());
+    let Ok(completed_at) = DateTime::parse_from_rfc3339(timestamp) else {
+        return false;
+    };
+    completed_at.with_timezone(&Utc) >= Utc::now() - Duration::hours(i64::from(ttl_hours))
 }

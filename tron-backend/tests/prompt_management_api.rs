@@ -13,7 +13,10 @@ use tron_backend::{
     adapters::outbound::persistence::SqliteVariableRepository,
     application::variable::VariableRepository,
     config::AppConfig,
-    domain::{prompt::analyze_template, variable::{PlatformVariable, Variable}},
+    domain::{
+        prompt::analyze_template,
+        variable::{PlatformVariable, Variable},
+    },
     shared::id::SnowflakeId,
 };
 
@@ -113,10 +116,7 @@ async fn prompt_variables_require_matching_descriptions_and_supported_types() {
     .await;
     assert_eq!(valid_response.status(), StatusCode::OK);
     let valid = response_json(valid_response).await;
-    assert_eq!(
-        valid["data"]["variables"],
-        typed_variables
-    );
+    assert_eq!(valid["data"]["variables"], typed_variables);
 
     for (name, variables) in [
         (
@@ -177,7 +177,10 @@ async fn runtime_prompt_variables_must_match_the_global_runtime_catalog() {
     .await;
     assert_eq!(valid.status(), StatusCode::OK);
     let valid = response_json(valid).await;
-    assert_eq!(valid["data"]["variables"][0]["sourceKind"], json!("RUNTIME"));
+    assert_eq!(
+        valid["data"]["variables"][0]["sourceKind"],
+        json!("RUNTIME")
+    );
     assert_eq!(
         valid["data"]["variables"][0]["runtimeProvider"],
         json!("AGENT_VISIBLE_DOMAINS")
@@ -222,7 +225,10 @@ async fn runtime_prompt_variables_must_match_the_global_runtime_catalog() {
         )
         .await;
         assert_eq!(response.status(), StatusCode::BAD_REQUEST, "{name}");
-        assert_eq!(response_json(response).await["code"], json!("PROMPT_INPUT_INVALID"));
+        assert_eq!(
+            response_json(response).await["code"],
+            json!("PROMPT_INPUT_INVALID")
+        );
     }
 }
 
@@ -316,6 +322,97 @@ async fn workspace_update_creates_isolated_override_and_revert_restores_upstream
     assert_eq!(reverted["data"]["sourceKind"], json!("INHERITED"));
     assert_eq!(reverted["data"]["promptBody"], json!("Parent {{topic}}"));
     assert_eq!(reverted["data"]["variables"], parent_variables);
+}
+
+#[tokio::test]
+async fn session_summary_builtin_is_visible_inherited_overridable_and_revertible() {
+    let (router, _) = prompt_app_with_builtins("prompt-session-summary-builtin");
+    let prompt_code = "SYS_MEMORY_SESSION_SUMMARY";
+
+    let platform = post_json(
+        &router,
+        "/api/v1/admin/platform/prompts/detail",
+        json!({"promptCode": prompt_code}),
+    )
+    .await;
+    assert_eq!(
+        platform["data"]["catalogKey"],
+        json!("memory.session-summary-system")
+    );
+    assert_eq!(platform["data"]["category"], json!("SYSTEM"));
+    assert_eq!(platform["data"]["sourceKind"], json!("PLATFORM"));
+    assert_eq!(platform["data"]["builtIn"], json!(true));
+    assert_eq!(platform["data"]["runtimeRequired"], json!(true));
+    assert_eq!(platform["data"]["version"], json!(3));
+    let default_body = platform["data"]["promptBody"]
+        .as_str()
+        .expect("session summary default body should exist")
+        .to_string();
+    assert!(default_body.contains("untrusted JSON evidence"));
+    assert!(default_body.contains("Do not remove it solely because the current increment"));
+    assert!(default_body.contains("Never describe a visible subset as the complete set"));
+    assert!(default_body.contains("not the act of creating this summary"));
+    assert!(default_body.contains("# Last Run Outcome"));
+    let translations = platform["data"]["translations"]
+        .as_array()
+        .expect("session summary translations should be returned");
+    let translation_locales = translations
+        .iter()
+        .filter_map(|translation| translation["locale"].as_str())
+        .collect::<BTreeSet<_>>();
+    assert!(translation_locales.contains("en-US"));
+    assert!(translation_locales.contains("zh-CN"));
+    let zh_cn_body = translations
+        .iter()
+        .find(|translation| translation["locale"] == json!("zh-CN"))
+        .and_then(|translation| translation["promptBody"].as_str())
+        .expect("session summary zh-CN body should exist");
+    assert!(zh_cn_body.contains("不得仅因本轮增量没有再次提及而删除"));
+    assert!(zh_cn_body.contains("不得将可见子集描述为完整集合"));
+    assert!(zh_cn_body.contains("不记录生成本摘要这一行为"));
+
+    let inherited = workspace_detail(&router, "TRON_CORE", prompt_code).await;
+    assert_eq!(inherited["data"]["sourceKind"], json!("INHERITED"));
+    assert_eq!(inherited["data"]["sourcePromptCode"], json!(prompt_code));
+    assert_eq!(inherited["data"]["promptBody"], json!(default_body));
+    let inherited_version = inherited["data"]["version"]
+        .as_u64()
+        .expect("inherited session summary should have a version");
+
+    let override_body = "# Goal\nWorkspace-specific session summary.";
+    let overridden = post_json(
+        &router,
+        "/api/v1/prompts/workspace-update",
+        json!({
+            "workspaceCode": "TRON_CORE",
+            "promptCode": prompt_code,
+            "displayName": "Session summary override",
+            "promptBody": override_body,
+            "description": "workspace summary rules",
+            "enabled": true,
+            "expectedVersion": inherited_version,
+            "variables": []
+        }),
+    )
+    .await;
+    assert_eq!(overridden["data"]["sourceKind"], json!("OVERRIDE"));
+    assert_eq!(overridden["data"]["promptBody"], json!(override_body));
+    assert_eq!(
+        overridden["data"]["catalogKey"],
+        json!("memory.session-summary-system")
+    );
+
+    let reverted = post_json(
+        &router,
+        "/api/v1/prompts/workspace-revert",
+        json!({
+            "workspaceCode": "TRON_CORE",
+            "promptCode": prompt_code
+        }),
+    )
+    .await;
+    assert_eq!(reverted["data"]["sourceKind"], json!("INHERITED"));
+    assert_eq!(reverted["data"]["promptBody"], json!(default_body));
 }
 
 #[tokio::test]
@@ -630,7 +727,11 @@ async fn platform_prompt_lifecycle_uses_prompt_local_envelopes() {
     assert_eq!(updated["data"]["category"], json!("PERSONA"));
     assert_eq!(
         updated["data"]["variables"],
-        Value::Array(vec![managed_variable("topic", "JSON", "Updated topic payload")])
+        Value::Array(vec![managed_variable(
+            "topic",
+            "JSON",
+            "Updated topic payload"
+        )])
     );
 
     let disabled = post_json(
@@ -932,6 +1033,24 @@ async fn post_json(router: &axum::Router, path: &str, body: Value) -> Value {
 
 fn prompt_app(test_name: &str) -> (axum::Router, PathBuf) {
     let database_url = temp_database_url(test_name);
+    let config = AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    };
+    let router = app_with_config(config);
+    seed_prompt_managed_variables(&database_url);
+    (router, database_url)
+}
+
+fn prompt_app_with_builtins(test_name: &str) -> (axum::Router, PathBuf) {
+    let nonce = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system clock should be after unix epoch")
+        .as_nanos();
+    let database_url = std::env::temp_dir().join(format!(
+        "builtin-{test_name}-{}-{nonce}.sqlite3",
+        std::process::id()
+    ));
     let config = AppConfig {
         database_url: database_url.to_string_lossy().into_owned(),
         ..AppConfig::default()

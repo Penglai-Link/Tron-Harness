@@ -124,6 +124,7 @@ fn resolve_root(
             root.enabled,
             root.allow_inheritance,
             &root,
+            &root,
         )
         .with_state(root.clone(), Some(root), None));
     }
@@ -180,6 +181,7 @@ fn resolve_root(
                 owned.enabled,
                 None,
                 &owned,
+                &root,
             )
             .with_state(owned, current_owned, Some(upstream_enabled)))
         }
@@ -194,6 +196,7 @@ fn resolve_root(
                 patch.enabled,
                 None,
                 &patch,
+                &root,
             )
             .with_state(definition, current_owned, Some(upstream_enabled)))
         }
@@ -207,6 +210,7 @@ fn resolve_root(
             upstream_enabled,
             None,
             &definition,
+            &root,
         )
         .with_state(definition, None, Some(upstream_enabled))),
     }
@@ -221,6 +225,7 @@ fn resolved_view(
     enabled: bool,
     allow_inheritance: Option<bool>,
     timestamps: &Prompt,
+    runtime_identity: &Prompt,
 ) -> ResolvedPrompt {
     let (source_workspace_code, source_workspace_name, source_workspace_path) = source
         .map(|value| (Some(value.0), Some(value.1), value.2))
@@ -246,9 +251,9 @@ fn resolved_view(
             version: timestamps.version,
             variables: definition.variables.clone(),
             translations: definition.translations.clone(),
-            built_in: definition.built_in,
-            runtime_required: definition.runtime_required,
-            catalog_key: definition.catalog_key.clone(),
+            built_in: runtime_identity.built_in,
+            runtime_required: runtime_identity.runtime_required,
+            catalog_key: runtime_identity.catalog_key.clone(),
             created_at: timestamps.created_at.clone(),
             updated_at: timestamps.updated_at.clone(),
         },

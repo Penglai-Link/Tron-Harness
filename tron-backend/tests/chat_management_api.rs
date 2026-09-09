@@ -44,6 +44,12 @@ struct AgentModelMockServer {
     _task: JoinHandle<()>,
 }
 
+struct RecordingAgentModelMockServer {
+    base_url: String,
+    requests: Arc<Mutex<Vec<Value>>>,
+    _task: JoinHandle<()>,
+}
+
 #[derive(Clone)]
 struct ScriptedAgentModelMockState {
     responses: Arc<Mutex<VecDeque<String>>>,
@@ -63,6 +69,79 @@ async fn agent_model_mock_server() -> AgentModelMockServer {
         .local_addr()
         .expect("agent mock server should expose address");
     let app = Router::new().route("/v1/chat/completions", post(agent_chat_completion));
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("agent mock server should stay available");
+    });
+    AgentModelMockServer {
+        base_url: format!("http://{address}/v1"),
+        _task: task,
+    }
+}
+
+async fn recording_agent_model_mock_server() -> RecordingAgentModelMockServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("recording agent mock server should bind");
+    let address = listener
+        .local_addr()
+        .expect("recording agent mock server should expose address");
+    let requests = Arc::new(Mutex::new(Vec::<Value>::new()));
+    let app = Router::new()
+        .route(
+            "/v1/chat/completions",
+            post(recording_agent_chat_completion),
+        )
+        .with_state(requests.clone());
+    let task = tokio::spawn(async move {
+        axum::serve(listener, app)
+            .await
+            .expect("recording agent mock server should stay available");
+    });
+    RecordingAgentModelMockServer {
+        base_url: format!("http://{address}/v1"),
+        requests,
+        _task: task,
+    }
+}
+
+async fn summary_failure_agent_model_mock_server() -> AgentModelMockServer {
+    let listener = TcpListener::bind("127.0.0.1:0")
+        .await
+        .expect("agent mock server should bind");
+    let address = listener
+        .local_addr()
+        .expect("agent mock server should expose address");
+    let calls = Arc::new(AtomicUsize::new(0));
+    let app = Router::new().route(
+        "/v1/chat/completions",
+        post({
+            let calls = calls.clone();
+            move || {
+                let calls = calls.clone();
+                async move {
+                    if calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                        Json(json!({
+                            "choices": [{
+                                "message": {
+                                    "role": "assistant",
+                                    "content": "main response remains successful"
+                                }
+                            }]
+                        }))
+                        .into_response()
+                    } else {
+                        (
+                            StatusCode::INTERNAL_SERVER_ERROR,
+                            Json(json!({"error": "summary model unavailable"})),
+                        )
+                            .into_response()
+                    }
+                }
+            }
+        }),
+    );
     let task = tokio::spawn(async move {
         axum::serve(listener, app)
             .await
@@ -222,11 +301,25 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
     .into_response()
 }
 
+async fn recording_agent_chat_completion(
+    State(requests): State<Arc<Mutex<Vec<Value>>>>,
+    Json(payload): Json<Value>,
+) -> Response {
+    requests
+        .lock()
+        .expect("recording agent requests should lock")
+        .push(payload.clone());
+    agent_chat_completion(Json(payload)).await
+}
+
 async fn scripted_agent_chat_completion(
     State(state): State<ScriptedAgentModelMockState>,
     Json(payload): Json<Value>,
 ) -> Response {
     assert_ne!(payload["stream"].as_bool(), Some(true));
+    if is_session_summary_request(&payload) {
+        return session_summary_mock_response();
+    }
     let content = state
         .responses
         .lock()
@@ -248,6 +341,9 @@ async fn delayed_steer_chat_completion(
     State(state): State<DelayedSteerModelMockState>,
     Json(payload): Json<Value>,
 ) -> Response {
+    if is_session_summary_request(&payload) {
+        return session_summary_mock_response();
+    }
     state
         .requests
         .lock()
@@ -272,6 +368,30 @@ async fn delayed_steer_chat_completion(
         yield Ok::<Event, Infallible>(Event::default().data("[DONE]"));
     };
     Sse::new(stream).into_response()
+}
+
+fn is_session_summary_request(payload: &Value) -> bool {
+    payload["messages"].as_array().is_some_and(|messages| {
+        messages.iter().any(|message| {
+            message["role"] == json!("user")
+                && message["content"]
+                    .as_str()
+                    .and_then(|content| serde_json::from_str::<Value>(content).ok())
+                    .is_some_and(|content| content["evidenceType"] == json!("SESSION_WORK_STATE"))
+        })
+    })
+}
+
+fn session_summary_mock_response() -> Response {
+    Json(json!({
+        "choices": [{
+            "message": {
+                "role": "assistant",
+                "content": "# Goal\nMock session summary"
+            }
+        }]
+    }))
+    .into_response()
 }
 
 #[tokio::test]
@@ -1254,7 +1374,11 @@ async fn chat_session_groups_do_not_require_workspace_access_grants() {
 
 #[tokio::test]
 async fn chat_send_persists_messages_and_invokes_agent_run() {
-    let app = app();
+    let database_url = temp_database_url("chat-send-session-summary");
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
     let server = agent_model_mock_server().await;
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
@@ -1326,6 +1450,429 @@ async fn chat_send_persists_messages_and_invokes_agent_run() {
     assert_eq!(history["data"]["total"], json!(1));
     assert_eq!(history["data"]["records"][0]["runCode"], json!(run_code));
     assert!(!sent.to_string().contains("sk-chat-api"));
+
+    let mut summary_row = None;
+    for _ in 0..100 {
+        summary_row = Connection::open(&database_url)
+            .expect("chat database should open")
+            .query_row(
+                "SELECT family_code, status, summary_markdown, metadata_json, expires_at
+                 FROM agent_session_family_snapshots
+                 WHERE session_code = ?1
+                   AND run_code = ?2
+                   AND snapshot_kind = 'SESSION_SUMMARY'",
+                [session_code.as_str(), run_code.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, Option<String>>(0)?,
+                        row.get::<_, String>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                        row.get::<_, Option<String>>(3)?,
+                        row.get::<_, Option<i64>>(4)?,
+                    ))
+                },
+            )
+            .optional()
+            .expect("session summary should be queryable");
+        if summary_row
+            .as_ref()
+            .is_some_and(|(_, status, _, _, _)| status == "COMPLETED")
+        {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    let (family_code, summary_status, summary_markdown, metadata_json, expires_at) =
+        summary_row.expect("background session summary should complete");
+    assert!(family_code.is_none());
+    assert_eq!(summary_status, "COMPLETED");
+    assert!(summary_markdown.is_some_and(|markdown| !markdown.trim().is_empty()));
+    assert!(metadata_json.is_some_and(|metadata| {
+        metadata.contains("\"runOutcome\"")
+            && metadata.contains("\"status\":\"COMPLETED\"")
+            && metadata.contains("\"promptVersion\":")
+    }));
+    assert!(expires_at.is_none());
+    let summary_event_count: i64 = Connection::open(&database_url)
+        .expect("chat database should open")
+        .query_row(
+            "SELECT count(1)
+             FROM agent_transcript_events
+             WHERE session_code = ?1
+               AND run_code = ?2
+               AND event_type IN (
+                   'agent.session_summary.started',
+                   'agent.session_summary.completed'
+               )",
+            [session_code.as_str(), run_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("session summary events should be queryable");
+    assert_eq!(summary_event_count, 2);
+}
+
+#[tokio::test]
+async fn session_summary_uses_the_current_workspace_prompt_and_restricted_model_request() {
+    let database_url = builtin_prompt_database_url("chat-session-summary-prompt-override");
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let server = recording_agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let prompt_code = "SYS_MEMORY_SESSION_SUMMARY";
+    let inherited_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/prompts/workspace-detail",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "promptCode": prompt_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(inherited_response.status(), StatusCode::OK);
+    let inherited = response_json(inherited_response).await;
+    let inherited_version = inherited["data"]["version"]
+        .as_u64()
+        .expect("inherited session summary prompt should have a version");
+    let custom_prompt =
+        "CUSTOM SESSION SUMMARY SYSTEM PROMPT\nReturn Markdown with a # Goal heading.";
+    let override_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/prompts/workspace-update",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "promptCode": prompt_code,
+            "displayName": "Custom session summary",
+            "promptBody": custom_prompt,
+            "description": "runtime override",
+            "enabled": true,
+            "expectedVersion": inherited_version,
+            "variables": []
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(override_response.status(), StatusCode::OK);
+    let override_payload = response_json(override_response).await;
+    let override_version = override_payload["data"]["version"]
+        .as_u64()
+        .expect("workspace override should have a version");
+
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Summary prompt override"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "use the current summary prompt",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let sent = response_json(send_response).await;
+    let run_code = sent["data"]["run"]["runCode"]
+        .as_str()
+        .expect("run code should be returned")
+        .to_string();
+
+    let mut summary_request = None;
+    for _ in 0..100 {
+        summary_request = server
+            .requests
+            .lock()
+            .expect("recorded model requests should lock")
+            .iter()
+            .find(|request| {
+                request["messages"].as_array().is_some_and(|messages| {
+                    messages.iter().any(|message| {
+                        message["role"] == json!("system")
+                            && message["content"] == json!(custom_prompt)
+                    })
+                })
+            })
+            .cloned();
+        if summary_request.is_some() {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    let summary_request =
+        summary_request.expect("background request should use the workspace prompt override");
+    assert_eq!(summary_request["temperature"], json!(0.0));
+    assert_eq!(summary_request["max_tokens"], json!(1_024));
+    assert!(summary_request.get("enable_thinking").is_none());
+    assert!(summary_request.get("thinking").is_none());
+    assert!(summary_request.get("tools").is_none());
+    assert_eq!(
+        summary_request["messages"]
+            .as_array()
+            .expect("summary messages should be an array")
+            .len(),
+        2
+    );
+
+    let mut persisted_prompt_version = None;
+    for _ in 0..100 {
+        persisted_prompt_version = Connection::open(&database_url)
+            .expect("chat database should open")
+            .query_row(
+                "SELECT json_extract(metadata_json, '$.promptVersion')
+                 FROM agent_session_family_snapshots
+                 WHERE session_code = ?1
+                   AND run_code = ?2
+                   AND snapshot_kind = 'SESSION_SUMMARY'
+                   AND status = 'COMPLETED'",
+                [session_code.as_str(), run_code.as_str()],
+                |row| row.get::<_, Option<u64>>(0),
+            )
+            .optional()
+            .expect("session summary prompt version should be queryable")
+            .flatten();
+        if persisted_prompt_version.is_some() {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    assert_eq!(persisted_prompt_version, Some(override_version));
+}
+
+#[tokio::test]
+async fn session_summary_model_failure_does_not_change_the_chat_result() {
+    let database_url = temp_database_url("chat-session-summary-model-failure");
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let server = summary_failure_agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+    let session = response_json(
+        request_with_headers(
+            &app,
+            Method::POST,
+            "/api/v1/chats/sessions",
+            Some(json!({
+                "workspaceCode": "TRON_CORE",
+                "title": "Summary failure is isolated"
+            })),
+            None,
+            Some(&authorization),
+        )
+        .await,
+    )
+    .await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "complete the main run",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let sent = response_json(send_response).await;
+    assert_eq!(
+        sent["data"]["messages"][1]["content"],
+        json!("main response remains successful")
+    );
+    let run_code = sent["data"]["run"]["runCode"]
+        .as_str()
+        .expect("run code should be returned")
+        .to_string();
+
+    let mut summary_failure = None;
+    for _ in 0..100 {
+        summary_failure = Connection::open(&database_url)
+            .expect("chat database should open")
+            .query_row(
+                "SELECT status, error_code, metadata_json
+                 FROM agent_session_family_snapshots
+                 WHERE session_code = ?1
+                   AND run_code = ?2
+                   AND snapshot_kind = 'SESSION_SUMMARY'",
+                [session_code.as_str(), run_code.as_str()],
+                |row| {
+                    Ok((
+                        row.get::<_, String>(0)?,
+                        row.get::<_, Option<String>>(1)?,
+                        row.get::<_, Option<String>>(2)?,
+                    ))
+                },
+            )
+            .optional()
+            .expect("session summary failure should be queryable");
+        if summary_failure
+            .as_ref()
+            .is_some_and(|(status, _, _)| status == "FAILED")
+        {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    let (summary_status, error_code, metadata_json) =
+        summary_failure.expect("background summary failure should be persisted");
+    assert_eq!(summary_status, "FAILED");
+    assert_eq!(error_code.as_deref(), Some("SESSION_SUMMARY_MODEL_FAILED"));
+    assert!(metadata_json.is_some_and(|metadata| {
+        metadata.contains("\"runOutcome\"") && metadata.contains("\"status\":\"COMPLETED\"")
+    }));
+
+    let history_response = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/agents/runs?conversationCode={session_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(history_response.status(), StatusCode::OK);
+    let history = response_json(history_response).await;
+    assert_eq!(history["data"]["records"][0]["status"], json!("COMPLETED"));
+}
+
+#[tokio::test]
+async fn session_summary_storage_failure_does_not_change_the_chat_result() {
+    let database_url = temp_database_url("chat-session-summary-storage-failure");
+    let app = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..AppConfig::default()
+    });
+    let server = agent_model_mock_server().await;
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+    let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
+    let session_response = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({
+            "workspaceCode": "TRON_CORE",
+            "title": "Summary storage failure is isolated"
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(session_response.status(), StatusCode::CREATED);
+    let session = response_json(session_response).await;
+    let session_code = session["data"]["sessionCode"]
+        .as_str()
+        .expect("session code should be returned")
+        .to_string();
+    Connection::open(&database_url)
+        .expect("chat database should open")
+        .execute_batch(
+            "CREATE TRIGGER reject_completed_session_summary
+             BEFORE INSERT ON agent_session_family_snapshots
+             WHEN NEW.snapshot_kind = 'SESSION_SUMMARY'
+              AND NEW.status = 'COMPLETED'
+             BEGIN
+               SELECT RAISE(ABORT, 'summary completion storage failure');
+             END;",
+        )
+        .expect("summary failure trigger should be created");
+
+    let send_response = request_with_headers(
+        &app,
+        Method::POST,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        Some(json!({
+            "content": "keep this chat result",
+            "workspaceCode": "TRON_CORE",
+            "modelCode": model_code
+        })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(send_response.status(), StatusCode::OK);
+    let sent = response_json(send_response).await;
+    assert_eq!(
+        sent["data"]["messages"][1]["content"],
+        json!("chat reply: keep this chat result")
+    );
+    let run_code = sent["data"]["run"]["runCode"]
+        .as_str()
+        .expect("run code should be returned")
+        .to_string();
+
+    let mut summary_failure = None;
+    for _ in 0..100 {
+        summary_failure = Connection::open(&database_url)
+            .expect("chat database should open")
+            .query_row(
+                "SELECT status, error_code
+                 FROM agent_session_family_snapshots
+                 WHERE session_code = ?1
+                   AND run_code = ?2
+                   AND snapshot_kind = 'SESSION_SUMMARY'",
+                [session_code.as_str(), run_code.as_str()],
+                |row| Ok((row.get::<_, String>(0)?, row.get::<_, Option<String>>(1)?)),
+            )
+            .optional()
+            .expect("session summary storage failure should be queryable");
+        if summary_failure
+            .as_ref()
+            .is_some_and(|(status, _)| status == "FAILED")
+        {
+            break;
+        }
+        sleep(Duration::from_millis(20)).await;
+    }
+    let (summary_status, error_code) =
+        summary_failure.expect("background storage failure should be persisted");
+    assert_eq!(summary_status, "FAILED");
+    assert_eq!(error_code.as_deref(), Some("SESSION_SUMMARY_STORE_FAILED"));
+    let run_status: String = Connection::open(&database_url)
+        .expect("chat database should open")
+        .query_row(
+            "SELECT status FROM agent_runs WHERE run_code = ?1",
+            [run_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("main run history should be queryable");
+    assert_eq!(run_status, "COMPLETED");
 }
 
 #[tokio::test]
@@ -3270,6 +3817,14 @@ fn temp_database_url(test_name: &str) -> PathBuf {
         .expect("system time should be after epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("tron-{test_name}-{nanos}.sqlite3"))
+}
+
+fn builtin_prompt_database_url(test_name: &str) -> PathBuf {
+    let nanos = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .expect("system time should be after epoch")
+        .as_nanos();
+    std::env::temp_dir().join(format!("builtin-{test_name}-{nanos}.sqlite3"))
 }
 
 fn assert_decimal_code_has_snowflake_shape(prefix: &str, code: &str) {

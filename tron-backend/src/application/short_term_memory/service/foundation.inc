@@ -120,8 +120,7 @@ impl ShortTermMemoryService {
             "RUNTIME",
             json!({"runCode": context.run_code}),
             None,
-        )?;
-        self.create_run_family_snapshots(context)
+        )
     }
 
     pub fn record_run_failed(

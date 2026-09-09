@@ -80,6 +80,9 @@ where
     service
         .recover_goal_state_on_startup()
         .expect("short-term memory goal recovery should initialize");
+    service
+        .recover_session_summaries_on_startup()
+        .expect("short-term memory session summary recovery should initialize");
     if let Err(error) = service.cleanup_event_log_on_startup() {
         eprintln!("short-term memory event log cleanup skipped: {error:?}");
     }

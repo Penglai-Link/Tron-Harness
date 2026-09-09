@@ -2,6 +2,7 @@ mod agui_warning;
 mod attachments;
 mod helpers;
 mod run_context_builder;
+mod session_summary;
 mod short_term_memory;
 
 pub(crate) use attachments::user_prompt_message;
@@ -13,8 +14,8 @@ use rand::RngCore;
 use crate::{
     application::{
         app::AppService, mcp::McpService, prompt::PromptService,
-        short_term_memory::ShortTermMemoryService,
-        skill::SkillRegistryService, variable::VariableService, workspace::WorkspaceService,
+        short_term_memory::ShortTermMemoryService, skill::SkillRegistryService,
+        variable::VariableService, workspace::WorkspaceService,
     },
     domain::agent::{
         AgentModelConfig, AgentModelProtocol, AgentRunHistoryRecord, AgentRunStatus, ModelRequest,
@@ -31,6 +32,9 @@ use super::{
 };
 use helpers::safe_preview;
 pub(crate) use run_context_builder::{AgentRunContextBuilder, PreparedAgentRun};
+use session_summary::{
+    completed_session_summary_outcome, failed_session_summary_outcome, schedule_session_summary,
+};
 
 #[derive(Clone)]
 pub struct AgentInvocationService {
@@ -194,6 +198,7 @@ impl AgentInvocationService {
             plan_steps: _plan_steps,
             collaboration: _collaboration,
             metadata,
+            session_summary_job_context,
             execution,
         } = orchestrator
             .execute(command, user_code, locale, sink, reservation)
@@ -249,6 +254,13 @@ impl AgentInvocationService {
                         created_at: current_timestamp(),
                     })
                     .map_err(|_| AgentInvocationError::HistoryStorageFailed)?;
+                schedule_session_summary(
+                    self.short_term_memory.clone(),
+                    self.prompt_service.clone(),
+                    self.model_client.clone(),
+                    session_summary_job_context,
+                    completed_session_summary_outcome(awaiting_user_input),
+                );
                 Ok(AgentInvocationResult {
                     run_code: result.run_code,
                     conversation_code: result.conversation_code,
@@ -272,6 +284,7 @@ impl AgentInvocationService {
             }
             Err(invocation_error) => {
                 let finished_at = current_timestamp();
+                let summary_outcome = failed_session_summary_outcome(&invocation_error);
                 self.history
                     .create_run(AgentRunHistoryRecord {
                         id: 0,
@@ -301,6 +314,13 @@ impl AgentInvocationService {
                         created_at: current_timestamp(),
                     })
                     .map_err(|_| AgentInvocationError::HistoryStorageFailed)?;
+                schedule_session_summary(
+                    self.short_term_memory.clone(),
+                    self.prompt_service.clone(),
+                    self.model_client.clone(),
+                    session_summary_job_context,
+                    summary_outcome,
+                );
                 Err(invocation_error)
             }
         }

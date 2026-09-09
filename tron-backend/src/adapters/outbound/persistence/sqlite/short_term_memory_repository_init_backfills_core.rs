@@ -224,7 +224,7 @@ pub(super) const STM_CORE_COLUMN_BACKFILLS: &[ColumnBackfill] = &[
     ColumnBackfill {
         table: "agent_session_family_snapshots",
         column: "family_code",
-        ddl: "family_code TEXT NOT NULL DEFAULT ''",
+        ddl: "family_code TEXT",
     },
     ColumnBackfill {
         table: "agent_session_family_snapshots",
@@ -270,6 +270,36 @@ pub(super) const STM_CORE_COLUMN_BACKFILLS: &[ColumnBackfill] = &[
         table: "agent_session_family_snapshots",
         column: "created_at",
         ddl: "created_at INTEGER NOT NULL DEFAULT 0",
+    },
+    ColumnBackfill {
+        table: "agent_session_family_snapshots",
+        column: "source_start_seq",
+        ddl: "source_start_seq INTEGER",
+    },
+    ColumnBackfill {
+        table: "agent_session_family_snapshots",
+        column: "source_end_seq",
+        ddl: "source_end_seq INTEGER",
+    },
+    ColumnBackfill {
+        table: "agent_session_family_snapshots",
+        column: "source_checkpoint_message_code",
+        ddl: "source_checkpoint_message_code TEXT",
+    },
+    ColumnBackfill {
+        table: "agent_session_family_snapshots",
+        column: "token_estimate",
+        ddl: "token_estimate INTEGER",
+    },
+    ColumnBackfill {
+        table: "agent_session_family_snapshots",
+        column: "completed_at",
+        ddl: "completed_at INTEGER",
+    },
+    ColumnBackfill {
+        table: "agent_session_family_snapshots",
+        column: "expires_at",
+        ddl: "expires_at INTEGER",
     },
     ColumnBackfill {
         table: "agent_session_goals",

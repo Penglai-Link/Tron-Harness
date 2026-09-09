@@ -2317,7 +2317,6 @@ export const pages = {
           criticalIngressCapacity: "设置关键事件专用队列容量。",
           defaultContextWindowTokens: "设置上下文预算使用的默认模型窗口大小。",
           defaultMaxSessions: "限制默认加载到家族上下文的关联会话数。",
-          defaultMaxSnapshots: "限制默认加载到家族上下文的关联快照数。",
           defaultSinkCapacity: "设置每个事件接收器的默认队列容量。",
           defaultSnapshotMaxChars: "限制每个关联快照加载的字符数。",
           defaultTtlHours: "设置家族上下文记录可被加载的有效时长。",

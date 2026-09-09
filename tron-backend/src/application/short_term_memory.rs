@@ -16,16 +16,18 @@ mod service_context;
 mod service_events;
 mod service_family;
 mod service_family_context;
-mod service_family_snapshot;
 mod service_family_support;
 mod service_goal_judge_model;
 mod service_goal_judge_payload;
 mod service_goals;
 mod service_input;
 mod service_parts;
+mod service_session_summary;
+mod service_session_summary_support;
 mod service_todos;
 mod service_tool_output;
 
+pub(crate) use assembler::estimate_messages_tokens;
 pub use config::{
     CompactionPolicyConfig, ContextBlockBudgetConfig, ContextBlockBudgets, ContextBudgetConfig,
     EventLogConfig, FamilyLoadConfig, GoalLoopConfig, ModelContextBudgetPlan,
@@ -35,9 +37,10 @@ pub use dto::{
     CompactionContextPolicy, ContextBudgetBreakdown, CreateCompactionCommand, GoalJudgeFailure,
     GoalJudgeOutput, GoalLoopDecision, GoalSessionCommand, ModelCompactionFailure,
     ModelCompactionOutput, ModelRequestTranscriptFacts, ModelResponseTranscriptFacts,
-    PreparedCompactionInput, PreparedGoalJudgeInput, PreparedModelContext, ReplaceTodosCommand,
+    ModelSessionSummaryOutput, PreparedCompactionInput, PreparedGoalJudgeInput,
+    PreparedModelContext, PreparedSessionSummaryInput, PreparedSessionSummaryJob,
+    ReplaceTodosCommand, SessionSummaryFailure, SessionSummaryJobContext, SessionSummaryRunOutcome,
     SetGoalCommand, TodoUpdateItem, ToolTranscriptStatus, UpdateGoalCommand,
 };
 pub use port::ShortTermMemoryRepository;
 pub use service::ShortTermMemoryService;
-pub(crate) use assembler::estimate_messages_tokens;

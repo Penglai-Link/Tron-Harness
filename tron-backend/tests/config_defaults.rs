@@ -221,12 +221,12 @@ shortTermMemory:
             .context
             .reasoning_summary_replay_enabled
     );
-    assert_eq!(
-        config.short_term_memory.family_load.default_max_snapshots,
-        2
-    );
     assert_eq!(config.short_term_memory.family_load.default_max_sessions, 4);
     assert_eq!(config.short_term_memory.family_load.task_weight_bps, 7000);
+    let current_family_load = serde_json::to_value(&config.short_term_memory.family_load)
+        .expect("runtime family-load config should serialize");
+    assert!(current_family_load.get("default_max_snapshots").is_none());
+    assert!(current_family_load.get("defaultMaxSnapshots").is_none());
     assert_eq!(
         config
             .short_term_memory

@@ -52,6 +52,7 @@ pub(super) fn open_initialized_connection(
     run_chat_schema_migrations(&tx)?;
     run_short_term_memory_schema_backfills(&tx)?;
     repair_short_term_memory_backfilled_data(&tx)?;
+    migrate_family_snapshot_ownership_to_session(&tx)?;
     tx.execute_batch(SHORT_TERM_MEMORY_TRANSCRIPT_MIGRATION)
         .map_err(storage_error)?;
     repair_run_lease_backfilled_data(&tx)?;
@@ -123,6 +124,75 @@ fn run_short_term_memory_schema_backfills(
         }
     }
     Ok(())
+}
+
+fn migrate_family_snapshot_ownership_to_session(
+    connection: &Connection,
+) -> Result<(), ShortTermMemoryError> {
+    const TABLE: &str = "agent_session_family_snapshots";
+    const LEGACY_TABLE: &str = "agent_session_family_snapshots_legacy_family_owned";
+    if !table_exists(connection, TABLE)? {
+        return Ok(());
+    }
+    let family_code_not_null = connection
+        .query_row(
+            "SELECT \"notnull\" FROM pragma_table_info('agent_session_family_snapshots') WHERE name = 'family_code'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(storage_error)?
+        .unwrap_or(0)
+        != 0;
+    if !family_code_not_null {
+        return Ok(());
+    }
+    if table_exists(connection, LEGACY_TABLE)? {
+        return Err(ShortTermMemoryError::StorageFailure);
+    }
+    connection
+        .execute_batch(
+            "ALTER TABLE agent_session_family_snapshots
+                 RENAME TO agent_session_family_snapshots_legacy_family_owned;
+
+             CREATE TABLE agent_session_family_snapshots (
+                 id INTEGER PRIMARY KEY,
+                 snapshot_code TEXT NOT NULL UNIQUE,
+                 family_code TEXT,
+                 session_code TEXT NOT NULL,
+                 run_code TEXT,
+                 snapshot_kind TEXT NOT NULL,
+                 status TEXT NOT NULL,
+                 source_start_seq INTEGER,
+                 source_end_seq INTEGER,
+                 source_checkpoint_message_code TEXT,
+                 summary_markdown TEXT,
+                 token_estimate INTEGER,
+                 error_code TEXT,
+                 error_message TEXT,
+                 metadata_json TEXT,
+                 created_at INTEGER NOT NULL,
+                 completed_at INTEGER,
+                 expires_at INTEGER
+             );
+
+             INSERT INTO agent_session_family_snapshots (
+                 id, snapshot_code, family_code, session_code, run_code,
+                 snapshot_kind, status, source_start_seq, source_end_seq,
+                 source_checkpoint_message_code, summary_markdown, token_estimate,
+                 error_code, error_message, metadata_json, created_at,
+                 completed_at, expires_at
+             )
+             SELECT id, snapshot_code, family_code, session_code, run_code,
+                    snapshot_kind, status, source_start_seq, source_end_seq,
+                    source_checkpoint_message_code, summary_markdown, token_estimate,
+                    error_code, error_message, metadata_json, created_at,
+                    completed_at, expires_at
+             FROM agent_session_family_snapshots_legacy_family_owned;
+
+             DROP TABLE agent_session_family_snapshots_legacy_family_owned;",
+        )
+        .map_err(storage_error)
 }
 
 fn repair_short_term_memory_backfilled_data(

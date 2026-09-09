@@ -263,7 +263,7 @@ pub struct ShortTermMemoryFamilyMember {
 pub struct ShortTermMemoryFamilySnapshot {
     pub id: i64,
     pub snapshot_code: String,
-    pub family_code: String,
+    pub family_code: Option<String>,
     pub session_code: String,
     pub run_code: Option<String>,
     pub snapshot_kind: String,

@@ -3,8 +3,8 @@ use std::{collections::HashMap, sync::Arc};
 use crate::{
     application::{
         app::AppService, mcp::McpService, prompt::PromptService,
-        short_term_memory::ShortTermMemoryService,
-        skill::SkillRegistryService, variable::VariableService, workspace::WorkspaceService,
+        short_term_memory::ShortTermMemoryService, skill::SkillRegistryService,
+        variable::VariableService, workspace::WorkspaceService,
     },
     domain::{
         agent::{
@@ -61,9 +61,11 @@ fn managed_system_prompt(
             }
         }
     }
-    Ok(crate::domain::prompt::builtin_prompt_text(catalog_key, locale)
-        .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"))
-        .to_string())
+    Ok(
+        crate::domain::prompt::builtin_prompt_text(catalog_key, locale)
+            .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"))
+            .to_string(),
+    )
 }
 
 pub(crate) struct PreparedAgentRun {

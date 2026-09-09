@@ -172,7 +172,7 @@ CREATE TABLE IF NOT EXISTS agent_session_family_members (
 CREATE TABLE IF NOT EXISTS agent_session_family_snapshots (
     id INTEGER PRIMARY KEY,
     snapshot_code TEXT NOT NULL UNIQUE,
-    family_code TEXT NOT NULL,
+    family_code TEXT,
     session_code TEXT NOT NULL,
     run_code TEXT,
     snapshot_kind TEXT NOT NULL,
@@ -314,6 +314,11 @@ CREATE INDEX IF NOT EXISTS idx_agent_session_family_snapshots_session_created
     ON agent_session_family_snapshots (session_code, created_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_session_family_snapshots_family_status
     ON agent_session_family_snapshots (family_code, status, created_at DESC, id DESC);
+CREATE INDEX IF NOT EXISTS idx_agent_session_family_snapshots_session_latest
+    ON agent_session_family_snapshots (session_code, snapshot_kind, status, source_end_seq DESC, id DESC);
+CREATE UNIQUE INDEX IF NOT EXISTS idx_agent_session_family_snapshots_session_run_summary
+    ON agent_session_family_snapshots (session_code, run_code)
+    WHERE snapshot_kind = 'SESSION_SUMMARY' AND run_code IS NOT NULL;
 CREATE INDEX IF NOT EXISTS idx_agent_session_goals_session_status
     ON agent_session_goals (session_code, status, updated_at DESC, id DESC);
 CREATE INDEX IF NOT EXISTS idx_agent_session_goals_workspace_updated

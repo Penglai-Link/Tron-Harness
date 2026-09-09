@@ -2193,7 +2193,6 @@ export const pages = {
           criticalIngressCapacity: "Sets the queue capacity reserved for critical events.",
           defaultContextWindowTokens: "Sets the default model context-window size used for budgeting.",
           defaultMaxSessions: "Limits related sessions loaded into family context by default.",
-          defaultMaxSnapshots: "Limits related snapshots loaded into family context by default.",
           defaultSinkCapacity: "Sets the default queue capacity for each event sink.",
           defaultSnapshotMaxChars: "Limits characters loaded from each related snapshot.",
           defaultTtlHours: "Sets how long family-context records remain eligible for loading.",

@@ -86,7 +86,7 @@ fn validate_family(family: &ShortTermMemoryFamily) -> Result<(), ShortTermMemory
 fn validate_family_snapshot(
     snapshot: &ShortTermMemoryFamilySnapshot,
 ) -> Result<(), ShortTermMemoryError> {
-    validate_allowed(&snapshot.snapshot_kind, &["RUN_HANDOFF"])?;
+    validate_allowed(&snapshot.snapshot_kind, &["RUN_HANDOFF", "SESSION_SUMMARY"])?;
     validate_allowed(
         &snapshot.status,
         &["PENDING", "IN_PROGRESS", "COMPLETED", "FAILED", "EXPIRED"],

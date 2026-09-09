@@ -1,6 +1,7 @@
 import {
   expect,
   test,
+  type Page,
 } from "@playwright/test";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -17,6 +18,10 @@ const frontendRoot = resolve(thisFilePath, "..", "..");
 let frontendProcess: ManagedProcess | undefined;
 let frontendBaseUrl = "";
 let frontendLogs = "";
+
+function pageTitle(page: Page, title: string) {
+  return page.locator("main header > div > p").filter({ hasText: title });
+}
 
 function reservePort() {
   return new Promise<number>((resolvePort, rejectPort) => {
@@ -85,7 +90,7 @@ test.afterAll(async () => {
 
 test("manages workspace prompts and exposes platform prompt routes", async ({ page }) => {
   await page.goto(`${frontendBaseUrl}/prompts`);
-  await expect(page.getByRole("heading", { name: "Prompt Management" })).toBeVisible();
+  await expect(pageTitle(page, "Prompt Management")).toBeVisible();
   await expect(page.getByRole("button", { name: "All Prompts" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Filter", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Category", exact: true })).toBeVisible();
@@ -96,14 +101,16 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await expect(page.getByRole("columnheader", { name: "Last Updated" })).toBeVisible();
   const workspaceRouterRow = page.getByRole("row").filter({ hasText: "Workspace Router" });
   await expect(workspaceRouterRow).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "Session work summary" })).toBeVisible();
   await page.getByRole("combobox", { name: "Category", exact: true }).click();
   await page.getByRole("option", { name: "System", exact: true }).click();
   await expect(page.getByRole("row").filter({ hasText: "Review Persona" })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
-  await workspaceRouterRow.click();
-  await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=.*mode=override/);
-  await expect(page.getByRole("heading", { name: "Create Prompt Override" })).toBeVisible();
+  await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
+  await page.getByRole("menuitem", { name: "Create override", exact: true }).click();
+  await expect(page).toHaveURL(/\/prompts\/edit\?promptCode=.*mode=override/);
+  await expect(pageTitle(page, "Create Prompt Override")).toBeVisible();
   await expect(page.getByRole("button", { name: "Render Preview", exact: true })).toHaveCount(0);
 
   await page.goto(`${frontendBaseUrl}/prompts`);
@@ -112,51 +119,40 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "New", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "Create Prompt" })).toBeVisible();
-  await expect(page.getByRole("switch", { name: "Enabled", exact: true })).toBeVisible();
-  await expect(page.getByRole("switch", { name: "Allow inheritance", exact: true })).toBeVisible();
+  await expect(pageTitle(page, "Create Prompt")).toBeVisible();
+  await expect(page.locator("label").filter({ hasText: "Status" })).toBeVisible();
+  await expect(page.locator("label").filter({ hasText: "Allow inheritance" })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Model Parameters" })).toHaveCount(0);
   await expect(page.getByText("Temperature", { exact: false })).toHaveCount(0);
   await expect(page.getByText("Max output tokens", { exact: true })).toHaveCount(0);
   await page.getByLabel("Name").fill("Greeting Template");
-  await page.getByLabel("Prompt body").fill("Hello {{name}} with priority {{priority}}.");
-  await expect(page.getByText("STRING").first()).toBeVisible();
-  await expect(page.getByRole("code").filter({ hasText: /^name$/ })).toBeVisible();
-  await expect(page.getByRole("code").filter({ hasText: /^priority$/ })).toBeVisible();
+  await page.getByRole("textbox", { name: "Prompt body", exact: true }).fill("Hello from the workspace.");
   await expect(page.getByRole("button", { name: "Preview", exact: true })).toHaveCount(0);
   await expect(page.getByText("Rendered prompt", { exact: true })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeDisabled();
-  await page.getByRole("textbox", { name: "Description name", exact: true }).fill("Customer display name");
-  await page.getByRole("textbox", { name: "Description priority", exact: true }).fill("Priority number");
-  await page.getByRole("combobox", { name: "Type priority", exact: true }).click();
-  await page.getByRole("option", { name: "NUMBER", exact: true }).click();
+  await expect(page.getByRole("button", { name: "Save", exact: true })).toBeEnabled();
 
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=/);
-  await expect(page.getByRole("heading", { name: "Prompt Details" })).toBeVisible();
+  await expect(pageTitle(page, "Prompt Details")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Prompt code", exact: true })).toHaveAttribute("readonly", "");
-  await expect(page.getByRole("textbox", { name: "Description name", exact: true })).toHaveValue(
-    "Customer display name",
-  );
-  await expect(page.getByRole("textbox", { name: "Description priority", exact: true })).toHaveValue(
-    "Priority number",
-  );
 
   await page.goto(`${frontendBaseUrl}/settings/prompts`);
-  await expect(page.getByRole("heading", { name: "Platform Prompts" })).toBeVisible();
+  await expect(pageTitle(page, "Platform Prompts")).toBeVisible();
   await expect(page.getByRole("button", { name: "New", exact: true })).toBeVisible();
+  await expect(page.getByRole("row").filter({ hasText: "Session work summary" })).toBeVisible();
   await page.getByRole("row").filter({ hasText: "Workspace Router" }).click();
   await expect(page).toHaveURL(/\/settings\/prompts\/detail\?promptCode=/);
 });
 
 test("reverts a workspace override without leaving the prompt list", async ({ page }) => {
   await page.goto(`${frontendBaseUrl}/prompts`);
-  await page.getByRole("row").filter({ hasText: "Workspace Router" }).click();
-  await expect(page.getByRole("heading", { name: "Create Prompt Override" })).toBeVisible();
+  await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
+  await page.getByRole("menuitem", { name: "Create override", exact: true }).click();
+  await expect(pageTitle(page, "Create Prompt Override")).toBeVisible();
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=/);
 
-  await page.getByRole("button", { name: "Cancel", exact: true }).click();
+  await page.getByRole("button", { name: "Back", exact: true }).click();
   await expect(page).toHaveURL(`${frontendBaseUrl}/prompts`);
   await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
   await page.getByRole("menuitem", { name: "Revert", exact: true }).click();
@@ -173,7 +169,7 @@ test("localizes prompt UI while preserving prompt data and technical values", as
   await page.addInitScript(() => window.localStorage.setItem("tron.locale", "zh-CN"));
   await page.goto(`${frontendBaseUrl}/prompts`);
 
-  await expect(page.getByRole("heading", { name: "提示词管理" })).toBeVisible();
+  await expect(pageTitle(page, "提示词管理")).toBeVisible();
   await expect(page.getByRole("button", { name: "全部提示词" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "筛选", exact: true })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "分类", exact: true })).toBeVisible();
@@ -186,27 +182,28 @@ test("localizes prompt UI while preserving prompt data and technical values", as
 
   const workspacePrompt = page.getByRole("row").filter({ hasText: "Workspace Router" });
   await expect(workspacePrompt).toBeVisible();
-  await workspacePrompt.click();
-  await expect(page).toHaveURL(/\/prompts\/detail\?promptCode=.*mode=override/);
-  await expect(page.getByRole("heading", { name: "创建提示词覆盖" })).toBeVisible();
+  await workspacePrompt.getByRole("button").click();
+  await page.getByRole("menuitem", { name: "创建覆盖", exact: true }).click();
+  await expect(page).toHaveURL(/\/prompts\/edit\?promptCode=.*mode=override/);
+  await expect(pageTitle(page, "创建提示词覆盖")).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/prompts`);
-  await page.getByRole("button", { name: "Workspace Router 的操作" }).click();
+  await page.getByRole("row").filter({ hasText: "Workspace Router" }).getByRole("button").click();
   await expect(page.getByText("复制", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
   await page.getByRole("button", { name: "新建", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "新建提示词" })).toBeVisible();
-  await expect(page.getByRole("switch", { name: "已启用", exact: true })).toBeVisible();
-  await expect(page.getByRole("switch", { name: "允许继承", exact: true })).toBeVisible();
+  await expect(pageTitle(page, "新建提示词")).toBeVisible();
+  await expect(page.locator("label").filter({ hasText: "状态" })).toBeVisible();
+  await expect(page.locator("label").filter({ hasText: "允许继承" })).toBeVisible();
   await page.getByLabel("名称").fill("Greeting Template");
-  await page.getByLabel("提示词内容").fill("Hello {{name}}.");
+  await page.getByRole("textbox", { name: "提示词内容", exact: true }).fill("Hello {{name}}.");
 
   await expect(page.getByText("变量名", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("code").filter({ hasText: /^name$/ })).toBeVisible();
   await expect(page.getByText("STRING", { exact: true }).first()).toBeVisible();
 
   await page.goto(`${frontendBaseUrl}/settings/prompts`);
-  await expect(page.getByRole("heading", { name: "平台提示词" })).toBeVisible();
+  await expect(pageTitle(page, "平台提示词")).toBeVisible();
   await expect(page.getByRole("button", { name: "新建", exact: true })).toBeVisible();
 });

@@ -2,8 +2,58 @@ use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 
 use crate::domain::agent::{
-    AgentMessage, ModelTokenUsage, TokenEstimateSnapshot, TokenUsageAuditSnapshot,
+    AgentMessage, AgentModelConfig, ModelRequest, ModelTokenUsage, TokenEstimateSnapshot,
+    TokenUsageAuditSnapshot,
 };
+
+#[derive(Clone)]
+pub struct SessionSummaryJobContext {
+    pub session_code: String,
+    pub workspace_code: String,
+    pub run_code: String,
+    pub locale: String,
+    pub model: AgentModelConfig,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionSummaryRunOutcome {
+    pub status: String,
+    pub error_code: Option<String>,
+    pub error_message: Option<String>,
+}
+
+#[derive(Clone)]
+pub struct PreparedSessionSummaryJob {
+    pub context: SessionSummaryJobContext,
+    pub outcome: SessionSummaryRunOutcome,
+    pub snapshot_code: String,
+    pub created_at: String,
+}
+
+pub struct PreparedSessionSummaryInput {
+    pub job: PreparedSessionSummaryJob,
+    pub source_start_seq: i64,
+    pub source_end_seq: i64,
+    pub previous_snapshot_code: Option<String>,
+    pub prompt_hash: String,
+    pub prompt_version: u64,
+    pub input_token_estimate: u32,
+    pub max_input_tokens: u32,
+    pub request: ModelRequest,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct ModelSessionSummaryOutput {
+    pub markdown: String,
+    pub token_usage: Option<ModelTokenUsage>,
+    pub provider_metadata: Option<Value>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SessionSummaryFailure {
+    pub error_code: String,
+    pub message: String,
+}
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]

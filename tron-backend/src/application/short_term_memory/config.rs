@@ -12,7 +12,6 @@ const DEFAULT_CHECKPOINT_CONTEXT_MAX_RATIO_BPS: u32 = 2_000;
 const DEFAULT_CHECKPOINT_CONTEXT_HARD_CAP_TOKENS: u32 = 6_000;
 const DEFAULT_WORKING_STATE_CONTEXT_MAX_RATIO_BPS: u32 = 1_000;
 const DEFAULT_WORKING_STATE_CONTEXT_HARD_CAP_TOKENS: u32 = 2_000;
-const DEFAULT_MAX_FAMILY_SNAPSHOTS: usize = 3;
 const DEFAULT_MAX_FAMILY_SESSIONS: usize = 3;
 const DEFAULT_SNAPSHOT_MAX_CHARS: usize = 2_000;
 const DEFAULT_FAMILY_TTL_HOURS: u32 = 72;
@@ -85,7 +84,6 @@ pub struct ContextBlockBudgetConfig {
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
 pub struct FamilyLoadConfig {
-    pub default_max_snapshots: usize,
     pub default_max_sessions: usize,
     pub default_snapshot_max_chars: usize,
     pub default_ttl_hours: u32,
@@ -163,7 +161,6 @@ impl Default for ShortTermMemoryConfig {
                 blocks: ContextBlockBudgets::default(),
             },
             family_load: FamilyLoadConfig {
-                default_max_snapshots: DEFAULT_MAX_FAMILY_SNAPSHOTS,
                 default_max_sessions: DEFAULT_MAX_FAMILY_SESSIONS,
                 default_snapshot_max_chars: DEFAULT_SNAPSHOT_MAX_CHARS,
                 default_ttl_hours: DEFAULT_FAMILY_TTL_HOURS,

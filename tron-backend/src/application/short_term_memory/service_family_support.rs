@@ -167,10 +167,10 @@ pub(super) fn family_code(kind: &str, key: &str) -> String {
     format!("ASF-{}", stable_hash(&[kind, key]))
 }
 
-pub(super) fn snapshot_code(family_code: &str, session_code: &str, run_code: &str) -> String {
+pub(super) fn session_summary_snapshot_code(session_code: &str, run_code: &str) -> String {
     format!(
         "AFS-{}",
-        stable_hash(&[family_code, session_code, run_code])
+        stable_hash(&[session_code, run_code, "SESSION_SUMMARY"])
     )
 }
 

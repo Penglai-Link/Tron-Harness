@@ -85,9 +85,9 @@ fn resolve_todo_enabled(context: &AgentRunContext) -> bool {
     }
     context
         .tool_exposure
-            .hidden_tools
-            .iter()
-            .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update"))
+        .hidden_tools
+        .iter()
+        .any(|tool| tool.tool_name.eq_ignore_ascii_case("todo_update"))
 }
 
 #[cfg(test)]

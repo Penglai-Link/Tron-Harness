@@ -102,9 +102,6 @@ impl ContextBudgetConfig {
 
 impl FamilyLoadConfig {
     fn apply_overrides(&mut self, overrides: FamilyLoadFileConfig) {
-        if let Some(value) = overrides.default_max_snapshots {
-            self.default_max_snapshots = value.max(1);
-        }
         if let Some(value) = overrides.default_max_sessions {
             self.default_max_sessions = value.max(1);
         }
@@ -266,7 +263,10 @@ struct ContextBlockBudgetFileConfig {
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct FamilyLoadFileConfig {
-    default_max_snapshots: Option<usize>,
+    // Kept only so legacy YAML remains readable. Session summaries are always
+    // loaded one-per-related-session, so this value is intentionally ignored.
+    #[serde(rename = "defaultMaxSnapshots")]
+    _default_max_snapshots: Option<usize>,
     default_max_sessions: Option<usize>,
     default_snapshot_max_chars: Option<usize>,
     default_ttl_hours: Option<u32>,

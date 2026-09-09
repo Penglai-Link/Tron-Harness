@@ -13,9 +13,8 @@ use crate::{
 };
 
 use super::short_term_memory_rows::{
-    insert_context_epoch, insert_event, insert_family, insert_family_member,
-    insert_family_snapshot, insert_message, insert_part, list_parts, option_timestamp_to_millis,
-    row_to_family, row_to_family_member, row_to_family_snapshot, storage_error,
+    insert_context_epoch, insert_event, insert_family, insert_family_member, insert_message,
+    insert_part, list_parts, row_to_family, row_to_family_member, storage_error,
 };
 
 #[path = "short_term_memory_repository_context.rs"]
@@ -410,27 +409,39 @@ impl ShortTermMemoryRepository for SqliteShortTermMemoryRepository {
         exclude_session_code: &str,
         limit: usize,
     ) -> Result<Vec<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT id, snapshot_code, family_code, session_code, run_code, snapshot_kind, status, source_start_seq, source_end_seq, source_checkpoint_message_code, summary_markdown, token_estimate, error_code, error_message, metadata_json, created_at, completed_at, expires_at
-                 FROM agent_session_family_snapshots
-                 WHERE family_code = ?1
-                   AND session_code != ?2
-                   AND status = 'COMPLETED'
-                   AND (expires_at IS NULL OR expires_at > CAST(strftime('%s','now') AS INTEGER) * 1000)
-                 ORDER BY created_at DESC, id DESC
-                 LIMIT ?3",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map(
-                params![family_code, exclude_session_code, limit as i64],
-                row_to_family_snapshot,
-            )
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
+        repository_family::list_completed_family_snapshots(
+            &self.connection,
+            family_code,
+            exclude_session_code,
+            limit,
+        )
+    }
+
+    fn session_summary_for_run(
+        &mut self,
+        session_code: &str,
+        run_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
+        repository_family::session_summary_for_run(&self.connection, session_code, run_code)
+    }
+
+    fn latest_completed_session_summary(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
+        repository_family::latest_completed_session_summary(&self.connection, session_code)
+    }
+
+    fn latest_completed_family_handoff(
+        &mut self,
+        family_code: &str,
+        session_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
+        repository_family::latest_completed_family_handoff(
+            &self.connection,
+            family_code,
+            session_code,
+        )
     }
 
     fn list_family_session_codes(
@@ -451,26 +462,14 @@ impl ShortTermMemoryRepository for SqliteShortTermMemoryRepository {
         &mut self,
         snapshots: &[ShortTermMemoryFamilySnapshot],
     ) -> Result<(), ShortTermMemoryError> {
-        let tx = self.connection.transaction().map_err(storage_error)?;
-        for snapshot in snapshots {
-            insert_family_snapshot(&tx, snapshot)?;
-            if snapshot.status == "COMPLETED" {
-                tx.execute(
-                    "UPDATE agent_session_families
-                     SET latest_snapshot_code = ?1,
-                         last_activity_at = ?2,
-                         updated_at = ?2
-                     WHERE family_code = ?3",
-                    params![
-                        snapshot.snapshot_code,
-                        option_timestamp_to_millis(Some(snapshot.created_at.as_str())),
-                        snapshot.family_code,
-                    ],
-                )
-                .map_err(storage_error)?;
-            }
-        }
-        tx.commit().map_err(storage_error)
+        repository_family::create_family_snapshots(&mut self.connection, snapshots)
+    }
+
+    fn recover_stale_session_summaries(
+        &mut self,
+        completed_at: &str,
+    ) -> Result<usize, ShortTermMemoryError> {
+        repository_family::recover_stale_session_summaries(&self.connection, completed_at)
     }
 
     fn ensure_hidden_heartbeat_session(

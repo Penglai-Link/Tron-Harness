@@ -104,6 +104,9 @@ impl PromptService {
         ensure_version(resolved.view.version, Some(command.expected_version))?;
         let requested_allow_inheritance = command.allow_inheritance;
         let (mut spec, variables) = normalize_spec(command.spec)?;
+        if resolved.view.runtime_required && !spec.enabled {
+            return Err(PromptError::RuntimeRequired);
+        }
         self.validate_workspace_managed_variables(&workspace.workspace_code, &variables)?;
         if requested_allow_inheritance.is_some()
             && resolved.view.source_kind != PromptViewSourceKind::Local

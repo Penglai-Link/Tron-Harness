@@ -95,7 +95,6 @@ shortTermMemory:
         # Example: maxRatio: "20%" and maxTokens: 6000.
         maxRatio: "60%"
   familyLoad:
-    defaultMaxSnapshots: 3
     defaultMaxSessions: 3
     defaultSnapshotMaxChars: 2000
     defaultTtlHours: 72

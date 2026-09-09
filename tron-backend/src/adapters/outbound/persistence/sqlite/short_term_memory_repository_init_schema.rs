@@ -170,6 +170,8 @@ pub(super) const STM_REQUIRED_INDEXES: &[&str] = &[
     "idx_agent_session_todos_session_position",
     "idx_agent_session_family_members_session_enabled",
     "idx_agent_session_family_snapshots_family_status",
+    "idx_agent_session_family_snapshots_session_latest",
+    "idx_agent_session_family_snapshots_session_run_summary",
     "idx_agent_session_goals_one_open",
     "idx_agent_session_goal_criteria_goal_position",
     "idx_agent_session_goal_events_goal_seq",
@@ -187,6 +189,13 @@ pub(super) struct StmRequiredColumnDefinition {
 }
 
 pub(super) const STM_REQUIRED_COLUMN_DEFINITIONS: &[StmRequiredColumnDefinition] = &[
+    StmRequiredColumnDefinition {
+        table: "agent_session_family_snapshots",
+        column: "family_code",
+        data_type: "TEXT",
+        not_null: false,
+        allowed_default_values: &[None],
+    },
     StmRequiredColumnDefinition {
         table: "agent_transcript_context_epochs",
         column: "replacement_seq",
@@ -395,7 +404,7 @@ pub(super) const STM_ALLOWED_VALUES: &[StmAllowedValues] = &[
     StmAllowedValues {
         table: "agent_session_family_snapshots",
         column: "snapshot_kind",
-        values: &["RUN_HANDOFF"],
+        values: &["RUN_HANDOFF", "SESSION_SUMMARY"],
     },
     StmAllowedValues {
         table: "agent_session_family_snapshots",
@@ -475,7 +484,8 @@ pub(super) const STM_ORPHAN_CHECKS: &[StmOrphanCheck] = &[
         sql: "SELECT count(1)
               FROM agent_session_family_snapshots s
               LEFT JOIN agent_session_families f ON f.family_code = s.family_code
-              WHERE f.family_code IS NULL",
+              WHERE s.family_code IS NOT NULL
+                AND f.family_code IS NULL",
     },
 ];
 
@@ -544,6 +554,14 @@ pub(super) const STM_REQUIRED_INDEX_DEFINITIONS: &[StmRequiredIndexDefinition] =
         fragments: &[
             "ON agent_session_goals (session_code)",
             "WHERE status IN ('ACTIVE', 'PAUSED', 'BLOCKED')",
+        ],
+    },
+    StmRequiredIndexDefinition {
+        name: "idx_agent_session_family_snapshots_session_run_summary",
+        unique: true,
+        fragments: &[
+            "ON agent_session_family_snapshots (session_code, run_code)",
+            "WHERE snapshot_kind = 'SESSION_SUMMARY' AND run_code IS NOT NULL",
         ],
     },
 ];

@@ -402,6 +402,29 @@ impl ShortTermMemoryRepository for ContextEpochFailingRepository {
         Ok(Vec::new())
     }
 
+    fn session_summary_for_run(
+        &mut self,
+        _session_code: &str,
+        _run_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
+        Ok(None)
+    }
+
+    fn latest_completed_session_summary(
+        &mut self,
+        _session_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
+        Ok(None)
+    }
+
+    fn latest_completed_family_handoff(
+        &mut self,
+        _family_code: &str,
+        _session_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError> {
+        Ok(None)
+    }
+
     fn list_family_session_codes(
         &mut self,
         _family_code: &str,
@@ -416,6 +439,13 @@ impl ShortTermMemoryRepository for ContextEpochFailingRepository {
         _snapshots: &[ShortTermMemoryFamilySnapshot],
     ) -> Result<(), ShortTermMemoryError> {
         Ok(())
+    }
+
+    fn recover_stale_session_summaries(
+        &mut self,
+        _completed_at: &str,
+    ) -> Result<usize, ShortTermMemoryError> {
+        Ok(0)
     }
 
     fn ensure_hidden_heartbeat_session(

@@ -7,9 +7,10 @@ use tron_backend::{
         chat::{ChatService, ChatSessionQuery, CreateChatSessionCommand},
         short_term_memory::{
             CreateCompactionCommand, GoalSessionCommand, ModelCompactionOutput,
-            ModelRequestTranscriptFacts, PreparedCompactionInput, SetGoalCommand,
-            ShortTermMemoryConfig, ShortTermMemoryRepository, ShortTermMemoryService,
-            TodoUpdateItem, ToolOutputConfig, ToolTranscriptStatus,
+            ModelRequestTranscriptFacts, ModelSessionSummaryOutput, PreparedCompactionInput,
+            SessionSummaryFailure, SessionSummaryJobContext, SessionSummaryRunOutcome,
+            SetGoalCommand, ShortTermMemoryConfig, ShortTermMemoryRepository,
+            ShortTermMemoryService, TodoUpdateItem, ToolOutputConfig, ToolTranscriptStatus,
         },
     },
     domain::{
@@ -438,27 +439,70 @@ fn transcript_service_records_todos_and_compaction() {
         )
         .expect("legacy assistant event should be queryable");
     assert_eq!(legacy_completed_count, 0);
-    let family_snapshot_count: i64 = connection
+    let summary_count_before_background_job: i64 = connection
         .query_row(
-            "SELECT count(1) FROM agent_session_family_snapshots WHERE session_code = ?1 AND status = 'COMPLETED'",
+            "SELECT count(1) FROM agent_session_family_snapshots WHERE session_code = ?1",
             [session.session_code.as_str()],
             |row| row.get(0),
         )
-        .expect("family snapshots should be queryable");
-    assert!(family_snapshot_count > 0);
-    let family_snapshot_summary: String = connection
+        .expect("session summaries should be queryable");
+    assert_eq!(summary_count_before_background_job, 0);
+
+    let summary_job = service
+        .prepare_session_summary_job(
+            session_summary_context(&context),
+            completed_summary_outcome(),
+        )
+        .expect("session summary job should prepare")
+        .expect("new run should create a session summary job");
+    let summary_input = service
+        .session_summary_model_request(
+            summary_job,
+            "Summarize only the supplied evidence as Markdown.".into(),
+            1,
+        )
+        .expect("session summary model input should prepare")
+        .expect("session summary should not be superseded");
+    let summary_model = service.session_summary_model_config(&context.model);
+    assert_eq!(summary_model.temperature, Some(0.0));
+    assert!(!summary_model.thinking_enabled);
+    assert!(!summary_model.responses_stateful_enabled);
+    assert_eq!(summary_model.max_tokens, Some(1_024));
+    assert_eq!(summary_model.max_retries, Some(0));
+    assert!(summary_input.request.tools.is_empty());
+    assert_eq!(summary_input.request.messages.len(), 2);
+    let summary_evidence = summary_input.request.messages[1].text_content();
+    assert!(summary_evidence.contains("Track the implementation state"));
+    assert!(summary_evidence.contains("shell.exec"));
+    assert!(summary_evidence.contains(inline_tool_output));
+    assert!(!summary_evidence.contains(large_output));
+    assert!(!summary_evidence.contains("system seed"));
+    assert!(!summary_evidence.contains("raw reasoning"));
+    service
+        .commit_session_summary(
+            &summary_input,
+            ModelSessionSummaryOutput {
+                markdown: "# Session Summary\n\n## Status\nRaw transcript text was summarized; raw reasoning are intentionally omitted."
+                    .into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &summary_model,
+        )
+        .expect("session summary should commit");
+    let session_summary: String = connection
         .query_row(
-            "SELECT summary_markdown FROM agent_session_family_snapshots WHERE session_code = ?1 AND status = 'COMPLETED' ORDER BY id DESC LIMIT 1",
+            "SELECT summary_markdown FROM agent_session_family_snapshots WHERE session_code = ?1 AND snapshot_kind = 'SESSION_SUMMARY' AND status = 'COMPLETED' ORDER BY source_end_seq DESC, id DESC LIMIT 1",
             [session.session_code.as_str()],
             |row| row.get(0),
         )
-        .expect("family snapshot summary should be queryable");
-    assert!(family_snapshot_summary.contains("## Handoff Summary"));
-    assert!(family_snapshot_summary.contains("Raw transcript text"));
-    assert!(family_snapshot_summary.contains("raw reasoning are intentionally omitted"));
-    assert!(!family_snapshot_summary.contains("Track the implementation state"));
-    assert!(!family_snapshot_summary.contains(inline_tool_output));
-    assert!(!family_snapshot_summary.contains(large_output));
+        .expect("session summary should be queryable");
+    assert!(session_summary.contains("# Session Summary"));
+    assert!(session_summary.contains("Raw transcript text"));
+    assert!(session_summary.contains("raw reasoning are intentionally omitted"));
+    assert!(!session_summary.contains("Track the implementation state"));
+    assert!(!session_summary.contains(inline_tool_output));
+    assert!(!session_summary.contains(large_output));
     let mut compaction_seed_context = base_context(&session.session_code);
     for index in 0..6 {
         compaction_seed_context.run_code = format!("RUN-STMEM-MANUAL-SEED-{index}");
@@ -837,7 +881,7 @@ fn transcript_service_records_todos_and_compaction() {
     assert!(rendered.contains("<session-family-context>"));
     assert!(rendered.contains("<load-plan total_token_budget=\""));
     assert!(rendered.contains("token_budget="));
-    assert!(rendered.contains("## Handoff Summary"));
+    assert!(rendered.contains("# Session Summary"));
     assert!(rendered.contains("Raw transcript text"));
     assert!(!rendered.contains("Track the implementation state"));
     assert!(!rendered.contains(inline_tool_output));
@@ -845,20 +889,20 @@ fn transcript_service_records_todos_and_compaction() {
     assert!(rendered.contains("Finish the complete short-term memory design"));
     assert!(rendered.contains("Inspect family context"));
     assert!(!rendered.contains("Do not inject completed todos"));
-    let non_expiring_snapshot_count: i64 = connection
+    let session_summary_without_fixed_expiration_count: i64 = connection
         .query_row(
-            "SELECT count(1) FROM agent_session_family_snapshots WHERE session_code = ?1 AND expires_at IS NOT NULL",
+            "SELECT count(1) FROM agent_session_family_snapshots WHERE session_code = ?1 AND snapshot_kind = 'SESSION_SUMMARY' AND expires_at IS NULL",
             [session.session_code.as_str()],
             |row| row.get(0),
         )
-        .expect("snapshot expiration should be queryable");
-    assert!(non_expiring_snapshot_count > 0);
+        .expect("session summary expiration should be queryable");
+    assert!(session_summary_without_fixed_expiration_count > 0);
     connection
         .execute(
-            "UPDATE agent_session_family_snapshots SET expires_at = 0 WHERE session_code = ?1",
+            "UPDATE agent_session_family_snapshots SET completed_at = 0 WHERE session_code = ?1 AND snapshot_kind = 'SESSION_SUMMARY'",
             [session.session_code.as_str()],
         )
-        .expect("snapshot should be markable as expired");
+        .expect("session summary should be markable as stale");
     let rendered_after_expiry = service
         .prepare_model_context(&second_context)
         .expect("prepared context should skip expired snapshots")
@@ -867,7 +911,7 @@ fn transcript_service_records_todos_and_compaction() {
         .map(AgentMessage::text_content)
         .collect::<Vec<_>>()
         .join("\n---\n");
-    assert!(!rendered_after_expiry.contains("Track the implementation state"));
+    assert!(!rendered_after_expiry.contains("Raw transcript text"));
     assert!(rendered_after_expiry.contains("Active state without snapshot"));
     service
         .record_model_requested(
@@ -966,7 +1010,7 @@ fn transcript_service_records_todos_and_compaction() {
 }
 
 #[test]
-fn family_snapshot_failure_is_bounded_and_does_not_fail_run_completion() {
+fn session_summary_storage_failure_is_separate_from_run_completion() {
     let database_url = temp_database_url("short-term-memory-family-failure");
     let chat_repository =
         SqliteChatRepository::connect(&database_url).expect("chat repository should connect");
@@ -1009,42 +1053,379 @@ fn family_snapshot_failure_is_bounded_and_does_not_fail_run_completion() {
         rusqlite::Connection::open(&database_url).expect("database should be queryable");
     connection
         .execute_batch(
-            "CREATE TRIGGER fail_completed_family_snapshot
+            "CREATE TRIGGER fail_session_summary_snapshot
              BEFORE INSERT ON agent_session_family_snapshots
-             WHEN NEW.status = 'COMPLETED'
+             WHEN NEW.snapshot_kind = 'SESSION_SUMMARY'
              BEGIN
-               SELECT RAISE(ABORT, 'completed snapshot blocked');
+               SELECT RAISE(ABORT, 'session summary snapshot blocked');
              END;",
         )
         .expect("failure trigger should be installable");
 
     service
         .record_run_completed(&context)
-        .expect("snapshot failure should not fail run completion");
+        .expect("run completion should not depend on session summary storage");
 
-    let failed_snapshot_count: i64 = connection
-        .query_row(
-            "SELECT count(1)
-             FROM agent_session_family_snapshots
-             WHERE session_code = ?1
-               AND status = 'FAILED'
-               AND error_code = 'SNAPSHOT_WRITE_FAILED'",
-            [session.session_code.as_str()],
-            |row| row.get(0),
-        )
-        .expect("failed snapshot evidence should be queryable");
-    assert!(failed_snapshot_count > 0);
-    let failure_event_count: i64 = connection
+    let summary_error = match service.prepare_session_summary_job(
+        session_summary_context(&context),
+        completed_summary_outcome(),
+    ) {
+        Ok(_) => panic!("session summary persistence should fail"),
+        Err(error) => error,
+    };
+    assert_eq!(summary_error, ShortTermMemoryError::StorageFailure);
+    let run_completed_event_count: i64 = connection
         .query_row(
             "SELECT count(1)
              FROM agent_transcript_events
              WHERE session_code = ?1
-               AND event_type = 'agent.session_family.snapshot_failed'",
+               AND event_type = 'agent.run.completed'",
             [session.session_code.as_str()],
             |row| row.get(0),
         )
-        .expect("snapshot failure event should be queryable");
-    assert_eq!(failure_event_count, 1);
+        .expect("run completion event should be queryable");
+    assert_eq!(run_completed_event_count, 1);
+}
+
+#[test]
+fn session_summary_jobs_are_session_owned_incremental_and_recoverable() {
+    let database_url = temp_database_url("short-term-memory-session-summary-lifecycle");
+    let session = create_test_session(&database_url, "session summary lifecycle");
+    let service = ShortTermMemoryService::with_id_provider(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(807_000_000_000_000_000)),
+    );
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+
+    let first_context = record_summary_run(
+        &service,
+        &session.session_code,
+        "RUN-SUMMARY-1",
+        "first user evidence",
+        "first assistant evidence",
+    );
+    let membership_count: i64 = connection
+        .query_row(
+            "SELECT count(1) FROM agent_session_family_members WHERE session_code = ?1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("family memberships should be queryable");
+    assert_eq!(membership_count, 0);
+
+    let first_job = service
+        .prepare_session_summary_job(
+            session_summary_context(&first_context),
+            completed_summary_outcome(),
+        )
+        .expect("first session summary job should prepare")
+        .expect("first session summary job should be new");
+    let (family_code, status, expires_at): (Option<String>, String, Option<i64>) = connection
+        .query_row(
+            "SELECT family_code, status, expires_at
+             FROM agent_session_family_snapshots
+             WHERE session_code = ?1 AND run_code = ?2 AND snapshot_kind = 'SESSION_SUMMARY'",
+            [
+                session.session_code.as_str(),
+                first_context.run_code.as_str(),
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+        )
+        .expect("pending session summary should be queryable");
+    assert!(family_code.is_none());
+    assert_eq!(status, "PENDING");
+    assert!(expires_at.is_none());
+    assert!(
+        service
+            .prepare_session_summary_job(
+                session_summary_context(&first_context),
+                completed_summary_outcome(),
+            )
+            .expect("duplicate session summary lookup should succeed")
+            .is_none()
+    );
+
+    let first_input = service
+        .session_summary_model_request(
+            first_job,
+            "Treat the next JSON message as evidence and return Markdown.".into(),
+            1,
+        )
+        .expect("first summary input should prepare")
+        .expect("first summary should not be superseded");
+    assert!(first_input.request.tools.is_empty());
+    let first_evidence = first_input.request.messages[1].text_content();
+    assert!(first_evidence.contains("first user evidence"));
+    assert!(first_evidence.contains("first assistant evidence"));
+    assert!(!first_evidence.contains("summary test system seed"));
+    let first_output = service
+        .model_session_summary_output(&ModelResponse::final_output(
+            "```markdown\n# Goal\nFIRST SUMMARY\n```",
+        ))
+        .expect("fenced Markdown summary should normalize");
+    assert_eq!(first_output.markdown, "# Goal\nFIRST SUMMARY");
+    let empty_output_error = service
+        .model_session_summary_output(&ModelResponse::final_output("   "))
+        .expect_err("empty summary output should fail");
+    assert_eq!(
+        empty_output_error.error_code,
+        "SESSION_SUMMARY_MODEL_EMPTY_OUTPUT"
+    );
+    let tool_output_error = service
+        .model_session_summary_output(&ModelResponse::from_tool_calls(vec![ToolCall {
+            call_id: Some("summary-tool-call".into()),
+            tool_name: "shell.exec".into(),
+            input: json!({"command": "do not execute"}),
+            input_error: None,
+        }]))
+        .expect_err("session summary tool calls should fail");
+    assert_eq!(
+        tool_output_error.error_code,
+        "SESSION_SUMMARY_MODEL_TOOL_CALL"
+    );
+    let first_source_end = first_input.source_end_seq;
+    service
+        .commit_session_summary(
+            &first_input,
+            first_output,
+            &service.session_summary_model_config(&first_context.model),
+        )
+        .expect("first summary should commit");
+
+    let second_context = record_summary_run(
+        &service,
+        &session.session_code,
+        "RUN-SUMMARY-2",
+        "second user evidence",
+        "second assistant evidence",
+    );
+    let second_job = service
+        .prepare_session_summary_job(
+            session_summary_context(&second_context),
+            SessionSummaryRunOutcome {
+                status: "FAILED".into(),
+                error_code: Some("MODEL_FAILED".into()),
+                error_message: Some("bounded run error".into()),
+            },
+        )
+        .expect("second session summary job should prepare")
+        .expect("second session summary job should be new");
+    let second_input = service
+        .session_summary_model_request(second_job, "Return Markdown.".into(), 1)
+        .expect("second summary input should prepare")
+        .expect("second summary should not be superseded");
+    assert_eq!(second_input.source_start_seq, first_source_end + 1);
+    service
+        .fail_session_summary(
+            &second_input.job,
+            Some(&second_input),
+            SessionSummaryFailure {
+                error_code: "SESSION_SUMMARY_MODEL_FAILED".into(),
+                message: "model failed without affecting the run".into(),
+            },
+        )
+        .expect("failed summary should persist its own status");
+
+    let third_context = record_summary_run(
+        &service,
+        &session.session_code,
+        "RUN-SUMMARY-3",
+        "third user evidence",
+        "third assistant evidence",
+    );
+    let third_job = service
+        .prepare_session_summary_job(
+            session_summary_context(&third_context),
+            completed_summary_outcome(),
+        )
+        .expect("third session summary job should prepare")
+        .expect("third session summary job should be new");
+    let third_input = service
+        .session_summary_model_request(third_job, "Return Markdown.".into(), 1)
+        .expect("third summary input should prepare")
+        .expect("third summary should not be superseded");
+    assert_eq!(third_input.source_start_seq, first_source_end + 1);
+    let third_evidence = third_input.request.messages[1].text_content();
+    assert!(third_evidence.contains("FIRST SUMMARY"));
+    assert!(third_evidence.contains("second user evidence"));
+    assert!(third_evidence.contains("third user evidence"));
+    service
+        .commit_session_summary(
+            &third_input,
+            ModelSessionSummaryOutput {
+                markdown: "# Goal\nTHIRD SUMMARY".into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &service.session_summary_model_config(&third_context.model),
+        )
+        .expect("third summary should commit");
+
+    let fourth_context = record_summary_run(
+        &service,
+        &session.session_code,
+        "RUN-SUMMARY-4",
+        "fourth user evidence",
+        "fourth assistant evidence",
+    );
+    let fourth_input = service
+        .session_summary_model_request(
+            service
+                .prepare_session_summary_job(
+                    session_summary_context(&fourth_context),
+                    completed_summary_outcome(),
+                )
+                .expect("fourth job should prepare")
+                .expect("fourth job should be new"),
+            "Return Markdown.".into(),
+            1,
+        )
+        .expect("fourth input should prepare")
+        .expect("fourth summary should not be superseded");
+    let fifth_context = record_summary_run(
+        &service,
+        &session.session_code,
+        "RUN-SUMMARY-5",
+        "fifth user evidence",
+        "fifth assistant evidence",
+    );
+    let fifth_input = service
+        .session_summary_model_request(
+            service
+                .prepare_session_summary_job(
+                    session_summary_context(&fifth_context),
+                    completed_summary_outcome(),
+                )
+                .expect("fifth job should prepare")
+                .expect("fifth job should be new"),
+            "Return Markdown.".into(),
+            1,
+        )
+        .expect("fifth input should prepare")
+        .expect("fifth summary should not be superseded");
+    service
+        .commit_session_summary(
+            &fifth_input,
+            ModelSessionSummaryOutput {
+                markdown: "# Goal\nFIFTH SUMMARY".into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &service.session_summary_model_config(&fifth_context.model),
+        )
+        .expect("fifth summary should commit first");
+    service
+        .commit_session_summary(
+            &fourth_input,
+            ModelSessionSummaryOutput {
+                markdown: "# Goal\nFOURTH SUMMARY".into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &service.session_summary_model_config(&fourth_context.model),
+        )
+        .expect("fourth summary should commit out of order");
+    let latest_run_code: String = connection
+        .query_row(
+            "SELECT run_code
+             FROM agent_session_family_snapshots
+             WHERE session_code = ?1
+               AND snapshot_kind = 'SESSION_SUMMARY'
+               AND status = 'COMPLETED'
+             ORDER BY source_end_seq DESC, id DESC
+             LIMIT 1",
+            [session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("latest session summary should be queryable");
+    assert_eq!(latest_run_code, fifth_context.run_code);
+
+    let mut empty_context = base_context(&session.session_code);
+    empty_context.run_code = "RUN-SUMMARY-EMPTY".into();
+    let empty_job = service
+        .prepare_session_summary_job(
+            session_summary_context(&empty_context),
+            completed_summary_outcome(),
+        )
+        .expect("empty run summary job should prepare")
+        .expect("empty run summary job should be new");
+    record_summary_run(
+        &service,
+        &session.session_code,
+        "RUN-SUMMARY-LATER",
+        "later user evidence must not leak backward",
+        "later assistant evidence must not leak backward",
+    );
+    let empty_input = service
+        .session_summary_model_request(empty_job, "Return Markdown.".into(), 1)
+        .expect("empty run summary input should prepare")
+        .expect("empty run summary should not be superseded");
+    assert_eq!(empty_input.source_end_seq, fifth_input.source_end_seq);
+    let empty_evidence = empty_input.request.messages[1].text_content();
+    assert!(!empty_evidence.contains("later user evidence must not leak backward"));
+    assert!(!empty_evidence.contains("later assistant evidence must not leak backward"));
+    service
+        .commit_session_summary(
+            &empty_input,
+            ModelSessionSummaryOutput {
+                markdown: "# Goal\nEMPTY RUN SUMMARY".into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &service.session_summary_model_config(&empty_context.model),
+        )
+        .expect("empty run summary should commit without later evidence");
+
+    let sixth_context = record_summary_run(
+        &service,
+        &session.session_code,
+        "RUN-SUMMARY-6",
+        "sixth user evidence",
+        "sixth assistant evidence",
+    );
+    service
+        .prepare_session_summary_job(
+            session_summary_context(&sixth_context),
+            SessionSummaryRunOutcome {
+                status: "CANCELLED".into(),
+                error_code: Some("AGENT_RUN_STOPPED".into()),
+                error_message: Some("cancelled by user".into()),
+            },
+        )
+        .expect("sixth session summary job should prepare")
+        .expect("sixth session summary job should be new");
+    assert_eq!(
+        service
+            .recover_session_summaries_on_startup()
+            .expect("stale summary recovery should succeed"),
+        1
+    );
+    let (recovered_status, recovered_error_code): (String, Option<String>) = connection
+        .query_row(
+            "SELECT status, error_code
+             FROM agent_session_family_snapshots
+             WHERE session_code = ?1 AND run_code = ?2 AND snapshot_kind = 'SESSION_SUMMARY'",
+            [
+                session.session_code.as_str(),
+                sixth_context.run_code.as_str(),
+            ],
+            |row| Ok((row.get(0)?, row.get(1)?)),
+        )
+        .expect("recovered session summary should be queryable");
+    assert_eq!(recovered_status, "FAILED");
+    assert_eq!(
+        recovered_error_code.as_deref(),
+        Some("SESSION_SUMMARY_INTERRUPTED")
+    );
+    assert_eq!(
+        service
+            .recover_session_summaries_on_startup()
+            .expect("repeated recovery should be idempotent"),
+        0
+    );
 }
 
 #[test]
@@ -1126,7 +1507,15 @@ fn family_context_deduplicates_sessions_across_families_and_counts_wrapper_budge
         .expect("prior response should be recorded");
     service
         .record_run_completed(&prior_context)
-        .expect("prior snapshots should be recorded");
+        .expect("prior run completion should be recorded");
+    create_stub_session_summary(
+        &service,
+        &prior_context,
+        &format!(
+            "# Session Summary\n\n## Status\nfamily dedupe marker {}",
+            "large snapshot body ".repeat(80)
+        ),
+    );
 
     let current_session = create_test_session(&database_url, "current family context");
     let mut current_context = base_context(&current_session.session_code);
@@ -1172,6 +1561,117 @@ fn family_context_deduplicates_sessions_across_families_and_counts_wrapper_budge
         family_context.len() <= config.context.family_context_max_chars,
         "family context should count wrappers inside the configured max chars"
     );
+}
+
+#[test]
+fn family_context_prefers_session_summary_and_falls_back_to_legacy_handoff() {
+    let database_url = temp_database_url("short-term-memory-family-legacy-fallback");
+    let prior_session = create_test_session(&database_url, "legacy handoff source");
+    let current_session = create_test_session(&database_url, "legacy handoff consumer");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+
+    let mut prior_context = base_context(&prior_session.session_code);
+    prior_context.execution_scope.task_code = Some("TASK-LEGACY-FALLBACK".into());
+    let prior_input = service
+        .record_user_input(&prior_context, "legacy family source")
+        .expect("prior input should be recorded");
+    attach_short_term_memory(
+        &mut prior_context,
+        &prior_session.session_code,
+        prior_input,
+        vec![AgentMessage::system("system seed")],
+    );
+    service
+        .record_run_started(&prior_context)
+        .expect("prior task family should be recorded");
+
+    let mut current_context = base_context(&current_session.session_code);
+    current_context.run_code = "RUN-LEGACY-FALLBACK-CURRENT".into();
+    current_context.execution_scope.task_code = Some("TASK-LEGACY-FALLBACK".into());
+    let current_input = service
+        .record_user_input(&current_context, "load related work")
+        .expect("current input should be recorded");
+    attach_short_term_memory(
+        &mut current_context,
+        &current_session.session_code,
+        current_input,
+        vec![AgentMessage::system("system seed")],
+    );
+    service
+        .record_run_started(&current_context)
+        .expect("current task family should be recorded");
+
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("database should be queryable");
+    let task_family_code: String = connection
+        .query_row(
+            "SELECT f.family_code
+             FROM agent_session_families f
+             JOIN agent_session_family_members m
+               ON m.family_code = f.family_code
+             WHERE m.session_code = ?1
+               AND f.family_kind = 'TASK'
+             LIMIT 1",
+            [prior_session.session_code.as_str()],
+            |row| row.get(0),
+        )
+        .expect("shared task family should be queryable");
+    connection
+        .execute(
+            "INSERT INTO agent_session_family_snapshots (
+                id, snapshot_code, family_code, session_code, run_code,
+                snapshot_kind, status, source_start_seq, source_end_seq,
+                summary_markdown, token_estimate, metadata_json, created_at,
+                completed_at, expires_at
+             ) VALUES (
+                910210100000000001,
+                'AFS-LEGACY-FALLBACK', ?1, ?2, ?3,
+                'RUN_HANDOFF', 'COMPLETED', 1, 2,
+                '# Legacy Handoff\nLEGACY FALLBACK MARKER', 8, '{}',
+                CAST(strftime('%s','now') AS INTEGER) * 1000,
+                CAST(strftime('%s','now') AS INTEGER) * 1000,
+                NULL
+             )",
+            [
+                task_family_code.as_str(),
+                prior_session.session_code.as_str(),
+                prior_context.run_code.as_str(),
+            ],
+        )
+        .expect("legacy handoff should be insertable");
+
+    let fallback_context = rendered_messages(
+        &service
+            .prepare_model_context(&current_context)
+            .expect("legacy family handoff should load")
+            .messages,
+    );
+    assert!(fallback_context.contains("LEGACY FALLBACK MARKER"));
+
+    let summary_context = record_summary_run(
+        &service,
+        &prior_session.session_code,
+        "RUN-SESSION-SUMMARY-PREFERRED",
+        "new session summary evidence",
+        "new session summary result",
+    );
+    create_stub_session_summary(
+        &service,
+        &summary_context,
+        "# Session Summary\nSESSION SUMMARY PREFERRED MARKER",
+    );
+    let preferred_context = rendered_messages(
+        &service
+            .prepare_model_context(&current_context)
+            .expect("session summary should load")
+            .messages,
+    );
+    assert!(preferred_context.contains("SESSION SUMMARY PREFERRED MARKER"));
+    assert!(!preferred_context.contains("LEGACY FALLBACK MARKER"));
 }
 
 #[test]
@@ -1452,12 +1952,15 @@ fn schema_guard_validates_required_indexes_and_tables() {
         "idx_agent_session_todos_session_position",
         "idx_agent_session_family_members_session_enabled",
         "idx_agent_session_family_snapshots_family_status",
+        "idx_agent_session_family_snapshots_session_latest",
+        "idx_agent_session_family_snapshots_session_run_summary",
         "idx_agent_session_goals_one_open",
         "idx_agent_session_goal_criteria_goal_position",
         "idx_agent_session_goal_events_goal_seq",
         "idx_agent_session_todos_session_todo_code",
         "idx_agent_session_run_leases_session",
         "idx_agent_session_run_leases_run",
+        "idx_agent_session_family_snapshots_session_run_summary",
     ] {
         assert!(index_exists(&connection, index), "{index} should exist");
     }
@@ -1501,6 +2004,175 @@ fn schema_guard_validates_required_indexes_and_tables() {
         .expect("input idempotency index should be queryable");
     assert!(input_idempotency_index_sql.contains("CREATE UNIQUE INDEX"));
     assert!(input_idempotency_index_sql.contains("idempotency_key IS NOT NULL"));
+    let session_summary_index_sql: String = connection
+        .query_row(
+            "SELECT sql FROM sqlite_master WHERE type = 'index' AND name = 'idx_agent_session_family_snapshots_session_run_summary'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("session summary unique index should be queryable");
+    assert!(session_summary_index_sql.contains("CREATE UNIQUE INDEX"));
+    assert!(session_summary_index_sql.contains("snapshot_kind = 'SESSION_SUMMARY'"));
+    assert!(session_summary_index_sql.contains("run_code IS NOT NULL"));
+    let family_code_not_null: i64 = connection
+        .query_row(
+            "SELECT \"notnull\" FROM pragma_table_info('agent_session_family_snapshots') WHERE name = 'family_code'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("snapshot family ownership column should be queryable");
+    assert_eq!(family_code_not_null, 0);
+}
+
+#[test]
+fn schema_migration_makes_snapshot_family_optional_and_preserves_legacy_handoffs() {
+    let database_url = temp_database_url("short-term-memory-session-owned-snapshot-migration");
+    let session = create_test_session(&database_url, "legacy family snapshot migration");
+    let service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("fresh short-term memory repository should connect"),
+        ShortTermMemoryConfig::default(),
+    );
+    let mut legacy_context = base_context(&session.session_code);
+    legacy_context.execution_scope.task_code = Some("TASK-LEGACY-SNAPSHOT".into());
+    let input_code = service
+        .record_user_input(&legacy_context, "legacy handoff input")
+        .expect("legacy input should be recorded");
+    attach_short_term_memory(
+        &mut legacy_context,
+        &session.session_code,
+        input_code,
+        vec![AgentMessage::system("system seed")],
+    );
+    service
+        .record_run_started(&legacy_context)
+        .expect("legacy family membership should be created");
+    service
+        .record_run_completed(&legacy_context)
+        .expect("legacy run should complete");
+    drop(service);
+
+    {
+        let connection =
+            rusqlite::Connection::open(&database_url).expect("legacy database should open");
+        let family_code: String = connection
+            .query_row(
+                "SELECT family_code
+                 FROM agent_session_family_members
+                 WHERE session_code = ?1
+                 ORDER BY id ASC
+                 LIMIT 1",
+                [session.session_code.as_str()],
+                |row| row.get(0),
+            )
+            .expect("legacy family should be queryable");
+        connection
+            .execute(
+                "INSERT INTO agent_session_family_snapshots (
+                    id, snapshot_code, family_code, session_code, run_code,
+                    snapshot_kind, status, source_start_seq, source_end_seq,
+                    source_checkpoint_message_code, summary_markdown, token_estimate,
+                    error_code, error_message, metadata_json, created_at,
+                    completed_at, expires_at
+                 ) VALUES (
+                    910200000000000001, 'AFS-LEGACY-HANDOFF', ?1, ?2, ?3,
+                    'RUN_HANDOFF', 'COMPLETED', 1, 2,
+                    NULL, '# Legacy Handoff', 4,
+                    NULL, NULL, '{}', 1, 1, NULL
+                 )",
+                [
+                    family_code.as_str(),
+                    session.session_code.as_str(),
+                    legacy_context.run_code.as_str(),
+                ],
+            )
+            .expect("legacy handoff should be insertable");
+        let canonical_table_sql: String = connection
+            .query_row(
+                "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'agent_session_family_snapshots'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("snapshot table definition should be queryable");
+        let legacy_table_sql =
+            canonical_table_sql.replacen("family_code TEXT,", "family_code TEXT NOT NULL,", 1);
+        assert_ne!(legacy_table_sql, canonical_table_sql);
+        connection
+            .execute_batch(
+                "DROP INDEX IF EXISTS idx_agent_session_family_snapshots_family_status;
+                 DROP INDEX IF EXISTS idx_agent_session_family_snapshots_session_latest;
+                 DROP INDEX IF EXISTS idx_agent_session_family_snapshots_session_run_summary;
+                 ALTER TABLE agent_session_family_snapshots
+                     RENAME TO agent_session_family_snapshots_nullable_backup;",
+            )
+            .expect("canonical table should be movable for legacy fixture setup");
+        connection
+            .execute_batch(&legacy_table_sql)
+            .expect("legacy family-owned snapshot table should be creatable");
+        connection
+            .execute_batch(
+                "INSERT INTO agent_session_family_snapshots
+                 SELECT * FROM agent_session_family_snapshots_nullable_backup;
+                 DROP TABLE agent_session_family_snapshots_nullable_backup;",
+            )
+            .expect("legacy snapshot rows should be copied");
+    }
+
+    let migrated_service = ShortTermMemoryService::new(
+        SqliteShortTermMemoryRepository::connect(&database_url)
+            .expect("legacy family-owned snapshot schema should migrate"),
+        ShortTermMemoryConfig::default(),
+    );
+    let connection =
+        rusqlite::Connection::open(&database_url).expect("migrated database should open");
+    let family_code_not_null: i64 = connection
+        .query_row(
+            "SELECT \"notnull\" FROM pragma_table_info('agent_session_family_snapshots') WHERE name = 'family_code'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("migrated family ownership column should be queryable");
+    assert_eq!(family_code_not_null, 0);
+    let legacy_summary: String = connection
+        .query_row(
+            "SELECT summary_markdown
+             FROM agent_session_family_snapshots
+             WHERE snapshot_code = 'AFS-LEGACY-HANDOFF'",
+            [],
+            |row| row.get(0),
+        )
+        .expect("legacy handoff should survive migration");
+    assert_eq!(legacy_summary, "# Legacy Handoff");
+
+    let summary_context = record_summary_run(
+        &migrated_service,
+        &session.session_code,
+        "RUN-SESSION-SUMMARY-AFTER-MIGRATION",
+        "new session-owned summary input",
+        "new session-owned summary output",
+    );
+    migrated_service
+        .prepare_session_summary_job(
+            session_summary_context(&summary_context),
+            completed_summary_outcome(),
+        )
+        .expect("session-owned summary should insert after migration")
+        .expect("new summary job should be created");
+    let new_family_code: Option<String> = connection
+        .query_row(
+            "SELECT family_code
+             FROM agent_session_family_snapshots
+             WHERE session_code = ?1
+               AND run_code = ?2
+               AND snapshot_kind = 'SESSION_SUMMARY'",
+            [
+                session.session_code.as_str(),
+                summary_context.run_code.as_str(),
+            ],
+            |row| row.get(0),
+        )
+        .expect("session-owned summary should be queryable");
+    assert!(new_family_code.is_none());
 }
 
 #[test]
@@ -4859,8 +5531,7 @@ fn tool_schema_tokens_participate_in_context_budget() {
         .expect("budget breakdown should be present");
     assert_eq!(breakdown.tool_schema_budget_tokens, Some(900));
     assert_eq!(
-        breakdown.compressed_history_message_count,
-        None,
+        breakdown.compressed_history_message_count, None,
         "schema overflow is rejected before history selection"
     );
     assert!(breakdown.tool_schema_tokens > breakdown.recent_transcript_tokens);
@@ -5553,6 +6224,82 @@ fn base_context(session_code: &str) -> AgentRunContext {
         short_term_memory: None,
         started_at: "2026-06-15T00:00:00Z".into(),
     }
+}
+
+fn session_summary_context(context: &AgentRunContext) -> SessionSummaryJobContext {
+    SessionSummaryJobContext {
+        session_code: context
+            .short_term_memory
+            .as_ref()
+            .map(|memory| memory.session_code.clone())
+            .or_else(|| context.conversation_code.clone())
+            .expect("summary test context should have a session"),
+        workspace_code: context.workspace_code.clone(),
+        run_code: context.run_code.clone(),
+        locale: context.locale.clone(),
+        model: context.model.clone(),
+    }
+}
+
+fn record_summary_run(
+    service: &ShortTermMemoryService,
+    session_code: &str,
+    run_code: &str,
+    user_text: &str,
+    assistant_text: &str,
+) -> AgentRunContext {
+    let mut context = base_context(session_code);
+    context.run_code = run_code.into();
+    let input_code = service
+        .record_user_input(&context, user_text)
+        .expect("summary test input should be recorded");
+    attach_short_term_memory(
+        &mut context,
+        session_code,
+        input_code,
+        vec![AgentMessage::system("summary test system seed")],
+    );
+    service
+        .record_model_response(&context, &ModelResponse::final_output(assistant_text))
+        .expect("summary test assistant output should be recorded");
+    context
+}
+
+fn completed_summary_outcome() -> SessionSummaryRunOutcome {
+    SessionSummaryRunOutcome {
+        status: "COMPLETED".into(),
+        error_code: None,
+        error_message: None,
+    }
+}
+
+fn create_stub_session_summary(
+    service: &ShortTermMemoryService,
+    context: &AgentRunContext,
+    markdown: &str,
+) {
+    let job = service
+        .prepare_session_summary_job(
+            session_summary_context(context),
+            completed_summary_outcome(),
+        )
+        .expect("session summary job should prepare")
+        .expect("session summary should not already exist");
+    let input = service
+        .session_summary_model_request(job, "Summarize the evidence as Markdown.".into(), 1)
+        .expect("session summary input should prepare")
+        .expect("session summary should not be superseded");
+    service
+        .commit_session_summary(
+            &input,
+            ModelSessionSummaryOutput {
+                markdown: markdown.into(),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &service.session_summary_model_config(&context.model),
+        )
+        .expect("session summary should commit");
 }
 
 fn attach_short_term_memory(

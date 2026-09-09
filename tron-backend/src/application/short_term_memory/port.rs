@@ -131,6 +131,20 @@ pub trait ShortTermMemoryRepository: Send {
         exclude_session_code: &str,
         limit: usize,
     ) -> Result<Vec<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError>;
+    fn session_summary_for_run(
+        &mut self,
+        session_code: &str,
+        run_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError>;
+    fn latest_completed_session_summary(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError>;
+    fn latest_completed_family_handoff(
+        &mut self,
+        family_code: &str,
+        session_code: &str,
+    ) -> Result<Option<ShortTermMemoryFamilySnapshot>, ShortTermMemoryError>;
     fn list_family_session_codes(
         &mut self,
         family_code: &str,
@@ -141,6 +155,10 @@ pub trait ShortTermMemoryRepository: Send {
         &mut self,
         snapshots: &[ShortTermMemoryFamilySnapshot],
     ) -> Result<(), ShortTermMemoryError>;
+    fn recover_stale_session_summaries(
+        &mut self,
+        completed_at: &str,
+    ) -> Result<usize, ShortTermMemoryError>;
     fn ensure_hidden_heartbeat_session(
         &mut self,
         workspace_code: &str,
