@@ -1355,10 +1355,13 @@ function parseXmlExecuteCommandBlock(
     return null;
   }
 
-  const commandMatch = input
-    .slice(bodyStart, closeIndex)
-    .match(/<command>([\s\S]*?)<\/command>/);
+  const body = input.slice(bodyStart, closeIndex);
+  const commandMatch = body.match(/<command>([\s\S]*?)<\/command>/)
+    ?? body.match(/(?:^|\n)\s*command>([\s\S]*?)<\/command>/);
   const command = commandMatch?.[1]?.trim() ?? "";
+  if (!command) {
+    return null;
+  }
 
   const token = createCommandToken(
     command,
