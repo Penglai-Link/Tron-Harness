@@ -1,4 +1,4 @@
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import {
   Field,
   SelectInput,
@@ -86,12 +86,12 @@ export function canSubmitAppForm(form: AppFormState) {
 
 export function AppStatusBadge({ status }: { status: AppDetailData["status"] }) {
   const { t } = useTranslation("pages");
-  return <Badge tone={appStatusTone(status)}>{t(`apps.status.${status}`)}</Badge>;
+  return <Badge variant={appStatusTone(status)}>{t(`apps.status.${status}`)}</Badge>;
 }
 
 export function AppRuntimeRoleBadge({ runtimeRole }: { runtimeRole: AppRuntimeRole }) {
   const { t } = useTranslation("pages");
-  return <Badge tone={appRuntimeRoleTone(runtimeRole)}>{t(`apps.runtimeRole.${runtimeRole}`)}</Badge>;
+  return <Badge variant={appRuntimeRoleTone(runtimeRole)}>{t(`apps.runtimeRole.${runtimeRole}`)}</Badge>;
 }
 
 export function AppTagList({ tags }: { tags: string[] }) {
@@ -103,7 +103,7 @@ export function AppTagList({ tags }: { tags: string[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {tags.map((tag) => (
-        <Badge key={tag} tone="info">
+        <Badge key={tag} variant="info">
           {tag}
         </Badge>
       ))}

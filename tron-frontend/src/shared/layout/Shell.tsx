@@ -46,7 +46,7 @@ import {
   getWorkspaceSwitcherMock,
 } from "@/shared/constants/workspaceSpaces";
 import { WorkspaceSpacesContext } from "@/shared/hooks/useWorkspaceSpaces";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { useLocale } from "@/i18n";
 import { useAppShellStore } from "@/store/appShellStore";
 import { useNavigationStore } from "@/store/navigationStore";

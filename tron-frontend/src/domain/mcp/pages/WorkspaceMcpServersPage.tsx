@@ -17,7 +17,6 @@ import {
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  Badge,
   DataTable,
   PageHeader,
   SearchField,
@@ -28,6 +27,7 @@ import {
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { Badge } from "@/components/ui/badge";
 
 function healthTone(status: WorkspaceMcpServerRecord["lastHealthStatus"]) {
   switch (status) {
@@ -193,7 +193,7 @@ export function WorkspaceMcpServersPage() {
             width: "16%",
             render: (row) => (
               <div className="space-y-1">
-                <Badge tone={healthTone(row.lastHealthStatus)}>
+                <Badge variant={healthTone(row.lastHealthStatus)}>
                   {row.lastHealthStatus}
                 </Badge>
                 {row.lastHealthCheckedAt ? (

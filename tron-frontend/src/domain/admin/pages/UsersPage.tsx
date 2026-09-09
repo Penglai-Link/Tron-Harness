@@ -15,11 +15,8 @@ import {
   useNavigate,
 } from "react-router";
 
-import { Badge } from "@/shared/ui/Badge";
-import {
-  Button,
-  LinkButton,
-} from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   MetricCard,
@@ -221,7 +218,7 @@ export function UsersPage() {
           { id: "name", header: pt("User"), render: (row) => <Link className="font-medium hover:underline" to={userDetailPath(row.userCode)}>{row.displayName}</Link> },
           { id: "contact", header: pt("Contact"), render: (row) => <div className="text-[13px] text-[var(--color-on-surface-variant)]"><div className="font-medium text-[var(--color-on-surface)]">{row.email}</div><div>{formatPhone(row.phone)}</div></div> },
           { id: "codes", header: pt("Codes"), render: (row) => <div className="max-w-64 text-[13px] text-[var(--color-on-surface-variant)]"><div className="font-medium text-[var(--color-on-surface)]">{row.userCode}</div><div>{row.roleCodes.map((code) => pt(getAdminUserRoleLabel(code))).join(", ")}</div><div>{row.spaceCodes.join(", ")}</div></div> },
-          { id: "status", header: pt("Status"), render: (row) => <Badge tone={getStatusTone(row.status)}>{pt(row.status)}</Badge> },
+          { id: "status", header: pt("Status"), render: (row) => <Badge variant={getStatusTone(row.status)}>{pt(row.status)}</Badge> },
           { id: "last", header: pt("Last Active"), render: (row) => formatTimestamp(row.lastActiveAt) },
           {
             id: "details",
@@ -234,9 +231,9 @@ export function UsersPage() {
               const showRestore = row.status === "Archived";
               return (
                 <div className="relative flex justify-end gap-1">
-                  <LinkButton size="icon" to={userDetailPath(row.userCode)} variant="ghost" aria-label={pt("View {{name}} details", { name: row.displayName })}>
+                  <Button render={<Link to={userDetailPath(row.userCode)} />} size="icon" variant="ghost" aria-label={pt("View {{name}} details", { name: row.displayName })}>
                     <Eye size={16} aria-hidden="true" />
-                  </LinkButton>
+                  </Button>
                   <Button size="icon" variant="ghost" aria-label={pt("Open actions for {{name}}", { name: row.displayName })} disabled={isProcessing} onClick={() => setOpenRowMenu((current) => (current === row.userCode ? null : row.userCode))}>
                     <MoreHorizontal size={16} aria-hidden="true" />
                   </Button>

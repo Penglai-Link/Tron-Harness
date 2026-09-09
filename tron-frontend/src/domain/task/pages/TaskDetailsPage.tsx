@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DialogSelect } from "@/components/ui/dialog-select";
+import { DialogSelect } from "@/components/dialog-select";
 import {
   Field,
   InspectorPanel,

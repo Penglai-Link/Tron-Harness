@@ -37,8 +37,6 @@ import type {
 } from "@/domain/open-app/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  Badge,
-  Button,
   DataTable,
   PageHeader,
   SearchField,
@@ -48,6 +46,8 @@ import {
   useTablePagination,
   useToast,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 type RowMenuState = {
   anchorRect: DOMRect;
@@ -298,7 +298,7 @@ export function PlatformOpenAppsPage() {
               header: pageT("list.columns.status", "Status"),
               width: "10%",
               render: (row) => (
-                <Badge tone={statusTone(row.status)}>
+                <Badge variant={statusTone(row.status)}>
                   {formatOpenAppStatusLabel(pageT, row.status)}
                 </Badge>
               ),

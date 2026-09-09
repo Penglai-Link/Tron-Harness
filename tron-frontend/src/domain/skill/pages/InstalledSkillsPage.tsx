@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DataTable,
@@ -323,7 +323,7 @@ export function InstalledSkillsPage() {
               >
                 {syncing === "refresh" ? pageT("actions.refreshing", "Refreshing...") : t("common:actions.refresh")}
               </Button>
-              {loading ? <Badge tone="info">{pageT("loading.badge", "Loading")}</Badge> : null}
+              {loading ? <Badge variant="info">{pageT("loading.badge", "Loading")}</Badge> : null}
             </div>
           </div>
           <DataTable<RegistrySkillRecord>
@@ -372,14 +372,14 @@ export function InstalledSkillsPage() {
                 id: "sourceType",
                 header: pageT("columns.source", "Source"),
                 render: (row) => (
-                  <Badge tone={getSourceTone(row.sourceType)}>{row.sourceType}</Badge>
+                  <Badge variant={getSourceTone(row.sourceType)}>{row.sourceType}</Badge>
                 ),
               },
               {
                 id: "updateStatus",
                 header: pageT("columns.update", "Update"),
                 render: (row) => (
-                  <Badge tone={getUpdateTone(row.updateStatus)}>{row.updateStatus}</Badge>
+                  <Badge variant={getUpdateTone(row.updateStatus)}>{row.updateStatus}</Badge>
                 ),
               },
               {
@@ -444,13 +444,13 @@ export function InstalledSkillsPage() {
           {selectedSkill ? (
             <>
               <div className="flex flex-wrap gap-[12px]">
-                <Badge tone={getSourceTone(selectedSkill.sourceType)}>
+                <Badge variant={getSourceTone(selectedSkill.sourceType)}>
                   {selectedSkill.sourceType}
                 </Badge>
-                <Badge tone={getUpdateTone(selectedSkill.updateStatus)}>
+                <Badge variant={getUpdateTone(selectedSkill.updateStatus)}>
                   {selectedSkill.updateStatus}
                 </Badge>
-                <Badge tone="info">{selectedSkill.managedBy === "Cli" ? "CLI Managed" : "Manual"}</Badge>
+                <Badge variant="info">{selectedSkill.managedBy === "Cli" ? "CLI Managed" : "Manual"}</Badge>
               </div>
 
               <div className="rounded-2xl border border-[var(--color-outline-variant)] px-4 py-4">
@@ -471,7 +471,7 @@ export function InstalledSkillsPage() {
                 <div className="mt-3 flex flex-wrap gap-[12px]">
                   {selectedSkill.files.length ? (
                     selectedSkill.files.map((file) => (
-                      <Badge key={file.path} tone={file.isMarkdown ? "info" : "outline"}>
+                      <Badge key={file.path} variant={file.isMarkdown ? "info" : "outline"}>
                         {file.path}
                       </Badge>
                     ))

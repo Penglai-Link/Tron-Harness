@@ -21,8 +21,8 @@ import {
   X,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DetailField,
   Field,
@@ -548,7 +548,7 @@ export function AutomationDetailsPage() {
             <DetailField label={pt("Record ID")} value={<ReadValue>{automation.id}</ReadValue>} />
             <DetailField
               label={pt("Status")}
-              value={<Badge tone={getAutomationStatusTone(automation.status)}>{pt(automation.status)}</Badge>}
+              value={<Badge variant={getAutomationStatusTone(automation.status)}>{pt(automation.status)}</Badge>}
             />
             <DetailField label={pt("Workspace")} value={<ReadValue>{automation.workspaceCode}</ReadValue>} />
             <DetailField label={pt("Agent code")} value={<ReadValue>{automation.agentCode}</ReadValue>} />

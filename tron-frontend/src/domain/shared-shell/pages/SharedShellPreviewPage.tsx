@@ -10,8 +10,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   Field,
@@ -151,9 +151,9 @@ export function SharedShellPreviewPage() {
             columns={[
               { id: "name", header: t("pages:sharedShell.columns.name", "Name"), render: (row) => <span className="font-medium">{row.name}</span> },
               { id: "owner", header: t("pages:sharedShell.columns.owner", "Owner"), render: (row) => <span className="text-[var(--color-on-surface-variant)]">{row.owner}</span> },
-              { id: "inheritance", header: t("pages:sharedShell.columns.inheritance", "Inheritance"), render: (row) => <Badge tone={row.inheritance === "Override" ? "warning" : "info"}>{row.inheritance}</Badge> },
+              { id: "inheritance", header: t("pages:sharedShell.columns.inheritance", "Inheritance"), render: (row) => <Badge variant={row.inheritance === "Override" ? "warning" : "info"}>{row.inheritance}</Badge> },
               { id: "usage", header: t("pages:sharedShell.columns.usage", "Usage"), align: "right", render: (row) => <span className="font-mono text-[13px]">{row.usage}</span> },
-              { id: "status", header: t("pages:sharedShell.columns.status", "Status"), align: "right", render: (row) => <Badge tone={row.status === "Healthy" ? "success" : "warning"}>{row.status}</Badge> },
+              { id: "status", header: t("pages:sharedShell.columns.status", "Status"), align: "right", render: (row) => <Badge variant={row.status === "Healthy" ? "success" : "warning"}>{row.status}</Badge> },
             ]}
           />
         </div>

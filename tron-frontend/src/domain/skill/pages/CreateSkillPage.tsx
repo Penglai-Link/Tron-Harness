@@ -4,8 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ExternalLink } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
-import { Badge } from "@/shared/ui/Badge";
-import { AnchorButton } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
 import {
   DetailField,
   Field,
@@ -181,16 +180,16 @@ function CandidateCard({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-[12px]">
-            <Badge tone="info">{candidate.skillName}</Badge>
-            {installed ? <Badge tone="success">{t("pages:skills.status.installed", "Installed")}</Badge> : null}
+            <Badge variant="info">{candidate.skillName}</Badge>
+            {installed ? <Badge variant="success">{t("pages:skills.status.installed", "Installed")}</Badge> : null}
             {installState?.state === "installing" ? (
-              <Badge tone="warning">{t("pages:skills.status.installing", "Installing")}</Badge>
+              <Badge variant="warning">{t("pages:skills.status.installing", "Installing")}</Badge>
             ) : null}
             {installState?.state === "error" ? (
-              <Badge tone="error">{t("pages:skills.status.failed", "Failed")}</Badge>
+              <Badge variant="error">{t("pages:skills.status.failed", "Failed")}</Badge>
             ) : null}
             {candidate.installsLabel ? (
-              <Badge tone="info">{candidate.installsLabel}</Badge>
+              <Badge variant="info">{candidate.installsLabel}</Badge>
             ) : null}
           </div>
           <p className="mt-3 text-sm font-medium text-[var(--color-on-surface)]">
@@ -641,20 +640,20 @@ export function CreateSkillPage() {
                       <div className="flex items-start justify-between gap-3">
                         <div className="min-w-0 flex-1">
                           <div className="flex flex-wrap items-center gap-[12px]">
-                            <Badge tone="info">{candidate.skillName}</Badge>
+                            <Badge variant="info">{candidate.skillName}</Badge>
                             {isInstalledCandidate(candidate) ? (
-                              <Badge tone="success">Installed</Badge>
+                              <Badge variant="success">Installed</Badge>
                             ) : null}
                             {installProgress?.results[candidate.packageRef]
                               ?.state === "installing" ? (
-                              <Badge tone="warning">Installing</Badge>
+                              <Badge variant="warning">Installing</Badge>
                             ) : null}
                             {installProgress?.results[candidate.packageRef]
                               ?.state === "error" ? (
-                              <Badge tone="error">Failed</Badge>
+                              <Badge variant="error">Failed</Badge>
                             ) : null}
                             {candidate.installsLabel ? (
-                              <Badge tone="info">
+                              <Badge variant="info">
                                 {candidate.installsLabel}
                               </Badge>
                             ) : null}
@@ -684,16 +683,14 @@ export function CreateSkillPage() {
                         </div>
 
                         {candidate.detailUrl ? (
-                          <AnchorButton
-                            href={candidate.detailUrl}
-                            rel="noreferrer"
+                          <Button
+                            render={<a href={candidate.detailUrl} rel="noreferrer" target="_blank" />}
                             size="sm"
-                            target="_blank"
                             variant="secondary"
                           >
                             <ExternalLink size={15} aria-hidden="true" />
                             Open
-                          </AnchorButton>
+                          </Button>
                         ) : null}
                       </div>
                     </div>

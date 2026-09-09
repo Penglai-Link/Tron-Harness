@@ -33,7 +33,7 @@ import {
   useToast,
   useWorkspaceSpaces,
 } from "@/shared";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   deletePlatformPrompt,
@@ -308,7 +308,7 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
                     { id: "name", header: pt("fields.name", "Name"), render: (record) => <span className="font-medium text-[var(--color-primary)]">{localizedPromptName(record, currentLocale)}</span> },
                     { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
                     { id: "inheritance", header: pt("fields.inheritance", "Inheritance"), render: (record) => record.sourceLabel },
-                    { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
+                    { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge variant={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
                     { id: "updated", header: pt("fields.lastUpdated", "Last Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
                     { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
                   ]}
@@ -352,9 +352,9 @@ export function PromptManagementPage({ scopeKind }: { scopeKind: PromptScopeKind
               columns={[
                 { id: "name", header: pt("fields.name", "Name"), render: (record) => <div className="text-left font-medium text-[var(--color-primary)]">{localizedPromptName(record, currentLocale)}<span className="mt-1 block font-mono text-[11px] font-normal text-[var(--color-on-surface-variant)]">{record.promptCode}</span></div> },
                 { id: "category", header: pt("fields.category", "Category"), render: (record) => <Badge>{pt(`categories.${record.category}`, promptCategoryLabel(record.category))}</Badge> },
-                { id: "source", header: pt("fields.source", "Source"), render: (record) => <div><Badge tone={sourceTone(record.sourceKind)}>{record.sourceKind}</Badge><span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{record.sourceLabel}</span></div> },
-                { id: "variables", header: pt("fields.variables", "Variables"), render: (record) => <Badge tone="info">{record.variables.length}</Badge> },
-                { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge tone={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
+                { id: "source", header: pt("fields.source", "Source"), render: (record) => <div><Badge variant={sourceTone(record.sourceKind)}>{record.sourceKind}</Badge><span className="mt-1 block text-xs text-[var(--color-on-surface-variant)]">{record.sourceLabel}</span></div> },
+                { id: "variables", header: pt("fields.variables", "Variables"), render: (record) => <Badge variant="info">{record.variables.length}</Badge> },
+                { id: "status", header: pt("fields.status", "Status"), render: (record) => <Badge variant={record.enabled ? "success" : "outline"}>{record.enabled ? pt("status.enabled", "Enabled") : pt("status.disabled", "Disabled")}</Badge> },
                 { id: "updated", header: pt("fields.updated", "Updated"), render: (record) => formatDateTime(record.updatedAt, { dateStyle: "medium", timeStyle: "short" }) },
                 { id: "actions", header: pt("fields.actions", "Actions"), align: "right", render: (record) => <DropdownMenu><DropdownMenuTrigger render={<Button size="icon" variant="ghost" aria-label={pt("aria.actionsFor", "Actions for {{name}}", { name: localizedPromptName(record, currentLocale) })} disabled={busyCode === record.promptCode} onClick={(event) => event.stopPropagation()} onKeyDown={(event) => event.stopPropagation()}><MoreHorizontal size={16} aria-hidden="true" /></Button>} /><DropdownMenuContent align="end">{actionItems(record)}</DropdownMenuContent></DropdownMenu> },
               ]}

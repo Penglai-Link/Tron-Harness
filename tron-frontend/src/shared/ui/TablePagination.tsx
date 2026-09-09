@@ -5,7 +5,7 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   SelectInput,
   TextInput,

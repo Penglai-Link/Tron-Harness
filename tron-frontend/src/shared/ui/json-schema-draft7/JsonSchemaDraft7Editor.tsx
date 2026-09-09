@@ -17,11 +17,11 @@ import {
 
 import { Button } from "@/components/ui/button";
 import {
-  Badge,
   Field,
   SegmentedTabs,
   TextArea,
 } from "@/shared";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/shared/lib/utils";
 
 import {
@@ -150,7 +150,7 @@ export function JsonSchemaDraft7Editor({
           <Code2 aria-hidden="true" size={14} />
           {jsonFileName}
         </span>
-        <Badge tone={jsonError ? "error" : "success"}>{jsonError ? tr("json.invalid", "INVALID JSON") : tr("json.valid", "VALID JSON")}</Badge>
+        <Badge variant={jsonError ? "error" : "success"}>{jsonError ? tr("json.invalid", "INVALID JSON") : tr("json.valid", "VALID JSON")}</Badge>
       </div>
       <TextArea
         aria-label={tr("json.aria", "JSON Schema source")}
@@ -181,8 +181,8 @@ export function JsonSchemaDraft7Editor({
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-[12px]">
             <h2 className="text-base font-semibold">{tr("title", "Information fields")}</h2>
-            <Badge tone="success">Draft 7</Badge>
-            {readOnly ? <Badge tone="outline">{tr("readOnly", "READ ONLY")}</Badge> : null}
+            <Badge variant="success">Draft 7</Badge>
+            {readOnly ? <Badge variant="outline">{tr("readOnly", "READ ONLY")}</Badge> : null}
           </div>
           <p className="mt-0.5 text-[12px] text-[var(--color-on-surface-variant)]">{tr("subtitle", "Visual fields and JSON edit the same field settings.")}</p>
         </div>

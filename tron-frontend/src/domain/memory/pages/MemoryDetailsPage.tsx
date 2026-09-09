@@ -42,8 +42,6 @@ import {
   updateMemoryFragment,
 } from "@/domain/memory/mock";
 import {
-  Badge,
-  Button,
   ConfirmDialog,
   Field,
   PageHeader,
@@ -51,6 +49,8 @@ import {
   useTabPanelConfig,
   useToast,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 
@@ -288,11 +288,11 @@ export function MemoryDetailsPage() {
           <>
             <SurfaceCard className="space-y-5">
               <div className="flex flex-wrap items-center gap-[12px]">
-                <Badge className="font-bold" tone={getTypeTone(memory)}>{memory.memoryType}</Badge>
-                <Badge tone={memory.memoryStatus === "ACTIVE" ? "success" : "info"}>{memory.memoryStatus}</Badge>
-                <Badge tone={memory.reviewStatus === "APPROVED" ? "success" : "info"}>{formatReviewStatus(memory.reviewStatus)}</Badge>
-                <Badge tone={memory.injectable ? "success" : "info"}>{getUseLabel(memory)}</Badge>
-                <Badge tone="info">{memory.targetLabel}</Badge>
+                <Badge className="font-bold" variant={getTypeTone(memory)}>{memory.memoryType}</Badge>
+                <Badge variant={memory.memoryStatus === "ACTIVE" ? "success" : "info"}>{memory.memoryStatus}</Badge>
+                <Badge variant={memory.reviewStatus === "APPROVED" ? "success" : "info"}>{formatReviewStatus(memory.reviewStatus)}</Badge>
+                <Badge variant={memory.injectable ? "success" : "info"}>{getUseLabel(memory)}</Badge>
+                <Badge variant="info">{memory.targetLabel}</Badge>
               </div>
               <div>
                 <h2 className="text-xl font-semibold leading-7 tracking-normal text-[var(--color-on-surface)]">

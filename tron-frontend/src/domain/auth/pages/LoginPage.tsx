@@ -31,7 +31,7 @@ import {
   useTheme,
   useToast,
 } from "@/shared";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { isApiError } from "@/shared/api/httpClient";
 import { useAuthStore } from "@/store/authStore";
 

@@ -12,13 +12,13 @@ import type {
   PlatformMcpServerRecord,
 } from "@/domain/mcp/model";
 import {
-  Button,
   Field,
   InfoTooltip,
   SelectInput,
   TextArea,
   TextInput,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
 import { SegmentedTabs } from "@/shared/ui/Tabs";
 import { SelectItem } from "@/components/ui/select";
 

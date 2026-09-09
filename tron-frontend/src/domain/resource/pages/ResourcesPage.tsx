@@ -52,7 +52,7 @@ import {
   useWorkspaceSpaces,
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 
 const allResourceKinds: ResourceKind[] = [
   "FILE",
@@ -181,7 +181,7 @@ export function ResourcesPage() {
       },
       {
         cell: ({ row }) => (
-          <Badge tone="outline">
+          <Badge variant="outline">
             {pageT(`kind.${row.original.kind.toLowerCase()}`)}
           </Badge>
         ),

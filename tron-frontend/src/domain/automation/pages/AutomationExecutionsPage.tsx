@@ -16,8 +16,8 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   ConfirmDialog,
   DataTable,
@@ -398,7 +398,7 @@ export function AutomationExecutionsPage() {
                 header: pt("Trigger"),
                 id: "trigger",
                 render: (row) => (
-                  <Badge tone={row.triggerSource === "Manual" ? "info" : "outline"}>
+                  <Badge variant={row.triggerSource === "Manual" ? "info" : "outline"}>
                     {pt(row.triggerSource)}
                   </Badge>
                 ),
@@ -407,7 +407,7 @@ export function AutomationExecutionsPage() {
                 header: pt("Status"),
                 id: "status",
                 render: (row) => (
-                  <Badge tone={getAutomationExecutionStatusTone(row.status)}>
+                  <Badge variant={getAutomationExecutionStatusTone(row.status)}>
                     {pt(row.status)}
                   </Badge>
                 ),

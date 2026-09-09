@@ -5,8 +5,8 @@ import {
 import { useTranslation } from "react-i18next";
 import { FileText } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   PageHeader,
@@ -68,7 +68,7 @@ export function AuditLogsPage() {
           { id: "actor", header: t("pages:admin.audit.columns.actor", "Actor"), render: (row) => row.actor },
           { id: "action", header: t("pages:admin.audit.columns.action", "Action"), render: (row) => row.action },
           { id: "resource", header: t("pages:admin.audit.columns.resource", "Resource ID"), render: (row) => <span className="font-mono text-[13px]">{row.resourceId}</span> },
-          { id: "status", header: t("pages:admin.audit.columns.status", "Status"), render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
+          { id: "status", header: t("pages:admin.audit.columns.status", "Status"), render: (row) => <Badge variant={getStatusTone(row.status)}>{row.status}</Badge> },
           { id: "ip", header: t("pages:admin.audit.columns.ip", "IP Address"), align: "right", render: (row) => <span className="font-mono text-[13px]">{row.ipAddress}</span> },
         ]}
       />

@@ -12,8 +12,8 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   DataTable,
   PageHeader,
@@ -308,8 +308,8 @@ export function PlatformModelsPage() {
             header: pageT("columns.status", "Status"),
             render: (row) => (
               <div className="flex flex-wrap gap-[12px]">
-                <Badge tone={row.enabled ? "success" : "info"}>{row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
-                {row.isDefault ? <Badge tone="info">{pageT("status.default", "Default")}</Badge> : null}
+                <Badge variant={row.enabled ? "success" : "info"}>{row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
+                {row.isDefault ? <Badge variant="info">{pageT("status.default", "Default")}</Badge> : null}
               </div>
             ),
           },

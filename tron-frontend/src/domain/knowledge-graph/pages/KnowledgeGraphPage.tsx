@@ -27,12 +27,12 @@ import {
   graphNodePropertyOptions,
 } from "@/domain/knowledge-graph/model";
 import {
-  Button,
   PageHeader,
   SurfaceCard,
   useTabPanelConfig,
   useWorkspaceSpaces,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
 
 const defaultGraphLayoutMode: GraphLayoutMode = "Radial";
 const preferredGraphNamespace = "rag_skill";

@@ -2,7 +2,7 @@ import { useTranslation } from "react-i18next";
 
 import { getAgentStatusTone } from "@/domain/agent/constants/agentManagementOptions";
 import type { AgentStatus } from "@/domain/agent/model";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 
 export function AgentStatusBadge({ status }: { status: AgentStatus }) {
   const { t } = useTranslation("common");
@@ -20,7 +20,7 @@ export function AgentStatusBadge({ status }: { status: AgentStatus }) {
   })();
 
   return (
-    <Badge tone={getAgentStatusTone(status)}>
+    <Badge variant={getAgentStatusTone(status)}>
       {label}
     </Badge>
   );

@@ -8,7 +8,7 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { useAuthStore } from "@/store/authStore";
 import type { AuthSession } from "@/domain/auth/model";
 

@@ -20,7 +20,7 @@ import {
 import { useTranslation } from "react-i18next";
 import { useLocation } from "react-router";
 
-import { MarkdownLink } from "@/shared";
+import { MarkdownLink } from "@/components/markdown-link";
 import { useChatWorkRailLabels } from "@/domain/chat";
 import { getApiAccessToken } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";

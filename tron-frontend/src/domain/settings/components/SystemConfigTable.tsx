@@ -2,7 +2,9 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 
-import { Badge, Button, InfoTooltip, SelectInput, SurfaceCard, TextInput, useToast } from "@/shared";
+import { InfoTooltip, SelectInput, SurfaceCard, TextInput, useToast } from "@/shared";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";
 import { useSystemConfig } from "@/domain/settings/hooks/useSystemConfig";
 import type { SystemConfigItem, SystemConfigValue } from "@/domain/settings/model/SystemConfig";
@@ -121,10 +123,10 @@ export function SystemConfigTable() {
                         <div className="flex flex-wrap items-center gap-1.5">
                           <span className="text-xs text-[var(--color-on-surface-variant)]">{t(`settingsGeneral.systemConfig.valueTypes.${item.valueType}`)}</span>
                           <code className="break-all text-xs text-[var(--color-on-surface)]">{item.path}</code>
-                          <Badge tone={item.effect === "migration" ? "warning" : item.effect === "hotUpdate" ? "success" : "info"}>
+                          <Badge variant={item.effect === "migration" ? "warning" : item.effect === "hotUpdate" ? "success" : "info"}>
                             {t(`settingsGeneral.systemConfig.effects.${item.effect}`)}
                           </Badge>
-                          {item.overriddenByEnvironment && <Badge tone="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
+                          {item.overriddenByEnvironment && <Badge variant="outline">{t("settingsGeneral.systemConfig.environmentOverride")}</Badge>}
                           <InfoTooltip ariaLabel={t("settingsGeneral.systemConfig.fieldHelp", { path: item.path })}>
                             {fieldDescription(item)}
                           </InfoTooltip>

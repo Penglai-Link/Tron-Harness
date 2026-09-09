@@ -24,7 +24,7 @@ import {
   useTabPanelConfig,
   useOpenRightSidebar,
 } from "@/shared";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { SelectInput } from "@/shared/ui/Forms";
 import { SelectItem } from "@/components/ui/select";
@@ -357,7 +357,7 @@ export function KnowledgeBasePage() {
               {
                 id: "status",
                 header: pageT("columns.status", "Status"),
-                render: (knowledgeBase) => <Badge tone={statusTone(knowledgeBase.status)}>{knowledgeBase.status}</Badge>,
+                render: (knowledgeBase) => <Badge variant={statusTone(knowledgeBase.status)}>{knowledgeBase.status}</Badge>,
               },
             ]}
             emptyState={ragLoading

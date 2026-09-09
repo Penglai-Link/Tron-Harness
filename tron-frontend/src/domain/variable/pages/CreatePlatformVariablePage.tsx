@@ -6,7 +6,7 @@ import { Save } from "lucide-react";
 import { createPlatformVariable } from "@/domain/variable/api";
 import { createPlatformVariableRecord } from "@/domain/variable/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SurfaceCard,

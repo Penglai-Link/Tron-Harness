@@ -17,8 +17,8 @@ import type {
   GraphNodeView,
 } from "@/domain/knowledge-graph/model";
 import { SelectItem } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   MultiSelectDropdown,
   type MultiSelectOption,
   SearchField,

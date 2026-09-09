@@ -18,8 +18,8 @@ import {
   Zap,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   PageHeader,
@@ -384,8 +384,8 @@ export function PlatformModelDetailsPage() {
         <SurfaceCard className="space-y-5">
           <div className="flex flex-wrap items-center gap-3">
             <ModelSourceBadge sourceKind={selectedRecord.sourceKind} label={pageT(`source.${selectedRecord.sourceKind.toLowerCase()}`, selectedRecord.sourceLabel)} />
-            <Badge tone={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
-            {selectedRecord.isDefault ? <Badge tone="info">{pageT("status.default", "Default")}</Badge> : null}
+            <Badge variant={selectedRecord.enabled ? "success" : "info"}>{selectedRecord.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
+            {selectedRecord.isDefault ? <Badge variant="info">{pageT("status.default", "Default")}</Badge> : null}
             <code className="rounded-md bg-[var(--color-surface-container-low)] px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">
               {selectedRecord.modelCode}
             </code>

@@ -2,8 +2,6 @@ import { useEffect, useState, type FormEvent } from "react";
 import { ExternalLink, FilePlus2, Pencil, Plus, RefreshCcw, Trash2 } from "lucide-react";
 
 import {
-  Badge,
-  Button,
   ConfirmDialog,
   DataTable,
   Field,
@@ -17,6 +15,8 @@ import {
   ToggleSwitch,
   useToast,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";
 import {
   createNavigationMenu,
@@ -285,7 +285,7 @@ export function NavigationMenusPage() {
         columns={[
           { id: "menu", header: text("columns.menu", "菜单", "Menu"), render: (row) => <div><div className="flex items-center gap-2 font-medium">{row.menuType === "ExternalLink" ? <ExternalLink size={14} aria-hidden="true" /> : row.menuType === "Group" ? <FilePlus2 size={14} aria-hidden="true" /> : null}{row.translations[locale]}</div><div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{row.menuCode}</div></div> },
           { id: "type", header: text("columns.type", "类型", "Type"), render: (row) => menuTypeLabel(row.menuType, text) },
-          { id: "source", header: text("columns.source", "来源", "Source"), render: (row) => <Badge tone={row.source === "BuiltIn" ? "info" : "default"}>{row.source === "BuiltIn" ? text("status.builtIn", "内置", "Built-in") : text("status.custom", "自定义", "Custom")}</Badge> },
+          { id: "source", header: text("columns.source", "来源", "Source"), render: (row) => <Badge variant={row.source === "BuiltIn" ? "info" : "default"}>{row.source === "BuiltIn" ? text("status.builtIn", "内置", "Built-in") : text("status.custom", "自定义", "Custom")}</Badge> },
           { id: "target", header: text("columns.target", "目标", "Target"), render: (row) => <span className="max-w-52 truncate font-mono text-xs">{row.pageCode ?? row.url ?? "—"}</span> },
           { id: "status", header: text("columns.status", "状态", "Status"), headerClassName: "text-center", cellClassName: "text-center", render: (row) => <div className="flex justify-center"><ToggleSwitch ariaLabel={text("aria.toggleMenu", row.enabled ? `禁用 ${row.menuCode}` : `启用 ${row.menuCode}`, row.enabled ? `Disable ${row.menuCode}` : `Enable ${row.menuCode}`)} checked={row.enabled} disabled={row.source === "BuiltIn" || updatingCode === row.menuCode} onCheckedChange={() => void toggleMenuEnabled(row)} /></div> },
           { id: "actions", header: text("columns.actions", "操作", "Actions"), align: "right", render: (row) => <div className="flex justify-end gap-1"><Button size="icon" variant="ghost" aria-label={text("aria.editMenu", `编辑 ${row.menuCode}`, `Edit ${row.menuCode}`)} onClick={() => openEdit(row)}><Pencil size={16} aria-hidden="true" /></Button>{row.source === "Custom" ? <Button size="icon" variant="ghost" aria-label={text("aria.deleteMenu", `删除 ${row.menuCode}`, `Delete ${row.menuCode}`)} disabled={deletingCode === row.menuCode} onClick={() => setMenuToDelete(row)}><Trash2 size={16} aria-hidden="true" /></Button> : null}</div> },

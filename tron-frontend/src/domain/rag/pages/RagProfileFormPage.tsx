@@ -28,7 +28,7 @@ import {
   ToggleSwitch,
   useToast,
 } from "@/shared";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { i18n } from "@/i18n";
 
 import {

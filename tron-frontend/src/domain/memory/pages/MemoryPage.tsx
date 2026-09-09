@@ -33,7 +33,6 @@ import type {
 } from "@/domain/memory/model";
 import { archiveMemoryFragment } from "@/domain/memory/mock/data";
 import {
-  Badge,
   ConfirmDialog,
   Field,
   PageHeader,
@@ -42,6 +41,7 @@ import {
   SurfaceCard,
   useTabPanelConfig,
 } from "@/shared";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DataTable,
@@ -355,7 +355,7 @@ function MemoryRecordsTable({
           const injectable = row.original.injectable;
           return (
             <div className="flex gap-1">
-              <Badge tone={injectable ? "success" : "info"}>
+              <Badge variant={injectable ? "success" : "info"}>
                 {injectable
                   ? t("pages:memory.use.autoContext", "Auto context")
                   : t("pages:memory.use.searchOnly", "Search only")}

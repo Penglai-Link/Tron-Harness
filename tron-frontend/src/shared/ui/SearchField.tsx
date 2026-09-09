@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { useMemo, useState, useEffect } from "react";
 
 import { cn } from "@/shared/lib/utils";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { TextInput } from "@/shared/ui/Forms";
 import { debounce } from "lodash-es";
 

@@ -38,8 +38,6 @@ import {
 import type { PlatformMcpGatewayConfig, PlatformMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  Badge,
-  Button,
   DataTable,
   PageHeader,
   SearchField,
@@ -51,6 +49,8 @@ import {
   useTablePagination,
   useToast,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 import {
   formatPlatformMcpEndpoint,
@@ -370,7 +370,7 @@ export function PlatformMcpServersPage() {
               header: pageT("table.columns.transport", "Transport"),
               width: "14%",
               render: (row) => (
-                <Badge tone="info">
+                <Badge variant="info">
                   {transportLabel(row.transportKind)}
                 </Badge>
               ),
@@ -391,7 +391,7 @@ export function PlatformMcpServersPage() {
               width: "16%",
               render: (row) => (
                 <div>
-                  <Badge tone={platformMcpServerStateTone(row.lastHealthStatus)}>
+                  <Badge variant={platformMcpServerStateTone(row.lastHealthStatus)}>
                     {healthLabel(row.lastHealthStatus)}
                   </Badge>
                 </div>
@@ -402,7 +402,7 @@ export function PlatformMcpServersPage() {
               header: pageT("table.columns.state", "State"),
               width: "10%",
               render: (row) => (
-                <Badge tone={platformMcpServerEnabledTone(row.enabled)}>
+                <Badge variant={platformMcpServerEnabledTone(row.enabled)}>
                   {row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}
                 </Badge>
               ),

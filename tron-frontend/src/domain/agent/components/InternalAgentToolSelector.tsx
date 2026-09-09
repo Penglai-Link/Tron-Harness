@@ -7,10 +7,10 @@ import type {
 } from "@/domain/agent/model";
 import { cn } from "@/shared/lib/utils";
 import {
-  Button,
   Field,
   SearchField,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
 
 interface InternalAgentToolSelectorProps {
   busy?: boolean;

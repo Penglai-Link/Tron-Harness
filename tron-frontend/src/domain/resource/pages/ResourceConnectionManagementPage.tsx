@@ -44,7 +44,7 @@ import {
   useWorkspaceSpaces,
 } from "@/shared";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import {
   DropdownMenu,
   DropdownMenuTrigger,
@@ -216,7 +216,7 @@ export function ResourceConnectionManagementPage({
       },
       {
         cell: ({ row }) => (
-          <Badge tone="outline">{secondaryLabel(row.original)}</Badge>
+          <Badge variant="outline">{secondaryLabel(row.original)}</Badge>
         ),
         header: pageT(
           kind === "dataSource"

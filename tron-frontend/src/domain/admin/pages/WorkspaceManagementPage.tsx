@@ -14,8 +14,8 @@ import {
   Trash2,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 import {
   DetailField,
@@ -776,7 +776,7 @@ export function WorkspaceManagementPage() {
             <div>
               <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pt("Workspace Tree")}</h2>
             </div>
-            {treeLoading ? <Badge tone="info">{pt("Loading")}</Badge> : null}
+            {treeLoading ? <Badge variant="info">{pt("Loading")}</Badge> : null}
           </div>
           <div className="grid gap-3">
             <SearchField ariaLabel={pt("Search workspaces")} clearLabel={pt("Clear workspace search")} placeholder={pt("Filter workspaces...")} value={searchInput} onChange={setSearchInput} onClear={clearWorkspaceSearch} />
@@ -815,7 +815,7 @@ export function WorkspaceManagementPage() {
                   <h2 className="text-2xl font-semibold tracking-tight text-[var(--color-on-surface)]">
                     {inspectorTab === "create" ? pt("Create Workspace") : detail ? detail.name : pt("Select a Workspace")}
                   </h2>
-                  {detail && inspectorTab !== "create" ? <Badge tone={getStatusTone(detail.status)}>{pt(detail.status)}</Badge> : null}
+                  {detail && inspectorTab !== "create" ? <Badge variant={getStatusTone(detail.status)}>{pt(detail.status)}</Badge> : null}
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-[12px]">
@@ -853,8 +853,8 @@ export function WorkspaceManagementPage() {
                     <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{pt("Use the selected tree context when you need a child, or keep it root-level for a new top branch.")}</p>
                   </div>
                   {rootValueToParent(createForm.parentWorkspaceCode)
-                    ? <Badge tone="info">{pt("Child of {{code}}", { code: rootValueToParent(createForm.parentWorkspaceCode) ?? "" })}</Badge>
-                    : <Badge tone="info">{pt("Root workspace")}</Badge>}
+                    ? <Badge variant="info">{pt("Child of {{code}}", { code: rootValueToParent(createForm.parentWorkspaceCode) ?? "" })}</Badge>
+                    : <Badge variant="info">{pt("Root workspace")}</Badge>}
                 </div>
                 <div className="grid gap-4 md:grid-cols-2">
                   <div className="min-w-0">
@@ -1148,7 +1148,7 @@ export function WorkspaceManagementPage() {
                               <div className="text-[12px] text-[var(--color-on-surface-variant)]">{row.userCode}</div>
                             </td>
                             <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.email}</td>
-                            <td className="px-4 py-3"><Badge tone={sourceTone(row.source)}>{pt(row.source)}</Badge></td>
+                            <td className="px-4 py-3"><Badge variant={sourceTone(row.source)}>{pt(row.source)}</Badge></td>
                             <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.matchedRoleCodes.length ? row.matchedRoleCodes.map((roleCode) => pt(getAdminUserRoleLabel(roleCode))).join(", ") : pt("Direct grant only")}</td>
                             <td className="px-4 py-3 text-[var(--color-on-surface-variant)]">{row.isOwner ? pt("Yes") : pt("No")}</td>
                           </tr>

@@ -11,7 +11,7 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   PageHeader,
@@ -209,7 +209,7 @@ function KanbanCard({
     >
       <div className={cn("flex min-w-0 items-center justify-between gap-[12px]", dense ? "mb-1" : compact ? "mb-1.5" : "mb-2")}>
         <span className="min-w-0 flex-1 truncate font-mono text-[11px] text-[var(--color-on-surface-variant)]">{task.taskCode}</span>
-        <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={task.priority} tone={taskPriorityTone(task.priority)}>{task.priority}</Badge>
+        <Badge className="max-w-[5.5rem] shrink-0 truncate whitespace-nowrap px-2 text-[11px]" title={task.priority} variant={taskPriorityTone(task.priority)}>{task.priority}</Badge>
       </div>
       <div className={cn("flex min-w-0 items-start gap-[12px]", dense ? "mb-1.5" : compact ? "mb-2" : "mb-3")}>
         <span

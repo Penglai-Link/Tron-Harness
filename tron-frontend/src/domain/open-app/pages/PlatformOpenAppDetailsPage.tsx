@@ -34,12 +34,12 @@ import type {
 } from "@/domain/open-app/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  Button,
   ConfirmDialog,
   PageHeader,
   SurfaceCard,
   useToast,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
 
 interface OpenAppDetailLocationState {
   secretReveal?: ManagedOpenAppSecretReveal;

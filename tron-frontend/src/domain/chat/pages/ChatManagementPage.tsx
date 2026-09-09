@@ -45,7 +45,7 @@ import {
   X,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import {
   ConfirmDialog,
   InfoTooltip,
@@ -56,10 +56,10 @@ import {
   useOpenRightSidebar,
   useToast,
   PageView,
-  MarkdownLink,
   type TargetPageFrameInspectionResult,
   useRightPanelTabs,
 } from "@/shared";
+import { MarkdownLink } from "@/components/markdown-link";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
 import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
@@ -2387,7 +2387,7 @@ function ContextOverviewPanel({
             {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
           </p>
         </div>
-        <Badge className="h-5 rounded px-1.5 text-[11px]" tone={statusTone}>
+        <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
           {statusLabel}
         </Badge>
       </div>
@@ -2900,7 +2900,7 @@ function RightWorkspaceSidebar({
         title={t("chat.shortTermMemory.goal")}
         actions={goal ? (
           <div className="flex items-center gap-1.5">
-            <Badge className="h-5 rounded px-1.5 text-[11px]" tone={goalStatusTone(goal.goal.status)}>
+            <Badge className="h-5 rounded px-1.5 text-[11px]" variant={goalStatusTone(goal.goal.status)}>
               {goalStatusLabel}
             </Badge>
             {canEditGoal && !editingGoal ? (
@@ -2969,7 +2969,7 @@ function RightWorkspaceSidebar({
       <ContextBlock
         title={t("chat.shortTermMemory.todo")}
         actions={activeTodos.length ? (
-          <Badge className="h-5 rounded px-1.5 text-[11px]" tone="secondary">
+          <Badge className="h-5 rounded px-1.5 text-[11px]" variant="secondary">
             {t("chat.shortTermMemory.activeTodoCount", { count: activeTodos.length })}
           </Badge>
         ) : null}
@@ -2991,10 +2991,10 @@ function RightWorkspaceSidebar({
               >
                 <span className={cn("size-2 rounded-full", todoStatusDotClass(todo.status))} aria-hidden="true" />
                 <span className="min-w-0 truncate text-sm text-[var(--color-on-surface)]">{todo.content}</span>
-                <Badge className="h-5 rounded px-1.5 text-[11px]" tone={todoStatusTone(todo.status)}>
+                <Badge className="h-5 rounded px-1.5 text-[11px]" variant={todoStatusTone(todo.status)}>
                   {t(`chat.shortTermMemory.todoStatuses.${todo.status}`)}
                 </Badge>
-                <Badge className="h-5 rounded px-1.5 text-[11px]" tone={todoPriorityTone(todo.priority)}>
+                <Badge className="h-5 rounded px-1.5 text-[11px]" variant={todoPriorityTone(todo.priority)}>
                   {t(`chat.shortTermMemory.todoPriorities.${todo.priority}`)}
                 </Badge>
               </div>
@@ -3928,7 +3928,7 @@ function CompactToolRow({
               <span className={cn("truncate", nested ? "font-normal" : "font-semibold")}>
                 {nested ? nestedToolLabel : toolLabel}
               </span>
-              {nested ? null : <Badge tone={complete ? "info" : "success"}>{complete ? t("chat.management.tool.badgeDone") : t("chat.management.tool.badgeRunning")}</Badge>}
+              {nested ? null : <Badge variant={complete ? "info" : "success"}>{complete ? t("chat.management.tool.badgeDone") : t("chat.management.tool.badgeRunning")}</Badge>}
             </div>
           </div>
         </div>

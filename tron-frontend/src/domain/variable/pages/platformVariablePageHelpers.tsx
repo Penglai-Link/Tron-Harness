@@ -17,8 +17,8 @@ import {
   TextArea,
   TextInput,
 } from "@/shared";
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
 
 import type {

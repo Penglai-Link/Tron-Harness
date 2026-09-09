@@ -29,7 +29,6 @@ import type {
 import { useAuthSession } from "@/domain/auth";
 import { useLocale, type SupportedLocale } from "@/i18n";
 import {
-  Button,
   Field,
   PageHeader,
   SelectInput,
@@ -39,6 +38,7 @@ import {
   useToast,
   useManagedAvatar,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
 import { isApiError } from "@/shared/api/httpClient";
 import { cn } from "@/shared/lib/utils";
 

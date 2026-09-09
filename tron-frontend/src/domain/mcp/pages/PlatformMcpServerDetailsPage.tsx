@@ -25,14 +25,14 @@ import type {
 } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  Badge,
-  Button,
   Field,
   PageHeader,
   SurfaceCard,
   useLocaleFormatters,
   useToast,
 } from "@/shared";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 import {
   formatPlatformMcpEndpoint,
@@ -203,12 +203,12 @@ export function PlatformMcpServerDetailsPage() {
               <ReadValue>{formatPlatformMcpEndpoint(record)}</ReadValue>
             </Field>
             <Field label={t("pages:mcp.detail.enabled", "Enabled")}>
-              <Badge tone={platformMcpServerEnabledTone(record.enabled)}>
+              <Badge variant={platformMcpServerEnabledTone(record.enabled)}>
                 {record.enabled ? t("pages:mcp.detail.enabledValue", "Enabled") : t("pages:mcp.detail.disabledValue", "Disabled")}
               </Badge>
             </Field>
             <Field label={t("pages:mcp.detail.health", "Health")}>
-              <Badge tone={platformMcpServerStateTone(record.lastHealthStatus)}>
+              <Badge variant={platformMcpServerStateTone(record.lastHealthStatus)}>
                 {healthLabel(record.lastHealthStatus)}
               </Badge>
             </Field>
@@ -280,7 +280,7 @@ export function PlatformMcpServerDetailsPage() {
                 Current configuration verified against the platform MCP runtime.
               </p>
             </div>
-            <Badge tone={platformMcpServerStateTone(record.lastHealthStatus)}>
+            <Badge variant={platformMcpServerStateTone(record.lastHealthStatus)}>
               {healthLabel(record.lastHealthStatus)}
             </Badge>
           </div>

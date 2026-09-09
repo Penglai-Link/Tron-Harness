@@ -1,4 +1,4 @@
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 
 import { getModelSourceTone } from "@/domain/model/constants/modelPageOptions";
 import type { ModelSourceKind } from "@/domain/model/model";
@@ -10,5 +10,5 @@ export function ModelSourceBadge({
   sourceKind: ModelSourceKind;
   label: string;
 }) {
-  return <Badge tone={getModelSourceTone(sourceKind)}>{label}</Badge>;
+  return <Badge variant={getModelSourceTone(sourceKind)}>{label}</Badge>;
 }
