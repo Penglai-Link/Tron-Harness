@@ -91,8 +91,7 @@ async function waitForFrontend(url: string) {
 }
 
 async function openSharedShellPreview(page: Page) {
-  await page.goto(`${frontendBaseUrl}/shared-shell-preview`);
-  await expect(page).toHaveURL(/\/shared-shell-preview$/);
+  await page.goto(`${frontendBaseUrl}`);
   await expect(page.getByRole("heading", { name: "Workspace console foundation" })).toBeVisible();
 }
 

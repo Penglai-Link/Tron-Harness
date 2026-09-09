@@ -1,3 +1,4 @@
+import { DEFAULT_AUTH_REDIRECT } from "@/domain/auth";
 import { create } from "zustand";
 
 export interface TabItem {
@@ -16,11 +17,6 @@ export interface TabRightPanelState {
   size?: number;
 }
 
-/**
- * /shared-shell-preview is not a console route, so no tab is auto-created
- * for it and the sidebar stays fully clickable afterwards.
- */
-export const DEFAULT_TAB_CLOSE_REDIRECT_PATH = "/shared-shell-preview";
 
 // 缓存的 tab 信息
 export interface CachedTabInfo {
@@ -118,7 +114,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
     if (!wasActive) return null;
 
     const nextActiveTab = get().tabs.find((tab) => tab.id === get().activeTabId);
-    return nextActiveTab?.path ?? DEFAULT_TAB_CLOSE_REDIRECT_PATH;
+    return nextActiveTab?.path ?? DEFAULT_AUTH_REDIRECT;
   },
 
   removeTab: (tabId) => get().removeTabs([tabId]),

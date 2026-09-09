@@ -39,7 +39,16 @@ export default function RoutedApp() {
 
   return (
     <Routes>
-      <Route path="/" element={<EntryRoutePage />} />
+      <Route
+        path="/"
+        element={
+          <ProtectedRoute>
+            <SuspendedRoute fullScreen>
+              <SharedShellPreviewPage />
+            </SuspendedRoute>
+          </ProtectedRoute>
+        }
+      />
       <Route path="/login" element={<EntryRoutePage />} />
       <Route
         path="/setup"
@@ -67,16 +76,6 @@ export default function RoutedApp() {
           <ProtectedRoute>
             <SuspendedRoute fullScreen>
               <DesignStandardPage />
-            </SuspendedRoute>
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/shared-shell-preview"
-        element={
-          <ProtectedRoute>
-            <SuspendedRoute fullScreen>
-              <SharedShellPreviewPage />
             </SuspendedRoute>
           </ProtectedRoute>
         }

@@ -320,8 +320,7 @@ test.afterAll(async () => {
 test("AC-RCS-01: desktop right sidebar collapses out of layout, restores width, and reopens", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await routeAuthApi(page);
-  await signIn(page, "/shared-shell-preview");
-
+  await signIn(page, "/");
   await expect(page.getByRole("heading", { name: "Workspace console foundation" })).toBeVisible();
   await expectRightSidebarClosed(page);
   const mainBefore = await page.locator("main").first().boundingBox();
@@ -354,7 +353,7 @@ test("AC-RCS-01: desktop right sidebar collapses out of layout, restores width, 
 test("AC-RCS-02: mobile right sidebar opens as a drawer and closes by all required paths", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await routeAuthApi(page);
-  await signIn(page, "/shared-shell-preview");
+  await signIn(page, "/");
 
   const drawerToggle = page.getByRole("button", { name: "Open right sidebar" });
   await expect(drawerToggle).toBeVisible();
@@ -405,7 +404,7 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
   await rightSidebar(page).getByRole("button", { name: "Close inspector" }).click();
   await expectNoRightSidebarControls(page);
 
-  await page.goto(`${frontendBaseUrl}/shared-shell-preview`);
+  await page.goto(`${frontendBaseUrl}`);
   await openRightSidebar(page);
   await expect(rightSidebar(page).getByText("Resource Pattern")).toBeVisible();
 

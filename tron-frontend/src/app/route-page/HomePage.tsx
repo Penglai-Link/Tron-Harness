@@ -24,7 +24,7 @@ export default function HomePage() {
               {t("cta.designStandard")}
               <ArrowRight size={16} aria-hidden="true" />
             </LinkButton>
-            <LinkButton to="/shared-shell-preview" variant="secondary">
+            <LinkButton to="/" variant="secondary">
               {t("cta.sharedShell")}
               <ArrowRight size={16} aria-hidden="true" />
             </LinkButton>
