@@ -10,13 +10,13 @@ export interface TabItem {
   activeNav?: string;
   rightPanelOpen?: boolean;
   rightPanelSize?: number;
+  hide?: boolean;
 }
 
 export interface TabRightPanelState {
   open?: boolean;
   size?: number;
 }
-
 
 // 缓存的 tab 信息
 export interface CachedTabInfo {
@@ -27,11 +27,26 @@ export interface CachedTabInfo {
   revision: number;
 }
 
+export const DEFAULT_TAB_ID = "default_tab";
+
+function createDefaultTab(): TabItem {
+  return {
+    id: DEFAULT_TAB_ID,
+    title: "",
+    path: "/",
+    closable: false,
+    rightPanelOpen: false,
+    rightPanelSize: 520,
+    hide: true,
+  };
+}
+
 interface TabState {
   tabs: TabItem[];
   activeTabId: string | null;
   cachedTabsMap: Map<string, CachedTabInfo>; // key: tabId, value: 缓存信息
   cachedTabsList: CachedTabInfo[]; // 缓存的 tab 列表，用于渲染
+  resetVersion: number;
   maxCachedTabs: number; // 最大缓存数量
   addTab: (tab: Omit<TabItem, "id">) => string;
   closeTab: (tabId: string) => string | null;
@@ -39,9 +54,13 @@ interface TabState {
   removeTabs: (tabIds: readonly string[]) => void;
   refreshTab: (tabId: string) => void;
   setActiveTab: (tabId: string) => void;
-  updateRightPanelState: (tabId: string, panelState: TabRightPanelState) => void;
+  updateRightPanelState: (
+    tabId: string,
+    panelState: TabRightPanelState
+  ) => void;
   updateTab: (tabId: string, updates: Partial<Omit<TabItem, "id">>) => void;
   clearAllTabs: () => void;
+  resetAllTabs: () => void;
   getTabByPath: (path: string) => TabItem | undefined;
   getTabByActiveNav: (activeNav: string) => TabItem | undefined;
   addToCache: (tabId: string, path: string, pageId: string) => void;
@@ -54,17 +73,18 @@ function generateTabId(): string {
 }
 
 export const useTabStore = create<TabState>()((set, get) => ({
-  tabs: [],
-  activeTabId: null,
+  tabs: [createDefaultTab()],
+  activeTabId: DEFAULT_TAB_ID,
   cachedTabsMap: new Map(),
   cachedTabsList: [],
+  resetVersion: 0,
   maxCachedTabs: 10, // 最多缓存 10 个 tab
 
   addTab: (tab) => {
     const state = get();
 
     // 首先根据 path 精确查找
-    const existingTabByPath = state.tabs.find(t => t.path === tab.path);
+    const existingTabByPath = state.tabs.find((t) => t.path === tab.path);
     if (existingTabByPath) {
       // 找到了精确匹配的 tab，只更新 activeTabId
       if (state.activeTabId !== existingTabByPath.id) {
@@ -75,7 +95,9 @@ export const useTabStore = create<TabState>()((set, get) => ({
 
     // 如果有 activeNav，根据 activeNav 查找已存在的 tab
     if (tab.activeNav) {
-      const existingTabByNav = state.tabs.find(t => t.activeNav === tab.activeNav);
+      const existingTabByNav = state.tabs.find(
+        (t) => t.activeNav === tab.activeNav
+      );
       if (existingTabByNav) {
         // 找到了同 activeNav 的 tab，返回它的 ID
         // 不在这里更新 activeTabId，让外部调用者决定
@@ -113,27 +135,45 @@ export const useTabStore = create<TabState>()((set, get) => ({
     get().removeTab(tabId);
     if (!wasActive) return null;
 
-    const nextActiveTab = get().tabs.find((tab) => tab.id === get().activeTabId);
+    const nextActiveTab = get().tabs.find(
+      (tab) => tab.id === get().activeTabId
+    );
     return nextActiveTab?.path ?? DEFAULT_AUTH_REDIRECT;
   },
 
   removeTab: (tabId) => get().removeTabs([tabId]),
 
   removeTabs: (tabIds) => {
-    const tabIdSet = new Set(tabIds);
+    const tabIdSet = new Set(
+      tabIds.filter((tabId) => tabId !== DEFAULT_TAB_ID)
+    );
     if (tabIdSet.size === 0) return;
 
     set((state) => {
-      const tabs = state.tabs.filter((tab) => !tabIdSet.has(tab.id));
+      const defaultTab =
+        state.tabs.find((tab) => tab.id === DEFAULT_TAB_ID) ??
+        createDefaultTab();
+      const tabs = [
+        defaultTab,
+        ...state.tabs.filter(
+          (tab) => tab.id !== DEFAULT_TAB_ID && !tabIdSet.has(tab.id)
+        ),
+      ];
       let nextActiveTabId = state.activeTabId;
+
+      if (!nextActiveTabId || !tabs.some((tab) => tab.id === nextActiveTabId)) {
+        nextActiveTabId = DEFAULT_TAB_ID;
+      }
 
       if (state.activeTabId && tabIdSet.has(state.activeTabId)) {
         if (tabs.length > 0) {
-          const removedIndex = state.tabs.findIndex((tab) => tab.id === state.activeTabId);
+          const removedIndex = state.tabs.findIndex(
+            (tab) => tab.id === state.activeTabId
+          );
           const nextIndex = Math.min(removedIndex, tabs.length - 1);
-          nextActiveTabId = tabs[nextIndex]?.id || null;
+          nextActiveTabId = tabs[nextIndex]?.id || DEFAULT_TAB_ID;
         } else {
-          nextActiveTabId = null;
+          nextActiveTabId = DEFAULT_TAB_ID;
         }
       }
 
@@ -170,7 +210,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
   },
 
   setActiveTab: (tabId) => {
-    const tab = get().tabs.find(t => t.id === tabId);
+    const tab = get().tabs.find((t) => t.id === tabId);
     if (tab) {
       set({ activeTabId: tabId });
     }
@@ -184,7 +224,10 @@ export const useTabStore = create<TabState>()((set, get) => ({
 
         const nextOpen = panelState.open ?? tab.rightPanelOpen;
         const nextSize = panelState.size ?? tab.rightPanelSize;
-        if (nextOpen === tab.rightPanelOpen && nextSize === tab.rightPanelSize) {
+        if (
+          nextOpen === tab.rightPanelOpen &&
+          nextSize === tab.rightPanelSize
+        ) {
           return tab;
         }
 
@@ -195,34 +238,43 @@ export const useTabStore = create<TabState>()((set, get) => ({
           rightPanelSize: nextSize,
         };
       });
-
       return changed ? { tabs } : state;
     });
   },
 
   updateTab: (tabId, updates) => {
     set((state) => ({
-      tabs: state.tabs.map(t =>
-        t.id === tabId ? { ...t, ...updates } : t
-      ),
+      tabs: state.tabs.map((t) => (t.id === tabId ? { ...t, ...updates } : t)),
     }));
   },
 
   clearAllTabs: () => {
+    const defaultTab =
+      get().tabs.find((tab) => tab.id === DEFAULT_TAB_ID) ?? createDefaultTab();
     set({
-      tabs: [],
-      activeTabId: null,
+      tabs: [defaultTab],
+      activeTabId: DEFAULT_TAB_ID,
       cachedTabsMap: new Map(),
       cachedTabsList: [],
     });
   },
 
+  resetAllTabs: () => {
+    set((state) => ({
+      tabs: [createDefaultTab()],
+      activeTabId: DEFAULT_TAB_ID,
+      cachedTabsMap: new Map(),
+      cachedTabsList: [],
+      resetVersion: state.resetVersion + 1,
+    }));
+  },
+
   getTabByPath: (path) => {
-    return get().tabs.find(t => t.path === path);
+    return get().tabs.find((t) => t.path === path);
   },
 
   getTabByActiveNav: (activeNav) => {
-    return get().tabs.find(t => t.activeNav === activeNav);
+    return get().tabs.find((t) => t.activeNav === activeNav);
   },
 
   addToCache: (tabId, path, pageId) => {
@@ -247,7 +299,10 @@ export const useTabStore = create<TabState>()((set, get) => ({
         lastAccessTime: now,
       });
       const newCachedTabsList = Array.from(newCachedTabsMap.values());
-      set({ cachedTabsMap: newCachedTabsMap, cachedTabsList: newCachedTabsList });
+      set({
+        cachedTabsMap: newCachedTabsMap,
+        cachedTabsList: newCachedTabsList,
+      });
       return;
     }
 
@@ -260,6 +315,7 @@ export const useTabStore = create<TabState>()((set, get) => ({
       let oldestTime = Date.now();
 
       newCachedTabsMap.forEach((info, id) => {
+        if (id === DEFAULT_TAB_ID) return;
         if (info.lastAccessTime < oldestTime) {
           oldestTime = info.lastAccessTime;
           oldestTabId = id;
@@ -289,7 +345,10 @@ export const useTabStore = create<TabState>()((set, get) => ({
       const newCachedTabsMap = new Map(state.cachedTabsMap);
       newCachedTabsMap.delete(tabId);
       const newCachedTabsList = Array.from(newCachedTabsMap.values());
-      return { cachedTabsMap: newCachedTabsMap, cachedTabsList: newCachedTabsList };
+      return {
+        cachedTabsMap: newCachedTabsMap,
+        cachedTabsList: newCachedTabsList,
+      };
     });
   },
 

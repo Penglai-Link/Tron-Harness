@@ -2,7 +2,6 @@ import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
 import { Command } from "lucide-react";
 import type { ReactNode } from "react";
-import { useLocation } from "react-router";
 
 import {
   ResizableHandle,
@@ -15,9 +14,9 @@ import {
   shellShortcutActions,
 } from "@/shared/lib/keyboardShortcuts";
 import { cn } from "@/shared/lib/utils";
-import { TabBar } from "@/shared/ui/TabBar";
+import { TabBar } from "@/shared/layout/content/TabBar";
 import { useAppShellStore } from "@/store/appShellStore";
-import { useTabStore } from "@/store/tabStore";
+import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import RightPanelContainer from "./RightPanelContainer";
 
 interface IPanelProps {
@@ -89,11 +88,12 @@ function EmptyTabWorkspace() {
 }
 
 export function Panel({ children, contentClassName }: IPanelProps) {
-  const { pathname, search } = useLocation();
-  const hasOpenTabs = useTabStore((state) => state.tabs.length > 0);
-  const activeTabId = useTabStore((state) => state.activeTabId);
+  const tabs = useTabStore((state) => state.tabs).filter((tab) => !tab.hide);
+  const hasOpenTabs = tabs.length > 0;
+  const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
+
   const activeTab = useTabStore((state) =>
-    state.tabs.find((tab) => tab.id === state.activeTabId),
+    state.tabs.find((tab) => tab.id === (state.activeTabId ?? DEFAULT_TAB_ID)),
   );
   const updateRightPanelState = useTabStore(
     (state) => state.updateRightPanelState,
@@ -127,7 +127,7 @@ export function Panel({ children, contentClassName }: IPanelProps) {
     initialSize: activeTab?.rightPanelSize,
     onOpenChange: handleRightPanelOpenChange,
     onSizeChange: handleRightPanelSizeChange,
-    resetKey: activeTabId ?? `${pathname}${search}`,
+    resetKey: activeTabId,
   });
   return (
     <section className="flex h-full flex-col">

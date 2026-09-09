@@ -63,7 +63,7 @@ import { SelectInput } from "@/shared/ui/Forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useShellShortcuts } from "@/shared/hooks/useShellShortcuts";
-import { useTabStore } from "@/store/tabStore";
+import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import { useAuthStore } from "@/store/authStore";
 import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
 import type {
@@ -99,7 +99,7 @@ type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["second
 const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 
 export function useOpenRightSidebar() {
-  const activeTabId = useTabStore((state) => state.activeTabId);
+  const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
   const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
 
   return useCallback(() => {
@@ -189,12 +189,12 @@ export function TronShell({
   const setWorkspaceSwitcherSnapshot = useAppShellStore((state) => state.setWorkspaceSwitcherSnapshot);
   const workspaceSwitcher = useAppShellStore((state) => state.workspaceSwitcherSnapshot);
   const tabPanelRegistry = useTabPanelRegistry();
-  const activeTabId = useTabStore((state) => state.activeTabId);
-  const activeTab = useTabStore((state) => state.tabs.find((tab) => tab.id === state.activeTabId));
+  const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
+  const activeTab = useTabStore((state) => state.tabs.find((tab) => tab.id === (state.activeTabId ?? DEFAULT_TAB_ID)));
   const closeTab = useTabStore((state) => state.closeTab);
   const activeShellConfig = activeTabId ? tabPanelRegistry.get(activeTabId) : undefined;
-  const hasRegistryConfig = Object.keys(tabPanelRegistry.cacheConfigs).length > 0;
   const updateRightPanelState = useTabStore((state) => state.updateRightPanelState);
+  const setActiveTab = useTabStore((state) => state.setActiveTab);
   const dataSource = getServiceDataSource("admin");
   const [openNavigationItems, setOpenNavigationItems] = useState<Record<string, boolean>>({});
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
@@ -565,8 +565,12 @@ export function TronShell({
       }
       return;
     }
+
     if (activeTab?.id) {
       updateRightPanelState(activeTab.id, { open: !rightPanelOpen });
+    } else {
+      setActiveTab(DEFAULT_TAB_ID)
+      updateRightPanelState(DEFAULT_TAB_ID, { open: !rightPanelOpen });
     }
   }
 

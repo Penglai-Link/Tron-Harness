@@ -24,7 +24,7 @@ interface TabBarProps {
 export function TabBar({ className }: TabBarProps) {
   const { t } = useTranslation("shell");
   const navigate = useNavigate();
-  const tabs = useTabStore((state) => state.tabs);
+  const tabs = useTabStore((state) => state.tabs).filter((tab) => !tab.hide);
   const activeTabId = useTabStore((state) => state.activeTabId);
   const closeTab = useTabStore((state) => state.closeTab);
   const removeTabs = useTabStore((state) => state.removeTabs);

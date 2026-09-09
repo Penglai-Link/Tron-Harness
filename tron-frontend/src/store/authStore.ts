@@ -1,11 +1,7 @@
 import { create } from "zustand";
 
-import {
-  LOGIN_PATH,
-} from "@/domain/auth/constants";
-import {
-  buildLoginUrl,
-} from "@/domain/auth/model";
+import { LOGIN_PATH } from "@/domain/auth/constants";
+import { buildLoginUrl } from "@/domain/auth/model";
 import {
   loginLdap,
   loginInternal,
@@ -32,7 +28,9 @@ interface AuthState {
   status: AuthStatus;
   ensureSessionFresh: () => Promise<boolean>;
   initialize: () => Promise<void>;
-  loginWithInternalAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
+  loginWithInternalAccount: (
+    payload: InternalLoginPayload
+  ) => Promise<AuthSession>;
   loginWithLdapAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
   acceptAuthGrant: (grant: AuthGrant) => AuthSession;
   markUnauthenticated: () => void;
@@ -42,7 +40,7 @@ interface AuthState {
 }
 
 type AuthStateSetter = (
-  partial: Partial<AuthState> | ((state: AuthState) => Partial<AuthState>),
+  partial: Partial<AuthState> | ((state: AuthState) => Partial<AuthState>)
 ) => void;
 
 type RefreshFailureMode = "preserve-session" | "unauthenticate";
@@ -72,7 +70,7 @@ function redirectToLoginIfNeeded() {
 function applyAuthenticatedSession(
   set: AuthStateSetter,
   grant: AuthGrant,
-  epoch: number,
+  epoch: number
 ) {
   if (epoch !== authEpoch) {
     return false;
@@ -98,13 +96,16 @@ function clearSessionRefreshTimer() {
   sessionRefreshTimer = null;
 }
 
-function transitionToUnauthenticated(set: AuthStateSetter, status: AuthStatus = "unauthenticated") {
+function transitionToUnauthenticated(
+  set: AuthStateSetter,
+  status: AuthStatus = "unauthenticated"
+) {
   authEpoch += 1;
   clearSessionRefreshTimer();
   accessTokenExpiresAtMs = null;
   setApiAccessToken(null);
-  // 会话失效后清理导航标签，避免残留到下一次登录
-  useTabStore.getState().clearAllTabs();
+  // 会话失效后重置导航和面板缓存，避免残留到下一次登录
+  useTabStore.getState().resetAllTabs();
   set({
     session: null,
     status,
@@ -121,7 +122,11 @@ function computeRefreshDelayMs(expiresInSeconds: number) {
   return Math.max(ttlMs - 60_000, 30_000);
 }
 
-function scheduleSessionRefresh(set: AuthStateSetter, expiresInSeconds: number, epoch: number) {
+function scheduleSessionRefresh(
+  set: AuthStateSetter,
+  expiresInSeconds: number,
+  epoch: number
+) {
   clearSessionRefreshTimer();
   sessionRefreshTimer = window.setTimeout(() => {
     void refreshSession(set, {
@@ -150,7 +155,7 @@ async function refreshSession(
     epoch?: number;
     failureMode: RefreshFailureMode;
     markChecking?: boolean;
-  },
+  }
 ) {
   const { status, session } = useAuthStore.getState();
   if (!options.allowBootstrap && (status !== "authenticated" || !session)) {
@@ -163,7 +168,11 @@ async function refreshSession(
 
   const epoch = options.epoch ?? authEpoch;
   if (options.markChecking) {
-    set((state) => (state.status === "authenticated" ? state : { session: null, status: "checking" }));
+    set((state) =>
+      state.status === "authenticated"
+        ? state
+        : { session: null, status: "checking" }
+    );
   }
 
   const pendingRefresh = refreshAuthSession()
@@ -173,7 +182,10 @@ async function refreshSession(
         return false;
       }
 
-      if (options.failureMode === "unauthenticate" || isUnauthorizedApiError(error)) {
+      if (
+        options.failureMode === "unauthenticate" ||
+        isUnauthorizedApiError(error)
+      ) {
         transitionToUnauthenticated(set);
         return false;
       }
@@ -201,8 +213,8 @@ export const useAuthStore = create<AuthState>((set) => ({
     }
 
     if (
-      accessTokenExpiresAtMs === null
-      || accessTokenExpiresAtMs - Date.now() > FOREGROUND_REFRESH_WINDOW_MS
+      accessTokenExpiresAtMs === null ||
+      accessTokenExpiresAtMs - Date.now() > FOREGROUND_REFRESH_WINDOW_MS
     ) {
       return true;
     }
@@ -217,7 +229,11 @@ export const useAuthStore = create<AuthState>((set) => ({
       return initializePromise;
     }
 
-    set((state) => (state.status === "authenticated" ? state : { session: null, status: "checking" }));
+    set((state) =>
+      state.status === "authenticated"
+        ? state
+        : { session: null, status: "checking" }
+    );
 
     initializePromise = refreshSession(set, {
       allowBootstrap: true,
@@ -271,15 +287,19 @@ export const useAuthStore = create<AuthState>((set) => ({
     });
   },
   updateSessionUser: (patch) => {
-    set((state) => state.session ? {
-      session: {
-        ...state.session,
-        user: {
-          ...state.session.user,
-          ...patch,
-        },
-      },
-    } : state);
+    set((state) =>
+      state.session
+        ? {
+            session: {
+              ...state.session,
+              user: {
+                ...state.session.user,
+                ...patch,
+              },
+            },
+          }
+        : state
+    );
   },
 }));
 

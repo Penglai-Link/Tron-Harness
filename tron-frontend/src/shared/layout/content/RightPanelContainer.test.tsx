@@ -1,10 +1,10 @@
 // @vitest-environment jsdom
-import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { useEffect } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { EditableTab } from "@/components/editable-tabs";
-import { useTabStore } from "@/store/tabStore";
+import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 
 import RightPanelContainer from "./RightPanelContainer";
 import { TabPanelRegistryProvider, useRightPanelTabs } from "./TabPanelRegistry";
@@ -35,6 +35,39 @@ describe("RightPanelContainer", () => {
     cleanup();
     useTabStore.getState().clearAllTabs();
     pageViewState.unmountedUrls = [];
+  });
+
+  it("renders a default-tab panel without a route cache entry", async () => {
+    render(
+      <TabPanelRegistryProvider>
+        <RightPanelContainer />
+      </TabPanelRegistryProvider>,
+    );
+
+    expect(screen.getByTestId("tron-right-sidebar-empty")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: /new tab/i }));
+    await waitFor(() => expect(screen.getByRole("tab", { name: /new tab/i })).toBeTruthy());
+  });
+
+  it("does not flash the default empty state while closing the last ordinary tab", async () => {
+    const tabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/tasks",
+      title: "Tasks",
+    });
+    useTabStore.getState().addToCache(tabId, "/tasks", "tasks.index");
+
+    render(
+      <TabPanelRegistryProvider>
+        <RightPanelContainer />
+      </TabPanelRegistryProvider>,
+    );
+
+    act(() => useTabStore.getState().setActiveTab(tabId));
+    act(() => useTabStore.getState().setActiveTab(DEFAULT_TAB_ID));
+
+    expect(screen.getByTestId("tron-right-sidebar-transition")).toBeTruthy();
+    await waitFor(() => expect(screen.queryByTestId("tron-right-sidebar-transition")).toBeNull());
   });
 
   it("opens a separate dynamic tab for each URL in the current main content tab", () => {

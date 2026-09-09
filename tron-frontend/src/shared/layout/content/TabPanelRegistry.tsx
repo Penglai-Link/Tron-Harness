@@ -10,12 +10,14 @@ import {
   type ReactNode,
 } from "react";
 
-import { useTabStore } from "@/store/tabStore";
+import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import type { EditableTab } from "@/components/editable-tabs";
 
 export interface TabPanelConfig {
   contentClassName?: string;
-  onPageInspectionConfirm?: (result: import("@/components/page-view").TargetPageFrameInspectionResult) => void;
+  onPageInspectionConfirm?: (
+    result: import("@/components/page-view").TargetPageFrameInspectionResult
+  ) => void;
   rightPanel?: ReactNode;
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
@@ -33,7 +35,7 @@ interface TabPanelRegistryValue {
   updateRightPanelTab: (
     tabId: string,
     stableId: string,
-    updates: Partial<EditableTab>,
+    updates: Partial<EditableTab>
   ) => void;
   removeRightPanelTab: (tabId: string, key: string) => void;
   setRightPanelActiveKey: (tabId: string, key: string) => void;
@@ -83,6 +85,8 @@ export function TabPanelRegistryProvider({
 
 function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
+  const resetVersion = useTabStore((state) => state.resetVersion);
+  const previousResetVersion = useRef(resetVersion);
   const [cacheConfigs, setCacheConfigs] = useState<
     Record<string, TabPanelConfig>
   >({});
@@ -98,20 +102,23 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
 
   const activeKeyScope = useCallback(
     (tabId: string, ownerKey?: string) => `${tabId}\u0000${ownerKey ?? ""}`,
-    [],
+    []
   );
 
-  const openRightPanelTab = useCallback((tabId: string, tab: EditableTab) => {
-    setRightPanelTabs((current) => {
-      const currentTabs = current[tabId] ?? [];
-      if (currentTabs.some((item) => item.key === tab.key)) return current;
-      return { ...current, [tabId]: [...currentTabs, tab] };
-    });
-    const scope = activeKeyScope(tabId, tab.ownerKey);
-    setRightPanelActiveKeys((current) => (
-      current[scope] === tab.key ? current : { ...current, [scope]: tab.key }
-    ));
-  }, [activeKeyScope]);
+  const openRightPanelTab = useCallback(
+    (tabId: string, tab: EditableTab) => {
+      setRightPanelTabs((current) => {
+        const currentTabs = current[tabId] ?? [];
+        if (currentTabs.some((item) => item.key === tab.key)) return current;
+        return { ...current, [tabId]: [...currentTabs, tab] };
+      });
+      const scope = activeKeyScope(tabId, tab.ownerKey);
+      setRightPanelActiveKeys((current) =>
+        current[scope] === tab.key ? current : { ...current, [scope]: tab.key }
+      );
+    },
+    [activeKeyScope]
+  );
 
   const updateRightPanelTab = useCallback(
     (tabId: string, stableId: string, updates: Partial<EditableTab>) => {
@@ -121,13 +128,13 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
         if (!previous) return current;
 
         const nextTabs = currentTabs.map((tab) =>
-          tab.stableId === stableId ? { ...tab, ...updates } : tab,
+          tab.stableId === stableId ? { ...tab, ...updates } : tab
         );
         return { ...current, [tabId]: nextTabs };
       });
       setRightPanelActiveKeys((current) => {
         const previous = (rightPanelTabs[tabId] ?? []).find(
-          (tab) => tab.stableId === stableId,
+          (tab) => tab.stableId === stableId
         );
         const scope = activeKeyScope(tabId, previous?.ownerKey);
         if (!previous || current[scope] !== previous.key || !updates.key) {
@@ -136,7 +143,7 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
         return { ...current, [scope]: updates.key };
       });
     },
-    [activeKeyScope, rightPanelTabs],
+    [activeKeyScope, rightPanelTabs]
   );
 
   const removeRightPanelTab = useCallback((tabId: string, key: string) => {
@@ -148,24 +155,33 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const setRightPanelActiveKey = useCallback((tabId: string, key: string) => {
-    const ownerKey = rightPanelTabs[tabId]?.find((tab) => tab.key === key)?.ownerKey
-      ?? rightPanelOwnerKeys[tabId];
-    const scope = activeKeyScope(tabId, ownerKey);
-    setRightPanelActiveKeys((current) => (
-      current[scope] === key ? current : { ...current, [scope]: key }
-    ));
-  }, [activeKeyScope, rightPanelOwnerKeys, rightPanelTabs]);
+  const setRightPanelActiveKey = useCallback(
+    (tabId: string, key: string) => {
+      const ownerKey =
+        rightPanelTabs[tabId]?.find((tab) => tab.key === key)?.ownerKey ??
+        rightPanelOwnerKeys[tabId];
+      const scope = activeKeyScope(tabId, ownerKey);
+      setRightPanelActiveKeys((current) =>
+        current[scope] === key ? current : { ...current, [scope]: key }
+      );
+    },
+    [activeKeyScope, rightPanelOwnerKeys, rightPanelTabs]
+  );
 
-  const setRightPanelOwnerKey = useCallback((tabId: string, ownerKey: string | undefined) => {
-    setRightPanelOwnerKeys((current) => (
-      current[tabId] === ownerKey ? current : { ...current, [tabId]: ownerKey }
-    ));
-  }, []);
+  const setRightPanelOwnerKey = useCallback(
+    (tabId: string, ownerKey: string | undefined) => {
+      setRightPanelOwnerKeys((current) =>
+        current[tabId] === ownerKey
+          ? current
+          : { ...current, [tabId]: ownerKey }
+      );
+    },
+    []
+  );
 
   const register = useCallback((tabId: string, config: TabPanelConfig) => {
     const definedConfigEntries = Object.entries(config).filter(
-      ([, value]) => value !== undefined,
+      ([, value]) => value !== undefined
     );
     if (!definedConfigEntries.length) return;
 
@@ -178,7 +194,8 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       if (
         previous &&
         previous.contentClassName === nextConfig.contentClassName &&
-        previous.onPageInspectionConfirm === nextConfig.onPageInspectionConfirm &&
+        previous.onPageInspectionConfirm ===
+          nextConfig.onPageInspectionConfirm &&
         previous.rightPanel === nextConfig.rightPanel &&
         previous.searchPlaceholder === nextConfig.searchPlaceholder &&
         previous.topbarActions === nextConfig.topbarActions
@@ -203,7 +220,7 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     const cachedTabIds = new Set(cachedTabsList.map((tab) => tab.tabId));
     setCacheConfigs((current) => {
       const staleTabIds = Object.keys(current).filter(
-        (tabId) => !cachedTabIds.has(tabId),
+        (tabId) => tabId !== DEFAULT_TAB_ID && !cachedTabIds.has(tabId)
       );
       if (!staleTabIds.length) return current;
 
@@ -228,21 +245,32 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
     });
   }, [cachedTabsList]);
 
+  useEffect(() => {
+    if (previousResetVersion.current === resetVersion) return;
+
+    previousResetVersion.current = resetVersion;
+    setCacheConfigs({});
+    setRightPanelTabs({});
+    setRightPanelActiveKeys({});
+    setRightPanelOwnerKeys({});
+  }, [resetVersion]);
+
   const get = useCallback(
     (tabId: string) => cacheConfigs[tabId],
-    [cacheConfigs],
+    [cacheConfigs]
   );
   const getRightPanelTabs = useCallback(
     (tabId: string) => rightPanelTabs[tabId] ?? [],
-    [rightPanelTabs],
+    [rightPanelTabs]
   );
   const getRightPanelActiveKey = useCallback(
-    (tabId: string) => rightPanelActiveKeys[activeKeyScope(tabId, rightPanelOwnerKeys[tabId])],
-    [activeKeyScope, rightPanelActiveKeys, rightPanelOwnerKeys],
+    (tabId: string) =>
+      rightPanelActiveKeys[activeKeyScope(tabId, rightPanelOwnerKeys[tabId])],
+    [activeKeyScope, rightPanelActiveKeys, rightPanelOwnerKeys]
   );
   const getRightPanelOwnerKey = useCallback(
     (tabId: string) => rightPanelOwnerKeys[tabId],
-    [rightPanelOwnerKeys],
+    [rightPanelOwnerKeys]
   );
 
   const value = useMemo<TabPanelRegistryValue>(
@@ -273,7 +301,7 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
       removeRightPanelTab,
       setRightPanelActiveKey,
       setRightPanelOwnerKey,
-    ],
+    ]
   );
 
   return (
@@ -307,7 +335,7 @@ export function useTabPanelRegistry() {
 
 export function useTabPanelConfig(config: TabPanelConfig) {
   const registry = useTabPanelRegistry();
-  const scopeTabId = useContext(TabPanelScopeContext);
+  const scopeTabId = useContext(TabPanelScopeContext) ?? DEFAULT_TAB_ID;
   const register = registry.register;
 
   useEffect(() => {
@@ -327,9 +355,9 @@ export function useTabPanelConfig(config: TabPanelConfig) {
 
 export function useRightPanelTabs(ownerKey?: string) {
   const registry = useTabPanelRegistry();
-  const scopeTabId = useContext(TabPanelScopeContext);
+  const scopeTabId = useContext(TabPanelScopeContext) ?? DEFAULT_TAB_ID;
   const updateRightPanelState = useTabStore(
-    (state) => state.updateRightPanelState,
+    (state) => state.updateRightPanelState
   );
 
   useEffect(() => {
@@ -351,7 +379,7 @@ export function useRightPanelTabs(ownerKey?: string) {
         updateRightPanelState(scopeTabId, { open: true });
       }
     },
-    [ownerKey, registry, scopeTabId, updateRightPanelState],
+    [ownerKey, registry, scopeTabId, updateRightPanelState]
   );
 
   return useMemo(() => ({ openTab }), [openTab]);

@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -10,7 +10,7 @@ import {
 import { OperateType } from "@/components/editable-tabs/types";
 import { PageView } from "@/components/page-view";
 import { Button } from "@/components/ui/button";
-import { useTabStore, type CachedTabInfo } from "@/store/tabStore";
+import { DEFAULT_TAB_ID, useTabStore, type CachedTabInfo } from "@/store/tabStore";
 import { Globe, Plus } from "lucide-react";
 import { useTabPanelRegistry } from "./TabPanelRegistry";
 
@@ -66,6 +66,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const updateRightPanelState = useTabStore(
     (state) => state.updateRightPanelState,
   );
+
   const nextTabId = useRef(1);
   const panelConfig = get(tab.tabId);
   const dynamicTabs = getRightPanelTabs(tab.tabId);
@@ -170,18 +171,58 @@ const RightPanelTabs = memo(function RightPanelTabs({
 });
 
 const RightPanelContainer = memo(function RightPanelContainer() {
-  const activeTabId = useTabStore((state) => state.activeTabId);
+  const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
   const cachedTabs = useTabStore((state) => state.cachedTabsList);
+  const previousActiveTabId = useRef(activeTabId);
+  const [settledActiveTabId, setSettledActiveTabId] = useState(activeTabId);
+  const switchingToDefault =
+    activeTabId === DEFAULT_TAB_ID &&
+    previousActiveTabId.current !== DEFAULT_TAB_ID &&
+    settledActiveTabId !== DEFAULT_TAB_ID;
 
-  if (!cachedTabs.length) {
+  useEffect(() => {
+    const wasOrdinaryTab = previousActiveTabId.current !== DEFAULT_TAB_ID;
+    previousActiveTabId.current = activeTabId;
+
+    if (activeTabId !== DEFAULT_TAB_ID || !wasOrdinaryTab) {
+      setSettledActiveTabId(activeTabId);
+      return;
+    }
+
+    const timer = window.setTimeout(
+      () => setSettledActiveTabId(DEFAULT_TAB_ID),
+      0,
+    );
+    return () => window.clearTimeout(timer);
+  }, [activeTabId]);
+
+  const panelTabs = useMemo(() => {
+    const cachedTabIds = new Set(cachedTabs.map((tab) => tab.tabId));
+    const uncachedPanels = !cachedTabIds.has(DEFAULT_TAB_ID)
+      ? [{
+        tabId: DEFAULT_TAB_ID,
+        path: "/default",
+        pageId: "",
+        lastAccessTime: 0,
+        revision: 0,
+      }]
+      : [];
+
+    return [...cachedTabs, ...uncachedPanels];
+  }, [cachedTabs]);
+
+  if (!panelTabs.length) {
     return <EmptyPanelContent />;
+  }
+
+  if (switchingToDefault) {
+    return <div className="h-full w-full" data-testid="tron-right-sidebar-transition" />;
   }
 
   return (
     <div className="relative h-full w-full overflow-hidden">
-      {cachedTabs.map((tab) => {
+      {panelTabs.map((tab) => {
         const isActive = tab.tabId === activeTabId;
-
         return (
           <div
             key={tab.tabId}
