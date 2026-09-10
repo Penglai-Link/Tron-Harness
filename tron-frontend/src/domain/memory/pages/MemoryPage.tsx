@@ -317,7 +317,7 @@ function MemoryRecordsTable({
         cell: ({ row }) => (
           <Badge
             className="w-fit max-w-full font-bold"
-            tone={getTypeTone(row.original)}
+            variant={getTypeTone(row.original)}
           >
             {row.original.memoryType}
           </Badge>
@@ -333,7 +333,7 @@ function MemoryRecordsTable({
         cell: ({ row }) => (
           <div className="flex gap-1">
             <Badge
-              tone={row.original.memoryStatus === "ACTIVE" ? "success" : "info"}
+              variant={row.original.memoryStatus === "ACTIVE" ? "success" : "info"}
             >
               {t(`pages:memory.statusValue.${row.original.memoryStatus}`, row.original.memoryStatus)}
             </Badge>

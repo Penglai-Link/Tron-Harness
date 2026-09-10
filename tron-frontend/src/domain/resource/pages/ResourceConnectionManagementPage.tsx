@@ -230,7 +230,7 @@ export function ResourceConnectionManagementPage({
       {
         cell: ({ row }) => (
           <Badge
-            tone={
+            variant={
               row.original.sourceKind === "LOCAL"
                 ? "success"
                 : row.original.sourceKind === "INHERITED"

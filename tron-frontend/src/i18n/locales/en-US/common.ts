@@ -29,7 +29,7 @@ export const common = {
     inputUrlTips:"Please Enter the URL",
     newTab: "New Tab",
     browser: "Browser",
-    attributes: "Page Info"
+    attributes: "Attributes"
   },
   jsonSchemaEditor: {
     actions: {

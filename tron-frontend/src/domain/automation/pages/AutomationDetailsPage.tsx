@@ -398,7 +398,7 @@ export function AutomationDetailsPage() {
               <Button
                 size="sm"
                 disabled={archived || statusBusy || automation.status === "Active"}
-                variant={automation.status === "Active" && !archived ? "primary" : "ghost"}
+                variant={automation.status === "Active" && !archived ? "default" : "ghost"}
                 onClick={() => {
                   void handleStatusChange("Active");
                 }}
@@ -409,7 +409,7 @@ export function AutomationDetailsPage() {
               <Button
                 size="sm"
                 disabled={archived || statusBusy || automation.status === "Paused"}
-                variant={automation.status === "Paused" && !archived ? "primary" : "ghost"}
+                variant={automation.status === "Paused" && !archived ? "default" : "ghost"}
                 onClick={() => {
                   void handleStatusChange("Paused");
                 }}

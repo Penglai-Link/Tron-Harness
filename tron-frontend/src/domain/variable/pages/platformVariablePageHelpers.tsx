@@ -291,7 +291,7 @@ export function SensitiveDataBadge({
   return (
     <span className="inline-flex w-fit max-w-max">
       <Badge
-        tone={sensitive ? "warning" : "info"}
+        variant={sensitive ? "warning" : "info"}
       >
         {sensitive ? t("variablesCommon.sensitive", "Sensitive") : t("variablesCommon.plain", "Plain")}
       </Badge>

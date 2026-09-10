@@ -216,7 +216,7 @@ export function ResourcesPage() {
             {
               cell: ({ row }: { row: { original: ResourceRecord } }) => (
                 <Badge
-                  tone={
+                  variant={
                     row.original.sourceKind === "LOCAL"
                       ? "success"
                       : row.original.sourceKind === "INHERITED"
