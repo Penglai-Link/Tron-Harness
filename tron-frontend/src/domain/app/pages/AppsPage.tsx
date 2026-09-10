@@ -81,17 +81,19 @@ function AppActions({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
-        <Button
-          aria-label={pageT("aria.actionsFor", { name: app.name })}
-          size="icon"
-          type="button"
-          variant="ghost"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <MoreHorizontal size={16} aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label={pageT("aria.actionsFor", { name: app.name })}
+            size="icon"
+            type="button"
+            variant="ghost"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <MoreHorizontal size={16} aria-hidden="true" />
+          </Button>
+        }
+      />
       <DropdownMenuContent align="end" onClick={stopRowNavigation}>
         <DropdownMenuItem
           onClick={(event) => {

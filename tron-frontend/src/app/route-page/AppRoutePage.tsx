@@ -143,7 +143,6 @@ export default function AppRoutePage() {
         <div
           key={`${cachedTab.tabId}:${cachedTab.revision}`}
           hidden={!isCurrentTab}
-          aria-hidden={!isCurrentTab}
           className="h-full"
         >
           <TabPanelRegistryProvider

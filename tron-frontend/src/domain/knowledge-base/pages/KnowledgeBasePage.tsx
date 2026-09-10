@@ -13,7 +13,7 @@ import type { KnowledgeBaseRecord } from "@/domain/knowledge-base/model/Knowledg
 import { useRagCorpora } from "@/domain/rag/hooks/useRagCorpora";
 import type { CorpusRecord } from "@/domain/rag/model/RagModel";
 import { DataTable } from "@/components/data-table";
-import { TextInput } from "@/components/forms";
+import { SelectInput, TextInput } from "@/components/forms";
 import { TablePagination } from "@/components/table-pagination";
 import {
   MetricCard,
