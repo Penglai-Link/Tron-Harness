@@ -1,5 +1,6 @@
 import {
   Archive,
+  Palette,
   Bot,
   Boxes,
   FileClock,
@@ -29,6 +30,12 @@ export const settingsNavigation = [
         href: "/settings/general",
         icon: Settings2,
         translationKey: "shell:settings.items.general",
+      },
+      {
+        label: "Appearance",
+        href: "/settings/appearance",
+        icon: Palette,
+        translationKey: "shell:settings.items.appearance",
       },
       {
         label: "Variables",

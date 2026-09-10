@@ -3361,4 +3361,9 @@ export const pages = {
       FAILED: "Failed",
     },
   },
+  settingsAppearance: {
+    fontSizeError: "Font size must be an integer between {{min}} and {{max}}.",
+    fontSize: "UI Font Size",
+    fontSizeTips: "Adjust the base font size used in the interface",
+  },
 } as const;

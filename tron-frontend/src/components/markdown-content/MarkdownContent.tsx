@@ -25,7 +25,7 @@ export function MarkdownContent({
       <div
         aria-label={ariaLabel}
         className={cn(
-          "min-h-6 py-1 text-sm leading-6 text-[var(--color-on-surface)]",
+          "min-h-6 py-1 text-[length:var(--tron-system-font-size)] leading-6 text-[var(--color-on-surface)]",
           className,
         )}
       >
@@ -40,7 +40,7 @@ export function MarkdownContent({
     <div
       aria-label={ariaLabel}
       className={cn(
-        "min-h-6 min-w-0 max-w-full overflow-hidden py-1 text-sm leading-7 text-[var(--color-on-surface)] [overflow-wrap:anywhere]",
+        "min-h-6 min-w-0 max-w-full overflow-hidden py-1 text-[length:var(--tron-system-font-size)] leading-7 text-[var(--color-on-surface)] [overflow-wrap:anywhere]",
         "[&_a]:text-[var(--color-primary)] [&_a]:underline-offset-2 hover:[&_a]:underline",
         "[&_blockquote]:mb-3 [&_blockquote]:border-l-2 [&_blockquote]:border-[var(--color-outline-variant)] [&_blockquote]:pl-4 [&_blockquote]:text-[var(--color-on-surface-variant)]",
         "[&_code]:rounded-md [&_code]:bg-[#afb8c133] [&_code]:px-[0.35em] [&_code]:py-[0.15em] [&_code]:font-mono [&_code]:text-[85%]",

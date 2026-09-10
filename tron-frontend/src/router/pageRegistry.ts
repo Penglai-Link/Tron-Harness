@@ -70,6 +70,7 @@ export const routePages: Record<string, RoutePageComponent> = {
   "resourceManagement.serverAccounts": lazy(() => import("@/domain/resource/pages/ResourceConnectionManagementPage").then((module) => ({ default: module.ServerAccountManagementPage }))),
   "resourceManagement.serverAccountsDetail": lazy(() => import("@/domain/resource/pages/ResourceEditorPage").then((module) => ({ default: module.ResourceEditorPage }))),
   "settings.agents": lazy(() => import("@/domain/agent/pages/PlatformAgentsPage").then((module) => ({ default: module.PlatformAgentsPage }))),
+  "settings.appearance": lazy(() => import("@/domain/settings/pages/SettingsAppearancePage").then((module) => ({ default: module.SettingsAppearancePage }))),
   "settings.general": lazy(() => import("@/domain/settings/pages/SettingsGeneralPage").then((module) => ({ default: module.SettingsGeneralPage }))),
   "settings.shortcuts": lazy(() => import("@/domain/settings/pages/SettingsShortcutsPage").then((module) => ({ default: module.SettingsShortcutsPage }))),
   "settings.mcpServersEdit": lazy(() => import("@/domain/mcp/pages/EditPlatformMcpServerPage").then((module) => ({ default: module.EditPlatformMcpServerPage }))),

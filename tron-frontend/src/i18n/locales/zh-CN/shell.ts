@@ -75,6 +75,7 @@ export const shell = {
     },
     items: {
       agents: "智能体",
+      appearance: "外观",
       auditLogs: "审计日志",
       general: "通用",
       mcpServers: "MCP 服务",

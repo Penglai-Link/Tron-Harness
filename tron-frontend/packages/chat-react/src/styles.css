@@ -84,6 +84,11 @@
   color: var(--tron-chat-text);
 }
 
+/* Keep message markdown in sync with the persisted system font size. */
+.tron-chat .markdown-body {
+  font-size: var(--tron-system-font-size, 16px);
+}
+
 .tron-chat__header {
   display: flex;
   min-height: 56px;

@@ -103,6 +103,7 @@ export const appRoutes: AppRoute[] = [
   { pageId: "variables.details", route: "/variables/detail", activeNav: "Variables", title: "Variable Details", archetype: "detail" },
   { pageId: "variables.details", route: "/variables/details", activeNav: "Variables", title: "Variable Details", archetype: "detail" },
   { pageId: "settings.general", route: "/settings/general", activeNav: "Settings", title: "General Settings", archetype: "settings", layout: "settings", settingsNav: "General" },
+  { pageId: "settings.appearance", route: "/settings/appearance", activeNav: "Settings", title: "Appearance Settings", archetype: "settings", layout: "settings", settingsNav: "Appearance" },
   { pageId: "settings.shortcuts", route: "/settings/shortcuts", activeNav: "Settings", title: "Keyboard Shortcuts", archetype: "settings", layout: "settings", settingsNav: "Shortcuts" },
   { pageId: "settings.agents", route: "/settings/agents", activeNav: "Settings", title: "Agent Management", archetype: "settings", layout: "settings", settingsNav: "Agents" },
   { pageId: "settings.mcpServers", route: "/settings/mcp-servers", activeNav: "Settings", title: "Platform MCP Servers", archetype: "settings", layout: "settings", settingsNav: "MCP Servers" },

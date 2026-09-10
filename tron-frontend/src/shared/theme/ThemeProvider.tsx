@@ -7,6 +7,14 @@ import {
   type ReactNode,
 } from "react";
 
+import {
+  applySystemFontSize,
+  defaultSystemFontSize,
+  isSystemFontSize,
+  readStoredSystemFontSize,
+  systemFontSizeStorageKey,
+} from "@/shared/lib/systemFontSize";
+
 export type AppTheme = "light" | "matrix-dark";
 
 interface ThemeOption {
@@ -15,6 +23,8 @@ interface ThemeOption {
 }
 
 interface ThemeContextValue {
+  fontSize: number;
+  setFontSize: (fontSize: number) => void;
   setTheme: (theme: AppTheme) => void;
   theme: AppTheme;
   themes: readonly ThemeOption[];
@@ -39,6 +49,11 @@ function getStoredTheme(): AppTheme | undefined {
   return storedTheme && isAppTheme(storedTheme) ? storedTheme : undefined;
 }
 
+function getStoredFontSize(): number | undefined {
+  if (typeof window === "undefined") return undefined;
+  return readStoredSystemFontSize(window.localStorage);
+}
+
 function applyTheme(theme: AppTheme) {
   if (typeof document === "undefined") return;
   const root = document.documentElement;
@@ -48,6 +63,7 @@ function applyTheme(theme: AppTheme) {
 
 export function ThemeProvider({ children }: { children: ReactNode }) {
   const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme() ?? "light");
+  const [fontSize, setFontSize] = useState<number>(() => getStoredFontSize() ?? defaultSystemFontSize);
 
   useLayoutEffect(() => {
     applyTheme(theme);
@@ -56,11 +72,26 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }, [theme]);
 
+  useLayoutEffect(() => {
+    applySystemFontSize(fontSize);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(systemFontSizeStorageKey, String(fontSize));
+    }
+  }, [fontSize]);
+
+  function updateFontSize(nextFontSize: number) {
+    if (isSystemFontSize(nextFontSize)) {
+      setFontSize(nextFontSize);
+    }
+  }
+
   const contextValue = useMemo<ThemeContextValue>(() => ({
+    fontSize,
+    setFontSize: updateFontSize,
     setTheme,
     theme,
     themes: themeOptions,
-  }), [theme]);
+  }), [fontSize, theme]);
 
   return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>;
 }

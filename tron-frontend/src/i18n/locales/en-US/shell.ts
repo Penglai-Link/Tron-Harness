@@ -75,6 +75,7 @@ export const shell = {
     },
     items: {
       agents: "Agents",
+      appearance: "Appearance",
       auditLogs: "Audit Logs",
       general: "General",
       mcpServers: "MCP Servers",
