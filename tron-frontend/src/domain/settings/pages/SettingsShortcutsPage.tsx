@@ -11,8 +11,16 @@ import {
   shortcutFromKeyboardEvent,
   type ShellShortcutAction,
 } from "@/shared/lib/keyboardShortcuts";
-import { PageHeader, SurfaceCard } from "@/shared";
+import { InfoTooltip, PageHeader, SurfaceCard } from "@/shared";
 import { useAppShellStore } from "@/store/appShellStore";
+import {
+  Item,
+  ItemContent,
+  ItemTitle,
+  ItemDescription,
+  ItemActions,
+} from "@/components/ui/item";
+import { Separator } from "@/components/ui/separator";
 
 export function SettingsShortcutsPage() {
   const { t } = useTranslation("pages");
@@ -26,8 +34,8 @@ export function SettingsShortcutsPage() {
   const pageT = (key: string, options?: Record<string, unknown>) =>
     t(`settingsShortcuts.${key}`, options);
   const useMacSymbols =
-    typeof navigator !== "undefined"
-    && /Mac|iPhone|iPad/i.test(navigator.userAgent);
+    typeof navigator !== "undefined" &&
+    /Mac|iPhone|iPad/i.test(navigator.userAgent);
 
   useEffect(() => {
     if (!capturingAction) return;
@@ -44,11 +52,11 @@ export function SettingsShortcutsPage() {
         return;
       }
       if (
-        !event.altKey
-        && !event.ctrlKey
-        && !event.metaKey
-        && !event.shiftKey
-        && (event.key === "Backspace" || event.key === "Delete")
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.shiftKey &&
+        (event.key === "Backspace" || event.key === "Delete")
       ) {
         setShortcutBinding(capturingAction, null);
         setCapturingAction(null);
@@ -62,10 +70,11 @@ export function SettingsShortcutsPage() {
         return;
       }
 
-      const conflict = shellShortcutActions.find((action) => (
-        action !== capturingAction
-        && shortcutEquals(shortcutBindings[action], binding)
-      ));
+      const conflict = shellShortcutActions.find(
+        (action) =>
+          action !== capturingAction &&
+          shortcutEquals(shortcutBindings[action], binding),
+      );
       if (conflict) {
         setCaptureError(
           pageT("messages.conflict", {
@@ -97,7 +106,7 @@ export function SettingsShortcutsPage() {
       <PageHeader title={pageT("title")} />
 
       <SurfaceCard className="overflow-hidden p-0">
-        <div className="border-b border-[var(--color-outline-variant)] px-5 py-4">
+        <div className="border-b border-[var(--color-outline-variant)] px-2 py-4">
           <h2 className="text-sm font-semibold text-[var(--color-on-surface)]">
             {pageT("supportedTitle")}
           </h2>
@@ -116,61 +125,58 @@ export function SettingsShortcutsPage() {
 
         <div className="overflow-x-auto">
           <div className="min-w-[760px] divide-y divide-[var(--color-outline-variant)]">
-            <div className="grid grid-cols-[minmax(180px,1fr)_minmax(260px,1.5fr)_minmax(220px,0.9fr)] gap-4 bg-[var(--color-surface-container)] px-5 py-3 text-xs font-semibold text-[var(--color-on-surface-variant)]">
-              <span>{pageT("columns.action")}</span>
-              <span>{pageT("columns.description")}</span>
-              <span>{pageT("columns.shortcut")}</span>
-            </div>
-            {shellShortcutActions.map((action) => {
+            {shellShortcutActions.map((action, index) => {
               const binding = shortcutBindings[action];
               const isCapturing = capturingAction === action;
               const label = pageT(`shortcuts.${action}.label`);
 
               return (
-                <div
-                  className="grid grid-cols-[minmax(180px,1fr)_minmax(260px,1.5fr)_minmax(220px,0.9fr)] items-center gap-4 px-5 py-3.5 text-sm"
-                  key={action}
-                >
-                  <span className="font-medium text-[var(--color-on-surface)]">
-                    {label}
-                  </span>
-                  <span className="text-[var(--color-on-surface-variant)]">
-                    {pageT(`shortcuts.${action}.description`)}
-                  </span>
-                  <div className="flex items-center gap-1.5">
-                    <Button
-                      aria-label={pageT("actions.configure", { label })}
-                      className="min-w-[156px] justify-start font-mono"
-                      size="sm"
-                      type="button"
-                      variant={isCapturing ? "secondary" : "outline"}
-                      onClick={() => beginCapture(action)}
-                    >
-                      <Keyboard aria-hidden="true" size={14} />
-                      {isCapturing
-                        ? pageT("capturing")
-                        : binding
-                        ? formatShortcut(binding, useMacSymbols)
-                        : pageT("unassigned")}
-                    </Button>
-                    {binding ? (
+                <>
+                  <Item size="xs" key={action}>
+                    <ItemContent>
+                      <ItemTitle>{label}</ItemTitle>
+                      <ItemDescription>
+                        {pageT(`shortcuts.${action}.description`)}
+                      </ItemDescription>
+                    </ItemContent>
+                    <ItemActions>
                       <Button
-                        aria-label={pageT("actions.clear", { label })}
-                        size="icon-sm"
+                        aria-label={pageT("actions.configure", { label })}
+                        className="min-w-[156px] justify-start font-mono"
+                        size="sm"
                         type="button"
-                        variant="ghost"
-                        onClick={() => {
-                          setShortcutBinding(action, null);
-                          if (capturingAction === action) {
-                            setCapturingAction(null);
-                          }
-                        }}
+                        variant={isCapturing ? "secondary" : "outline"}
+                        onClick={() => beginCapture(action)}
                       >
-                        <X aria-hidden="true" size={15} />
+                        <Keyboard aria-hidden="true" size={14} />
+                        {isCapturing
+                          ? pageT("capturing")
+                          : binding
+                          ? formatShortcut(binding, useMacSymbols)
+                          : pageT("unassigned")}
                       </Button>
-                    ) : null}
-                  </div>
-                </div>
+                      {binding ? (
+                        <Button
+                          aria-label={pageT("actions.clear", { label })}
+                          size="icon-sm"
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setShortcutBinding(action, null);
+                            if (capturingAction === action) {
+                              setCapturingAction(null);
+                            }
+                          }}
+                        >
+                          <X aria-hidden="true" size={15} />
+                        </Button>
+                      ) : null}
+                    </ItemActions>
+                  </Item>
+                  {index < shellShortcutActions.length - 1 ? (
+                    <Separator />
+                  ) : null}
+                </>
               );
             })}
           </div>
