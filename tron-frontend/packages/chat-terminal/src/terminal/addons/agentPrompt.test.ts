@@ -137,4 +137,22 @@ describe("AgentPromptAddon cursor visibility", () => {
       addon.dispose();
     },
   );
+
+  it("keeps the prompt hidden while a model session is active", () => {
+    const terminal = new TerminalStub();
+    const addon = new AgentPromptAddon({ text: "Ask AI" });
+    const setVisible = vi.spyOn(
+      addon as unknown as { setVisible: (visible: boolean) => void },
+      "setVisible",
+    );
+    addon.activate(terminal as unknown as XTerminal);
+    addon.setInputState(true, "");
+    addon.setModelSessionActive(true);
+    setVisible.mockClear();
+
+    addon.setModelSessionActive(true);
+
+    expect(setVisible).toHaveBeenLastCalledWith(false);
+    addon.dispose();
+  });
 });

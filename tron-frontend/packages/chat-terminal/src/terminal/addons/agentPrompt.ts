@@ -26,6 +26,7 @@ export class AgentPromptAddon implements ITerminalAddon {
   private isInputStateManaged = false;
   private standaloneInput = "";
   private visible = true;
+  private modelSessionActive = false;
   private cursorHidden = false;
   private cursorWasFocused = false;
   private previousCursorInactiveStyle?: XTerminal["options"]["cursorInactiveStyle"];
@@ -72,6 +73,11 @@ export class AgentPromptAddon implements ITerminalAddon {
   setVisible(visible: boolean) {
     this.visible = visible;
     this.schedulePositionUpdate();
+  }
+
+  setModelSessionActive(active: boolean) {
+    this.modelSessionActive = active;
+    this.syncVisibility();
   }
 
   refreshLocale() {
@@ -199,7 +205,7 @@ export class AgentPromptAddon implements ITerminalAddon {
   }
 
   private syncVisibility() {
-    this.setVisible(this.inputEnabled && !this.hasInput);
+    this.setVisible(!this.modelSessionActive && this.inputEnabled && !this.hasInput);
     this.schedulePositionUpdate();
   }
 

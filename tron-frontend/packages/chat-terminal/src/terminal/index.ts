@@ -223,6 +223,10 @@ export class Terminal {
       this.modelSessionAddon = new ModelSessionAddon(
         {
           ...modelSessionOptions,
+          onSessionStateChange: (active) => {
+            modelSessionOptions.onSessionStateChange?.(active);
+            this.agentPromptAddon?.setModelSessionActive(active);
+          },
           onLayoutResize: () => {
             modelSessionOptions.onLayoutResize?.();
             this.refreshForContentLayout();
@@ -304,7 +308,8 @@ export class Terminal {
   }
 
   shouldNotifyTransportResize() {
-    return !this.isFittingContentLayout;
+    return !this.isFittingContentLayout
+      && !(this.inputRouterAddon?.isAgentRequestInFlight() ?? false);
   }
 
   private scheduleThemeRefresh() {

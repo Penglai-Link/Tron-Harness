@@ -264,6 +264,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     }
 
     this.show();
+    this.options.onSessionStateChange?.(true);
     this.anchorPreparedSession();
   }
 
@@ -402,6 +403,9 @@ export class ModelSessionAddon implements ITerminalAddon {
     }
 
     await this.waitForPendingRowWrites();
+    if (completedSessions.length > 0) {
+      this.options.onSessionStateChange?.(false);
+    }
   }
 
   clear() {
@@ -411,6 +415,7 @@ export class ModelSessionAddon implements ITerminalAddon {
     this.activeSessionKey = undefined;
     this.preparedSessionAnchor = false;
     this.isVisible.value = false;
+    this.options.onSessionStateChange?.(false);
   }
 
   private handleEraseInDisplay(params: (number | number[])[]) {

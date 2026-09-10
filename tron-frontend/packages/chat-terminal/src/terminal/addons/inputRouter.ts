@@ -73,6 +73,10 @@ export class InputRouterAddon implements ITerminalAddon {
     this.options.onInputStateChange?.(state);
   }
 
+  isAgentRequestInFlight() {
+    return this.agentRequestInFlight;
+  }
+
   private async handleData(data: string) {
     if (this.agentRequestInFlight) {
       return;
@@ -154,7 +158,7 @@ export class InputRouterAddon implements ITerminalAddon {
       console.error("Terminal agent request failed", error);
     } finally {
       if (finishShellLine) {
-        this.options.write("\r");
+        this.options.write("\r\n");
       }
       this.agentRequestInFlight = false;
       this.notifyInputState();

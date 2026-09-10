@@ -52,8 +52,24 @@ describe("InputRouterAddon", () => {
     expect(harness.options.clearInputLine).not.toHaveBeenCalled();
     expect(harness.options.write.mock.calls).toEqual([
       ["", true],
-      ["\r"],
+      ["\r\n"],
     ]);
+  });
+
+  it("reports an agent request as in flight until the response completes", async () => {
+    let release = () => {};
+    harness.options.onAgentRequest.mockImplementation(
+      () => new Promise<void>((resolve) => { release = resolve; }),
+    );
+    harness.atPrompt(true, "# hide shell redraw");
+
+    const request = harness.type("\r");
+    await Promise.resolve();
+    expect(harness.addon.isAgentRequestInFlight()).toBe(true);
+
+    release();
+    await request;
+    expect(harness.addon.isAgentRequestInFlight()).toBe(false);
   });
 
   it("honours a custom agent prefix", async () => {
@@ -115,7 +131,7 @@ describe("InputRouterAddon", () => {
     expect(harness.options.clearInputLine).not.toHaveBeenCalled();
     expect(harness.options.write.mock.calls).toEqual([
       ["", true],
-      ["\r"],
+      ["\r\n"],
     ]);
   });
 
@@ -221,7 +237,7 @@ describe("InputRouterAddon", () => {
     expect(harness.options.clearInputLine).not.toHaveBeenCalled();
     expect(harness.options.write.mock.calls).toEqual([
       ["", true],
-      ["\r"],
+      ["\r\n"],
     ]);
     expect(harness.options.onInputStateChange).toHaveBeenLastCalledWith({
       agentRequestInFlight: false,

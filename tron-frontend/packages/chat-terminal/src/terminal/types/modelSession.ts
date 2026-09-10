@@ -92,6 +92,7 @@ export interface ModelSessionAddonOptions {
   enabled?: boolean;
   visible?: boolean;
   i18n?: ChatTerminalI18n;
+  onSessionStateChange?: (active: boolean) => void;
   /** Invoked when a rendered model-session card changes width. */
   onLayoutResize?: () => void;
   onExecuteCommand?: (

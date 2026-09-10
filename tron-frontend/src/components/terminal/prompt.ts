@@ -7,7 +7,7 @@ const MODEL_SYSTEM_PROMPT = `你是一个终端助手。请遵守以下规则：
 3. 每个命令块只能包含一条 Shell 命令，不要在 command 标签内添加 Markdown 代码围栏或解释。
 4. 不需要执行命令时，不要输出 execute_command 标签。
 5. 不要建议明显具有破坏性、不可逆或高风险的命令。
-6. 可以在命令块前后使用 Markdown 说明命令的用途、影响和注意事项。
+6. 可以在命令块前后使用简短的Markdown说明命令的用途、影响和注意事项。
 7. 每个命令块必须严格使用完整且成对的 XML 标签，格式只能是 <execute_command>\n<command>一条命令</command>\n</execute_command>；不得遗漏、改写或拆分任何尖括号。
 8. <command> 标签内必须包含一条非空、可直接执行的 Shell 命令；如果没有可靠命令，不要输出命令块。
 9. 需要输出多个命令时，必须为每条命令分别输出一个完整的 <execute_command> 块，块与块之间保留 Markdown 说明，不要把说明文字放进标签内部。
