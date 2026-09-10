@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
-import { InfoTooltip, PageHeader, SurfaceCard, useTheme } from "@/shared";
+import { PageHeader, SurfaceCard, useTheme } from "@/shared";
 import {
   isSystemFontSize,
   maximumSystemFontSize,
@@ -15,6 +15,7 @@ import {
   ItemDescription,
   ItemActions,
 } from "@/components/ui/item";
+import { InfoTooltip } from "@/components/info-tooltip";
 
 export function SettingsAppearancePage() {
   const { t: shellT } = useTranslation("shell");

@@ -11,7 +11,6 @@ import {
   shortcutFromKeyboardEvent,
   type ShellShortcutAction,
 } from "@/shared/lib/keyboardShortcuts";
-import { InfoTooltip, PageHeader, SurfaceCard } from "@/shared";
 import { useAppShellStore } from "@/store/appShellStore";
 import {
   Item,
@@ -21,6 +20,7 @@ import {
   ItemActions,
 } from "@/components/ui/item";
 import { Separator } from "@/components/ui/separator";
+import { PageHeader, SurfaceCard } from "@/shared";
 
 export function SettingsShortcutsPage() {
   const { t } = useTranslation("pages");
