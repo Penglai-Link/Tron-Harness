@@ -56,4 +56,43 @@ describe("keyboard shortcuts", () => {
   it("does not expose the removed terminal action", () => {
     expect(shellShortcutActions).not.toContain("openTerminal");
   });
+
+  it("uses event.code to avoid Mac Option dead keys (Option+N)", () => {
+    // On Mac, Cmd+Option+N reports event.key === "Dead" but event.code === "KeyN".
+    const macEvent = keyboardEvent({
+      altKey: true,
+      code: "KeyN",
+      key: "Dead",
+      metaKey: true,
+    });
+
+    expect(shortcutFromKeyboardEvent(macEvent)).toEqual({
+      altKey: true,
+      key: "N",
+      modKey: true,
+      shiftKey: false,
+    });
+  });
+
+  it("matches default bindings via event.code when Mac Option produces special chars", () => {
+    const bindings = createDefaultShellShortcutBindings();
+    // Cmd+Option+J on Mac: event.key may be "∆" but event.code is "KeyJ".
+    const macEvent = keyboardEvent({
+      altKey: true,
+      code: "KeyJ",
+      ctrlKey: false,
+      key: "∆",
+      metaKey: true,
+    });
+
+    expect(findMatchingShellShortcutAction(bindings, macEvent)).toBe("toggleBottomPanel");
+  });
+
+  it("rejects dead keys when event.code is unavailable", () => {
+    expect(shortcutFromKeyboardEvent(keyboardEvent({
+      altKey: true,
+      code: "",
+      key: "Dead",
+    }))).toBeNull();
+  });
 });

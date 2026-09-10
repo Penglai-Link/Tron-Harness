@@ -47,6 +47,48 @@ function normalizeKey(key: string) {
   return key;
 }
 
+const codeToKeyMap: Record<string, string> = {
+  BracketLeft: "[",
+  BracketRight: "]",
+  Semicolon: ";",
+  Quote: "'",
+  Comma: ",",
+  Period: ".",
+  Slash: "/",
+  Backslash: "\\",
+  Minus: "-",
+  Equal: "=",
+  Backquote: "`",
+  Space: " ",
+};
+
+function codeToKey(code: string): string | undefined {
+  if (!code) return undefined;
+  const letterMatch = /^Key([A-Z])$/.exec(code);
+  if (letterMatch) return letterMatch[1];
+  const digitMatch = /^Digit([0-9])$/.exec(code);
+  if (digitMatch) return digitMatch[1];
+  return codeToKeyMap[code];
+}
+
+/**
+ * Derives a stable key identifier from a keyboard event. Prefers
+ * `event.code` (physical key) to avoid Mac Option-key dead keys and special
+ * characters (e.g. Option+N reports `event.key === "Dead"`, Option+J reports
+ * `event.key === "∆"`). Falls back to `event.key` when `event.code` is
+ * unavailable or unmapped.
+ */
+function shortcutKeyFromEvent(
+  event: Pick<KeyboardEvent, "code" | "key">,
+): string | null {
+  const codeKey = codeToKey(event.code);
+  if (codeKey) return codeKey;
+  if (!event.key || event.key === "Dead" || event.key === "Process") {
+    return null;
+  }
+  return normalizeKey(event.key);
+}
+
 function isShortcutBinding(value: unknown): value is ShellShortcutBinding {
   if (!value || typeof value !== "object") return false;
   const binding = value as Partial<ShellShortcutBinding>;
@@ -101,15 +143,18 @@ export function normalizeShellShortcutBindings(value: unknown): ShellShortcutBin
 }
 
 export function shortcutFromKeyboardEvent(
-  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
+  event: Pick<KeyboardEvent, "altKey" | "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
 ): ShellShortcutBinding | null {
   if (modifierKeys.has(event.key)) return null;
   const modKey = event.metaKey || event.ctrlKey;
   if (!modKey && !event.altKey && !event.shiftKey) return null;
 
+  const key = shortcutKeyFromEvent(event);
+  if (!key) return null;
+
   return {
     altKey: event.altKey,
-    key: normalizeKey(event.key),
+    key,
     modKey,
     shiftKey: event.shiftKey,
   };
@@ -127,18 +172,20 @@ export function shortcutEquals(
 
 export function shortcutMatchesKeyboardEvent(
   binding: ShellShortcutBinding | null,
-  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
+  event: Pick<KeyboardEvent, "altKey" | "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
 ) {
   if (!binding) return false;
+  const eventKey = shortcutKeyFromEvent(event);
+  if (!eventKey) return false;
   return binding.altKey === event.altKey
-    && binding.key === normalizeKey(event.key)
+    && binding.key === eventKey
     && binding.modKey === (event.metaKey || event.ctrlKey)
     && binding.shiftKey === event.shiftKey;
 }
 
 export function findMatchingShellShortcutAction(
   bindings: ShellShortcutBindings,
-  event: Pick<KeyboardEvent, "altKey" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
+  event: Pick<KeyboardEvent, "altKey" | "code" | "ctrlKey" | "key" | "metaKey" | "shiftKey">,
 ) {
   return shellShortcutActions.find((action) => (
     shortcutMatchesKeyboardEvent(bindings[action], event)
