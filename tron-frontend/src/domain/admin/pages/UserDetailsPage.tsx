@@ -17,17 +17,16 @@ import {
 } from "react-router";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
+import { DetailField } from "@/components/detail-field";
+import { Field, TextInput } from "@/components/forms";
 import {
-  DetailField,
-  Field,
   PageHeader,
   SurfaceCard,
-  TextInput,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveAdminUser,
@@ -520,7 +519,7 @@ export function UserDetailsPage() {
               <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">{user.username}</p>
             </div>
             <div className="flex items-center gap-[12px]">
-              <Badge tone={getStatusTone(currentStatus)}>{currentStatus}</Badge>
+              <Badge variant={getStatusTone(currentStatus)}>{currentStatus}</Badge>
               <div className="flex size-9 items-center justify-center rounded-xl bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]">
                 <ShieldCheck size={18} aria-hidden="true" />
               </div>

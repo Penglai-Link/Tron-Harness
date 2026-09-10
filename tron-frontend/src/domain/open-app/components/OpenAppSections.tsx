@@ -14,13 +14,10 @@ import type {
   OpenApiCapabilityCatalogOperation,
   OpenAppStatus,
 } from "@/domain/open-app/model";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 import {
-  Field,
   MetricCard,
-  SelectInput,
   SurfaceCard,
-  TextArea,
-  TextInput,
   useLocaleFormatters,
 } from "@/shared";
 import {

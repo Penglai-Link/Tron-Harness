@@ -1,6 +1,7 @@
-import { LinkButton } from "@/shared";
+import { buttonVariants } from "@/components/ui/button";
 import { Command, ArrowRight } from "lucide-react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router";
 
 export default function HomePage() {
   const { t } = useTranslation("home");
@@ -20,14 +21,14 @@ export default function HomePage() {
             {t("description")}
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <LinkButton to="/design-standard">
+            <Link to="/design-standard" className={buttonVariants()}>
               {t("cta.designStandard")}
               <ArrowRight size={16} aria-hidden="true" />
-            </LinkButton>
-            <LinkButton to="/" variant="secondary">
+            </Link>
+            <Link to="/" className={buttonVariants({ variant: "secondary" })}>
               {t("cta.sharedShell")}
               <ArrowRight size={16} aria-hidden="true" />
-            </LinkButton>
+            </Link>
           </div>
         </div>
       </section>

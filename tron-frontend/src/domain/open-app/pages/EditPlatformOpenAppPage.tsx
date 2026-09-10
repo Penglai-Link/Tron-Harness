@@ -39,11 +39,11 @@ import type {
 } from "@/domain/open-app/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  Button,
   PageHeader,
   SurfaceCard,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 
 export function EditPlatformOpenAppPage() {
   const [searchParams] = useSearchParams();

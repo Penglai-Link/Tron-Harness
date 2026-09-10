@@ -23,12 +23,7 @@ import type {
   ResourceKind,
   QuickResourceUploadHandoffPayload,
 } from "@/domain/resource/model";
-import {
-  SelectInput,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-} from "@/shared";
+import { SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
 import { cn } from "@/shared/lib/utils";
 
 import { readPdfPageCount } from "./pdfPageCount";

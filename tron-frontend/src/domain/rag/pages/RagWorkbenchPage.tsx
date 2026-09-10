@@ -13,7 +13,7 @@ import {
   useTabPanelConfig,
   useWorkspaceSpaces,
 } from "@/shared";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 
 import { useAuthSession } from "@/domain/auth/hooks";
 import { RagWorkbenchTab } from "@/domain/rag/components/RagWorkbenchTab";

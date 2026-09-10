@@ -27,16 +27,16 @@ import {
 } from "@/domain/variable/mock/data";
 import type { PlatformVariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SearchField,
-  SelectInput,
-  TablePagination,
   useTablePagination,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   SensitiveDataBadge,

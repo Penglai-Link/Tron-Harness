@@ -27,20 +27,17 @@ import {
   listMemoryWorkDomainsMock,
   updateMemoryWorkDomainRecord,
 } from "@/domain/memory/mock";
+import { DataTable } from "@/components/data-table";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  SelectInput,
-  ConfirmDialog,
-  DataTable,
-  Field,
   PageHeader,
-  SearchField,
-  TablePagination,
-  TextArea,
-  TextInput,
   useDismissibleLayer,
   useTablePagination,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   Dialog,

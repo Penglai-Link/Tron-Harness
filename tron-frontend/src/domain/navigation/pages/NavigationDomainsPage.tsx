@@ -2,22 +2,18 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, MoreHorizontal, Plus, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router";
 
+import { DataTable } from "@/components/data-table";
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
+import { ModalDialog } from "@/components/modal-dialog";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  Badge,
-  Button,
-  ConfirmDialog,
-  DataTable,
-  Field,
-  ModalDialog,
   PageHeader,
-  SearchField,
-  SelectInput,
-  TablePagination,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";
 import {
   DropdownMenu,
@@ -305,7 +301,7 @@ export function NavigationDomainsPage() {
         columns={[
           { id: "position", header: text("columns.position", "排序", "Position"), render: (row) => row.position },
           { id: "domain", header: text("columns.domain", "领域", "Domain"), render: (row) => <div><div className="font-medium">{row.name[locale]}</div><div className="font-mono text-xs text-[var(--color-on-surface-variant)]">{row.domainCode}</div></div> },
-          { id: "status", header: text("columns.status", "状态", "Status"), render: (row) => <div className="flex flex-wrap gap-1.5"><Badge tone={row.enabled ? "success" : "default"}>{row.enabled ? text("status.enabled", "启用", "Enabled") : text("status.disabled", "禁用", "Disabled")}</Badge>{row.builtIn ? <Badge tone="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}{row.isDefault ? <Badge tone="warning">{text("status.default", "默认", "Default")}</Badge> : null}</div> },
+          { id: "status", header: text("columns.status", "状态", "Status"), render: (row) => <div className="flex flex-wrap gap-1.5"><Badge variant={row.enabled ? "success" : "default"}>{row.enabled ? text("status.enabled", "启用", "Enabled") : text("status.disabled", "禁用", "Disabled")}</Badge>{row.builtIn ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}{row.isDefault ? <Badge variant="warning">{text("status.default", "默认", "Default")}</Badge> : null}</div> },
           {
             id: "actions",
             header: text("columns.actions", "操作", "Actions"),

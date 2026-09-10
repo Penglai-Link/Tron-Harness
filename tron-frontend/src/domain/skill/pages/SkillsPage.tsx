@@ -22,24 +22,24 @@ import {
 } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { DetailField } from "@/components/detail-field";
+import { MarkdownContent } from "@/components/markdown-content";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
-  DetailField,
-  InspectorPanel,
-  MarkdownContent,
   PageHeader,
-  SearchField,
   SurfaceCard,
-  TablePagination,
   useTabPanelConfig,
   useLocaleFormatters,
   useOpenRightSidebar,
   useTablePagination,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
+import { useToast } from "@/components/ui/toast";
 
 import {
   bindWorkspaceSkill,
@@ -305,12 +305,12 @@ function RagIndexDetailCard({
           </p>
         </div>
         {indexing ? (
-          <Badge tone="info">
+          <Badge variant="info">
             <LoaderCircle className="mr-1 animate-spin" size={13} aria-hidden="true" />
             {t("pages:skills.status.indexing", { defaultValue: "Indexing" })}
           </Badge>
         ) : (
-          <Badge tone={getRagStatusTone(status)}>{getRagStatusLabel(status)}</Badge>
+          <Badge variant={getRagStatusTone(status)}>{getRagStatusLabel(status)}</Badge>
         )}
       </div>
 
@@ -701,24 +701,24 @@ export function SkillsPage() {
         <>
           <div className="flex flex-wrap items-center gap-[12px]">
             {selectedSkill.sourceType ? (
-              <Badge tone={getSourceTone(selectedSkill.sourceType)}>
+              <Badge variant={getSourceTone(selectedSkill.sourceType)}>
                 {pageT(`source.${selectedSkill.sourceType}`, selectedSkill.sourceType)}
               </Badge>
             ) : null}
             {selectedSkill.updateStatus ? (
-              <Badge tone={getUpdateTone(selectedSkill.updateStatus)}>
+              <Badge variant={getUpdateTone(selectedSkill.updateStatus)}>
                 {pageT(`update.${selectedSkill.updateStatus}`, selectedSkill.updateStatus)}
               </Badge>
             ) : null}
             {selectedSkill.registryState !== "Present" ? (
-              <Badge tone={getRegistryStateTone(selectedSkill.registryState)}>
+              <Badge variant={getRegistryStateTone(selectedSkill.registryState)}>
                 {pageT(`registry.${selectedSkill.registryState}`, selectedSkill.registryState)}
               </Badge>
             ) : null}
-            <Badge tone={getWorkspaceSourceTone(selectedSkill.sourceKind)}>
+            <Badge variant={getWorkspaceSourceTone(selectedSkill.sourceKind)}>
               {pageT(`sourceKind.${selectedSkill.sourceKind}`, selectedSkill.sourceKind)}
             </Badge>
-            <Badge tone={selectedSkill.enabled ? "success" : "info"}>
+            <Badge variant={selectedSkill.enabled ? "success" : "info"}>
               {selectedSkill.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}
             </Badge>
           </div>
@@ -810,7 +810,7 @@ export function SkillsPage() {
             </p>
             <div className="mt-2 flex flex-wrap gap-[12px]">
               {selectedSkill.files.map((file) => (
-                <Badge key={file.path} tone={file.isMarkdown ? "info" : "outline"}>
+                <Badge key={file.path} variant={file.isMarkdown ? "info" : "outline"}>
                   {file.path}
                 </Badge>
               ))}
@@ -975,9 +975,9 @@ export function SkillsPage() {
                 header: pageT("columns.update", "Update"),
                 render: (row) => (
                   row.updateStatus ? (
-                    <Badge tone={getUpdateTone(row.updateStatus)}>{pageT(`update.${row.updateStatus}`, row.updateStatus)}</Badge>
+                    <Badge variant={getUpdateTone(row.updateStatus)}>{pageT(`update.${row.updateStatus}`, row.updateStatus)}</Badge>
                   ) : (
-                    <Badge tone="info">{pageT("status.unknown", "Unknown")}</Badge>
+                    <Badge variant="info">{pageT("status.unknown", "Unknown")}</Badge>
                   )
                 ),
               },

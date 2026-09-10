@@ -2,18 +2,16 @@ import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { ArrowDown, ArrowUp, Copy, FolderTree, Plus, RefreshCcw, RotateCcw, Trash2 } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 
+import { Field, SelectInput, TextInput } from "@/components/forms";
+import { ModalDialog } from "@/components/modal-dialog";
 import {
-  Badge,
-  Button,
-  ConfirmDialog,
-  Field,
-  ModalDialog,
   PageHeader,
-  SelectInput,
   SurfaceCard,
-  TextInput,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";
 import {
   addNavigationMenuItem,
@@ -79,7 +77,7 @@ function TreeNode({
     <div>
       <div className="group flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-[var(--color-hover-surface)]" style={{ marginLeft: `${Math.min(level, 3) * 18}px` }}>
         <FolderTree className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
-        <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="truncate text-sm font-medium">{item.translations[locale]}</span><Badge tone="default">{menuTypeLabel(item.menuType, text)}</Badge>{item.source === "BuiltIn" ? <Badge tone="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}</div><div className="mt-0.5 flex flex-wrap gap-2 text-xs text-[var(--color-on-surface-variant)]"><span className="font-mono">{item.menuCode}</span>{item.visibleRoles.length ? <span>{item.visibleRoles.join(", ")}</span> : <span>{text("tree.allUsers", "所有登录用户", "All signed-in users")}</span>}</div></div>
+        <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="truncate text-sm font-medium">{item.translations[locale]}</span><Badge variant="default">{menuTypeLabel(item.menuType, text)}</Badge>{item.source === "BuiltIn" ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}</div><div className="mt-0.5 flex flex-wrap gap-2 text-xs text-[var(--color-on-surface-variant)]"><span className="font-mono">{item.menuCode}</span>{item.visibleRoles.length ? <span>{item.visibleRoles.join(", ")}</span> : <span>{text("tree.allUsers", "所有登录用户", "All signed-in users")}</span>}</div></div>
         <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100"><Button size="icon" variant="ghost" className="size-8" disabled={siblingIndex === 0} aria-label={text("aria.moveUp", "上移", "Move up")} onClick={() => onMove(item, parentMenuCode, siblingIndex - 1)}><ArrowUp size={14} aria-hidden="true" /></Button><Button size="icon" variant="ghost" className="size-8" disabled={siblingIndex === siblingCount - 1} aria-label={text("aria.moveDown", "下移", "Move down")} onClick={() => onMove(item, parentMenuCode, siblingIndex + 1)}><ArrowDown size={14} aria-hidden="true" /></Button><Button size="icon" variant="ghost" className="size-8" disabled={item.children.length > 0} aria-label={text("aria.remove", `移除 ${item.menuCode}`, `Remove ${item.menuCode}`)} onClick={() => onRemove(item)}><Trash2 size={14} aria-hidden="true" /></Button></div>
       </div>
       {item.children.length ? <div className="space-y-1">{item.children.map((child, index) => <TreeNode key={child.menuCode} item={child} level={level + 1} siblingIndex={index} siblingCount={item.children.length} parentMenuCode={item.menuCode} onMove={onMove} onRemove={onRemove} locale={locale} text={text} />)}</div> : null}
@@ -278,7 +276,7 @@ export function NavigationDomainMenuTreePage() {
       <PageHeader title={text("tree.title", "菜单编排", "Menu arrangement")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button><Button variant="secondary" disabled={!isApiMode || saving} onClick={() => setRestoreDefaultTreesOpen(true)}><RotateCcw size={16} aria-hidden="true" />{text("tree.restoreDefaultTrees", "生成所有默认菜单树", "Generate all default menu trees")}</Button><Button variant="secondary" disabled={!selectedDomainCode || saving} onClick={openAddMenu}><Plus size={16} aria-hidden="true" />{text("tree.addTitle", "加入菜单", "Add menu")}</Button><Button disabled={!selectedDomainCode || saving} onClick={openCopyMenu}><Copy size={16} aria-hidden="true" />{text("tree.copyTitle", "跨领域复制", "Copy across domains")}</Button></>} />
       <div className="mb-5 rounded-2xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-5"><SelectInput className="min-w-64" aria-label={text("tree.domain", "领域", "Domain")} value={selectedDomainCode} onValueChange={(value) => { if (value) changeDomain(value); }}>{domains.map((domain) => <SelectItem key={domain.domainCode} value={domain.domainCode}>{domain.name[locale]}</SelectItem>)}</SelectInput></div>
       <SurfaceCard>
-        <div className="mb-4 flex items-start justify-between gap-3"><h2 className="text-base font-semibold">{text("tree.currentTitle", "当前领域菜单树", "Current domain menu tree")}</h2><Badge tone="info">{text("tree.maxDepth", "最多 3 级", "Up to 3 levels")}</Badge></div>
+        <div className="mb-4 flex items-start justify-between gap-3"><h2 className="text-base font-semibold">{text("tree.currentTitle", "当前领域菜单树", "Current domain menu tree")}</h2><Badge variant="info">{text("tree.maxDepth", "最多 3 级", "Up to 3 levels")}</Badge></div>
         {loading ? <p className="py-8 text-center text-sm text-[var(--color-on-surface-variant)]">{text("loadingTree", "正在加载菜单树…", "Loading menu tree…")}</p> : tree.length ? <><div className="mb-1 flex justify-end px-2 text-xs font-medium text-[var(--color-on-surface-variant)]">{text("columns.actions", "操作", "Actions")}</div><div className="space-y-1">{tree.map((item, index) => <TreeNode key={item.menuCode} item={item} level={0} siblingIndex={index} siblingCount={tree.length} parentMenuCode={null} onMove={moveMenu} onRemove={setItemToRemove} locale={locale} text={text} />)}</div></> : <p className="py-8 text-center text-sm text-[var(--color-on-surface-variant)]">{text("tree.empty", "当前领域还没有菜单。", "This domain has no menus yet.")}</p>}
       </SurfaceCard>
 

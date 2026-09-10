@@ -13,17 +13,15 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { SelectInput, TextInput, ToggleSwitch } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  TextInput,
-  ToggleSwitch,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   usePermissionDomainList,
@@ -622,7 +620,7 @@ export function RoleMatrixPage() {
               className={HEADER_ACTION_BUTTON_CLASS}
               disabled={!hasDirtyChanges || saving}
               size="sm"
-              variant="primary"
+              variant="default"
               aria-busy={saving}
               onClick={() => runDebouncedAction("header-save-role-draft", () => {
                 void saveDraft();
@@ -724,9 +722,9 @@ export function RoleMatrixPage() {
                             type="button"
                             onClick={() => runDebouncedAction(`matrix-select-${role.id}`, () => selectRole(role.id), 180)}
                           >
-                            <Badge tone={role.kind === "System" ? "info" : "outline"}>{role.kind}</Badge>
+                            <Badge variant={role.kind === "System" ? "info" : "outline"}>{role.kind}</Badge>
                           </button>
-                          {dirtyIds.has(role.id) ? <Badge tone="warning">{t("pages:admin.roles.unsaved", "Unsaved")}</Badge> : null}
+                          {dirtyIds.has(role.id) ? <Badge variant="warning">{t("pages:admin.roles.unsaved", "Unsaved")}</Badge> : null}
                         </div>
                         <button className="mt-2 w-full text-left" type="button" onClick={() => runDebouncedAction(`matrix-select-${role.id}`, () => selectRole(role.id), 180)}>
                           <div className="mt-1 font-mono text-[11px] uppercase text-[var(--color-on-surface-variant)]">{role.code}</div>

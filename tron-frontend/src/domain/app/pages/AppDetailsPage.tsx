@@ -10,13 +10,13 @@ import {
 
 import { Button } from "@/components/ui/button";
 import {
-  InspectorPanel,
   PageHeader,
   SurfaceCard,
   useLocaleFormatters,
   useTabPanelConfig,
-  useToast,
 } from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveApp,

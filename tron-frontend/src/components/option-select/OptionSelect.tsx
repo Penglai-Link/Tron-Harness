@@ -1,5 +1,5 @@
 import { SelectItem } from "@/components/ui/select";
-import { SelectInput } from "@/shared/ui/Forms";
+import { SelectInput } from "@/components/forms";
 
 export interface OptionSelectItem {
   disabled?: boolean;

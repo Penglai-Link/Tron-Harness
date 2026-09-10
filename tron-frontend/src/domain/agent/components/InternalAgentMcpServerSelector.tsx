@@ -6,12 +6,10 @@ import {
 import { useTranslation } from "react-i18next";
 
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
-import {
-  Badge,
-  Button,
-  Field,
-  SearchField,
-} from "@/shared";
+import { Field } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface InternalAgentMcpServerSelectorProps {
   busy?: boolean;
@@ -157,16 +155,16 @@ export function InternalAgentMcpServerSelector({
                       <p className="text-sm font-semibold text-[var(--color-on-surface)]">
                         {server.name}
                       </p>
-                      <Badge tone={healthTone(server.lastHealthStatus)}>
+                      <Badge variant={healthTone(server.lastHealthStatus)}>
                         {server.lastHealthStatus}
                       </Badge>
                       {!server.platformEnabled ? (
-                        <Badge tone="warning">
+                        <Badge variant="warning">
                           {internalPageT("platformDisabled", "Platform disabled")}
                         </Badge>
                       ) : null}
                       {server.workspaceOverrideDisabled ? (
-                        <Badge tone="warning">
+                        <Badge variant="warning">
                           {internalPageT("workspaceDisabled", "Locally disabled")}
                         </Badge>
                       ) : null}

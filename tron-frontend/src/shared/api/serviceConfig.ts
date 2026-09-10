@@ -13,8 +13,7 @@ import {
   type EndpointParams,
   parseEndpoint,
 } from "@/shared/api/httpClient";
-import { useToast } from "@/shared/ui/Toast";
-import { toastManager } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 
 export type ServiceDataSource = "mock" | "api";
 

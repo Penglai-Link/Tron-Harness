@@ -20,19 +20,16 @@ import {
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { MarkdownContent } from "@/components/markdown-content";
 import {
-  Field,
-  InfoTooltip,
-  MarkdownContent,
   PageHeader,
-  SelectInput,
   SurfaceCard,
-  TextArea,
-  TextInput,
   useTabPanelConfig,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   analyzePromptTemplateApi,

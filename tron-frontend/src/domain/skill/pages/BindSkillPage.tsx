@@ -7,16 +7,16 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 
 import { cn } from "@/shared/lib/utils";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
+import { DetailField } from "@/components/detail-field";
+import { Field } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
-  DetailField,
-  Field,
   PageHeader,
-  SearchField,
   SurfaceCard,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button"
 
 import {
@@ -111,13 +111,13 @@ function CandidateCard({
         />
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-[12px]">
-            <Badge tone="info">{candidate.skillName}</Badge>
+            <Badge variant="info">{candidate.skillName}</Badge>
             {installed ? (
-              <Badge tone="success">{t("pages:skills.status.installed", "Installed")}</Badge>
+              <Badge variant="success">{t("pages:skills.status.installed", "Installed")}</Badge>
             ) : null}
-            <Badge tone="info">{candidate.sourceType}</Badge>
+            <Badge variant="info">{candidate.sourceType}</Badge>
             {candidate.declaredVersion ? (
-              <Badge tone="info">{candidate.declaredVersion}</Badge>
+              <Badge variant="info">{candidate.declaredVersion}</Badge>
             ) : null}
           </div>
           <p className="mt-3 text-sm font-medium text-[var(--color-on-surface)]">
@@ -351,10 +351,10 @@ export function BindSkillPage() {
                       className="rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-4"
                     >
                       <div className="flex flex-wrap items-center gap-[12px]">
-                        <Badge tone="info">{candidate.skillName}</Badge>
-                        <Badge tone="info">{candidate.sourceType}</Badge>
+                        <Badge variant="info">{candidate.skillName}</Badge>
+                        <Badge variant="info">{candidate.sourceType}</Badge>
                         {candidate.declaredVersion ? (
-                          <Badge tone="info">{candidate.declaredVersion}</Badge>
+                          <Badge variant="info">{candidate.declaredVersion}</Badge>
                         ) : null}
                       </div>
                       <p className="mt-3 break-words text-sm font-medium text-[var(--color-on-surface)]">

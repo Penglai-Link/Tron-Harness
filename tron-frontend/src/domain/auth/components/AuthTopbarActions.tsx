@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router";
 
 import { LOGIN_PATH } from "@/domain/auth/constants";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { useAppShellStore } from "@/store/appShellStore";
 import { useAuthStore } from "@/store/authStore";
 

@@ -22,16 +22,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DataTable } from "@/components/data-table";
+import { SelectInput, TextInput } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SelectInput,
-  TablePagination,
-  TextInput,
-  useToast,
   useLocaleFormatters,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveApp,
@@ -82,17 +81,19 @@ function AppActions({
 
   return (
     <DropdownMenu>
-      <DropdownMenuTrigger>
-        <Button
-          aria-label={pageT("aria.actionsFor", { name: app.name })}
-          size="icon"
-          type="button"
-          variant="ghost"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <MoreHorizontal size={16} aria-hidden="true" />
-        </Button>
-      </DropdownMenuTrigger>
+      <DropdownMenuTrigger
+        render={
+          <Button
+            aria-label={pageT("aria.actionsFor", { name: app.name })}
+            size="icon"
+            type="button"
+            variant="ghost"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <MoreHorizontal size={16} aria-hidden="true" />
+          </Button>
+        }
+      />
       <DropdownMenuContent align="end" onClick={stopRowNavigation}>
         <DropdownMenuItem
           onClick={(event) => {

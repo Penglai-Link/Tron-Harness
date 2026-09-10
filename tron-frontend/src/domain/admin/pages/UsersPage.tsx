@@ -15,22 +15,19 @@ import {
   useNavigate,
 } from "react-router";
 
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  Button,
-  LinkButton,
-} from "@/shared/ui/Button";
-import {
-  DataTable,
   MetricCard,
   PageHeader,
-  SearchField,
-  SelectInput,
-  TablePagination,
   useLocaleFormatters,
   useLocaleText,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   useUserList,
@@ -221,7 +218,7 @@ export function UsersPage() {
           { id: "name", header: pt("User"), render: (row) => <Link className="font-medium hover:underline" to={userDetailPath(row.userCode)}>{row.displayName}</Link> },
           { id: "contact", header: pt("Contact"), render: (row) => <div className="text-[13px] text-[var(--color-on-surface-variant)]"><div className="font-medium text-[var(--color-on-surface)]">{row.email}</div><div>{formatPhone(row.phone)}</div></div> },
           { id: "codes", header: pt("Codes"), render: (row) => <div className="max-w-64 text-[13px] text-[var(--color-on-surface-variant)]"><div className="font-medium text-[var(--color-on-surface)]">{row.userCode}</div><div>{row.roleCodes.map((code) => pt(getAdminUserRoleLabel(code))).join(", ")}</div><div>{row.spaceCodes.join(", ")}</div></div> },
-          { id: "status", header: pt("Status"), render: (row) => <Badge tone={getStatusTone(row.status)}>{pt(row.status)}</Badge> },
+          { id: "status", header: pt("Status"), render: (row) => <Badge variant={getStatusTone(row.status)}>{pt(row.status)}</Badge> },
           { id: "last", header: pt("Last Active"), render: (row) => formatTimestamp(row.lastActiveAt) },
           {
             id: "details",
@@ -234,9 +231,9 @@ export function UsersPage() {
               const showRestore = row.status === "Archived";
               return (
                 <div className="relative flex justify-end gap-1">
-                  <LinkButton size="icon" to={userDetailPath(row.userCode)} variant="ghost" aria-label={pt("View {{name}} details", { name: row.displayName })}>
+                  <Link to={userDetailPath(row.userCode)} className={buttonVariants({ size: "icon", variant: "ghost" })} aria-label={pt("View {{name}} details", { name: row.displayName })}>
                     <Eye size={16} aria-hidden="true" />
-                  </LinkButton>
+                  </Link>
                   <Button size="icon" variant="ghost" aria-label={pt("Open actions for {{name}}", { name: row.displayName })} disabled={isProcessing} onClick={() => setOpenRowMenu((current) => (current === row.userCode ? null : row.userCode))}>
                     <MoreHorizontal size={16} aria-hidden="true" />
                   </Button>

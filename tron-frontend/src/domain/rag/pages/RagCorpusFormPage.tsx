@@ -17,17 +17,13 @@ import {
   X,
 } from "lucide-react";
 
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
 import {
-  Field,
   PageHeader,
-  SelectInput,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-  useToast,
 } from "@/shared";
-import { Button } from "@/shared/ui/Button";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 
 import {
   getRagMockCorpora,

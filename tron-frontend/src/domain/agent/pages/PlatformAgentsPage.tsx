@@ -33,22 +33,22 @@ import type {
   PlatformSystemAgentRecord,
 } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DataTable } from "@/components/data-table";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SearchField,
   SurfaceCard,
-  TablePagination,
   useLocaleFormatters,
   useTablePagination,
-  useToast,
 } from "@/shared";
-import { Button } from "@/shared/ui/Button";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 import {
   Field,
   TextArea,
   TextInput,
-} from "@/shared/ui/Forms";
+} from "@/components/forms";
 
 function formatLastScanned(lastScannedAt: string | null, formatDateTime: (value: string | number | Date) => string) {
   if (!lastScannedAt) {

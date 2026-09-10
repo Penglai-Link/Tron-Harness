@@ -1,11 +1,11 @@
 import { useAuthSession, AuthUserMenuPanel } from "@/domain/auth";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
 import {
-  useToast,
   SettingsShell,
   TabPanelRegistryProvider,
   TronShell,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { useTabStore } from "@/store/tabStore";
 import {
   useRef,
@@ -143,7 +143,6 @@ export default function AppRoutePage() {
         <div
           key={`${cachedTab.tabId}:${cachedTab.revision}`}
           hidden={!isCurrentTab}
-          aria-hidden={!isCurrentTab}
           className="h-full"
         >
           <TabPanelRegistryProvider

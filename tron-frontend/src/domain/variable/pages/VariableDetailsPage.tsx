@@ -33,16 +33,16 @@ import {
 import type { VariableRecord } from "@/domain/variable/model";
 import { getVariableSourceTone } from "@/domain/variable/constants";
 import { useVariableCatalog } from "@/domain/variable/hooks";
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { Field } from "@/components/forms";
 import {
-  Field,
   PageHeader,
   SurfaceCard,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   ReadValue,
@@ -442,7 +442,7 @@ export function VariableDetailsPage() {
               </Field>
               <Field label={t("pages:variables.detail.source", "Source")}>
                 <div className="flex min-h-6 flex-wrap items-center gap-[12px]">
-                  <Badge tone={getVariableSourceTone(selectedRecord.sourceKind)}>{selectedRecord.sourceKind}</Badge>
+                  <Badge variant={getVariableSourceTone(selectedRecord.sourceKind)}>{selectedRecord.sourceKind}</Badge>
                   <span className="text-sm text-[var(--color-on-surface)]">{sourceLabel(selectedRecord)}</span>
                 </div>
               </Field>

@@ -9,18 +9,17 @@ import {
   MoreHorizontal
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { SelectInput, TextInput } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SelectInput,
-  TablePagination,
-  TextInput,
   useTablePagination,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -460,8 +459,8 @@ export function ModelRegistryPage() {
               header: pageT("columns.status", "Status"),
               render: (row) => (
                 <div className="flex flex-wrap items-center gap-[12px]">
-                  <Badge tone={row.enabled ? "success" : "info"}>{row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
-                  {row.isDefault ? <Badge tone="info">{pageT("status.default", "Default")}</Badge> : null}
+                  <Badge variant={row.enabled ? "success" : "info"}>{row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}</Badge>
+                  {row.isDefault ? <Badge variant="info">{pageT("status.default", "Default")}</Badge> : null}
                 </div>
               ),
             },

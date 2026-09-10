@@ -24,14 +24,13 @@ import {
 } from "@/domain/auth/api";
 import { DEFAULT_AUTH_REDIRECT } from "@/domain/auth/constants";
 import { resolveAuthRedirect } from "@/domain/auth/model";
+import { Field, TextInput } from "@/components/forms";
+import { PixelBlast } from "@/components/pixel-blast";
 import {
-  Field,
-  PixelBlast,
-  TextInput,
   useTheme,
-  useToast,
 } from "@/shared";
-import { Button } from "@/shared/ui/Button";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
 import { isApiError } from "@/shared/api/httpClient";
 import { useAuthStore } from "@/store/authStore";
 

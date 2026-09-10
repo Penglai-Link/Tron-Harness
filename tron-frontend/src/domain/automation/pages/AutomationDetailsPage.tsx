@@ -21,20 +21,18 @@ import {
   X,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { DetailField } from "@/components/detail-field";
+import { Field, TextArea, TextInput } from "@/components/forms";
+import { MarkdownContent } from "@/components/markdown-content";
+import { OptionSelect } from "@/components/option-select";
 import {
-  DetailField,
-  Field,
-  MarkdownContent,
-  OptionSelect,
   PageHeader,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  useToast,
   useLocaleText,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveAutomation,
@@ -548,7 +546,7 @@ export function AutomationDetailsPage() {
             <DetailField label={pt("Record ID")} value={<ReadValue>{automation.id}</ReadValue>} />
             <DetailField
               label={pt("Status")}
-              value={<Badge tone={getAutomationStatusTone(automation.status)}>{pt(automation.status)}</Badge>}
+              value={<Badge variant={getAutomationStatusTone(automation.status)}>{pt(automation.status)}</Badge>}
             />
             <DetailField label={pt("Workspace")} value={<ReadValue>{automation.workspaceCode}</ReadValue>} />
             <DetailField label={pt("Agent code")} value={<ReadValue>{automation.agentCode}</ReadValue>} />

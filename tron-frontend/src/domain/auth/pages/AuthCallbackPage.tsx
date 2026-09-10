@@ -14,7 +14,7 @@ import {
 } from "react-router";
 
 import { buildLoginUrl, resolveAuthRedirect } from "@/domain/auth/model";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import { useAuthSession } from "@/domain/auth/hooks";
 
 export function AuthCallbackPage() {

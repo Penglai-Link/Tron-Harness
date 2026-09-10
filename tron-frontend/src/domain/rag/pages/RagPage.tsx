@@ -14,8 +14,8 @@ import {
   PageHeader,
   useTabPanelConfig,
   useTablePagination,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   deleteRagCorpus,

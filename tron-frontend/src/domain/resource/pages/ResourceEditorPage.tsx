@@ -40,19 +40,16 @@ import {
   useQuickResourceUploadHandoffStore,
   type QuickResourceUploadHandoff,
 } from "@/domain/resource/model";
+import { Field, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
 import {
-  ConfirmDialog,
-  Field,
   PageHeader,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 
 const fileKinds: ResourceKind[] = ["FILE", "IMAGE", "PDF"];
 const dataSourceKinds: ResourceKind[] = [
@@ -689,7 +686,7 @@ export function ResourceEditorPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <Field label={editorT("fields.type", "Resource type")}>
             <div className="flex h-10 items-center">
-              <Badge tone="outline">
+              <Badge variant="outline">
                 {t(`pages:resources.kind.${kind.toLowerCase()}`, {
                   defaultValue: kind,
                 })}

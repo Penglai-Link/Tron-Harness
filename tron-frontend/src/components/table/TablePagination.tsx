@@ -1,6 +1,6 @@
 import type { Table } from "@tanstack/react-table";
 
-import { TablePagination as SharedTablePagination } from "@/shared/ui/TablePagination";
+import { TablePagination as SharedTablePagination } from "@/components/table-pagination";
 
 export interface TablePaginationProps<T> {
   itemLabel?: string;

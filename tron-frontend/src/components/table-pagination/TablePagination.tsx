@@ -5,11 +5,11 @@ import {
 import { useTranslation } from "react-i18next";
 
 import { useLocaleFormatters } from "@/shared/hooks/useLocaleFormatters";
-import { Button } from "@/shared/ui/Button";
+import { Button } from "@/components/ui/button";
 import {
   SelectInput,
   TextInput,
-} from "@/shared/ui/Forms";
+} from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
 
 const defaultPageSizeOptions = [15, 25, 50, 100] as const;

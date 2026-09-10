@@ -1,11 +1,10 @@
 import { useTranslation } from "react-i18next";
 
+import { Field, TextInput } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
 import {
-  Field,
-  InfoTooltip,
   PageHeader,
   SurfaceCard,
-  TextInput,
 } from "@/shared";
 import {
   maximumAguiWorkReplayTurnLimit,

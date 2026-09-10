@@ -23,20 +23,17 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DialogSelect } from "@/components/ui/dialog-select";
+import { DialogSelect } from "@/components/dialog-select";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
+import { MarkdownContent } from "@/components/markdown-content";
+import { OptionSelect } from "@/components/option-select";
 import {
-  Field,
-  InspectorPanel,
-  MarkdownContent,
-  OptionSelect,
   PageHeader,
-  SelectInput,
   SurfaceCard,
-  TextArea,
-  TextInput,
   useTabPanelConfig,
-  useToast,
 } from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveTask,

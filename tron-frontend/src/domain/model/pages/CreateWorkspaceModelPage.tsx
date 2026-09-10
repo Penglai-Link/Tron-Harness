@@ -7,13 +7,13 @@ import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
 import { Button } from "@/components/ui/button";
+import { ToggleSwitch } from "@/components/forms";
 import {
   PageHeader,
   SurfaceCard,
-  ToggleSwitch,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   createWorkspaceModel,

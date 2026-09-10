@@ -8,14 +8,14 @@ import {
 } from "@tanstack/react-table";
 import { MoreHorizontal } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
-  SearchField,
-  SelectInput,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import {
   DataTable,
   TablePagination,
@@ -341,7 +341,7 @@ export function VariablesPage() {
       },
       {
         cell: ({ row }) => (
-          <Badge tone={getVariableSourceTone(row.original.sourceKind)}>
+          <Badge variant={getVariableSourceTone(row.original.sourceKind)}>
             {row.original.sourceKind}
           </Badge>
         ),

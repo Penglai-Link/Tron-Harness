@@ -8,12 +8,11 @@ import {
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 
+import { DataTable } from "@/components/data-table";
+import { SelectInput, TextInput } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
-  TextInput,
   useTablePagination,
 } from "@/shared";
 import { Badge } from "@/components/ui/badge";

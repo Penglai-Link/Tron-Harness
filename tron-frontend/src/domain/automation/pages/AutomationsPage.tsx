@@ -12,21 +12,21 @@ import {
   RefreshCcw,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
   useDismissibleLayer,
   useLocaleFormatters,
   useLocaleText,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import { cn } from "@/shared/lib/utils";
 import {
@@ -391,11 +391,11 @@ export function AutomationsPage() {
             render: (row) => (
               <div>
                 {row.lastExecutionStatus ? (
-                  <Badge tone={getAutomationExecutionStatusTone(row.lastExecutionStatus)}>
+                  <Badge variant={getAutomationExecutionStatusTone(row.lastExecutionStatus)}>
                     {pt(row.lastExecutionStatus)}
                   </Badge>
                 ) : (
-                  <Badge tone="info">{pt("Never run")}</Badge>
+                  <Badge variant="info">{pt("Never run")}</Badge>
                 )}
               </div>
             ),
@@ -405,7 +405,7 @@ export function AutomationsPage() {
             id: "status",
             width: "9%",
             render: (row) => (
-              <Badge tone={getAutomationStatusTone(row.status)}>{pt(row.status)}</Badge>
+              <Badge variant={getAutomationStatusTone(row.status)}>{pt(row.status)}</Badge>
             ),
           },
           {

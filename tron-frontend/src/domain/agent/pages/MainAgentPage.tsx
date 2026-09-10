@@ -1,4 +1,4 @@
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import {
   MetricCard,
   SurfaceCard,

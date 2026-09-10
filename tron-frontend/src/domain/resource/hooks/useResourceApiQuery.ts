@@ -8,7 +8,7 @@ import {
 } from "react";
 
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
-import { useToast } from "@/shared/ui/Toast";
+import { useToast } from "@/components/ui/toast";
 
 export interface ResourceApiQueryState<T> {
   data: T;

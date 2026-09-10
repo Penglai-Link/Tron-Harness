@@ -16,18 +16,18 @@ import {
 } from "@/domain/mcp/mock";
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DataTable } from "@/components/data-table";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  Badge,
-  DataTable,
   PageHeader,
-  SearchField,
   SurfaceCard,
-  TablePagination,
   useLocaleFormatters,
   useTablePagination,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
+import { Badge } from "@/components/ui/badge";
 
 function healthTone(status: WorkspaceMcpServerRecord["lastHealthStatus"]) {
   switch (status) {
@@ -193,7 +193,7 @@ export function WorkspaceMcpServersPage() {
             width: "16%",
             render: (row) => (
               <div className="space-y-1">
-                <Badge tone={healthTone(row.lastHealthStatus)}>
+                <Badge variant={healthTone(row.lastHealthStatus)}>
                   {row.lastHealthStatus}
                 </Badge>
                 {row.lastHealthCheckedAt ? (

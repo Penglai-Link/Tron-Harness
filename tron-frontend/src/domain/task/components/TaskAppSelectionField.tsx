@@ -1,5 +1,5 @@
 import type { AppOption } from "@/domain/app/model";
-import { MultiSelectDropdown } from "@/shared";
+import { MultiSelectDropdown } from "@/components/multi-select-dropdown";
 import { useTranslation } from "react-i18next";
 
 function LegacyChip({

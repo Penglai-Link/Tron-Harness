@@ -4,7 +4,8 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
-import { Field, TextArea, TextInput, useToast } from "@/shared";
+import { Field, TextArea, TextInput } from "@/components/forms";
+import { useToast } from "@/components/ui/toast";
 import { useAuthStore } from "@/store/authStore";
 import { completeSetup, createSetupSession, fetchSetupStatus, type SetupStatus } from "@/domain/setup/api";
 import { useLocale, type SupportedLocale } from "@/i18n";

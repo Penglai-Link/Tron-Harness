@@ -5,15 +5,15 @@ import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
 import type { PlatformToolRecord, ToolCatalogDomainRecord } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DataTable } from "@/components/data-table";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SearchField,
-  SelectInput,
-  TablePagination,
   useTablePagination,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { SelectItem } from "@/components/ui/select";
 
 export function PlatformToolsPage() {

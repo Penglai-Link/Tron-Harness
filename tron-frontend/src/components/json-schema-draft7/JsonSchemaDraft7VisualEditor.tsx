@@ -13,12 +13,8 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
-import {
-  Badge,
-  Field,
-  SelectInput,
-  TextInput,
-} from "@/shared";
+import { Field, SelectInput, TextInput } from "@/components/forms";
+import { Badge } from "@/components/ui/badge";
 import { cn } from "@/shared/lib/utils";
 
 import {
@@ -339,7 +335,7 @@ function SchemaPropertyRow({
           <Field label={tr("fields.description", "Description")}>
             <DenseTextInput disabled={readOnly} placeholder={tr("fields.descriptionPlaceholder", "Explain this field") } value={schema.description ?? ""} onChange={(event) => onSchemaChange(removeUndefinedKeyword(schema, "description", event.target.value || undefined))} />
           </Field>
-          {schema.format === "tron-variable-ref" ? <Badge tone="warning">tron-variable-ref</Badge> : null}
+          {schema.format === "tron-variable-ref" ? <Badge variant="warning">tron-variable-ref</Badge> : null}
           <SchemaNodeEditor depth={depth + 1} formatOptions={formatOptions} readOnly={readOnly} schema={value} onChange={onSchemaChange} />
           {!readOnly ? <div className="flex justify-end gap-1">
             <Button aria-label={tr("actions.moveUp", "Move {{code}} up", { code: name })} disabled={readOnly || index === 0} size="icon-sm" variant="ghost" onClick={() => onMove(-1)}><ChevronUp aria-hidden="true" size={13} /></Button>

@@ -7,11 +7,9 @@ import type {
   GraphScopeView,
 } from "@/domain/knowledge-graph/model";
 import { isEmbeddingVectorProperty } from "@/domain/knowledge-graph/model";
-import {
-  Badge,
-  Button,
-  InspectorPanel,
-} from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 interface GraphInspectorProps {
   edges: GraphEdgeView[];
@@ -57,8 +55,8 @@ export function GraphInspector({ edges, node, onClose, onExpandNode, scope }: Gr
         <div className="min-w-0">
           <h2 className="break-words text-xl font-semibold">{node.nodeCode}</h2>
           <div className="mt-2 flex flex-wrap items-center gap-[12px]">
-            <Badge tone={primaryLabel === "RagSkill" ? "info" : "outline"}>{primaryLabel}</Badge>
-            <Badge tone={node.properties.status === "ACTIVE" ? "success" : "info"}>{formatValue(node.properties.status ?? "ACTIVE")}</Badge>
+            <Badge variant={primaryLabel === "RagSkill" ? "info" : "outline"}>{primaryLabel}</Badge>
+            <Badge variant={node.properties.status === "ACTIVE" ? "success" : "info"}>{formatValue(node.properties.status ?? "ACTIVE")}</Badge>
           </div>
         </div>
         <Button size="icon" variant="ghost" type="button" aria-label={pageT("inspector.closeAria", "Close node inspector")} onClick={onClose}>

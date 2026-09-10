@@ -56,20 +56,18 @@ import {
 } from "@/domain/mcp";
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DataTable } from "@/components/data-table";
+import { Field, SelectInput, TextInput } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
-  Field,
-  InfoTooltip,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
-  TextInput,
-  useToast,
   useTablePagination,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { SelectItem } from "@/components/ui/select";
 
 interface InternalAgentDraft {

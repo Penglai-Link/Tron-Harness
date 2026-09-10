@@ -8,8 +8,8 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
-import { Badge } from "@/shared/ui/Badge";
-import { Button } from "@/shared/ui/Button";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import {
   componentPrinciples,
   tronColors,
@@ -78,7 +78,7 @@ export function DesignStandardPage() {
               <div className="rounded-2xl border border-[var(--color-card-border)] bg-white p-6 shadow-[0_18px_50px_rgba(0,0,0,0.05)]">
                 <div className="flex flex-wrap items-start justify-between gap-4">
                   <div>
-                    <Badge tone="info">{t("pages:designStandard.badge", "Apple-like enterprise SaaS")}</Badge>
+                    <Badge variant="info">{t("pages:designStandard.badge", "Apple-like enterprise SaaS")}</Badge>
                     <h2 className="mt-4 text-[40px] font-semibold leading-[1.1] tracking-normal">{t("pages:designStandard.heroTitle", "Calm control for agent operations")}</h2>
                     <p className="mt-4 max-w-2xl text-base leading-7 text-[var(--color-on-surface-variant)]">
                       {t("pages:designStandard.heroDescription", "The Tron light system uses restrained color, dense but breathable spacing, and stable workspace navigation for AI agent governance.")}
@@ -172,7 +172,7 @@ export function DesignStandardPage() {
                             <td className="px-5 py-3 text-[var(--color-on-surface-variant)]">{row.model}</td>
                             <td className="px-5 py-3 font-mono text-[13px]">{row.usage}</td>
                             <td className="px-5 py-3">
-                              <Badge tone={row.status === "Healthy" ? "success" : "warning"}>{row.status}</Badge>
+                              <Badge variant={row.status === "Healthy" ? "success" : "warning"}>{row.status}</Badge>
                             </td>
                           </tr>
                         ))}

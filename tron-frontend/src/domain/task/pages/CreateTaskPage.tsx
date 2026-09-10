@@ -12,18 +12,15 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DialogSelect } from "@/components/ui/dialog-select";
+import { DialogSelect } from "@/components/dialog-select";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
+import { OptionSelect } from "@/components/option-select";
 import {
-  Field,
-  OptionSelect,
   PageHeader,
-  SelectInput,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import { createTask } from "@/domain/task/api";
 import { createMockTask } from "@/domain/task/mock/data";

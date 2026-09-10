@@ -10,19 +10,19 @@ import {
   X,
 } from "lucide-react";
 
-import { Badge } from "@/shared/ui/Badge";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
-  InspectorPanel,
   MetricCard,
   PageHeader,
   SurfaceCard,
-  TablePagination,
   useTabPanelConfig,
   useOpenRightSidebar,
   useTablePagination,
 } from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
 
 import { useObservabilityOverview } from "@/domain/observability/hooks";
 import { cn } from "@/shared/lib/utils";
@@ -85,7 +85,7 @@ export function ObservabilityPage() {
   const rightPanel = useMemo(() => (inspectorOpen ? (
     <InspectorPanel title={pageT("inspector.title", "Inspector")}>
       <div className="flex items-center justify-between">
-        <Badge tone="success">agent-router-04</Badge>
+        <Badge variant="success">agent-router-04</Badge>
         <Button size="icon" variant="ghost" aria-label={pageT("aria.closeInspector", "Close inspector")} onClick={() => setInspectorOpen(false)}>
           <X size={16} aria-hidden="true" />
         </Button>
@@ -166,7 +166,7 @@ export function ObservabilityPage() {
           { id: "agent", header: pageT("columns.agent", "Agent"), render: (row) => row.agent },
           { id: "span", header: pageT("columns.span", "Span"), render: (row) => <span className="font-mono text-[13px]">{row.span}</span> },
           { id: "latency", header: pageT("columns.latency", "Latency"), render: (row) => row.latency },
-          { id: "status", header: pageT("columns.status", "Status"), render: (row) => <Badge tone={getStatusTone(row.status)}>{row.status}</Badge> },
+          { id: "status", header: pageT("columns.status", "Status"), render: (row) => <Badge variant={getStatusTone(row.status)}>{row.status}</Badge> },
         ]}
       />
     </>

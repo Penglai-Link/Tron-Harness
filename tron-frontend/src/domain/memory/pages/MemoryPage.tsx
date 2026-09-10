@@ -32,16 +32,15 @@ import type {
   MemorySearchTarget,
 } from "@/domain/memory/model";
 import { archiveMemoryFragment } from "@/domain/memory/mock/data";
+import { Field, SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
-  Badge,
-  ConfirmDialog,
-  Field,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
   useTabPanelConfig,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
   DataTable,
@@ -355,7 +354,7 @@ function MemoryRecordsTable({
           const injectable = row.original.injectable;
           return (
             <div className="flex gap-1">
-              <Badge tone={injectable ? "success" : "info"}>
+              <Badge variant={injectable ? "success" : "info"}>
                 {injectable
                   ? t("pages:memory.use.autoContext", "Auto context")
                   : t("pages:memory.use.searchOnly", "Search only")}

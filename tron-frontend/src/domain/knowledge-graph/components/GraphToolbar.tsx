@@ -17,14 +17,11 @@ import type {
   GraphNodeView,
 } from "@/domain/knowledge-graph/model";
 import { SelectItem } from "@/components/ui/select";
-import {
-  Button,
-  MultiSelectDropdown,
-  type MultiSelectOption,
-  SearchField,
-  SelectInput,
-  InfoTooltip,
-} from "@/shared";
+import { Button } from "@/components/ui/button";
+import { SelectInput } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { MultiSelectDropdown, type MultiSelectOption } from "@/components/multi-select-dropdown";
+import { SearchField } from "@/components/search-field";
 
 interface GraphToolbarProps {
   activeLabels: string[];

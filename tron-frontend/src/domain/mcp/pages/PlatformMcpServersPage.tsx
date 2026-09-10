@@ -37,20 +37,19 @@ import {
 } from "@/domain/mcp/mock";
 import type { PlatformMcpGatewayConfig, PlatformMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DataTable } from "@/components/data-table";
+import { SelectInput, ToggleSwitch } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  Badge,
-  Button,
-  DataTable,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
-  ToggleSwitch,
   useLocaleFormatters,
   useTablePagination,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 import {
   formatPlatformMcpEndpoint,
@@ -370,7 +369,7 @@ export function PlatformMcpServersPage() {
               header: pageT("table.columns.transport", "Transport"),
               width: "14%",
               render: (row) => (
-                <Badge tone="info">
+                <Badge variant="info">
                   {transportLabel(row.transportKind)}
                 </Badge>
               ),
@@ -391,7 +390,7 @@ export function PlatformMcpServersPage() {
               width: "16%",
               render: (row) => (
                 <div>
-                  <Badge tone={platformMcpServerStateTone(row.lastHealthStatus)}>
+                  <Badge variant={platformMcpServerStateTone(row.lastHealthStatus)}>
                     {healthLabel(row.lastHealthStatus)}
                   </Badge>
                 </div>
@@ -402,7 +401,7 @@ export function PlatformMcpServersPage() {
               header: pageT("table.columns.state", "State"),
               width: "10%",
               render: (row) => (
-                <Badge tone={platformMcpServerEnabledTone(row.enabled)}>
+                <Badge variant={platformMcpServerEnabledTone(row.enabled)}>
                   {row.enabled ? pageT("status.enabled", "Enabled") : pageT("status.disabled", "Disabled")}
                 </Badge>
               ),

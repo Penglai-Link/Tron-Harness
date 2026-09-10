@@ -13,12 +13,12 @@ import {
 } from "@/domain/open-app/components";
 import { createPlatformOpenAppMock } from "@/domain/open-app/mock";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { Button } from "@/components/ui/button";
 import {
-  Button,
   PageHeader,
   SurfaceCard,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 export function CreatePlatformOpenAppPage() {
   const navigate = useNavigate();

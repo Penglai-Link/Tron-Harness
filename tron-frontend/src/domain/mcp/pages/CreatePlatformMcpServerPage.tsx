@@ -21,13 +21,13 @@ import type {
 } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  Badge,
-  Button,
   PageHeader,
   SurfaceCard,
   useLocaleFormatters,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
 
 import {
   emptyPlatformMcpServerForm,
@@ -58,7 +58,7 @@ function VerificationResultCard({
             {t("pages:mcp.verification.description", "Draft configuration verified against the platform MCP runtime.")}
           </p>
         </div>
-        <Badge tone={platformMcpServerStateTone(record.lastHealthStatus)}>
+        <Badge variant={platformMcpServerStateTone(record.lastHealthStatus)}>
           {healthLabel(record.lastHealthStatus)}
         </Badge>
       </div>
