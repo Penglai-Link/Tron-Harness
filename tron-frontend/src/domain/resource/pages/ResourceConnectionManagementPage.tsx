@@ -37,9 +37,9 @@ import {
   queryResourceConnectionPage,
   useManagedResourceRecords,
 } from "@/domain/resource/hooks";
+import { SearchField } from "@/components/search-field";
 import {
   PageHeader,
-  SearchField,
   useLocaleFormatters,
   useWorkspaceSpaces,
 } from "@/shared";

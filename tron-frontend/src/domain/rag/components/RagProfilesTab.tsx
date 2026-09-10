@@ -9,11 +9,11 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { DataTable } from "@/components/data-table";
+import { TextInput } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   SurfaceCard,
-  TablePagination,
-  TextInput,
   useDismissibleLayer,
   useTablePagination,
 } from "@/shared";

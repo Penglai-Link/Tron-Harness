@@ -41,14 +41,14 @@ import {
   disableMemoryFragment,
   updateMemoryFragment,
 } from "@/domain/memory/mock";
+import { Field } from "@/components/forms";
 import {
-  ConfirmDialog,
-  Field,
   PageHeader,
   SurfaceCard,
   useTabPanelConfig,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";

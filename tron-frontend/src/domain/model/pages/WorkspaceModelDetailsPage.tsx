@@ -13,14 +13,13 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Field, ToggleSwitch } from "@/components/forms";
 import {
-  Field,
   PageHeader,
   SurfaceCard,
-  ToggleSwitch,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   deleteWorkspaceModel,

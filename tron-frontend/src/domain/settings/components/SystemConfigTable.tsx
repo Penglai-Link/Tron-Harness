@@ -2,7 +2,10 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 
-import { InfoTooltip, SelectInput, SurfaceCard, TextInput, useToast } from "@/shared";
+import { SelectInput, TextInput } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { SurfaceCard } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";

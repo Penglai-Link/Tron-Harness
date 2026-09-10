@@ -20,19 +20,19 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { SelectItem } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  ConfirmDialog,
-  DataTable,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
   useTabPanelConfig,
   useLocaleFormatters,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {

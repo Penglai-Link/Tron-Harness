@@ -11,15 +11,10 @@ import type {
   PlatformMcpServerPayload,
   PlatformMcpServerRecord,
 } from "@/domain/mcp/model";
-import {
-  Field,
-  InfoTooltip,
-  SelectInput,
-  TextArea,
-  TextInput,
-} from "@/shared";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { Button } from "@/components/ui/button";
-import { SegmentedTabs } from "@/shared/ui/Tabs";
+import { SegmentedTabs } from "@/components/inspector";
 import { SelectItem } from "@/components/ui/select";
 
 export interface KeyValueRow {

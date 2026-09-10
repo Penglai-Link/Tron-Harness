@@ -16,11 +16,8 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import {
-  Field,
-  SegmentedTabs,
-  TextArea,
-} from "@/shared";
+import { Field, TextArea } from "@/components/forms";
+import { SegmentedTabs } from "@/components/inspector";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/shared/lib/utils";
 

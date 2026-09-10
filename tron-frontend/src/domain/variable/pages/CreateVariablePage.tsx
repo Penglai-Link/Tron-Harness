@@ -9,9 +9,9 @@ import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SurfaceCard,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   WorkspaceVariableFormFields,

@@ -32,15 +32,14 @@ import type {
   MemorySearchTarget,
 } from "@/domain/memory/model";
 import { archiveMemoryFragment } from "@/domain/memory/mock/data";
+import { Field, SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
-  ConfirmDialog,
-  Field,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
   useTabPanelConfig,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {

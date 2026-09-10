@@ -16,18 +16,18 @@ import {
 } from "react-router";
 
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   MetricCard,
   PageHeader,
-  SearchField,
-  SelectInput,
-  TablePagination,
   useLocaleFormatters,
   useLocaleText,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   useUserList,
@@ -231,9 +231,9 @@ export function UsersPage() {
               const showRestore = row.status === "Archived";
               return (
                 <div className="relative flex justify-end gap-1">
-                  <Button render={<Link to={userDetailPath(row.userCode)} />} size="icon" variant="ghost" aria-label={pt("View {{name}} details", { name: row.displayName })}>
+                  <Link to={userDetailPath(row.userCode)} className={buttonVariants({ size: "icon", variant: "ghost" })} aria-label={pt("View {{name}} details", { name: row.displayName })}>
                     <Eye size={16} aria-hidden="true" />
-                  </Button>
+                  </Link>
                   <Button size="icon" variant="ghost" aria-label={pt("Open actions for {{name}}", { name: row.displayName })} disabled={isProcessing} onClick={() => setOpenRowMenu((current) => (current === row.userCode ? null : row.userCode))}>
                     <MoreHorizontal size={16} aria-hidden="true" />
                   </Button>

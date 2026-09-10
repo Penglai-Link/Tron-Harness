@@ -16,17 +16,17 @@ import {
 } from "@/domain/mcp/mock";
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DataTable } from "@/components/data-table";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SearchField,
   SurfaceCard,
-  TablePagination,
   useLocaleFormatters,
   useTablePagination,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Badge } from "@/components/ui/badge";
 
 function healthTone(status: WorkspaceMcpServerRecord["lastHealthStatus"]) {

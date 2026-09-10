@@ -17,16 +17,12 @@ import {
   X,
 } from "lucide-react";
 
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
 import {
-  Field,
   PageHeader,
-  SelectInput,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 
 import {

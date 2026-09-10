@@ -24,13 +24,13 @@ import type {
   PlatformMcpServerRecord,
 } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { Field } from "@/components/forms";
 import {
-  Field,
   PageHeader,
   SurfaceCard,
   useLocaleFormatters,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 

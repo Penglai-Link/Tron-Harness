@@ -13,11 +13,7 @@ import {
 
 import { Button } from "@/components/ui/button";
 import { SelectItem } from "@/components/ui/select";
-import {
-  Field,
-  SelectInput,
-  TextInput,
-} from "@/shared";
+import { Field, SelectInput, TextInput } from "@/components/forms";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/shared/lib/utils";
 

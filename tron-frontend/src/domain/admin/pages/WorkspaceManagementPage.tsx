@@ -17,22 +17,18 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
+import { DetailField } from "@/components/detail-field";
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DetailField,
-  Field,
   PageHeader,
-  SearchField,
-  SelectInput,
-  SegmentedTabs,
   SurfaceCard,
-  TablePagination,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
   useLocaleFormatters,
   useLocaleText,
-  useToast,
 } from "@/shared";
+import { SegmentedTabs } from "@/components/inspector";
+import { useToast } from "@/components/ui/toast";
 
 import {
   type AdminPage,

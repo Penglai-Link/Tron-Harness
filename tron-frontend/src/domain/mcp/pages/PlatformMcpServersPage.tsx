@@ -37,18 +37,17 @@ import {
 } from "@/domain/mcp/mock";
 import type { PlatformMcpGatewayConfig, PlatformMcpServerRecord } from "@/domain/mcp/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
+import { DataTable } from "@/components/data-table";
+import { SelectInput, ToggleSwitch } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
-  ToggleSwitch,
   useLocaleFormatters,
   useTablePagination,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 

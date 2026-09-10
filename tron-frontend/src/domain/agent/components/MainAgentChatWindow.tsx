@@ -26,7 +26,7 @@ import { getApiAccessToken } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
-import { useToast } from "@/shared/ui/Toast";
+import { useToast } from "@/components/ui/toast";
 
 interface MainAgentChatWindowProps {
   currentUserDisplayName?: string;

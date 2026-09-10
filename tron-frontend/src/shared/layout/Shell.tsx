@@ -59,7 +59,7 @@ import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcu
 import { cn } from "@/shared/lib/utils";
 import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
 import { useTheme } from "@/shared/theme/ThemeProvider";
-import { SelectInput } from "@/shared/ui/Forms";
+import { SelectInput } from "@/components/forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useShellShortcuts } from "@/shared/hooks/useShellShortcuts";
@@ -70,7 +70,7 @@ import type {
   WorkspaceSpacesContextValue,
   WorkspaceSwitcherData,
 } from "@/shared/types/WorkspaceSpace";
-import DraggleLine from "../ui/DraggleLine";
+import DraggleLine from "@/components/draggle-line";
 import { SelectItem } from "@/components/ui/select";
 import {
   SidebarProvider,

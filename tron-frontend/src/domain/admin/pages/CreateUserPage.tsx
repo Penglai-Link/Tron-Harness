@@ -6,13 +6,12 @@ import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
 import { UserPlus } from "lucide-react";
 
+import { Field, TextInput } from "@/components/forms";
 import {
-  Field,
   PageHeader,
   SurfaceCard,
-  TextInput,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import {
   createAdminUser,

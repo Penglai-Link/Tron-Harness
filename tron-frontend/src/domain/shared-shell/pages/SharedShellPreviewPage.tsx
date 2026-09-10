@@ -12,24 +12,19 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
-  Field,
-  InspectorPanel,
   MetricCard,
   PageHeader,
-  SegmentedTabs,
-  SelectInput,
   SurfaceCard,
-  TablePagination,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
   TronShell,
   useTabPanelConfig,
   useTablePagination,
-  useToast,
 } from "@/shared";
+import { InspectorPanel, SegmentedTabs } from "@/components/inspector";
+import { useToast } from "@/components/ui/toast";
 import { sharedShellPreviewRows } from "@/domain/shared-shell/constants";
 import { AuthUserMenuPanel } from "@/domain/auth";
 import { SelectItem } from "@/components/ui/select";

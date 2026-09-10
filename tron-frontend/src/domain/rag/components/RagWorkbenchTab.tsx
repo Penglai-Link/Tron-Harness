@@ -10,14 +10,10 @@ import {
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
+import { MultiSelectDropdown } from "@/components/multi-select-dropdown";
 import {
-  Field,
-  MultiSelectDropdown,
-  SelectInput,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
 } from "@/shared";
 import { Button } from "@/components/ui/button";
 import { i18n } from "@/i18n";

@@ -41,8 +41,8 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
   PageHeader,
   SurfaceCard,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 
 export function EditPlatformOpenAppPage() {

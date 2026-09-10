@@ -32,12 +32,12 @@ import {
 import type { PlatformVariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Button } from "@/components/ui/button";
+import { Field } from "@/components/forms";
 import {
-  Field,
   PageHeader,
   SurfaceCard,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   PlatformVariableFormFields,

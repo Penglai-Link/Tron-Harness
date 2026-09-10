@@ -1,11 +1,7 @@
 import type { ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  Field,
-  TextArea,
-  TextInput,
-} from "@/shared";
+import { Field, TextArea, TextInput } from "@/components/forms";
 
 import type {
   VariableRecord,

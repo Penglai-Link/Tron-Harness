@@ -9,7 +9,7 @@ import { Button } from "@/components/ui/button";
 import {
   SelectInput,
   TextInput,
-} from "@/shared/ui/Forms";
+} from "@/components/forms";
 import { SelectItem } from "@/components/ui/select";
 
 const defaultPageSizeOptions = [15, 25, 50, 100] as const;

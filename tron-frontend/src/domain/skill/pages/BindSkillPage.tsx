@@ -8,15 +8,15 @@ import { useTranslation } from "react-i18next";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { DetailField } from "@/components/detail-field";
+import { Field } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
-  DetailField,
-  Field,
   PageHeader,
-  SearchField,
   SurfaceCard,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button"
 
 import {

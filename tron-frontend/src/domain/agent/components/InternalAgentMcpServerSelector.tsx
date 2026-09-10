@@ -6,10 +6,8 @@ import {
 import { useTranslation } from "react-i18next";
 
 import type { WorkspaceMcpServerRecord } from "@/domain/mcp/model";
-import {
-  Field,
-  SearchField,
-} from "@/shared";
+import { Field } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 

@@ -1,10 +1,5 @@
 import { Badge } from "@/components/ui/badge";
-import {
-  Field,
-  SelectInput,
-  TextArea,
-  TextInput,
-} from "@/shared";
+import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 
 import type {
   AppDetailData,

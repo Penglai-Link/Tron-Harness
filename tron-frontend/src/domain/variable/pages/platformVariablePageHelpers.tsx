@@ -12,11 +12,7 @@ import {
   ShieldCheck,
 } from "lucide-react";
 
-import {
-  Field,
-  TextArea,
-  TextInput,
-} from "@/shared";
+import { Field, TextArea, TextInput } from "@/components/forms";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";

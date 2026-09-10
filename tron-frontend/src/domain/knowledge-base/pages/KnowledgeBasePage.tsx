@@ -12,21 +12,20 @@ import { listKnowledgeBases } from "@/domain/knowledge-base/mock/data";
 import type { KnowledgeBaseRecord } from "@/domain/knowledge-base/model/KnowledgeBaseModel";
 import { useRagCorpora } from "@/domain/rag/hooks/useRagCorpora";
 import type { CorpusRecord } from "@/domain/rag/model/RagModel";
+import { DataTable } from "@/components/data-table";
+import { TextInput } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
-  InspectorPanel,
   MetricCard,
   PageHeader,
   SurfaceCard,
-  TablePagination,
-  TextInput,
   useTablePagination,
   useTabPanelConfig,
   useOpenRightSidebar,
 } from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { SelectInput } from "@/shared/ui/Forms";
 import { SelectItem } from "@/components/ui/select";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 

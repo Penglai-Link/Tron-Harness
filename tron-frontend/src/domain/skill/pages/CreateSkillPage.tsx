@@ -5,15 +5,14 @@ import { ExternalLink } from "lucide-react";
 
 import { cn } from "@/shared/lib/utils";
 import { Badge } from "@/components/ui/badge";
+import { DetailField } from "@/components/detail-field";
+import { Field, SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
-  DetailField,
-  Field,
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   fetchRegistrySkills,
@@ -27,7 +26,7 @@ import type {
 } from "@/domain/skill/model";
 import { skillIndexWarningMessage } from "@/domain/skill/utils/ragIndexWarning";
 import { SelectItem } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
+import { Button, buttonVariants } from "@/components/ui/button";
 
 type InstallCandidateState = "pending" | "installing" | "success" | "error";
 
@@ -683,14 +682,15 @@ export function CreateSkillPage() {
                         </div>
 
                         {candidate.detailUrl ? (
-                          <Button
-                            render={<a href={candidate.detailUrl} rel="noreferrer" target="_blank" />}
-                            size="sm"
-                            variant="secondary"
+                          <a
+                            href={candidate.detailUrl}
+                            rel="noreferrer"
+                            target="_blank"
+                            className={buttonVariants({ size: "sm", variant: "secondary" })}
                           >
                             <ExternalLink size={15} aria-hidden="true" />
                             Open
-                          </Button>
+                          </a>
                         ) : null}
                       </div>
                     </div>

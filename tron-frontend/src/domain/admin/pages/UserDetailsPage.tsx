@@ -20,14 +20,13 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/shared/lib/utils";
+import { DetailField } from "@/components/detail-field";
+import { Field, TextInput } from "@/components/forms";
 import {
-  DetailField,
-  Field,
   PageHeader,
   SurfaceCard,
-  TextInput,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveAdminUser,

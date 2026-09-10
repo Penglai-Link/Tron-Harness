@@ -34,11 +34,11 @@ import type {
 } from "@/domain/open-app/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  ConfirmDialog,
   PageHeader,
   SurfaceCard,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 
 interface OpenAppDetailLocationState {

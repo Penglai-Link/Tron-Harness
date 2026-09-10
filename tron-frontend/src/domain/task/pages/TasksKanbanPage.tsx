@@ -13,14 +13,14 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   useTaskKanbanColumns,

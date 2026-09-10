@@ -7,7 +7,7 @@ import {
   ContextMenuItem,
   ContextMenuTrigger,
 } from "@/components/ui/context-menu";
-import { useToast } from "@/shared/ui/Toast";
+import { useToast } from "@/components/ui/toast";
 
 interface MarkdownLinkProps {
   children?: ReactNode;

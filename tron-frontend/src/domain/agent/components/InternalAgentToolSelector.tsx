@@ -6,10 +6,8 @@ import type {
   ToolCatalogDomainRecord,
 } from "@/domain/agent/model";
 import { cn } from "@/shared/lib/utils";
-import {
-  Field,
-  SearchField,
-} from "@/shared";
+import { Field } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import { Button } from "@/components/ui/button";
 
 interface InternalAgentToolSelectorProps {

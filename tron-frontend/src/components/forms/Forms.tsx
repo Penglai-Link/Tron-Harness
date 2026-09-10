@@ -7,7 +7,7 @@ import type {
 import { Children, forwardRef, isValidElement, useMemo } from "react";
 
 import { cn } from "@/shared/lib/utils";
-import { InfoTooltip } from "@/shared/ui/InfoTooltip";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { Select, SelectPopup, SelectPrimitive, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";

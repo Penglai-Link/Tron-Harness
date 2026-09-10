@@ -19,7 +19,7 @@ import {
 
 const thisFilePath = fileURLToPath(import.meta.url);
 const frontendRoot = resolve(thisFilePath, "..", "..");
-const toastSourcePath = resolve(frontendRoot, "src/shared/ui/Toast.tsx");
+const toastSourcePath = resolve(frontendRoot, "src/components/ui/toast.tsx");
 const redExpectationTimeout = 2500;
 const toastAutoDismissTimeout = 3000;
 
@@ -151,21 +151,21 @@ test.afterAll(async () => {
 test("TDD-FEEDBACK-01: shared toast provider, hook, and public export are wired", async () => {
   const sharedExports = source("src/shared/index.ts");
   const appSource = source("src/app/App.tsx");
-  const toastSource = sourceIfExists("src/shared/ui/Toast.tsx");
+  const toastSource = sourceIfExists("src/components/ui/toast.tsx");
 
   expect.soft(
     existsSync(toastSourcePath),
-    "src/shared/ui/Toast.tsx should define the shared ToastProvider/useToast API.",
+    "src/components/ui/toast.tsx should define the toast ToastProvider/useToast API.",
   ).toBe(true);
-  expect.soft(toastSource, "ToastProvider should be implemented by the shared UI primitive.").toContain("ToastProvider");
-  expect.soft(toastSource, "useToast should be implemented by the shared UI primitive.").toContain("useToast");
-  expect.soft(toastSource, "The shared toast API should expose a generic show operation.").toContain("show");
-  expect.soft(toastSource, "The shared toast API should expose a success convenience operation.").toContain("success");
-  expect.soft(toastSource, "The shared toast API should expose an error convenience operation.").toContain("error");
-  expect.soft(toastSource, "The shared toast API should expose a warning convenience operation.").toContain("warning");
-  expect.soft(toastSource, "The shared toast API should expose an info convenience operation.").toContain("info");
-  expect.soft(toastSource, "The shared toast API should expose dismiss for manual removal.").toContain("dismiss");
-  expect.soft(sharedExports, "The public shared boundary should export the toast primitive.").toContain("./ui/Toast");
+  expect.soft(toastSource, "ToastProvider should be implemented by the toast primitive.").toContain("ToastProvider");
+  expect.soft(toastSource, "useToast should be implemented by the toast primitive.").toContain("useToast");
+  expect.soft(toastSource, "The toast API should expose the generic toastManager.add operation.").toContain("toastManager");
+  expect.soft(toastSource, "The toast API should expose a success convenience operation.").toContain("success");
+  expect.soft(toastSource, "The toast API should expose an error convenience operation.").toContain("error");
+  expect.soft(toastSource, "The toast API should expose a warning convenience operation.").toContain("warning");
+  expect.soft(toastSource, "The toast API should expose an info convenience operation.").toContain("info");
+  expect.soft(toastSource, "The toast API should expose dismiss for manual removal.").toContain("dismiss");
+  expect.soft(sharedExports, "The public shared boundary should no longer re-export the toast primitive.").not.toContain("./ui/Toast");
   expect.soft(appSource, "The app root should mount ToastProvider around routed pages.").toContain("ToastProvider");
 });
 

@@ -18,21 +18,21 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { DetailField } from "@/components/detail-field";
+import { MarkdownContent } from "@/components/markdown-content";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  ConfirmDialog,
-  DataTable,
-  DetailField,
-  InspectorPanel,
-  MarkdownContent,
   PageHeader,
   SurfaceCard,
-  TablePagination,
   useDismissibleLayer,
   useTabPanelConfig,
   useLocaleText,
   useOpenRightSidebar,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { InspectorPanel } from "@/components/inspector";
+import { useToast } from "@/components/ui/toast";
 
 import { cn } from "@/shared/lib/utils";
 import {

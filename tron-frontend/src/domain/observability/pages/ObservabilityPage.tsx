@@ -12,17 +12,17 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
-  InspectorPanel,
   MetricCard,
   PageHeader,
   SurfaceCard,
-  TablePagination,
   useTabPanelConfig,
   useOpenRightSidebar,
   useTablePagination,
 } from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
 
 import { useObservabilityOverview } from "@/domain/observability/hooks";
 import { cn } from "@/shared/lib/utils";

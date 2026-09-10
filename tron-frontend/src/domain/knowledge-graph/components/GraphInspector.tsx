@@ -7,9 +7,7 @@ import type {
   GraphScopeView,
 } from "@/domain/knowledge-graph/model";
 import { isEmbeddingVectorProperty } from "@/domain/knowledge-graph/model";
-import {
-  InspectorPanel,
-} from "@/shared";
+import { InspectorPanel } from "@/components/inspector";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 

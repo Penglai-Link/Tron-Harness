@@ -17,8 +17,7 @@ import {
 } from "@/domain/memory/mock/data";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
-import { useToast } from "@/shared/ui/Toast";
-import { toastManager } from "@/components/ui/toast";
+import { useToast } from "@/components/ui/toast";
 
 interface UseMemoryFragmentListOptions {
   activeTarget?: MemorySearchTarget;

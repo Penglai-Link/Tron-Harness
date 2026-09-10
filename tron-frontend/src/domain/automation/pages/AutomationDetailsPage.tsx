@@ -23,18 +23,16 @@ import {
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DetailField } from "@/components/detail-field";
+import { Field, TextArea, TextInput } from "@/components/forms";
+import { MarkdownContent } from "@/components/markdown-content";
+import { OptionSelect } from "@/components/option-select";
 import {
-  DetailField,
-  Field,
-  MarkdownContent,
-  OptionSelect,
   PageHeader,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  useToast,
   useLocaleText,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveAutomation,

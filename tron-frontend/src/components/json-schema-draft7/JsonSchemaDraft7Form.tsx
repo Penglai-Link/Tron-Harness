@@ -16,7 +16,7 @@ import {
   TextArea,
   TextInput,
   ToggleSwitch,
-} from "@/shared/ui/Forms";
+} from "@/components/forms";
 
 import {
   asSchemaObject,

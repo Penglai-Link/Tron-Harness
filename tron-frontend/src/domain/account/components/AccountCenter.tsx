@@ -28,16 +28,14 @@ import type {
 } from "@/domain/account/model";
 import { useAuthSession } from "@/domain/auth";
 import { useLocale, type SupportedLocale } from "@/i18n";
+import { Field, SelectInput, TextInput } from "@/components/forms";
 import {
-  Field,
   PageHeader,
-  SelectInput,
-  TextInput,
   useLocaleFormatters,
   useTheme,
-  useToast,
   useManagedAvatar,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { isApiError } from "@/shared/api/httpClient";
 import { cn } from "@/shared/lib/utils";

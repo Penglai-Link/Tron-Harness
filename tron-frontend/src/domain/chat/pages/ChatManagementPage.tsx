@@ -46,19 +46,19 @@ import {
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { MarkdownContent } from "@/components/markdown-content";
 import {
-  ConfirmDialog,
-  InfoTooltip,
-  MarkdownContent,
   useWorkspaceSpaces,
   useTabPanelConfig,
   useDismissibleLayer,
   useOpenRightSidebar,
-  useToast,
   PageView,
   type TargetPageFrameInspectionResult,
   useRightPanelTabs,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { MarkdownLink } from "@/components/markdown-link";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
@@ -166,7 +166,7 @@ import {
   downloadChatSessionAttachment,
   uploadChatSessionAttachment,
 } from "../api/chatAttachmentApi";
-import DraggleLine from "@/shared/ui/DraggleLine";
+import DraggleLine from "@/components/draggle-line";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,

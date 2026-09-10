@@ -4,13 +4,7 @@ import {
 } from "react";
 import { useTranslation } from "react-i18next";
 
-import {
-  Field,
-  SelectInput,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-} from "@/shared";
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
 
 import {
   getDefaultModelCapabilitiesForType,

@@ -3,7 +3,7 @@ import { createPortal } from "react-dom";
 import { CircleAlert } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { cn } from "@/shared/lib/utils";
+import { cn } from "@/lib/utils";
 
 export interface ConfirmDialogProps {
   ariaLabel?: string;

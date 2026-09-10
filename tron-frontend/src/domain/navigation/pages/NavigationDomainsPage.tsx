@@ -2,20 +2,16 @@ import { useEffect, useMemo, useState } from "react";
 import { ArrowDown, ArrowUp, MoreHorizontal, Plus, RefreshCcw } from "lucide-react";
 import { useNavigate } from "react-router";
 
+import { DataTable } from "@/components/data-table";
+import { Field, SelectInput, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
+import { ModalDialog } from "@/components/modal-dialog";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  ConfirmDialog,
-  DataTable,
-  Field,
-  ModalDialog,
   PageHeader,
-  SearchField,
-  SelectInput,
-  TablePagination,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";

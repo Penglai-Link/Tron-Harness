@@ -22,16 +22,15 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { DataTable } from "@/components/data-table";
+import { SelectInput, TextInput } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SelectInput,
-  TablePagination,
-  TextInput,
-  useToast,
   useLocaleFormatters,
   useWorkspaceSpaces,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   archiveApp,

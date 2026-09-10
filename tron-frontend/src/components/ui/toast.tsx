@@ -8,6 +8,7 @@ import {
   LoaderCircleIcon,
   TriangleAlertIcon,
 } from "lucide-react";
+import { useCallback, useMemo } from "react";
 import type React from "react";
 import { cn } from "@/lib/utils";
 import { buttonVariants } from "@/components/ui/button";
@@ -324,3 +325,29 @@ export function AnchoredToastProvider({
 }
 
 export { Toast as ToastPrimitive };
+
+function createToast(type: "success" | "error" | "warning" | "info") {
+  return (description: string, config?: { title?: string | null; durationMs?: number }) => {
+    const { title, durationMs } = config || {};
+    return toastManager.add({
+      type,
+      description,
+      title,
+      timeout: durationMs,
+    });
+  };
+}
+
+export function useToast() {
+  const dismiss = useCallback((id: string) => toastManager.close(id), []);
+  return useMemo(
+    () => ({
+      warning: createToast("warning"),
+      info: createToast("info"),
+      success: createToast("success"),
+      error: createToast("error"),
+      dismiss,
+    }),
+    [dismiss],
+  );
+}

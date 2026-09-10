@@ -13,8 +13,8 @@ import { Button } from "@/components/ui/button";
 import {
   PageHeader,
   SurfaceCard,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import { updateApp } from "@/domain/app/api";
 import {

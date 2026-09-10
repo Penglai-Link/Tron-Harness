@@ -19,7 +19,7 @@ import {
 } from "react-router";
 
 import { cn } from "@/shared/lib/utils";
-import { Button } from "@/components/ui/button";
+import { buttonVariants } from "@/components/ui/button";
 
 interface SettingsNavItem {
   href: string;
@@ -132,10 +132,10 @@ export function SettingsShell({ activeItem, children, contentClassName, items, r
               <p className="truncate text-base font-semibold">{t("shell:settings.title")}</p>
             </div>
           </div>
-          <Button render={<Link to={returnTo} />} variant="secondary">
+          <Link to={returnTo} className={buttonVariants({ variant: "secondary" })}>
             <ArrowLeft size={16} aria-hidden="true" />
             {t("shell:settings.back")}
-          </Button>
+          </Link>
         </div>
       </header>
 

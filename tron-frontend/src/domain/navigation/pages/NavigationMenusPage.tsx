@@ -1,20 +1,17 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { ExternalLink, FilePlus2, Pencil, Plus, RefreshCcw, Trash2 } from "lucide-react";
 
+import { DataTable } from "@/components/data-table";
+import { Field, SelectInput, TextInput, ToggleSwitch } from "@/components/forms";
+import { InfoTooltip } from "@/components/info-tooltip";
+import { ModalDialog } from "@/components/modal-dialog";
+import { SearchField } from "@/components/search-field";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  ConfirmDialog,
-  DataTable,
-  Field,
-  InfoTooltip,
-  ModalDialog,
   PageHeader,
-  SearchField,
-  SelectInput,
-  TablePagination,
-  TextInput,
-  ToggleSwitch,
-  useToast,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";

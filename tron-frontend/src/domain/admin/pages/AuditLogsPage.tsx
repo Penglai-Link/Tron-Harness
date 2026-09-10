@@ -7,12 +7,11 @@ import { FileText } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { DataTable } from "@/components/data-table";
+import { SelectInput, TextInput } from "@/components/forms";
+import { TablePagination } from "@/components/table-pagination";
 import {
-  DataTable,
   PageHeader,
-  SelectInput,
-  TablePagination,
-  TextInput,
   useTablePagination,
 } from "@/shared";
 

@@ -31,8 +31,8 @@ import {
   PageHeader,
   SurfaceCard,
   useLocaleFormatters,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 

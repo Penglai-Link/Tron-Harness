@@ -23,8 +23,8 @@ import {
   PageHeader,
   SurfaceCard,
   useTabPanelConfig,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { Button } from "@/components/ui/button"

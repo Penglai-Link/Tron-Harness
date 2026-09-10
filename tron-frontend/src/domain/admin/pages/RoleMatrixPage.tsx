@@ -15,15 +15,13 @@ import { useTranslation } from "react-i18next";
 
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SelectInput, TextInput, ToggleSwitch } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
   PageHeader,
-  SearchField,
-  SelectInput,
   SurfaceCard,
-  TextInput,
-  ToggleSwitch,
-  useToast,
 } from "@/shared";
+import { useToast } from "@/components/ui/toast";
 
 import {
   usePermissionDomainList,

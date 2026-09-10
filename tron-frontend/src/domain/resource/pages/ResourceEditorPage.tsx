@@ -40,17 +40,14 @@ import {
   useQuickResourceUploadHandoffStore,
   type QuickResourceUploadHandoff,
 } from "@/domain/resource/model";
+import { Field, TextArea, TextInput, ToggleSwitch } from "@/components/forms";
 import {
-  ConfirmDialog,
-  Field,
   PageHeader,
   SurfaceCard,
-  TextArea,
-  TextInput,
-  ToggleSwitch,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/components/ui/badge";
 

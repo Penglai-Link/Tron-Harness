@@ -42,15 +42,15 @@ import type {
   ResourceSourceKind,
 } from "@/domain/resource/model";
 import { useQuickResourceUploadHandoffStore } from "@/domain/resource/model";
+import { SelectInput } from "@/components/forms";
+import { SearchField } from "@/components/search-field";
 import {
-  ConfirmDialog,
   PageHeader,
-  SearchField,
-  SelectInput,
   useLocaleFormatters,
-  useToast,
   useWorkspaceSpaces,
 } from "@/shared";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { useToast } from "@/components/ui/toast";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { Badge } from "@/components/ui/badge";
 
