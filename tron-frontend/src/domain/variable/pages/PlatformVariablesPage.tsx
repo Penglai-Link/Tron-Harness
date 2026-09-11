@@ -408,7 +408,7 @@ export function PlatformVariablesPage() {
             {
               align: "right",
               cellClassName: "sticky right-0 z-10 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)] group-hover:bg-[var(--color-hover-surface)]",
-              header: "Actions",
+              header: pageT("columns.actions", "Actions"),
               headerClassName: "sticky right-0 z-20 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
               id: "actions",
               width: "100px",

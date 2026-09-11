@@ -2786,6 +2786,22 @@ export const pages = {
     table: { empty: "No domains match the current filters.", noDescription: "No description", title: "Domains" },
     title: "Memory Domains",
   },
+  installedSkills: {
+    actions: { refresh: "Refresh", refreshing: "Refreshing...", sync: "Sync", uninstall: "Uninstall", uninstalling: "Uninstalling...", update: "Update", updating: "Updating..." },
+    aria: { closeMarkdownFullscreen: "Close skill markdown fullscreen", openMarkdownFullscreen: "Open skill markdown fullscreen", skillMarkdownFullscreen: "Skill markdown fullscreen", skillMarkdownFullscreenPreview: "Skill markdown fullscreen preview", skillMarkdownPreview: "Skill markdown preview", uninstallConfirmation: "Uninstall skill confirmation" },
+    columns: { action: "Action", skill: "Skill", source: "Source", update: "Update", version: "Version", workspaces: "Workspaces" },
+    detail: { empty: "Select an installed skill to review its source, files, and markdown preview.", enabledWorkspaces: "Enabled Workspaces", files: "Files", filesEmpty: "No files discovered.", fullscreen: "Fullscreen", label: "Skill Detail", lastChecked: "Last Checked", lastUpdated: "Last Updated", loading: "Loading skill detail...", managedByCli: "CLI Managed", managedByManual: "Manual", markdownFullscreenDescription: "Preview the rendered markdown for this skill package.", markdownFullscreenTitle: "SKILL.md", markdownPreviewLabel: "SKILL.md Preview", notChecked: "Not checked", registryPath: "Registry Path", select: "Select a Skill", source: "Source", version: "Version" },
+    emptyState: { body: "Use “Sync” to search `skills.sh` and add one to the local registry.", title: "No installed skills match the current filters." },
+    errors: { detail: "Skill detail could not be loaded", load: "Installed skills could not be loaded", registry: "Registry operation failed", uninstall: "Skill uninstall failed" },
+    loading: { badge: "Loading" },
+    messages: { discovered: "Discovered {{count}} installed skills", uninstalled: "{{name}} uninstalled", uninstalledKept: "{{name}} uninstalled. {{count}} workspace binding{{suffix}} remain and will show as deleted.", uninstalledRemoved: "{{name}} uninstalled and removed from {{count}} workspace binding{{suffix}}", updated: "Registry skills updated" },
+    pagination: { itemLabel: "skills" },
+    search: { ariaLabel: "Filter installed skills", clear: "Clear installed skill search", placeholder: "Filter installed skills..." },
+    status: { unspecified: "Unspecified" },
+    title: "Skill Center",
+    uninstallDialog: { cancel: "Cancel", keepWorkspaceSkills: "Keep Workspace Skills", removeLocal: "This will remove the local skill files from Skill Center.", title: "Uninstall {{name}}", uninstall: "Uninstall", uninstalling: "Uninstalling...", uninstallWorkspaceToo: "Uninstall Workspace Skills Too", usedByWorkspaces: "{{name}} is currently used by {{count}} workspace{{suffix}}. Do you also want to uninstall the corresponding workspace skills?" },
+    warnings: { ragIndex: "Skill RAG index completed with warnings" },
+  },
   skills: {
     actions: { cancel: "Cancel", install: "Install", installSelected: "Install Selected{{suffix}}", refreshing: "Refreshing...", retry: "Retry", retryRag: "Retry RAG", search: "Search", searching: "Searching...", syncSelected: "Sync Selected{{suffix}}", uninstall: "Uninstall" },
     aria: { selectSkill: "Select {{name}}" },
@@ -2833,7 +2849,7 @@ export const pages = {
   },
   admin: {
     actions: { cancel: "Cancel" },
-    audit: { columns: { action: "Action", actor: "Actor", ip: "IP Address", resource: "Resource ID", status: "Status", timestamp: "Timestamp" }, entries: "entries", export: "Export", exported: "{{count}} audit rows exported", search: "Search audit logs...", title: "Audit Logs" },
+    audit: { columns: { action: "Action", actor: "Actor", ip: "IP Address", resource: "Resource ID", status: "Status", timestamp: "Timestamp" }, entries: "entries", export: "Export", exported: "{{count}} audit rows exported", search: "Search audit logs...", statusOptions: { Failed: "Failed", Success: "Success", Warning: "Warning", all: "All status" }, title: "Audit Logs" },
     roles: { actions: { add: "Add Role", clear: "Clear Filters", clone: "Clone", confirm: "Confirm", delete: "Delete", discard: "Discard", new: "New", reset: "Reset", save: "Save", saving: "Saving..." }, allDomains: "All domains", domainFilter: "Filter by permission domain", empty: "No roles match the current filters.", messages: { discarded: "Unsaved changes discarded", saved: "Role matrix draft saved" }, role: "Role", roleTypeFilter: "Filter by role type", roleTypes: { All: "All", Custom: "Custom", System: "System" }, search: "Search roles", searchPlaceholder: "Search roles, codes, or descriptions...", showChanged: "Show changed only", title: "Roles & Permissions", unsaved: "Unsaved", updated: "Updated {{value}}", usersLinked: "{{count}} users linked" },
     users: {
       createTitle: "Create User",
@@ -2865,7 +2881,7 @@ export const pages = {
   variablesPlatform: {
     actions: { delete: "Delete", edit: "Edit", new: "New", refresh: "Refresh", refreshing: "Refreshing..." },
     aria: { actionsFor: "Open actions for {{key}}", menu: "Actions for {{key}}", search: "Search platform variables", sensitiveFilter: "Filter platform variables by sensitive data" },
-    columns: { key: "Key", sensitive: "Sensitive Data", updated: "Updated", value: "Value" },
+    columns: { actions: "Actions", key: "Key", sensitive: "Sensitive Data", updated: "Updated", value: "Value" },
     empty: { filtered: "No platform variables match the current filters." },
     createTitle: "Create Platform Variable",
     detailTitle: "Platform Variable",
