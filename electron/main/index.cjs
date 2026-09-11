@@ -2,7 +2,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 const { spawn, exec } = require("node:child_process");
-const { app, BrowserWindow, ipcMain, shell } = require("electron");
+const { app, BrowserWindow, clipboard, ipcMain, Menu, shell } = require("electron");
 
 const {
   HOST,
@@ -21,17 +21,32 @@ const {
   sanitizeUrl,
   waitBackendReady
 } = require("./helpers.cjs");
+const {
+  createWebviewCommentPayload,
+  dispatchWebviewComment,
+  buildWebviewContextMenuTemplate
+} = require("./webview-context-menu.cjs");
 
 const MAIN_WINDOW_LABEL = "tron-main";
 const MIN_STARTUP_SCREEN_MS = 1200;
 const ALLOWED_INJECTION_EVENTS = new Set([
   "tron:frame-ready",
   "tron:dom-event",
+  "tron:inspection-started",
   "tron:node-inspected",
   "tron:inspection-exited",
   "tron:navigation-requested",
   "tron:navigation-changed"
 ]);
+const commentCapablePageIdsByWebContentsId = new Map();
+
+function setCommentAvailability(webContentsId, pageId, available) {
+  if (available) {
+    commentCapablePageIdsByWebContentsId.set(webContentsId, pageId);
+  } else {
+    commentCapablePageIdsByWebContentsId.delete(webContentsId);
+  }
+}
 
 const injectionTemplate = fs.readFileSync(
   path.resolve(__dirname, "..", "injection", "tron-desktop-injection.js"),
@@ -91,6 +106,46 @@ function createMainWindow() {
         void guestContents.loadURL(targetUrl);
       }
       return { action: "deny" };
+    });
+
+    guestContents.on("context-menu", (event, params) => {
+      event.preventDefault();
+      if (guestContents.isDestroyed()) {
+        return;
+      }
+
+      const template = buildWebviewContextMenuTemplate(guestContents, params, {
+        addComment: (x, y) => {
+          const pageId = commentCapablePageIdsByWebContentsId.get(guestContents.id);
+          if (!pageId) {
+            return;
+          }
+
+          void dispatchWebviewComment(
+            guestContents.mainFrame,
+            createWebviewCommentPayload(pageId, x, y)
+          ).then((dispatched) => {
+            if (!dispatched) {
+              console.error("failed to dispatch webview comment command");
+            }
+          });
+        },
+        allowInspect: isDevMode(),
+        canComment: commentCapablePageIdsByWebContentsId.has(guestContents.id),
+        copyText: (value) => clipboard.writeText(value),
+        isHttpUrl,
+        locale: app.getLocale(),
+        openExternal: openUrlInSystemBrowser
+      });
+      Menu.buildFromTemplate(template).popup({
+        frame: params.frame || undefined,
+        sourceType: params.menuSourceType,
+        window
+      });
+    });
+
+    guestContents.once("destroyed", () => {
+      commentCapablePageIdsByWebContentsId.delete(guestContents.id);
     });
   });
 
@@ -794,7 +849,29 @@ function registerIpcHandlers() {
       return "";
     }
 
+    setCommentAvailability(ipcEvent.sender.id, pageId, payload.commentAvailable);
+
     return buildWebviewInjectionScript(pageId, Boolean(payload.enabled));
+  });
+
+  ipcMain.handle("tron-desktop:update-target-comment-availability", (ipcEvent, payload = {}) => {
+    if (!state.mainWindow || state.mainWindow.isDestroyed()) {
+      return false;
+    }
+
+    const host = ipcEvent.sender.hostWebContents;
+    if (!host || host.id !== state.mainWindow.webContents.id) {
+      return false;
+    }
+
+    const pageId = String(payload.pageId || "").trim().slice(0, 160);
+    if (!pageId) {
+      return false;
+    }
+
+    setCommentAvailability(ipcEvent.sender.id, pageId, payload.commentAvailable);
+
+    return true;
   });
 }
 

@@ -227,6 +227,7 @@ help:
 	@echo ""
 	@echo "Desktop commands:"
 	@echo "  make desktop-build     Build desktop installer packages and sidecar binary"
+	@echo "  make desktop-test      Run Electron desktop unit tests"
 	@echo "  make desktop-dev       Build desktop dependencies and run Electron dev mode"
 	@echo "  make desktop-clean     Remove desktop build artifacts"
 	@echo ""
@@ -388,6 +389,10 @@ desktop-dev:
 	$(MAKE) install
 	$(MAKE) desktop-build
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_DEV_ENV),$(NPM) run -s dev))
+
+.PHONY: desktop-test
+desktop-test:
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(NPM) test)
 
 .PHONY: desktop-clean
 desktop-clean:

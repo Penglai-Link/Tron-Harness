@@ -1,27 +1,40 @@
 const { contextBridge, ipcRenderer, webFrame } = require("electron");
+const {
+  buildPageMessageScript,
+  normalizeTargetConfiguration
+} = require("./target-preload-helpers.cjs");
 
 let configuredPageId = "";
 let configureGeneration = 0;
 let disposed = false;
 
+function postPageMessage(payload) {
+  if (disposed) {
+    return Promise.resolve();
+  }
+
+  return webFrame
+    .executeJavaScript(buildPageMessageScript(payload), true)
+    .catch(() => undefined);
+}
+
 async function configureTarget(payload) {
   const generation = ++configureGeneration;
-  const pageId = typeof payload?.pageId === "string" ? payload.pageId.trim().slice(0, 160) : "";
-  if (!pageId || disposed) {
+  const configuration = normalizeTargetConfiguration(payload);
+  if (!configuration || disposed) {
     return;
   }
 
-  configuredPageId = pageId;
-  const enabled = Boolean(payload?.enabled);
-  const script = await ipcRenderer.invoke("tron-desktop:target-injection-script", {
-    enabled,
-    pageId
-  });
+  configuredPageId = configuration.pageId;
+  const script = await ipcRenderer.invoke(
+    "tron-desktop:target-injection-script",
+    configuration
+  );
   if (
     disposed
     || generation !== configureGeneration
     || typeof script !== "string"
-    || configuredPageId !== pageId
+    || configuredPageId !== configuration.pageId
   ) {
     return;
   }
@@ -30,15 +43,12 @@ async function configureTarget(payload) {
   if (disposed || generation !== configureGeneration) {
     return;
   }
-  window.postMessage(
-    {
-      channel: "tron:frame-event",
-      type: "tron:toggle-injection",
-      pageId,
-      enabled
-    },
-    "*"
-  );
+  await postPageMessage({
+    channel: "tron:frame-event",
+    type: "tron:toggle-injection",
+    pageId: configuration.pageId,
+    enabled: configuration.enabled
+  });
 }
 
 window.addEventListener("message", (event) => {
@@ -66,15 +76,20 @@ ipcRenderer.on("tron-desktop:toggle-injection", (_event, payload) => {
     return;
   }
 
-  window.postMessage(
-    {
-      channel: "tron:frame-event",
-      type: "tron:toggle-injection",
-      pageId: payload?.pageId,
-      enabled: Boolean(payload?.enabled)
-    },
-    "*"
-  );
+  const configuration = normalizeTargetConfiguration(payload);
+  if (configuration && configuration.pageId === configuredPageId) {
+    void ipcRenderer.invoke(
+      "tron-desktop:update-target-comment-availability",
+      configuration
+    ).catch(() => undefined);
+  }
+
+  void postPageMessage({
+    channel: "tron:frame-event",
+    type: "tron:toggle-injection",
+    pageId: payload?.pageId,
+    enabled: Boolean(payload?.enabled)
+  });
 });
 
 ipcRenderer.on("tron-desktop:configure-target", (_event, payload) => {

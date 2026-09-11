@@ -285,6 +285,7 @@ export const TargetPageFrame = forwardRef<
       try {
         void webview
           .send(channel, {
+            commentAvailable: inspectionMode && panelVisible,
             enabled: injectionEnabledRef.current,
             pageId,
           })
@@ -293,7 +294,7 @@ export const TargetPageFrame = forwardRef<
         webviewReadyRef.current = false;
       }
     },
-    [pageId, webview],
+    [inspectionMode, pageId, panelVisible, webview],
   );
 
   useEffect(() => {
@@ -377,6 +378,11 @@ export const TargetPageFrame = forwardRef<
         return;
       }
 
+      if (sanitized.eventType === "tron:inspection-started") {
+        if (inspectionMode && panelVisible) setInjectionEnabled(true);
+        return;
+      }
+
       if (sanitized.eventType === "tron:navigation-requested") {
         const requestedUrl = sanitizeUrlInput(
           readString(asRecord(sanitized.payload), "url"),
@@ -403,22 +409,10 @@ export const TargetPageFrame = forwardRef<
     inspectionMode,
     isDesktopHost,
     onInspectionConfirm,
+    panelVisible,
     pageId,
     setCurrentUrl,
   ]);
-
-  const openInSystemBrowser = useCallback(() => {
-    if (!activeUrl) {
-      return;
-    }
-    void bridge
-      .openTargetPage({ mode: "browser", pageId, url: activeUrl })
-      .then((result) => {
-        if (!result.opened && result.reason === "running-in-browser") {
-          window.open(activeUrl, "_blank", "noopener,noreferrer");
-        }
-      });
-  }, [activeUrl, bridge, pageId]);
 
   const handleBack = () => {
     if (isDesktopHost) {

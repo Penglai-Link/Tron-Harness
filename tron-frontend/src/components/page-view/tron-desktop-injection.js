@@ -58,6 +58,8 @@
   let lockedScrollPosition = null;
   let restoringLockedScroll = false;
   let lastPointerPosition = null;
+  let lastContextMenuTarget = null;
+  let lastContextMenuPosition = null;
 
   const safePost = (eventType, payload, options = {}) => {
     if (!injectionEnabled && !options.force) {
@@ -1620,6 +1622,72 @@
     setTimeout(() => input.focus(), 0);
   };
 
+  const selectElementForComment = (element, point) => {
+    selectedElement = element;
+    lastPointerPosition = point;
+    lockRemarkScroll();
+    updateOverlay(element);
+    showInputPanel(element);
+  };
+
+  const captureContextMenuTarget = (event) => {
+    const path = typeof event.composedPath === "function"
+      ? event.composedPath()
+      : [event.target];
+    const element = path.find((candidate) => candidate?.nodeType === 1);
+
+    if (!element || isInspectorUi(element)) {
+      lastContextMenuTarget = null;
+      lastContextMenuPosition = null;
+      return;
+    }
+
+    lastContextMenuTarget = element;
+    lastContextMenuPosition = {
+      x: event.clientX,
+      y: event.clientY,
+    };
+  };
+
+  const openCommentAtPoint = (rawX, rawY) => {
+    const x = Number(rawX);
+    const y = Number(rawY);
+    const capturedElement = lastContextMenuTarget?.isConnected
+      ? lastContextMenuTarget
+      : null;
+    const capturedPoint = lastContextMenuPosition;
+    lastContextMenuTarget = null;
+    lastContextMenuPosition = null;
+
+    if (!capturedElement && (!Number.isFinite(x) || !Number.isFinite(y))) {
+      return;
+    }
+
+    clearSelection();
+    const point = capturedPoint || { x, y };
+    const element = capturedElement || readInspectableElementFromPoint(point.x, point.y);
+    if (!element) {
+      return false;
+    }
+
+    injectionEnabled = true;
+    applyInspectorState();
+    selectElementForComment(element, point);
+    safePost("tron:inspection-started", { source: "context-menu" });
+    return true;
+  };
+
+  try {
+    Object.defineProperty(window, "__tronDesktopInspector", {
+      configurable: true,
+      value: Object.freeze({
+        openCommentAtPoint: (x, y, pageId) => (
+          pageId === PAGE_ID && openCommentAtPoint(x, y) === true
+        ),
+      }),
+    });
+  } catch {}
+
   const onPointerMove = (event) => {
     lastPointerPosition = {
       x: event.clientX,
@@ -1661,10 +1729,10 @@
       return;
     }
 
-    selectedElement = element;
-    lockRemarkScroll();
-    updateOverlay(element);
-    showInputPanel(element);
+    selectElementForComment(element, {
+      x: event.clientX,
+      y: event.clientY,
+    });
   };
 
   const onClick = (event) => {
@@ -1762,6 +1830,7 @@
   }
 
   document.addEventListener("click", onNavigationClick, true);
+  document.addEventListener("contextmenu", captureContextMenuTarget, true);
   applyInspectorState();
 
   window.addEventListener(
@@ -1772,7 +1841,10 @@
         return;
       }
 
-      if (payload.channel !== BRIDGE_CHANNEL && payload.type !== "tron:toggle-injection") {
+      if (
+        payload.channel !== BRIDGE_CHANNEL
+        && payload.type !== "tron:toggle-injection"
+      ) {
         return;
       }
 

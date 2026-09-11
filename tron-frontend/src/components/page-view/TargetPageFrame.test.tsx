@@ -105,7 +105,11 @@ describe("TargetPageFrame webview", () => {
     await waitFor(() => {
       expect(webview.send).toHaveBeenCalledWith(
         "tron-desktop:configure-target",
-        expect.objectContaining({ enabled: false, pageId: "session-1page-1" }),
+        expect.objectContaining({
+          commentAvailable: false,
+          enabled: false,
+          pageId: "session-1page-1",
+        }),
       );
     });
   });
@@ -132,7 +136,7 @@ describe("TargetPageFrame webview", () => {
     await waitFor(() => {
       expect(webview.send).toHaveBeenCalledWith(
         "tron-desktop:toggle-injection",
-        expect.objectContaining({ enabled: false }),
+        expect.objectContaining({ commentAvailable: false, enabled: false }),
       );
     });
 
@@ -182,8 +186,99 @@ describe("TargetPageFrame webview", () => {
     await waitFor(() => {
       expect(webview.send).toHaveBeenCalledWith(
         "tron-desktop:configure-target",
-        expect.objectContaining({ enabled: true, pageId: "page-1" }),
+        expect.objectContaining({
+          commentAvailable: true,
+          enabled: true,
+          pageId: "page-1",
+        }),
       );
+    });
+  });
+
+  it("syncs inspection state when a context-menu comment starts", async () => {
+    const frameRef = createRef<TargetPageFrameHandle>();
+    render(<TargetPageFrame ref={frameRef} inspectionMode pageId="page-1" />);
+    act(() => frameRef.current?.open("https://example.com"));
+    const webview = prepareWebview();
+    dispatchWebviewEvent(webview, "dom-ready");
+
+    act(() => {
+      window.postMessage(
+        {
+          channel: "tron:frame-event",
+          eventType: "tron:inspection-started",
+          frameId: "frame-1",
+          pageId: "page-1",
+          payload: { source: "context-menu" },
+          timestamp: Date.now(),
+        },
+        "*",
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole("button", { name: "Disable inspection" })).toBeTruthy();
+      expect(webview.send).toHaveBeenCalledWith(
+        "tron-desktop:toggle-injection",
+        expect.objectContaining({ enabled: true }),
+      );
+    });
+  });
+
+  it("limits context-menu review to the matching visible webview", async () => {
+    render(
+      <>
+        <TargetPageFrame inspectionMode pageId="page-1" />
+        <TargetPageFrame inspectionMode pageId="page-2" />
+      </>,
+    );
+
+    act(() => {
+      window.postMessage(
+        {
+          channel: "tron:frame-event",
+          eventType: "tron:inspection-started",
+          frameId: "frame-1",
+          pageId: "page-1",
+          payload: { source: "context-menu" },
+          timestamp: Date.now(),
+        },
+        "*",
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getAllByRole("button", { name: "Disable inspection" }),
+      ).toHaveLength(1);
+      expect(
+        screen.getAllByRole("button", { name: "Enable inspection" }),
+      ).toHaveLength(1);
+    });
+  });
+
+  it("ignores context-menu review events while the webview tab is hidden", async () => {
+    visibilityState.visible = false;
+    render(<TargetPageFrame inspectionMode pageId="page-1" />);
+
+    act(() => {
+      window.postMessage(
+        {
+          channel: "tron:frame-event",
+          eventType: "tron:inspection-started",
+          frameId: "frame-1",
+          pageId: "page-1",
+          payload: { source: "context-menu" },
+          timestamp: Date.now(),
+        },
+        "*",
+      );
+    });
+
+    await waitFor(() => {
+      expect(
+        screen.getByRole("button", { name: "Enable inspection" }),
+      ).toBeTruthy();
     });
   });
 });

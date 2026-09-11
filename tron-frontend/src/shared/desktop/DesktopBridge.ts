@@ -50,7 +50,7 @@ export interface DesktopInjectionEvent {
   };
 }
 
-export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event" | "tron:node-inspected" | "tron:inspection-exited" | "tron:navigation-requested" | "tron:navigation-changed";
+export type DesktopInjectionEventType = "tron:frame-ready" | "tron:dom-event" | "tron:inspection-started" | "tron:node-inspected" | "tron:inspection-exited" | "tron:navigation-requested" | "tron:navigation-changed";
 
 export interface DesktopInjectionEventRequest {
   eventType: DesktopInjectionEventType;
@@ -76,6 +76,7 @@ type WindowWithElectronDesktop = Window & {
 const ALLOWED_INJECTION_EVENTS = new Set<DesktopInjectionEventType>([
   "tron:frame-ready",
   "tron:dom-event",
+  "tron:inspection-started",
   "tron:node-inspected",
   "tron:inspection-exited",
   "tron:navigation-requested",

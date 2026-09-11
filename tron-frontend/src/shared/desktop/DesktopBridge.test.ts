@@ -193,6 +193,19 @@ describe("DesktopBridge", () => {
     });
   });
 
+  it("accepts inspection start events from the injected frame", () => {
+    const event = sanitizeInjectionEventPayload({
+      eventType: "tron:inspection-started",
+      frameId: "frame-1",
+      pageId: "page-1",
+      payload: { source: "context-menu" },
+      timestamp: 1000,
+    });
+
+    expect(event?.eventType).toBe("tron:inspection-started");
+    expect(event?.payload).toEqual({ source: "context-menu" });
+  });
+
   it("preserves long URLs in navigation events", () => {
     const longUrl = `https://example.com/search?wd=${"query-".repeat(40)}&redirect=https%3A%2F%2Ftarget.example%2Fpath%3Fa%3D1#section`;
     const event = sanitizeInjectionEventPayload({
