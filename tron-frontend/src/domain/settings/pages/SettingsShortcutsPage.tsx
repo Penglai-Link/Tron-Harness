@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Keyboard, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
@@ -131,8 +131,8 @@ export function SettingsShortcutsPage() {
               const label = pageT(`shortcuts.${action}.label`);
 
               return (
-                <>
-                  <Item size="xs" key={action}>
+                <Fragment key={action}>
+                  <Item size="xs">
                     <ItemContent>
                       <ItemTitle>{label}</ItemTitle>
                       <ItemDescription>
@@ -176,7 +176,7 @@ export function SettingsShortcutsPage() {
                   {index < shellShortcutActions.length - 1 ? (
                     <Separator />
                   ) : null}
-                </>
+                </Fragment>
               );
             })}
           </div>
