@@ -450,23 +450,23 @@ export function InstalledSkillsPage() {
                 <Badge variant={getUpdateTone(selectedSkill.updateStatus)}>
                   {selectedSkill.updateStatus}
                 </Badge>
-                <Badge variant="info">{selectedSkill.managedBy === "Cli" ? "CLI Managed" : "Manual"}</Badge>
+                <Badge variant="info">{selectedSkill.managedBy === "Cli" ? pageT("detail.managedByCli", "CLI Managed") : pageT("detail.managedByManual", "Manual")}</Badge>
               </div>
 
               <div className="rounded-2xl border border-[var(--color-outline-variant)] px-4 py-4">
                 <div className="grid gap-4 md:grid-cols-2">
-                  <DetailField label="Source" value={selectedSkill.sourceRef} />
-                  <DetailField label="Registry Path" value={selectedSkill.registryPath} />
-                  <DetailField label="Version" value={selectedSkill.declaredVersion ?? "Unspecified"} />
-                  <DetailField label="Last Checked" value={selectedSkill.lastCheckedAt ? formatDateTime(selectedSkill.lastCheckedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
-                  <DetailField label="Last Updated" value={selectedSkill.lastUpdatedAt ? formatDateTime(selectedSkill.lastUpdatedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
-                  <DetailField label="Enabled Workspaces" value={String(selectedSkill.enabledWorkspaceCount)} />
+                  <DetailField label={pageT("detail.source", "Source")} value={selectedSkill.sourceRef} />
+                  <DetailField label={pageT("detail.registryPath", "Registry Path")} value={selectedSkill.registryPath} />
+                  <DetailField label={pageT("detail.version", "Version")} value={selectedSkill.declaredVersion ?? pageT("status.unspecified", "Unspecified")} />
+                  <DetailField label={pageT("detail.lastChecked", "Last Checked")} value={selectedSkill.lastCheckedAt ? formatDateTime(selectedSkill.lastCheckedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
+                  <DetailField label={pageT("detail.lastUpdated", "Last Updated")} value={selectedSkill.lastUpdatedAt ? formatDateTime(selectedSkill.lastUpdatedAt, { dateStyle: "medium", timeStyle: "short" }) : pageT("detail.notChecked", "Not checked")} />
+                  <DetailField label={pageT("detail.enabledWorkspaces", "Enabled Workspaces")} value={String(selectedSkill.enabledWorkspaceCount)} />
                 </div>
               </div>
 
               <div>
                 <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                  Files
+                  {pageT("detail.files", "Files")}
                 </p>
                 <div className="mt-3 flex flex-wrap gap-[12px]">
                   {selectedSkill.files.length ? (
@@ -477,7 +477,7 @@ export function InstalledSkillsPage() {
                     ))
                   ) : (
                     <span className="text-sm text-[var(--color-on-surface-variant)]">
-                      No files discovered.
+                      {pageT("detail.filesEmpty", "No files discovered.")}
                     </span>
                   )}
                 </div>
@@ -486,22 +486,22 @@ export function InstalledSkillsPage() {
               <div>
                 <div className="flex flex-wrap items-center justify-between gap-[12px]">
                   <p className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
-                    SKILL.md Preview
+                    {pageT("detail.markdownPreviewLabel", "SKILL.md Preview")}
                   </p>
                   <Button
                     size="sm"
                     type="button"
                     variant="ghost"
-                    aria-label="Open skill markdown fullscreen"
+                    aria-label={pageT("aria.openMarkdownFullscreen", "Open skill markdown fullscreen")}
                     onClick={() => setSkillMarkdownFullscreenOpen(true)}
                   >
                     <Maximize2 size={14} aria-hidden="true" />
-                    Fullscreen
+                    {pageT("detail.fullscreen", "Fullscreen")}
                   </Button>
                 </div>
                 <div className="mt-2 max-h-[24rem] min-w-0 max-w-full overflow-x-hidden overflow-y-auto overscroll-y-contain rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] px-4 py-3">
                   <MarkdownContent
-                    ariaLabel="Skill markdown preview"
+                    ariaLabel={pageT("aria.skillMarkdownPreview", "Skill markdown preview")}
                     className="max-w-full pr-1"
                     content={selectedSkill.skillMarkdown}
                   />
@@ -517,7 +517,7 @@ export function InstalledSkillsPage() {
             className="w-[min(92vw,32rem)] rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
-            aria-label="Uninstall skill confirmation"
+            aria-label={pageT("aria.uninstallConfirmation", "Uninstall skill confirmation")}
           >
             <div className="flex items-start gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div className="mt-0.5 rounded-full bg-[var(--color-error-container)] p-2 text-[var(--color-on-error-container)]">
@@ -525,12 +525,16 @@ export function InstalledSkillsPage() {
               </div>
               <div className="min-w-0 flex-1">
                 <h2 className="text-base font-semibold text-[var(--color-on-surface)]">
-                  Uninstall {uninstallTarget.skillName}
+                  {pageT("uninstallDialog.title", "Uninstall {{name}}", { name: uninstallTarget.skillName })}
                 </h2>
                 <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
                   {uninstallTarget.enabledWorkspaceCount > 0
-                    ? `${uninstallTarget.skillName} is currently used by ${uninstallTarget.enabledWorkspaceCount} workspace${uninstallTarget.enabledWorkspaceCount === 1 ? "" : "s"}. Do you also want to uninstall the corresponding workspace skills?`
-                    : "This will remove the local skill files from Skill Center."}
+                    ? pageT("uninstallDialog.usedByWorkspaces", "{{name}} is currently used by {{count}} workspace{{suffix}}. Do you also want to uninstall the corresponding workspace skills?", {
+                      name: uninstallTarget.skillName,
+                      count: uninstallTarget.enabledWorkspaceCount,
+                      suffix: uninstallTarget.enabledWorkspaceCount === 1 ? "" : "s",
+                    })
+                    : pageT("uninstallDialog.removeLocal", "This will remove the local skill files from Skill Center.")}
                 </p>
               </div>
             </div>
@@ -545,7 +549,7 @@ export function InstalledSkillsPage() {
                     aria-busy={uninstallingSkillName === uninstallTarget.skillName}
                     onClick={() => void executeUninstall(uninstallTarget, false)}
                   >
-                    Keep Workspace Skills
+                    {pageT("uninstallDialog.keepWorkspaceSkills", "Keep Workspace Skills")}
                   </Button>
                   <Button
                     type="button"
@@ -554,7 +558,7 @@ export function InstalledSkillsPage() {
                     aria-busy={uninstallingSkillName === uninstallTarget.skillName}
                     onClick={() => void executeUninstall(uninstallTarget, true)}
                   >
-                    Uninstall Workspace Skills Too
+                    {pageT("uninstallDialog.uninstallWorkspaceToo", "Uninstall Workspace Skills Too")}
                   </Button>
                 </>
               ) : (
@@ -565,7 +569,7 @@ export function InstalledSkillsPage() {
                   aria-busy={uninstallingSkillName === uninstallTarget.skillName}
                   onClick={() => void executeUninstall(uninstallTarget, false)}
                 >
-                  {uninstallingSkillName === uninstallTarget.skillName ? "Uninstalling..." : "Uninstall"}
+                  {uninstallingSkillName === uninstallTarget.skillName ? pageT("uninstallDialog.uninstalling", "Uninstalling...") : pageT("uninstallDialog.uninstall", "Uninstall")}
                 </Button>
               )}
               <Button
@@ -575,7 +579,7 @@ export function InstalledSkillsPage() {
                 disabled={uninstallingSkillName === uninstallTarget.skillName}
                 onClick={() => setUninstallTarget(null)}
               >
-                Cancel
+                {pageT("uninstallDialog.cancel", "Cancel")}
               </Button>
             </div>
           </div>
@@ -587,20 +591,20 @@ export function InstalledSkillsPage() {
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] min-w-0 max-w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
             aria-modal="true"
-            aria-label="Skill markdown fullscreen preview"
+            aria-label={pageT("aria.skillMarkdownFullscreenPreview", "Skill markdown fullscreen preview")}
           >
             <div className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
-                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">SKILL.md</h2>
+                <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("detail.markdownFullscreenTitle", "SKILL.md")}</h2>
                 <p className="mt-1 text-[13px] text-[var(--color-on-surface-variant)]">
-                  Preview the rendered markdown for this skill package.
+                  {pageT("detail.markdownFullscreenDescription", "Preview the rendered markdown for this skill package.")}
                 </p>
               </div>
               <Button
                 size="icon"
                 type="button"
                 variant="ghost"
-                aria-label="Close skill markdown fullscreen"
+                aria-label={pageT("aria.closeMarkdownFullscreen", "Close skill markdown fullscreen")}
                 onClick={() => setSkillMarkdownFullscreenOpen(false)}
               >
                 <X size={16} aria-hidden="true" />
@@ -608,7 +612,7 @@ export function InstalledSkillsPage() {
             </div>
             <div className="min-h-0 min-w-0 flex-1 overflow-x-hidden overflow-y-auto overscroll-y-contain px-5 py-4">
               <MarkdownContent
-                ariaLabel="Skill markdown fullscreen"
+                ariaLabel={pageT("aria.skillMarkdownFullscreen", "Skill markdown fullscreen")}
                 className="max-w-none pr-1"
                 content={selectedSkill.skillMarkdown}
               />

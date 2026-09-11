@@ -55,7 +55,7 @@ export function AuditLogsPage() {
           <>
             <TextInput className="h-8 w-60" placeholder={t("pages:admin.audit.search", "Search audit logs...")} value={query} onChange={(event) => setQuery(event.target.value)} />
             <SelectInput className="h-8 w-36" value={status} onValueChange={(event) => setStatus(event!)}>
-              {adminAuditStatusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{option.label}</SelectItem>)}
+              {adminAuditStatusOptions.map((option) => <SelectItem key={option.value} value={option.value}>{t("pages:admin.audit.statusOptions." + option.value, option.label)}</SelectItem>)}
             </SelectInput>
           </>
         }
@@ -67,7 +67,7 @@ export function AuditLogsPage() {
           { id: "actor", header: t("pages:admin.audit.columns.actor", "Actor"), render: (row) => row.actor },
           { id: "action", header: t("pages:admin.audit.columns.action", "Action"), render: (row) => row.action },
           { id: "resource", header: t("pages:admin.audit.columns.resource", "Resource ID"), render: (row) => <span className="font-mono text-[13px]">{row.resourceId}</span> },
-          { id: "status", header: t("pages:admin.audit.columns.status", "Status"), render: (row) => <Badge variant={getStatusTone(row.status)}>{row.status}</Badge> },
+          { id: "status", header: t("pages:admin.audit.columns.status", "Status"), render: (row) => <Badge variant={getStatusTone(row.status)}>{t("pages:admin.audit.statusOptions." + row.status, row.status)}</Badge> },
           { id: "ip", header: t("pages:admin.audit.columns.ip", "IP Address"), align: "right", render: (row) => <span className="font-mono text-[13px]">{row.ipAddress}</span> },
         ]}
       />
