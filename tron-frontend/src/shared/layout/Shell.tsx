@@ -80,6 +80,7 @@ import {
 import { Content } from "./content";
 import RightPanelContainer from "./content/RightPanelContainer";
 import { TronSidebar } from "./TronSidebar";
+import { ChatSidebarPanel } from "./chat";
 import { useTabPanelRegistry } from "./content/TabPanelRegistry";
 
 
@@ -1133,6 +1134,7 @@ export function TronShell({
             openSections={openSections}
             renderDomainSelector={renderNavigationDomainSelector}
             renderFooter={renderSidebarUserSection}
+            renderChatPanel={(compact) => <ChatSidebarPanel compact={compact} />}
             setOpenNavigationItems={setOpenNavigationItems}
             translate={(key, options) => t(key, options)}
             onNavigate={handleSidebarNavigationClick}

@@ -45,6 +45,7 @@ fn context_assembly_publishes_agui_event_when_detailed_event_persistence_is_disa
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("AG-UI context status".into()),
                 app_code: None,
                 task_code: None,
@@ -135,6 +136,7 @@ fn failed_tool_calls_and_discovery_results_replay_to_the_next_run() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("tool replay".into()),
                 app_code: None,
                 task_code: None,
@@ -258,6 +260,7 @@ fn transcript_service_records_todos_and_compaction() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("short-term memory".into()),
                 app_code: None,
                 task_code: None,
@@ -686,6 +689,7 @@ fn transcript_service_records_todos_and_compaction() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("second short-term memory".into()),
                 app_code: None,
                 task_code: None,
@@ -746,6 +750,7 @@ fn transcript_service_records_todos_and_compaction() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("active state only".into()),
                 app_code: None,
                 task_code: None,
@@ -1019,6 +1024,7 @@ fn session_summary_storage_failure_is_separate_from_run_completion() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("family failure".into()),
                 app_code: None,
                 task_code: None,
@@ -2664,6 +2670,7 @@ fn message_with_event_transaction_rolls_back_on_event_insert_failure() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("rollback".into()),
                 app_code: None,
                 task_code: None,
@@ -2747,6 +2754,7 @@ fn context_epoch_revision_is_unique_under_concurrent_prepare() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("context epoch concurrent".into()),
                 app_code: None,
                 task_code: None,
@@ -2819,6 +2827,7 @@ fn goal_storage_rejects_second_open_goal_and_preserves_existing_goal() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("goal conflict".into()),
                 app_code: None,
                 task_code: None,
@@ -2876,6 +2885,7 @@ fn goal_update_rejects_stale_revision_and_preserves_current_state() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("goal revision conflict".into()),
                 app_code: None,
                 task_code: None,
@@ -4140,6 +4150,7 @@ fn history_retention_preserves_current_user_input_when_single_turn_exceeds_budge
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("current input pinning".into()),
                 app_code: None,
                 task_code: None,
@@ -5467,6 +5478,7 @@ fn tool_schema_tokens_participate_in_context_budget() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("tool schema budget".into()),
                 app_code: None,
                 task_code: None,
@@ -5702,6 +5714,7 @@ fn delete_session_removes_short_term_memory_rows() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("delete stm".into()),
                 app_code: None,
                 task_code: None,
@@ -6108,6 +6121,7 @@ fn concurrent_append_allocates_unique_session_sequence_values() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("concurrent seq".into()),
                 app_code: None,
                 task_code: None,
@@ -6212,11 +6226,13 @@ fn base_context(session_code: &str) -> AgentRunContext {
         effective_tools: Vec::new(),
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
+            project_code: None,
             app_code: None,
             repository_url: None,
             local_directory: None,
             branch_name: None,
             task_code: None,
+            allowed_local_directories: Vec::new(),
         },
         limits: AgentRunLimits::default(),
         messages: vec![AgentMessage::user("Track the implementation state")],
@@ -6530,6 +6546,7 @@ fn create_test_session(database_url: &str, title: &str) -> ChatSession {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some(title.into()),
                 app_code: None,
                 task_code: None,

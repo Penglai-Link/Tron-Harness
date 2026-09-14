@@ -1,23 +1,24 @@
 fn row_to_session(row: &Row<'_>) -> rusqlite::Result<ChatSession> {
-    let status: String = row.get(8)?;
-    let source_type: String = row.get(14)?;
+    let status: String = row.get(9)?;
+    let source_type: String = row.get(15)?;
     Ok(ChatSession {
         id: row.get(0)?,
         session_code: row.get(1)?,
         workspace_code: row.get(2)?,
-        user_code: row.get(3)?,
-        app_code: row.get(4)?,
-        task_code: row.get(5)?,
+        project_code: row.get(3)?,
+        user_code: row.get(4)?,
+        app_code: row.get(5)?,
+        task_code: row.get(6)?,
         source_type: session_source_type_from_storage(&source_type).map_err(chat_mapping_error)?,
-        source_code: row.get(15)?,
-        agent_code: row.get(6)?,
-        system_agent_session_id: row.get(13)?,
-        title: row.get(7)?,
+        source_code: row.get(16)?,
+        agent_code: row.get(7)?,
+        system_agent_session_id: row.get(14)?,
+        title: row.get(8)?,
         status: session_status_from_storage(&status).map_err(chat_mapping_error)?,
-        last_run_code: row.get(9)?,
-        last_run_status: row.get(10)?,
-        created_at: timestamp_from_millis(row.get(11)?),
-        updated_at: timestamp_from_millis(row.get(12)?),
+        last_run_code: row.get(10)?,
+        last_run_status: row.get(11)?,
+        created_at: timestamp_from_millis(row.get(12)?),
+        updated_at: timestamp_from_millis(row.get(13)?),
     })
 }
 

@@ -624,11 +624,13 @@ fn base_context(run_code: &str) -> AgentRunContext {
         effective_tools: Vec::new(),
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
+            project_code: None,
             app_code: Some("APP-1".into()),
             repository_url: Some("https://example.test/repo.git".into()),
             local_directory: Some("/workspace/repo".into()),
             branch_name: Some("main".into()),
             task_code: Some("TASK-1".into()),
+            allowed_local_directories: Vec::new(),
         },
         limits: AgentRunLimits {
             max_steps: 4,
@@ -679,6 +681,7 @@ fn auto_compaction_fixture(
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some(label.into()),
                 app_code: None,
                 task_code: None,
@@ -816,6 +819,7 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("Overflow recovery".into()),
                 app_code: None,
                 task_code: None,
@@ -922,6 +926,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("Auto model compaction".into()),
                 app_code: None,
                 task_code: None,
@@ -1344,6 +1349,7 @@ async fn react_agent_persists_failed_tool_observation_in_short_term_memory() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("Failed STM tool".into()),
                 app_code: None,
                 task_code: None,
@@ -1785,6 +1791,7 @@ async fn react_agent_externalizes_parallel_tool_outputs_with_unique_sequences() 
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("Parallel STM".into()),
                 app_code: None,
                 task_code: None,
@@ -2423,6 +2430,7 @@ async fn react_agent_recovers_after_missing_and_unauthorized_tools() {
             .create_session(
                 CreateChatSessionCommand {
                     workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                     title: Some(format!("STM tool {label}")),
                     app_code: None,
                     task_code: None,
@@ -2827,6 +2835,7 @@ async fn react_agent_preserves_unresolved_requests_when_steering_with_short_term
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("Steer memory".into()),
                 app_code: None,
                 task_code: None,

@@ -18,12 +18,29 @@ impl ChatService {
         } else {
             ChatSessionSourceType::Manual
         });
+        let project_code = normalized_optional(command.project_code);
+        let app_code = if source_type == ChatSessionSourceType::Manual
+            && self.projects.is_some()
+            && project_code.is_some()
+        {
+            let projects = self.projects.as_ref().ok_or(ChatError::ProjectInvalid)?;
+            let project = projects
+                .resolve_execution_context(
+                    &workspace_code,
+                    project_code.as_deref().expect("project code is checked"),
+                )
+                .map_err(|_| ChatError::ProjectInvalid)?;
+            Some(project.primary_app.app_code)
+        } else {
+            normalized_optional(command.app_code)
+        };
         let session = ChatSession {
             id,
             session_code: format!("SESSION-{id}"),
             workspace_code,
+            project_code,
             user_code,
-            app_code: normalized_optional(command.app_code),
+            app_code,
             task_code,
             source_type,
             source_code: normalized_optional(command.source_code),
@@ -38,6 +55,19 @@ impl ChatService {
             updated_at: now,
         };
         let mut repository = self.repository();
+        if session.source_type == ChatSessionSourceType::Manual
+            && session.project_code.is_some()
+            && let Some(existing) = repository.list_sessions()?.into_iter().find(|existing| {
+                existing.workspace_code == session.workspace_code
+                    && existing.project_code == session.project_code
+                    && existing.user_code == session.user_code
+                    && existing.source_type == ChatSessionSourceType::Manual
+                    && existing.status == ChatSessionStatus::Active
+                    && existing.last_run_code.is_none()
+            })
+        {
+            return Ok(existing);
+        }
         repository.create_session(&session)?;
         Ok(session)
     }
@@ -327,5 +357,4 @@ impl ChatService {
             Err(error) => Err(ChatSteerError::from(error)),
         }
     }
-
 }

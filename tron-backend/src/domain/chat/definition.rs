@@ -42,6 +42,7 @@ pub struct ChatSession {
     pub id: i64,
     pub session_code: String,
     pub workspace_code: String,
+    pub project_code: Option<String>,
     pub user_code: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,
@@ -184,6 +185,8 @@ pub enum ChatError {
     StorageFailure,
     WorkspaceForbidden,
     WorkspaceRequired,
+    ProjectRequired,
+    ProjectInvalid,
     UserInputAlreadyAnswered,
     UserInputAnswerInvalid(String),
     UserInputPending,
@@ -201,6 +204,10 @@ impl Display for ChatError {
             Self::StorageFailure => f.write_str("chat storage failure"),
             Self::WorkspaceForbidden => f.write_str("workspace access is forbidden"),
             Self::WorkspaceRequired => f.write_str("workspaceCode is required"),
+            Self::ProjectRequired => {
+                f.write_str("projectCode is required for a manual chat session")
+            }
+            Self::ProjectInvalid => f.write_str("chat project is invalid for this workspace"),
             Self::UserInputAlreadyAnswered => {
                 f.write_str("chat user input request is already answered")
             }

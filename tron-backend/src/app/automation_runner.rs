@@ -185,6 +185,7 @@ async fn run_automation_with_main_agent(
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some(automation.workspace_code.clone()),
+                project_code: None,
                 title: Some(format!("Automation: {}", automation.name)),
                 app_code: None,
                 task_code: None,

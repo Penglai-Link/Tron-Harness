@@ -255,6 +255,7 @@ fn chat_service_persists_server_message_before_enqueuing_steer() {
         .create_session(
             CreateChatSessionCommand {
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
                 title: Some("Steer persistence".into()),
                 app_code: None,
                 task_code: None,

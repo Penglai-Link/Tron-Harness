@@ -20,6 +20,7 @@ export interface ChatSession {
   id: number;
   sessionCode: string;
   workspaceCode: string;
+  projectCode?: string | null;
   userCode?: string | null;
   appCode?: string | null;
   taskCode?: string | null;
@@ -47,6 +48,7 @@ export interface ChatSessionGroup {
 
 export interface CreateChatSessionInput {
   workspaceCode: string;
+  projectCode?: string | null;
   title?: string | null;
   appCode?: string | null;
   taskCode?: string | null;

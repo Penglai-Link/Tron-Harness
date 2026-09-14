@@ -23,6 +23,7 @@ pub struct ChatSessionQuery {
 #[serde(rename_all = "camelCase")]
 pub struct CreateChatSessionCommand {
     pub workspace_code: Option<String>,
+    pub project_code: Option<String>,
     pub title: Option<String>,
     pub app_code: Option<String>,
     pub task_code: Option<String>,

@@ -495,6 +495,7 @@ fn chat_session_code_uses_shared_snowflake_id_provider() {
                 source_code: None,
                 title: Some("Snowflake chat".into()),
                 workspace_code: Some("TRON_CORE".into()),
+                project_code: None,
             },
             Some("auth.operator".into()),
         )

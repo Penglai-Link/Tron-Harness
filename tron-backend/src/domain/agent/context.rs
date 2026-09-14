@@ -58,11 +58,15 @@ pub struct AgentToolExposureState {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Default)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentExecutionScope {
+    #[serde(default)]
+    pub project_code: Option<String>,
     pub app_code: Option<String>,
     pub repository_url: Option<String>,
     pub local_directory: Option<String>,
     pub branch_name: Option<String>,
     pub task_code: Option<String>,
+    #[serde(default)]
+    pub allowed_local_directories: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]

@@ -54,6 +54,7 @@ interface TronSidebarProps {
   openSections: Record<string, boolean>;
   renderDomainSelector: (compact: boolean, mobile: boolean) => ReactNode;
   renderFooter: (compact: boolean, mobile: boolean) => ReactNode;
+  renderChatPanel?: (compact: boolean) => ReactNode;
   setOpenNavigationItems: Dispatch<SetStateAction<Record<string, boolean>>>;
   translate: (key: string, options?: Record<string, string>) => string;
 }
@@ -68,6 +69,7 @@ export function TronSidebar({
   openSections,
   renderDomainSelector,
   renderFooter,
+  renderChatPanel,
   setOpenNavigationItems,
   translate,
 }: TronSidebarProps) {
@@ -218,6 +220,7 @@ export function TronSidebar({
         {renderDomainSelector(compact, isMobile)}
       </SidebarHeader>
       <SidebarContent className="p-2">
+        {renderChatPanel ? renderChatPanel(compact) : null}
         <nav className={cn("flex flex-1 flex-col gap-[12px]", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
           {navigation.map((section) => {
             const sectionKey = section.id ?? section.label;

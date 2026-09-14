@@ -139,6 +139,7 @@ impl AgentRunContextBuilder {
             system_model_id: requested_system_model_id,
             system_agent_session_id: requested_system_agent_session_id,
             app_code: requested_app_code,
+            execution_scope_override,
             task_code: requested_task_code,
             model: requested_model,
             limits: requested_limits,
@@ -386,10 +387,22 @@ impl AgentRunContextBuilder {
         let user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
         messages.push(user_prompt_message.clone());
 
-        let local_directory = app.as_ref().map(|app| app.local_directory.clone());
-        let branch_name = app.as_ref().and_then(|app| app.default_branch.clone());
-        let repository_url = app.as_ref().and_then(|app| app.repository_url.clone());
-        let app_code = app.as_ref().map(|app| app.app_code.clone());
+        let local_directory = execution_scope_override
+            .as_ref()
+            .and_then(|scope| scope.local_directory.clone())
+            .or_else(|| app.as_ref().map(|app| app.local_directory.clone()));
+        let branch_name = execution_scope_override
+            .as_ref()
+            .and_then(|scope| scope.branch_name.clone())
+            .or_else(|| app.as_ref().and_then(|app| app.default_branch.clone()));
+        let repository_url = execution_scope_override
+            .as_ref()
+            .and_then(|scope| scope.repository_url.clone())
+            .or_else(|| app.as_ref().and_then(|app| app.repository_url.clone()));
+        let app_code = execution_scope_override
+            .as_ref()
+            .and_then(|scope| scope.app_code.clone())
+            .or_else(|| app.as_ref().map(|app| app.app_code.clone()));
         let task_code = requested_task_code;
         let runtime_selection =
             runtime_selection_for_agent(&resolved_agent, local_directory.clone())?;
@@ -413,13 +426,15 @@ impl AgentRunContextBuilder {
             tools,
             effective_tools,
             tool_exposure,
-            execution_scope: AgentExecutionScope {
+            execution_scope: execution_scope_override.unwrap_or(AgentExecutionScope {
+                project_code: None,
                 app_code: app_code.clone(),
                 repository_url,
                 local_directory,
                 branch_name,
                 task_code: task_code.clone(),
-            },
+                allowed_local_directories: Vec::new(),
+            }),
             limits,
             messages,
             observations: Vec::new(),

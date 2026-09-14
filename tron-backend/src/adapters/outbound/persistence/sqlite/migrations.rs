@@ -182,3 +182,7 @@ CREATE INDEX IF NOT EXISTS idx_chat_sessions_visibility_updated
     ON chat_sessions (visibility, updated_at DESC, id DESC);";
 pub(super) const CHAT_USER_INPUT_REQUESTS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260821_0001_create_chat_user_input_requests.sql");
+pub(super) const PROJECT_CHAT_CONTEXT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260911_0001_create_project_chat_context.sql");
+pub(super) const CHAT_SESSION_PROJECT_CODE_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260911_0002_add_chat_session_project_code.sql");

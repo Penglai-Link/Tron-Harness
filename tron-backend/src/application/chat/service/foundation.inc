@@ -17,15 +17,15 @@ use crate::{
         },
         chat::{
             ChatRepository, ChatResumeEntry, ChatSendResult, ChatSessionAttachmentUploadCommand,
-            ChatSessionQuery,
-            ChatSteerError, ChatSteerResult, CreateChatSessionCommand, SendChatMessageCommand,
-            SteerChatMessageCommand, UpdateChatSessionCommand,
+            ChatSessionQuery, ChatSteerError, ChatSteerResult, CreateChatSessionCommand,
+            SendChatMessageCommand, SteerChatMessageCommand, UpdateChatSessionCommand,
         },
         llm::LlmRuntimeService,
+        project::ProjectService,
         prompt::PromptService,
         resource::{ChatSessionAttachmentCreateCommand, ResourceService},
     },
-    domain::agent::{AgentModelConfig, ModelTokenUsage},
+    domain::agent::{AgentExecutionScope, AgentModelConfig, ModelTokenUsage},
     domain::chat::{
         ChatError, ChatMessage, ChatMessageAttachment, ChatMessageChannel, ChatMessageRole,
         ChatSession, ChatSessionGroup, ChatSessionSourceType, ChatSessionStatus,
@@ -55,6 +55,7 @@ pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
     pub(super) prompt_service: Option<PromptService>,
     resources: Option<ResourceService>,
+    projects: Option<ProjectService>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
     coordinator_namespace: u64,
     pub(super) active_runs: ActiveRunRegistry,
@@ -81,6 +82,7 @@ impl ChatService {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             prompt_service: None,
             resources: None,
+            projects: None,
             id_provider,
             coordinator_namespace: CHAT_SERVICE_COORDINATOR_NAMESPACE
                 .fetch_add(1, Ordering::Relaxed),
@@ -93,6 +95,7 @@ impl ChatService {
             repository: self.repository.clone(),
             prompt_service: self.prompt_service.clone(),
             resources: self.resources.clone(),
+            projects: self.projects.clone(),
             id_provider,
             coordinator_namespace: self.coordinator_namespace,
             active_runs: self.active_runs.clone(),
@@ -109,9 +112,13 @@ impl ChatService {
         self
     }
 
+    pub fn with_projects(mut self, projects: ProjectService) -> Self {
+        self.projects = Some(projects);
+        self
+    }
+
     pub fn with_prompt_service(mut self, prompt_service: PromptService) -> Self {
         self.prompt_service = Some(prompt_service);
         self
     }
-
 }

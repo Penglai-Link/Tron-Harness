@@ -4375,6 +4375,7 @@ export function ChatManagementPage() {
           (candidate) => candidate !== timer,
         );
         setActiveChatDataRefreshKey((current) => current + 1);
+        window.dispatchEvent(new Event("tron:chat-session-updated"));
       }, delay);
       sessionTitleRefreshTimersRef.current.push(timer);
     });
@@ -4472,6 +4473,7 @@ export function ChatManagementPage() {
   const handleRuntimeSessionChange = useCallback((nextSession: RuntimeChatSession | null) => {
     if (nextSession) {
       setSessionGroups((current) => replaceSession(current, toPageChatSession(nextSession)));
+      window.dispatchEvent(new Event("tron:chat-session-updated"));
     }
     setActiveChatDataRefreshKey((current) => current + 1);
     setActiveChatReplayRefreshKey((current) => current + 1);
@@ -4624,6 +4626,18 @@ export function ChatManagementPage() {
   useEffect(() => {
     setSessionGroups(orderSessionGroups(groups));
   }, [groups]);
+
+  useEffect(() => {
+    const refresh = () => setActiveChatDataRefreshKey((current) => current + 1);
+    window.addEventListener("tron:chat-session-archived", refresh);
+    return () => window.removeEventListener("tron:chat-session-archived", refresh);
+  }, []);
+
+  useEffect(() => () => {
+    window.dispatchEvent(new CustomEvent("tron:chat-session-run-state", {
+      detail: { sessionCode: "" },
+    }));
+  }, []);
 
   useEffect(() => {
     if (!optimisticActiveSession) return;
@@ -5017,6 +5031,16 @@ export function ChatManagementPage() {
     replayRunHint: replayActiveRunLoadingHint,
   });
   const currentSessionRunActive = runUiState.active;
+  const sidebarRunningSessionCode = sending
+    ? runningSessionCode
+    : currentSessionRunActive
+      ? activeSession?.sessionCode ?? ""
+      : "";
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("tron:chat-session-run-state", {
+      detail: { sessionCode: sidebarRunningSessionCode },
+    }));
+  }, [sidebarRunningSessionCode]);
   const effectiveActiveRunCode = runUiState.runCode;
   const canSteerCurrentRun = runUiState.canSteer;
   const canStopCurrentRun = runUiState.canStop;
@@ -5864,6 +5888,7 @@ export function ChatManagementPage() {
         ]);
       }
       setSessionGroups((current) => replaceSession(current, result.session));
+      window.dispatchEvent(new Event("tron:chat-session-updated"));
       scheduleSessionTitleRefresh(result.session);
       setLatestRequestEstimatesBySessionCode((current) => {
         if (result.run.latestRequestEstimate) {
@@ -6114,6 +6139,7 @@ export function ChatManagementPage() {
         }
       }
       setSessionGroups((current) => replaceSession(current, result.session));
+      window.dispatchEvent(new Event("tron:chat-session-updated"));
       setActiveChatDataRefreshKey((current) => current + 1);
       setActiveRunRefreshKey((current) => current + 1);
       setActiveChatReplayRefreshKey((current) => current + 1);
@@ -6388,6 +6414,7 @@ export function ChatManagementPage() {
     try {
       const session = await createChatSession({
         agentCode: nextSessionAgentCode,
+        projectCode: activeSession?.projectCode ?? undefined,
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });
@@ -6496,6 +6523,7 @@ export function ChatManagementPage() {
     try {
       const session = await updateChatSession(activeSession.sessionCode, { title });
       setSessionGroups((current) => replaceSession(current, session));
+      window.dispatchEvent(new Event("tron:chat-session-updated"));
       setEditingTitle(false);
       toast.success(t("chat.management.toasts.sessionRenamed"), { title: session.sessionCode });
     } catch (error) {
@@ -6516,6 +6544,7 @@ export function ChatManagementPage() {
     try {
       const renamed = await updateChatSession(session.sessionCode, { title });
       setSessionGroups((current) => replaceSession(current, renamed));
+      window.dispatchEvent(new Event("tron:chat-session-updated"));
       toast.success(t("chat.management.toasts.sessionRenamed"), { title: renamed.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : t("chat.management.toasts.renameSessionFailed");
@@ -6549,24 +6578,26 @@ export function ChatManagementPage() {
 
   return (
     <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white" ref={mainRef}>
-      <SessionSidebar
-        activeSessionCode={activeSession?.sessionCode ?? activeSessionCode}
-        activeSourceTab={activeSourceTab}
-        collapsed={sidebarCollapsed}
-        creatingSession={creatingSession}
-        groups={sessionGroups}
-        pendingUserInputSessionCodes={pendingUserInputSessionCodes}
-        runningSessionCode={currentSessionRunActive ? activeSession?.sessionCode ?? "" : ""}
-        sessionActionPendingCode={sessionActionPendingCode}
-        unseenSessionCodes={unseenSessionCodes}
-        onArchiveSession={(session) => void handleArchiveSession(session)}
-        onCollapseToggle={() => setUserSidebarCollapsed((value) => !value)}
-        onCreateSession={() => void handleCreateSession()}
-        onDeleteSession={setDeleteTargetSession}
-        onRenameSession={handleSidebarRenameSession}
-        onSessionSelect={handleSessionSelect}
-        onSourceTabSelect={handleSourceTabSelect}
-      />
+      <div className="hidden">
+        <SessionSidebar
+          activeSessionCode={activeSession?.sessionCode ?? activeSessionCode}
+          activeSourceTab={activeSourceTab}
+          collapsed={sidebarCollapsed}
+          creatingSession={creatingSession}
+          groups={sessionGroups}
+          pendingUserInputSessionCodes={pendingUserInputSessionCodes}
+          runningSessionCode={currentSessionRunActive ? activeSession?.sessionCode ?? "" : ""}
+          sessionActionPendingCode={sessionActionPendingCode}
+          unseenSessionCodes={unseenSessionCodes}
+          onArchiveSession={(session) => void handleArchiveSession(session)}
+          onCollapseToggle={() => setUserSidebarCollapsed((value) => !value)}
+          onCreateSession={() => void handleCreateSession()}
+          onDeleteSession={setDeleteTargetSession}
+          onRenameSession={handleSidebarRenameSession}
+          onSessionSelect={handleSessionSelect}
+          onSourceTabSelect={handleSourceTabSelect}
+        />
+      </div>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         <header className="flex h-14 items-center justify-between px-5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
           <div className="min-w-0">
@@ -6616,6 +6647,12 @@ export function ChatManagementPage() {
               <p className="mt-0.5 flex items-center gap-[12px] text-xs text-[var(--color-on-surface-variant)]">
                 <CircleDot size={12} />
                 {activeSession?.sessionCode}
+                {currentSessionRunActive ? (
+                  <span className="inline-flex items-center gap-1 text-[var(--color-primary)]" role="status">
+                    <LoaderCircle className="size-3 animate-spin" />
+                    {t("chat.management.runIndicator.running")}
+                  </span>
+                ) : null}
                 <span
                   className={cn(
                     "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none",

@@ -17,6 +17,7 @@ use super::migrations::{
     CHAT_MESSAGE_TOKEN_USAGE_MIGRATION, CHAT_SESSION_AGENT_CODE_MIGRATION,
     CHAT_SESSION_LEGACY_SOURCE_MIGRATION, CHAT_SESSION_SOURCE_MIGRATION,
     CHAT_SESSION_SYSTEM_AGENT_SESSION_ID_MIGRATION, CHAT_SESSION_VISIBILITY_MIGRATION,
+    CHAT_SESSION_PROJECT_CODE_MIGRATION,
     CHAT_USER_INPUT_REQUESTS_MIGRATION, CONVERSATION_RUNTIME_SESSIONS_MIGRATION,
 };
 
@@ -70,6 +71,9 @@ impl SqliteChatRepository {
                 .connection
                 .execute_batch(CHAT_SESSION_VISIBILITY_MIGRATION)
                 .map_err(storage_error)?;
+        }
+        if !column_exists(&repository.connection, "chat_sessions", "project_code")? {
+            repository.connection.execute_batch(CHAT_SESSION_PROJECT_CODE_MIGRATION).map_err(storage_error)?;
         }
         if !column_exists(&repository.connection, "chat_messages", "input_tokens")? {
             repository

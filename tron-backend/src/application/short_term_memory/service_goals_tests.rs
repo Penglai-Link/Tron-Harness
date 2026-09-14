@@ -285,6 +285,7 @@ fn service_with_database_url(label: &str) -> (ShortTermMemoryService, String) {
             id: 1,
             session_code: "SESSION-1".into(),
             workspace_code: "TRON_CORE".into(),
+            project_code: None,
             user_code: None,
             app_code: None,
             task_code: None,

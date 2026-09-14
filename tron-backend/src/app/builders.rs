@@ -32,6 +32,16 @@ fn build_app_service(database_url: &str, workspaces: WorkspaceService) -> AppSer
     AppService::new(repository, workspaces)
 }
 
+fn build_project_service(
+    database_url: &str,
+    workspaces: WorkspaceService,
+    apps: AppService,
+) -> ProjectService {
+    let repository = SqliteProjectRepository::connect(database_url)
+        .expect("project SQLite repository should initialize");
+    ProjectService::new(repository, workspaces, apps)
+}
+
 fn build_task_service(
     database_url: &str,
     workspaces: WorkspaceService,

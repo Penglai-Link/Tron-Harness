@@ -39,6 +39,7 @@ pub async fn create_session(
     match state.chats.create_session(
         crate::application::chat::CreateChatSessionCommand {
             workspace_code: request.workspace_code,
+            project_code: None,
             title: request.title,
             app_code: request.app_code,
             task_code: request.task_code,

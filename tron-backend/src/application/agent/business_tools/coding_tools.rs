@@ -3,7 +3,12 @@ mod chat_attachments;
 mod filesystem;
 mod search;
 
-use std::{collections::BTreeMap, fs, path::PathBuf, sync::Arc};
+use std::{
+    collections::BTreeMap,
+    fs,
+    path::{Path, PathBuf},
+    sync::Arc,
+};
 
 use serde::{Deserialize, Serialize};
 
@@ -159,11 +164,52 @@ pub(super) fn resolve_path(
         return Err(ToolError::ExecutionFailed("path is required".into()));
     }
     let path = expand_tilde(trimmed);
-    if path.is_absolute() {
+    let resolved = if path.is_absolute() {
+        path
+    } else {
+        default_cwd_for_context(context).join(path)
+    };
+    ensure_allowed_path(context, resolved)
+}
+
+fn ensure_allowed_path(context: &AgentRunContext, path: PathBuf) -> Result<PathBuf, ToolError> {
+    if context.execution_scope.allowed_local_directories.is_empty() {
+        return Ok(path);
+    }
+    let candidate = canonicalize_existing_path(&path)?;
+    let allowed = context
+        .execution_scope
+        .allowed_local_directories
+        .iter()
+        .map(|root| canonicalize_existing_path(&expand_tilde(root)))
+        .collect::<Result<Vec<_>, _>>()?;
+    if allowed.iter().any(|root| candidate.starts_with(root)) {
         Ok(path)
     } else {
-        Ok(default_cwd_for_context(context).join(path))
+        Err(ToolError::ExecutionFailed(
+            "path is outside the linked project directories".into(),
+        ))
     }
+}
+
+fn canonicalize_existing_path(path: &Path) -> Result<PathBuf, ToolError> {
+    let mut existing = path;
+    let mut missing = Vec::new();
+    while !existing.exists() {
+        let Some(name) = existing.file_name() else {
+            break;
+        };
+        missing.push(name.to_os_string());
+        existing = existing
+            .parent()
+            .ok_or_else(|| ToolError::ExecutionFailed("path has no existing parent".into()))?;
+    }
+    let mut canonical = fs::canonicalize(existing)
+        .map_err(|_| ToolError::ExecutionFailed("path cannot be resolved".into()))?;
+    for segment in missing.iter().rev() {
+        canonical.push(segment);
+    }
+    Ok(canonical)
 }
 
 pub(super) fn resolve_optional_directory(
@@ -347,11 +393,13 @@ mod tests {
             effective_tools: Vec::new(),
             tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope {
+                project_code: None,
                 app_code: Some("APP-1".into()),
                 repository_url: Some("https://example.test/repo.git".into()),
                 local_directory: local_directory.map(str::to_string),
                 branch_name: Some("main".into()),
                 task_code: Some("TASK-1".into()),
+                allowed_local_directories: Vec::new(),
             },
             limits: AgentRunLimits {
                 max_steps: 4,

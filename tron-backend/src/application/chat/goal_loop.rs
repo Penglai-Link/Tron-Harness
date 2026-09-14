@@ -151,6 +151,7 @@ impl ChatService {
                     .clone()
                     .or(session.system_agent_session_id.clone()),
                 app_code: app_code.clone(),
+                execution_scope_override: None,
                 task_code: task_code.clone(),
                 model: Some(resolved_model.clone()),
                 system_model_id: system_model_id.clone(),

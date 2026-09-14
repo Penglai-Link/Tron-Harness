@@ -30,6 +30,7 @@ use crate::{
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository, SqliteOpenAppRepository,
                 SqlitePromptRepository, SqliteResourceRepository, SqliteRoleRepository,
                 SqliteNavigationRepository,
+                SqliteProjectRepository,
                 SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository, bootstrap_platform_admin,
@@ -55,6 +56,7 @@ use crate::{
     application::navigation::NavigationService,
     application::open_app::OpenAppService,
     application::prompt::PromptService,
+    application::project::ProjectService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
     application::resource::{ObjectStorage, ResourceService},
     application::role::RoleService,
@@ -89,6 +91,7 @@ static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
 static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
 static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
 static GLOBAL_APP_SERVICE: OnceLock<AppService> = OnceLock::new();
+static GLOBAL_PROJECT_SERVICE: OnceLock<ProjectService> = OnceLock::new();
 static GLOBAL_TASK_SERVICE: OnceLock<TaskService> = OnceLock::new();
 static GLOBAL_VARIABLE_SERVICE: OnceLock<VariableService> = OnceLock::new();
 static GLOBAL_RESOURCE_SERVICE: OnceLock<ResourceService> = OnceLock::new();
@@ -125,6 +128,7 @@ pub struct AppState {
     pub agent_tool_registry: Arc<ToolRegistry>,
     pub active_runs: ActiveRunRegistry,
     pub apps: AppService,
+    pub projects: ProjectService,
     pub automations: AutomationService,
     pub chats: ChatService,
     pub short_term_memory: ShortTermMemoryService,
@@ -230,6 +234,13 @@ impl AppState {
                 .clone()
         } else {
             build_app_service(&config.database_url, workspaces.clone())
+        };
+        let projects = if config.database_url == ":memory:" {
+            GLOBAL_PROJECT_SERVICE
+                .get_or_init(|| build_project_service(":memory:", workspaces.clone(), apps.clone()))
+                .clone()
+        } else {
+            build_project_service(&config.database_url, workspaces.clone(), apps.clone())
         };
         let tasks = if config.database_url == ":memory:" {
             GLOBAL_TASK_SERVICE
@@ -442,6 +453,7 @@ impl AppState {
             build_chat_service_with_id_provider(&config.database_url, id_provider)
         }
         .with_active_runs(active_runs.clone())
+        .with_projects(projects.clone())
         .with_resources(resources.clone())
         .with_prompt_service(prompts.clone());
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
@@ -490,6 +502,7 @@ impl AppState {
             agent_tool_registry,
             active_runs,
             apps,
+            projects,
             automations,
             chats,
             short_term_memory,

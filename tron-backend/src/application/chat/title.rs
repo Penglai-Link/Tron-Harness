@@ -147,6 +147,7 @@ mod tests {
             id: 1,
             session_code: "SESSION-1".into(),
             workspace_code: "TRON_CORE".into(),
+            project_code: None,
             app_code: None,
             task_code: None,
             source_type: ChatSessionSourceType::Manual,

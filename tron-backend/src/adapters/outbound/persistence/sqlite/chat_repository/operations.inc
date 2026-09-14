@@ -2,12 +2,13 @@ impl ChatRepository for SqliteChatRepository {
     fn create_session(&mut self, session: &ChatSession) -> Result<(), ChatError> {
         self.connection
             .execute(
-                "INSERT INTO chat_sessions (id, session_code, workspace_code, user_code, app_code, task_code, source_type, source_code, agent_code, system_agent_session_id, title, status, last_run_code, last_run_status, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16)",
+                "INSERT INTO chat_sessions (id, session_code, workspace_code, project_code, user_code, app_code, task_code, source_type, source_code, agent_code, system_agent_session_id, title, status, last_run_code, last_run_status, created_at, updated_at)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16, ?17)",
                 params![
                     session.id,
                     session.session_code,
                     session.workspace_code,
+                    session.project_code,
                     session.user_code,
                     session.app_code,
                     session.task_code,
@@ -57,7 +58,7 @@ impl ChatRepository for SqliteChatRepository {
         let mut statement = self
             .connection
             .prepare(
-                "SELECT id, session_code, workspace_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at
+                "SELECT id, session_code, workspace_code, project_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at
                         , system_agent_session_id, source_type, source_code
                  FROM chat_sessions
                  WHERE COALESCE(visibility, 'VISIBLE') != 'HIDDEN'
@@ -74,7 +75,7 @@ impl ChatRepository for SqliteChatRepository {
     fn get_session(&mut self, session_code: &str) -> Result<ChatSession, ChatError> {
         self.connection
             .query_row(
-                "SELECT id, session_code, workspace_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at
+                "SELECT id, session_code, workspace_code, project_code, user_code, app_code, task_code, agent_code, title, status, last_run_code, last_run_status, created_at, updated_at
                         , system_agent_session_id, source_type, source_code
                  FROM chat_sessions
                  WHERE session_code = ?1",

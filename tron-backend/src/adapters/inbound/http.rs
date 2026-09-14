@@ -12,6 +12,7 @@ pub mod memory;
 pub mod models;
 pub mod navigation;
 pub mod prompts;
+pub mod projects;
 pub mod rag;
 pub mod resources;
 pub mod setup;

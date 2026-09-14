@@ -3,8 +3,8 @@ use serde_json::Value;
 
 use crate::domain::{
     agent::{
-        AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage, TokenEstimateSnapshot,
-        TokenUsageAuditSnapshot, ToolObservation,
+        AgentExecutionScope, AgentModelConfig, AgentRunLimits, EffectiveTool, ModelTokenUsage,
+        TokenEstimateSnapshot, TokenUsageAuditSnapshot, ToolObservation,
     },
     chat::ChatMessageAttachment,
     reasoning::ReasoningEffort,
@@ -23,6 +23,8 @@ pub struct AgentInvocationCommand {
     #[serde(skip)]
     pub system_agent_session_id: Option<String>,
     pub app_code: Option<String>,
+    #[serde(skip)]
+    pub execution_scope_override: Option<AgentExecutionScope>,
     pub task_code: Option<String>,
     pub model: Option<AgentModelConfig>,
     pub limits: Option<AgentRunLimits>,

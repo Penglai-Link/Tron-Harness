@@ -107,6 +107,8 @@ pub(crate) fn chat_send_error_code(error: &ChatSendError) -> &'static str {
         ChatSendError::Chat(ChatError::SessionTitleRequired) => "CHAT_SESSION_TITLE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "CHAT_WORKSPACE_REQUIRED",
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => "CHAT_WORKSPACE_FORBIDDEN",
+        ChatSendError::Chat(ChatError::ProjectRequired) => "CHAT_PROJECT_REQUIRED",
+        ChatSendError::Chat(ChatError::ProjectInvalid) => "CHAT_PROJECT_INVALID",
         ChatSendError::Chat(ChatError::UserInputAlreadyAnswered) => {
             "CHAT_USER_INPUT_ALREADY_ANSWERED"
         }
@@ -135,6 +137,12 @@ pub(crate) fn chat_send_error_message(error: ChatSendError) -> String {
         ChatSendError::Chat(ChatError::WorkspaceRequired) => "workspaceCode is required".into(),
         ChatSendError::Chat(ChatError::WorkspaceForbidden) => {
             "workspace access is forbidden".into()
+        }
+        ChatSendError::Chat(ChatError::ProjectRequired) => {
+            "projectCode is required for a manual chat session".into()
+        }
+        ChatSendError::Chat(ChatError::ProjectInvalid) => {
+            "chat project is invalid for this workspace".into()
         }
         ChatSendError::Chat(ChatError::UserInputAlreadyAnswered) => {
             "chat user input request is already answered".into()

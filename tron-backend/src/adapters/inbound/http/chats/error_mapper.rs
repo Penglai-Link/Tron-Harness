@@ -49,6 +49,16 @@ pub fn chat_error_response(error: ChatError) -> Response {
             "CHAT_WORKSPACE_FORBIDDEN",
             "workspace access is forbidden".to_string(),
         ),
+        ChatError::ProjectRequired => (
+            StatusCode::BAD_REQUEST,
+            "CHAT_PROJECT_REQUIRED",
+            "projectCode is required for a manual chat session".to_string(),
+        ),
+        ChatError::ProjectInvalid => (
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "CHAT_PROJECT_INVALID",
+            "chat project is invalid for this workspace".to_string(),
+        ),
         ChatError::UserInputAlreadyAnswered => (
             StatusCode::CONFLICT,
             "CHAT_USER_INPUT_ALREADY_ANSWERED",
