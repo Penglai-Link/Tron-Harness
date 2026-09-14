@@ -39,6 +39,7 @@ const ALLOWED_INJECTION_EVENTS = new Set([
   "tron:navigation-changed"
 ]);
 const commentCapablePageIdsByWebContentsId = new Map();
+let isQuitting = false;
 
 function setCommentAvailability(webContentsId, pageId, available) {
   if (available) {
@@ -90,6 +91,15 @@ function createMainWindow() {
   });
 
   state.mainWindow = window;
+
+  window.on("close", (event) => {
+    if (process.platform !== "darwin" || isQuitting) {
+      return;
+    }
+
+    event.preventDefault();
+    window.hide();
+  });
 
   window.webContents.on("will-attach-webview", (_event, webPreferences) => {
     webPreferences.contextIsolation = true;
@@ -882,9 +892,22 @@ app.whenReady().then(() => {
 });
 
 app.on("window-all-closed", () => {
-  app.quit();
+  if (process.platform !== "darwin") {
+    app.quit();
+  }
+});
+
+app.on("activate", () => {
+  if (!state.mainWindow || state.mainWindow.isDestroyed()) {
+    void bootstrap();
+    return;
+  }
+
+  state.mainWindow.show();
+  state.mainWindow.focus();
 });
 
 app.on("before-quit", () => {
+  isQuitting = true;
   stopBackend();
 });
