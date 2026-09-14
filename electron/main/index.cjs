@@ -26,6 +26,7 @@ const {
   dispatchWebviewComment,
   buildWebviewContextMenuTemplate
 } = require("./webview-context-menu.cjs");
+const { handleFsCommand } = require("./fs-gateway.cjs");
 
 const MAIN_WINDOW_LABEL = "tron-main";
 const MIN_STARTUP_SCREEN_MS = 1200;
@@ -786,6 +787,11 @@ function forwardTargetEvent(event) {
 function registerIpcHandlers() {
   ipcMain.handle("tron-desktop:invoke", async (_event, command, payload = {}) => {
     const request = normalizeRequest(payload);
+
+    if (typeof command === "string" && command.startsWith("fs:")) {
+      const browserWindow = BrowserWindow.fromWebContents(_event.sender) || undefined;
+      return handleFsCommand(command, request, browserWindow);
+    }
 
     if (command === "desktopBackendStatus") {
       return {

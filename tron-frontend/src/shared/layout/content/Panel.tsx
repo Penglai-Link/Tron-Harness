@@ -145,10 +145,10 @@ export function Panel({ children, contentClassName }: IPanelProps) {
           }
         `}</style>
         <ResizablePanelGroup orientation="horizontal" className="w-full">
-          <ResizablePanel defaultSize="100%">
+          <ResizablePanel defaultSize="100%" className="min-w-0" style={{ overflow: "hidden" }}>
             <main
               className={cn(
-                "relative z-0 h-full min-w-0 overflow-x-hidden overflow-y-auto px-6 py-6",
+                "relative z-0 h-full min-w-[400px] overflow-x-hidden overflow-y-auto px-6 py-6",
                 contentClassName,
               )}
             >

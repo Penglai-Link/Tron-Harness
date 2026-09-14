@@ -1,3 +1,5 @@
+import type { FsListResult, FsReadResult, FsRootInfo } from "@/shared/fs/types";
+
 const DESKTOP_BACKEND_STATUS_COMMAND = "desktopBackendStatus";
 const CHECK_TARGET_PAGE_EMBEDDING_COMMAND = "checkTargetPageEmbedding";
 const OPEN_TARGET_PAGE_COMMAND = "openTargetPage";
@@ -395,6 +397,55 @@ export class DesktopBridge {
         event: sanitized,
       },
     } as Record<string, unknown>);
+  }
+
+  private requireInvoke(): InvokeCommand<unknown> {
+    if (!this.invoke) {
+      throw new Error("not-in-desktop");
+    }
+    return this.invoke;
+  }
+
+  public async pickFsRoot(): Promise<FsRootInfo | null> {
+    const response = await this.requireInvoke()("fs:pickRoot", {});
+    if (!response || typeof response !== "object") {
+      return null;
+    }
+    return response as FsRootInfo;
+  }
+
+  public async listFsEntries(rootId: string, path: string): Promise<FsListResult> {
+    const response = await this.requireInvoke()("fs:list", { rootId, path });
+    return response as FsListResult;
+  }
+
+  public async readFsFile(rootId: string, path: string): Promise<FsReadResult> {
+    const response = await this.requireInvoke()("fs:read", { rootId, path });
+    return response as FsReadResult;
+  }
+
+  public async writeFsFile(rootId: string, path: string, content: string): Promise<void> {
+    await this.requireInvoke()("fs:write", { rootId, path, content });
+  }
+
+  public async createFsFile(rootId: string, path: string): Promise<void> {
+    await this.requireInvoke()("fs:createFile", { rootId, path });
+  }
+
+  public async createFsDirectory(rootId: string, path: string): Promise<void> {
+    await this.requireInvoke()("fs:createDirectory", { rootId, path });
+  }
+
+  public async renameFsEntry(rootId: string, path: string, newName: string): Promise<void> {
+    await this.requireInvoke()("fs:rename", { rootId, path, newName });
+  }
+
+  public async deleteFsEntry(rootId: string, path: string, recursive: boolean): Promise<void> {
+    await this.requireInvoke()("fs:delete", { rootId, path, recursive });
+  }
+
+  public async closeFsRoot(rootId: string): Promise<void> {
+    await this.requireInvoke()("fs:closeRoot", { rootId });
   }
 }
 

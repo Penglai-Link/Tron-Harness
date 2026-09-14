@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -11,8 +11,13 @@ import { OperateType } from "@/components/editable-tabs/types";
 import { PageView } from "@/components/page-view";
 import { Button } from "@/components/ui/button";
 import { DEFAULT_TAB_ID, useTabStore, type CachedTabInfo } from "@/store/tabStore";
+import { isDesktopHost } from "@/shared/desktop/DesktopBridge";
 import { Globe, Plus } from "lucide-react";
 import { useTabPanelRegistry } from "./TabPanelRegistry";
+
+const FilePanel = lazy(() =>
+  import("@/components/files/FilePanel").then((module) => ({ default: module.FilePanel })),
+);
 
 interface RightPanelTabsProps {
   tab: CachedTabInfo;
@@ -72,7 +77,8 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const dynamicTabs = getRightPanelTabs(tab.tabId);
   const ownerKey = getRightPanelOwnerKey(tab.tabId);
   const pageAttributesKey = `page-attributes:${tab.tabId}`;
-  const activeKey = getRightPanelActiveKey(tab.tabId) ?? pageAttributesKey;
+  const filesTabKey = `page-files:${tab.tabId}`;
+  const isDesktop = isDesktopHost();
   const pageAttributesTab = useMemo<EditableTab | null>(() => {
     return panelConfig?.rightPanel
       ? {
@@ -83,6 +89,27 @@ const RightPanelTabs = memo(function RightPanelTabs({
         }
       : null;
   }, [pageAttributesKey, panelConfig?.rightPanel, tab.tabId]);
+
+  const filesTab = useMemo<EditableTab | null>(() => {
+    if (!isDesktop) return null;
+
+    return {
+      key: filesTabKey,
+      label: t("files.panelTitle"),
+      closable: false,
+      children: (
+        <Suspense
+          fallback={
+            <div className="flex h-full items-center justify-center text-sm text-[var(--color-on-surface-variant)]">
+              {t("files.loading")}
+            </div>
+          }
+        >
+          <FilePanel />
+        </Suspense>
+      ),
+    };
+  }, [filesTabKey, isDesktop, t]);
 
   const createTab = useCallback((): EditableTab => {
     const id = nextTabId.current++;
@@ -127,6 +154,15 @@ const RightPanelTabs = memo(function RightPanelTabs({
     [dynamicTabs, ownerKey, panelConfig?.onPageInspectionConfirm, tab.tabId, updateRightPanelTab],
   );
 
+  const items = useMemo(
+    () => [filesTab, pageAttributesTab, ...dynamicItems].filter((item) => !!item),
+    [filesTab, dynamicItems, pageAttributesTab],
+  );
+
+  const defaultActiveKey =
+    pageAttributesTab?.key ?? filesTab?.key ?? items[0]?.key ?? "";
+  const activeKey = getRightPanelActiveKey(tab.tabId) ?? defaultActiveKey;
+
   const handleEdit = useCallback(
     (action: OperateType, info: EditableTabEditInfo) => {
       if (action !== OperateType.Remove || !info.key) return;
@@ -138,15 +174,10 @@ const RightPanelTabs = memo(function RightPanelTabs({
         const fallbackKey = info.remainingTabs?.find(
           (item) => item.key !== info.key,
         )?.key;
-        setRightPanelActiveKey(tab.tabId, fallbackKey ?? pageAttributesKey);
+        setRightPanelActiveKey(tab.tabId, fallbackKey ?? defaultActiveKey);
       }
     },
-    [activeKey, pageAttributesKey, removeRightPanelTab, setRightPanelActiveKey, tab.tabId, updateRightPanelState],
-  );
-
-  const items = useMemo(
-    () => [pageAttributesTab, ...dynamicItems].filter((item) => !!item),
-    [dynamicItems, pageAttributesTab],
+    [activeKey, defaultActiveKey, removeRightPanelTab, setRightPanelActiveKey, tab.tabId, updateRightPanelState],
   );
 
   if (!items.length) {
