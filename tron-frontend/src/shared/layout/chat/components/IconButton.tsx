@@ -3,8 +3,8 @@ import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
 
 interface IconButtonProps {
-  onClick?: () => void;
-  size?: number;
+  onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
+  size?: "xs" | "sm" | "lg";
   className?: string;
   disabled?: boolean;
   children?: React.ReactNode;
@@ -13,7 +13,7 @@ interface IconButtonProps {
 
 const IconButton = ({
   disabled,
-  size = 14,
+  size = "sm",
   className,
   children,
   icon: Icon,
@@ -22,13 +22,14 @@ const IconButton = ({
   return (
     <Button
       disabled={disabled}
-      onClick={() => onClick?.()}
+      onClick={onClick}
+      size={size}
       type="button"
       variant="link"
       className={cn("flex gap-1 p-0 hover:no-underline", className)}
     >
-      {Icon && <Icon size={size} />}
-      <span className={`text-[${size}px]`}>{children}</span>
+      {Icon && <Icon />}
+      {children}
     </Button>
   );
 };

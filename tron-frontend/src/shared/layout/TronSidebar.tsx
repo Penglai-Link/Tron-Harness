@@ -219,9 +219,9 @@ export function TronSidebar({
       <SidebarHeader className="gap-1.5 border-b border-[var(--color-card-border)] px-2 py-2.5">
         {renderDomainSelector(compact, isMobile)}
       </SidebarHeader>
-      <SidebarContent className="p-2">
+      <SidebarContent>
         {renderChatPanel ? renderChatPanel(compact) : null}
-        <nav className={cn("flex flex-1 flex-col gap-[12px]", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
+        <nav className={cn("flex flex-1 flex-col gap-[12px] p-2", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
           {navigation.map((section) => {
             const sectionKey = section.id ?? section.label;
             const open = openSections[sectionKey] ?? true;

@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from "react";
-import { FolderPlus, MoreHorizontal } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { ChevronDown, Plus } from "lucide-react";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
-import { NewChatButton } from "./components/NewChatButton";
-import { ProjectSessionGroup } from "./components/ProjectSessionGroup";
+import { Create } from "./components/Create";
+import SessionGroup from "./components/SessionGroup";
 import { ProjectCreateDialog } from "./components/ProjectCreateDialog";
 import { useChatSidebarData } from "./hooks/useChatSidebarData";
 import { usePinnedProjectCodes } from "./hooks/usePinnedProjectCodes";
 import type { ProjectRecord } from "@/domain/project";
+import IconButton from "./components/IconButton";
+import Item from "./components/Item";
 
 export function ChatSidebarPanel({ compact }: { compact: boolean }) {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
@@ -16,6 +17,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
   const { projects, loading, sessionsByProject } =
     useChatSidebarData(workspaceCode);
   const [runningSessionCode, setRunningSessionCode] = useState("");
+  const [projectListExpanded, setProjectListExpanded] = useState(true);
   const [selectedProjectCode, setSelectedProjectCode] = useState<string>();
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectRecord>();
@@ -54,29 +56,45 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
     (project) => project.projectCode === selectedProjectCode,
   );
   return (
-    <section>
-      <div className="px-2 hover:bg-sidebar-accent rounded">
-        <NewChatButton
-          project={selectedProject}
-          sessions={
-            selectedProject
-              ? sessionsByProject.get(selectedProject.projectCode) ?? []
-              : []
-          }
-          workspaceCode={workspaceCode}
-        />
-      </div>
-      <div className="flex items-center gap-1 justify-between pl-2">
-        <span className="text-[14px] opacity-45">项目</span>
-        <Button
-          type="button"
-          variant="link"
-          onClick={() => setProjectCreateOpen(true)}
-        >
-          <FolderPlus size={12} />
-        </Button>
-      </div>
-      {orderedProjects.length > 0 ? (
+    <section className="border-b border-[var(--color-card-border)] p-2">
+      <Item
+        left={
+          <Create
+            project={selectedProject}
+            sessions={
+              selectedProject
+                ? sessionsByProject.get(selectedProject.projectCode) ?? []
+                : []
+            }
+            workspaceCode={workspaceCode}
+          />
+        }
+      />
+
+      <Item
+        onClick={() => setProjectListExpanded((value) => !value)}
+        className="group/projects flex h-8 items-center gap-1 rounded pl-2 pr-1 hover:bg-sidebar-accent"
+        left={<span className="opacity-50">项目</span>}
+        right={
+          <div className="flex items-center">
+            <IconButton
+              className="opacity-0 pointer-events-none transition-opacity group-hover/projects:opacity-100 group-hover/projects:pointer-events-auto group-focus-within/projects:opacity-100 group-focus-within/projects:pointer-events-auto"
+              onClick={() => setProjectCreateOpen(true)}
+              icon={Plus}
+            />
+            <IconButton
+              className={
+                projectListExpanded
+                  ? "transition-transform"
+                  : "-rotate-90 transition-transform"
+              }
+              onClick={() => setProjectCreateOpen(true)}
+              icon={ChevronDown}
+            />
+          </div>
+        }
+      />
+      {projectListExpanded && orderedProjects.length > 0 ? (
         <div className="max-h-64 space-y-0.5 overflow-y-auto">
           {loading ? (
             <p className="px-2 py-1 text-xs text-sidebar-foreground/60">
@@ -84,7 +102,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
             </p>
           ) : (
             orderedProjects.map((project) => (
-              <ProjectSessionGroup
+              <SessionGroup
                 key={project.projectCode}
                 project={project}
                 runningSessionCode={runningSessionCode}

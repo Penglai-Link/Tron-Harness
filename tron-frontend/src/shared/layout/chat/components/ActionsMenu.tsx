@@ -3,7 +3,6 @@ import { MoreHorizontal } from "lucide-react";
 import { archiveChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
 import { removeProject, type ProjectRecord } from "@/domain/project";
-import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import {
   DropdownMenu,
@@ -13,8 +12,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
+import IconButton from "./IconButton";
 
-export function ProjectActionsMenu({
+const ActionsMenu = ({
   onEdit,
   onPinnedChange,
   onRefresh,
@@ -28,7 +28,7 @@ export function ProjectActionsMenu({
   pinned: boolean;
   project: ProjectRecord;
   sessions: ChatSession[];
-}) {
+}) => {
   const toast = useToast();
   const [archiveChatsOpen, setArchiveChatsOpen] = useState(false);
   const [removalOpen, setRemovalOpen] = useState(false);
@@ -69,14 +69,10 @@ export function ProjectActionsMenu({
       <DropdownMenu>
         <DropdownMenuTrigger
           render={
-            <Button
-              className="shrink-0"
-              type="button"
-              variant="link"
+            <IconButton
               onClick={(event) => event.stopPropagation()}
-            >
-              <MoreHorizontal size={14} />
-            </Button>
+              icon={MoreHorizontal}
+            />
           }
         />
         <DropdownMenuContent
@@ -126,4 +122,6 @@ export function ProjectActionsMenu({
       />
     </>
   );
-}
+};
+
+export default ActionsMenu;
