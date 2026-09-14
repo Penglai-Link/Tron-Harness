@@ -50,6 +50,7 @@ const CreateByProject = ({
       className="shrink-0 p-0"
       disabled={creating}
       icon={SquarePen}
+      needHover
       onClick={(event) => {
         event.stopPropagation();
         createSession();

@@ -10,7 +10,7 @@ interface ItemProps {
 const Item = ({ left, right, className, onClick }: ItemProps) => {
   return (
     <div
-      className={`px-2 flex text-sm rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground justify-between items-center ${className || ""}`}
+      className={`px-2 h-8 flex text-sm rounded hover:bg-sidebar-accent hover:text-sidebar-accent-foreground justify-between items-center ${className || ""}`}
       onClick={onClick}
     >
       {left ? left : null}

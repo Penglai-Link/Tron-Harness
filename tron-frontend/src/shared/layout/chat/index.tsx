@@ -56,7 +56,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
     (project) => project.projectCode === selectedProjectCode,
   );
   return (
-    <section className="border-b border-[var(--color-card-border)] p-2">
+    <section className="border-b border-[var(--color-card-border)] p-2 flex flex-col gap-1">
       <Item
         left={
           <Create
@@ -73,12 +73,12 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
 
       <Item
         onClick={() => setProjectListExpanded((value) => !value)}
-        className="group/projects flex h-8 items-center gap-1 rounded pl-2 pr-1 hover:bg-sidebar-accent"
+        className="group/projects flex items-center gap-1 rounded px-2 hover:bg-sidebar-accent"
         left={<span className="opacity-50">项目</span>}
         right={
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             <IconButton
-              className="opacity-0 pointer-events-none transition-opacity group-hover/projects:opacity-100 group-hover/projects:pointer-events-auto group-focus-within/projects:opacity-100 group-focus-within/projects:pointer-events-auto"
+              className="opacity-0 pointer-events-none transition-opacity group-hover/projects:opacity-100"
               onClick={() => setProjectCreateOpen(true)}
               icon={Plus}
             />

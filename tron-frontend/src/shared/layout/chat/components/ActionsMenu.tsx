@@ -70,12 +70,14 @@ const ActionsMenu = ({
         <DropdownMenuTrigger
           render={
             <IconButton
+              needHover
               onClick={(event) => event.stopPropagation()}
               icon={MoreHorizontal}
             />
           }
         />
         <DropdownMenuContent
+          className="duration-10"
           align="start"
           onClick={(event) => event.stopPropagation()}
         >

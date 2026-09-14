@@ -43,7 +43,7 @@ const MessageItem = ({
   return (
     <Item
       className={cn(
-        "group/session flex h-8 min-w-0 items-center relative pl-5",
+        "group/session flex h-8 min-w-0 items-center relative pl-6",
         active && "bg-sidebar-accent text-sidebar-accent-foreground",
       )}
       left={
@@ -58,6 +58,7 @@ const MessageItem = ({
         <>
           <div className="flex items-center pl-2 right-0 h-full bg-linear-to-r from-sidebar-accent/0 from-0% to-sidebar-accent to-30%">
             <IconButton
+              needHover
               className="shrink-0 hidden group-hover/session:block"
               disabled={archiving}
               onClick={(event) => {
@@ -68,7 +69,10 @@ const MessageItem = ({
               icon={Archive}
             />
             {running ? (
-              <IconButton className="shrink-0 items-center justify-center pointer-events-none">
+              <IconButton
+                needHover
+                className="shrink-0 items-center justify-center pointer-events-none"
+              >
                 <LoaderCircle size={14} className="animate-spin" />
               </IconButton>
             ) : null}

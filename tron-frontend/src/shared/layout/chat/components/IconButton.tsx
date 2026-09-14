@@ -4,33 +4,35 @@ import { LucideIcon } from "lucide-react";
 
 interface IconButtonProps {
   onClick?: (e: React.MouseEvent<HTMLButtonElement>) => void;
-  size?: "xs" | "sm" | "lg";
+  size?: number;
   className?: string;
   disabled?: boolean;
   children?: React.ReactNode;
   icon?: LucideIcon;
+  needHover?: boolean;
 }
 
 const IconButton = ({
   disabled,
-  size = "sm",
+  size = 16,
   className,
   children,
   icon: Icon,
+  needHover,
   onClick,
+  ...rest
 }: IconButtonProps) => {
   return (
-    <Button
+    <button
       disabled={disabled}
       onClick={onClick}
-      size={size}
-      type="button"
-      variant="link"
-      className={cn("flex gap-1 p-0 hover:no-underline", className)}
+      className={cn(`flex gap-1 items-center p-0 ${needHover ? 'opacity-60 hover:opacity-100' : ''}`, className)}
+      style={{ fontSize: size }}
+      {...rest}
     >
-      {Icon && <Icon />}
+      {Icon && <Icon size={size} />}
       {children}
-    </Button>
+    </button>
   );
 };
 

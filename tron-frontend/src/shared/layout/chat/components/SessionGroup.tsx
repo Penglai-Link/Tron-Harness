@@ -35,11 +35,11 @@ const SessionGroup = ({
     <section>
       <Item
         className={cn(
-          "group/project flex h-8 mb-1 pl-2 w-full min-w-0 items-center gap-1",
+          "group/project flex mb-1 pl-2 w-full min-w-0 items-center gap-1",
         )}
         left={
           <IconButton
-            className="flex min-w-0 flex-1 items-center gap-1 text-left justify-start truncate"
+            className="flex min-w-0 flex-1 items-center text-left justify-start truncate"
             onClick={() => {
               onSelect(project.projectCode);
               setOpen((value) => !value);
@@ -50,7 +50,7 @@ const SessionGroup = ({
           </IconButton>
         }
         right={
-          <div className="flex shrink-0 gap-2 items-center opacity-0 pointer-events-none transition-opacity group-hover/project:opacity-100 group-hover/project:pointer-events-auto group-focus-within/project:opacity-100 group-focus-within/project:pointer-events-auto has-[button[data-popup-open]]:opacity-100 has-[button[data-popup-open]]:pointer-events-auto">
+          <div className="flex shrink-0 gap-2 items-center opacity-0 pointer-events-none group-hover/project:opacity-100 group-hover/project:pointer-events-auto has-[button[data-popup-open]]:opacity-100 has-[button[data-popup-open]]:pointer-events-auto">
             <ActionsMenu
               pinned={pinned}
               project={project}
@@ -73,7 +73,7 @@ const SessionGroup = ({
             />
           ))}
           {sessions.length === 0 ? (
-            <p className="py-1 pl-5 text-[14px] opacity-45">暂无会话</p>
+            <p className="py-1 pl-6 text-[14px] opacity-45">暂无会话</p>
           ) : null}
         </div>
       ) : null}
