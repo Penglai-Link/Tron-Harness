@@ -59,14 +59,28 @@ impl NavigationService {
             built_in: false,
             enabled: command.enabled,
             is_default: command.is_default,
-            position: command.position,
+            position: 0,
             visible_roles: command.visible_roles,
             created_at: timestamp.clone(),
             updated_at: timestamp,
         };
         let mut repository = self.lock_repository();
-        repository.save_domain(&domain)?;
-        Ok(domain)
+        let mut domains = repository.list_domains()?;
+        domains.push(domain);
+        let inserted_code = domains
+            .last()
+            .map(|item| item.domain_code.clone())
+            .expect("new domain was pushed");
+        let domains = reorder_domains(domains, &inserted_code, command.position);
+        let created = domains
+            .iter()
+            .find(|item| item.domain_code == inserted_code)
+            .cloned()
+            .expect("new domain was reordered");
+        for domain in &domains {
+            repository.save_domain(domain)?;
+        }
+        Ok(created)
     }
 
     pub fn update_domain(
@@ -92,10 +106,32 @@ impl NavigationService {
             visible_roles: command.visible_roles,
             enabled: command.enabled,
             is_default: command.is_default,
-            position: command.position,
+            position: current.position,
             ..current
         };
-        repository.save_domain(&updated)?;
+        let domains = reorder_domains(
+            repository
+                .list_domains()?
+                .into_iter()
+                .map(|domain| {
+                    if domain.domain_code == updated.domain_code {
+                        updated.clone()
+                    } else {
+                        domain
+                    }
+                })
+                .collect(),
+            &updated.domain_code,
+            command.position,
+        );
+        let updated = domains
+            .iter()
+            .find(|domain| domain.domain_code == updated.domain_code)
+            .cloned()
+            .expect("updated domain was reordered");
+        for domain in &domains {
+            repository.save_domain(domain)?;
+        }
         Ok(updated)
     }
 
@@ -424,6 +460,29 @@ impl NavigationService {
             .lock()
             .expect("navigation repository mutex poisoned")
     }
+}
+
+fn reorder_domains(
+    mut domains: Vec<NavigationDomain>,
+    moving_code: &str,
+    requested_position: i64,
+) -> Vec<NavigationDomain> {
+    domains.sort_by(|left, right| {
+        left.position
+            .cmp(&right.position)
+            .then_with(|| left.domain_code.cmp(&right.domain_code))
+    });
+    let moving = domains
+        .iter()
+        .position(|domain| domain.domain_code == moving_code)
+        .expect("moving domain must exist");
+    let domain = domains.remove(moving);
+    let target = requested_position.clamp(0, domains.len() as i64) as usize;
+    domains.insert(target, domain);
+    for (position, domain) in domains.iter_mut().enumerate() {
+        domain.position = position as i64;
+    }
+    domains
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
