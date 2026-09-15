@@ -5061,8 +5061,17 @@ export function ChatManagementPage() {
     if (defaultSession) {
       setActiveSessionCode(defaultSession.sessionCode);
       selectSourceTab(defaultChatSessionSourceTab);
+      replaceChatSearchParams((next) => {
+        next.set("sessionCode", defaultSession.sessionCode);
+      });
     }
-  }, [activeSessionCode, requestedSessionCode, requestedSourceTab, sessionGroups]);
+  }, [
+    activeSessionCode,
+    replaceChatSearchParams,
+    requestedSessionCode,
+    requestedSourceTab,
+    sessionGroups,
+  ]);
 
   useEffect(() => {
     activeSessionCodeRef.current = activeSessionCode;
