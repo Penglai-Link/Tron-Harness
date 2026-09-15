@@ -917,7 +917,7 @@ export function TronShell({
           ref={domainTriggerRef}
           className={cn(
             "flex h-10 w-full min-w-0 items-center rounded-lg text-left text-sm font-medium text-[var(--color-on-surface)] transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]",
-            compact ? "justify-center px-1.5" : "justify-between gap-2 px-2.5 text-[15px]",
+            compact ? "justify-center px-1.5" : "justify-between gap-2 px-2.5",
           )}
           type="button"
           id="tron-domain-trigger"
@@ -935,7 +935,7 @@ export function TronShell({
           ) : (
             <span className="min-w-0 truncate">{domainName}</span>
           )}
-          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)]", compact ? "hidden" : "")} size={15} aria-hidden="true" />
+          <ChevronDown className={cn("shrink-0 text-[var(--color-on-surface-variant)]", compact ? "hidden" : "")} size={16} aria-hidden="true" />
         </button>
         {utilityPanel === "domain" ? (
           <div
