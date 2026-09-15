@@ -59,7 +59,9 @@ function mapMenu(menu: NavigationRuntimeMenu): TronNavItem {
     ? menu.url ?? "#"
     : menu.menuType === "Internal"
       ? navigationPageRegistry[menu.pageCode ?? ""] ?? "#"
-      : "";
+      : menu.menuType === "Widget"
+        ? "#"
+        : "";
 
   return {
     children: menu.children.length ? menu.children.map(mapMenu) : undefined,

@@ -123,6 +123,7 @@ pub(crate) fn menu_type_name(menu_type: MenuType) -> &'static str {
         MenuType::Group => "Group",
         MenuType::Internal => "Internal",
         MenuType::ExternalLink => "ExternalLink",
+        MenuType::Widget => "Widget",
     }
 }
 

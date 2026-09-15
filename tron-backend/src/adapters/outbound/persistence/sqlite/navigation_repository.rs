@@ -18,7 +18,9 @@ use crate::{
     shared::id::SnowflakeId,
 };
 
-use super::migrations::{NAVIGATION_AGENTS_SPLIT_MIGRATION, NAVIGATION_MIGRATION};
+use super::migrations::{
+    CHAT_PANEL_NAVIGATION_MIGRATION, NAVIGATION_AGENTS_SPLIT_MIGRATION, NAVIGATION_MIGRATION,
+};
 
 const POSITION_WORK_OFFSET: i64 = 1_000_000_000;
 

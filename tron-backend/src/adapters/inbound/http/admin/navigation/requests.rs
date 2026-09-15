@@ -16,6 +16,7 @@ mod request {
         Group,
         Internal,
         ExternalLink,
+        Widget,
     }
 
     #[derive(Debug, Deserialize)]
@@ -123,6 +124,7 @@ mod request {
                 MenuTypeRequest::Group => Self::Group,
                 MenuTypeRequest::Internal => Self::Internal,
                 MenuTypeRequest::ExternalLink => Self::ExternalLink,
+                MenuTypeRequest::Widget => Self::Widget,
             }
         }
     }

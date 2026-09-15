@@ -7,7 +7,7 @@ pub struct DefaultNavigationMenuTreeItem {
     pub visible_roles: &'static [&'static str],
 }
 
-pub const DEFAULT_NAVIGATION_MENU_TREE_DOMAINS: &[&str] = &["ADVANCED"];
+pub const DEFAULT_NAVIGATION_MENU_TREE_DOMAINS: &[&str] = &["ADVANCED", "CHAT"];
 
 // Keep this in the same parent-before-child order as the built-in navigation seed.
 // It provides a runtime recovery path when an administrator removes all assignments.
@@ -185,6 +185,34 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         menu_code: "OBSERVABILITY",
         parent_menu_code: Some("DATA"),
         position: 6,
+        visible_roles: &[],
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "CHAT",
+        menu_code: "CHAT_SESSIONS",
+        parent_menu_code: None,
+        position: 0,
+        visible_roles: &[],
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "CHAT",
+        menu_code: "CHAT_NEW_SESSION",
+        parent_menu_code: Some("CHAT_SESSIONS"),
+        position: 0,
+        visible_roles: &[],
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "CHAT",
+        menu_code: "CHAT_PROJECTS",
+        parent_menu_code: Some("CHAT_SESSIONS"),
+        position: 1,
+        visible_roles: &[],
+    },
+    DefaultNavigationMenuTreeItem {
+        domain_code: "CHAT",
+        menu_code: "CHAT_RECENTS",
+        parent_menu_code: Some("CHAT_SESSIONS"),
+        position: 2,
         visible_roles: &[],
     },
 ];

@@ -6,6 +6,15 @@ pub const ADVANCED_DOMAIN_CODE: &str = "ADVANCED";
 pub const ZH_CN: &str = "zh-CN";
 pub const EN_US: &str = "en-US";
 
+/// Domain rendered by a dedicated shell panel instead of the primary navigation tree.
+pub const CHAT_PANEL_DOMAIN_CODE: &str = "CHAT";
+pub const PANEL_DOMAIN_CODES: &[&str] = &[CHAT_PANEL_DOMAIN_CODE];
+
+/// Widget menu codes are stored in the `page_code` column of a `Widget` menu.
+pub const WIDGET_CHAT_NEW_SESSION: &str = "chat.newSession";
+pub const WIDGET_CHAT_PROJECTS: &str = "chat.projects";
+pub const WIDGET_CHAT_RECENTS: &str = "chat.recents";
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MenuSource {
     BuiltIn,
@@ -34,6 +43,8 @@ pub enum MenuType {
     Group,
     Internal,
     ExternalLink,
+    /// Rendered by a dedicated shell panel component; `page_code` holds the widget code.
+    Widget,
 }
 
 impl MenuType {
@@ -42,6 +53,7 @@ impl MenuType {
             Self::Group => "Group",
             Self::Internal => "Internal",
             Self::ExternalLink => "ExternalLink",
+            Self::Widget => "Widget",
         }
     }
 
@@ -50,6 +62,7 @@ impl MenuType {
             "Group" => Ok(Self::Group),
             "Internal" => Ok(Self::Internal),
             "ExternalLink" => Ok(Self::ExternalLink),
+            "Widget" => Ok(Self::Widget),
             _ => Err(NavigationError::StorageFailure),
         }
     }
@@ -256,6 +269,11 @@ pub fn validate_menu_target(
         }
         MenuType::ExternalLink if page_code.is_none() && url.is_some_and(is_http_url) => Ok(()),
         MenuType::ExternalLink => Err(NavigationError::InvalidExternalUrl),
+        MenuType::Widget
+            if page_code.is_some_and(|value| !value.trim().is_empty()) && url.is_none() =>
+        {
+            Ok(())
+        }
         _ => Err(NavigationError::InvalidMenuTarget),
     }
 }

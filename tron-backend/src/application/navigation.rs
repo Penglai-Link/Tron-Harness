@@ -10,8 +10,8 @@ use std::{
 use crate::{
     domain::navigation::{
         MenuQuery, MenuSource, MenuType, NavigationDomain, NavigationError, NavigationMenu,
-        NavigationPage, NavigationTreeItem, validate_domain_code, validate_menu_code,
-        validate_menu_target, validate_roles, validate_translations,
+        NavigationPage, NavigationTreeItem, PANEL_DOMAIN_CODES, validate_domain_code,
+        validate_menu_code, validate_menu_target, validate_roles, validate_translations,
     },
     shared::time::current_timestamp,
 };

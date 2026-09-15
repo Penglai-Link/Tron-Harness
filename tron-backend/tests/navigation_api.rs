@@ -489,7 +489,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     assert_eq!(restore_payload["code"], "0");
     assert_eq!(
         restore_payload["data"]["restoredDomainCodes"],
-        json!(["ADVANCED"])
+        json!(["ADVANCED", "CHAT"])
     );
     assert_eq!(restore_payload["data"]["restoredItemCount"], 25);
 
@@ -529,4 +529,86 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         response_json(second_restore).await["data"]["restoredItemCount"],
         0
     );
+}
+
+#[tokio::test]
+async fn chat_panel_widgets_are_hidden_from_domain_list_but_rendered_in_tree() {
+    let router = app();
+    let token = authenticated_bearer_token(&router).await;
+
+    let domains = request_json(
+        &router,
+        Method::GET,
+        "/api/v1/navigation/domains",
+        None,
+        Some(&token),
+        None,
+    )
+    .await;
+    let domains_payload = response_json(domains).await;
+    let domain_codes = domains_payload["data"]
+        .as_array()
+        .expect("domain list should be an array")
+        .iter()
+        .map(|domain| domain["domainCode"].as_str().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert!(
+        !domain_codes.contains(&"CHAT"),
+        "panel domain must not appear in the primary domain list: {domain_codes:?}"
+    );
+
+    let tree = request_json(
+        &router,
+        Method::GET,
+        "/api/v1/navigation/domains/CHAT/menu-tree",
+        None,
+        Some(&token),
+        None,
+    )
+    .await;
+    let tree_status = tree.status();
+    let tree_payload = response_json(tree).await;
+    assert_eq!(
+        tree_status,
+        StatusCode::OK,
+        "chat panel tree response: {tree_payload}"
+    );
+    assert_eq!(tree_payload["data"]["domainCode"], "CHAT");
+    let menus = tree_payload["data"]["menus"]
+        .as_array()
+        .expect("chat tree should have menus");
+    assert_eq!(menus[0]["menuCode"], "CHAT_SESSIONS");
+    assert_eq!(menus[0]["menuType"], "Group");
+    let children = menus[0]["children"]
+        .as_array()
+        .expect("chat sessions group should have children");
+    let widget_codes = children
+        .iter()
+        .map(|child| child["pageCode"].as_str().unwrap_or(""))
+        .collect::<Vec<_>>();
+    assert_eq!(
+        widget_codes,
+        vec!["chat.newSession", "chat.projects", "chat.recents"]
+    );
+    for child in children {
+        assert_eq!(child["menuType"], "Widget");
+        assert!(child["url"].is_null());
+    }
+
+    // Widget menus stay leaves: static children are rejected.
+    let add_child = request_json(
+        &router,
+        Method::POST,
+        "/api/v1/admin/navigation/domains/CHAT/menu-items",
+        Some(json!({
+            "menuCode": "CHATS",
+            "parentMenuCode": "CHAT_PROJECTS",
+            "position": 0,
+            "visibleRoles": []
+        })),
+        Some(&token),
+        None,
+    )
+    .await;
+    assert_ne!(add_child.status(), StatusCode::OK);
 }

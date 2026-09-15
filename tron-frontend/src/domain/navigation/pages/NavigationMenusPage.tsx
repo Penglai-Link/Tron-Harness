@@ -65,6 +65,7 @@ function menuPayload(form: MenuFormState): NavigationMenuPayload {
 function menuTypeLabel(type: NavigationMenuType, text: ReturnType<typeof useNavigationAdminText>) {
   if (type === "Group") return text("types.group", "分组", "Group");
   if (type === "ExternalLink") return text("types.externalLink", "外部链接", "External link");
+  if (type === "Widget") return text("types.widget", "面板组件", "Widget");
   return text("types.internal", "内部页面", "Internal page");
 }
 

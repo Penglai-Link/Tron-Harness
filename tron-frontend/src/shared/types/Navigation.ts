@@ -1,4 +1,4 @@
-export type NavigationMenuType = "Group" | "Internal" | "ExternalLink";
+export type NavigationMenuType = "Group" | "Internal" | "ExternalLink" | "Widget";
 export type NavigationMenuSource = "BuiltIn" | "Custom";
 
 export interface NavigationLocalizedText {

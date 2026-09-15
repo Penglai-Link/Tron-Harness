@@ -25,7 +25,11 @@ impl NavigationService {
         let _ = locale;
         Ok(domains
             .into_iter()
-            .filter(|domain| domain.enabled && roles_match(&domain.visible_roles, role_codes))
+            .filter(|domain| {
+                domain.enabled
+                    && roles_match(&domain.visible_roles, role_codes)
+                    && !PANEL_DOMAIN_CODES.contains(&domain.domain_code.as_str())
+            })
             .collect())
     }
 
