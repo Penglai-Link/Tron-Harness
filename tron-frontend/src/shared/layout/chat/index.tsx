@@ -3,6 +3,7 @@ import { ChevronDown, Plus } from "lucide-react";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { Create } from "./components/Create";
 import SessionGroup from "./components/SessionGroup";
+import RecentSessionGroup from "./components/RecentSessionGroup";
 import { ProjectCreateDialog } from "./components/ProjectCreateDialog";
 import { useChatSidebarData } from "./hooks/useChatSidebarData";
 import { usePinnedProjectCodes } from "./hooks/usePinnedProjectCodes";
@@ -14,7 +15,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const workspaceCode =
     (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
-  const { projects, loading, sessionsByProject } =
+  const { projects, loading, recentSessions, sessionsByProject } =
     useChatSidebarData(workspaceCode);
   const [runningSessionCode, setRunningSessionCode] = useState("");
   const [projectListExpanded, setProjectListExpanded] = useState(true);
@@ -78,7 +79,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
         right={
           <div className="flex items-center gap-2">
             <IconButton
-              className="opacity-0 pointer-events-none transition-opacity group-hover/projects:opacity-100"
+              className="opacity-0 transition-opacity group-hover/projects:opacity-100"
               onClick={() => setProjectCreateOpen(true)}
               icon={Plus}
             />
@@ -88,7 +89,6 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
                   ? "transition-transform"
                   : "-rotate-90 transition-transform"
               }
-              onClick={() => setProjectCreateOpen(true)}
               icon={ChevronDown}
             />
           </div>
@@ -119,6 +119,12 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
             ))
           )}
         </div>
+      ) : null}
+      {recentSessions.length > 0 ? (
+        <RecentSessionGroup
+          runningSessionCode={runningSessionCode}
+          sessions={recentSessions}
+        />
       ) : null}
       <ProjectCreateDialog
         open={projectCreateOpen || Boolean(editingProject)}

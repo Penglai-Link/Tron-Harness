@@ -10,6 +10,7 @@ interface IconButtonProps {
   children?: React.ReactNode;
   icon?: LucideIcon;
   needHover?: boolean;
+  "aria-label"?: string;
 }
 
 const IconButton = ({

@@ -38,5 +38,18 @@ export function useChatSidebarData(workspaceCode: string) {
       ])
     );
   }, [projects.projects, sessionGroups]);
-  return { ...projects, sessionsByProject };
+  const recentSessions = useMemo(() => {
+    const entries = sessionGroups
+      .flatMap((group) => group.sessions)
+      .filter(
+        (session) =>
+          session.sourceType?.toUpperCase() === "MANUAL" &&
+          !session.projectCode,
+      );
+    return [...entries].sort(
+      (left, right) =>
+        new Date(right.updatedAt).getTime() - new Date(left.updatedAt).getTime(),
+    );
+  }, [sessionGroups]);
+  return { ...projects, recentSessions, sessionsByProject };
 }
