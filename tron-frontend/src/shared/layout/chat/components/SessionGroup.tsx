@@ -3,11 +3,14 @@ import { cn } from "@/shared/lib/utils";
 import { useState } from "react";
 import type { ChatSession } from "@/domain/chat/model";
 import type { ProjectRecord } from "@/domain/project";
+import { Button } from "@/components/ui/button";
 import MessageItem from "./MessageItem";
 import ActionsMenu from "./ActionsMenu";
 import CreateByProject from "./CreateByProject";
 import IconButton from "./IconButton";
 import Item from "./Item";
+
+const sessionListPageSize = 5;
 
 const SessionGroup = ({
   project,
@@ -31,6 +34,8 @@ const SessionGroup = ({
   onSelect: (projectCode: string) => void;
 }) => {
   const [open, setOpen] = useState(true);
+  const [visibleSessionCount, setVisibleSessionCount] =
+    useState(sessionListPageSize);
   return (
     <section>
       <Item
@@ -65,7 +70,7 @@ const SessionGroup = ({
       />
       {open ? (
         <div className="flex flex-col gap-1">
-          {sessions.map((session) => (
+          {sessions.slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
               running={runningSessionCode === session.sessionCode}
@@ -74,6 +79,16 @@ const SessionGroup = ({
           ))}
           {sessions.length === 0 ? (
             <p className="py-1 pl-6 text-[14px] opacity-45">暂无会话</p>
+          ) : null}
+          {sessions.length > visibleSessionCount ? (
+            <button
+              className="py-1 pl-6 text-[14px]! opacity-45 text-left"
+              onClick={() =>
+                setVisibleSessionCount((count) => count + sessionListPageSize)
+              }
+            >
+              展开显示
+            </button>
           ) : null}
         </div>
       ) : null}

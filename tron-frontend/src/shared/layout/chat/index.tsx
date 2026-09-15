@@ -9,8 +9,11 @@ import { ProjectCreateDialog } from "./components/ProjectCreateDialog";
 import { useChatSidebarData } from "./hooks/useChatSidebarData";
 import { usePinnedProjectCodes } from "./hooks/usePinnedProjectCodes";
 import type { ProjectRecord } from "@/domain/project";
+import { Button } from "@/components/ui/button";
 import IconButton from "./components/IconButton";
 import Item from "./components/Item";
+
+const sidebarListPageSize = 5;
 
 export function ChatSidebarPanel({ compact }: { compact: boolean }) {
   const location = useLocation();
@@ -21,6 +24,8 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
     useChatSidebarData(workspaceCode);
   const [runningSessionCode, setRunningSessionCode] = useState("");
   const [projectListExpanded, setProjectListExpanded] = useState(true);
+  const [visibleProjectCount, setVisibleProjectCount] =
+    useState(sidebarListPageSize);
   const [selectedProjectCode, setSelectedProjectCode] = useState<string>();
   const [projectCreateOpen, setProjectCreateOpen] = useState(false);
   const [editingProject, setEditingProject] = useState<ProjectRecord>();
@@ -30,7 +35,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
     return [...projects].sort(
       (left, right) =>
         Number(pinned.has(right.projectCode)) -
-        Number(pinned.has(left.projectCode)),
+        Number(pinned.has(left.projectCode))
     );
   }, [pinnedProjectCodes, projects]);
   useEffect(() => {
@@ -46,24 +51,24 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
     };
     window.addEventListener(
       "tron:chat-session-run-state",
-      handleRunStateChange,
+      handleRunStateChange
     );
     return () =>
       window.removeEventListener(
         "tron:chat-session-run-state",
-        handleRunStateChange,
+        handleRunStateChange
       );
   }, []);
   const activeSessionCode =
     new URLSearchParams(location.search).get("sessionCode") ?? "";
   const activeProject = orderedProjects.find((project) =>
     (sessionsByProject.get(project.projectCode) ?? []).some(
-      (session) => session.sessionCode === activeSessionCode,
-    ),
+      (session) => session.sessionCode === activeSessionCode
+    )
   );
   if (compact) return null;
   const selectedProject = orderedProjects.find(
-    (project) => project.projectCode === selectedProjectCode,
+    (project) => project.projectCode === selectedProjectCode
   );
   const createTargetProject = activeProject ?? selectedProject;
   return (
@@ -105,28 +110,45 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
         }
       />
       {projectListExpanded && orderedProjects.length > 0 ? (
-        <div className="max-h-64 space-y-0.5 overflow-y-auto">
+        <div className="space-y-0.5">
           {loading ? (
             <p className="px-2 py-1 text-xs text-sidebar-foreground/60">
               加载中
             </p>
           ) : (
-            orderedProjects.map((project) => (
-              <SessionGroup
-                key={project.projectCode}
-                project={project}
-                runningSessionCode={runningSessionCode}
-                selected={project.projectCode === selectedProjectCode}
-                sessions={sessionsByProject.get(project.projectCode) ?? []}
-                pinned={pinnedProjectCodes.includes(project.projectCode)}
-                onEdit={() => setEditingProject(project)}
-                onPinnedChange={() => togglePinned(project.projectCode)}
-                onRefresh={() =>
-                  window.dispatchEvent(new Event("tron:project-created"))
-                }
-                onSelect={setSelectedProjectCode}
-              />
-            ))
+            <>
+              {orderedProjects.slice(0, visibleProjectCount).map((project) => (
+                <SessionGroup
+                  key={project.projectCode}
+                  project={project}
+                  runningSessionCode={runningSessionCode}
+                  selected={project.projectCode === selectedProjectCode}
+                  sessions={sessionsByProject.get(project.projectCode) ?? []}
+                  pinned={pinnedProjectCodes.includes(project.projectCode)}
+                  onEdit={() => setEditingProject(project)}
+                  onPinnedChange={() => togglePinned(project.projectCode)}
+                  onRefresh={() =>
+                    window.dispatchEvent(new Event("tron:project-created"))
+                  }
+                  onSelect={setSelectedProjectCode}
+                />
+              ))}
+              {orderedProjects.length > visibleProjectCount ? (
+                <Button
+                  className="ml-2 w-fit"
+                  size="sm"
+                  type="button"
+                  variant="ghost"
+                  onClick={() =>
+                    setVisibleProjectCount(
+                      (count) => count + sidebarListPageSize
+                    )
+                  }
+                >
+                  展开显示
+                </Button>
+              ) : null}
+            </>
           )}
         </div>
       ) : null}

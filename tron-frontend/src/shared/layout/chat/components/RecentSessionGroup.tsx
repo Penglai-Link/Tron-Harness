@@ -4,6 +4,9 @@ import MessageItem from "./MessageItem";
 import IconButton from "./IconButton";
 import Item from "./Item";
 import type { ChatSession } from "@/domain/chat/model";
+import { Button } from "@/components/ui/button";
+
+const recentSessionListPageSize = 5;
 
 export default function RecentSessionGroup({
   runningSessionCode,
@@ -13,6 +16,9 @@ export default function RecentSessionGroup({
   sessions: ChatSession[];
 }) {
   const [open, setOpen] = useState(true);
+  const [visibleSessionCount, setVisibleSessionCount] = useState(
+    recentSessionListPageSize
+  );
 
   return (
     <section>
@@ -30,7 +36,9 @@ export default function RecentSessionGroup({
         }
         right={
           <IconButton
-            className={open ? "transition-transform" : "-rotate-90 transition-transform"}
+            className={
+              open ? "transition-transform" : "-rotate-90 transition-transform"
+            }
             icon={ChevronDown}
             onClick={(event) => {
               event.stopPropagation();
@@ -41,13 +49,28 @@ export default function RecentSessionGroup({
       />
       {open ? (
         <div className="flex flex-col gap-1">
-          {sessions.map((session) => (
+          {sessions.slice(0, visibleSessionCount).map((session) => (
             <MessageItem
               key={session.sessionCode}
               running={runningSessionCode === session.sessionCode}
               session={session}
             />
           ))}
+          {sessions.length > visibleSessionCount ? (
+            <Button
+              className="ml-6 w-fit"
+              size="sm"
+              type="button"
+              variant="ghost"
+              onClick={() =>
+                setVisibleSessionCount(
+                  (count) => count + recentSessionListPageSize
+                )
+              }
+            >
+              展开显示
+            </Button>
+          ) : null}
         </div>
       ) : null}
     </section>
