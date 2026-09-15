@@ -37,7 +37,6 @@ describe("EditableTabs", () => {
     render(
       <EditableTabs
         createTab={() => ({ key: "three", label: "Three", children: <p>Three content</p> })}
-        hideAdd
         items={initialTabs}
         renderAddTrigger={({ onAdd }) => (
           <button onClick={onAdd} type="button">

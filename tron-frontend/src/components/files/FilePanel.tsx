@@ -1,6 +1,7 @@
-import { useCallback, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import {
+  ChevronDown,
   FilePlus2,
   FolderOpen,
   FolderPlus,
@@ -18,14 +19,24 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "@/components/ui/resizable";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
 
 import { electronFs, fsErrorCode } from "@/shared/fs/electronFs";
 import { isBinaryExtension } from "@/shared/fs/binaryGuard";
-import type { FsEntry } from "@/shared/fs/types";
+import type { FsEditor, FsEntry } from "@/shared/fs/types";
+import { IntelliJIdeaIcon } from "@/shared/icons/IntelliJIdeaIcon";
+import { VscodeIcon } from "@/shared/icons/VscodeIcon";
 
 import { CodeEditor } from "./CodeEditor";
 import { FileTree, type FileTreeAction } from "./FileTree";
+import { useFileTabCoordinator } from "./FileTabCoordinator";
 import { baseName, joinPath, parentPath, useFsTree } from "./useFsTree";
 
 interface FsFileMeta {
@@ -45,10 +56,11 @@ interface DeleteTargetState {
   entry: FsEntry;
 }
 
-export function FilePanel() {
+export function FilePanel({ tabKey }: { tabKey?: string }) {
   const { t } = useTranslation("common");
   const toast = useToast();
   const fsTree = useFsTree();
+  const coordinator = useFileTabCoordinator();
   const {
     root,
     tree,
@@ -59,6 +71,7 @@ export function FilePanel() {
     toggleDir,
     selectEntry,
     refreshDir,
+    reset: resetFsTree,
   } = fsTree;
 
   const [activePath, setActivePath] = useState<string | null>(null);
@@ -75,6 +88,21 @@ export function FilePanel() {
 
   const isDesktop = electronFs.isAvailable();
 
+  const coordinatorRef = useRef(coordinator);
+  useEffect(() => {
+    coordinatorRef.current = coordinator;
+  }, [coordinator]);
+
+  useEffect(() => {
+    return () => {
+      const current = coordinatorRef.current;
+      if (current && tabKey) {
+        current.setActiveFile(tabKey, null);
+        current.setActiveRoot(tabKey, null);
+      }
+    };
+  }, [tabKey]);
+
   const showFsError = useCallback((error: unknown) => {
     const code = fsErrorCode(error);
     const message = t(`files.errors.${code}`, { defaultValue: t("files.errors.fs-unknown-error") });
@@ -85,6 +113,16 @@ export function FilePanel() {
     const rootId = rootIdOverride ?? root?.rootId;
     if (!rootId) return;
 
+    const fileKey = `${rootId}\u0000${path}`;
+
+    if (coordinator && tabKey) {
+      const existingTab = coordinator.findFileTab(fileKey, tabKey);
+      if (existingTab) {
+        coordinator.focusTab(existingTab);
+        return;
+      }
+    }
+
     selectEntry(path);
     if (activePath === path) return;
 
@@ -92,6 +130,10 @@ export function FilePanel() {
     contentRef.current = currentContentsRef.current.get(path)
       ?? openContentsRef.current.get(path)
       ?? "";
+
+    if (coordinator && tabKey) {
+      coordinator.setActiveFile(tabKey, fileKey);
+    }
 
     if (openContentsRef.current.has(path)) return;
 
@@ -107,8 +149,11 @@ export function FilePanel() {
     } catch (error) {
       showFsError(error);
       setActivePath(null);
+      if (coordinator && tabKey) {
+        coordinator.setActiveFile(tabKey, null);
+      }
     }
-  }, [activePath, root?.rootId, selectEntry, showFsError]);
+  }, [activePath, coordinator, root?.rootId, selectEntry, showFsError, tabKey]);
 
   const handleSelect = useCallback((path: string, entry: FsEntry) => {
     selectEntry(path);
@@ -161,13 +206,49 @@ export function FilePanel() {
       return next;
     });
     setActivePath(null);
-  }, [activePath]);
+    if (coordinator && tabKey) {
+      coordinator.setActiveFile(tabKey, null);
+    }
+  }, [activePath, coordinator, tabKey]);
 
   const handlePick = useCallback(async () => {
     const previousRootId = root?.rootId;
     try {
       const info = await pickRoot();
       if (!info) return;
+
+      // 检查是否有其它文件 tab 已经打开了同一个根目录。
+      if (coordinator && tabKey) {
+        const existingTab = coordinator.findRootTab(info.path, tabKey);
+        if (existingTab) {
+          // 关闭刚刚打开的根会话，跳转到已有的 tab。
+          try {
+            await electronFs.closeRoot(info.rootId);
+          } catch {
+            // 忽略清理错误。
+          }
+          if (previousRootId) {
+            try {
+              await electronFs.closeRoot(previousRootId);
+            } catch {
+              // 旧会话已失效时忽略清理错误。
+            }
+          }
+          // 清空当前 tab 的本地状态，因为旧根已关闭。
+          openContentsRef.current.clear();
+          currentContentsRef.current.clear();
+          savedContentRef.current.clear();
+          contentRef.current = "";
+          setFileMeta(new Map());
+          setActivePath(null);
+          setDirtyPaths(new Set());
+          resetFsTree();
+          coordinator.setActiveFile(tabKey, null);
+          coordinator.setActiveRoot(tabKey, null);
+          coordinator.focusTab(existingTab);
+          return;
+        }
+      }
 
       if (previousRootId) {
         try {
@@ -184,10 +265,27 @@ export function FilePanel() {
       setFileMeta(new Map());
       setActivePath(null);
       setDirtyPaths(new Set());
+      if (coordinator && tabKey) {
+        coordinator.setActiveFile(tabKey, null);
+        coordinator.setActiveRoot(tabKey, info.path);
+      }
     } catch (error) {
       showFsError(error);
     }
-  }, [pickRoot, root?.rootId, showFsError]);
+  }, [coordinator, pickRoot, resetFsTree, root?.rootId, showFsError, tabKey]);
+
+  const openInEditor = useCallback(async (editor: FsEditor) => {
+    if (!root) {
+      toast.error(t("files.noFolderSelected"));
+      return;
+    }
+
+    try {
+      await electronFs.openInEditor(root.rootId, editor);
+    } catch (error) {
+      showFsError(error);
+    }
+  }, [root, showFsError, t, toast]);
 
   const submitName = useCallback(async () => {
     if (!root || !nameDialog) return;
@@ -287,7 +385,7 @@ export function FilePanel() {
         <span className="min-w-0 truncate text-sm font-medium text-[var(--color-on-surface)]">
           {root.name}
         </span>
-        <div className="flex shrink-0 items-center gap-1">
+        <div className="flex shrink-0 items-center gap-0.5">
           <Button
             size="icon-sm"
             variant="ghost"
@@ -298,6 +396,44 @@ export function FilePanel() {
           >
             <FolderOpen size={14} aria-hidden="true" />
           </Button>
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  size="icon-sm"
+                  variant="ghost"
+                  type="button"
+                  title={t("files.openOptions")}
+                  aria-label={t("files.openOptions")}
+                >
+                  <ChevronDown size={13} aria-hidden="true" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-56">
+              <DropdownMenuItem onClick={() => void handlePick()}>
+                <FolderOpen size={14} aria-hidden="true" />
+                <span>{t("files.openFolder")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+              <DropdownMenuItem
+                disabled={!root}
+                title={t("files.noFolderSelected")}
+                onClick={() => void openInEditor("vscode")}
+              >
+                <VscodeIcon size={14} className="text-muted-foreground" aria-hidden="true" />
+                <span>{t("files.openInVscode")}</span>
+              </DropdownMenuItem>
+              <DropdownMenuItem
+                disabled={!root}
+                title={t("files.noFolderSelected")}
+                onClick={() => void openInEditor("idea")}
+              >
+                <IntelliJIdeaIcon size={14} className="text-muted-foreground" aria-hidden="true" />
+                <span>{t("files.openInIdea")}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
 

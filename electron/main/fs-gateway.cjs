@@ -19,6 +19,7 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const crypto = require("node:crypto");
+const { spawn } = require("node:child_process");
 
 /** 单次请求可读取文本文件的最大字节数。 */
 const MAX_READ_BYTES = 2 * 1024 * 1024;
@@ -311,6 +312,57 @@ function closeRoot(rootId) {
   return {};
 }
 
+const EDITOR_LAUNCHERS = {
+  vscode: process.platform === "win32" ? ["code.cmd", "code"] : ["code"],
+  idea: process.platform === "win32" ? ["idea64.exe", "idea.cmd", "idea"] : ["idea"],
+};
+
+function launchEditor(command, targetPath) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, [targetPath], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+      // WSL 下 VS Code 的 `code` 脚本会检测到 Microsoft 内核并交互式询问是否继续；
+      // 非交互式 spawn（stdio 已忽略）下该提示读到 EOF 会直接 exit 1，导致编辑器不启动。
+      // 显式设置该变量跳过提示（其他平台 / 编辑器会忽略此变量）。
+      env: { ...process.env, DONT_PROMPT_WSL_INSTALL: "1" },
+    });
+
+    let settled = false;
+    child.once("error", (error) => {
+      if (settled) return;
+      settled = true;
+      reject(error);
+    });
+    child.once("spawn", () => {
+      if (settled) return;
+      settled = true;
+      child.unref();
+      resolve();
+    });
+  });
+}
+
+async function openInEditor(rootId, editor) {
+  const root = rootOf(rootId);
+  const launchers = EDITOR_LAUNCHERS[editor];
+  if (!launchers) {
+    throw new Error("invalid-editor");
+  }
+
+  for (const command of launchers) {
+    try {
+      await launchEditor(command, root.realPath);
+      return {};
+    } catch {
+      // 尝试下一个候选启动器。
+    }
+  }
+
+  throw new Error("editor-not-found");
+}
+
 /**
  * @param {string} command
  * @param {Record<string, unknown>} payload
@@ -358,6 +410,10 @@ async function handleFsCommand(command, payload = {}, browserWindow) {
 
     case "fs:closeRoot": {
       return closeRoot(payload.rootId);
+    }
+
+    case "fs:openInEditor": {
+      return openInEditor(payload.rootId, payload.editor);
     }
 
     default:

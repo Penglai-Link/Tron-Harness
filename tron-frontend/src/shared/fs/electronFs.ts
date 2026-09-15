@@ -1,6 +1,6 @@
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 
-import type { FsEntry, FsReadResult, FsRootInfo } from "./types";
+import type { FsEditor, FsEntry, FsReadResult, FsRootInfo } from "./types";
 
 /**
  * 面向渲染进程的文件系统门面。
@@ -56,6 +56,10 @@ export class FileSystemClient {
   public async closeRoot(rootId: string): Promise<void> {
     return this.bridge.closeFsRoot(rootId);
   }
+
+  public async openInEditor(rootId: string, editor: FsEditor): Promise<void> {
+    return this.bridge.openInEditor(rootId, editor);
+  }
 }
 
 /** 面板在运行时使用的共享实例。 */
@@ -83,6 +87,8 @@ const KNOWN_FS_ERROR_CODES = [
   "invalid-root-id",
   "invalid-path",
   "invalid-content",
+  "editor-not-found",
+  "invalid-editor",
   "unknown-fs-command",
 ] as const;
 

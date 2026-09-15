@@ -29,7 +29,10 @@ export const common = {
     inputUrlTips:"请输入 URL",
     newTab: "新标签",
     browser: "浏览器",
-    attributes: "属性"
+    attributes: "属性",
+    addTab: "添加标签",
+    newFileTab: "新增文件标签",
+    newWebTab: "新增网页标签"
   },
   jsonSchemaEditor: {
     actions: {
@@ -223,6 +226,10 @@ export const common = {
   files: {
     panelTitle: "文件",
     openFolder: "打开文件夹",
+    openOptions: "更多打开方式",
+    openInVscode: "使用 VS Code 打开",
+    openInIdea: "使用 IntelliJ IDEA 打开",
+    noFolderSelected: "请先选择文件夹",
     emptyDescription: "选择一个文件夹，开始浏览与编辑",
     notDesktop: "请通过桌面端使用文件面板",
     createFile: "新建文件",
@@ -257,6 +264,8 @@ export const common = {
       "invalid-root-id": "无效的文件夹标识",
       "invalid-path": "无效的路径",
       "invalid-content": "无效的内容",
+      "editor-not-found": "未找到编辑器，请确认已安装并配置其命令行启动器（位于 PATH 中）",
+      "invalid-editor": "不支持的编辑器",
       "fs-unknown-error": "文件操作失败",
     },
   },

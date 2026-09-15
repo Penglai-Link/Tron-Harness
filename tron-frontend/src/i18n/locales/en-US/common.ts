@@ -29,7 +29,10 @@ export const common = {
     inputUrlTips:"Please Enter the URL",
     newTab: "New Tab",
     browser: "Browser",
-    attributes: "Attributes"
+    attributes: "Attributes",
+    addTab: "Add tab",
+    newFileTab: "New file tab",
+    newWebTab: "New web tab"
   },
   jsonSchemaEditor: {
     actions: {
@@ -223,6 +226,10 @@ export const common = {
   files: {
     panelTitle: "Files",
     openFolder: "Open folder",
+    openOptions: "More open options",
+    openInVscode: "Open in VS Code",
+    openInIdea: "Open in IntelliJ IDEA",
+    noFolderSelected: "Select a folder first",
     emptyDescription: "Select a folder to browse and edit",
     notDesktop: "Use the desktop app to access the files panel",
     createFile: "New file",
@@ -257,6 +264,8 @@ export const common = {
       "invalid-root-id": "Invalid folder identifier",
       "invalid-path": "Invalid path",
       "invalid-content": "Invalid content",
+      "editor-not-found": "Editor not found. Make sure its command-line launcher is installed and available in PATH",
+      "invalid-editor": "Unsupported editor",
       "fs-unknown-error": "File operation failed",
     },
   },

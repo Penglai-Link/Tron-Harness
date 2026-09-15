@@ -8,11 +8,18 @@ import {
   type EditableTabEditInfo,
 } from "@/components/editable-tabs";
 import { OperateType } from "@/components/editable-tabs/types";
+import { FileTabCoordinatorProvider } from "@/components/files/FileTabCoordinator";
 import { PageView } from "@/components/page-view";
 import { Button } from "@/components/ui/button";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import { DEFAULT_TAB_ID, useTabStore, type CachedTabInfo } from "@/store/tabStore";
 import { isDesktopHost } from "@/shared/desktop/DesktopBridge";
-import { Globe, Plus } from "lucide-react";
+import { FolderOpen, Globe, Plus } from "lucide-react";
 import { useTabPanelRegistry } from "./TabPanelRegistry";
 
 const FilePanel = lazy(() =>
@@ -24,32 +31,57 @@ interface RightPanelTabsProps {
 }
 
 interface EmptyPanelContentProps {
-  onAdd?: () => void;
+  onAddFile?: () => void;
+  onAddWeb?: () => void;
 }
 
-function EmptyPanelContent({ onAdd }: EmptyPanelContentProps) {
+function EmptyPanelContent({ onAddFile, onAddWeb }: EmptyPanelContentProps) {
   const { t } = useTranslation("common");
+
+  if (!onAddFile && !onAddWeb) {
+    return (
+      <div
+        className="flex h-full min-h-32 flex-col items-center justify-center gap-3 px-6 text-sm text-[var(--color-on-surface-variant)]"
+        data-testid="tron-right-sidebar-empty"
+      >
+        {t("content.noData")}
+      </div>
+    );
+  }
 
   return (
     <div
       className="flex h-full min-h-32 flex-col items-center justify-center gap-3 px-6 text-sm text-[var(--color-on-surface-variant)]"
       data-testid="tron-right-sidebar-empty"
     >
-      {onAdd ? (
-        <Button
-          aria-label={t("content.newTab")}
-          onClick={onAdd}
-          type="button"
-          size="lg"
-          variant="outline"
-          className="w-full flex items-center justify-start"
-        >
-          <Globe />
-          {t('content.browser')}
-        </Button>
-      ) : (
-        t('content.noData')
-      )}
+      <div className="flex w-full flex-col gap-2">
+        {onAddFile ? (
+          <Button
+            aria-label={t("content.newFileTab")}
+            onClick={onAddFile}
+            type="button"
+            size="lg"
+            variant="outline"
+            className="w-full flex items-center justify-start"
+          >
+            <FolderOpen aria-hidden="true" />
+            {t("files.panelTitle")}
+          </Button>
+        ) : null}
+        {onAddWeb ? (
+          <Button
+            aria-label={t("content.newTab")}
+            onClick={onAddWeb}
+            type="button"
+            size="lg"
+            variant="outline"
+            className="w-full flex items-center justify-start"
+          >
+            <Globe aria-hidden="true" />
+            {t("content.browser")}
+          </Button>
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -77,7 +109,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const dynamicTabs = getRightPanelTabs(tab.tabId);
   const ownerKey = getRightPanelOwnerKey(tab.tabId);
   const pageAttributesKey = `page-attributes:${tab.tabId}`;
-  const filesTabKey = `page-files:${tab.tabId}`;
+  const filesTabKeyPrefix = `page-files:${tab.tabId}:`;
   const isDesktop = isDesktopHost();
   const pageAttributesTab = useMemo<EditableTab | null>(() => {
     return panelConfig?.rightPanel
@@ -90,13 +122,16 @@ const RightPanelTabs = memo(function RightPanelTabs({
       : null;
   }, [pageAttributesKey, panelConfig?.rightPanel, tab.tabId]);
 
-  const filesTab = useMemo<EditableTab | null>(() => {
-    if (!isDesktop) return null;
+  const [fileTabIds, setFileTabIds] = useState<string[]>([]);
+  const nextFileTabId = useRef(1);
 
-    return {
-      key: filesTabKey,
+  const filesTabs = useMemo<EditableTab[]>(() => {
+    if (!isDesktop) return [];
+
+    return fileTabIds.map((key) => ({
+      key,
       label: t("files.panelTitle"),
-      closable: false,
+      closable: true,
       children: (
         <Suspense
           fallback={
@@ -105,13 +140,13 @@ const RightPanelTabs = memo(function RightPanelTabs({
             </div>
           }
         >
-          <FilePanel />
+          <FilePanel tabKey={key} />
         </Suspense>
       ),
-    };
-  }, [filesTabKey, isDesktop, t]);
+    }));
+  }, [fileTabIds, isDesktop, t]);
 
-  const createTab = useCallback((): EditableTab => {
+  const createWebTab = useCallback((): EditableTab => {
     const id = nextTabId.current++;
     const stableId = `right-panel-page-${tab.tabId}-${ownerKey ?? "default"}-${id}`;
     const newTab: EditableTab = {
@@ -126,6 +161,17 @@ const RightPanelTabs = memo(function RightPanelTabs({
     openRightPanelTab(tab.tabId, newTab);
     return newTab;
   }, [openRightPanelTab, ownerKey, t, tab.tabId]);
+
+  const openFileTab = useCallback(() => {
+    const id = nextFileTabId.current++;
+    const key = `${filesTabKeyPrefix}${id}`;
+    setFileTabIds((previous) => [...previous, key]);
+    setRightPanelActiveKey(tab.tabId, key);
+  }, [filesTabKeyPrefix, setRightPanelActiveKey, tab.tabId]);
+
+  const focusFileTab = useCallback((key: string) => {
+    setRightPanelActiveKey(tab.tabId, key);
+  }, [setRightPanelActiveKey, tab.tabId]);
 
   const dynamicItems = useMemo(
     () => dynamicTabs.map((item) => {
@@ -155,17 +201,32 @@ const RightPanelTabs = memo(function RightPanelTabs({
   );
 
   const items = useMemo(
-    () => [filesTab, pageAttributesTab, ...dynamicItems].filter((item) => !!item),
-    [filesTab, dynamicItems, pageAttributesTab],
+    () => [...filesTabs, pageAttributesTab, ...dynamicItems].filter((item) => !!item),
+    [filesTabs, dynamicItems, pageAttributesTab],
   );
 
   const defaultActiveKey =
-    pageAttributesTab?.key ?? filesTab?.key ?? items[0]?.key ?? "";
+    pageAttributesTab?.key ?? filesTabs[0]?.key ?? items[0]?.key ?? "";
   const activeKey = getRightPanelActiveKey(tab.tabId) ?? defaultActiveKey;
 
   const handleEdit = useCallback(
     (action: OperateType, info: EditableTabEditInfo) => {
       if (action !== OperateType.Remove || !info.key) return;
+
+      if (info.key.startsWith(filesTabKeyPrefix)) {
+        setFileTabIds((previous) => previous.filter((key) => key !== info.key));
+        if (info.remainingTabs?.length === 0) {
+          updateRightPanelState(tab.tabId, { open: false });
+        }
+        if (activeKey === info.key) {
+          const fallbackKey = info.remainingTabs?.find(
+            (item) => item.key !== info.key,
+          )?.key;
+          setRightPanelActiveKey(tab.tabId, fallbackKey ?? defaultActiveKey);
+        }
+        return;
+      }
+
       removeRightPanelTab(tab.tabId, info.key);
       if (info.remainingTabs?.length === 0) {
         updateRightPanelState(tab.tabId, { open: false });
@@ -177,27 +238,62 @@ const RightPanelTabs = memo(function RightPanelTabs({
         setRightPanelActiveKey(tab.tabId, fallbackKey ?? defaultActiveKey);
       }
     },
-    [activeKey, defaultActiveKey, removeRightPanelTab, setRightPanelActiveKey, tab.tabId, updateRightPanelState],
+    [activeKey, defaultActiveKey, filesTabKeyPrefix, removeRightPanelTab, setRightPanelActiveKey, tab.tabId, updateRightPanelState],
   );
 
   if (!items.length) {
-    return <EmptyPanelContent onAdd={createTab} />;
+    return (
+      <EmptyPanelContent
+        onAddFile={isDesktop ? openFileTab : undefined}
+        onAddWeb={createWebTab}
+      />
+    );
   }
 
   return (
-    <EditableTabs
-      className="h-full min-h-0"
-      activeKey={activeKey}
-      createTab={createTab}
-      items={items}
-      keepMounted
-      preserveInternalTabs={false}
-      provideTabVisibility
-      onEdit={handleEdit}
-      onChange={(key) => {
-        if (key) setRightPanelActiveKey(tab.tabId, key);
-      }}
-    />
+    <FileTabCoordinatorProvider onFocusTab={focusFileTab}>
+      <EditableTabs
+        className="h-full min-h-0"
+        activeKey={activeKey}
+        createTab={createWebTab}
+        items={items}
+        keepMounted
+        preserveInternalTabs={false}
+        provideTabVisibility
+        onEdit={handleEdit}
+        onChange={(key) => {
+          if (key) setRightPanelActiveKey(tab.tabId, key);
+        }}
+        renderAddTrigger={() => (
+          <DropdownMenu>
+            <DropdownMenuTrigger
+              render={
+                <Button
+                  aria-label={t("content.addTab")}
+                  size="icon-sm"
+                  type="button"
+                  variant="ghost"
+                >
+                  <Plus aria-hidden="true" />
+                </Button>
+              }
+            />
+            <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-44">
+              {isDesktop ? (
+                <DropdownMenuItem onClick={openFileTab}>
+                  <FolderOpen size={14} aria-hidden="true" />
+                  <span>{t("content.newFileTab")}</span>
+                </DropdownMenuItem>
+              ) : null}
+              <DropdownMenuItem onClick={createWebTab}>
+                <Globe size={14} aria-hidden="true" />
+                <span>{t("content.newWebTab")}</span>
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        )}
+      />
+    </FileTabCoordinatorProvider>
   );
 });
 

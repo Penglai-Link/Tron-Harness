@@ -1,4 +1,4 @@
-import type { FsListResult, FsReadResult, FsRootInfo } from "@/shared/fs/types";
+import type { FsEditor, FsListResult, FsReadResult, FsRootInfo } from "@/shared/fs/types";
 
 const DESKTOP_BACKEND_STATUS_COMMAND = "desktopBackendStatus";
 const CHECK_TARGET_PAGE_EMBEDDING_COMMAND = "checkTargetPageEmbedding";
@@ -446,6 +446,10 @@ export class DesktopBridge {
 
   public async closeFsRoot(rootId: string): Promise<void> {
     await this.requireInvoke()("fs:closeRoot", { rootId });
+  }
+
+  public async openInEditor(rootId: string, editor: FsEditor): Promise<void> {
+    await this.requireInvoke()("fs:openInEditor", { rootId, editor });
   }
 }
 

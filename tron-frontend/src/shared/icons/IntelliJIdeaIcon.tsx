@@ -1,0 +1,20 @@
+import type { SVGProps } from "react";
+
+interface BrandIconProps extends SVGProps<SVGSVGElement> {
+  size?: number;
+}
+
+export function IntelliJIdeaIcon({ size = 16, ...props }: BrandIconProps) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 1024 1024"
+      width={size}
+      height={size}
+      fill="currentColor"
+      {...props}
+    >
+      <path d="M85.333333 85.333333v853.333334h853.333334V85.333333H85.333333z m117.333334 400H256V256H202.666667V186.666667H384V256H330.666667v229.333333H384V554.666667H202.666667v-69.333334z m288 336H170.666667V768h320v53.333333zM682.666667 421.333333c0 48-10.666667 138.666667-128 138.666667-64 0-98.773333-38.485333-112-54.229333l49.237333-56.277334c8.874667 9.856 30.762667 35.84 62.762667 35.84 48 0 48-48 48-64v-234.666666H682.666667v234.666666z" />
+    </svg>
+  );
+}

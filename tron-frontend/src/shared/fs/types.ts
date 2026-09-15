@@ -33,3 +33,6 @@ export interface FsRootInfo {
   name: string;
   path: string;
 }
+
+/** 可通过 `fs:openInEditor` 启动的外部编辑器。 */
+export type FsEditor = "vscode" | "idea";
