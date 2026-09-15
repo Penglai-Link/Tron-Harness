@@ -30,7 +30,6 @@ export default function RecentSessionGroup({
         }
         right={
           <IconButton
-            aria-label={open ? "收起最近会话" : "展开最近会话"}
             className={open ? "transition-transform" : "-rotate-90 transition-transform"}
             icon={ChevronDown}
             onClick={(event) => {
