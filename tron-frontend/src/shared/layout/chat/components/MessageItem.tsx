@@ -56,7 +56,12 @@ const MessageItem = ({
       }
       right={
         <>
-          <div className="opacity-0 group-hover/session:opacity-100 flex items-center pl-2 right-0 h-full bg-linear-to-r from-sidebar-accent/0 from-0% to-sidebar-accent to-30%">
+          <div
+            className={cn(
+              "opacity-0 group-hover/session:opacity-100 flex items-center pl-2 right-0 h-full bg-linear-to-r from-sidebar-accent/0 from-0% to-sidebar-accent to-30%",
+              running ? "opacity-100" : "",
+            )}
+          >
             <IconButton
               needHover
               className="shrink-0 hidden group-hover/session:block"

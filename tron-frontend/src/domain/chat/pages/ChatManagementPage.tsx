@@ -4320,7 +4320,7 @@ export function ChatManagementPage() {
   const [autoSidebarCollapsed, setAutoSidebarCollapsed] = useState(false);
   const sidebarCollapsed = userSidebarCollapsed || autoSidebarCollapsed;
   const mainRef = useRef<HTMLDivElement>(null);
-  const [composer, setComposer] = useState("");
+  const [composerDraftsBySessionCode, setComposerDraftsBySessionCode] = useState<Record<string, string>>({});
   const [optimisticActiveSession, setOptimisticActiveSession] = useState<ChatSession | null>(null);
   const requestedSession = requestedSessionCode ? findSession(sessionGroups, requestedSessionCode) : undefined;
   const optimisticSession = optimisticActiveSession
@@ -4397,12 +4397,48 @@ export function ChatManagementPage() {
   const [deleteTargetSession, setDeleteTargetSession] = useState<ChatSession | null>(null);
   const [unseenSessionCodes, setUnseenSessionCodes] = useState<Set<string>>(() => new Set());
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
-  const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
+  const [pendingAttachmentsBySessionCode, setPendingAttachmentsBySessionCode] = useState<
+    Record<string, ChatMessageAttachment[]>
+  >({});
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
   const [rightPanelSnapshots, setRightPanelSnapshots] = useState<
     Record<string, ChatRightPanelSnapshot>
   >({});
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
+
+  const composerSessionCode = activeSession?.sessionCode ?? "";
+  const composer = composerSessionCode
+    ? composerDraftsBySessionCode[composerSessionCode] ?? ""
+    : "";
+  const pendingAttachments = composerSessionCode
+    ? pendingAttachmentsBySessionCode[composerSessionCode] ?? []
+    : [];
+  const setComposer = useCallback(
+    (value: string | ((current: string) => string)) => {
+      if (!composerSessionCode) return;
+      setComposerDraftsBySessionCode((current) => {
+        const previous = current[composerSessionCode] ?? "";
+        const nextValue = typeof value === "function" ? value(previous) : value;
+        if (nextValue === previous) return current;
+        return { ...current, [composerSessionCode]: nextValue };
+      });
+    },
+    [composerSessionCode],
+  );
+  const setPendingAttachments = useCallback(
+    (
+      value: ChatMessageAttachment[] | ((current: ChatMessageAttachment[]) => ChatMessageAttachment[]),
+    ) => {
+      if (!composerSessionCode) return;
+      setPendingAttachmentsBySessionCode((current) => {
+        const previous = current[composerSessionCode] ?? [];
+        const nextValue = typeof value === "function" ? value(previous) : value;
+        if (nextValue === previous) return current;
+        return { ...current, [composerSessionCode]: nextValue };
+      });
+    },
+    [composerSessionCode],
+  );
 
   const { openTab } = useRightPanelTabs(activeSession?.sessionCode);
 
@@ -5067,10 +5103,6 @@ export function ChatManagementPage() {
     ) {
       detachLocalRunObserver(owner.sessionCode);
     }
-  }, [activeSession?.sessionCode]);
-
-  useEffect(() => {
-    setPendingAttachments([]);
   }, [activeSession?.sessionCode]);
 
   useEffect(() => {
@@ -5799,6 +5831,21 @@ export function ChatManagementPage() {
     });
   }
 
+  function forgetComposerDraft(sessionCode: string) {
+    setComposerDraftsBySessionCode((current) => {
+      if (!(sessionCode in current)) return current;
+      const next = { ...current };
+      delete next[sessionCode];
+      return next;
+    });
+    setPendingAttachmentsBySessionCode((current) => {
+      if (!(sessionCode in current)) return current;
+      const next = { ...current };
+      delete next[sessionCode];
+      return next;
+    });
+  }
+
   async function handleSend(contentOverride?: string, attachmentOverride?: ChatMessageAttachment[]) {
     if (sendingRef.current || userInputRequest || userInputAnswerPending) return;
     if (!activeSession) return;
@@ -5938,10 +5985,14 @@ export function ChatManagementPage() {
     runningSessionCodeRef.current = sendingSessionCode;
     setRunningSessionCode(sendingSessionCode);
     if (shouldClearComposer) {
-      setComposer("");
-    }
-    if (shouldClearComposer) {
-      setPendingAttachments([]);
+      setComposerDraftsBySessionCode((current) => ({
+        ...current,
+        [sendingSessionCode]: "",
+      }));
+      setPendingAttachmentsBySessionCode((current) => ({
+        ...current,
+        [sendingSessionCode]: [],
+      }));
     }
     if (activeSessionCodeRef.current === sendingSessionCode) {
       setVisibleMessages((current) => [
@@ -6150,7 +6201,13 @@ export function ChatManagementPage() {
         const rawMessage = error instanceof Error ? error.message : t("chat.management.toasts.chatSendFailed");
         const toastMessage = chatSendErrorToastMessage(rawMessage);
         if (!sourceSubmission && pendingSubmissionAttachments.length) {
-          setPendingAttachments((current) => [...pendingSubmissionAttachments, ...current]);
+          setPendingAttachmentsBySessionCode((current) => ({
+            ...current,
+            [sendingSessionCode]: [
+              ...pendingSubmissionAttachments,
+              ...(current[sendingSessionCode] ?? []),
+            ],
+          }));
         }
         if (activeSessionCodeRef.current === sendingSessionCode) {
           setVisibleMessages((current) => current.filter((item) => (
@@ -6623,6 +6680,7 @@ export function ChatManagementPage() {
       }
       forgetSessionModelSelection(archived.sessionCode);
       forgetRightPanelSnapshot(archived.sessionCode);
+      forgetComposerDraft(archived.sessionCode);
       toast.success(t("chat.management.toasts.sessionArchived"), { title: archived.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : t("chat.management.toasts.archiveSessionFailed");
@@ -6655,6 +6713,7 @@ export function ChatManagementPage() {
       }
       forgetSessionModelSelection(deleted.sessionCode);
       forgetRightPanelSnapshot(deleted.sessionCode);
+      forgetComposerDraft(deleted.sessionCode);
       // Clear MainAgentChatWindow's persisted session if it matches the deleted one
       forgetMainAgentPersistedSession(activeWorkspaceCode, deleted.sessionCode);
       toast.success(t("chat.management.toasts.sessionDeleted"), { title: deleted.sessionCode });
