@@ -1,5 +1,6 @@
 import { ChevronDown, Folder, FolderPlus, X } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useAppOptions } from "@/domain/app";
 import { createProject } from "@/domain/project";
 import type { ProjectRecord } from "@/domain/project";
@@ -36,6 +37,7 @@ export function ProjectCreateDialog({
   workspaceCode: string;
 }) {
   const { options } = useAppOptions({ workspaceCode });
+  const { t } = useTranslation("shell");
   const toast = useToast();
   const [name, setName] = useState("");
   const [appCodes, setAppCodes] = useState<string[]>([]);
@@ -82,7 +84,7 @@ export function ProjectCreateDialog({
       onSaved(savedProject);
       onOpenChange(false);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "保存项目失败");
+      toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.project.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -91,22 +93,22 @@ export function ProjectCreateDialog({
     <Dialog onOpenChange={onOpenChange} open={open}>
       <DialogContent className="sm:max-w-lg">
         <DialogHeader>
-          <DialogTitle>{project ? "编辑项目" : "创建项目"}</DialogTitle>
+          <DialogTitle>{project ? t("shell:chatSidebar.projectDialog.editTitle") : t("shell:chatSidebar.projectDialog.createTitle")}</DialogTitle>
         </DialogHeader>
         <div className="flex flex-col gap-6">
           <Field>
-            <FieldLabel htmlFor="project-name">项目名称</FieldLabel>
+            <FieldLabel htmlFor="project-name">{t("shell:chatSidebar.projectDialog.nameLabel")}</FieldLabel>
             <Input
               id="project-name"
-              placeholder="输入项目名称"
+              placeholder={t("shell:chatSidebar.projectDialog.namePlaceholder")}
               value={name}
               onChange={(event) => setName(event.target.value)}
             />
           </Field>
           <Field>
-            <FieldLabel>关联应用</FieldLabel>
+            <FieldLabel>{t("shell:chatSidebar.projectDialog.linkedApps")}</FieldLabel>
             <FieldDescription>
-              选择项目会话可以访问的应用目录。
+              {t("shell:chatSidebar.projectDialog.linkedAppsDescription")}
             </FieldDescription>
             <div className="w-full overflow-hidden rounded-[4px] border border-input">
               {selectedApps.map((app) => (
@@ -121,13 +123,13 @@ export function ProjectCreateDialog({
                   <span className="min-w-0 flex-1 truncate">{app.name}</span>
                   {selectedApps.length > 1 ? (
                     app.appCode === resolvedPrimaryAppCode ? (
-                      <Badge>主要</Badge>
+                      <Badge>{t("shell:chatSidebar.projectDialog.primary")}</Badge>
                     ) : (
                       <Badge
                         variant="outline"
                         onClick={() => setPrimaryAppCode(app.appCode)}
                       >
-                        设为主要
+                        {t("shell:chatSidebar.projectDialog.setPrimary")}
                       </Badge>
                     )
                   ) : null}
@@ -153,7 +155,7 @@ export function ProjectCreateDialog({
                         aria-hidden="true"
                         className="size-4 text-muted-foreground"
                       />
-                      <span className="flex-1 text-left">添加应用</span>
+                      <span className="flex-1 text-left">{t("shell:chatSidebar.projectDialog.addApp")}</span>
                       <ChevronDown
                         aria-hidden="true"
                         className="size-4 text-muted-foreground"
@@ -180,20 +182,24 @@ export function ProjectCreateDialog({
             </div>
             {selectedApps.length === 0 ? (
               <FieldDescription className="text-destructive">
-                请选择至少一个应用
+                {t("shell:chatSidebar.projectDialog.selectAtLeastOneApp")}
               </FieldDescription>
             ) : null}
           </Field>
         </div>
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            取消
+            {t("shell:chatSidebar.project.cancel")}
           </Button>
           <Button
             disabled={!name.trim() || appCodes.length === 0 || saving}
             onClick={() => void submit()}
           >
-            {saving ? "保存中" : project ? "保存修改" : "创建项目"}
+            {saving
+              ? t("shell:chatSidebar.projectDialog.saving")
+              : project
+                ? t("shell:chatSidebar.projectDialog.saveChanges")
+                : t("shell:chatSidebar.projectDialog.createTitle")}
           </Button>
         </DialogFooter>
       </DialogContent>

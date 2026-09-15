@@ -19,7 +19,7 @@ const MessageItem = ({
   const location = useLocation();
   const navigate = useNavigate();
   const toast = useToast();
-  const { t } = useTranslation("pages");
+  const { t } = useTranslation("shell");
   const [archiving, setArchiving] = useState(false);
   const active =
     new URLSearchParams(location.search).get("sessionCode") ===
@@ -31,7 +31,7 @@ const MessageItem = ({
     try {
       await archiveChatSession(session.sessionCode);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "归档会话失败");
+      toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.archiveFailed"));
       setArchiving(false);
       return;
     }
@@ -49,13 +49,13 @@ const MessageItem = ({
         window.dispatchEvent(new Event("tron:chat-session-created"));
         navigate(`/chats?sessionCode=${encodeURIComponent(replacement.sessionCode)}`);
       } catch (error) {
-        toast.error(error instanceof Error ? error.message : "创建会话失败");
+        toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.createFailed"));
         navigate("/chats");
       }
     } else if (active) {
       navigate("/chats");
     }
-    toast.success("会话已归档");
+    toast.success(t("shell:chatSidebar.session.archived"));
     setArchiving(false);
   }
 

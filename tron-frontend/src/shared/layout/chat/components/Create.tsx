@@ -1,5 +1,6 @@
 import { SquarePen } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { createChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
@@ -16,6 +17,7 @@ export function Create({
   workspaceCode: string;
 }) {
   const navigate = useNavigate();
+  const { t } = useTranslation("shell");
   const [creating, setCreating] = useState(false);
   async function create() {
     if (!project || creating) return;
@@ -47,7 +49,7 @@ export function Create({
       icon={SquarePen}
       className="w-full justify-start"
     >
-      新会话
+      {t("shell:chatSidebar.newChat")}
     </IconButton>
   );
 }

@@ -1,5 +1,6 @@
 import { ChevronDown } from "lucide-react";
 import { useState } from "react";
+import { useTranslation } from "react-i18next";
 import MessageItem from "./MessageItem";
 import IconButton from "./IconButton";
 import Item from "./Item";
@@ -15,6 +16,7 @@ export default function RecentSessionGroup({
   runningSessionCode: string;
   sessions: ChatSession[];
 }) {
+  const { t } = useTranslation("shell");
   const [open, setOpen] = useState(true);
   const [visibleSessionCount, setVisibleSessionCount] = useState(
     recentSessionListPageSize
@@ -31,7 +33,7 @@ export default function RecentSessionGroup({
             type="button"
             onClick={() => setOpen((value) => !value)}
           >
-            <span>最近</span>
+            <span>{t("shell:chatSidebar.recent")}</span>
           </button>
         }
         right={
@@ -68,7 +70,7 @@ export default function RecentSessionGroup({
                 )
               }
             >
-              展开显示
+              {t("shell:chatSidebar.showMore")}
             </Button>
           ) : null}
         </div>

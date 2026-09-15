@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { useTranslation } from "react-i18next";
 import { ChevronDown, Plus } from "lucide-react";
 import { useLocation, useNavigate } from "react-router";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
@@ -56,6 +57,7 @@ function LinkItem({ menu }: { menu: NavigationRuntimeMenu }) {
 }
 
 export function ChatSidebarPanel({ compact }: { compact: boolean }) {
+  const { t } = useTranslation("shell");
   const location = useLocation();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const workspaceCode =
@@ -162,7 +164,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
               <div className="space-y-0.5">
                 {loading ? (
                   <p className="px-2 py-1 text-xs text-sidebar-foreground/60">
-                    加载中
+                    {t("shell:chatSidebar.loading")}
                   </p>
                 ) : (
                   <>
@@ -198,7 +200,7 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
                           )
                         }
                       >
-                        展开显示
+                        {t("shell:chatSidebar.showMore")}
                       </Button>
                     ) : null}
                   </>

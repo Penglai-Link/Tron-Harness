@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { SquarePen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { createChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
@@ -17,6 +18,7 @@ const CreateByProject = ({
 }) => {
   const navigate = useNavigate();
   const toast = useToast();
+  const { t } = useTranslation("shell");
   const [creating, setCreating] = useState(false);
 
   async function createSession() {
@@ -39,7 +41,7 @@ const CreateByProject = ({
       window.dispatchEvent(new Event("tron:chat-session-created"));
       navigate(`/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`);
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "创建会话失败");
+      toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.createFailed"));
     } finally {
       setCreating(false);
     }

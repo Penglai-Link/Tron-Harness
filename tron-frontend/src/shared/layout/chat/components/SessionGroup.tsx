@@ -1,4 +1,5 @@
 import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { useTranslation } from "react-i18next";
 import { cn } from "@/shared/lib/utils";
 import { useState } from "react";
 import type { ChatSession } from "@/domain/chat/model";
@@ -33,6 +34,7 @@ const SessionGroup = ({
   onRefresh: () => void;
   onSelect: (projectCode: string) => void;
 }) => {
+  const { t } = useTranslation("shell");
   const [open, setOpen] = useState(true);
   const [visibleSessionCount, setVisibleSessionCount] =
     useState(sessionListPageSize);
@@ -78,7 +80,7 @@ const SessionGroup = ({
             />
           ))}
           {sessions.length === 0 ? (
-            <p className="py-1 pl-6 text-[14px] opacity-45">暂无会话</p>
+            <p className="py-1 pl-6 text-[14px] opacity-45">{t("shell:chatSidebar.noSessions")}</p>
           ) : null}
           {sessions.length > visibleSessionCount ? (
             <button
@@ -87,7 +89,7 @@ const SessionGroup = ({
                 setVisibleSessionCount((count) => count + sessionListPageSize)
               }
             >
-              展开显示
+              {t("shell:chatSidebar.showMore")}
             </button>
           ) : null}
         </div>
