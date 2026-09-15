@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronDown, Plus } from "lucide-react";
+import { useLocation } from "react-router";
 import { useWorkspaceSpaces } from "@/shared/hooks/useWorkspaceSpaces";
 import { Create } from "./components/Create";
 import SessionGroup from "./components/SessionGroup";
@@ -12,6 +13,7 @@ import IconButton from "./components/IconButton";
 import Item from "./components/Item";
 
 export function ChatSidebarPanel({ compact }: { compact: boolean }) {
+  const location = useLocation();
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const workspaceCode =
     (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
@@ -52,19 +54,27 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
         handleRunStateChange,
       );
   }, []);
+  const activeSessionCode =
+    new URLSearchParams(location.search).get("sessionCode") ?? "";
+  const activeProject = orderedProjects.find((project) =>
+    (sessionsByProject.get(project.projectCode) ?? []).some(
+      (session) => session.sessionCode === activeSessionCode,
+    ),
+  );
   if (compact) return null;
   const selectedProject = orderedProjects.find(
     (project) => project.projectCode === selectedProjectCode,
   );
+  const createTargetProject = activeProject ?? selectedProject;
   return (
     <section className="border-b border-[var(--color-card-border)] p-2 flex flex-col gap-1">
       <Item
         left={
           <Create
-            project={selectedProject}
+            project={createTargetProject}
             sessions={
-              selectedProject
-                ? sessionsByProject.get(selectedProject.projectCode) ?? []
+              createTargetProject
+                ? sessionsByProject.get(createTargetProject.projectCode) ?? []
                 : []
             }
             workspaceCode={workspaceCode}

@@ -6662,6 +6662,10 @@ export function ChatManagementPage() {
 
   async function handleArchiveSession(session: ChatSession) {
     const returnSourceTab = requestedSourceTab ?? activeSourceTab;
+    const shouldCreateProjectReplacement = Boolean(
+      session.projectCode?.trim()
+      && activeSessionCode === session.sessionCode,
+    );
     setSessionActionPendingCode(session.sessionCode);
     try {
       await stopSessionRunBeforeMutation(session.sessionCode);
@@ -6675,12 +6679,33 @@ export function ChatManagementPage() {
         next.delete(archived.sessionCode);
         return next;
       });
-      if (activeSessionCode === archived.sessionCode) {
-        selectSessionAfterRemoval(nextGroups, returnSourceTab);
-      }
       forgetSessionModelSelection(archived.sessionCode);
       forgetRightPanelSnapshot(archived.sessionCode);
       forgetComposerDraft(archived.sessionCode);
+
+      if (shouldCreateProjectReplacement) {
+        try {
+          setCreatingSession(true);
+          const replacement = await createChatSession({
+            agentCode: mainChatAgentOption.agentCode,
+            projectCode: session.projectCode,
+            title: "New chat",
+            workspaceCode: session.workspaceCode,
+          });
+          invalidatedQueueSessionCodesRef.current.delete(replacement.sessionCode);
+          setSessionGroups((current) => insertSession(current, replacement));
+          handleSessionSelect(replacement, returnSourceTab);
+          setVisibleMessages([]);
+        } catch (error) {
+          const message = error instanceof Error ? error.message : t("chat.management.toasts.createSessionFailed");
+          toast.error(message, { title: t("chat.management.toasts.createSessionFailed") });
+          selectSessionAfterRemoval(nextGroups, returnSourceTab);
+        } finally {
+          setCreatingSession(false);
+        }
+      } else if (activeSessionCode === archived.sessionCode) {
+        selectSessionAfterRemoval(nextGroups, returnSourceTab);
+      }
       toast.success(t("chat.management.toasts.sessionArchived"), { title: archived.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : t("chat.management.toasts.archiveSessionFailed");

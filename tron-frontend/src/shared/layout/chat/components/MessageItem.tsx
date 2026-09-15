@@ -2,7 +2,7 @@ import { Archive, Icon, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { archiveChatSession } from "@/domain/chat/hooks";
+import { archiveChatSession, createChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
 import { cn } from "@/shared/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -30,14 +30,33 @@ const MessageItem = ({
     setArchiving(true);
     try {
       await archiveChatSession(session.sessionCode);
-      window.dispatchEvent(new Event("tron:chat-session-archived"));
-      if (active) navigate("/chats");
-      toast.success("会话已归档");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "归档会话失败");
-    } finally {
       setArchiving(false);
+      return;
     }
+
+    window.dispatchEvent(new Event("tron:chat-session-archived"));
+    const projectCode = session.projectCode?.trim();
+    if (active && projectCode) {
+      try {
+        const replacement = await createChatSession({
+          agentCode: "main-agent",
+          projectCode,
+          title: "New chat",
+          workspaceCode: session.workspaceCode,
+        });
+        window.dispatchEvent(new Event("tron:chat-session-created"));
+        navigate(`/chats?sessionCode=${encodeURIComponent(replacement.sessionCode)}`);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "创建会话失败");
+        navigate("/chats");
+      }
+    } else if (active) {
+      navigate("/chats");
+    }
+    toast.success("会话已归档");
+    setArchiving(false);
   }
 
   return (
