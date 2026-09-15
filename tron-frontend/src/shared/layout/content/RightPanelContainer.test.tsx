@@ -30,6 +30,19 @@ function TabOpener({ onReady }: { onReady: (open: (tab: EditableTab) => void) =>
   return null;
 }
 
+function OwnerScopedTabOpener({
+  onReady,
+  ownerKey,
+}: {
+  onReady: (open: (tab: EditableTab) => void) => void;
+  ownerKey: string;
+}) {
+  const { openTab } = useRightPanelTabs(ownerKey);
+
+  useEffect(() => onReady(openTab), [onReady, openTab]);
+  return null;
+}
+
 describe("RightPanelContainer", () => {
   afterEach(() => {
     cleanup();
@@ -265,6 +278,60 @@ describe("RightPanelContainer", () => {
 
     expect((screen.getByRole("textbox", { name: "https://first.example.com" }) as HTMLInputElement).value)
       .toBe("first draft");
+  });
+
+  it("preserves right-panel pages independently for each session owner", async () => {
+    const tabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/chats",
+      title: "Chats",
+    });
+    useTabStore.getState().addToCache(tabId, "/chats", "chats.index");
+    let openTab: ((tab: EditableTab) => void) | undefined;
+    const renderPanel = (ownerKey: string) => (
+      <TabPanelRegistryProvider>
+        <TabPanelRegistryProvider tabId={tabId}>
+          <OwnerScopedTabOpener ownerKey={ownerKey} onReady={(open) => { openTab = open; }} />
+        </TabPanelRegistryProvider>
+        <RightPanelContainer />
+      </TabPanelRegistryProvider>
+    );
+    const { rerender } = render(renderPanel("SESSION-A"));
+
+    act(() => openTab?.({
+      children: null,
+      key: "target-page",
+      label: "Target page",
+      stableId: "target-page",
+      url: "https://session-a.example.com",
+    }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "https://session-a.example.com" }),
+      { target: { value: "session A draft" } },
+    );
+
+    openTab = undefined;
+    rerender(renderPanel("SESSION-B"));
+    await waitFor(() => expect(openTab).toBeTruthy());
+    act(() => openTab?.({
+      children: null,
+      key: "target-page",
+      label: "Target page",
+      stableId: "target-page",
+      url: "https://session-b.example.com",
+    }));
+    fireEvent.change(
+      screen.getByRole("textbox", { name: "https://session-b.example.com" }),
+      { target: { value: "session B draft" } },
+    );
+
+    rerender(renderPanel("SESSION-A"));
+
+    await waitFor(() => {
+      expect(
+        (screen.getByRole("textbox", { name: "https://session-a.example.com" }) as HTMLInputElement).value,
+      ).toBe("session A draft");
+    });
   });
 
   it("unmounts the target page when its right-panel tab is closed", () => {

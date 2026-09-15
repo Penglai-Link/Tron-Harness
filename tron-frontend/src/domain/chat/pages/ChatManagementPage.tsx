@@ -1811,6 +1811,25 @@ interface QueryStatus {
   retry?: () => void;
 }
 
+interface ChatRightPanelSnapshot {
+  compactionBusy: boolean;
+  contextEvents: TranscriptAguiEvent[];
+  goal?: ChatSessionGoalView | null;
+  goalBusy: boolean;
+  goalStatus: QueryStatus;
+  latestCompaction?: ChatSessionCompaction | null;
+  latestCompactionStatus: QueryStatus;
+  latestRequestEstimate?: ChatTokenEstimateSnapshot | null;
+  latestUsageAudit?: ChatUsageAuditSnapshot | null;
+  messages: ChatMessage[];
+  model?: ModelRecord | null;
+  selectedModel?: ChatModelOption | null;
+  session: ChatSession;
+  todos?: ChatSessionTodo[];
+  todosStatus: QueryStatus;
+  workspaceGoalRunning: boolean;
+}
+
 interface ChatAgentOption {
   agentCode: string;
   description: string;
@@ -3096,6 +3115,160 @@ function RightContextSidebar({
   );
 }
 
+function ChatSessionRightPanel({
+  active,
+  snapshot,
+  onCancelGoal,
+  onClearGoal,
+  onCreateCompaction,
+  onCreateGoal,
+  onPauseGoal,
+  onResumeGoal,
+  onUpdateGoal,
+}: {
+  active: boolean;
+  snapshot: ChatRightPanelSnapshot;
+  onCancelGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onClearGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onCreateCompaction: () => Promise<void> | void;
+  onCreateGoal: (input: SetChatSessionGoalInput) => Promise<boolean> | boolean;
+  onPauseGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onResumeGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onUpdateGoal: (input: UpdateChatSessionGoalInput) => Promise<boolean> | boolean;
+}) {
+  const { t } = useTranslation("pages");
+  const [activeTab, setActiveTab] = useState("workspace");
+  const sessionCode = snapshot.session.sessionCode;
+  const tabs = useMemo<EditableTab[]>(() => [
+    {
+      key: "workspace",
+      label: (
+        <>
+          <WorkspaceTabState goal={snapshot.goal} running={snapshot.workspaceGoalRunning} />
+          <span>{t("chat.shortTermMemory.workspace")}</span>
+        </>
+      ),
+      closable: false,
+      children: (
+        <div className="min-h-0 overflow-y-auto">
+          <div className="m-4">
+            <RightWorkspaceSidebar
+              goal={snapshot.goal}
+              goalBusy={snapshot.goalBusy}
+              goalStatus={snapshot.goalStatus}
+              onCancelGoal={onCancelGoal}
+              onClearGoal={onClearGoal}
+              onCreateGoal={onCreateGoal}
+              onPauseGoal={onPauseGoal}
+              onResumeGoal={onResumeGoal}
+              onUpdateGoal={onUpdateGoal}
+              sessionCode={sessionCode}
+              todos={snapshot.todos}
+              todosStatus={snapshot.todosStatus}
+            />
+          </div>
+        </div>
+      ),
+    },
+    {
+      key: "context",
+      label: t("chat.shortTermMemory.context"),
+      closable: false,
+      children: (
+        <div className="min-h-0 overflow-y-auto">
+          <div className="m-4">
+            <RightContextSidebar
+              events={snapshot.contextEvents}
+              goal={snapshot.goal}
+              latestCompaction={snapshot.latestCompaction}
+              latestCompactionStatus={snapshot.latestCompactionStatus}
+              latestRequestEstimate={snapshot.latestRequestEstimate}
+              latestUsageAudit={snapshot.latestUsageAudit}
+              messages={snapshot.messages}
+              model={snapshot.model}
+              compactionBusy={snapshot.compactionBusy}
+              onCreateCompaction={onCreateCompaction}
+              selectedModel={snapshot.selectedModel}
+              session={snapshot.session}
+              todos={snapshot.todos}
+            />
+          </div>
+        </div>
+      ),
+    },
+  ], [
+    onCancelGoal,
+    onClearGoal,
+    onCreateCompaction,
+    onCreateGoal,
+    onPauseGoal,
+    onResumeGoal,
+    onUpdateGoal,
+    sessionCode,
+    snapshot,
+    t,
+  ]);
+
+  return (
+    <div
+      aria-hidden={!active}
+      className={active ? "relative h-full w-full" : "absolute inset-0 h-full w-full invisible pointer-events-none"}
+      data-session-code={sessionCode}
+    >
+      <EditableTabs
+        activeKey={activeTab}
+        className="h-full min-h-0"
+        defaultActiveKey="workspace"
+        hideAdd
+        items={tabs}
+        keepMounted
+        onChange={(key) => setActiveTab(key ?? "workspace")}
+      />
+    </div>
+  );
+}
+
+function ChatSessionRightPanelCache({
+  activeSessionCode,
+  snapshots,
+  onCancelGoal,
+  onClearGoal,
+  onCreateCompaction,
+  onCreateGoal,
+  onPauseGoal,
+  onResumeGoal,
+  onUpdateGoal,
+}: {
+  activeSessionCode: string;
+  snapshots: Readonly<Record<string, ChatRightPanelSnapshot>>;
+  onCancelGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onClearGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onCreateCompaction: () => Promise<void> | void;
+  onCreateGoal: (input: SetChatSessionGoalInput) => Promise<boolean> | boolean;
+  onPauseGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onResumeGoal: (input: ChatSessionGoalCommand) => Promise<boolean> | boolean;
+  onUpdateGoal: (input: UpdateChatSessionGoalInput) => Promise<boolean> | boolean;
+}) {
+  return (
+    <div className="relative h-full w-full overflow-hidden">
+      {Object.values(snapshots).map((snapshot) => (
+        <ChatSessionRightPanel
+          active={snapshot.session.sessionCode === activeSessionCode}
+          key={snapshot.session.sessionCode}
+          snapshot={snapshot}
+          onCancelGoal={onCancelGoal}
+          onClearGoal={onClearGoal}
+          onCreateCompaction={onCreateCompaction}
+          onCreateGoal={onCreateGoal}
+          onPauseGoal={onPauseGoal}
+          onResumeGoal={onResumeGoal}
+          onUpdateGoal={onUpdateGoal}
+        />
+      ))}
+    </div>
+  );
+}
+
 function ContextBlock({
   actions,
   children,
@@ -4226,7 +4399,9 @@ export function ChatManagementPage() {
   const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const [pendingAttachments, setPendingAttachments] = useState<ChatMessageAttachment[]>([]);
   const [attachmentUploadPending, setAttachmentUploadPending] = useState(false);
-  const [rightPanelActiveTab, setRightPanelActiveTab] = useState("workspace");
+  const [rightPanelSnapshots, setRightPanelSnapshots] = useState<
+    Record<string, ChatRightPanelSnapshot>
+  >({});
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
 
   const { openTab } = useRightPanelTabs(activeSession?.sessionCode);
@@ -5099,78 +5274,27 @@ export function ChatManagementPage() {
     ),
   );
 
-  const rightPanel = useMemo(() => {
-    if (!hasActiveSession) return undefined;
-    const tabs: EditableTab[] = [
-      {
-        key: "workspace",
-        label: (
-          <>
-            <WorkspaceTabState goal={activeGoal} running={workspaceGoalRunning} />
-            <span>{t("chat.shortTermMemory.workspace")}</span>
-          </>
-        ),
-        closable: false,
-        children: (
-          <div className="min-h-0 overflow-y-auto">
-            <div className="m-4">
-              <RightWorkspaceSidebar
-                goal={activeGoal}
-                goalBusy={Boolean(activeSession?.sessionCode && goalActionSessionCode === activeSession.sessionCode)}
-                goalStatus={goalStatus}
-                onCancelGoal={handleCancelGoalForRightPanel}
-                onClearGoal={handleClearGoalForRightPanel}
-                onCreateGoal={handleCreateGoalForRightPanel}
-                onPauseGoal={handlePauseGoalForRightPanel}
-                onResumeGoal={handleResumeGoalForRightPanel}
-                onUpdateGoal={handleUpdateGoalForRightPanel}
-                sessionCode={activeSession?.sessionCode}
-                todos={shortTermMemoryTodos}
-                todosStatus={shortTermMemoryTodosStatus}
-              />
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: "context",
-        label: t("chat.shortTermMemory.context"),
-        closable: false,
-        children: (
-          <div className="min-h-0 overflow-y-auto">
-            <div className="m-4">
-              <RightContextSidebar
-                events={contextAguiEvents}
-                goal={activeGoal}
-                latestCompaction={latestCompaction}
-                latestCompactionStatus={latestCompactionStatus}
-                latestRequestEstimate={activeSession ? latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null : null}
-                latestUsageAudit={activeSession ? latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null : null}
-                messages={visibleMessages}
-                model={selectedMainAgentModel}
-                compactionBusy={Boolean(activeSession?.sessionCode && compactingSessionCode === activeSession.sessionCode)}
-                onCreateCompaction={handleCreateCompactionForRightPanel}
-                selectedModel={selectedModel}
-                session={activeSession}
-                todos={shortTermMemoryTodos}
-              />
-            </div>
-          </div>
-        ),
-      }
-    ];
+  const activeRightPanelSnapshot = useMemo<ChatRightPanelSnapshot | null>(() => {
+    if (!activeSession) return null;
 
-    return (
-      <EditableTabs
-        key={activeSession?.sessionCode}
-        activeKey={rightPanelActiveTab}
-        className="h-full min-h-0"
-        defaultActiveKey="workspace"
-        hideAdd
-        items={tabs}
-        onChange={(key) => setRightPanelActiveTab(key ?? "workspace")}
-      />
-    );
+    return {
+      compactionBusy: compactingSessionCode === activeSession.sessionCode,
+      contextEvents: contextAguiEvents,
+      goal: activeGoal,
+      goalBusy: goalActionSessionCode === activeSession.sessionCode,
+      goalStatus,
+      latestCompaction,
+      latestCompactionStatus,
+      latestRequestEstimate: latestRequestEstimatesBySessionCode[activeSession.sessionCode] ?? null,
+      latestUsageAudit: latestUsageAuditsBySessionCode[activeSession.sessionCode] ?? null,
+      messages: visibleMessages,
+      model: selectedMainAgentModel,
+      selectedModel,
+      session: activeSession,
+      todos: shortTermMemoryTodos,
+      todosStatus: shortTermMemoryTodosStatus,
+      workspaceGoalRunning,
+    };
   }, [
     activeSession,
     activeGoal,
@@ -5178,27 +5302,54 @@ export function ChatManagementPage() {
     contextAguiEvents,
     goalActionSessionCode,
     goalStatus,
-    hasActiveSession,
+    latestCompaction,
+    latestCompactionStatus,
+    latestRequestEstimatesBySessionCode,
+    latestUsageAuditsBySessionCode,
+    selectedMainAgentModel,
+    selectedModel,
+    shortTermMemoryTodos,
+    shortTermMemoryTodosStatus,
+    visibleMessages,
+    workspaceGoalRunning,
+  ]);
+
+  useEffect(() => {
+    if (!activeRightPanelSnapshot) return;
+    const sessionCode = activeRightPanelSnapshot.session.sessionCode;
+    setRightPanelSnapshots((current) => (
+      current[sessionCode] === activeRightPanelSnapshot
+        ? current
+        : { ...current, [sessionCode]: activeRightPanelSnapshot }
+    ));
+  }, [activeRightPanelSnapshot]);
+
+  const rightPanel = useMemo(() => {
+    if (!hasActiveSession) return undefined;
+    return (
+      <ChatSessionRightPanelCache
+        activeSessionCode={activeSession?.sessionCode ?? ""}
+        snapshots={rightPanelSnapshots}
+        onCancelGoal={handleCancelGoalForRightPanel}
+        onClearGoal={handleClearGoalForRightPanel}
+        onCreateCompaction={handleCreateCompactionForRightPanel}
+        onCreateGoal={handleCreateGoalForRightPanel}
+        onPauseGoal={handlePauseGoalForRightPanel}
+        onResumeGoal={handleResumeGoalForRightPanel}
+        onUpdateGoal={handleUpdateGoalForRightPanel}
+      />
+    );
+  }, [
+    activeSession?.sessionCode,
     handleCancelGoalForRightPanel,
     handleClearGoalForRightPanel,
     handleCreateCompactionForRightPanel,
     handleCreateGoalForRightPanel,
     handlePauseGoalForRightPanel,
     handleResumeGoalForRightPanel,
-    handleInspectionConfirmForRightPanel,
     handleUpdateGoalForRightPanel,
-    latestCompaction,
-    latestCompactionStatus,
-    latestRequestEstimatesBySessionCode,
-    latestUsageAuditsBySessionCode,
-    rightPanelActiveTab,
-    selectedMainAgentModel,
-    selectedModel,
-    shortTermMemoryTodos,
-    shortTermMemoryTodosStatus,
-    t,
-    visibleMessages,
-    workspaceGoalRunning,
+    hasActiveSession,
+    rightPanelSnapshots,
   ]);
   const downloadPendingAttachment = useCallback(
     (attachment: ChatMessageAttachment) => {
@@ -5632,6 +5783,15 @@ export function ChatManagementPage() {
 
   function forgetSessionModelSelection(sessionCode: string) {
     setSessionModelSelections((current) => {
+      if (!(sessionCode in current)) return current;
+      const next = { ...current };
+      delete next[sessionCode];
+      return next;
+    });
+  }
+
+  function forgetRightPanelSnapshot(sessionCode: string) {
+    setRightPanelSnapshots((current) => {
       if (!(sessionCode in current)) return current;
       const next = { ...current };
       delete next[sessionCode];
@@ -6462,6 +6622,7 @@ export function ChatManagementPage() {
         selectSessionAfterRemoval(nextGroups, returnSourceTab);
       }
       forgetSessionModelSelection(archived.sessionCode);
+      forgetRightPanelSnapshot(archived.sessionCode);
       toast.success(t("chat.management.toasts.sessionArchived"), { title: archived.sessionCode });
     } catch (error) {
       const message = error instanceof Error ? error.message : t("chat.management.toasts.archiveSessionFailed");
@@ -6493,6 +6654,7 @@ export function ChatManagementPage() {
         selectSessionAfterRemoval(nextGroups, returnSourceTab);
       }
       forgetSessionModelSelection(deleted.sessionCode);
+      forgetRightPanelSnapshot(deleted.sessionCode);
       // Clear MainAgentChatWindow's persisted session if it matches the deleted one
       forgetMainAgentPersistedSession(activeWorkspaceCode, deleted.sessionCode);
       toast.success(t("chat.management.toasts.sessionDeleted"), { title: deleted.sessionCode });
