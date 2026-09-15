@@ -63,7 +63,6 @@ import { MarkdownLink } from "@/components/markdown-link";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
 import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
-import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import {
   archiveChatSession,
   createChatSession,
@@ -4256,23 +4255,6 @@ export function ChatManagementPage() {
       toast.error(t("chat.markdownLink.openExternalFailed"));
     });
   }, [desktopBridge, toast, t]);
-
-  // 悬浮窗（Main Agent）在 /chats 路由下触发"内部打开"时，
-  // 在右侧边栏"页面"标签的内置浏览器中打开链接
-  useEffect(() => {
-    const handleOpenChatsPageView = (event: Event) => {
-      const url = (event as CustomEvent<string>).detail;
-      if (typeof url === "string" && url) {
-        openMarkdownInternalLink(url);
-      }
-    };
-
-    window.addEventListener(OPEN_CHATS_PAGE_VIEW_EVENT, handleOpenChatsPageView);
-    return () => window.removeEventListener(
-      OPEN_CHATS_PAGE_VIEW_EVENT,
-      handleOpenChatsPageView,
-    );
-  }, [openMarkdownInternalLink]);
 
   const activeSessionCodeRef = useRef("");
   const modelSelectionSessionRef = useRef("");

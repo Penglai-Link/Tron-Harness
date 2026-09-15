@@ -18,7 +18,6 @@ import {
   type ReactNode,
 } from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation } from "react-router";
 
 import { MarkdownLink } from "@/components/markdown-link";
 import { useChatWorkRailLabels } from "@/domain/chat";
@@ -78,9 +77,6 @@ function isMissingPersistedSessionError(message: string, title?: string) {
     && message.trim().toLowerCase() === "chat session was not found";
 }
 
-// 支持在右侧边栏 PageView 内置浏览器中"内部打开"链接的路由（精确匹配）
-const INTERNAL_OPEN_ROUTES = ["/chats"];
-
 export function MainAgentChatWindow({
   currentUserDisplayName,
   floatingSubtitle = "Workspace Coordinator",
@@ -93,14 +89,10 @@ export function MainAgentChatWindow({
   const toast = useToast();
   const { t } = useTranslation("pages");
   const workRailLabels = useChatWorkRailLabels();
-  const { pathname } = useLocation();
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
-  // 仅路由列表中的页面存在带 PageView 内置浏览器的右侧边栏，此时提供"内部打开"
-  const internalSidebarAvailable = INTERNAL_OPEN_ROUTES.includes(pathname);
   const openMarkdownLinkInChatsSidebar = useCallback((url: string) => {
     window.dispatchEvent(new CustomEvent(OPEN_CHATS_PAGE_VIEW_EVENT, { detail: url }));
   }, []);
-  // 悬浮窗没有右侧边栏 PageView，链接统一走系统浏览器打开
   const openMarkdownLink = useCallback((url: string) => {
     if (!desktopBridge.isDesktop()) {
       window.open(url, "_blank", "noopener,noreferrer");
@@ -264,7 +256,7 @@ export function MainAgentChatWindow({
         renderMarkdownLink={({ href, children }) => (
           <MarkdownLink
             href={href}
-            onOpenInternal={internalSidebarAvailable ? openMarkdownLinkInChatsSidebar : undefined}
+            onOpenInternal={openMarkdownLinkInChatsSidebar}
             onOpenExternal={openMarkdownLink}
           >
             {children}

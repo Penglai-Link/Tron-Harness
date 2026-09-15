@@ -56,6 +56,7 @@ import {
   type WorkspaceTreeNode,
 } from "@/shared/lib/workspaceTree";
 import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
+import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { cn } from "@/shared/lib/utils";
 import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
 import { useTheme } from "@/shared/theme/ThemeProvider";
@@ -199,6 +200,32 @@ export function TronShell({
   const [openNavigationItems, setOpenNavigationItems] = useState<Record<string, boolean>>({});
   const [rightDrawerOpen, setRightDrawerOpen] = useState(false);
   const rightPanelOpen = activeTab?.rightPanelOpen ?? false;
+
+  // 右侧边栏已常驻，任意路由下的悬浮窗"内部打开"都应落在当前激活标签的右侧面板中
+  useEffect(() => {
+    const handleOpenPageView = (event: Event) => {
+      const url = (event as CustomEvent<string>).detail;
+      if (typeof url !== "string" || !url.trim()) return;
+
+      const normalizedUrl = url.trim();
+      const ownerKey = tabPanelRegistry.getRightPanelOwnerKey(activeTabId);
+      const scopedPrefix = ownerKey ? `${encodeURIComponent(ownerKey)}:` : "";
+      const key = `${scopedPrefix}markdown-page:${normalizedUrl}`;
+
+      tabPanelRegistry.openRightPanelTab(activeTabId, {
+        key,
+        stableId: key,
+        ownerKey,
+        label: normalizedUrl,
+        url: normalizedUrl,
+        children: null,
+      });
+      updateRightPanelState(activeTabId, { open: true });
+    };
+
+    window.addEventListener(OPEN_CHATS_PAGE_VIEW_EVENT, handleOpenPageView);
+    return () => window.removeEventListener(OPEN_CHATS_PAGE_VIEW_EVENT, handleOpenPageView);
+  }, [activeTabId, tabPanelRegistry, updateRightPanelState]);
 
   const [topbarToolsMenuOpen, setTopbarToolsMenuOpen] = useState(false);
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
