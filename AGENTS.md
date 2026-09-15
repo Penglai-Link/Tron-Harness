@@ -46,3 +46,5 @@ Pagable response body format:
 - If you encounter anything counterintuitive, surprising or confusing in this project, please append it to this file as a comment.
 - `ToggleSwitch` currently applies a hard-coded `title="12"` to every rendered label; do not treat it as user-facing copy when composing layouts around that control.
 - `cargo fmt` can reformat unrelated tracked files; review and retain only feature-owned changes before committing.
+
+<!-- On macOS, electron/tests/fs-gateway.test.cjs registers os.tmpdir() paths without realpath normalization; a symlinked temporary directory can cause path-outside-root failures. Use TMPDIR=/private/tmp make desktop-test to run with a canonical temporary root. -->
