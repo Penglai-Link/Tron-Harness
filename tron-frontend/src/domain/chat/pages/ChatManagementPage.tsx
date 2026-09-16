@@ -1838,7 +1838,7 @@ interface ChatRightPanelSnapshot {
   latestRequestEstimate?: ChatTokenEstimateSnapshot | null;
   latestUsageAudit?: ChatUsageAuditSnapshot | null;
   messages: ChatMessage[];
-  model?: ModelRecord | null;
+  model?: ChatModelOption | null;
   selectedModel?: ChatModelOption | null;
   session: ChatSession;
   todos?: ChatSessionTodo[];

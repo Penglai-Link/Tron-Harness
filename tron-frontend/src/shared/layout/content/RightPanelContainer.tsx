@@ -1,4 +1,4 @@
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -8,7 +8,6 @@ import {
   type EditableTabEditInfo,
 } from "@/components/editable-tabs";
 import { OperateType } from "@/components/editable-tabs/types";
-import { FileTabCoordinatorProvider } from "@/components/files/FileTabCoordinator";
 import { PageView } from "@/components/page-view";
 import { Button } from "@/components/ui/button";
 import {
@@ -18,13 +17,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { DEFAULT_TAB_ID, useTabStore, type CachedTabInfo } from "@/store/tabStore";
+import { FILE_TAB_KEY_PREFIX, useFileTabsStore } from "@/store/fileTabsStore";
 import { isDesktopHost } from "@/shared/desktop/DesktopBridge";
 import { FolderOpen, Globe, Plus } from "lucide-react";
+import { useFilePanelTarget } from "./FilePanelHostProvider";
 import { useTabPanelRegistry } from "./TabPanelRegistry";
-
-const FilePanel = lazy(() =>
-  import("@/components/files/FilePanel").then((module) => ({ default: module.FilePanel })),
-);
 
 interface RightPanelTabsProps {
   tab: CachedTabInfo;
@@ -109,7 +106,6 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const dynamicTabs = getRightPanelTabs(tab.tabId);
   const ownerKey = getRightPanelOwnerKey(tab.tabId);
   const pageAttributesKey = `page-attributes:${tab.tabId}`;
-  const filesTabKeyPrefix = `page-files:${tab.tabId}:`;
   const isDesktop = isDesktopHost();
   const pageAttributesTab = useMemo<EditableTab | null>(() => {
     return panelConfig?.rightPanel
@@ -122,29 +118,25 @@ const RightPanelTabs = memo(function RightPanelTabs({
       : null;
   }, [pageAttributesKey, panelConfig?.rightPanel, tab.tabId]);
 
-  const [fileTabIds, setFileTabIds] = useState<string[]>([]);
-  const nextFileTabId = useRef(1);
+  const fileTabKeys = useFileTabsStore((state) => state.fileTabKeys);
+  const fileTabLabels = useFileTabsStore((state) => state.fileTabLabels);
+  const activeFileTabKey = useFileTabsStore((state) => state.activeFileTabKey);
+  const openFileTab = useFileTabsStore((state) => state.openFileTab);
+  const closeFileTab = useFileTabsStore((state) => state.closeFileTab);
+  const setActiveFileTab = useFileTabsStore((state) => state.setActiveFileTab);
 
   const filesTabs = useMemo<EditableTab[]>(() => {
     if (!isDesktop) return [];
 
-    return fileTabIds.map((key) => ({
+    return fileTabKeys.map((key) => ({
       key,
-      label: t("files.panelTitle"),
+      label: fileTabLabels[key] || t("files.panelTitle"),
+      labelClassName: "max-w-[100px]",
       closable: true,
-      children: (
-        <Suspense
-          fallback={
-            <div className="flex h-full items-center justify-center text-sm text-[var(--color-on-surface-variant)]">
-              {t("files.loading")}
-            </div>
-          }
-        >
-          <FilePanel tabKey={key} />
-        </Suspense>
-      ),
+      // 实际内容由全局 FilePanelHost 渲染，这里仅作为 tab 标签占位。
+      children: <div className="h-full w-full" />,
     }));
-  }, [fileTabIds, isDesktop, t]);
+  }, [fileTabKeys, fileTabLabels, isDesktop, t]);
 
   const createWebTab = useCallback((): EditableTab => {
     const id = nextTabId.current++;
@@ -162,16 +154,10 @@ const RightPanelTabs = memo(function RightPanelTabs({
     return newTab;
   }, [openRightPanelTab, ownerKey, t, tab.tabId]);
 
-  const openFileTab = useCallback(() => {
-    const id = nextFileTabId.current++;
-    const key = `${filesTabKeyPrefix}${id}`;
-    setFileTabIds((previous) => [...previous, key]);
-    setRightPanelActiveKey(tab.tabId, key);
-  }, [filesTabKeyPrefix, setRightPanelActiveKey, tab.tabId]);
-
-  const focusFileTab = useCallback((key: string) => {
-    setRightPanelActiveKey(tab.tabId, key);
-  }, [setRightPanelActiveKey, tab.tabId]);
+  const handleOpenFileTab = useCallback(() => {
+    openFileTab();
+    updateRightPanelState(tab.tabId, { open: true });
+  }, [openFileTab, tab.tabId, updateRightPanelState]);
 
   const dynamicItems = useMemo(
     () => dynamicTabs.map((item) => {
@@ -201,28 +187,25 @@ const RightPanelTabs = memo(function RightPanelTabs({
   );
 
   const items = useMemo(
-    () => [...filesTabs, pageAttributesTab, ...dynamicItems].filter((item) => !!item),
+    () => [pageAttributesTab, ...dynamicItems, ...filesTabs].filter(
+      (item): item is EditableTab => item !== null,
+    ),
     [filesTabs, dynamicItems, pageAttributesTab],
   );
 
   const defaultActiveKey =
-    pageAttributesTab?.key ?? filesTabs[0]?.key ?? items[0]?.key ?? "";
-  const activeKey = getRightPanelActiveKey(tab.tabId) ?? defaultActiveKey;
+    pageAttributesTab?.key ?? dynamicItems[0]?.key ?? filesTabs[0]?.key ?? "";
+  const routeActiveKey = getRightPanelActiveKey(tab.tabId);
+  const activeKey = activeFileTabKey ?? routeActiveKey ?? defaultActiveKey;
 
   const handleEdit = useCallback(
     (action: OperateType, info: EditableTabEditInfo) => {
       if (action !== OperateType.Remove || !info.key) return;
 
-      if (info.key.startsWith(filesTabKeyPrefix)) {
-        setFileTabIds((previous) => previous.filter((key) => key !== info.key));
+      if (info.key.startsWith(FILE_TAB_KEY_PREFIX)) {
+        closeFileTab(info.key);
         if (info.remainingTabs?.length === 0) {
           updateRightPanelState(tab.tabId, { open: false });
-        }
-        if (activeKey === info.key) {
-          const fallbackKey = info.remainingTabs?.find(
-            (item) => item.key !== info.key,
-          )?.key;
-          setRightPanelActiveKey(tab.tabId, fallbackKey ?? defaultActiveKey);
         }
         return;
       }
@@ -238,62 +221,66 @@ const RightPanelTabs = memo(function RightPanelTabs({
         setRightPanelActiveKey(tab.tabId, fallbackKey ?? defaultActiveKey);
       }
     },
-    [activeKey, defaultActiveKey, filesTabKeyPrefix, removeRightPanelTab, setRightPanelActiveKey, tab.tabId, updateRightPanelState],
+    [activeKey, closeFileTab, defaultActiveKey, removeRightPanelTab, setRightPanelActiveKey, tab.tabId, updateRightPanelState],
   );
 
   if (!items.length) {
     return (
       <EmptyPanelContent
-        onAddFile={isDesktop ? openFileTab : undefined}
+        onAddFile={isDesktop ? handleOpenFileTab : undefined}
         onAddWeb={createWebTab}
       />
     );
   }
 
   return (
-    <FileTabCoordinatorProvider onFocusTab={focusFileTab}>
-      <EditableTabs
-        className="h-full min-h-0"
-        activeKey={activeKey}
-        createTab={createWebTab}
-        items={items}
-        keepMounted
-        preserveInternalTabs={false}
-        provideTabVisibility
-        onEdit={handleEdit}
-        onChange={(key) => {
-          if (key) setRightPanelActiveKey(tab.tabId, key);
-        }}
-        renderAddTrigger={() => (
-          <DropdownMenu>
-            <DropdownMenuTrigger
-              render={
-                <Button
-                  aria-label={t("content.addTab")}
-                  size="icon-sm"
-                  type="button"
-                  variant="ghost"
-                >
-                  <Plus aria-hidden="true" />
-                </Button>
-              }
-            />
-            <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-44">
-              {isDesktop ? (
-                <DropdownMenuItem onClick={openFileTab}>
-                  <FolderOpen size={14} aria-hidden="true" />
-                  <span>{t("content.newFileTab")}</span>
-                </DropdownMenuItem>
-              ) : null}
-              <DropdownMenuItem onClick={createWebTab}>
-                <Globe size={14} aria-hidden="true" />
-                <span>{t("content.newWebTab")}</span>
+    <EditableTabs
+      className="h-full min-h-0"
+      activeKey={activeKey}
+      createTab={createWebTab}
+      items={items}
+      keepMounted
+      preserveInternalTabs={false}
+      provideTabVisibility
+      onEdit={handleEdit}
+      onChange={(key) => {
+        if (!key) return;
+        if (key.startsWith(FILE_TAB_KEY_PREFIX)) {
+          setActiveFileTab(key);
+        } else {
+          setActiveFileTab(null);
+          setRightPanelActiveKey(tab.tabId, key);
+        }
+      }}
+      renderAddTrigger={() => (
+        <DropdownMenu>
+          <DropdownMenuTrigger
+            render={
+              <Button
+                aria-label={t("content.addTab")}
+                size="icon-sm"
+                type="button"
+                variant="ghost"
+              >
+                <Plus aria-hidden="true" />
+              </Button>
+            }
+          />
+          <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-44">
+            {isDesktop ? (
+              <DropdownMenuItem onClick={handleOpenFileTab}>
+                <FolderOpen size={14} aria-hidden="true" />
+                <span>{t("content.newFileTab")}</span>
               </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        )}
-      />
-    </FileTabCoordinatorProvider>
+            ) : null}
+            <DropdownMenuItem onClick={createWebTab}>
+              <Globe size={14} aria-hidden="true" />
+              <span>{t("content.newWebTab")}</span>
+            </DropdownMenuItem>
+          </DropdownMenuContent>
+        </DropdownMenu>
+      )}
+    />
   );
 });
 
@@ -301,6 +288,12 @@ const RightPanelContainer = memo(function RightPanelContainer() {
   const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
   const cachedTabs = useTabStore((state) => state.cachedTabsList);
   const previousActiveTabId = useRef(activeTabId);
+  const mountFilePanel = useFilePanelTarget();
+  const hostRef = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (hostRef.current) mountFilePanel(hostRef.current);
+  }, [mountFilePanel]);
   const [settledActiveTabId, setSettledActiveTabId] = useState(activeTabId);
   const switchingToDefault =
     activeTabId === DEFAULT_TAB_ID &&
@@ -347,7 +340,7 @@ const RightPanelContainer = memo(function RightPanelContainer() {
   }
 
   return (
-    <div className="relative h-full w-full overflow-hidden">
+    <div ref={hostRef} className="relative h-full w-full overflow-hidden">
       {panelTabs.map((tab) => {
         const isActive = tab.tabId === activeTabId;
         return (
