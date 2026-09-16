@@ -8,9 +8,11 @@ use super::{
     CandidateHit, CompiledRetrievalProfile, ContextPack, ContextPackItem, RagRerankCall,
     RagSearchRequest, RagSearchRow, RagSearchRuntime, RetrievalRoute,
     search::{CandidateRouteRank, RankedCandidate},
-    search_profile::{DedupPolicy, EmbeddingMmrPolicy, FusionPolicy, TopicPolicy},
+    search_profile::{DedupPolicy, EmbeddingMmrPolicy, FusionPolicy, RerankStrategy, TopicPolicy},
     search_strategy::{RetrieverKind, RetrieverStrategy},
 };
+
+const PERSON_AI_LLM_FALLBACK_ROUTE: &str = "PERSON_AI:ROUTE:LlmFallback";
 
 pub(super) fn rank_route_rows(
     rows: Vec<RagSearchRow>,
@@ -101,6 +103,9 @@ pub(super) async fn apply_rerank<E>(
 where
     E: RagSearchRuntime,
 {
+    if compiled.rerank_strategy == RerankStrategy::Disabled {
+        return Ok(());
+    }
     let documents = hits
         .iter()
         .map(|hit| hit.result.text.clone())
@@ -108,13 +113,23 @@ where
     let order = runtime
         .rerank(RagRerankCall {
             workspace_code: request.workspace_code.clone(),
-            model_code: compiled.rerank_model_code.clone(),
+            model_code: match compiled.rerank_strategy {
+                RerankStrategy::Disabled => return Ok(()),
+                RerankStrategy::Native => compiled.rerank_model_code.clone(),
+                RerankStrategy::LlmFallback => Some(PERSON_AI_LLM_FALLBACK_ROUTE.into()),
+            },
             query: query.to_string(),
             documents,
             top_n: Some(request.limit),
         })
-        .await
-        .map_err(|_| RagError::RerankFailed)?;
+        .await;
+    let order = match order {
+        Ok(order) => order,
+        // LLM fallback is opportunistic: invalid JSON, timeout, or an upstream
+        // failure preserves the existing embedding/fusion ranking.
+        Err(_) if compiled.rerank_strategy == RerankStrategy::LlmFallback => return Ok(()),
+        Err(_) => return Err(RagError::RerankFailed),
+    };
     if order.is_empty() {
         return Ok(());
     }
@@ -439,4 +454,185 @@ fn normalized_text(text: &str) -> Option<String> {
         .join(" ")
         .to_ascii_lowercase();
     (!normalized.is_empty()).then_some(normalized)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::{
+        future::Future,
+        pin::Pin,
+        sync::{Arc, Mutex},
+    };
+
+    use serde_json::{Map, json};
+
+    use crate::application::rag::{
+        RagEmbeddingCall, RagEmbeddingResult, RagIngestAccessContext, RagSearchContextRequest,
+        RagSearchGraphExpansionRequest, RagSearchTraceRequest,
+    };
+
+    use super::*;
+
+    #[derive(Clone)]
+    struct RecordingRerankRuntime {
+        result: Result<Vec<(usize, f64)>, String>,
+        calls: Arc<Mutex<Vec<RagRerankCall>>>,
+    }
+
+    impl RagSearchRuntime for RecordingRerankRuntime {
+        fn embed<'a>(
+            &'a self,
+            _call: RagEmbeddingCall,
+        ) -> Pin<Box<dyn Future<Output = Result<RagEmbeddingResult, String>> + Send + 'a>> {
+            Box::pin(async { Err("embedding should not be called in rerank tests".into()) })
+        }
+
+        fn rerank<'a>(
+            &'a self,
+            call: RagRerankCall,
+        ) -> Pin<Box<dyn Future<Output = Result<Vec<(usize, f64)>, String>> + Send + 'a>> {
+            self.calls.lock().expect("record rerank call").push(call);
+            let result = self.result.clone();
+            Box::pin(async move { result })
+        }
+    }
+
+    fn compiled_profile(rerank_strategy: RerankStrategy) -> CompiledRetrievalProfile {
+        CompiledRetrievalProfile {
+            profile_id: "profile-1".into(),
+            corpus_id: "corpus-1".into(),
+            corpus_ids: vec!["corpus-1".into()],
+            required_source_version: "v1".into(),
+            pipeline: None,
+            routes: Vec::new(),
+            supported_context_strategies: vec!["RESULT_LIST".into()],
+            embedding_model_code: Some("embedding-1".into()),
+            rerank_model_code: Some("native-rerank-1".into()),
+            rerank_enabled: true,
+            rerank_strategy,
+            fusion_policy: FusionPolicy::SumScore,
+            dedup_policy: DedupPolicy::TextUnit,
+            topic_policy: TopicPolicy::Disabled,
+            graph_expansion_policy: None,
+            degrade_policy: "FAIL_CLOSED".into(),
+        }
+    }
+
+    fn search_request() -> RagSearchRequest {
+        RagSearchRequest {
+            profile_id: "profile-1".into(),
+            workspace_code: "workspace-1".into(),
+            query: "which document is relevant".into(),
+            access_context: RagIngestAccessContext {
+                user_code: "user-1".into(),
+                agent_code: "agent-1".into(),
+                workspace_code: "workspace-1".into(),
+            },
+            filters: json!({}),
+            limit: 10,
+            token_budget: 1_000,
+            context: RagSearchContextRequest {
+                strategy: "RESULT_LIST".into(),
+                return_fields: Vec::new(),
+                graph_expansion: RagSearchGraphExpansionRequest::default(),
+            },
+            trace: RagSearchTraceRequest::default(),
+        }
+    }
+
+    fn ranked_hit(source_code: &str, text: &str, score: f64) -> RankedCandidate {
+        RankedCandidate {
+            result: CandidateHit {
+                corpus_id: "corpus-1".into(),
+                source_code: source_code.into(),
+                source_version: "v1".into(),
+                scope_type: "Workspace".into(),
+                scope_code: "workspace-1".into(),
+                title: None,
+                score,
+                text: text.into(),
+                metadata: json!({}),
+                fields: Map::new(),
+            },
+            target_code: format!("text-unit-{source_code}"),
+            scope_type: "Workspace".into(),
+            scope_code: "workspace-1".into(),
+            route_ids: Vec::new(),
+            route_ranks: Vec::new(),
+            token_count: 10,
+            embedding: None,
+            identity_key: source_code.into(),
+            canonical_dedup_key: source_code.into(),
+        }
+    }
+
+    #[tokio::test]
+    async fn llm_fallback_rerank_uses_text_default_route_and_applies_valid_order() {
+        let calls = Arc::new(Mutex::new(Vec::new()));
+        let runtime = RecordingRerankRuntime {
+            result: Ok(vec![(1, 0.99), (0, 0.42)]),
+            calls: calls.clone(),
+        };
+        let mut hits = vec![
+            ranked_hit("source-a", "first candidate", 0.91),
+            ranked_hit("source-b", "second candidate", 0.52),
+        ];
+
+        apply_rerank(
+            &runtime,
+            &compiled_profile(RerankStrategy::LlmFallback),
+            &search_request(),
+            "which document is relevant",
+            &mut hits,
+        )
+        .await
+        .expect("LLM fallback rerank succeeds");
+
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.result.source_code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["source-b", "source-a"]
+        );
+        assert_eq!(hits[0].result.score, 0.99);
+        assert_eq!(hits[1].result.score, 0.42);
+        let calls = calls.lock().expect("read rerank calls");
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].model_code, None);
+        assert_eq!(
+            calls[0].documents,
+            vec!["first candidate", "second candidate"]
+        );
+    }
+
+    #[tokio::test]
+    async fn llm_fallback_rerank_failure_preserves_embedding_order() {
+        let runtime = RecordingRerankRuntime {
+            result: Err("invalid JSON from LLM".into()),
+            calls: Arc::new(Mutex::new(Vec::new())),
+        };
+        let mut hits = vec![
+            ranked_hit("source-a", "first candidate", 0.91),
+            ranked_hit("source-b", "second candidate", 0.52),
+        ];
+
+        apply_rerank(
+            &runtime,
+            &compiled_profile(RerankStrategy::LlmFallback),
+            &search_request(),
+            "which document is relevant",
+            &mut hits,
+        )
+        .await
+        .expect("LLM fallback failure is non-fatal");
+
+        assert_eq!(
+            hits.iter()
+                .map(|hit| hit.result.source_code.as_str())
+                .collect::<Vec<_>>(),
+            vec!["source-a", "source-b"]
+        );
+        assert_eq!(hits[0].result.score, 0.91);
+        assert_eq!(hits[1].result.score, 0.52);
+    }
 }

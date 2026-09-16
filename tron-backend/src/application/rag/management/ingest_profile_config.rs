@@ -97,6 +97,30 @@ where
             }
         }
         RagProfileType::Retrieval => {
+            if input
+                .rerank_strategy
+                .as_deref()
+                .is_some_and(|value| !matches!(value, "Disabled" | "Native" | "LlmFallback"))
+            {
+                errors.push(validation_issue(
+                    "RAG_MANAGEMENT_REQUEST_INVALID",
+                    "rerankStrategy must be Disabled, Native, or LlmFallback.",
+                    Some("rerankStrategy"),
+                ));
+            }
+            if input.rerank_enabled.unwrap_or(false)
+                && input.rerank_strategy.as_deref().unwrap_or("Disabled") == "Native"
+                && input
+                    .rerank_model_code
+                    .as_deref()
+                    .is_none_or(|value| value.trim().is_empty())
+            {
+                errors.push(validation_issue(
+                    "RAG_MANAGEMENT_REQUEST_INVALID",
+                    "rerankModelCode is required when Native rerank is enabled.",
+                    Some("rerankModelCode"),
+                ));
+            }
             let derived_routes;
             let enabled_routes = if let Some(pipeline) = &input.pipeline {
                 derived_routes = retrieval_routes_from_pipeline(input, pipeline);
@@ -312,7 +336,8 @@ fn build_ingest_profile_config(input: &RagProfileManagementInput) -> Value {
     if let Some(graph_write_policy) = input.graph_write_policy.clone() {
         config.insert("graphWritePolicy".into(), graph_write_policy);
     }
-    if let Some(source_input_policy) = sanitize_source_input_policy(input.source_input_policy.as_ref())
+    if let Some(source_input_policy) =
+        sanitize_source_input_policy(input.source_input_policy.as_ref())
     {
         config.insert("sourceInputPolicy".into(), source_input_policy);
     }
@@ -433,7 +458,8 @@ fn build_ingest_pipeline_profile_config(
     if let Some(graph_write_policy) = input.graph_write_policy.clone() {
         config.insert("graphWritePolicy".into(), graph_write_policy);
     }
-    if let Some(source_input_policy) = sanitize_source_input_policy(input.source_input_policy.as_ref())
+    if let Some(source_input_policy) =
+        sanitize_source_input_policy(input.source_input_policy.as_ref())
     {
         config.insert("sourceInputPolicy".into(), source_input_policy);
     }

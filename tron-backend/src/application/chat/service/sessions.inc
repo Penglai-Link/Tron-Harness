@@ -277,6 +277,7 @@ impl ChatService {
             app_code: session.app_code,
             task_code: session.task_code,
             agent_code: session.agent_code,
+            model_selection: None,
             model_code: answered.model_code,
             system_model_id: None,
             reasoning_effort: answered.reasoning_effort,

@@ -96,9 +96,13 @@ import { useTranslation } from "react-i18next";
 import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
 import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import type { SystemAgentModelRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
-import { fetchWorkspaceModelCatalog } from "@/domain/model/api";
-import { getWorkspaceModelCatalog } from "@/domain/model/mock";
-import type { ModelRecord, ReasoningEffort } from "@/domain/model/model";
+import { fetchWorkspaceSelectOptions } from "@/domain/model/api";
+import { getWorkspaceSelectOptions } from "@/domain/model/mock";
+import type {
+  ModelSelectOption,
+  ModelSelection,
+  ReasoningEffort,
+} from "@/domain/model/model";
 import {
   formatReasoningEffort,
   reasoningEffortOptions,
@@ -836,7 +840,7 @@ function contextStatusLabel(estimate: ChatTokenEstimateSnapshot | null, breakdow
 }
 
 function contextWindowLimitFromSources(
-  model: ModelRecord | null | undefined,
+  model: ChatModelOption | null | undefined,
   selectedModel: ChatModelOption | null | undefined,
   events: TranscriptAguiEvent[],
 ) {
@@ -1788,21 +1792,33 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
   ].sort((left, right) => left.value.firstMillis - right.value.firstMillis);
 }
 
-function availableChatModels(models: ModelRecord[]) {
-  return models.filter((model) => model.enabled && model.modelType === "TEXT");
-}
-
-function defaultChatModel(models: ModelRecord[]) {
-  return models.find((model) => model.isDefault) ?? models[0] ?? null;
+function availableChatModels(models: ModelSelectOption[]) {
+  // Keep unavailable fixed models in this list. A persisted session selection
+  // must remain visible (and disabled) instead of silently falling back.
+  return models.filter((model) => model.modelType === "TEXT");
 }
 
 interface ChatModelOption {
+  accessPlatform: string | null;
+  cacheHitCoefficient: number | null;
   contextWindowTokens: number | null;
+  defaultReasoningEffort: ReasoningEffort | null;
   displayName: string;
+  enabled: boolean;
+  inputCoefficient: number | null;
+  isDefault: boolean;
   modelCode: string | null;
   modelName: string;
+  modelSelection: ModelSelection | null;
   optionCode: string;
+  providerCode: string | null;
+  remoteStatus: string | null;
+  qualityType: "High" | "Middle" | "Low" | null;
   source: "main-agent" | "system-agent";
+  supportedReasoningEfforts: ReasoningEffort[];
+  upstreamVendorName: string | null;
+  outputCoefficient: number | null;
+  vendor: string | null;
 }
 
 interface QueryStatus {
@@ -1860,34 +1876,75 @@ function isMainChatAgent(agentCode: string) {
   return agentCode.trim().toLowerCase() === mainChatAgentOption.agentCode;
 }
 
-function modelsForAgent(models: ModelRecord[], selectedAgent: ChatAgentOption | null): ChatModelOption[] {
+function normalizeModelSelection(model: ModelSelectOption): ModelSelection {
+  return model.modelSelection ?? {
+    kind: "Fixed",
+    providerCode: null,
+    modelCode: model.modelCode,
+    qualityType: null,
+    routeCode: null,
+  };
+}
+
+function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOption | null): ChatModelOption[] {
   if (!selectedAgent || isMainChatAgent(selectedAgent.agentCode)) {
     return models.map((model) => ({
+      accessPlatform: model.accessPlatform ?? null,
+      cacheHitCoefficient: model.cacheHitCoefficient ?? null,
       contextWindowTokens: model.contextWindowTokens ?? null,
+      defaultReasoningEffort: model.defaultReasoningEffort ?? null,
       displayName: model.displayName,
+      enabled: model.enabled,
+      inputCoefficient: model.inputCoefficient ?? null,
+      isDefault: Boolean(model.isDefault),
       modelCode: model.modelCode,
       modelName: model.modelName,
-      optionCode: `main:${model.modelCode}`,
+      modelSelection: normalizeModelSelection(model),
+      optionCode: model.optionCode ?? `main:${model.modelCode}`,
+      providerCode: model.providerCode ?? null,
+      remoteStatus: model.remoteStatus ?? null,
+      qualityType: model.qualityType ?? model.modelSelection?.qualityType ?? null,
       source: "main-agent",
+      supportedReasoningEfforts: model.supportedReasoningEfforts ?? [],
+      upstreamVendorName: model.upstreamVendorName ?? null,
+      outputCoefficient: model.outputCoefficient ?? null,
+      vendor: model.vendor ?? null,
     }));
   }
 
   return selectedAgent.models.map((model) => ({
+    accessPlatform: null,
+    cacheHitCoefficient: null,
     contextWindowTokens: model.contextWindowTokens ?? null,
+    defaultReasoningEffort: null,
     displayName: model.displayName || model.modelId,
+    enabled: true,
+    inputCoefficient: null,
+    isDefault: false,
     modelCode: null,
     modelName: model.modelId,
+    modelSelection: null,
     optionCode: `system:${selectedAgent.agentCode}:${model.modelId}`,
+    providerCode: null,
+    remoteStatus: null,
+    qualityType: null,
     source: "system-agent",
+    supportedReasoningEfforts: [],
+    upstreamVendorName: null,
+    outputCoefficient: null,
+    vendor: null,
   }));
 }
 
-function defaultChatModelOption(options: ChatModelOption[], models: ModelRecord[]) {
+function defaultChatModelOption(options: ChatModelOption[], _models: ModelSelectOption[]) {
   if (!options.length) return null;
   if (options[0].source === "system-agent") return options[0];
-  const defaultModel = defaultChatModel(models);
-  if (!defaultModel) return options[0];
-  return options.find((option) => option.modelCode === defaultModel.modelCode) ?? options[0];
+  const enabled = options.filter((option) => option.enabled);
+  return enabled.find((option) => option.isDefault)
+    ?? enabled.find((option) => option.modelSelection?.kind === "ProviderRoute"
+      && option.modelSelection.routeCode === "ChatAuto")
+    ?? enabled[0]
+    ?? options[0];
 }
 
 function normalizedFuzzyValue(value: string) {
@@ -1918,7 +1975,20 @@ function fuzzyTextMatch(query: string, target: string) {
 }
 
 function fuzzyModelMatch(query: string, model: ChatModelOption) {
-  return fuzzyTextMatch(query, model.displayName) || fuzzyTextMatch(query, model.modelName);
+  return fuzzyTextMatch(query, model.displayName)
+    || fuzzyTextMatch(query, model.modelName)
+    || fuzzyTextMatch(query, model.accessPlatform ?? "")
+    || fuzzyTextMatch(query, model.upstreamVendorName ?? model.vendor ?? "");
+}
+
+function isPersonAiAutoModel(model: ChatModelOption) {
+  return model.modelSelection?.kind === "ProviderRoute"
+    && model.modelSelection.routeCode === "ChatAuto";
+}
+
+function formatModelMultiplier(value: number | null) {
+  if (value === null || !Number.isFinite(value)) return null;
+  return new Intl.NumberFormat(undefined, { maximumFractionDigits: 6 }).format(value);
 }
 
 function chatSendErrorToastMessage(message: string) {
@@ -3056,7 +3126,7 @@ function RightContextSidebar({
   latestRequestEstimate?: ChatTokenEstimateSnapshot | null;
   latestUsageAudit?: ChatUsageAuditSnapshot | null;
   messages: ChatMessage[];
-  model?: ModelRecord | null;
+  model?: ChatModelOption | null;
   onCreateCompaction?: () => void;
   compactionBusy?: boolean;
   selectedModel?: ChatModelOption | null;
@@ -3318,21 +3388,71 @@ function ChatModelSelector({
 }) {
   const [open, setOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
-  const [expandedModelCode, setExpandedModelCode] = useState<string | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const { t } = useTranslation("pages");
   const selectedModel = models.find((model) => model.optionCode === selectedModelCode) ?? null;
+  const modelDisplayName = (model: ChatModelOption) => (
+    isPersonAiAutoModel(model)
+      ? t("chat.management.modelSelector.autoName")
+      : model.displayName
+  );
+  const outputMultiplier = (model: ChatModelOption) => (
+    model.providerCode === "PersonAi" && !isPersonAiAutoModel(model)
+      ? formatModelMultiplier(model.outputCoefficient)
+      : null
+  );
+  const modelTitle = (model: ChatModelOption) => {
+    return [
+      modelDisplayName(model),
+      model.upstreamVendorName,
+      !model.enabled ? t("chat.management.modelSelector.unavailable") : null,
+    ].filter(Boolean).join("\n");
+  };
   const filteredModels = useMemo(
     () => models.filter((model) => fuzzyModelMatch(searchQuery, model)),
     [models, searchQuery],
   );
+  const autoModels = useMemo(
+    () => filteredModels.filter(isPersonAiAutoModel),
+    [filteredModels],
+  );
+  const groupedModels = useMemo(() => {
+    const groups = new Map<string, { label: string; models: ChatModelOption[] }>();
+    filteredModels
+      .filter((model) => !isPersonAiAutoModel(model))
+      .forEach((model) => {
+        const qualityType = model.qualityType ?? "High";
+        const vendor = model.upstreamVendorName ?? model.vendor ?? t("modelProviders.values.unknown");
+        const personAiGroup = model.providerCode === "PersonAi";
+        const key = personAiGroup
+          ? `${model.providerCode}:${qualityType}:${vendor}`
+          : model.accessPlatform ?? "platform";
+        const label = personAiGroup
+          ? t("chat.management.modelSelector.qualityGroup", {
+              quality: t(`chat.management.modelSelector.quality.${qualityType}`),
+              vendor,
+            })
+          : model.accessPlatform ?? t("chat.management.modelSelector.platformModels");
+        const group = groups.get(key) ?? { label, models: [] };
+        group.models.push(model);
+        groups.set(key, group);
+      });
+    return Array.from(groups.entries()).map(([key, group]) => ({
+      key,
+      label: group.label,
+      models: group.models.sort((left, right) => left.displayName.localeCompare(right.displayName)),
+    }));
+  }, [filteredModels, t]);
   const disabled = loading || models.length === 0;
-  const selectedModelLabel = loading ? t("chat.management.modelSelector.loading") : selectedModel ? selectedModel.displayName : emptyLabel;
+  const selectedModelLabel = loading
+    ? t("chat.management.modelSelector.loading")
+    : selectedModel
+      ? modelDisplayName(selectedModel)
+      : emptyLabel;
 
   useEffect(() => {
     if (!open) {
       setSearchQuery("");
-      setExpandedModelCode(null);
       return;
     }
     const frame = window.requestAnimationFrame(() => {
@@ -3372,7 +3492,7 @@ function ChatModelSelector({
               onKeyDown={(event) => {
                 event.stopPropagation();
                 if (event.key !== "Enter") return;
-                const firstModel = filteredModels[0];
+                const firstModel = filteredModels.find((model) => model.enabled);
                 if (!firstModel) return;
                 event.preventDefault();
                 onSelect(firstModel.optionCode);
@@ -3385,33 +3505,57 @@ function ChatModelSelector({
               value={selectedModelCode}
               onValueChange={(modelCode) => onSelect(modelCode)}
             >
-              {filteredModels.map((model) => (
+              {autoModels.map((model) => (
                 <DropdownMenuRadioItem
-                  className="w-full items-start px-3 py-2"
-                  closeOnClick
+                  className="w-full items-center px-3 py-2"
+                  closeOnClick={model.enabled}
+                  disabled={!model.enabled}
                   key={model.optionCode}
-                  title={model.displayName}
+                  title={modelTitle(model)}
                   value={model.optionCode}
-                  onMouseEnter={() => setExpandedModelCode(model.optionCode)}
-                  onMouseLeave={() => setExpandedModelCode((current) => (
-                    current === model.optionCode ? null : current
-                  ))}
-                  onFocus={() => setExpandedModelCode(model.optionCode)}
-                  onBlur={() => setExpandedModelCode((current) => (
-                    current === model.optionCode ? null : current
-                  ))}
                 >
-                  <span
-                    className={cn(
-                      "block min-w-0 font-medium",
-                      expandedModelCode === model.optionCode
-                        ? "whitespace-normal break-all overflow-visible"
-                        : "truncate",
-                    )}
-                  >
-                    {model.displayName}
+                  <span className="min-w-0 truncate font-medium">
+                    {modelDisplayName(model)}
                   </span>
+                  {!model.enabled ? (
+                    <span className="ml-2 shrink-0 text-[10px] text-[var(--color-error)]">
+                      {t("chat.management.modelSelector.unavailable")}
+                    </span>
+                  ) : null}
                 </DropdownMenuRadioItem>
+              ))}
+              {groupedModels.map((group) => (
+                <div key={group.key} className="mb-1 last:mb-0">
+                  <p className="px-3 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--color-on-surface-variant)]">
+                    {group.label}
+                  </p>
+                  {group.models.map((model) => (
+                    <DropdownMenuRadioItem
+                      className="w-full items-center px-3 py-2"
+                      closeOnClick={model.enabled}
+                      disabled={!model.enabled}
+                      key={model.optionCode}
+                      title={modelTitle(model)}
+                      value={model.optionCode}
+                    >
+                      <span className="flex min-w-0 flex-1 items-center gap-2">
+                        <span className="min-w-0 flex-1 truncate font-medium">
+                          {modelDisplayName(model)}
+                        </span>
+                        {outputMultiplier(model) ? (
+                          <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
+                            {outputMultiplier(model)}×
+                          </span>
+                        ) : null}
+                        {!model.enabled ? (
+                          <span className="shrink-0 text-[10px] text-[var(--color-error)]">
+                            {t("chat.management.modelSelector.unavailable")}
+                          </span>
+                        ) : null}
+                      </span>
+                    </DropdownMenuRadioItem>
+                  ))}
+                </div>
               ))}
             </DropdownMenuRadioGroup>
           ) : (
@@ -4379,7 +4523,7 @@ export function ChatManagementPage() {
   const [activeRunSupportsSteer, setActiveRunSupportsSteer] = useState<boolean | null>(null);
   const [queuedSubmissions, setQueuedSubmissions] = useState<ChatQueuedSubmission[]>([]);
   const [creatingSession, setCreatingSession] = useState(false);
-  const [chatModels, setChatModels] = useState<ModelRecord[]>([]);
+  const [chatModels, setChatModels] = useState<ModelSelectOption[]>([]);
   const [selectedModelCode, setSelectedModelCode] = useState("");
   const [selectedReasoningEffort, setSelectedReasoningEffort] = useState<ReasoningEffort | null>(null);
   const [sessionModelSelections, setSessionModelSelections] = useState<Record<string, string>>(() => readChatSessionModelSelections());
@@ -4505,9 +4649,7 @@ export function ChatManagementPage() {
   const selectedModel = agentScopedModels.find((model) => model.optionCode === selectedModelCode) ?? null;
   const selectedModelAgentCode = inferChatAgentCodeFromModel(selectedModel, selectedAgentCode || mainChatAgentOption.agentCode);
   const effectiveAgentCode = selectedModelAgentCode || selectedAgentCode || mainChatAgentOption.agentCode;
-  const selectedMainAgentModel = selectedModel?.modelCode
-    ? chatModels.find((model) => model.modelCode === selectedModel.modelCode) ?? null
-    : null;
+  const selectedMainAgentModel = selectedModel?.source === "main-agent" ? selectedModel : null;
   const selectedReasoningEffortOptions = useMemo(() => {
     const supported = new Set(selectedMainAgentModel?.supportedReasoningEfforts ?? []);
     return reasoningEffortOptions
@@ -4648,7 +4790,7 @@ export function ChatManagementPage() {
     content: string,
     attachments: ChatMessageAttachment[],
   ): SendChatMessageInput | null {
-    if (!selectedModel) return null;
+    if (!selectedModel || !selectedModel.enabled) return null;
     const input: SendChatMessageInput = {
       agentCode: effectiveAgentCode,
       appCode: session.appCode,
@@ -4661,7 +4803,9 @@ export function ChatManagementPage() {
     if (selectedModel.source === "system-agent") {
       input.systemModelId = selectedModel.modelName;
     } else {
-      input.modelCode = selectedModel.modelCode;
+      // The selector always sends the complete selection. In particular Auto
+      // intentionally does not include a physical modelCode.
+      input.modelSelection = selectedModel.modelSelection;
       input.reasoningEffort = selectedReasoningEffort;
     }
     return input;
@@ -4921,11 +5065,11 @@ export function ChatManagementPage() {
 
       setModelsLoading(true);
       try {
-        const catalog = getServiceDataSource("model") === "api"
-          ? await fetchWorkspaceModelCatalog(activeWorkspaceCode)
-          : getWorkspaceModelCatalog(activeWorkspaceCode);
+        const options = getServiceDataSource("model") === "api"
+          ? await fetchWorkspaceSelectOptions(activeWorkspaceCode)
+          : getWorkspaceSelectOptions(activeWorkspaceCode);
         if (!active) return;
-        const models = availableChatModels(catalog.records);
+        const models = availableChatModels(options);
         setChatModels(models);
       } catch (error) {
         if (active) {
@@ -5053,7 +5197,7 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     setSelectedReasoningEffort(null);
-  }, [activeSession?.sessionCode, selectedModel?.optionCode, selectedMainAgentModel?.updatedAt]);
+  }, [activeSession?.sessionCode, selectedModel?.optionCode, selectedMainAgentModel?.optionCode]);
 
   useEffect(() => {
     if (requestedSessionCode || requestedSourceTab || activeSessionCode) return;
@@ -5873,6 +6017,15 @@ export function ChatManagementPage() {
     }
     if (!selectedModel) {
       toast.warning(t("chat.management.toasts.selectModelFirst"), { title: t("chat.management.toasts.modelRequiredTitle") });
+      return;
+    }
+    if (!selectedModel.enabled) {
+      toast.warning(
+        selectedModel.remoteStatus === "Unavailable"
+          ? "该远程模型已经下线，请改选其他模型。"
+          : "该模型当前不可用，请改选其他模型。",
+        { title: t("chat.management.toasts.modelRequiredTitle") },
+      );
       return;
     }
 

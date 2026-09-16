@@ -4,6 +4,7 @@ use axum::{
     http::StatusCode,
     response::{IntoResponse, Response},
 };
+use serde::Serialize;
 
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
@@ -13,11 +14,14 @@ use crate::{
         AgentManagementService, UpdateWorkspaceInternalAgentMcpPolicyCommand,
         UpdateWorkspaceInternalAgentPolicyCommand,
     },
-    domain::agent::{
-        AgentRunHistoryQuery, ExpandedDomainPersistenceMode, McpAccessMode, ToolAssignmentMode,
-        ToolExposureMode,
-    },
     domain::mcp::WorkspaceMcpServerListQuery,
+    domain::{
+        agent::{
+            AgentRunHistoryQuery, AgentRunHistoryRecord, ExpandedDomainPersistenceMode,
+            McpAccessMode, ToolAssignmentMode, ToolExposureMode,
+        },
+        model_provider::ProviderModelRunSnapshotView,
+    },
     response::ApiResponse,
 };
 
@@ -81,9 +85,26 @@ pub async fn get_agent_run(
     Path(run_code): Path<String>,
 ) -> Response {
     match state.agent_runs.get_run(&run_code) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
+        Ok(result) => Json(ApiResponse::success(AgentRunDetailResponse {
+            model_snapshot: state
+                .model_providers
+                .get_run_snapshot(&run_code)
+                .ok()
+                .flatten(),
+            run: result,
+        }))
+        .into_response(),
         Err(error) => agent_history_error_response(error),
     }
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentRunDetailResponse {
+    #[serde(flatten)]
+    run: AgentRunHistoryRecord,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    model_snapshot: Option<ProviderModelRunSnapshotView>,
 }
 
 pub async fn activate_agui_stream(

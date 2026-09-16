@@ -72,6 +72,12 @@ fn build_retrieval_profile_config(input: &RagProfileManagementInput) -> Value {
         })
     };
 
+    let rerank_strategy = input
+        .rerank_strategy
+        .clone()
+        .filter(|value| !value.trim().is_empty())
+        .unwrap_or_else(|| "Disabled".into());
+    let rerank_enabled = input.rerank_enabled.unwrap_or(false) && rerank_strategy != "Disabled";
     let mut config = serde_json::Map::from_iter([
         (
             "description".into(),
@@ -106,8 +112,12 @@ fn build_retrieval_profile_config(input: &RagProfileManagementInput) -> Value {
         (
             "rerankPolicy".into(),
             json!({
-                "enabled": input.rerank_enabled.unwrap_or(false)
+                "enabled": rerank_enabled
             }),
+        ),
+        (
+            "rerankStrategy".into(),
+            Value::String(rerank_strategy.clone()),
         ),
         (
             "hydratePolicy".into(),
@@ -116,12 +126,14 @@ fn build_retrieval_profile_config(input: &RagProfileManagementInput) -> Value {
             }),
         ),
     ]);
-    if let Some(rerank_model_code) = input
+    if rerank_enabled && rerank_strategy == "Native" {
+        if let Some(rerank_model_code) = input
         .rerank_model_code
         .clone()
         .filter(|value| !value.trim().is_empty())
-    {
-        config.insert("rerankModelCode".into(), Value::String(rerank_model_code));
+        {
+            config.insert("rerankModelCode".into(), Value::String(rerank_model_code));
+        }
     }
     if let Some(pipeline) = &input.pipeline {
         config.insert(
@@ -441,6 +453,7 @@ fn project_ingest_profile_view(profile: &RagProfileRecord) -> RagProfileManageme
         graph_expansion_policy: None,
         context_strategies: Vec::new(),
         rerank_enabled: false,
+        rerank_strategy: Some("Native".into()),
         rerank_model_code: None,
         degrade_policy: Some(profile.degrade_policy.clone()),
     }

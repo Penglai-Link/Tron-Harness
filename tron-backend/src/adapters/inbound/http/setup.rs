@@ -9,19 +9,18 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 
 use crate::{
-    adapters::inbound::http::{
-        auth::{
-            RequestAuthContext,
-            handler::{auth_grant_response, response_with_refresh_cookie},
-        },
+    adapters::inbound::http::auth::{
+        RequestAuthContext,
+        handler::{auth_grant_response, response_with_refresh_cookie},
     },
+    adapters::outbound::setup_transaction::{SetupCompletionCommand, SetupTransactionError},
     app::AppState,
-    adapters::outbound::setup_transaction::{
-        SetupCompletionCommand, SetupTransactionError,
-    },
     config::VariableCryptoConfig,
-    domain::{auth::AuthError, user::{UserError, validate_initial_password}},
     domain::workspace::{WorkspaceListQuery, WorkspaceStatus},
+    domain::{
+        auth::AuthError,
+        user::{UserError, validate_initial_password},
+    },
     response::{ApiResponse, EmptyData},
 };
 
@@ -84,7 +83,7 @@ struct SetupWorkspaceDto {
 #[serde(rename_all = "camelCase")]
 struct SetupModelsDto {
     configured: bool,
-    required_types: [&'static str; 3],
+    required_types: [&'static str; 2],
 }
 
 fn snapshot(state: &AppState) -> Result<SetupSnapshot, Response> {
@@ -120,23 +119,33 @@ fn snapshot(state: &AppState) -> Result<SetupSnapshot, Response> {
         .map(|key| crypto_status_key(&key))
         .unwrap_or_else(|| crypto_status(&state.config.variable_crypto));
     let workspace_configured = workspaces.len() == 1;
-    let configured_model_types = workspace_configured && workspaces.first().is_some_and(|workspace| {
-        state
-            .models
-            .list_workspace_models(&workspace.workspace_code)
-            .map(|catalog| {
-                ["TEXT", "EMBEDDING", "RERANK"]
-                    .into_iter()
-                    .all(|model_type| {
-                        catalog.defaults.iter().any(|default| {
-                            default.model_code.is_some()
-                                && format!("{:?}", default.model_type).to_ascii_uppercase()
-                                    == model_type
+    let manual_model_types = workspace_configured
+        && workspaces.first().is_some_and(|workspace| {
+            state
+                .models
+                .list_workspace_models(&workspace.workspace_code)
+                .map(|catalog| {
+                    ["TEXT", "EMBEDDING"]
+                        .into_iter()
+                        .all(|model_type| {
+                            catalog.defaults.iter().any(|default| {
+                                default.model_code.is_some()
+                                    && format!("{:?}", default.model_type).to_ascii_uppercase()
+                                        == model_type
+                            })
                         })
-                    })
-            })
-            .unwrap_or(false)
-    });
+                })
+                .unwrap_or(false)
+        });
+    let person_ai_model_types = state
+        .model_providers
+        .get_connection(crate::domain::model_provider::ModelProviderCode::PersonAi)
+        .ok()
+        .is_some_and(|connection| {
+            connection.status == crate::domain::model_provider::ProviderConnectionStatus::Connected
+                && connection.catalog_model_count > 0
+        });
+    let configured_model_types = manual_model_types || person_ai_model_types;
 
     let configuration_ready = !admin.password_reset_required
         && actual_crypto.configured
@@ -172,7 +181,7 @@ fn snapshot(state: &AppState) -> Result<SetupSnapshot, Response> {
             },
             models: SetupModelsDto {
                 configured: configured_model_types,
-                required_types: ["TEXT", "EMBEDDING", "RERANK"],
+                required_types: ["TEXT", "EMBEDDING"],
             },
         },
     })
@@ -276,8 +285,14 @@ pub async fn activate_admin(
             .into_response();
     }
 
-    match state.users.initialize_bootstrap_password(&request.new_password) {
-        Ok(()) => Json(ApiResponse::success(BootstrapAdminResponse { activated: true })).into_response(),
+    match state
+        .users
+        .initialize_bootstrap_password(&request.new_password)
+    {
+        Ok(()) => Json(ApiResponse::success(BootstrapAdminResponse {
+            activated: true,
+        }))
+        .into_response(),
         Err(UserError::WeakInitialPassword) => (
             StatusCode::BAD_REQUEST,
             Json(ApiResponse::<EmptyData>::error(
@@ -315,9 +330,7 @@ pub async fn complete(
             // The transaction has already committed at this point. Loading the
             // new key here keeps the running backend usable without a service
             // restart after the one-shot initialization request succeeds.
-            let _ = state
-                .variables
-                .configure_cipher(&encryption_key_base64);
+            let _ = state.variables.configure_cipher(&encryption_key_base64);
             Json(ApiResponse::success(completed)).into_response()
         }
         Err(error) => setup_transaction_error_response(error),
@@ -360,6 +373,11 @@ fn setup_transaction_error_response(error: SetupTransactionError) -> Response {
             StatusCode::BAD_REQUEST,
             "SETUP_MODEL_INVALID",
             message,
+        ),
+        SetupTransactionError::PersonAiNotReady => (
+            StatusCode::CONFLICT,
+            "SETUP_PERSON_AI_NOT_READY",
+            "Person-AI authorization, high-quality chat, and embedding verification must complete before initialization".into(),
         ),
         SetupTransactionError::AdminNotFound => (
             StatusCode::INTERNAL_SERVER_ERROR,

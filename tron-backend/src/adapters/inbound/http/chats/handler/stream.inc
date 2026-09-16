@@ -2,7 +2,7 @@ pub async fn send_message(
     State(state): State<AppState>,
     auth: RequestAuthContext,
     Path(session_code): Path<String>,
-    Json(request): Json<SendChatMessageCommand>,
+    Json(mut request): Json<SendChatMessageCommand>,
 ) -> Response {
     let Ok(session) = state.chats.get_session(&session_code) else {
         return chat_error_response(ChatError::SessionNotFound);
@@ -17,10 +17,27 @@ pub async fn send_message(
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
     };
+    let run_code = generate_agent_run_code();
+    request.run_code = Some(run_code.clone());
     let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
     };
+    if let Err(error) = state.model_providers.record_requested_runtime_snapshot(
+        Some(&run_code),
+        &session.session_code,
+        &session.workspace_code,
+        &resolved_model,
+    ) {
+        return chat_send_error_response(ChatSendError::Agent(
+            crate::application::agent::AgentInvocationError::RuntimeFailed(error.to_string()),
+        ));
+    }
+    let resolved_model = crate::adapters::outbound::model::with_person_ai_conversation(
+        resolved_model,
+        &session.session_code,
+        Some(&run_code),
+    );
 
     let agent_service = AgentInvocationService::new(
         state.workspaces.clone(),
@@ -120,13 +137,27 @@ pub(crate) async fn stream_message_command(
     };
     let system_agent_live_stream = uses_system_live_stream(&resolved_runtime);
     let supports_steer = matches!(resolved_runtime.runtime_type, AgentRuntimeType::React);
+    let run_code = generate_agent_run_code();
+    request.run_code = Some(run_code.clone());
     let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
     };
-
-    let run_code = generate_agent_run_code();
-    request.run_code = Some(run_code.clone());
+    if let Err(error) = state.model_providers.record_requested_runtime_snapshot(
+        Some(&run_code),
+        &session.session_code,
+        &session.workspace_code,
+        &resolved_model,
+    ) {
+        return chat_send_error_response(ChatSendError::Agent(
+            crate::application::agent::AgentInvocationError::RuntimeFailed(error.to_string()),
+        ));
+    }
+    let resolved_model = crate::adapters::outbound::model::with_person_ai_conversation(
+        resolved_model,
+        &session.session_code,
+        Some(&run_code),
+    );
 
     let agui_stream = AgentAguiStreamService::with_replay_store(
         state.agui_events.clone(),

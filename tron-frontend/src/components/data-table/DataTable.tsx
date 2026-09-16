@@ -15,7 +15,7 @@ export interface DataTableColumn<T> {
   align?: "left" | "right";
   cellClassName?: string;
   colClassName?: string;
-  header: string;
+  header: ReactNode;
   headerClassName?: string;
   id: string;
   render: (row: T) => ReactNode;

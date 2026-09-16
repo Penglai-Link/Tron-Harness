@@ -8,6 +8,7 @@ import type {
   RagPipelineStageDefinition,
   RagProfilePipeline,
   RagProfileStatus,
+  RerankStrategy,
   RagRetrievalRouteType,
   RetrievalProfileRecord,
 } from "@/domain/rag/model/RagModel";
@@ -112,6 +113,7 @@ export interface RagRetrievalProfileFormState {
   primaryCorpusId: string;
   rerankEnabled: boolean;
   rerankModelCode: string;
+  rerankStrategy: RerankStrategy;
   routes: RagRetrievalRouteFormRow[];
   status: RagProfileStatus;
   topicPolicy: string;
@@ -547,8 +549,15 @@ export function buildRetrievalProfileFormState(existing?: RetrievalProfileRecord
       graphExpansionPolicy: existing.config.graphExpansionPolicy,
       id: existing.id,
       primaryCorpusId: existing.primaryCorpusId,
-      rerankEnabled: existing.config.rerankEnabled,
-      rerankModelCode: existing.config.rerankModelCode,
+      rerankEnabled: existing.config.rerankEnabled && existing.config.rerankStrategy !== "Disabled",
+      rerankModelCode: existing.config.rerankEnabled && existing.config.rerankStrategy === "Native"
+        ? existing.config.rerankModelCode
+        : "",
+      rerankStrategy: !existing.config.rerankEnabled || existing.config.rerankStrategy === "Disabled"
+        ? "Disabled"
+        : existing.config.rerankStrategy === "LlmFallback"
+          ? "LlmFallback"
+          : "Native",
       routes: activeRoutes.map((route, index) => ({
         ...route,
         enabled: true,
@@ -570,6 +579,7 @@ export function buildRetrievalProfileFormState(existing?: RetrievalProfileRecord
     primaryCorpusId: "",
     rerankEnabled: false,
     rerankModelCode: "",
+    rerankStrategy: "Disabled",
     routes: [createRetrievalRouteFormRow()],
     status: "Ready",
     topicPolicy: "NONE",
@@ -719,8 +729,9 @@ export function buildRetrievalProfileRecordFromForm(form: RagRetrievalProfileFor
         .filter((filter) => filter.field && filter.operator && filter.value),
       fusionPolicy: form.fusionPolicy.trim(),
       graphExpansionPolicy: form.graphExpansionPolicy.trim(),
-      rerankEnabled: form.rerankEnabled,
-      rerankModelCode: form.rerankModelCode.trim(),
+      rerankEnabled: form.rerankStrategy !== "Disabled" && form.rerankEnabled,
+      rerankModelCode: form.rerankStrategy === "Native" ? form.rerankModelCode.trim() : "",
+      rerankStrategy: form.rerankStrategy,
       routesConfig: form.routes
         .map((route) => ({
           corpusId: route.corpusId.trim(),

@@ -362,6 +362,8 @@ pub struct RagProfileManagementInput {
     #[serde(default)]
     pub rerank_enabled: Option<bool>,
     #[serde(default)]
+    pub rerank_strategy: Option<String>,
+    #[serde(default)]
     pub rerank_model_code: Option<String>,
     #[serde(default)]
     pub degrade_policy: Option<String>,
@@ -438,6 +440,8 @@ pub struct RagProfileManagementView {
     #[serde(default)]
     pub context_strategies: Vec<String>,
     pub rerank_enabled: bool,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub rerank_strategy: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub rerank_model_code: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]

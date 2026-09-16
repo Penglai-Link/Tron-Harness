@@ -47,6 +47,7 @@ fn map_send_request(
         app_code: request.app_code,
         task_code: request.task_code,
         agent_code: request.agent_code,
+        model_selection: None,
         model_code: request.model_code,
         system_model_id: request.system_model_id,
         reasoning_effort: request.reasoning_effort,

@@ -105,6 +105,12 @@ fn project_retrieval_profile_view(profile: &RagProfileRecord) -> RagProfileManag
             .and_then(|policy| policy.get("enabled"))
             .and_then(Value::as_bool)
             .unwrap_or(false),
+        rerank_strategy: profile
+            .config
+        .get("rerankStrategy")
+        .and_then(Value::as_str)
+        .map(ToOwned::to_owned)
+        .or_else(|| Some("Disabled".into())),
         rerank_model_code: profile
             .config
             .get("rerankModelCode")
@@ -494,7 +500,9 @@ fn retrieval_strategy_ids_for_corpus(
             RagStorageBackend::Sqlite => Some(vec!["VECTOR_SQLITE_VEC0_COSINE_V1".into()]),
             RagStorageBackend::Graph => Some(vec!["VECTOR_GRAPH_SINGLE_NODE_V1".into()]),
         },
-        "TREE_FULLTEXT" if capabilities.tree && capabilities.fulltext && has_tree_storage(corpus) => {
+        "TREE_FULLTEXT"
+            if capabilities.tree && capabilities.fulltext && has_tree_storage(corpus) =>
+        {
             Some(vec!["TREE_FULLTEXT_V1".into()])
         }
         "TREE_VECTOR" if capabilities.tree && capabilities.vector && has_tree_storage(corpus) => {

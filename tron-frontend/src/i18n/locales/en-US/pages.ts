@@ -84,12 +84,15 @@ export const pages = {
       archived: "Archived",
     },
     form: {
-      descriptionPlaceholder: "Describe the ownership boundary, runtime purpose, and operator context.",
-      localDirectoryHint: "Absolute path where this app is stored on this machine.",
+      descriptionPlaceholder:
+        "Describe the ownership boundary, runtime purpose, and operator context.",
+      localDirectoryHint:
+        "Absolute path where this app is stored on this machine.",
       localDirectoryPlaceholder: "/workspace/tron/tron-backend",
       repositoryHint: "Optional repository metadata for this app.",
       repositoryPlaceholder: "https://github.com/clouds3n/tron-console",
-      tagsHint: "Comma-separated tags used for filtering and task selection context.",
+      tagsHint:
+        "Comma-separated tags used for filtering and task selection context.",
       tagsPlaceholder: "React, Operator",
     },
     messages: {
@@ -102,7 +105,8 @@ export const pages = {
       restored: "{{name}} restored",
       updated: "{{name}} updated",
       updateFailed: "App could not be updated.",
-      workspaceRequired: "Select a workspace in the shell header before creating an app.",
+      workspaceRequired:
+        "Select a workspace in the shell header before creating an app.",
     },
     pagination: {
       itemLabel: "apps",
@@ -214,7 +218,8 @@ export const pages = {
     },
     hints: {
       optionalVariableKey: "Optional. Enter an existing variable key.",
-      variableKey: "Enter an existing variable key. Secret values are not stored in this resource.",
+      variableKey:
+        "Enter an existing variable key. Secret values are not stored in this resource.",
     },
     messages: {
       accountCreated: "The account was added without a recurring health check.",
@@ -226,7 +231,8 @@ export const pages = {
       deleteFailed: "Unable to delete the connection.",
       deleted: "{{name}} was deleted.",
       deletedTitle: "Deleted",
-      serverCreated: "The server was created. Add an account from Server Account Management.",
+      serverCreated:
+        "The server was created. Add an account from Server Account Management.",
     },
     pagination: {
       next: "Next",
@@ -350,18 +356,23 @@ export const pages = {
       },
       chooseFile: "Choose a file",
       dropHint: "Drop one file here, or click to choose",
-      editorRequired: "Some information needs your review. Continue in the editor with this file and detected details already filled in.",
+      editorRequired:
+        "Some information needs your review. Continue in the editor with this file and detected details already filled in.",
       errors: {
-        create: "The resource could not be uploaded. Check the resource code and try again.",
-        editorRequired: "This file needs additional information that is not available in Quick Upload. Choose a different file or resource type.",
-        singleFile: "Quick upload accepts one file at a time. Split multiple files into separate uploads.",
+        create:
+          "The resource could not be uploaded. Check the resource code and try again.",
+        editorRequired:
+          "This file needs additional information that is not available in Quick Upload. Choose a different file or resource type.",
+        singleFile:
+          "Quick upload accepts one file at a time. Split multiple files into separate uploads.",
       },
       fileInputAria: "Choose one file for quick upload",
       fields: {
         code: "Resource code",
         definition: "Resource type",
         description: "Description",
-        descriptionPlaceholder: "Describe the resource purpose or usage (optional)",
+        descriptionPlaceholder:
+          "Describe the resource purpose or usage (optional)",
         inheritance: "Allow inheritance",
         name: "Name",
       },
@@ -412,7 +423,8 @@ export const pages = {
       code: "Resource code",
       codePlaceholder: "resource-code",
       description: "Description",
-      descriptionPlaceholder: "Describe when agents and applications should use this resource",
+      descriptionPlaceholder:
+        "Describe when agents and applications should use this resource",
       name: "Resource name",
       namePlaceholder: "Resource name",
       type: "Resource type",
@@ -426,12 +438,16 @@ export const pages = {
     messages: {
       created: "{{name}} created",
       deleted: "{{name}} deleted",
-      deleteDescription: "Delete this resource and its files. This cannot be undone.",
+      deleteDescription:
+        "Delete this resource and its files. This cannot be undone.",
       deleteTitle: "Delete {{name}}?",
       downloaded: "Download started for {{name}}",
-      quickUploadFileMissing: "The selected quick-upload file is no longer available. Choose it again in Files to continue.",
-      quickUploadRestored: "File and detected details were added. Complete the remaining fields before creating the resource.",
-      quickUploadScopeMismatch: "The quick-upload file belongs to a different scope. Choose it again from this Resource list.",
+      quickUploadFileMissing:
+        "The selected quick-upload file is no longer available. Choose it again in Files to continue.",
+      quickUploadRestored:
+        "File and detected details were added. Complete the remaining fields before creating the resource.",
+      quickUploadScopeMismatch:
+        "The quick-upload file belongs to a different scope. Choose it again from this Resource list.",
       replaced: "{{name}} replaced with {{file}}",
       saved: "Resource saved",
     },
@@ -609,7 +625,8 @@ export const pages = {
       workedFor: "Worked for {{duration}}",
       workingFor: "Working for {{duration}}",
       failed: "Run failed",
-      compactionInterrupted: "Run ended before compaction completion was reported",
+      compactionInterrupted:
+        "Run ended before compaction completion was reported",
       askingQuestions: "Asking {{count}} questions",
       askedQuestions: "Asked {{count}} questions",
       waitingForAnswer: "Waiting for your answer",
@@ -648,7 +665,16 @@ export const pages = {
         searchAria: "Search chat models",
         searchPlaceholder: "Search models...",
         loading: "Loading models...",
-        noMatch: "No models match \"{{query}}\".",
+        noMatch: 'No models match "{{query}}".',
+        autoName: "Auto",
+        platformModels: "Platform models",
+        qualityGroup: "{{quality}} · {{vendor}}",
+        quality: {
+          High: "Remote high quality",
+          Middle: "Remote medium quality",
+          Low: "Remote low quality",
+        },
+        unavailable: "Unavailable; cannot send",
       },
       agentSelector: {
         selectAria: "Select chat agent",
@@ -708,8 +734,10 @@ export const pages = {
       emptyState: {
         noSessionTitle: "No session selected",
         startChat: "Start chat",
-        withWorkspace: "Create a new session or pick one from the left panel to start messaging.",
-        noWorkspace: "Select or create a workspace before loading chat sessions.",
+        withWorkspace:
+          "Create a new session or pick one from the left panel to start messaging.",
+        noWorkspace:
+          "Select or create a workspace before loading chat sessions.",
       },
       deleteDialog: {
         aria: "Delete chat session confirmation",
@@ -717,7 +745,8 @@ export const pages = {
         confirm: "Delete",
         confirming: "Deleting...",
         cancel: "Cancel",
-        description: 'Delete "{{title}}" permanently? This action cannot be undone.',
+        description:
+          'Delete "{{title}}" permanently? This action cannot be undone.',
       },
       toasts: {
         attachNoSession: "Create or select a session before attaching a file",
@@ -741,7 +770,8 @@ export const pages = {
         chatSendFailedTitle: "Chat send failed",
         chatSendFailed: "Chat send failed",
         responseRecoveredTitle: "Active response recovered",
-        responseRecovered: "Message was kept in the queue while the current response finishes",
+        responseRecovered:
+          "Message was kept in the queue while the current response finishes",
         answerFailedTitle: "Answer submission failed",
         answerFailed: "Answer submission failed",
         sessionClosedTitle: "Session closed",
@@ -753,7 +783,8 @@ export const pages = {
         steerFailedTitle: "Chat steer failed",
         steerFailed: "Chat steer failed",
         noWorkspaceTitle: "No workspace selected",
-        createWorkspaceFirst: "Create a workspace before starting a chat session",
+        createWorkspaceFirst:
+          "Create a workspace before starting a chat session",
         createSessionFailed: "Create session failed",
         archiveSessionFailed: "Archive session failed",
         deleteSessionFailed: "Delete session failed",
@@ -846,33 +877,41 @@ export const pages = {
         runtimeNotices: {
           compaction_requested: {
             title: "Context compaction queued",
-            detail: "The current input reached the compaction threshold. A checkpoint is being prepared.",
+            detail:
+              "The current input reached the compaction threshold. A checkpoint is being prepared.",
           },
           compaction_started: {
             title: "Compacting context",
-            detail: "A checkpoint is being generated. The current request will continue when it is ready.",
+            detail:
+              "A checkpoint is being generated. The current request will continue when it is ready.",
           },
           compaction_completed: {
             title: "Context compacted",
-            detail: "Later requests will use the new checkpoint and retained recent conversation.",
+            detail:
+              "Later requests will use the new checkpoint and retained recent conversation.",
           },
           compaction_failed: {
             title: "Context compaction failed",
-            detail: "No checkpoint was created. The run will follow its configured failure policy.",
+            detail:
+              "No checkpoint was created. The run will follow its configured failure policy.",
           },
           tool_schema_over_budget: {
             title: "Tool definitions exceed the context budget",
             detail: "Reduce exposed tools or raise the Tool Schema limit.",
-            detailWithBudget: "Tool definitions use about {{actual}} tokens, above the {{limit}} limit ({{count}} tools).",
+            detailWithBudget:
+              "Tool definitions use about {{actual}} tokens, above the {{limit}} limit ({{count}} tools).",
           },
         },
         systemPromptName: "System Prompt",
         structure: "Context Structure",
         budgetFormulaAria: "View context budget calculation",
         budgetFormulaTitle: "Budget calculation",
-        effectiveInputFormula: "Effective input budget = model context window − output reserve",
-        historyFormula: "Current session history budget =\neffective input budget\n− Seed Prompt\n− Checkpoint\n− Session Family Context\n− Working State\n− Tool Schema",
-        budgetFormulaNote: "Fixed input blocks are deducted first; the remainder retains recent conversation history.",
+        effectiveInputFormula:
+          "Effective input budget = model context window − output reserve",
+        historyFormula:
+          "Current session history budget =\neffective input budget\n− Seed Prompt\n− Checkpoint\n− Session Family Context\n− Working State\n− Tool Schema",
+        budgetFormulaNote:
+          "Fixed input blocks are deducted first; the remainder retains recent conversation history.",
         seedMeta: "system prompt",
         toolMeta: "tool definition",
         checkpointMeta: "seq {{start}}-{{end}}",
@@ -893,7 +932,8 @@ export const pages = {
         input: "Input",
         cached: "Cached",
         reasoning: "Reasoning",
-        providerDelta: "Local estimate {{estimate}}, provider actual {{actual}}, delta {{delta}}.",
+        providerDelta:
+          "Local estimate {{estimate}}, provider actual {{actual}}, delta {{delta}}.",
         calibration: "Calibration {{factor}}.",
         providerUnavailable: "Provider usage will appear after the next run.",
       },
@@ -972,13 +1012,15 @@ export const pages = {
       backToList: "Back to list",
     },
     messages: {
-      corpusDeleted: "Corpus {{id}} deleted. {{count}} ingest profile(s) removed.",
+      corpusDeleted:
+        "Corpus {{id}} deleted. {{count}} ingest profile(s) removed.",
       ingestProfileDeleted: "Ingest profile {{id}} deleted.",
       retrievalProfileDeleted: "Retrieval profile {{id}} deleted.",
     },
     errors: {
       deleteCorpus: "Corpus could not be deleted.",
-      deleteCorpusRetrievalBinding: "This corpus is bound to retrieval profile {{id}}. Remove the retrieval binding before deleting it.",
+      deleteCorpusRetrievalBinding:
+        "This corpus is bound to retrieval profile {{id}}. Remove the retrieval binding before deleting it.",
       deleteIngestProfile: "Ingest profile could not be deleted.",
       deleteRetrievalProfile: "Retrieval profile could not be deleted.",
     },
@@ -1090,9 +1132,11 @@ export const pages = {
       },
       errors: {
         booleanField: "Filter field {{field}} must be true or false.",
-        businessAttributeRequired: "Business attribute {{index}} must include both field and value.",
+        businessAttributeRequired:
+          "Business attribute {{index}} must include both field and value.",
         documentRequired: "Document URI and format are required.",
-        filterRequired: "Filter {{index}} must include field, operator, and value.",
+        filterRequired:
+          "Filter {{index}} must include field, operator, and value.",
         filterValueRequired: "Filter {{index}} needs at least one value.",
         integerField: "Filter field {{field}} must be an integer.",
         requestFailed: "RAG workbench request failed.",
@@ -1130,27 +1174,45 @@ export const pages = {
         valueLabel: "Value",
       },
       hints: {
-        businessField: "Business field written to payload.domainFields, sourced from the current corpus field mapping.",
-        businessValue: "Value for the business field. It is converted with the corpus filter schema type.",
-        contextStrategy: "Strategy used to assemble the context pack from retrieval results.",
+        businessField:
+          "Business field written to payload.domainFields, sourced from the current corpus field mapping.",
+        businessValue:
+          "Value for the business field. It is converted with the corpus filter schema type.",
+        contextStrategy:
+          "Strategy used to assemble the context pack from retrieval results.",
         corpus: "Target corpus for this ingest request.",
-        documentFormat: "Document parse format, such as PDF, DOCX, or MARKDOWN. It must match the ingest parse strategy.",
-        documentUri: "Document source URI. Project documents usually start with project-doc://.",
-        filterField: "Additional filter field for this retrieval request, sourced from the profile-bound corpus filter schema.",
-        filterOperator: "Filter comparison operator, such as eq for equals or in for list membership.",
-        filterValue: "Filter query value. Use comma-separated values for the in operator.",
-        ingestProfile: "Profile used for this ingest request. It controls source contract, parsing, splitting, and indexing.",
-        language: "Language tag written to metadata.language. Defaults to zh-CN.",
+        documentFormat:
+          "Document parse format, such as PDF, DOCX, or MARKDOWN. It must match the ingest parse strategy.",
+        documentUri:
+          "Document source URI. Project documents usually start with project-doc://.",
+        filterField:
+          "Additional filter field for this retrieval request, sourced from the profile-bound corpus filter schema.",
+        filterOperator:
+          "Filter comparison operator, such as eq for equals or in for list membership.",
+        filterValue:
+          "Filter query value. Use comma-separated values for the in operator.",
+        ingestProfile:
+          "Profile used for this ingest request. It controls source contract, parsing, splitting, and indexing.",
+        language:
+          "Language tag written to metadata.language. Defaults to zh-CN.",
         limit: "Maximum hits returned by this retrieval request.",
-        metadataSourcePath: "Path written to metadata.sourcePath so the document can be traced in the project.",
+        metadataSourcePath:
+          "Path written to metadata.sourcePath so the document can be traced in the project.",
         query: "Natural-language query for this retrieval test.",
-        retrievalProfile: "Profile used for this retrieval request. It controls routes, fusion, deduplication, and context strategy.",
-        returnField: "Extra field requested in retrieval results, sourced from corpus field mapping.",
-        scopeType: "Target request scope. The scope code is filled automatically from the selected type.",
-        sourceCode: "Unique source code for this ingest request. The same code and version support idempotent updates.",
-        sourceText: "Body text for direct text ingest. Document reference ingest uses document URI and format instead.",
-        sourceVersion: "Source version, usually v1. It cannot be edited when the ingest profile requires a fixed version.",
-        tokenBudget: "Maximum token budget for the context pack returned to the model.",
+        retrievalProfile:
+          "Profile used for this retrieval request. It controls routes, fusion, deduplication, and context strategy.",
+        returnField:
+          "Extra field requested in retrieval results, sourced from corpus field mapping.",
+        scopeType:
+          "Target request scope. The scope code is filled automatically from the selected type.",
+        sourceCode:
+          "Unique source code for this ingest request. The same code and version support idempotent updates.",
+        sourceText:
+          "Body text for direct text ingest. Document reference ingest uses document URI and format instead.",
+        sourceVersion:
+          "Source version, usually v1. It cannot be edited when the ingest profile requires a fixed version.",
+        tokenBudget:
+          "Maximum token budget for the context pack returned to the model.",
       },
       ingest: {
         resultTitle: "Ingest result",
@@ -1288,19 +1350,31 @@ export const pages = {
       },
       hints: {
         code: "Stable corpus code used in API parameters and profile references. It cannot be changed after creation.",
-        description: "Purpose description used to identify this corpus in lists and profile pages.",
-        filterName: "Business field allowed for retrieval profiles and workbench filters. It must come from field mappings.",
-        filterOperators: "Supported filter operators for this field. Separate multiple operators with commas, such as eq, in.",
-        filterType: "Filter value type used when saving configuration and validating workbench test input.",
-        mappingColumn: "Column or property name used when writing this field to the underlying storage.",
-        mappingLogicalName: "Business-facing field name used by filter schema, workbench attributes, and return fields.",
+        description:
+          "Purpose description used to identify this corpus in lists and profile pages.",
+        filterName:
+          "Business field allowed for retrieval profiles and workbench filters. It must come from field mappings.",
+        filterOperators:
+          "Supported filter operators for this field. Separate multiple operators with commas, such as eq, in.",
+        filterType:
+          "Filter value type used when saving configuration and validating workbench test input.",
+        mappingColumn:
+          "Column or property name used when writing this field to the underlying storage.",
+        mappingLogicalName:
+          "Business-facing field name used by filter schema, workbench attributes, and return fields.",
         name: "Display name shown to users.",
-        segmentBinding: "Storage target used by this data segment. Empty means the segment is not bound.",
-        storageBackend: "Choose local table storage or graph storage for this target. Each backend requires different fields.",
-        storageCodeStrategy: "Graph node code generation strategy that keeps node codes stable for the same source version and scope.",
-        storageNamespace: "Graph storage namespace used to isolate corpora or business domains.",
-        storageNodeLabel: "Graph node label used to identify text-unit or document nodes.",
-        storageTable: "Table name used by local table storage. Auto-generated values can be overridden.",
+        segmentBinding:
+          "Storage target used by this data segment. Empty means the segment is not bound.",
+        storageBackend:
+          "Choose local table storage or graph storage for this target. Each backend requires different fields.",
+        storageCodeStrategy:
+          "Graph node code generation strategy that keeps node codes stable for the same source version and scope.",
+        storageNamespace:
+          "Graph storage namespace used to isolate corpora or business domains.",
+        storageNodeLabel:
+          "Graph node label used to identify text-unit or document nodes.",
+        storageTable:
+          "Table name used by local table storage. Auto-generated values can be overridden.",
       },
       loading: {
         breadcrumb: "Loading corpus",
@@ -1337,21 +1411,31 @@ export const pages = {
         errors: {
           codeRequired: "Corpus code is required.",
           codeUnique: "Corpus code must be unique.",
-          fieldMappingConflict: "Field mapping logical names must resolve to the same physical column across source and text unit mappings.",
-          filterFieldColumnBound: "Filter fields must resolve to columns in a bound storage target.",
+          fieldMappingConflict:
+            "Field mapping logical names must resolve to the same physical column across source and text unit mappings.",
+          filterFieldColumnBound:
+            "Filter fields must resolve to columns in a bound storage target.",
           filterFieldMapped: "Filter field names must reference mapped fields.",
           filterFieldRequired: "At least one filter schema field is required.",
           nameRequired: "Corpus name is required.",
-          segmentBindingsRequired: "Every business segment must be bound to a storage target.",
-          sourceColumnsExist: "Source mapping columns must exist in the bound source storage target.",
-          sourceContractFields: "Source mappings must retain contract fields: {{fields}}.",
-          sourceLogicalNamesUnique: "Source mapping logical names must be unique.",
+          segmentBindingsRequired:
+            "Every business segment must be bound to a storage target.",
+          sourceColumnsExist:
+            "Source mapping columns must exist in the bound source storage target.",
+          sourceContractFields:
+            "Source mappings must retain contract fields: {{fields}}.",
+          sourceLogicalNamesUnique:
+            "Source mapping logical names must be unique.",
           storageTargetRequired: "At least one storage target is required.",
-          textUnitColumnsExist: "Text unit mapping columns must exist in the bound text unit storage target.",
-          textUnitContractFields: "Text unit mappings must retain contract fields: {{fields}}.",
-          textUnitLogicalNamesUnique: "Text unit mapping logical names must be unique.",
+          textUnitColumnsExist:
+            "Text unit mapping columns must exist in the bound text unit storage target.",
+          textUnitContractFields:
+            "Text unit mappings must retain contract fields: {{fields}}.",
+          textUnitLogicalNamesUnique:
+            "Text unit mapping logical names must be unique.",
         },
-        graphCapabilityRequiresTarget: "Graph capability requires at least one non-diagnostic business segment bound to a GRAPH storage target.",
+        graphCapabilityRequiresTarget:
+          "Graph capability requires at least one non-diagnostic business segment bound to a GRAPH storage target.",
         labels: {
           node: "Node",
           unbound: "Unbound",
@@ -1363,7 +1447,8 @@ export const pages = {
           workspace: "Workspace",
         },
         segmentBinding: {
-          targetExisting: "{{segment}} storage target must reference an existing storage target.",
+          targetExisting:
+            "{{segment}} storage target must reference an existing storage target.",
           targetRequired: "{{segment}} storage target is required.",
         },
         segments: {
@@ -1377,7 +1462,8 @@ export const pages = {
           label: "Storage target {{index}}",
           namespaceRequired: "{{label}} graph namespace is required.",
           nodeLabelRequired: "{{label}} node label is required.",
-          tableInvalid: "{{label}} table name must start with rag_ and use only lowercase letters, numbers, or underscores.",
+          tableInvalid:
+            "{{label}} table name must start with rag_ and use only lowercase letters, numbers, or underscores.",
           tableRequired: "{{label}} SQLite table name is required.",
         },
       },
@@ -1468,6 +1554,8 @@ export const pages = {
         primaryCorpus: "Primary corpus",
         profileId: "Profile ID",
         rerankModelCode: "Rerank model code",
+        rerankStrategy: "Rerank strategy",
+        rerankStrategyHint: "No rerank keeps the vector ranking. Native uses a configured rerank model. LLM fallback asks the active text model to order candidate documents and keeps the original order if it fails.",
         requiredSourceVersion: "Required source version",
         retrievalStrategy: "Retrieval strategy",
         selectCorpus: "Select corpus",
@@ -1484,60 +1572,98 @@ export const pages = {
       filters: {
         add: "Add filter",
         count: "{{count}} filters",
-        empty: "No profile filters. Add one only when every request should include the same fixed condition.",
+        empty:
+          "No profile filters. Add one only when every request should include the same fixed condition.",
         fieldAria: "Filter {{index}} field",
         operatorAria: "Filter {{index}} operator",
         removeAria: "Remove filter {{index}}",
         title: "Profile filters",
         valueAria: "Filter {{index}} value",
       },
+      rerankStrategy: {
+        disabled: "No rerank",
+        native: "Native rerank",
+        llmFallback: "LLM rerank fallback",
+      },
       hints: {
         ingest: {
-          description: "Readable description shown in profile lists and details.",
-          embeddingModelCode: "Optional model code used for vector embeddings. Leave empty to use the workspace default embedding model.",
-          embeddingVersion: "Version tag written to vector index entries. Defaults to v1.",
-          graphWritePolicy: "Graph write policy JSON for graph-backed corpora. Leave empty when not writing graph data.",
-          parseDocumentFormat: "Document formats accepted by the parser. Markdown parsers use MARKDOWN; MinerU uses comma-separated values such as PDF, DOCX.",
-          parseDocumentMineruFormat: "Format list accepted by MinerU. Separate multiple values with commas. Defaults to PDF, DOCX.",
-          parseDocumentUnsupportedFormatPolicy: "Policy for unsupported formats. FAIL_FAST rejects requests before parsing.",
+          description:
+            "Readable description shown in profile lists and details.",
+          embeddingModelCode:
+            "Optional model code used for vector embeddings. Leave empty to use the workspace default embedding model.",
+          embeddingVersion:
+            "Version tag written to vector index entries. Defaults to v1.",
+          graphWritePolicy:
+            "Graph write policy JSON for graph-backed corpora. Leave empty when not writing graph data.",
+          parseDocumentFormat:
+            "Document formats accepted by the parser. Markdown parsers use MARKDOWN; MinerU uses comma-separated values such as PDF, DOCX.",
+          parseDocumentMineruFormat:
+            "Format list accepted by MinerU. Separate multiple values with commas. Defaults to PDF, DOCX.",
+          parseDocumentUnsupportedFormatPolicy:
+            "Policy for unsupported formats. FAIL_FAST rejects requests before parsing.",
           profileId: "Stable profile ID used by ingest API requests.",
-          primaryCorpus: "Corpus written by this ingest profile. It also limits available stage strategies.",
-          requiredSourceVersion: "Source version required by this profile. v1 matches the current ingest request contract.",
-          resolveSourceAllowedUriSchemes: "URI schemes accepted by the source resolver. Separate multiple values with commas. Project document references should use project-doc.",
-          resolveSourceMaxBytes: "Maximum document bytes read by the source resolver. Document reference profiles default to 52428800 bytes for PDF/DOCX.",
-          splitTextHeadingDepth: "Maximum Markdown heading depth used to generate chunk paths. markdownHeading supports 1 to 6.",
-          splitTextMaxTokens: "Target maximum tokens for each text unit. Defaults to 800.",
-          splitTextOverlapTokens: "Overlapping tokens between adjacent text units. Defaults to 80.",
-          splitTextType: "Splitter implementation. Use markdownHeading after document parsing and plainText for direct text payloads.",
-          status: "Only Ready profiles are saved as runtime-available RAG profiles.",
-          strategy: "Execution strategy for this stage. Selecting a strategy fills recommended defaults below.",
-          treeSummaryModelCode: "Optional model code used by the LLM tree summary stage. Leave empty to use the workspace default LLM model.",
+          primaryCorpus:
+            "Corpus written by this ingest profile. It also limits available stage strategies.",
+          requiredSourceVersion:
+            "Source version required by this profile. v1 matches the current ingest request contract.",
+          resolveSourceAllowedUriSchemes:
+            "URI schemes accepted by the source resolver. Separate multiple values with commas. Project document references should use project-doc.",
+          resolveSourceMaxBytes:
+            "Maximum document bytes read by the source resolver. Document reference profiles default to 52428800 bytes for PDF/DOCX.",
+          splitTextHeadingDepth:
+            "Maximum Markdown heading depth used to generate chunk paths. markdownHeading supports 1 to 6.",
+          splitTextMaxTokens:
+            "Target maximum tokens for each text unit. Defaults to 800.",
+          splitTextOverlapTokens:
+            "Overlapping tokens between adjacent text units. Defaults to 80.",
+          splitTextType:
+            "Splitter implementation. Use markdownHeading after document parsing and plainText for direct text payloads.",
+          status:
+            "Only Ready profiles are saved as runtime-available RAG profiles.",
+          strategy:
+            "Execution strategy for this stage. Selecting a strategy fills recommended defaults below.",
+          treeSummaryModelCode:
+            "Optional model code used by the LLM tree summary stage. Leave empty to use the workspace default LLM model.",
         },
         retrieval: {
-          contextStrategy: "Strategy used to assemble context packs from retrieval results. At least one strategy must be enabled for workbench and API calls.",
-          dedupPolicy: "How multi-route recall results are deduplicated so the same source chunk does not repeat in context.",
-          description: "Readable description shown in profile lists and details.",
-          filterField: "Fixed filter field attached by this profile. It must come from filterable fields on the primary or route corpora.",
-          filterOperator: "Comparison operator used by this filter, such as eq for equals or in for list membership.",
-          filterValue: "Fixed filter value. Each request using this retrieval profile includes this condition after save.",
+          contextStrategy:
+            "Strategy used to assemble context packs from retrieval results. At least one strategy must be enabled for workbench and API calls.",
+          dedupPolicy:
+            "How multi-route recall results are deduplicated so the same source chunk does not repeat in context.",
+          description:
+            "Readable description shown in profile lists and details.",
+          filterField:
+            "Fixed filter field attached by this profile. It must come from filterable fields on the primary or route corpora.",
+          filterOperator:
+            "Comparison operator used by this filter, such as eq for equals or in for list membership.",
+          filterValue:
+            "Fixed filter value. Each request using this retrieval profile includes this condition after save.",
           fusionPolicy: "How results from multiple retrieval routes are fused.",
-          graphExpansionPolicy: "Policy used to expand adjacent nodes or structural relations when graph retrieval is enabled.",
-          primaryCorpus: "Default corpus for this retrieval profile. It is also used to infer available filter fields.",
+          graphExpansionPolicy:
+            "Policy used to expand adjacent nodes or structural relations when graph retrieval is enabled.",
+          primaryCorpus:
+            "Default corpus for this retrieval profile. It is also used to infer available filter fields.",
           profileId: "Stable profile ID used by retrieval API requests.",
-          rerankModelCode: "Model code used for reranking. It only applies when reranking is enabled; leave empty for defaults.",
-          routeCorpus: "Corpus queried by this route. Different corpora affect available retrieval strategies.",
-          routeStrategy: "Recall strategy used by this route, such as fulltext, vector, graph, or structured retrieval.",
+          rerankModelCode:
+            "Model code used for reranking. It only applies when reranking is enabled; leave empty for defaults.",
+          routeCorpus:
+            "Corpus queried by this route. Different corpora affect available retrieval strategies.",
+          routeStrategy:
+            "Recall strategy used by this route, such as fulltext, vector, graph, or structured retrieval.",
           status: "Only Ready retrieval profiles are runtime-available.",
-          topicPolicy: "Policy used to aggregate or order context packs by topic.",
+          topicPolicy:
+            "Policy used to aggregate or order context packs by topic.",
         },
-        parseDocumentMineruFormat: "Format list accepted by MinerU. Separate multiple values with commas. Defaults to PDF, DOCX.",
+        parseDocumentMineruFormat:
+          "Format list accepted by MinerU. Separate multiple values with commas. Defaults to PDF, DOCX.",
       },
       ingest: {
         advancedNodes: {
           barrier: "Control barrier",
           collapseConfig: "Collapse config",
           configureConfig: "Configure",
-          description: "Use these controls when the selected template needs a custom stage combination.",
+          description:
+            "Use these controls when the selected template needs a custom stage combination.",
           enableFirst: "Enable first",
           enableNode: "Enable {{stage}} node",
           mustRunBefore: "Must run before {{stages}}",
@@ -1545,7 +1671,8 @@ export const pages = {
           title: "Advanced node controls",
         },
         inputContract: {
-          description: "These fields define the inputs accepted by the workbench and ingest API for this profile.",
+          description:
+            "These fields define the inputs accepted by the workbench and ingest API for this profile.",
           title: "Input contract",
         },
         pipelineSettings: {
@@ -1555,7 +1682,8 @@ export const pages = {
           title: "Write pipeline",
         },
         stageStrategies: {
-          noAvailableStrategy: "No available strategy for this stage and corpus.",
+          noAvailableStrategy:
+            "No available strategy for this stage and corpus.",
           noStrategy: "No supported strategy",
           strategyAria: "{{stage}} strategy ID",
         },
@@ -1591,29 +1719,39 @@ export const pages = {
         errors: {
           availableRouteStrategy: "Select an available route strategy.",
           availableStageStrategy: "Select an available stage strategy.",
-          contextStrategyRequired: "At least one context strategy must be enabled.",
+          contextStrategyRequired:
+            "At least one context strategy must be enabled.",
           documentFormatRequired: "Document format is required.",
           extractTreeDependency: "extractTree requires splitText.",
-          filterFieldInRoutes: "Filter field must belong to one of the selected route corpora.",
+          filterFieldInRoutes:
+            "Filter field must belong to one of the selected route corpora.",
           filterFieldRequired: "Filter field is required.",
           filterOperatorRequired: "Filter operator is required.",
-          filtersComplete: "Each filter condition must resolve to a field, operator, and value.",
+          filtersComplete:
+            "Each filter condition must resolve to a field, operator, and value.",
           filterValueRequired: "Filter value is required.",
-          graphExpansionRequiresGraph: "Graph expansion requires at least one graph strategy.",
+          graphExpansionRequiresGraph:
+            "Graph expansion requires at least one graph strategy.",
           headingDepthRange: "Heading depth must be between 1 and 6.",
           idRequired: "Profile ID is required.",
           idUnique: "Profile ID must be unique.",
           maxBytesPositive: "Maximum bytes must be a positive integer.",
           maxTokensPositive: "Maximum tokens must be a positive integer.",
-          overlapTokensNonNegative: "Overlap tokens must be greater than or equal to 0.",
+          overlapTokensNonNegative:
+            "Overlap tokens must be greater than or equal to 0.",
           parseDocumentDependency: "parseDocument requires resolveSource.",
-          persistSourceDependencies: "persistSource requires splitText, fulltextIndex, and vectorIndex.",
+          persistSourceDependencies:
+            "persistSource requires splitText, fulltextIndex, and vectorIndex.",
           persistTreeDependency: "persistTree requires extractTree.",
-          preparePersistTogether: "preparePayload and persistSource must be enabled together.",
-          primaryCorpusInRoutes: "Primary corpus must appear in at least one route.",
+          preparePersistTogether:
+            "preparePayload and persistSource must be enabled together.",
+          primaryCorpusInRoutes:
+            "Primary corpus must appear in at least one route.",
           primaryCorpusRequired: "Primary corpus is required.",
-          readyStatusOnly: "The current RAG runtime only allows saving Ready profiles.",
-          requiredStagesEnabled: "Required stages must stay enabled: {{stages}}.",
+          readyStatusOnly:
+            "The current RAG runtime only allows saving Ready profiles.",
+          requiredStagesEnabled:
+            "Required stages must stay enabled: {{stages}}.",
           resolveSourceDependency: "resolveSource requires validateSource.",
           routeCorpusExisting: "Route corpus must match an existing corpus.",
           routeCorpusRequired: "Route corpus is required.",
@@ -1626,14 +1764,19 @@ export const pages = {
         },
       },
       notFound: {
-        ingestApi: "The requested ingest profile could not be loaded from the RAG management API.",
-        ingestMock: "The requested ingest profile does not exist in the mock registry.",
-        retrievalApi: "The requested retrieval profile could not be loaded from the RAG management API.",
-        retrievalMock: "The requested retrieval profile does not exist in the mock registry.",
+        ingestApi:
+          "The requested ingest profile could not be loaded from the RAG management API.",
+        ingestMock:
+          "The requested ingest profile does not exist in the mock registry.",
+        retrievalApi:
+          "The requested retrieval profile could not be loaded from the RAG management API.",
+        retrievalMock:
+          "The requested retrieval profile does not exist in the mock registry.",
         title: "Profile not found",
       },
       payloadPreview: {
-        description: "This shows the full management payload sent to save and verify APIs.",
+        description:
+          "This shows the full management payload sent to save and verify APIs.",
         title: "Developer preview",
       },
       pipelineEdges: {
@@ -1661,7 +1804,8 @@ export const pages = {
           title: "Context strategies",
         },
         graphExpansion: {
-          disabledPlaceholder: "Select a graph strategy before using this policy",
+          disabledPlaceholder:
+            "Select a graph strategy before using this policy",
           title: "Graph expansion",
         },
         resultPolicy: {
@@ -1675,7 +1819,8 @@ export const pages = {
       retrievalFlow: {
         context: "Build context",
         dedup: "Result deduplication",
-        description: "Saved profiles run route retrieval in parallel, then process results and build context.",
+        description:
+          "Saved profiles run route retrieval in parallel, then process results and build context.",
         enabledRoutes: "{{count}} routes",
         fusion: "Result fusion",
         noRoutes: "No routes selected",
@@ -1686,8 +1831,10 @@ export const pages = {
       routes: {
         add: "Add route",
         corpusAria: "Route {{index}} corpus",
-        description: "Each route chooses a corpus and retrieval strategy; the strategy decides fulltext, vector, graph, or structured recall.",
-        noBackendStrategies: "This corpus has no backend-supported retrieval strategies.",
+        description:
+          "Each route chooses a corpus and retrieval strategy; the strategy decides fulltext, vector, graph, or structured recall.",
+        noBackendStrategies:
+          "This corpus has no backend-supported retrieval strategies.",
         noStrategies: "No supported strategies",
         removeAria: "Remove route {{index}}",
         selectStrategy: "Select route strategy",
@@ -1720,25 +1867,32 @@ export const pages = {
       },
       templates: {
         basic: "Basic",
-        description: "Choose a backend-declared ingest mode first, then adjust individual stages only when needed.",
+        description:
+          "Choose a backend-declared ingest mode first, then adjust individual stages only when needed.",
         "document-reference": {
-          description: "Validate a document source reference, parse and split text, then write fulltext and vector indexes.",
+          description:
+            "Validate a document source reference, parse and split text, then write fulltext and vector indexes.",
           name: "Document reference ingest",
         },
-        empty: "No backend templates are available. Use advanced node controls below.",
+        empty:
+          "No backend templates are available. Use advanced node controls below.",
         "graph-tree-enhanced": {
-          description: "Build fulltext and vector indexes while extracting and persisting structure tree branches for graph corpora.",
+          description:
+            "Build fulltext and vector indexes while extracting and persisting structure tree branches for graph corpora.",
           name: "Graph tree enhanced ingest",
         },
-        graphRequired: "Select a graph-backed corpus before using this template.",
+        graphRequired:
+          "Select a graph-backed corpus before using this template.",
         "mineru-document-reference": {
-          description: "Parse PDF or DOCX project document references with MinerU into Markdown, then build fulltext and vector indexes.",
+          description:
+            "Parse PDF or DOCX project document references with MinerU into Markdown, then build fulltext and vector indexes.",
           name: "MinerU document reference ingest",
         },
         nodeCount: "{{count}} nodes",
         selected: "Selected",
         "text-standard": {
-          description: "Prepare text payloads, split text units, build fulltext and vector indexes, then persist the source.",
+          description:
+            "Prepare text payloads, split text units, build fulltext and vector indexes, then persist the source.",
           name: "Standard text ingest",
         },
         title: "Pipeline templates",
@@ -1791,7 +1945,8 @@ export const pages = {
         },
         modelList: {
           name: "List models",
-          description: "List effective model definitions for the current or specified workspace.",
+          description:
+            "List effective model definitions for the current or specified workspace.",
         },
         skillList: {
           name: "List skills",
@@ -1799,7 +1954,8 @@ export const pages = {
         },
         taskCreate: {
           name: "Create task",
-          description: "Create a new task in the current or specified workspace.",
+          description:
+            "Create a new task in the current or specified workspace.",
         },
         taskList: {
           name: "List tasks",
@@ -1807,7 +1963,8 @@ export const pages = {
         },
         variableList: {
           name: "List variables",
-          description: "List effective variables in the current or specified workspace.",
+          description:
+            "List effective variables in the current or specified workspace.",
         },
         workspaceGet: {
           name: "Get workspace",
@@ -1871,10 +2028,12 @@ export const pages = {
       toggle: "System-agent policy update failed",
     },
     mainAgent: {
-      description: "Platform-level guidance used by the runtime main-agent path.",
+      description:
+        "Platform-level guidance used by the runtime main-agent path.",
       hint: "Only personality and instructions are editable in v1.",
       instructions: "Instructions",
-      instructionsPlaceholder: "Persistent instructions injected into the runtime main-agent path.",
+      instructionsPlaceholder:
+        "Persistent instructions injected into the runtime main-agent path.",
       personality: "Personality",
       personalityPlaceholder: "How should the platform main agent behave?",
       title: "Main Agent",
@@ -1920,7 +2079,8 @@ export const pages = {
   },
   workspaceAgents: {
     emptyInternalWorkspace: "Select a workspace to manage internal agents.",
-    emptyWorkspace: "Select a workspace to manage inherited system-agent policy.",
+    emptyWorkspace:
+      "Select a workspace to manage inherited system-agent policy.",
     errors: {
       load: "Workspace agents could not be loaded",
       reset: "Internal policy reset failed",
@@ -1982,10 +2142,12 @@ export const pages = {
       catalog: {
         mainAgent: {
           name: "Main Agent",
-          description: "Primary workspace internal agent with access to platform business tools.",
+          description:
+            "Primary workspace internal agent with access to platform business tools.",
         },
       },
-      description: "Manage internal agent policy and tool assignment for the selected workspace.",
+      description:
+        "Manage internal agent policy and tool assignment for the selected workspace.",
       empty: "No internal agents found for this workspace.",
       agentCode: "Code: {{code}}",
       errors: {
@@ -1995,46 +2157,67 @@ export const pages = {
       help: {
         mcpAccessMode: {
           ariaLabel: "Explain MCP access mode",
-          summary: "Controls whether this internal agent can use inherited MCP servers and how that set is resolved.",
-          optionOne: "All enabled servers: the agent can use every server currently effective in the workspace.",
-          optionTwo: "Selected servers: only the specific effective servers chosen below remain assignable.",
+          summary:
+            "Controls whether this internal agent can use inherited MCP servers and how that set is resolved.",
+          optionOne:
+            "All enabled servers: the agent can use every server currently effective in the workspace.",
+          optionTwo:
+            "Selected servers: only the specific effective servers chosen below remain assignable.",
         },
         optionLabel: "Options",
         expandedDomainPersistenceMode: {
           ariaLabel: "Explain expanded domain persistence mode",
-          summary: "Controls how long domain-expanded tools stay available during a run after discovery loads them.",
-          optionOne: "Sticky expanded: once a domain is expanded, its tools stay available for the rest of the run.",
-          optionTwo: "Ephemeral expanded: expanded tools are temporary and can be dropped after the relevant step.",
+          summary:
+            "Controls how long domain-expanded tools stay available during a run after discovery loads them.",
+          optionOne:
+            "Sticky expanded: once a domain is expanded, its tools stay available for the rest of the run.",
+          optionTwo:
+            "Ephemeral expanded: expanded tools are temporary and can be dropped after the relevant step.",
         },
         toolAssignmentMode: {
           ariaLabel: "Explain tool assignment mode",
-          summary: "Controls which platform business tools are assigned to this internal agent.",
-          optionOne: "All platform tools: assign every platform tool in the registry to this agent.",
-          optionTwo: "Selected tools: assign only the specific tools you choose below.",
+          summary:
+            "Controls which platform business tools are assigned to this internal agent.",
+          optionOne:
+            "All platform tools: assign every platform tool in the registry to this agent.",
+          optionTwo:
+            "Selected tools: assign only the specific tools you choose below.",
         },
         toolExposureMode: {
           ariaLabel: "Explain tool exposure mode",
-          summary: "Controls how the assigned tools are exposed to the model at runtime.",
-          optionOne: "Direct list: send the concrete tool schemas to the model at startup.",
-          optionTwo: "Domain discovery: send the domain catalog first, then expand a domain before concrete tools are loaded.",
+          summary:
+            "Controls how the assigned tools are exposed to the model at runtime.",
+          optionOne:
+            "Direct list: send the concrete tool schemas to the model at startup.",
+          optionTwo:
+            "Domain discovery: send the domain catalog first, then expand a domain before concrete tools are loaded.",
         },
         maxSteps: {
           ariaLabel: "Explain max steps",
-          summary: "Caps how many model turns this internal agent can take in a single run.",
-          optionOne: "Lower values stop long reasoning loops sooner and keep runs tight.",
-          optionTwo: "Higher values allow more multi-step work, but they also increase runtime cost.",
+          summary:
+            "Caps how many model turns this internal agent can take in a single run.",
+          optionOne:
+            "Lower values stop long reasoning loops sooner and keep runs tight.",
+          optionTwo:
+            "Higher values allow more multi-step work, but they also increase runtime cost.",
         },
         maxToolCalls: {
           ariaLabel: "Explain max tool calls",
-          summary: "Caps the total number of tool executions this internal agent can perform across the whole run.",
-          optionOne: "Lower values keep the overall tool budget tight and stop long tool loops earlier.",
-          optionTwo: "Higher values allow more tool-driven iteration before the run stops entirely.",
+          summary:
+            "Caps the total number of tool executions this internal agent can perform across the whole run.",
+          optionOne:
+            "Lower values keep the overall tool budget tight and stop long tool loops earlier.",
+          optionTwo:
+            "Higher values allow more tool-driven iteration before the run stops entirely.",
         },
         maxParallelToolCalls: {
           ariaLabel: "Explain max parallel tool calls",
-          summary: "Caps how many tool calls from one model turn may execute concurrently before the runtime starts another batch.",
-          optionOne: "Lower values reduce concurrency and force larger tool sets to run in smaller batches.",
-          optionTwo: "Higher values allow wider fan-out when the model returns many independent tool calls.",
+          summary:
+            "Caps how many tool calls from one model turn may execute concurrently before the runtime starts another batch.",
+          optionOne:
+            "Lower values reduce concurrency and force larger tool sets to run in smaller batches.",
+          optionTwo:
+            "Higher values allow wider fan-out when the model returns many independent tool calls.",
         },
       },
       labels: {
@@ -2063,7 +2246,8 @@ export const pages = {
       },
       mcpSelection: {
         clearVisible: "Clear visible",
-        disabledHint: "Only workspace-effective enabled servers can be assigned.",
+        disabledHint:
+          "Only workspace-effective enabled servers can be assigned.",
         empty: "No MCP servers match the search query.",
         noDescription: "No description available.",
         platformDisabled: "Platform disabled",
@@ -2103,7 +2287,8 @@ export const pages = {
       title: "Internal Agents",
     },
     workspace: {
-      description: "Inherited system agents follow platform policy unless this workspace adds a local disable override.",
+      description:
+        "Inherited system agents follow platform policy unless this workspace adds a local disable override.",
       label: "Current Workspace",
       unselected: "No workspace selected",
     },
@@ -2119,10 +2304,12 @@ export const pages = {
       description: "Description",
       shortcut: "Shortcut",
     },
-    configureHint: "Select a shortcut, then press the key combination. Press Esc to cancel or Backspace to clear. Supported app containers also try to capture browser-reserved shortcuts; regular browsers may still handle them first.",
+    configureHint:
+      "Select a shortcut, then press the key combination. Press Esc to cancel or Backspace to clear. Supported app containers also try to capture browser-reserved shortcuts; regular browsers may still handle them first.",
     messages: {
       conflict: "This shortcut is already assigned to {{action}}.",
-      modifierRequired: "Use at least one modifier key (Cmd/Ctrl, Alt, or Shift).",
+      modifierRequired:
+        "Use at least one modifier key (Cmd/Ctrl, Alt, or Shift).",
     },
     shortcuts: {
       closeCurrentTab: {
@@ -2152,74 +2339,108 @@ export const pages = {
   },
   settingsGeneral: {
     aguiWorkReplay: {
-      description: "Controls how many recent completed conversation turns keep user-facing work rails after chat switching or page refresh.",
+      description:
+        "Controls how many recent completed conversation turns keep user-facing work rails after chat switching or page refresh.",
       help: "Show AG-UI work replay settings help",
       recentWorkTurns: "Recent Work Turns",
       recentWorkTurnsAria: "AG-UI recent work turn limit",
-      recentWorkTurnsHint: "Show between {{min}} and {{max}} recent turns per session.",
+      recentWorkTurnsHint:
+        "Show between {{min}} and {{max}} recent turns per session.",
       title: "AG-UI Work Replay",
     },
     systemConfig: {
-        categories: {
-          auth: { label: "Authentication" },
-          eventBus: { label: "Event bus" },
-          httpClients: { label: "HTTP clients" },
-          mineru: { label: "MinerU parsing" },
-          resource: { label: "Resource" },
-          server: { label: "Server" },
+      categories: {
+        auth: { label: "Authentication" },
+        eventBus: { label: "Event bus" },
+        httpClients: { label: "HTTP clients" },
+        mineru: { label: "MinerU parsing" },
+        resource: { label: "Resource" },
+        server: { label: "Server" },
         shortTermMemory: { label: "Short-term memory" },
         systemAgents: { label: "System agents" },
         variableCrypto: { label: "Variable encryption" },
       },
       descriptions: {
         fields: {
-          accessTokenTtlSeconds: "Sets how many seconds an access token remains valid.",
-          aguiGlobalReplayBytes: "Limits replay memory used by all AG-UI streams combined.",
-          aguiReplayBytesPerStream: "Limits replay memory retained for one AG-UI stream.",
-          aguiReplayEventsPerStream: "Limits the number of replay events retained for one AG-UI stream.",
-          aguiStreamIdleTtlSeconds: "Sets how long an inactive AG-UI stream remains cached.",
+          accessTokenTtlSeconds:
+            "Sets how many seconds an access token remains valid.",
+          aguiGlobalReplayBytes:
+            "Limits replay memory used by all AG-UI streams combined.",
+          aguiReplayBytesPerStream:
+            "Limits replay memory retained for one AG-UI stream.",
+          aguiReplayEventsPerStream:
+            "Limits the number of replay events retained for one AG-UI stream.",
+          aguiStreamIdleTtlSeconds:
+            "Sets how long an inactive AG-UI stream remains cached.",
           authorizeUrl: "Sets the OAuth provider authorization endpoint.",
           backend: "Selects the parsing backend implementation.",
           baseUrl: "Sets the upstream service base URL.",
           bindAddress: "Sets the network address on which the backend listens.",
-          cleanupBatchSize: "Sets the number of event-log rows processed in each cleanup batch.",
-          cleanupMaxRowsPerStartup: "Caps the event-log rows removed during one startup.",
-          cleanupOnStartup: "Determines whether expired event-log data is cleaned during startup.",
+          cleanupBatchSize:
+            "Sets the number of event-log rows processed in each cleanup batch.",
+          cleanupMaxRowsPerStartup:
+            "Caps the event-log rows removed during one startup.",
+          cleanupOnStartup:
+            "Determines whether expired event-log data is cleaned during startup.",
           clientId: "Sets the public OAuth application identifier.",
           clientSecret: "Sets the confidential OAuth application credential.",
-          codexCommand: "Sets the command used to launch the Codex system agent.",
-          connectTimeoutMs: "Sets the maximum time allowed to establish a connection.",
-          cookieSecure: "Determines whether authentication cookies require HTTPS.",
-          criticalIngressCapacity: "Sets the queue capacity reserved for critical events.",
-          defaultContextWindowTokens: "Sets the default model context-window size used for budgeting.",
-          defaultMaxSessions: "Limits related sessions loaded into family context by default.",
-          defaultSinkCapacity: "Sets the default queue capacity for each event sink.",
-          defaultSnapshotMaxChars: "Limits characters loaded from each related snapshot.",
-          defaultTtlHours: "Sets how long family-context records remain eligible for loading.",
+          codexCommand:
+            "Sets the command used to launch the Codex system agent.",
+          connectTimeoutMs:
+            "Sets the maximum time allowed to establish a connection.",
+          cookieSecure:
+            "Determines whether authentication cookies require HTTPS.",
+          criticalIngressCapacity:
+            "Sets the queue capacity reserved for critical events.",
+          defaultContextWindowTokens:
+            "Sets the default model context-window size used for budgeting.",
+          defaultMaxSessions:
+            "Limits related sessions loaded into family context by default.",
+          defaultSinkCapacity:
+            "Sets the default queue capacity for each event sink.",
+          defaultSnapshotMaxChars:
+            "Limits characters loaded from each related snapshot.",
+          defaultTtlHours:
+            "Sets how long family-context records remain eligible for loading.",
           devOauth2Enabled: "Enables the development OAuth2 provider.",
-          devOauth2Name: "Sets the display name of the development OAuth2 provider.",
-          emailsApiUrl: "Sets the OAuth provider endpoint used to retrieve email addresses.",
-          enabled: "Determines whether this subsystem or integration is enabled.",
-          externalizeAboveBytes: "Stores tool results externally when their payload exceeds this size.",
-          familyContextMaxChars: "Caps the total characters loaded as session-family context.",
-          familyContextMaxRatio: "Caps the session-family context share, for example 10%.",
-          frontendDistDir: "Sets the directory containing frontend static assets.",
+          devOauth2Name:
+            "Sets the display name of the development OAuth2 provider.",
+          emailsApiUrl:
+            "Sets the OAuth provider endpoint used to retrieve email addresses.",
+          enabled:
+            "Determines whether this subsystem or integration is enabled.",
+          externalizeAboveBytes:
+            "Stores tool results externally when their payload exceeds this size.",
+          familyContextMaxChars:
+            "Caps the total characters loaded as session-family context.",
+          familyContextMaxRatio:
+            "Caps the session-family context share, for example 10%.",
+          frontendDistDir:
+            "Sets the directory containing frontend static assets.",
           judgeInputMaxChars: "Caps the input supplied to the goal-loop judge.",
           judgeOutputMaxTokens: "Caps tokens generated by the goal-loop judge.",
-          jwtSecret: "Sets the secret used to sign and verify authentication tokens.",
-          keyBase64: "Sets the Base64 encryption key; changing it requires migrating existing encrypted values.",
-          maxActorUserCodeBytes: "Limits the encoded actor user-code length in an event.",
-          maxActorUsernameBytes: "Limits the encoded actor username length in an event.",
-          maxAttrKeyBytes: "Limits the encoded length of one event attribute key.",
+          jwtSecret:
+            "Sets the secret used to sign and verify authentication tokens.",
+          keyBase64:
+            "Sets the Base64 encryption key; changing it requires migrating existing encrypted values.",
+          maxActorUserCodeBytes:
+            "Limits the encoded actor user-code length in an event.",
+          maxActorUsernameBytes:
+            "Limits the encoded actor username length in an event.",
+          maxAttrKeyBytes:
+            "Limits the encoded length of one event attribute key.",
           maxAttrs: "Limits the number of attributes attached to one event.",
-          maxAttrValueBytes: "Limits the encoded length of one event attribute value.",
+          maxAttrValueBytes:
+            "Limits the encoded length of one event attribute value.",
           maxBytes: "Caps the accepted document size in bytes.",
-          maxConsecutiveJudgeFailures: "Limits consecutive judge failures before the goal loop pauses.",
+          maxConsecutiveJudgeFailures:
+            "Limits consecutive judge failures before the goal loop pauses.",
           maxNameBytes: "Limits the encoded event-name length.",
           maxPayloadBytes: "Limits the total encoded event payload size.",
           maxPayloadFields: "Limits the number of fields in an event payload.",
           maxProducerBytes: "Limits the encoded event-producer name length.",
-          maxRatio: "Caps this context block as a percentage of the available input budget, for example 20%.",
+          maxRatio:
+            "Caps this context block as a percentage of the available input budget, for example 20%.",
           maxRequestFieldBytes: "Limits encoded request metadata field length.",
           maxRuns: "Limits the number of automated runs in one goal loop.",
           maxSubjectCodeBytes: "Limits the encoded event subject-code length.",
@@ -2228,32 +2449,51 @@ export const pages = {
           maxTokens: "Caps tokens allocated to this context block.",
           mode: "Selects the event-log storage detail level.",
           name: "Sets the user-facing provider name.",
-          opencodeCommand: "Sets the command used to launch the OpenCode system agent.",
-          otherWeight: "Sets the relative weight for other family-context records, for example 5%.",
-          parseEndpoint: "Sets the document parsing endpoint relative to the base URL.",
+          opencodeCommand:
+            "Sets the command used to launch the OpenCode system agent.",
+          otherWeight:
+            "Sets the relative weight for other family-context records, for example 5%.",
+          parseEndpoint:
+            "Sets the document parsing endpoint relative to the base URL.",
           parseMethod: "Selects the document parsing method.",
-          poolIdleTimeoutMs: "Sets how long an idle pooled connection is retained.",
-          poolMaxIdlePerHost: "Limits idle pooled connections retained per host.",
+          poolIdleTimeoutMs:
+            "Sets how long an idle pooled connection is retained.",
+          poolMaxIdlePerHost:
+            "Limits idle pooled connections retained per host.",
           port: "Sets the TCP port on which the backend listens.",
-          projectDocRoot: "Sets the root directory available to project-document references.",
-          reasoningSummaryReplayEnabled: "Determines whether reasoning summaries are replayed into conversation context.",
-          redirectUri: "Sets the OAuth callback URI registered with the provider.",
-          refreshTokenTtlSeconds: "Sets how many seconds a refresh token remains valid.",
-          requirementWeight: "Sets the relative weight for requirement-related family context, for example 25%.",
-          retainedHistoryRatio: "Sets the history share retained after compaction, for example 20%.",
+          projectDocRoot:
+            "Sets the root directory available to project-document references.",
+          reasoningSummaryReplayEnabled:
+            "Determines whether reasoning summaries are replayed into conversation context.",
+          redirectUri:
+            "Sets the OAuth callback URI registered with the provider.",
+          refreshTokenTtlSeconds:
+            "Sets how many seconds a refresh token remains valid.",
+          requirementWeight:
+            "Sets the relative weight for requirement-related family context, for example 25%.",
+          retainedHistoryRatio:
+            "Sets the history share retained after compaction, for example 20%.",
           retentionDays: "Sets how many days event-log records are retained.",
-          returnContentList: "Determines whether parsing returns the structured content list.",
+          returnContentList:
+            "Determines whether parsing returns the structured content list.",
           root: "Sets the directory used for externalized tool-result artifacts.",
           scope: "Sets the OAuth scopes requested during authorization.",
-          standardIngressCapacity: "Sets the queue capacity for standard events.",
-          taskWeight: "Sets the relative weight for task-related family context, for example 65%.",
-          tcpKeepaliveMs: "Sets the TCP keepalive interval for pooled connections.",
+          standardIngressCapacity:
+            "Sets the queue capacity for standard events.",
+          taskWeight:
+            "Sets the relative weight for task-related family context, for example 65%.",
+          tcpKeepaliveMs:
+            "Sets the TCP keepalive interval for pooled connections.",
           timeoutSeconds: "Sets the maximum duration of one parsing request.",
           tokenUrl: "Sets the OAuth provider token-exchange endpoint.",
-          triggerRatio: "Sets the context-usage threshold that triggers compaction, for example 80%.",
-          userApiUrl: "Sets the OAuth provider endpoint used to retrieve the user profile.",
-          workspaceChatWeight: "Sets the relative weight for workspace chat context, for example 10%.",
-          workspaceHeartbeatWeight: "Sets the relative weight for workspace heartbeat context, for example 10%.",
+          triggerRatio:
+            "Sets the context-usage threshold that triggers compaction, for example 80%.",
+          userApiUrl:
+            "Sets the OAuth provider endpoint used to retrieve the user profile.",
+          workspaceChatWeight:
+            "Sets the relative weight for workspace chat context, for example 10%.",
+          workspaceHeartbeatWeight:
+            "Sets the relative weight for workspace heartbeat context, for example 10%.",
         },
         unknownField: "Sets this backend configuration value.",
       },
@@ -2261,10 +2501,20 @@ export const pages = {
       help: "Show backend configuration help",
       itemCount_one: "{{count}} setting",
       itemCount_other: "{{count}} settings",
-      actions: { refresh: "Refresh", save: "Save {{count}} changes", saving: "Saving..." },
-      confirmMigration: "I understand that these changes affect storage or encryption and may require a planned data migration before restart.",
-      description: "Backend configuration fields persisted to application.yaml. Runtime behavior remains unchanged until the indicated activation step.",
-      effects: { hotUpdate: "Hot update", migration: "Data migration", restart: "Restart required" },
+      actions: {
+        refresh: "Refresh",
+        save: "Save {{count}} changes",
+        saving: "Saving...",
+      },
+      confirmMigration:
+        "I understand that these changes affect storage or encryption and may require a planned data migration before restart.",
+      description:
+        "Backend configuration fields persisted to application.yaml. Runtime behavior remains unchanged until the indicated activation step.",
+      effects: {
+        hotUpdate: "Hot update",
+        migration: "Data migration",
+        restart: "Restart required",
+      },
       environmentOverride: "Environment override active",
       loading: "Loading backend configuration...",
       messages: {
@@ -2292,10 +2542,12 @@ export const pages = {
       verify: "Verify failed",
     },
     gateway: {
-      description: "Manage platform-internal MCP modules exposed through the gateway.",
+      description:
+        "Manage platform-internal MCP modules exposed through the gateway.",
       title: "Internal modules",
       updatedAt: "Updated {{value}}",
-      variablesEnabledHint: "Controls whether `/mcp/variables` is exposed through the gateway.",
+      variablesEnabledHint:
+        "Controls whether `/mcp/variables` is exposed through the gateway.",
       variablesEndpointEnabled: "Variables endpoint",
     },
     messages: {
@@ -2384,7 +2636,8 @@ export const pages = {
     },
     title: "MCP Servers",
     workspace: {
-      description: "Inherited MCP servers follow platform policy unless this workspace adds a local disable override.",
+      description:
+        "Inherited MCP servers follow platform policy unless this workspace adds a local disable override.",
       label: "Current workspace",
       unselected: "No workspace selected",
     },
@@ -2436,7 +2689,8 @@ export const pages = {
       revertTitle: "Revert override?",
     },
     empty: {
-      noPromptVariableOptions: "No variable management entries or runtime variables are available",
+      noPromptVariableOptions:
+        "No variable management entries or runtime variables are available",
       noVariableDescription: "No description",
       noVariables: "No variables detected",
       noPromptBody: "No prompt body",
@@ -2454,7 +2708,8 @@ export const pages = {
       statusUpdate: "Status update failed",
       workspaceRequiredForSave: "Select a workspace before saving",
       translation: "Translation failed",
-      translationEdited: "The target language has manual edits. Review or clear them before translating again.",
+      translationEdited:
+        "The target language has manual edits. Review or clear them before translating again.",
     },
     fields: {
       actions: "Actions",
@@ -2494,23 +2749,57 @@ export const pages = {
       overrideSaved: "Override saved",
       saved: "Prompt saved",
       duplicated: "Prompt duplicated",
-      translationDraftCreated: "Other languages translated and synchronized from the current language",
+      translationDraftCreated:
+        "Other languages translated and synchronized from the current language",
     },
     pagination: {
       itemLabel: "prompts",
     },
     runtimeVariables: {
-      AGENT_VISIBLE_DOMAINS: { description: "Visible tool domains and their operations.", sourceLabel: "Agent tool domains" },
-      AGENT_DOMAIN_PERSISTENCE_MODE: { description: "How expanded domain tools are persisted.", sourceLabel: "Agent domain persistence mode" },
-      CHAT_USER_MESSAGE: { description: "The first user message.", sourceLabel: "Chat user message" },
-      TERMINAL_EXPLAIN_COMMAND: { description: "Command being analyzed.", sourceLabel: "Terminal command" },
-      TERMINAL_EXPLAIN_OUTPUT: { description: "Command output being analyzed.", sourceLabel: "Terminal output" },
-      TERMINAL_CURRENT_COMMAND: { description: "Current command intent.", sourceLabel: "Terminal current command" },
-      TERMINAL_USER_REQUEST: { description: "User request for a command.", sourceLabel: "Terminal user request" },
-      TASK_CONTEXT: { description: "Structured task metadata and description.", sourceLabel: "Task context" },
-      RAG_TREE_TITLE: { description: "Tree node title.", sourceLabel: "RAG tree title" },
-      RAG_TREE_SOURCE_TEXT: { description: "Text covered by the node.", sourceLabel: "RAG tree source text" },
-      RAG_TREE_CHILD_SUMMARIES: { description: "Summaries generated for child nodes.", sourceLabel: "RAG tree child summaries" },
+      AGENT_VISIBLE_DOMAINS: {
+        description: "Visible tool domains and their operations.",
+        sourceLabel: "Agent tool domains",
+      },
+      AGENT_DOMAIN_PERSISTENCE_MODE: {
+        description: "How expanded domain tools are persisted.",
+        sourceLabel: "Agent domain persistence mode",
+      },
+      CHAT_USER_MESSAGE: {
+        description: "The first user message.",
+        sourceLabel: "Chat user message",
+      },
+      TERMINAL_EXPLAIN_COMMAND: {
+        description: "Command being analyzed.",
+        sourceLabel: "Terminal command",
+      },
+      TERMINAL_EXPLAIN_OUTPUT: {
+        description: "Command output being analyzed.",
+        sourceLabel: "Terminal output",
+      },
+      TERMINAL_CURRENT_COMMAND: {
+        description: "Current command intent.",
+        sourceLabel: "Terminal current command",
+      },
+      TERMINAL_USER_REQUEST: {
+        description: "User request for a command.",
+        sourceLabel: "Terminal user request",
+      },
+      TASK_CONTEXT: {
+        description: "Structured task metadata and description.",
+        sourceLabel: "Task context",
+      },
+      RAG_TREE_TITLE: {
+        description: "Tree node title.",
+        sourceLabel: "RAG tree title",
+      },
+      RAG_TREE_SOURCE_TEXT: {
+        description: "Text covered by the node.",
+        sourceLabel: "RAG tree source text",
+      },
+      RAG_TREE_CHILD_SUMMARIES: {
+        description: "Summaries generated for child nodes.",
+        sourceLabel: "RAG tree child summaries",
+      },
     },
     shell: {
       searchPlaceholder: "Search prompts...",
@@ -2518,9 +2807,12 @@ export const pages = {
     hints: {
       promptBodyEditor: "Edit the Markdown prompt body in a larger workspace.",
       promptBodyPreview: "Preview the rendered Markdown prompt body.",
-      promptBodyVariables: "Type {{ to search and select an available variable management entry or system runtime variable. Sensitive variables cannot be inserted into prompts.",
-      translationReview: "Edit one language at a time. Translation uses the current language to overwrite and synchronize the other languages.",
-      translationSync: "Uses the current language to translate and overwrite the other languages.",
+      promptBodyVariables:
+        "Type {{ to search and select an available variable management entry or system runtime variable. Sensitive variables cannot be inserted into prompts.",
+      translationReview:
+        "Edit one language at a time. Translation uses the current language to overwrite and synchronize the other languages.",
+      translationSync:
+        "Uses the current language to translate and overwrite the other languages.",
       variableOptionSearch: "Search variables",
     },
     sources: {
@@ -2562,8 +2854,10 @@ export const pages = {
       nameRequired: "Name is required",
       promptBodyRequired: "Prompt body is required",
       requiredFields: "Complete the required fields before saving",
-      variableBindingRequired: "Type an opening placeholder and select a variable management entry or runtime variable",
-      variableBindingUnavailable: "A referenced variable management entry is unavailable. Reinsert it before saving.",
+      variableBindingRequired:
+        "Type an opening placeholder and select a variable management entry or runtime variable",
+      variableBindingUnavailable:
+        "A referenced variable management entry is unavailable. Reinsert it before saving.",
       variableDescriptionRequired: "Variable description is required",
     },
   },
@@ -2600,11 +2894,14 @@ export const pages = {
       notFound: "Not Found",
     },
     capabilityGrants: {
-      catalogHint: "Only operations in the shared backend catalog can be granted.",
+      catalogHint:
+        "Only operations in the shared backend catalog can be granted.",
       collapseCapability: "Collapse {{name}}",
       collapseOperation: "Collapse {{name}}",
-      description: "Grants are applied by business capability and operation. Current route exposure is shown for each operation.",
-      detailDescription: "Authorization is scoped by business capability and operation. Only the listed operations are available to this open-app.",
+      description:
+        "Grants are applied by business capability and operation. Current route exposure is shown for each operation.",
+      detailDescription:
+        "Authorization is scoped by business capability and operation. Only the listed operations are available to this open-app.",
       empty: "No capability grants assigned.",
       expandCapability: "Expand {{name}}",
       expandOperation: "Expand {{name}}",
@@ -2614,8 +2911,10 @@ export const pages = {
     },
     create: {
       cardTitle: "Create platform open-app",
-      description: "Create the external integration identity first. After creation, the one-time app key reveal is shown and grants can be edited on the dedicated edit page.",
-      nextDescription: "A new Open App Code and App Key are generated. The cleartext App Key is shown once on the detail page immediately after create. After that reveal, only the fingerprint remains visible and future changes use key rotation.",
+      description:
+        "Create the external integration identity first. After creation, the one-time app key reveal is shown and grants can be edited on the dedicated edit page.",
+      nextDescription:
+        "A new Open App Code and App Key are generated. The cleartext App Key is shown once on the detail page immediately after create. After that reveal, only the fingerprint remains visible and future changes use key rotation.",
       nextTitle: "What happens next",
     },
     detail: {
@@ -2656,7 +2955,8 @@ export const pages = {
       updatedAt: "Updated",
     },
     identity: {
-      description: "Signed OpenAPI calls identify the integration by Open App Code and fingerprint. Cleartext keys are never shown again after the reveal step.",
+      description:
+        "Signed OpenAPI calls identify the integration by Open App Code and fingerprint. Cleartext keys are never shown again after the reveal step.",
       title: "Open App Identity",
     },
     list: {
@@ -2670,7 +2970,8 @@ export const pages = {
         status: "Status",
         updatedAt: "Updated",
       },
-      description: "Browse platform open-apps and open the selected record for detail or editing.",
+      description:
+        "Browse platform open-apps and open the selected record for detail or editing.",
       empty: "No open-apps match the current filters.",
       fingerprint: "Fingerprint: {{value}}",
       noDescription: "No description",
@@ -2695,8 +2996,10 @@ export const pages = {
       userGrantsSaved: "User grants updated",
     },
     metadata: {
-      detailDescription: "Review the platform identity and runtime status for this external integration.",
-      editDescription: "Edit the platform identity label, description, and status for this open-app.",
+      detailDescription:
+        "Review the platform identity and runtime status for this external integration.",
+      editDescription:
+        "Edit the platform identity label, description, and status for this open-app.",
       noDescription: "No description",
       title: "Open App Metadata",
     },
@@ -2704,24 +3007,28 @@ export const pages = {
       enabledLabel: "Enabled",
       enabledTrend: "Open-apps that can currently use HMAC authentication.",
       capabilityGroupsLabel: "Capability Groups",
-      capabilityGroupsTrend: "Current business OpenAPI families exposed for authorization.",
+      capabilityGroupsTrend:
+        "Current business OpenAPI families exposed for authorization.",
       openAppsLabel: "Open Apps",
       openAppsTrend: "Platform-level integrations currently registered.",
     },
     placeholders: {
-      description: "What business system is this open-app allowed to represent?",
+      description:
+        "What business system is this open-app allowed to represent?",
       name: "Customer Support Bridge",
     },
     reveal: {
       badge: "One-time secret reveal",
-      description: "This cleartext key is only shown after create or rotate. Later views expose fingerprint only.",
+      description:
+        "This cleartext key is only shown after create or rotate. Later views expose fingerprint only.",
       fingerprint: "Fingerprint: {{value}}",
       title: "Store this app key now",
     },
     rotateDialog: {
       cancel: "Keep current key",
       confirming: "Rotating...",
-      description: "The current app key becomes invalid immediately. The new key will be revealed once after rotation.",
+      description:
+        "The current app key becomes invalid immediately. The new key will be revealed once after rotation.",
       title: "Rotate app key?",
     },
     status: {
@@ -2737,8 +3044,10 @@ export const pages = {
     },
     userGrants: {
       dedupeHint: "Duplicate or blank lines are removed before save.",
-      description: "V1 only supports explicit binding to concrete internal users. Enter one user code per line.",
-      detailDescription: "These user codes are the only internal identities this open-app may impersonate after HMAC verification succeeds.",
+      description:
+        "V1 only supports explicit binding to concrete internal users. Enter one user code per line.",
+      detailDescription:
+        "These user codes are the only internal identities this open-app may impersonate after HMAC verification succeeds.",
       empty: "No users granted.",
       hint: "Signed requests still send X-Tron-User-Code explicitly. Signature success only proves the caller; this list proves who the open-app may impersonate.",
       selected: "{{count}} selected",
@@ -2751,112 +3060,681 @@ export const pages = {
     },
   },
   memory: {
-    actions: { archive: "Archive", cancel: "Cancel", copied: "Copied", copyCode: "Copy code", disable: "Disable", edit: "Edit", new: "New", open: "Open details", refresh: "Refresh", save: "Save", saving: "Saving..." },
+    actions: {
+      archive: "Archive",
+      cancel: "Cancel",
+      copied: "Copied",
+      copyCode: "Copy code",
+      disable: "Disable",
+      edit: "Edit",
+      new: "New",
+      open: "Open details",
+      refresh: "Refresh",
+      save: "Save",
+      saving: "Saving...",
+    },
     aria: { actionsFor: "Open actions for {{title}}" },
-    columns: { actions: "Actions", memory: "Memory", status: "Status", type: "Type", updated: "Updated", use: "Use" },
-    confirm: { description: "{{title}} will stay available for later review.", title: "Archive memory?" },
-    empty: { title: "No memories found", withFilters: "No memories in {{target}} match the current filters.", withQuery: "No memories in {{target}} match \"{{query}}\"." },
-    errors: { archive: "Memory could not be archived.", create: "Memory could not be created", notFound: "Memory not found.", save: "Memory could not be saved", status: "Memory status could not be updated" },
-    filters: { injectable: "Filter memories by context use", review: "Filter memories by review status", reviewOptions: { all: "Any review", APPROVED: "Approved", PENDING_REVIEW: "Pending review", REJECTED: "Rejected" }, status: "Filter memories by status", statusOptions: { all: "Any status", ACTIVE: "Active", ARCHIVED: "Archived", CANDIDATE: "Candidate", DISABLED: "Disabled" }, target: "Filter memory target", useOptions: { all: "Any use", injectable: "Auto context", "not-injectable": "Search only" } },
-    messages: { archived: "{{title}} archived.", created: "{{title}} created", disabled: "{{title}} disabled", refreshed: "Memory refreshed.", saved: "{{title}} saved" },
-    reviewValue: { APPROVED: "Approved", PENDING_REVIEW: "Pending review", REJECTED: "Rejected" },
-    statusValue: { ACTIVE: "Active", ARCHIVED: "Archived", CANDIDATE: "Candidate", DISABLED: "Disabled" },
-    use: { autoContext: "Auto context", autoContextDetail: "added automatically", searchOnly: "Search only", searchOnlyDetail: "manual lookup" },
+    columns: {
+      actions: "Actions",
+      memory: "Memory",
+      status: "Status",
+      type: "Type",
+      updated: "Updated",
+      use: "Use",
+    },
+    confirm: {
+      description: "{{title}} will stay available for later review.",
+      title: "Archive memory?",
+    },
+    empty: {
+      title: "No memories found",
+      withFilters: "No memories in {{target}} match the current filters.",
+      withQuery: 'No memories in {{target}} match "{{query}}".',
+    },
+    errors: {
+      archive: "Memory could not be archived.",
+      create: "Memory could not be created",
+      notFound: "Memory not found.",
+      save: "Memory could not be saved",
+      status: "Memory status could not be updated",
+    },
+    filters: {
+      injectable: "Filter memories by context use",
+      review: "Filter memories by review status",
+      reviewOptions: {
+        all: "Any review",
+        APPROVED: "Approved",
+        PENDING_REVIEW: "Pending review",
+        REJECTED: "Rejected",
+      },
+      status: "Filter memories by status",
+      statusOptions: {
+        all: "Any status",
+        ACTIVE: "Active",
+        ARCHIVED: "Archived",
+        CANDIDATE: "Candidate",
+        DISABLED: "Disabled",
+      },
+      target: "Filter memory target",
+      useOptions: {
+        all: "Any use",
+        injectable: "Auto context",
+        "not-injectable": "Search only",
+      },
+    },
+    messages: {
+      archived: "{{title}} archived.",
+      created: "{{title}} created",
+      disabled: "{{title}} disabled",
+      refreshed: "Memory refreshed.",
+      saved: "{{title}} saved",
+    },
+    reviewValue: {
+      APPROVED: "Approved",
+      PENDING_REVIEW: "Pending review",
+      REJECTED: "Rejected",
+    },
+    statusValue: {
+      ACTIVE: "Active",
+      ARCHIVED: "Archived",
+      CANDIDATE: "Candidate",
+      DISABLED: "Disabled",
+    },
+    use: {
+      autoContext: "Auto context",
+      autoContextDetail: "added automatically",
+      searchOnly: "Search only",
+      searchOnlyDetail: "manual lookup",
+    },
     createTitle: "New Memory",
     search: "Search memories",
     searchPlaceholder: "Search memories...",
     title: "Memory",
-    form: { autoContext: "Auto context", currentSpace: "Current space", currentUser: "Current user", metadata: "Metadata rows", metadataHint: "One key-value pair per line, formatted as Key: Value.", notApplicable: "Not applicable", optional: "Optional", reviewStatus: "Review status", scope: "Scope", searchOnly: "Search only", semanticKey: "Semantic key", sourceLabel: "Source label", status: "Memory status", tags: "Tags", tagsHint: "Comma-separated values.", target: "Target", text: "Memory text", title: "Title", type: "Memory type", use: "Use", workDomain: "Work domain" },
+    form: {
+      autoContext: "Auto context",
+      currentSpace: "Current space",
+      currentUser: "Current user",
+      metadata: "Metadata rows",
+      metadataHint: "One key-value pair per line, formatted as Key: Value.",
+      notApplicable: "Not applicable",
+      optional: "Optional",
+      reviewStatus: "Review status",
+      scope: "Scope",
+      searchOnly: "Search only",
+      semanticKey: "Semantic key",
+      sourceLabel: "Source label",
+      status: "Memory status",
+      tags: "Tags",
+      tagsHint: "Comma-separated values.",
+      target: "Target",
+      text: "Memory text",
+      title: "Title",
+      type: "Memory type",
+      use: "Use",
+      workDomain: "Work domain",
+    },
   },
   memoryDomains: {
-    actions: { cancel: "Cancel", disable: "Disable", disabling: "Disabling...", edit: "Edit", enable: "Enable", new: "New Domain", preview: "Preview", refresh: "Refresh", refreshing: "Refreshing...", save: "Save", saving: "Saving..." },
-    aria: { search: "Search memory domains", sort: "Sort memory domains", status: "Filter memory domains by status" },
-    columns: { actions: "Actions", description: "Description", domain: "Domain", status: "Status", updated: "Updated" },
-    confirm: { description: "{{name}} will be removed from active memory targets.", title: "Disable domain?" },
+    actions: {
+      cancel: "Cancel",
+      disable: "Disable",
+      disabling: "Disabling...",
+      edit: "Edit",
+      enable: "Enable",
+      new: "New Domain",
+      preview: "Preview",
+      refresh: "Refresh",
+      refreshing: "Refreshing...",
+      save: "Save",
+      saving: "Saving...",
+    },
+    aria: {
+      search: "Search memory domains",
+      sort: "Sort memory domains",
+      status: "Filter memory domains by status",
+    },
+    columns: {
+      actions: "Actions",
+      description: "Description",
+      domain: "Domain",
+      status: "Status",
+      updated: "Updated",
+    },
+    confirm: {
+      description: "{{name}} will be removed from active memory targets.",
+      title: "Disable domain?",
+    },
     createTitle: "New Memory Domain",
     detailTitle: "Memory Domain",
     editTitle: "Edit Memory Domain",
-    errors: { disable: "Memory domain could not be disabled", enable: "Memory domain could not be enabled", load: "Memory domains could not be loaded", save: "Memory domain could not be saved" },
-    fields: { code: "Domain Code", description: "Description", name: "Name", search: "Search", sort: "Sort", status: "Status" },
-    messages: { created: "{{name}} created", disabled: "{{name}} disabled", enabled: "{{name}} enabled", saved: "{{name}} saved" },
+    errors: {
+      disable: "Memory domain could not be disabled",
+      enable: "Memory domain could not be enabled",
+      load: "Memory domains could not be loaded",
+      save: "Memory domain could not be saved",
+    },
+    fields: {
+      code: "Domain Code",
+      description: "Description",
+      name: "Name",
+      search: "Search",
+      sort: "Sort",
+      status: "Status",
+    },
+    messages: {
+      created: "{{name}} created",
+      disabled: "{{name}} disabled",
+      enabled: "{{name}} enabled",
+      saved: "{{name}} saved",
+    },
     pagination: { itemLabel: "memory domains" },
     placeholders: { search: "Search domains" },
-    sort: { "code-asc": "Code A-Z", "name-asc": "Name A-Z", "updated-desc": "Updated first" },
+    sort: {
+      "code-asc": "Code A-Z",
+      "name-asc": "Name A-Z",
+      "updated-desc": "Updated first",
+    },
     status: { active: "Active", all: "All statuses", disabled: "Disabled" },
-    table: { empty: "No domains match the current filters.", noDescription: "No description", title: "Domains" },
+    table: {
+      empty: "No domains match the current filters.",
+      noDescription: "No description",
+      title: "Domains",
+    },
     title: "Memory Domains",
   },
   installedSkills: {
-    actions: { refresh: "Refresh", refreshing: "Refreshing...", sync: "Sync", uninstall: "Uninstall", uninstalling: "Uninstalling...", update: "Update", updating: "Updating..." },
-    aria: { closeMarkdownFullscreen: "Close skill markdown fullscreen", openMarkdownFullscreen: "Open skill markdown fullscreen", skillMarkdownFullscreen: "Skill markdown fullscreen", skillMarkdownFullscreenPreview: "Skill markdown fullscreen preview", skillMarkdownPreview: "Skill markdown preview", uninstallConfirmation: "Uninstall skill confirmation" },
-    columns: { action: "Action", skill: "Skill", source: "Source", update: "Update", version: "Version", workspaces: "Workspaces" },
-    detail: { empty: "Select an installed skill to review its source, files, and markdown preview.", enabledWorkspaces: "Enabled Workspaces", files: "Files", filesEmpty: "No files discovered.", fullscreen: "Fullscreen", label: "Skill Detail", lastChecked: "Last Checked", lastUpdated: "Last Updated", loading: "Loading skill detail...", managedByCli: "CLI Managed", managedByManual: "Manual", markdownFullscreenDescription: "Preview the rendered markdown for this skill package.", markdownFullscreenTitle: "SKILL.md", markdownPreviewLabel: "SKILL.md Preview", notChecked: "Not checked", registryPath: "Registry Path", select: "Select a Skill", source: "Source", version: "Version" },
-    emptyState: { body: "Use “Sync” to search `skills.sh` and add one to the local registry.", title: "No installed skills match the current filters." },
-    errors: { detail: "Skill detail could not be loaded", load: "Installed skills could not be loaded", registry: "Registry operation failed", uninstall: "Skill uninstall failed" },
+    actions: {
+      refresh: "Refresh",
+      refreshing: "Refreshing...",
+      sync: "Sync",
+      uninstall: "Uninstall",
+      uninstalling: "Uninstalling...",
+      update: "Update",
+      updating: "Updating...",
+    },
+    aria: {
+      closeMarkdownFullscreen: "Close skill markdown fullscreen",
+      openMarkdownFullscreen: "Open skill markdown fullscreen",
+      skillMarkdownFullscreen: "Skill markdown fullscreen",
+      skillMarkdownFullscreenPreview: "Skill markdown fullscreen preview",
+      skillMarkdownPreview: "Skill markdown preview",
+      uninstallConfirmation: "Uninstall skill confirmation",
+    },
+    columns: {
+      action: "Action",
+      skill: "Skill",
+      source: "Source",
+      update: "Update",
+      version: "Version",
+      workspaces: "Workspaces",
+    },
+    detail: {
+      empty:
+        "Select an installed skill to review its source, files, and markdown preview.",
+      enabledWorkspaces: "Enabled Workspaces",
+      files: "Files",
+      filesEmpty: "No files discovered.",
+      fullscreen: "Fullscreen",
+      label: "Skill Detail",
+      lastChecked: "Last Checked",
+      lastUpdated: "Last Updated",
+      loading: "Loading skill detail...",
+      managedByCli: "CLI Managed",
+      managedByManual: "Manual",
+      markdownFullscreenDescription:
+        "Preview the rendered markdown for this skill package.",
+      markdownFullscreenTitle: "SKILL.md",
+      markdownPreviewLabel: "SKILL.md Preview",
+      notChecked: "Not checked",
+      registryPath: "Registry Path",
+      select: "Select a Skill",
+      source: "Source",
+      version: "Version",
+    },
+    emptyState: {
+      body: "Use “Sync” to search `skills.sh` and add one to the local registry.",
+      title: "No installed skills match the current filters.",
+    },
+    errors: {
+      detail: "Skill detail could not be loaded",
+      load: "Installed skills could not be loaded",
+      registry: "Registry operation failed",
+      uninstall: "Skill uninstall failed",
+    },
     loading: { badge: "Loading" },
-    messages: { discovered: "Discovered {{count}} installed skills", uninstalled: "{{name}} uninstalled", uninstalledKept: "{{name}} uninstalled. {{count}} workspace binding{{suffix}} remain and will show as deleted.", uninstalledRemoved: "{{name}} uninstalled and removed from {{count}} workspace binding{{suffix}}", updated: "Registry skills updated" },
+    messages: {
+      discovered: "Discovered {{count}} installed skills",
+      uninstalled: "{{name}} uninstalled",
+      uninstalledKept:
+        "{{name}} uninstalled. {{count}} workspace binding{{suffix}} remain and will show as deleted.",
+      uninstalledRemoved:
+        "{{name}} uninstalled and removed from {{count}} workspace binding{{suffix}}",
+      updated: "Registry skills updated",
+    },
     pagination: { itemLabel: "skills" },
-    search: { ariaLabel: "Filter installed skills", clear: "Clear installed skill search", placeholder: "Filter installed skills..." },
+    search: {
+      ariaLabel: "Filter installed skills",
+      clear: "Clear installed skill search",
+      placeholder: "Filter installed skills...",
+    },
     status: { unspecified: "Unspecified" },
     title: "Skill Center",
-    uninstallDialog: { cancel: "Cancel", keepWorkspaceSkills: "Keep Workspace Skills", removeLocal: "This will remove the local skill files from Skill Center.", title: "Uninstall {{name}}", uninstall: "Uninstall", uninstalling: "Uninstalling...", uninstallWorkspaceToo: "Uninstall Workspace Skills Too", usedByWorkspaces: "{{name}} is currently used by {{count}} workspace{{suffix}}. Do you also want to uninstall the corresponding workspace skills?" },
+    uninstallDialog: {
+      cancel: "Cancel",
+      keepWorkspaceSkills: "Keep Workspace Skills",
+      removeLocal: "This will remove the local skill files from Skill Center.",
+      title: "Uninstall {{name}}",
+      uninstall: "Uninstall",
+      uninstalling: "Uninstalling...",
+      uninstallWorkspaceToo: "Uninstall Workspace Skills Too",
+      usedByWorkspaces:
+        "{{name}} is currently used by {{count}} workspace{{suffix}}. Do you also want to uninstall the corresponding workspace skills?",
+    },
     warnings: { ragIndex: "Skill RAG index completed with warnings" },
   },
   skills: {
-    actions: { cancel: "Cancel", install: "Install", installSelected: "Install Selected{{suffix}}", refreshing: "Refreshing...", retry: "Retry", retryRag: "Retry RAG", search: "Search", searching: "Searching...", syncSelected: "Sync Selected{{suffix}}", uninstall: "Uninstall" },
+    actions: {
+      cancel: "Cancel",
+      install: "Install",
+      installSelected: "Install Selected{{suffix}}",
+      refreshing: "Refreshing...",
+      retry: "Retry",
+      retryRag: "Retry RAG",
+      search: "Search",
+      searching: "Searching...",
+      syncSelected: "Sync Selected{{suffix}}",
+      uninstall: "Uninstall",
+    },
     aria: { selectSkill: "Select {{name}}" },
-    bind: { breadcrumbs: { install: "Install", skills: "Skills" }, fields: { searchAriaLabel: "Search installed skills", searchPlaceholder: "Search installed skills...", selected: "Selected", selectedCount: "{{count}} skill(s)", workspace: "Workspace" } },
-    columns: { action: "Action", enabled: "Enabled", rag: "RAG", skill: "Skill", source: "Source", update: "Update", version: "Version", workspace: "Workspace" },
-    detail: { empty: "No bound skill is selected.", label: "Skill Detail", loading: "Loading skill detail...", notChecked: "Not checked", select: "Select a Skill" },
-    empty: { noMatch: "No synced skills matched the current query.", noneSelected: "No skills are selected yet.", searchHint: "Search synced skills in the local registry, then select the ones to install into this workspace." },
-    emptyState: { title: "No workspace skills match the current filters.", withWorkspace: "Install synced skills to {{workspace}} to see them here.", withoutWorkspace: "Select a workspace in the shell header to view bound skills." },
-    errors: { detail: "Skill detail could not be loaded", install: "Skill install failed", load: "Workspace skills could not be loaded", loadInstalled: "Installed skills could not be loaded", ragRetry: "Skill RAG retry failed", refresh: "Workspace refresh failed", removeBinding: "Workspace skill could not be removed", selectWorkspaceEnable: "Select a workspace in the shell before changing skill state", selectWorkspaceRefresh: "Select a workspace in the shell before refreshing skills", selectWorkspaceUnbind: "Select a workspace in the shell before unbinding skills", updateBinding: "Workspace skill binding could not be updated", workspaceRequired: "Select a workspace in the shell header before installing skills" },
+    bind: {
+      breadcrumbs: { install: "Install", skills: "Skills" },
+      fields: {
+        searchAriaLabel: "Search installed skills",
+        searchPlaceholder: "Search installed skills...",
+        selected: "Selected",
+        selectedCount: "{{count}} skill(s)",
+        workspace: "Workspace",
+      },
+    },
+    columns: {
+      action: "Action",
+      enabled: "Enabled",
+      rag: "RAG",
+      skill: "Skill",
+      source: "Source",
+      update: "Update",
+      version: "Version",
+      workspace: "Workspace",
+    },
+    detail: {
+      empty: "No bound skill is selected.",
+      label: "Skill Detail",
+      loading: "Loading skill detail...",
+      notChecked: "Not checked",
+      select: "Select a Skill",
+    },
+    empty: {
+      noMatch: "No synced skills matched the current query.",
+      noneSelected: "No skills are selected yet.",
+      searchHint:
+        "Search synced skills in the local registry, then select the ones to install into this workspace.",
+    },
+    emptyState: {
+      title: "No workspace skills match the current filters.",
+      withWorkspace: "Install synced skills to {{workspace}} to see them here.",
+      withoutWorkspace:
+        "Select a workspace in the shell header to view bound skills.",
+    },
+    errors: {
+      detail: "Skill detail could not be loaded",
+      install: "Skill install failed",
+      load: "Workspace skills could not be loaded",
+      loadInstalled: "Installed skills could not be loaded",
+      ragRetry: "Skill RAG retry failed",
+      refresh: "Workspace refresh failed",
+      removeBinding: "Workspace skill could not be removed",
+      selectWorkspaceEnable:
+        "Select a workspace in the shell before changing skill state",
+      selectWorkspaceRefresh:
+        "Select a workspace in the shell before refreshing skills",
+      selectWorkspaceUnbind:
+        "Select a workspace in the shell before unbinding skills",
+      updateBinding: "Workspace skill binding could not be updated",
+      workspaceRequired:
+        "Select a workspace in the shell header before installing skills",
+    },
     fields: { syncType: "Sync Type" },
     installTitle: "Install Skills",
-    messages: { disabled: "{{name}} disabled in {{workspace}}", enabled: "{{name}} enabled in {{workspace}}", inheritedInfo: "Inherited skills cannot be unbound.", installed: "{{count}} skill(s) installed in {{workspace}}", noInstalledMatch: "No installed skills matched the current query", noMatch: "No skills matched the current query", partial: "Installed {{bound}} of {{total}} skills. {{failure}}", ragRetried: "{{name}} RAG index rebuilt", refreshed: "Workspace skills refreshed", removed: "{{name}} removed from {{workspace}}", reverted: "{{name}} reverted to inherited setting in {{workspace}}", unbound: "{{name}} unbound from {{workspace}}" },
+    messages: {
+      disabled: "{{name}} disabled in {{workspace}}",
+      enabled: "{{name}} enabled in {{workspace}}",
+      inheritedInfo: "Inherited skills cannot be unbound.",
+      installed: "{{count}} skill(s) installed in {{workspace}}",
+      noInstalledMatch: "No installed skills matched the current query",
+      noMatch: "No skills matched the current query",
+      partial: "Installed {{bound}} of {{total}} skills. {{failure}}",
+      ragRetried: "{{name}} RAG index rebuilt",
+      refreshed: "Workspace skills refreshed",
+      removed: "{{name}} removed from {{workspace}}",
+      reverted: "{{name}} reverted to inherited setting in {{workspace}}",
+      unbound: "{{name}} unbound from {{workspace}}",
+    },
     noWorkspace: "No workspace selected",
     pagination: { itemLabel: "skills" },
-    searchModes: { find: { button: "Search" }, repo: { button: "List Skills" } },
-    sections: { installPlan: "Install Plan", searchResults: "Search Results", syncPlan: "Sync Plan" },
-    rag: { empty: "No RAG index state has been recorded for this skill.", graph: "Graph", lastAttempt: "Last Attempt", lastIndexed: "Last Indexed", notAttempted: "Not attempted", notIndexed: "Not indexed", progress: { skillDisable: "Updating RAG state for {{name}}", skillIndex: "Indexing {{name}} into RAG", skillRetry: "Retrying RAG index for {{name}}", workspace: "Rebuilding RAG index for workspace skills" }, title: "RAG Index", vector: "Vector", status: { disabled: "Disabled", failed: "Failed", indexed: "Indexed", pending: "Pending", stale: "Stale", warning: "Warning" } },
-    registryMissing: { action: "Skill Center", description: "Restore it from Skill Center, then return here and click Refresh to recover this workspace binding.", title: "The registry copy for this skill is missing." },
-    search: { ariaLabel: "Filter workspace skills", clear: "Clear workspace skill search", placeholder: "Filter workspace skills..." },
+    searchModes: {
+      find: { button: "Search" },
+      repo: { button: "List Skills" },
+    },
+    sections: {
+      installPlan: "Install Plan",
+      searchResults: "Search Results",
+      syncPlan: "Sync Plan",
+    },
+    rag: {
+      empty: "No RAG index state has been recorded for this skill.",
+      graph: "Graph",
+      lastAttempt: "Last Attempt",
+      lastIndexed: "Last Indexed",
+      notAttempted: "Not attempted",
+      notIndexed: "Not indexed",
+      progress: {
+        skillDisable: "Updating RAG state for {{name}}",
+        skillIndex: "Indexing {{name}} into RAG",
+        skillRetry: "Retrying RAG index for {{name}}",
+        workspace: "Rebuilding RAG index for workspace skills",
+      },
+      title: "RAG Index",
+      vector: "Vector",
+      status: {
+        disabled: "Disabled",
+        failed: "Failed",
+        indexed: "Indexed",
+        pending: "Pending",
+        stale: "Stale",
+        warning: "Warning",
+      },
+    },
+    registryMissing: {
+      action: "Skill Center",
+      description:
+        "Restore it from Skill Center, then return here and click Refresh to recover this workspace binding.",
+      title: "The registry copy for this skill is missing.",
+    },
+    search: {
+      ariaLabel: "Filter workspace skills",
+      clear: "Clear workspace skill search",
+      placeholder: "Filter workspace skills...",
+    },
     source: { GitHub: "GitHub", Manual: "Manual", Marketplace: "Marketplace" },
-    sourceKind: { Inherited: "Inherited", Local: "Local", Override: "Override" },
-    status: { deleted: "Deleted", disabled: "Disabled", enabled: "Enabled", failed: "Failed", indexing: "Indexing", indexed: "Indexed", inherited: "Inherited", installed: "Installed", installing: "Installing...", pending: "Pending", stale: "Stale", unknown: "Unknown", unspecified: "Unspecified", warning: "Warning" },
-    update: { Error: "Error", Manual: "Manual", UpdateAvailable: "Update available", UpToDate: "Up to date" },
+    sourceKind: {
+      Inherited: "Inherited",
+      Local: "Local",
+      Override: "Override",
+    },
+    status: {
+      deleted: "Deleted",
+      disabled: "Disabled",
+      enabled: "Enabled",
+      failed: "Failed",
+      indexing: "Indexing",
+      indexed: "Indexed",
+      inherited: "Inherited",
+      installed: "Installed",
+      installing: "Installing...",
+      pending: "Pending",
+      stale: "Stale",
+      unknown: "Unknown",
+      unspecified: "Unspecified",
+      warning: "Warning",
+    },
+    update: {
+      Error: "Error",
+      Manual: "Manual",
+      UpdateAvailable: "Update available",
+      UpToDate: "Up to date",
+    },
     warnings: { rag: "RAG warning", ragIndex: "RAG index warning" },
     syncTitle: "Sync Skills",
     title: "Workspace Skill Management",
   },
-  designStandard: { badge: "Apple-like enterprise SaaS", colorRoles: "Color roles", columns: { model: "Model", source: "Source", status: "Status", usage: "Usage", workspace: "Workspace" }, componentSignals: "Component signals", eyebrow: "Design system / Tron light", export: "Export", heroDescription: "The Tron light system uses restrained color, dense but breathable spacing, and stable workspace navigation for AI agent governance.", heroTitle: "Calm control for agent operations", label: "Design Standard", ready: "Ready for onboarding", search: "Search design standard", signalDescription: "Baseline pattern reserved for shared shell and later Stitch page implementation.", tableDescription: "Token-governed rows for workspace resource views.", tableTitle: "Dense table pattern", title: "Workspace UI foundation", typography: "Typography scale" },
-  sharedShell: { actions: { export: "Export Scan", filter: "Filter", newResource: "New Resource" }, columns: { inheritance: "Inheritance", name: "Name", owner: "Owner", status: "Status", usage: "Usage" }, controls: { description: "Tabs and filters must produce visible state in implemented pages.", title: "Common controls" }, form: { application: "Application", global: "Global", notes: "Notes", notesPlaceholder: "Describe the policy, source, or automation behavior...", resourceName: "Resource Name", resourceNameHint: "Used by create/import flows.", scope: "Scope", workspace: "Workspace", title: "Form primitives" }, inspector: { components: "Step 2 shared components", description: "Shell, page headers, tables, forms, tabs, badges, toggles, cards, and inspector panels are ready for console-page composition.", inheritance: "Inheritance controls enabled", lastInteraction: "Last interaction", switchHint: "Visible switch state is reserved for Step 3 interaction smoke checks.", title: "Resource Pattern" }, metrics: { archetypes: "Primary archetypes", archetypesTrend: "Kanban, split-pane, graph, chat, forms, tables", pages: "Console pages", pagesTrend: "Routed pages are organized by product area", width: "Shell width", widthTrend: "Matches design doc fixed agent sidebar" }, messages: { exportQueued: "Export queued", exportRequested: "Scan export requested" }, ready: "Ready", search: "Search tasks, agents, traces...", table: { search: "Search resources...", title: "Resource governance table" }, tabs: { overrides: "Overrides", resources: "Resources" }, title: "Shared Shell Preview", pageTitle: "Workspace console foundation" },
+  designStandard: {
+    badge: "Apple-like enterprise SaaS",
+    colorRoles: "Color roles",
+    columns: {
+      model: "Model",
+      source: "Source",
+      status: "Status",
+      usage: "Usage",
+      workspace: "Workspace",
+    },
+    componentSignals: "Component signals",
+    eyebrow: "Design system / Tron light",
+    export: "Export",
+    heroDescription:
+      "The Tron light system uses restrained color, dense but breathable spacing, and stable workspace navigation for AI agent governance.",
+    heroTitle: "Calm control for agent operations",
+    label: "Design Standard",
+    ready: "Ready for onboarding",
+    search: "Search design standard",
+    signalDescription:
+      "Baseline pattern reserved for shared shell and later Stitch page implementation.",
+    tableDescription: "Token-governed rows for workspace resource views.",
+    tableTitle: "Dense table pattern",
+    title: "Workspace UI foundation",
+    typography: "Typography scale",
+  },
+  sharedShell: {
+    actions: {
+      export: "Export Scan",
+      filter: "Filter",
+      newResource: "New Resource",
+    },
+    columns: {
+      inheritance: "Inheritance",
+      name: "Name",
+      owner: "Owner",
+      status: "Status",
+      usage: "Usage",
+    },
+    controls: {
+      description:
+        "Tabs and filters must produce visible state in implemented pages.",
+      title: "Common controls",
+    },
+    form: {
+      application: "Application",
+      global: "Global",
+      notes: "Notes",
+      notesPlaceholder:
+        "Describe the policy, source, or automation behavior...",
+      resourceName: "Resource Name",
+      resourceNameHint: "Used by create/import flows.",
+      scope: "Scope",
+      workspace: "Workspace",
+      title: "Form primitives",
+    },
+    inspector: {
+      components: "Step 2 shared components",
+      description:
+        "Shell, page headers, tables, forms, tabs, badges, toggles, cards, and inspector panels are ready for console-page composition.",
+      inheritance: "Inheritance controls enabled",
+      lastInteraction: "Last interaction",
+      switchHint:
+        "Visible switch state is reserved for Step 3 interaction smoke checks.",
+      title: "Resource Pattern",
+    },
+    metrics: {
+      archetypes: "Primary archetypes",
+      archetypesTrend: "Kanban, split-pane, graph, chat, forms, tables",
+      pages: "Console pages",
+      pagesTrend: "Routed pages are organized by product area",
+      width: "Shell width",
+      widthTrend: "Matches design doc fixed agent sidebar",
+    },
+    messages: {
+      exportQueued: "Export queued",
+      exportRequested: "Scan export requested",
+    },
+    ready: "Ready",
+    search: "Search tasks, agents, traces...",
+    table: {
+      search: "Search resources...",
+      title: "Resource governance table",
+    },
+    tabs: { overrides: "Overrides", resources: "Resources" },
+    title: "Shared Shell Preview",
+    pageTitle: "Workspace console foundation",
+  },
   mcp: {
     createTitle: "Connect MCP server",
-    detail: { authKind: "Auth Kind", created: "Created", disabledValue: "Disabled", enabled: "Enabled", enabledValue: "Enabled", endpoint: "Endpoint", health: "Health", tokenRef: "Bearer token variable ref", updated: "Updated", url: "URL" },
+    detail: {
+      authKind: "Auth Kind",
+      created: "Created",
+      disabledValue: "Disabled",
+      enabled: "Enabled",
+      enabledValue: "Enabled",
+      endpoint: "Endpoint",
+      health: "Health",
+      tokenRef: "Bearer token variable ref",
+      updated: "Updated",
+      url: "URL",
+    },
     detailTitle: "Platform MCP Server Detail",
-    actions: { cancel: "Cancel", edit: "Edit", save: "Save", saving: "Saving...", verify: "Verify", verifying: "Verifying..." },
+    actions: {
+      cancel: "Cancel",
+      edit: "Edit",
+      save: "Save",
+      saving: "Saving...",
+      verify: "Verify",
+      verifying: "Verifying...",
+    },
     editRecordTitle: "Edit {{name}}",
     editTitle: "Edit Platform MCP Server",
-    errors: { create: "Platform MCP server could not be created", load: "Platform MCP server could not be loaded", save: "Platform MCP server could not be saved", verify: "Verify failed" },
+    errors: {
+      create: "Platform MCP server could not be created",
+      load: "Platform MCP server could not be loaded",
+      save: "Platform MCP server could not be saved",
+      verify: "Verify failed",
+    },
     loading: "Loading platform MCP server...",
-    messages: { created: "{{name}} created", updated: "{{name}} updated", verified: "{{name}} verified" },
+    messages: {
+      created: "{{name}} created",
+      updated: "{{name}} updated",
+      verified: "{{name}} verified",
+    },
     new: "New",
     notFound: "Platform MCP server not found.",
-    form: { add: "Add {{label}}", arguments: "Arguments", authKind: "Auth Kind", authKindHint: "Bearer static reads the token from Variable Management using {{var-name}}.", command: "Command", commandHint: "Command used to launch the stdio MCP server.", description: "Description", descriptionHint: "Optional operator-facing description.", environment: "Environment variables", headerRefs: "Header variable refs", headers: "Headers", key: "Key", name: "Name", nameHint: "Human-readable name shown in registry lists.", none: "None", passthrough: "Environment variable passthrough", serverCode: "Server Code", serverCodeHint: "Lowercase letters, digits, underscore, and hyphen only.", serverCodeImmutable: "Server code is immutable after creation.", tokenRef: "Bearer token variable ref", tokenRefHint: "Enter a Variable Management reference in {{var-name}} form, such as {{MCP_TOKEN}}.", transport: "Transport", url: "URL", urlHint: "Streamable HTTP endpoint, for example https://example.com/mcp.", value: "Value", workingDirectory: "Working directory", workingDirectoryHint: "Optional working directory for the spawned stdio process." },
+    form: {
+      add: "Add {{label}}",
+      arguments: "Arguments",
+      authKind: "Auth Kind",
+      authKindHint:
+        "Bearer static reads the token from Variable Management using {{var-name}}.",
+      command: "Command",
+      commandHint: "Command used to launch the stdio MCP server.",
+      description: "Description",
+      descriptionHint: "Optional operator-facing description.",
+      environment: "Environment variables",
+      headerRefs: "Header variable refs",
+      headers: "Headers",
+      key: "Key",
+      name: "Name",
+      nameHint: "Human-readable name shown in registry lists.",
+      none: "None",
+      passthrough: "Environment variable passthrough",
+      serverCode: "Server Code",
+      serverCodeHint: "Lowercase letters, digits, underscore, and hyphen only.",
+      serverCodeImmutable: "Server code is immutable after creation.",
+      tokenRef: "Bearer token variable ref",
+      tokenRefHint:
+        "Enter a Variable Management reference in {{var-name}} form, such as {{MCP_TOKEN}}.",
+      transport: "Transport",
+      url: "URL",
+      urlHint: "Streamable HTTP endpoint, for example https://example.com/mcp.",
+      value: "Value",
+      workingDirectory: "Working directory",
+      workingDirectoryHint:
+        "Optional working directory for the spawned stdio process.",
+    },
     title: "MCP Servers",
-    verification: { checked: "Checked", description: "Draft configuration verified against the platform MCP runtime.", noIssues: "No issues reported.", title: "Verification result" },
+    verification: {
+      checked: "Checked",
+      description:
+        "Draft configuration verified against the platform MCP runtime.",
+      noIssues: "No issues reported.",
+      title: "Verification result",
+    },
   },
   admin: {
     actions: { cancel: "Cancel" },
-    audit: { columns: { action: "Action", actor: "Actor", ip: "IP Address", resource: "Resource ID", status: "Status", timestamp: "Timestamp" }, entries: "entries", export: "Export", exported: "{{count}} audit rows exported", search: "Search audit logs...", statusOptions: { Failed: "Failed", Success: "Success", Warning: "Warning", all: "All status" }, title: "Audit Logs" },
-    roles: { actions: { add: "Add Role", clear: "Clear Filters", clone: "Clone", confirm: "Confirm", delete: "Delete", discard: "Discard", new: "New", reset: "Reset", save: "Save", saving: "Saving..." }, allDomains: "All domains", domainFilter: "Filter by permission domain", empty: "No roles match the current filters.", messages: { discarded: "Unsaved changes discarded", saved: "Role matrix draft saved" }, role: "Role", roleTypeFilter: "Filter by role type", roleTypes: { All: "All", Custom: "Custom", System: "System" }, search: "Search roles", searchPlaceholder: "Search roles, codes, or descriptions...", showChanged: "Show changed only", title: "Roles & Permissions", unsaved: "Unsaved", updated: "Updated {{value}}", usersLinked: "{{count}} users linked" },
+    audit: {
+      columns: {
+        action: "Action",
+        actor: "Actor",
+        ip: "IP Address",
+        resource: "Resource ID",
+        status: "Status",
+        timestamp: "Timestamp",
+      },
+      entries: "entries",
+      export: "Export",
+      exported: "{{count}} audit rows exported",
+      search: "Search audit logs...",
+      statusOptions: {
+        Failed: "Failed",
+        Success: "Success",
+        Warning: "Warning",
+        all: "All status",
+      },
+      title: "Audit Logs",
+    },
+    roles: {
+      actions: {
+        add: "Add Role",
+        clear: "Clear Filters",
+        clone: "Clone",
+        confirm: "Confirm",
+        delete: "Delete",
+        discard: "Discard",
+        new: "New",
+        reset: "Reset",
+        save: "Save",
+        saving: "Saving...",
+      },
+      allDomains: "All domains",
+      domainFilter: "Filter by permission domain",
+      empty: "No roles match the current filters.",
+      messages: {
+        discarded: "Unsaved changes discarded",
+        saved: "Role matrix draft saved",
+      },
+      role: "Role",
+      roleTypeFilter: "Filter by role type",
+      roleTypes: { All: "All", Custom: "Custom", System: "System" },
+      search: "Search roles",
+      searchPlaceholder: "Search roles, codes, or descriptions...",
+      showChanged: "Show changed only",
+      title: "Roles & Permissions",
+      unsaved: "Unsaved",
+      updated: "Updated {{value}}",
+      usersLinked: "{{count}} users linked",
+    },
     users: {
       createTitle: "Create User",
       creating: "Creating...",
       detailTitle: "User Detail",
       errors: { create: "User could not be created" },
-      fields: { displayName: "Display Name", email: "Email", firstName: "First Name", lastName: "Last Name", locale: "Locale", phone: "Phone", phoneCountryCode: "Phone Country Code", timezone: "Timezone", username: "Username" },
+      fields: {
+        displayName: "Display Name",
+        email: "Email",
+        firstName: "First Name",
+        lastName: "Last Name",
+        locale: "Locale",
+        phone: "Phone",
+        phoneCountryCode: "Phone Country Code",
+        timezone: "Timezone",
+        username: "Username",
+      },
       messages: { created: "{{name}} created successfully" },
       new: "New",
       loading: "Loading user detail",
@@ -2869,8 +3747,29 @@ export const pages = {
     notFound: "Not Found",
   },
   variablesCommon: {
-    dialog: { cancel: "Cancel", description: "Verify your current password to reveal this value temporarily.", password: "Step-up Password", revealValue: "Reveal Value", revealing: "Revealing...", title: "Reveal Sensitive Value" },
-    form: { description: "Description", descriptionAria: "Platform variable description", descriptionHint: "Optional operator-facing note about how this platform variable is used.", inheritedHint: "This value becomes the inherited default for all workspaces.", key: "Variable Key", keyAria: "Platform variable key", keyHint: "Letters, digits, underscore, hyphen, or dot.", maskedHint: "Masked by default and requires verification to reveal.", value: "Variable Value", valueAria: "Platform variable value" },
+    dialog: {
+      cancel: "Cancel",
+      description:
+        "Verify your current password to reveal this value temporarily.",
+      password: "Step-up Password",
+      revealValue: "Reveal Value",
+      revealing: "Revealing...",
+      title: "Reveal Sensitive Value",
+    },
+    form: {
+      description: "Description",
+      descriptionAria: "Platform variable description",
+      descriptionHint:
+        "Optional operator-facing note about how this platform variable is used.",
+      inheritedHint:
+        "This value becomes the inherited default for all workspaces.",
+      key: "Variable Key",
+      keyAria: "Platform variable key",
+      keyHint: "Letters, digits, underscore, hyphen, or dot.",
+      maskedHint: "Masked by default and requires verification to reveal.",
+      value: "Variable Value",
+      valueAria: "Platform variable value",
+    },
     hide: "Hide",
     none: "None",
     plain: "Plain",
@@ -2879,15 +3778,42 @@ export const pages = {
     sensitiveData: "Sensitive Data",
   },
   variablesPlatform: {
-    actions: { delete: "Delete", edit: "Edit", new: "New", refresh: "Refresh", refreshing: "Refreshing..." },
-    aria: { actionsFor: "Open actions for {{key}}", menu: "Actions for {{key}}", search: "Search platform variables", sensitiveFilter: "Filter platform variables by sensitive data" },
-    columns: { actions: "Actions", key: "Key", sensitive: "Sensitive Data", updated: "Updated", value: "Value" },
+    actions: {
+      delete: "Delete",
+      edit: "Edit",
+      new: "New",
+      refresh: "Refresh",
+      refreshing: "Refreshing...",
+    },
+    aria: {
+      actionsFor: "Open actions for {{key}}",
+      menu: "Actions for {{key}}",
+      search: "Search platform variables",
+      sensitiveFilter: "Filter platform variables by sensitive data",
+    },
+    columns: {
+      actions: "Actions",
+      key: "Key",
+      sensitive: "Sensitive Data",
+      updated: "Updated",
+      value: "Value",
+    },
     empty: { filtered: "No platform variables match the current filters." },
     createTitle: "Create Platform Variable",
     detailTitle: "Platform Variable",
-    errors: { create: "Platform variable could not be created", delete: "Platform variable could not be deleted", load: "Platform variables could not be loaded", reveal: "Sensitive value could not be revealed" },
+    errors: {
+      create: "Platform variable could not be created",
+      delete: "Platform variable could not be deleted",
+      load: "Platform variables could not be loaded",
+      reveal: "Sensitive value could not be revealed",
+    },
     fields: { search: "Search", sensitive: "Sensitive Data" },
-    filters: { allData: "All Data", plainData: "Plain Data", searchPlaceholder: "Search platform variables...", sensitiveData: "Sensitive Data" },
+    filters: {
+      allData: "All Data",
+      plainData: "Plain Data",
+      searchPlaceholder: "Search platform variables...",
+      sensitiveData: "Sensitive Data",
+    },
     messages: { deleted: "{{key}} deleted" },
     pagination: { itemLabel: "platform variables" },
     identifier: "Identifier",
@@ -2898,16 +3824,89 @@ export const pages = {
     title: "Platform Variables",
   },
   variables: {
-    actions: { cancel: "Cancel", delete: "Delete", deleting: "Deleting...", edit: "Edit", new: "New", override: "Override", revert: "Revert", save: "Save", saving: "Saving..." },
-    aria: { actionsFor: "Open actions for {{key}}", search: "Search variables", sensitiveFilter: "Filter variables by sensitive data", sourceFilter: "Filter variables by source" },
-    columns: { actions: "Actions", inheritedFrom: "Inherited From", key: "Key", sensitive: "Sensitive Data", source: "Source", updated: "Updated", value: "Value" },
-    empty: { filtered: "No effective variables match the current filters.", notFound: "Variable not found in the current workspace.", workspace: "Select a workspace in the shell to load variables.", workspaceDetail: "Select a workspace in the shell to load this variable." },
+    actions: {
+      cancel: "Cancel",
+      delete: "Delete",
+      deleting: "Deleting...",
+      edit: "Edit",
+      new: "New",
+      override: "Override",
+      revert: "Revert",
+      save: "Save",
+      saving: "Saving...",
+    },
+    aria: {
+      actionsFor: "Open actions for {{key}}",
+      search: "Search variables",
+      sensitiveFilter: "Filter variables by sensitive data",
+      sourceFilter: "Filter variables by source",
+    },
+    columns: {
+      actions: "Actions",
+      inheritedFrom: "Inherited From",
+      key: "Key",
+      sensitive: "Sensitive Data",
+      source: "Source",
+      updated: "Updated",
+      value: "Value",
+    },
+    empty: {
+      filtered: "No effective variables match the current filters.",
+      notFound: "Variable not found in the current workspace.",
+      workspace: "Select a workspace in the shell to load variables.",
+      workspaceDetail: "Select a workspace in the shell to load this variable.",
+    },
     createTitle: "Create Variable",
-    detail: { created: "Created", inheritedFrom: "Inherited From", overrides: "Overrides", source: "Source", updated: "Updated" },
-    errors: { create: "Variable could not be created", inheritedSensitive: "Inherited sensitive variables must stay sensitive when overridden", keyRequired: "Variable key is required", newValueRequired: "New value is required before turning off sensitivity", remove: "Variable could not be removed", reveal: "Sensitive value could not be revealed", save: "Variable could not be saved", sensitiveValueRequired: "Sensitive value is required before turning on sensitivity", valueRequired: "Variable value is required", workspaceRequired: "Select a workspace in the shell before creating a variable." },
-    form: { description: "Description", descriptionHint: "Optional operator-facing note about how this variable is used.", key: "Variable Key", keyHint: "Letters, digits, underscore, hyphen, or dot.", overrideHint: "Save a local value in this workspace without mutating the inherited source.", sensitive: "Sensitive Data", sensitiveHint: "Masked by default and requires verification to reveal.", value: "Variable Value", valueHint: "Value is stored exactly as entered; no data typing is applied." },
-    filters: { allData: "All Data", allSources: "All Sources", plainData: "Plain Data", searchPlaceholder: "Search variables", sensitiveData: "Sensitive Data" },
-    messages: { created: "{{key}} created", deleted: "{{key}} deleted", overridden: "{{key}} overridden in {{workspace}}", reverted: "{{key}} reverted to inherited value", saved: "{{key}} saved" },
+    detail: {
+      created: "Created",
+      inheritedFrom: "Inherited From",
+      overrides: "Overrides",
+      source: "Source",
+      updated: "Updated",
+    },
+    errors: {
+      create: "Variable could not be created",
+      inheritedSensitive:
+        "Inherited sensitive variables must stay sensitive when overridden",
+      keyRequired: "Variable key is required",
+      newValueRequired: "New value is required before turning off sensitivity",
+      remove: "Variable could not be removed",
+      reveal: "Sensitive value could not be revealed",
+      save: "Variable could not be saved",
+      sensitiveValueRequired:
+        "Sensitive value is required before turning on sensitivity",
+      valueRequired: "Variable value is required",
+      workspaceRequired:
+        "Select a workspace in the shell before creating a variable.",
+    },
+    form: {
+      description: "Description",
+      descriptionHint:
+        "Optional operator-facing note about how this variable is used.",
+      key: "Variable Key",
+      keyHint: "Letters, digits, underscore, hyphen, or dot.",
+      overrideHint:
+        "Save a local value in this workspace without mutating the inherited source.",
+      sensitive: "Sensitive Data",
+      sensitiveHint: "Masked by default and requires verification to reveal.",
+      value: "Variable Value",
+      valueHint:
+        "Value is stored exactly as entered; no data typing is applied.",
+    },
+    filters: {
+      allData: "All Data",
+      allSources: "All Sources",
+      plainData: "Plain Data",
+      searchPlaceholder: "Search variables",
+      sensitiveData: "Sensitive Data",
+    },
+    messages: {
+      created: "{{key}} created",
+      deleted: "{{key}} deleted",
+      overridden: "{{key}} overridden in {{workspace}}",
+      reverted: "{{key}} reverted to inherited value",
+      saved: "{{key}} saved",
+    },
     detailTitle: "Variable",
     loading: "Loading",
     loadingValue: "Loading variable...",
@@ -2919,33 +3918,101 @@ export const pages = {
     title: "Variables",
   },
   automationCreate: {
-    actions: { cancel: "Cancel", new: "New", save: "Save", saving: "Saving..." },
-    aria: { closePrompt: "Close prompt fullscreen", description: "Automation description", executionAgent: "Automation execution agent", executionModel: "Automation execution model", prompt: "Automation prompt", promptFullscreen: "Automation prompt fullscreen" },
+    actions: {
+      cancel: "Cancel",
+      new: "New",
+      save: "Save",
+      saving: "Saving...",
+    },
+    aria: {
+      closePrompt: "Close prompt fullscreen",
+      description: "Automation description",
+      executionAgent: "Automation execution agent",
+      executionModel: "Automation execution model",
+      prompt: "Automation prompt",
+      promptFullscreen: "Automation prompt fullscreen",
+    },
     detail: { create: "Create Automation" },
-    errors: { create: "Automation could not be created", executionOptions: "Execution options could not be loaded", workspaceRequired: "Select a workspace in the shell header before creating an automation" },
-    fields: { automationPrompt: "Automation prompt", cron: "Cron expression", description: "Description", executionAgent: "Execution agent", executionModel: "Execution model", name: "Automation name", prompt: "Prompt body", status: "Automation status" },
-    placeholders: { description: "Summarize the business intent, constraints, or expected operator-facing output.", name: "Daily workspace release digest", prompt: "Write the long-form prompt that the automation should dispatch for this workspace." },
+    errors: {
+      create: "Automation could not be created",
+      executionOptions: "Execution options could not be loaded",
+      workspaceRequired:
+        "Select a workspace in the shell header before creating an automation",
+    },
+    fields: {
+      automationPrompt: "Automation prompt",
+      cron: "Cron expression",
+      description: "Description",
+      executionAgent: "Execution agent",
+      executionModel: "Execution model",
+      name: "Automation name",
+      prompt: "Prompt body",
+      status: "Automation status",
+    },
+    placeholders: {
+      description:
+        "Summarize the business intent, constraints, or expected operator-facing output.",
+      name: "Daily workspace release digest",
+      prompt:
+        "Write the long-form prompt that the automation should dispatch for this workspace.",
+    },
     messages: { created: "Automation {{code}} created" },
-    promptFullscreenHint: "Write the long-form prompt that will be dispatched whenever this automation runs.",
-    status: { Active: "Active", Disabled: "Disabled", Draft: "Draft", Paused: "Paused" },
+    promptFullscreenHint:
+      "Write the long-form prompt that will be dispatched whenever this automation runs.",
+    status: {
+      Active: "Active",
+      Disabled: "Disabled",
+      Draft: "Draft",
+      Paused: "Paused",
+    },
     title: "Automations",
-    values: { loadingAgents: "Loading agents...", loadingModels: "Loading models...", noModels: "No executable models" },
+    values: {
+      loadingAgents: "Loading agents...",
+      loadingModels: "Loading models...",
+      noModels: "No executable models",
+    },
   },
   mainAgent: {
-    metrics: { activeAgents: "Active Agents", agentsTrend: "+3 since last hour", allServices: "All services operational", pendingTasks: "Pending Tasks", systemHealth: "System Health", tasksTrend: "Avg processing time: 1.2s" },
+    metrics: {
+      activeAgents: "Active Agents",
+      agentsTrend: "+3 since last hour",
+      allServices: "All services operational",
+      pendingTasks: "Pending Tasks",
+      systemHealth: "System Health",
+      tasksTrend: "Avg processing time: 1.2s",
+    },
     messages: { deployment: "Deployment triggered in us-east-1" },
     noWorkspace: "No workspace selected",
-    sections: { activity: "Recent Activity", throughput: "Throughput Analytics" },
+    sections: {
+      activity: "Recent Activity",
+      throughput: "Throughput Analytics",
+    },
     workspace: "Workspace",
   },
   observability: {
-    actions: { edit: "Edit", export: "Export", openInspector: "Open Inspector", pauseAgent: "Pause Agent", viewAll: "View All" },
+    actions: {
+      edit: "Edit",
+      export: "Export",
+      openInspector: "Open Inspector",
+      pauseAgent: "Pause Agent",
+      viewAll: "View All",
+    },
     aria: { closeInspector: "Close inspector", refreshChart: "Refresh chart" },
-    charts: { errorHeatmap: "Error Heatmap", requestThroughput: "Request Throughput" },
-    columns: { agent: "Agent", latency: "Latency", span: "Span", status: "Status", trace: "Trace" },
+    charts: {
+      errorHeatmap: "Error Heatmap",
+      requestThroughput: "Request Throughput",
+    },
+    columns: {
+      agent: "Agent",
+      latency: "Latency",
+      span: "Span",
+      status: "Status",
+      trace: "Trace",
+    },
     fields: { budget: "Budget", region: "Region", retries: "Retries" },
     inspector: {
-      description: "Router span route.llm.failover is sampled at 100% while the failover controller is in review.",
+      description:
+        "Router span route.llm.failover is sampled at 100% while the failover controller is in review.",
       title: "Inspector",
     },
     messages: {
@@ -2961,8 +4028,21 @@ export const pages = {
     traces: { itemLabel: "traces", title: "Recent Traces" },
   },
   tasks: {
-    apps: { ariaLabel: "Task apps", legacyHint: "Legacy app codes are not registered in the current workspace. They stay visible until you explicitly remove or replace them.", legacyLabel: "Legacy app codes", loading: "Loading app options...", placeholder: "Select apps", removeLegacy: "Remove legacy app code {{code}}" },
-    actions: { cancel: "Cancel", new: "New", save: "Save", saving: "Saving..." },
+    apps: {
+      ariaLabel: "Task apps",
+      legacyHint:
+        "Legacy app codes are not registered in the current workspace. They stay visible until you explicitly remove or replace them.",
+      legacyLabel: "Legacy app codes",
+      loading: "Loading app options...",
+      placeholder: "Select apps",
+      removeLegacy: "Remove legacy app code {{code}}",
+    },
+    actions: {
+      cancel: "Cancel",
+      new: "New",
+      save: "Save",
+      saving: "Saving...",
+    },
     kanban: {
       allPriorities: "All priorities",
       errors: { status: "Task status could not be updated" },
@@ -2987,7 +4067,8 @@ export const pages = {
       executionModel: "Task execution model",
       openDescription: "Open description fullscreen",
     },
-    descriptionFullscreenHint: "Write the objective, deliverables, context, constraints, and variable references in a larger workspace.",
+    descriptionFullscreenHint:
+      "Write the objective, deliverables, context, constraints, and variable references in a larger workspace.",
     detail: {
       actions: { edit: "Edit", execute: "Execute", executing: "Executing..." },
       addSubtask: "Add Subtask",
@@ -3003,13 +4084,16 @@ export const pages = {
       descriptionFullscreenPreviewAria: "Description fullscreen preview",
       descriptionMarkdownAria: "Task description markdown",
       descriptionMarkdownFullscreenAria: "Task description markdown fullscreen",
-      descriptionPreviewHint: "Preview the rendered markdown for this task description.",
+      descriptionPreviewHint:
+        "Preview the rendered markdown for this task description.",
       errors: { execution: "Task execution failed" },
       executionResult: "Execution Result",
       executionResultFullscreenAria: "Execution result fullscreen preview",
-      executionResultHint: "Preview the final agent reply recorded for this task execution.",
+      executionResultHint:
+        "Preview the final agent reply recorded for this task execution.",
       executionResultMarkdownAria: "Task execution result markdown",
-      executionResultMarkdownFullscreenAria: "Task execution result markdown fullscreen",
+      executionResultMarkdownFullscreenAria:
+        "Task execution result markdown fullscreen",
       metadata: "Task Metadata",
       newSubtaskTitle: "New Subtask Title",
       noSubtasks: "No active subtasks.",
@@ -3037,9 +4121,12 @@ export const pages = {
       subtask: "Subtask could not be created",
       update: "Task details could not be updated",
       updates: "Updates could not be saved",
-      workspaceRequired: "Select a workspace in the shell header before creating a task",
-      workspaceRequiredApps: "Select a workspace in the shell header to choose apps.",
-      workspaceRequiredUsers: "Select a workspace in the shell header to assign users.",
+      workspaceRequired:
+        "Select a workspace in the shell header before creating a task",
+      workspaceRequiredApps:
+        "Select a workspace in the shell header to choose apps.",
+      workspaceRequiredUsers:
+        "Select a workspace in the shell header to assign users.",
     },
     fields: {
       agentCodes: "Agent Codes",
@@ -3056,7 +4143,8 @@ export const pages = {
     },
     hints: {
       apps: "Select active apps from the current workspace.",
-      assignedUsers: "Only effective users from the current workspace can be assigned.",
+      assignedUsers:
+        "Only effective users from the current workspace can be assigned.",
     },
     messages: {
       archived: "Task {{code}} archived",
@@ -3070,11 +4158,22 @@ export const pages = {
     placeholders: {
       agentCodes: "agent-reviewer, agent-builder",
       assignedUsers: "Select assigned users",
-      description: "Describe the outcome, expected deliverables, context, constraints, and variable references like $VAR1...",
+      description:
+        "Describe the outcome, expected deliverables, context, constraints, and variable references like $VAR1...",
       sourceUrl: "Optional GitHub/GitLab URL",
     },
-    priorities: { "Extra High": "Extra High", High: "High", Low: "Low", Medium: "Medium" },
-    sourceTypes: { External: "External", GitHub: "GitHub", GitLab: "GitLab", Internal: "Internal" },
+    priorities: {
+      "Extra High": "Extra High",
+      High: "High",
+      Low: "Low",
+      Medium: "Medium",
+    },
+    sourceTypes: {
+      External: "External",
+      GitHub: "GitHub",
+      GitLab: "GitLab",
+      Internal: "Internal",
+    },
     statuses: {
       Archived: "Archived",
       Completed: "Completed",
@@ -3088,7 +4187,12 @@ export const pages = {
       Review: "Review",
     },
     title: "Tasks",
-    types: { Bug: "Bug", Feature: "Feature", Improvement: "Improvement", Task: "Task" },
+    types: {
+      Bug: "Bug",
+      Feature: "Feature",
+      Improvement: "Improvement",
+      Task: "Task",
+    },
     values: {
       loadingAgents: "Loading agents...",
       loadingModels: "Loading models...",
@@ -3098,7 +4202,8 @@ export const pages = {
       noUsers: "No effective users available for the active workspace.",
     },
     warnings: {
-      removeLegacyAppCodes: "Remove legacy app codes before changing app selection",
+      removeLegacyAppCodes:
+        "Remove legacy app codes before changing app selection",
       restoreBeforeEditing: "Restore archived task before editing",
       restoreBeforeSubtasks: "Restore archived task before adding subtasks",
     },
@@ -3123,7 +4228,8 @@ export const pages = {
       retrieval: "Retrieval",
       status: "Status",
     },
-    description: "Traditional RAG libraries with ingestion, chunking, retrieval profiles, and freshness controls.",
+    description:
+      "Traditional RAG libraries with ingestion, chunking, retrieval profiles, and freshness controls.",
     empty: {
       filtered: "No knowledge bases match the current filters.",
       loadFailed: "RAG corpora could not be loaded.",
@@ -3141,9 +4247,12 @@ export const pages = {
       searchPlaceholder: "Search knowledge bases, retrieval...",
     },
     inspector: {
-      apiNote: "This view is backed by the RAG corpus management API. Index counts and freshness metrics are shown only when the API reports them.",
-      crossDomainNote: "KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.",
-      mockNote: "Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows.",
+      apiNote:
+        "This view is backed by the RAG corpus management API. Index counts and freshness metrics are shown only when the API reports them.",
+      crossDomainNote:
+        "KnowledgeGraph stays focused on entity relationships. Resources remains the broader asset inventory for files, connectors, and raw sources.",
+      mockNote:
+        "Use this catalog for traditional RAG corpora that need predictable chunking, metadata filters, and controlled refresh windows.",
       operationalNotes: "Operational Notes",
       title: "Selected KnowledgeBase",
     },
@@ -3160,11 +4269,14 @@ export const pages = {
       configuredProfiles: "Configured retrieval profiles from the RAG API",
       configuredSources: "{{count}} configured sources",
       defaultRetrieval: "Default Retrieval",
-      documentCountsNotReported: "Document counts are not reported by the RAG API",
-      freshnessBudget: "Index pipelines stay inside the retrieval freshness budget",
+      documentCountsNotReported:
+        "Document counts are not reported by the RAG API",
+      freshnessBudget:
+        "Index pipelines stay inside the retrieval freshness budget",
       freshnessNotReported: "Freshness metrics are not reported by the RAG API",
       freshnessSla: "Freshness SLA",
-      hybridRetrieval: "Vector search plus lexical reranking for traditional RAG",
+      hybridRetrieval:
+        "Vector search plus lexical reranking for traditional RAG",
       indexedDocuments: "Indexed Documents",
       knowledgeBases: "Knowledge Bases",
       noUpstreamSources: "No upstream sources reported",
@@ -3186,6 +4298,180 @@ export const pages = {
       docs: "docs",
       notReported: "Not reported",
       sources: "sources",
+    },
+  },
+  modelProviders: {
+    actions: {
+      authorize: "Authorize Person-AI",
+      backToConnection: "Back to Connection",
+      checkAuthorization: "Check Authorization",
+      disconnect: "Disconnect",
+      manage: "Manage",
+      openAuthorizationPage: "Open Authorization Page",
+      reauthorize: "Reauthorize",
+      refresh: "Refresh",
+      remoteModels: "Remote Models",
+      syncHistory: "Sync History",
+      syncNow: "Sync Now",
+    },
+    aria: {
+      authorizationSessionHelp: "Authorization session help",
+      catalogHelp: "Remote model catalog help",
+      accountHelp: "Account balance help",
+      connectionHelp: "Person-AI connection help",
+      fieldHelp: "Help for {{label}}",
+      providerListHelp: "Model provider help",
+      syncRunsHelp: "Sync history help",
+    },
+    columns: {
+      actions: "Actions",
+      authorizationExpiresAt: "Authorization Expires",
+      catalogModels: "Catalog Models",
+      completedAt: "Completed",
+      connectionStatus: "Connection Status",
+      contextWindow: "Context Window",
+      quality: "Quality",
+      inputCoefficient: "Input Multiplier",
+      cacheHitCoefficient: "Cache Hit Multiplier",
+      outputCoefficient: "Output Multiplier",
+      lastSeenAt: "Last Seen",
+      lastSyncAt: "Last Sync",
+      model: "Model",
+      modelCount: "Model Count",
+      provider: "Provider",
+      result: "Result",
+      startedAt: "Started",
+      status: "Status",
+      type: "Type",
+      upstreamVendor: "Upstream Vendor",
+    },
+    catalogModelTypes: {
+      Chat: "Chat",
+      Embedding: "Embedding",
+      Image: "Image",
+      Video: "Video",
+      Speech: "Speech",
+      AigcTextDetection: "Text AIGC Detection",
+      AigcImageDetection: "Image AIGC Detection",
+    },
+    detail: {
+      authorizationSession: "Authorization Session",
+      account: "Account",
+      accountLoadError: "Could not load account information: {{error}}",
+      authorizationExpiresAt: "Authorization Expires",
+      catalogModels: "Catalog Models",
+      connection: "Connection",
+      lastError: "Latest error: {{error}}",
+      lastSyncAt: "Last Sync",
+      username: "User",
+      vipLevel: "Plan",
+      remainingPoints: "Remaining Points",
+      serverBaseUrl: "Server URL",
+    },
+    disconnectDialog: {
+      confirm: "Disconnect",
+      description:
+        "This removes Person-AI's encrypted credentials and disables the remote model catalog. Historical run snapshots remain available; authorization is required before calling it again.",
+      title: "Disconnect Person-AI?",
+    },
+    empty: {
+      catalog: "No remote models.",
+      providers: "No model providers.",
+      syncRuns: "No sync history.",
+    },
+    help: {
+      authorizationSession:
+        "After sign-in, the system syncs chat and multimedia catalogs, validates high-quality Auto chat and Embedding, then atomically replaces the connection credentials.",
+      authorizationExpiresAt:
+        "The current access-token expiry. The system refreshes it before it expires; administrators must reauthorize if refresh fails.",
+      catalog:
+        "Sync includes chat and multimedia catalogs. Models missing from a complete sync are retained as unavailable for history; unavailable chat models cannot be newly selected or used.",
+      catalogModels:
+        "The number of records in the remote catalog, including offline models retained for historical traceability.",
+      account: "The Person-AI account points balance.",
+      username: "The username of the authorized Person-AI account.",
+      vipLevel: "The plan level of the authorized Person-AI account.",
+      remainingPoints: "The remaining points balance returned by Person-AI.",
+      upstreamVendor: "The upstream provider that serves this model.",
+      contextWindow: "The largest context window this model can process in one request.",
+      quality: "The remote routing quality assigned by Person-AI for this model.",
+      inputCoefficient: "The points multiplier used for input tokens.",
+      cacheHitCoefficient: "The points multiplier used for cache-hit tokens.",
+      outputCoefficient: "The points multiplier used for output tokens. The chat picker shows only this multiplier.",
+      connection:
+        "This is a platform-wide account. Tokens are encrypted on the server and are never copied to workspaces or model records.",
+      lastSyncAt:
+        "The time when the last complete catalog snapshot was stored. A failed sync never marks existing models offline.",
+      providerList:
+        "A provider connection manages shared credentials and a remote model catalog. Workspaces do not store provider tokens.",
+      serverBaseUrl:
+        "The gateway URL used by the Person-AI SDK for authorization, chat, and catalog requests.",
+      syncRuns:
+        "The last successful catalog is retained after a failed sync, so network or rate-limit failures are not mistaken for offline models.",
+    },
+    loading: "Loading",
+    messages: {
+      authorizationCompleted:
+        "Person-AI authorization, chat, and Embedding validation completed.",
+      authorizationPageOpened:
+        "The Person-AI authorization page is open. Results are checked automatically after you sign in.",
+      authorizationPending:
+        "Authorization is still pending. Complete the Person-AI sign-in.",
+      disconnectFailed: "Could not disconnect Person-AI.",
+      disconnected:
+        "Person-AI disconnected. Remote models remain in the catalog but cannot be selected or called.",
+      loadAuthorizationFailed:
+        "Could not restore the Person-AI authorization session.",
+      loadAccountFailed: "Could not load Person-AI account information.",
+      loadCatalogFailed: "Could not load the Person-AI remote model catalog.",
+      loadConnectionFailed: "Could not load the Person-AI connection status.",
+      loadProvidersFailed: "Could not load model provider status.",
+      loadSyncRunsFailed: "Could not load Person-AI sync history.",
+      openAuthorizationFailed: "Could not create Person-AI authorization.",
+      pollAuthorizationFailed: "Person-AI authorization check failed.",
+      syncCompleted:
+        "Sync completed with {{count}} remote models in the catalog.",
+      syncFailed: "Person-AI model sync failed.",
+    },
+    pagination: {
+      catalog: "{{count}} models total",
+      providers: "{{count}} providers total",
+      syncRuns: "{{count}} records total",
+    },
+    quality: {
+      High: "High",
+      Middle: "Medium",
+      Low: "Low",
+    },
+    status: {
+      AuthRequired: "Reauthorization Required",
+      Available: "Available",
+      Connected: "Connected",
+      Degraded: "Sync Issue",
+      Disconnected: "Disconnected",
+      Failed: "Failed",
+      Unavailable: "Unavailable",
+      PendingAuthorization: "Authorization Pending",
+      Running: "Syncing",
+      Succeeded: "Succeeded",
+    },
+    summary: {
+      catalogUpdated: "Catalog updated",
+      syncingCatalog: "Syncing catalog",
+      unknownError: "Unknown error",
+    },
+    titles: {
+      catalog: "Person-AI · Remote Models",
+      providers: "Model Providers",
+      syncRuns: "Person-AI · Sync History",
+    },
+    values: {
+      dash: "-",
+      neverSynced: "Never synced",
+      notProvided: "Not provided",
+      unknown: "Unknown",
+      contextTokens: "{{count}} tokens",
+      vipLevel: "VIP {{level}}",
     },
   },
   modelRegistry: {
@@ -3272,13 +4558,16 @@ export const pages = {
       apiKeyRequired: "apiKey is required",
       create: "Workspace model could not be created",
       createPlatform: "Platform model could not be created",
-      duplicateDisplayName: "displayName already exists in workspace {{workspace}}",
-      duplicatePlatformDisplayName: "displayName already exists in platform models",
+      duplicateDisplayName:
+        "displayName already exists in workspace {{workspace}}",
+      duplicatePlatformDisplayName:
+        "displayName already exists in platform models",
       load: "Workspace models could not be loaded",
       save: "Model could not be saved",
       status: "Status update failed",
       verify: "Verify failed",
-      workspaceRequired: "Select a workspace in the shell before creating a model.",
+      workspaceRequired:
+        "Select a workspace in the shell before creating a model.",
     },
     form: {
       apiKey: "API Key",

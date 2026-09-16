@@ -87,6 +87,7 @@ export interface CorpusRecord {
 export type RagProfileStatus = "Ready" | "Draft" | "Needs Review";
 export type RagProfileType = "Ingest" | "Retrieval";
 export type RagPipelineMode = "DAG";
+export type RerankStrategy = "Disabled" | "Native" | "LlmFallback";
 export type RagIngestStageId =
   | "validateSource"
   | "preparePayload"
@@ -224,6 +225,7 @@ export interface RagRetrievalProfileConfig {
   graphExpansionPolicy: string;
   rerankEnabled: boolean;
   rerankModelCode: string;
+  rerankStrategy?: RerankStrategy;
   routesConfig: RagRetrievalRouteConfig[];
   topicPolicy: string;
 }

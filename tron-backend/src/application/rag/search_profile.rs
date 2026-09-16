@@ -21,11 +21,19 @@ pub struct CompiledRetrievalProfile {
     pub embedding_model_code: Option<String>,
     pub rerank_model_code: Option<String>,
     pub rerank_enabled: bool,
+    pub rerank_strategy: RerankStrategy,
     pub fusion_policy: FusionPolicy,
     pub dedup_policy: DedupPolicy,
     pub topic_policy: TopicPolicy,
     pub graph_expansion_policy: Option<Value>,
     pub degrade_policy: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RerankStrategy {
+    Disabled,
+    Native,
+    LlmFallback,
 }
 
 #[derive(Debug, Clone, PartialEq)]
@@ -158,6 +166,18 @@ where
                 .map(|value| value != "DISABLED")
         })
         .unwrap_or(false);
+    let rerank_strategy = match profile
+        .config
+        .get("rerankStrategy")
+        .and_then(Value::as_str)
+        .unwrap_or(if rerank_enabled { "Native" } else { "Disabled" })
+    {
+        "Disabled" => RerankStrategy::Disabled,
+        "Native" => RerankStrategy::Native,
+        "LlmFallback" => RerankStrategy::LlmFallback,
+        _ => return Err(RagError::RetrievalProfileInvalid),
+    };
+    let rerank_enabled = rerank_enabled && rerank_strategy != RerankStrategy::Disabled;
 
     let supported_context_strategies = parse_context_strategies(&profile.config)?;
     let fusion_policy = parse_fusion_policy(&profile.config)?;
@@ -193,6 +213,7 @@ where
         embedding_model_code: string_config(&profile.config, "embeddingModelCode"),
         rerank_model_code: string_config(&profile.config, "rerankModelCode"),
         rerank_enabled,
+        rerank_strategy,
         fusion_policy,
         dedup_policy,
         topic_policy: parse_topic_policy(&profile.config)?,

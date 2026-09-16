@@ -10,6 +10,9 @@ use crate::{
     domain::{
         agent::{AgentModelConfig, AgentRuntimeType, ManagedSystemAgentRecord},
         chat::{ChatError, ChatSession},
+        model_provider::{
+            ModelProviderCode, ModelSelection, ModelSelectionKind, ProviderRouteCode,
+        },
     },
 };
 
@@ -231,12 +234,43 @@ pub(crate) fn prepare_send_model(
     request: &SendChatMessageCommand,
     runtime: &ResolvedAgentRuntime,
 ) -> Result<AgentModelConfig, ChatSendError> {
+    if let Some(selection) = request.model_selection.as_ref() {
+        validate_chat_model_selection(selection)?;
+    }
     if matches!(runtime.runtime_type, AgentRuntimeType::React) {
+        let fixed_model_code = request.model_selection.as_ref().and_then(|selection| {
+            (selection.kind == crate::domain::model_provider::ModelSelectionKind::Fixed
+                && selection.provider_code.is_none())
+            .then(|| {
+                selection
+                    .model_code
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|value| !value.is_empty())
+            })
+            .flatten()
+        });
+        match state.model_providers.resolve_chat_selection(
+            &session.workspace_code,
+            request.model_selection.as_ref(),
+            request.model_code.as_deref(),
+            request.reasoning_effort,
+        ) {
+            Ok(Some(config)) => {
+                return Ok(config);
+            }
+            Ok(None) => {}
+            Err(error) => {
+                return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed(
+                    error.to_string(),
+                )));
+            }
+        }
         return state
             .models
             .text_agent_model_config_with_reasoning_effort(
                 &session.workspace_code,
-                request.model_code.as_deref(),
+                fixed_model_code.or(request.model_code.as_deref()),
                 request.reasoning_effort,
             )
             .map_err(|error| match error {
@@ -280,6 +314,48 @@ pub(crate) fn prepare_send_model(
     ))
 }
 
+fn validate_chat_model_selection(selection: &ModelSelection) -> Result<(), ChatSendError> {
+    let invalid = |message: &str| {
+        ChatSendError::Agent(AgentInvocationError::RuntimeFailed(message.to_owned()))
+    };
+    match selection.kind {
+        ModelSelectionKind::Fixed => {
+            if selection.route_code.is_some() {
+                return Err(invalid("Fixed modelSelection cannot include routeCode"));
+            }
+            match selection.provider_code {
+                Some(ModelProviderCode::PersonAi) if selection.quality_type.is_none() => {
+                    return Err(invalid("Person-AI Fixed modelSelection requires qualityType"));
+                }
+                None if selection.quality_type.is_some() => {
+                    return Err(invalid("platform Fixed modelSelection cannot include qualityType"));
+                }
+                _ => {}
+            }
+            if selection
+                .model_code
+                .as_deref()
+                .is_none_or(|model_code| model_code.trim().is_empty())
+            {
+                return Err(invalid("Fixed modelSelection requires modelCode"));
+            }
+            Ok(())
+        }
+        ModelSelectionKind::ProviderRoute => {
+            if selection.provider_code != Some(ModelProviderCode::PersonAi)
+                || selection.route_code != Some(ProviderRouteCode::ChatAuto)
+                || selection.model_code.is_some()
+                || selection.quality_type.is_some()
+            {
+                return Err(invalid(
+                    "chat ProviderRoute modelSelection must be PersonAi ChatAuto without modelCode",
+                ));
+            }
+            Ok(())
+        }
+    }
+}
+
 fn validate_system_agent_model(
     system_agent: &ManagedSystemAgentRecord,
     model_name: &str,
@@ -316,8 +392,11 @@ fn validate_system_agent_model(
 #[cfg(test)]
 mod tests {
     use crate::application::chat::ChatSendError;
+    use crate::domain::model_provider::{
+        ModelProviderCode, ModelSelection, ModelSelectionKind, ProviderRouteCode,
+    };
 
-    use super::{chat_send_error_code, chat_send_error_message};
+    use super::{chat_send_error_code, chat_send_error_message, validate_chat_model_selection};
 
     #[test]
     fn active_run_race_uses_dedicated_stream_error_code() {
@@ -328,6 +407,26 @@ mod tests {
         assert_eq!(
             chat_send_error_message(error),
             "chat session already has an active run"
+        );
+    }
+
+    #[test]
+    fn chat_provider_route_accepts_only_person_ai_auto() {
+        assert!(
+            validate_chat_model_selection(&ModelSelection::person_ai_route(
+                ProviderRouteCode::ChatAuto,
+            ))
+            .is_ok()
+        );
+        assert!(
+            validate_chat_model_selection(&ModelSelection {
+                kind: ModelSelectionKind::ProviderRoute,
+                provider_code: Some(ModelProviderCode::PersonAi),
+                model_code: Some("deepseek-v4".into()),
+                quality_type: None,
+                route_code: Some(ProviderRouteCode::ChatAuto),
+            })
+            .is_err()
         );
     }
 }

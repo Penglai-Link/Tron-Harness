@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Check, ChevronRight, Eye, EyeOff } from "lucide-react";
 import { useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
@@ -14,6 +14,10 @@ import {
   verifyPlatformModelDraft,
   type ModelMutationPayload,
 } from "@/domain/model/api/modelApi";
+import {
+  createModelProviderAuthorization,
+  pollModelProviderAuthorization,
+} from "@/domain/model/api/modelProviderApi";
 import {
   ModelFormFields,
   emptyModelFormState,
@@ -39,9 +43,19 @@ interface SetupDraft {
   displayName?: string;
   workspaceName?: string;
   workspaceDescription?: string;
+  modelAccess: "Manual" | "PersonAi";
+  personAiAuthorization?: PersonAiSetupAuthorization;
   models: Partial<Record<SetupModelType, Partial<ModelFormState>>>;
+  rerankConfigured?: boolean;
   verified: Record<SetupModelType, boolean>;
   step?: SetupStep;
+}
+
+interface PersonAiSetupAuthorization {
+  sessionId: string;
+  loginUrl: string;
+  status: string;
+  verified: boolean;
 }
 
 // The setup wizard deliberately keeps its draft only in the running frontend
@@ -51,7 +65,9 @@ const setupDraft: SetupDraft = {
   newPassword: "",
   confirmPassword: "",
   encryptionKey: "",
+  modelAccess: "Manual",
   models: {},
+  rerankConfigured: false,
   verified: { TEXT: false, EMBEDDING: false, RERANK: false },
 };
 
@@ -62,7 +78,10 @@ function clearSetupDraft() {
   setupDraft.displayName = undefined;
   setupDraft.workspaceName = undefined;
   setupDraft.workspaceDescription = undefined;
+  setupDraft.modelAccess = "Manual";
+  setupDraft.personAiAuthorization = undefined;
   setupDraft.models = {};
+  setupDraft.rerankConfigured = false;
   setupDraft.verified = { TEXT: false, EMBEDDING: false, RERANK: false };
   setupDraft.step = undefined;
 }
@@ -81,6 +100,7 @@ function resolveSetupError(
       SETUP_WORKSPACE_ALREADY_EXISTS: "errors.workspaceAlreadyExists",
       SETUP_WORKSPACE_MULTIPLE: "errors.workspaceAlreadyExists",
       SETUP_CRYPTO_INVALID: "errors.cryptoFormat",
+      SETUP_PERSON_AI_NOT_READY: "errors.personAiNotReady",
     };
     const messageKey = error.code ? messageKeys[error.code] : undefined;
     if (messageKey) return translate(messageKey);
@@ -152,6 +172,13 @@ export function SetupPage() {
   const [encryptionKey, setEncryptionKeyState] = useState(() => setupDraft.encryptionKey);
   const [workspaceName, setWorkspaceNameState] = useState(() => setupDraft.workspaceName ?? "");
   const [workspaceDescription, setWorkspaceDescriptionState] = useState(() => setupDraft.workspaceDescription ?? "");
+  const [modelAccess, setModelAccessState] = useState<"Manual" | "PersonAi">(() => setupDraft.modelAccess);
+  const [rerankConfigured, setRerankConfiguredState] = useState(() => setupDraft.rerankConfigured ?? false);
+  const [personAiAuthorization, setPersonAiAuthorizationState] = useState<PersonAiSetupAuthorization | undefined>(
+    () => setupDraft.personAiAuthorization,
+  );
+  const [personAiPolling, setPersonAiPolling] = useState(false);
+  const [personAiPollError, setPersonAiPollError] = useState("");
   const [models, setModels] = useState<Record<SetupModelType, ModelFormState>>(() => ({
     TEXT: { ...emptyModel("TEXT", t("models.defaultText")), ...setupDraft.models.TEXT },
     EMBEDDING: { ...emptyModel("EMBEDDING", t("models.defaultEmbedding")), ...setupDraft.models.EMBEDDING },
@@ -193,6 +220,26 @@ export function SetupPage() {
   function setWorkspaceDescription(value: string) {
     setupDraft.workspaceDescription = value;
     setWorkspaceDescriptionState(value);
+  }
+
+  function setModelAccess(value: "Manual" | "PersonAi") {
+    setupDraft.modelAccess = value;
+    setModelAccessState(value);
+  }
+
+  function setRerankConfigured(value: boolean) {
+    setupDraft.rerankConfigured = value;
+    setRerankConfiguredState(value);
+    if (!value) {
+      setupDraft.verified.RERANK = false;
+      setVerified((current) => ({ ...current, RERANK: false }));
+      setModelValidationAttempted((current) => ({ ...current, RERANK: false }));
+    }
+  }
+
+  function setPersonAiAuthorization(value: PersonAiSetupAuthorization | undefined) {
+    setupDraft.personAiAuthorization = value;
+    setPersonAiAuthorizationState(value);
   }
 
   const steps = useMemo(() => STEP_ORDER.map((item) => ({
@@ -239,9 +286,13 @@ export function SetupPage() {
     }
     if (step === "crypto") return encryptionKey.length > 0;
     if (step === "workspace") return Boolean(workspaceName.trim());
-    if (step === "models") return Object.values(verified).every(Boolean);
+    if (step === "models") {
+      return modelAccess === "PersonAi"
+        ? Boolean(personAiAuthorization?.verified)
+        : (["TEXT", "EMBEDDING"] as const).every((type) => verified[type]);
+    }
     return true;
-  }, [confirmPassword, encryptionKey, newPassword, passwordPolicyValid, status, step, verified, workspaceName]);
+  }, [confirmPassword, encryptionKey, modelAccess, newPassword, passwordPolicyValid, personAiAuthorization?.verified, status, step, verified, workspaceName]);
 
   function updateModel(type: SetupModelType, patch: Partial<ModelFormState>) {
     const nextModel = { ...models[type], ...patch };
@@ -375,6 +426,83 @@ export function SetupPage() {
     }
   }
 
+  async function startPersonAiAuthorization() {
+    const key = encryptionKey || makeKey();
+    if (!/^[A-Za-z0-9+/]{22}==?$/.test(key) || atob(key).length !== 16) {
+      toast.error(t("errors.cryptoFormat"));
+      return;
+    }
+    setEncryptionKey(key);
+    setSaving(true);
+    setPersonAiPollError("");
+    try {
+      const authorization = await createModelProviderAuthorization("PersonAi");
+      setPersonAiAuthorization({
+        sessionId: authorization.sessionId,
+        loginUrl: authorization.loginUrl,
+        status: authorization.status,
+        verified: false,
+      });
+      window.open(authorization.loginUrl, "_blank", "noopener,noreferrer");
+      toast.info(t("models.personAi.authorizationOpened", "已打开 Person-AI 授权页；完成登录后会自动检查授权状态。"));
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t("models.personAi.authorizationFailed", "无法创建 Person-AI 授权。"));
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  const checkPersonAiAuthorization = useCallback(async (showPending = true) => {
+    const authorization = personAiAuthorization;
+    const key = encryptionKey.trim();
+    if (!authorization || !key) return false;
+    setPersonAiPolling(true);
+    try {
+      const result = await pollModelProviderAuthorization("PersonAi", authorization.sessionId, {
+        encryptionKeyBase64: key,
+      });
+      const verified = result.completed && result.textVerified === true && result.embeddingVerified === true;
+      setPersonAiAuthorization({
+        sessionId: result.session.sessionId,
+        loginUrl: result.session.loginUrl,
+        status: result.session.status,
+        verified,
+      });
+      setPersonAiPollError("");
+      if (verified) {
+        toast.success(t("models.personAi.verified", "Person-AI 聊天和 Embedding 已验证。"));
+      } else if (showPending) {
+        toast.info(t("models.personAi.pending", "授权还未完成，请在 Person-AI 页面完成登录。"));
+      }
+      return verified;
+    } catch (error) {
+      const message = error instanceof Error
+        ? error.message
+        : t("models.personAi.authorizationFailed", "Person-AI 授权检查失败。");
+      setPersonAiPollError(message);
+      if (showPending) toast.error(message);
+      return false;
+    } finally {
+      setPersonAiPolling(false);
+    }
+  }, [encryptionKey, personAiAuthorization, t, toast]);
+
+  useEffect(() => {
+    if (!personAiAuthorization || personAiAuthorization.verified || !encryptionKey.trim()) return;
+    let active = true;
+    const poll = () => {
+      void checkPersonAiAuthorization(false).then((verified) => {
+        if (!active || !verified) return;
+      });
+    };
+    poll();
+    const timer = window.setInterval(poll, 3_000);
+    return () => {
+      active = false;
+      window.clearInterval(timer);
+    };
+  }, [checkPersonAiAuthorization, personAiAuthorization?.verified]);
+
   async function finish() {
     setSaving(true);
     try {
@@ -383,20 +511,29 @@ export function SetupPage() {
         throw new Error(t("errors.cryptoFormat"));
       }
       if (!workspaceName.trim()) throw new Error(t("errors.workspaceName"));
-      if (!Object.values(verified).every(Boolean)) throw new Error(t("errors.modelVerificationRequired"));
+      if (modelAccess === "Manual" && !(["TEXT", "EMBEDDING"] as const).every((type) => verified[type])) {
+        throw new Error(t("errors.modelVerificationRequired"));
+      }
+      if (modelAccess === "PersonAi" && !personAiAuthorization?.verified) {
+        throw new Error(t("errors.personAiNotReady", "请先完成 Person-AI 授权与验证。"));
+      }
 
-      const completed = await completeSetup({
+      const payload: Parameters<typeof completeSetup>[0] = {
         newPassword,
         displayName: displayName.trim(),
         encryptionKeyBase64: key,
         workspaceName: workspaceName.trim(),
         workspaceDescription: workspaceDescription.trim() || null,
-        models: {
+        modelAccess,
+      };
+      if (modelAccess === "Manual") {
+        payload.models = {
           text: modelPayload(models.TEXT),
           embedding: modelPayload(models.EMBEDDING),
-          rerank: modelPayload(models.RERANK),
-        },
-      });
+          ...(rerankConfigured ? { rerank: modelPayload(models.RERANK) } : {}),
+        };
+      }
+      const completed = await completeSetup(payload);
       if (!completed.initialized) {
         throw new Error(t("errors.setupPersistence"));
       }
@@ -498,35 +635,104 @@ export function SetupPage() {
             )}
             {step === "models" && (
               <div className="space-y-8">
-                {(["TEXT", "EMBEDDING", "RERANK"] as SetupModelType[]).map((type) => (
-                  <div key={type} className="border-b border-[var(--color-outline-variant)] pb-7 last:border-0">
-                    <div className="mb-4 flex items-center justify-between">
-                      <div>
-                        <h2 className="font-medium">{type === "TEXT" ? t("models.text") : type === "EMBEDDING" ? t("models.embedding") : t("models.rerank")}</h2>
+                <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t("models.access.label", "模型接入方式")}>
+                  {([
+                    ["Manual", t("models.access.manual", "手动配置模型"), t("models.access.manualHint", "填写并验证文本和向量模型；重排模型可选。")],
+                    ["PersonAi", t("models.access.personAi", "接入 Person-AI"), t("models.access.personAiHint", "浏览器授权后自动同步聊天模型和 Embedding。")],
+                  ] as const).map(([access, label, hint]) => (
+                    <button
+                      aria-checked={modelAccess === access}
+                      className={`rounded-xl border p-4 text-left transition-colors ${modelAccess === access ? "border-[var(--color-primary)] bg-[var(--color-secondary-container)]" : "border-[var(--color-outline-variant)] hover:bg-[var(--color-surface-container)]"}`}
+                      key={access}
+                      onClick={() => setModelAccess(access)}
+                      role="radio"
+                      type="button"
+                    >
+                      <p className="font-medium">{label}</p>
+                      <p className="mt-1 text-sm leading-5 text-[var(--color-on-surface-variant)]">{hint}</p>
+                    </button>
+                  ))}
+                </div>
+                {modelAccess === "PersonAi" ? (
+                  <div className="rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] p-5">
+                    <h2 className="font-medium">{t("models.personAi.title", "Person-AI 平台连接")}</h2>
+                    <p className="mt-2 text-sm leading-6 text-[var(--color-on-surface-variant)]">
+                      {t("models.personAi.description", "系统会使用平台管理员授权的账号，同步远程聊天模型，并验证高质量自动聊天与 Embedding。")}
+                    </p>
+                    {personAiAuthorization ? (
+                      <div className="mt-4 rounded-lg bg-[var(--color-surface-container)] px-3 py-2 text-sm">
+                        <p>{personAiAuthorization.verified
+                          ? t("models.personAi.ready", "授权完成，模型目录已可用。")
+                          : t("models.personAi.waiting", "等待 Person-AI 授权完成…")}</p>
+                        {!personAiAuthorization.verified && personAiPollError ? <p className="mt-1 text-[var(--color-error)]">{personAiPollError}</p> : null}
                       </div>
-                      {verified[type] && <span className="flex items-center gap-1 text-xs text-[var(--color-primary)]"><Check size={14} /> {t("models.verified")}</span>}
-                    </div>
-                    <ModelFormFields
-                      state={models[type]}
-                      fieldErrors={modelValidationAttempted[type] ? modelFieldErrors(models[type]) : undefined}
-                      onChange={(nextState) => updateModel(type, nextState)}
-                      allowedProtocols={type === "TEXT" ? ["OPENAI_COMPATIBLE", "RESPONSES"] : undefined}
-                      allowedCapabilityGroups={type === "TEXT" ? ["Multimodal", "Text"] : undefined}
-                      fixedProtocol={type === "EMBEDDING" ? "OPENAI_COMPATIBLE_EMBEDDING" : type === "RERANK" ? "RERANK" : undefined}
-                      hideDescription
-                      apiKeyValue={models[type].apiKeyRef}
-                      onApiKeyChange={(value) => updateModel(type, { apiKeyRef: value })}
-                    />
-                    <div className="mt-5 flex justify-end">
-                      <Button type="button" variant="default" disabled={saving} onClick={() => void verifyModel(type)}>{t("models.verify")}</Button>
+                    ) : null}
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <Button type="button" disabled={saving || personAiPolling} onClick={() => void startPersonAiAuthorization()}>
+                        {personAiAuthorization ? t("models.personAi.reauthorize", "重新打开授权") : t("models.personAi.authorize", "连接 Person-AI")}
+                      </Button>
+                      {personAiAuthorization && !personAiAuthorization.verified ? (
+                        <Button type="button" variant="secondary" disabled={saving || personAiPolling} onClick={() => void checkPersonAiAuthorization()}>
+                          {personAiPolling ? t("models.personAi.checking", "检查中…") : t("models.personAi.check", "检查授权状态")}
+                        </Button>
+                      ) : null}
                     </div>
                   </div>
-                ))}
+                ) : (
+                  <>
+                    {(["TEXT", "EMBEDDING"] as const).map((type) => (
+                      <div key={type} className="border-b border-[var(--color-outline-variant)] pb-7">
+                        <div className="mb-4 flex items-center justify-between">
+                          <h2 className="font-medium">{type === "TEXT" ? t("models.text") : t("models.embedding")}</h2>
+                          {verified[type] && <span className="flex items-center gap-1 text-xs text-[var(--color-primary)]"><Check size={14} /> {t("models.verified")}</span>}
+                        </div>
+                        <ModelFormFields
+                          state={models[type]}
+                          fieldErrors={modelValidationAttempted[type] ? modelFieldErrors(models[type]) : undefined}
+                          onChange={(nextState) => updateModel(type, nextState)}
+                          allowedProtocols={type === "TEXT" ? ["OPENAI_COMPATIBLE", "RESPONSES"] : undefined}
+                          allowedCapabilityGroups={type === "TEXT" ? ["Multimodal", "Text"] : undefined}
+                          fixedProtocol={type === "EMBEDDING" ? "OPENAI_COMPATIBLE_EMBEDDING" : undefined}
+                          hideDescription
+                          apiKeyValue={models[type].apiKeyRef}
+                          onApiKeyChange={(value) => updateModel(type, { apiKeyRef: value })}
+                        />
+                        <div className="mt-5 flex justify-end">
+                          <Button type="button" variant="default" disabled={saving} onClick={() => void verifyModel(type)}>{t("models.verify")}</Button>
+                        </div>
+                      </div>
+                    ))}
+                    <div className="pb-7">
+                      <div className="mb-4 flex items-center justify-between gap-4">
+                        <h2 className="font-medium">{t("models.rerank")}</h2>
+                        <Button type="button" variant="secondary" disabled={saving} onClick={() => setRerankConfigured(!rerankConfigured)}>
+                          {rerankConfigured ? t("models.rerankRemove") : t("models.rerankConfigure")}
+                        </Button>
+                      </div>
+                      {rerankConfigured ? (
+                        <>
+                          <ModelFormFields
+                            state={models.RERANK}
+                            fieldErrors={modelValidationAttempted.RERANK ? modelFieldErrors(models.RERANK) : undefined}
+                            onChange={(nextState) => updateModel("RERANK", nextState)}
+                            fixedProtocol="RERANK"
+                            hideDescription
+                            apiKeyValue={models.RERANK.apiKeyRef}
+                            onApiKeyChange={(value) => updateModel("RERANK", { apiKeyRef: value })}
+                          />
+                          <div className="mt-5 flex justify-end">
+                            <Button type="button" variant="default" disabled={saving} onClick={() => void verifyModel("RERANK")}>{t("models.verify")}</Button>
+                          </div>
+                        </>
+                      ) : null}
+                    </div>
+                  </>
+                )}
               </div>
             )}
             {step === "review" && (
               <div className="grid gap-3 sm:grid-cols-2">
-                {[[t("review.admin"), displayName], [t("review.workspace"), workspaceName], [t("review.encryption"), status.crypto.algorithm], [t("review.models"), t("review.modelSummary")]].map(([label, value]) => (
+                {[[t("review.admin"), displayName], [t("review.workspace"), workspaceName], [t("review.encryption"), status.crypto.algorithm], [t("review.models"), modelAccess === "PersonAi" ? t("models.personAi.ready", "Person-AI 已授权") : t("review.modelSummary")]].map(([label, value]) => (
                   <div key={label} className="flex items-center justify-between gap-5 rounded-lg bg-[var(--color-surface-container)] px-4 py-3 text-sm"><span className="text-[var(--color-on-surface-variant)]">{label}</span><span className="text-right font-medium">{value}</span></div>
                 ))}
               </div>

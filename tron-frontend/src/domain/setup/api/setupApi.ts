@@ -45,10 +45,11 @@ export interface SetupCompletionPayload {
   encryptionKeyBase64: string;
   workspaceName: string;
   workspaceDescription?: string | null;
-  models: {
+  modelAccess: "Manual" | "PersonAi";
+  models?: {
     text: ModelMutationPayload;
     embedding: ModelMutationPayload;
-    rerank: ModelMutationPayload;
+    rerank?: ModelMutationPayload;
   };
 }
 

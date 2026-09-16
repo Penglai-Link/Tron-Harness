@@ -148,6 +148,7 @@ pub async fn execute_task(
         app_code: None,
         task_code: Some(task.task_code.clone()),
         agent_code: Some(task.agent_code.clone()),
+        model_selection: None,
         model_code: task.model_code.clone(),
         system_model_id: task.model_code.clone(),
         reasoning_effort: None,

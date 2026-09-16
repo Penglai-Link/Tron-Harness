@@ -53,9 +53,14 @@ impl ModelProtocolAdapter for ChatCompletionsAdapter {
 
 pub fn chat_completions_request(config: &AgentModelConfig, request: &ModelRequest) -> Value {
     let mut payload = json!({
-        "model": config.model_name,
         "messages": request.messages.iter().map(chat_message_json).collect::<Vec<_>>(),
     });
+    // A Person-AI ProviderRoute deliberately has no physical model. Leaving
+    // `model` out is what tells the encrypted gateway to keep the session on
+    // its high-quality automatic route.
+    if !config.model_name.trim().is_empty() {
+        payload["model"] = json!(config.model_name);
+    }
     if let Some(temperature) = config.temperature {
         payload["temperature"] = json!(temperature);
     }

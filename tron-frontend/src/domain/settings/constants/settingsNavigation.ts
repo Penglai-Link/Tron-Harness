@@ -57,6 +57,12 @@ export const settingsNavigation = [
     translationKey: "shell:settings.groups.platform",
     items: [
       {
+        label: "Model Providers",
+        href: "/settings/model-providers",
+        icon: Sparkles,
+        translationKey: "shell:settings.items.modelProviders",
+      },
+      {
         label: "Models",
         href: "/settings/models",
         icon: Sparkles,

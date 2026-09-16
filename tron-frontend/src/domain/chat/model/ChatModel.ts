@@ -5,6 +5,7 @@ import type {
   ChatUserInputRequest,
   ReasoningEffort,
 } from "@tron/chat-core";
+import type { ModelSelection } from "@/domain/model/model";
 
 export type {
   ChatUserInputAnswer,
@@ -185,6 +186,8 @@ export interface SendChatMessageInput {
   appCode?: string | null;
   taskCode?: string | null;
   agentCode?: string | null;
+  /** First-party clients send this; modelCode remains a legacy compatibility field. */
+  modelSelection?: ModelSelection | null;
   modelCode?: string | null;
   systemModelId?: string | null;
   reasoningEffort?: ReasoningEffort | null;

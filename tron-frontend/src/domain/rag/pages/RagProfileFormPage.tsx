@@ -2028,6 +2028,15 @@ export function RagRetrievalProfileFormPage() {
     });
   }
 
+  function updateRerankStrategy(value: "Disabled" | "Native" | "LlmFallback") {
+    setForm((currentForm) => ({
+      ...currentForm,
+      rerankEnabled: value === "Disabled" ? false : currentForm.rerankEnabled,
+      rerankModelCode: value === "Native" ? currentForm.rerankModelCode : "",
+      rerankStrategy: value,
+    }));
+  }
+
   function toggleContextStrategy(strategyId: string, enabled: boolean) {
     setForm((currentForm) => ({
       ...currentForm,
@@ -2325,13 +2334,24 @@ export function RagRetrievalProfileFormPage() {
                         {topicPolicyOptions.map((policy) => <SelectItem key={policy} value={policy}>{policy}</SelectItem>)}
                       </SelectInput>
                     </Field>
-                    <Field label={pageT("fields.rerankModelCode", "Rerank model code")} hint={retrievalHintT("rerankModelCode")}>
-                      <TextInput aria-label={pageT("fields.rerankModelCode", "Rerank model code")} className="font-mono" value={form.rerankModelCode} onChange={(event) => updateForm("rerankModelCode", event.target.value)} />
+                    <Field label={pageT("fields.rerankStrategy", "Rerank strategy")} hint={pageT("fields.rerankStrategyHint", "No rerank keeps the vector ranking. Native uses a configured rerank model. LLM fallback asks the active text model to order candidate documents and keeps the original order if it fails.")}>
+                      <SelectInput aria-label={pageT("fields.rerankStrategy", "Rerank strategy")} value={form.rerankStrategy} onValueChange={(value) => updateRerankStrategy((value ?? "Disabled") as "Disabled" | "Native" | "LlmFallback")}>
+                        <SelectItem value="Disabled">{pageT("rerankStrategy.disabled", "No rerank")}</SelectItem>
+                        <SelectItem value="Native">{pageT("rerankStrategy.native", "Native rerank")}</SelectItem>
+                        <SelectItem value="LlmFallback">{pageT("rerankStrategy.llmFallback", "LLM fallback")}</SelectItem>
+                      </SelectInput>
                     </Field>
+                    {form.rerankStrategy === "Native" ? (
+                      <Field label={pageT("fields.rerankModelCode", "Rerank model code")} hint={retrievalHintT("rerankModelCode")}>
+                        <TextInput aria-label={pageT("fields.rerankModelCode", "Rerank model code")} className="font-mono" value={form.rerankModelCode} onChange={(event) => updateForm("rerankModelCode", event.target.value)} />
+                      </Field>
+                    ) : null}
                   </div>
-                  <div className="mt-4">
-                    <ToggleSwitch checked={form.rerankEnabled} label={pageT("fields.enableRerank", "Enable rerank")} onCheckedChange={(checked) => updateForm("rerankEnabled", checked)} />
-                  </div>
+                  {form.rerankStrategy !== "Disabled" ? (
+                    <div className="mt-4">
+                      <ToggleSwitch checked={form.rerankEnabled} label={pageT("fields.enableRerank", "Enable rerank")} onCheckedChange={(checked) => updateForm("rerankEnabled", checked)} />
+                    </div>
+                  ) : null}
                 </section>
 
 

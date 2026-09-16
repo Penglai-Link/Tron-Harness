@@ -17,16 +17,35 @@ impl ModelService {
         Ok(catalog
             .records
             .into_iter()
-            .map(|record| ModelSelectOption {
-                model_code: record.model_code,
-                display_name: record.display_name,
-                model_name: record.model_name,
-                source_kind: record.source_kind,
-                source_label: record.source_label,
-                vendor: record.vendor,
-                protocol: record.protocol,
-                model_type: record.model_type,
-                enabled: record.enabled,
+            .map(|record| {
+                let model_code = record.model_code.clone();
+                ModelSelectOption {
+                    option_code: model_code.clone(),
+                    model_code,
+                    display_name: record.display_name,
+                    model_name: record.model_name,
+                    source_kind: record.source_kind,
+                    source_label: record.source_label,
+                    vendor: record.vendor,
+                    protocol: record.protocol,
+                    model_type: record.model_type,
+                    enabled: record.enabled,
+                    model_selection: crate::domain::model_provider::ModelSelection::fixed(
+                        record.model_code,
+                    ),
+                    provider_code: None,
+                    access_platform: None,
+                    upstream_vendor_name: None,
+                    remote_status: None,
+                    context_window_tokens: record.context_window_tokens,
+                    quality_type: None,
+                    input_coefficient: None,
+                    cache_hit_coefficient: None,
+                    output_coefficient: None,
+                    supported_reasoning_efforts: record.supported_reasoning_efforts,
+                    default_reasoning_effort: record.default_reasoning_effort,
+                    is_default: record.is_default,
+                }
             })
             .collect())
     }

@@ -10,6 +10,7 @@ use crate::adapters::{
         account::routes as account_routes,
         admin::{
             models::routes::routes as admin_model_routes,
+            model_providers::routes as admin_model_provider_routes,
             navigation::routes as admin_navigation_routes,
             open_apps::routes::routes as admin_open_app_routes,
             prompts::routes::routes as admin_prompt_routes, roles::routes as role_routes,
@@ -49,6 +50,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
     account_routes()
         .merge(user_routes())
         .merge(admin_model_routes())
+        .merge(admin_model_provider_routes())
         .merge(admin_navigation_routes())
         .merge(admin_prompt_routes())
         .merge(admin_open_app_routes())

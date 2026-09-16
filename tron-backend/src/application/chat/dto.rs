@@ -9,6 +9,7 @@ use crate::{
             ChatClientCapabilities, ChatMessage, ChatMessageAttachment, ChatSession,
             ChatSessionSourceType,
         },
+        model_provider::ModelSelection,
         reasoning::ReasoningEffort,
     },
 };
@@ -56,6 +57,9 @@ pub struct SendChatMessageCommand {
     pub app_code: Option<String>,
     pub task_code: Option<String>,
     pub agent_code: Option<String>,
+    /// First-party clients send the full selection. `modelCode` remains for
+    /// older clients and is normalized as a Fixed selection by the handler.
+    pub model_selection: Option<ModelSelection>,
     pub model_code: Option<String>,
     pub system_model_id: Option<String>,
     pub reasoning_effort: Option<ReasoningEffort>,

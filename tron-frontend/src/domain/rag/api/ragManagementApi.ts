@@ -22,6 +22,7 @@ import {
   type RagPipelineStageResult,
   type RagPipelineTemplate,
   type RagProfilePipeline,
+  type RerankStrategy,
   type RagRetrievalRouteConfig,
   type RagStorageBinding,
   type RetrievalProfileRecord,
@@ -159,6 +160,7 @@ export interface RagProfileDetailApi {
   profileType?: string;
   rerankEnabled?: boolean;
   rerankModelCode?: string;
+  rerankStrategy?: RerankStrategy;
   requiredSourceVersion?: string;
   routes?: RagProfileRouteApi[];
   status?: string;
@@ -705,8 +707,13 @@ export function mapRagProfileDetailToRecord(payload: RagProfileDetailApi): Profi
       })),
       fusionPolicy: readString(payload.fusionPolicy),
       graphExpansionPolicy: readString(payload.graphExpansionPolicy),
-      rerankEnabled: Boolean(payload.rerankEnabled),
-      rerankModelCode: readString(payload.rerankModelCode),
+      rerankEnabled: Boolean(payload.rerankEnabled) && payload.rerankStrategy !== "Disabled",
+      rerankModelCode: payload.rerankStrategy === "Native" ? readString(payload.rerankModelCode) : "",
+      rerankStrategy: !Boolean(payload.rerankEnabled) || payload.rerankStrategy === "Disabled"
+        ? "Disabled"
+        : payload.rerankStrategy === "LlmFallback"
+          ? "LlmFallback"
+          : "Native",
       routesConfig,
       topicPolicy: readString(payload.topicPolicy),
     },
@@ -947,6 +954,7 @@ export function buildRagRetrievalProfileMutationPayload(
     requiredSourceVersion: hidden.requiredSourceVersion,
     rerankEnabled: record.config.rerankEnabled,
     rerankModelCode: record.config.rerankModelCode,
+    rerankStrategy: record.config.rerankStrategy ?? "Disabled",
     status: profileStatusToApiCode(record.status),
     topicPolicy: record.config.topicPolicy,
   };

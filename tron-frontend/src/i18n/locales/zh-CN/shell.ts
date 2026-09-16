@@ -127,6 +127,7 @@ export const shell = {
       menuArrangement: "菜单编排",
       menuPool: "菜单池",
       memoryDomains: "记忆领域",
+      modelProviders: "模型供应商",
       models: "模型",
       navigationDomains: "菜单领域",
       openapi: "OpenAPI",

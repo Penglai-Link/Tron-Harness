@@ -206,6 +206,7 @@ async fn run_automation_with_main_agent(
                 app_code: None,
                 task_code: None,
                 agent_code: Some(resolved_runtime.agent_code.clone()),
+                model_selection: None,
                 model_code,
                 system_model_id,
                 reasoning_effort: None,

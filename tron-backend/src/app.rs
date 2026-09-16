@@ -22,7 +22,10 @@ use crate::{
         outbound::{
             config::YamlSystemConfigStore,
             crypto::{BcryptPasswordHasher, VariableCipherProvider},
-            model::{HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient},
+            model::{
+                HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient,
+                PersonAiAwareLlmRuntimeClient, PersonAiModelProviderClient,
+            },
             persistence::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
@@ -53,6 +56,7 @@ use crate::{
     application::mcp::McpService,
     application::memory::{MemoryService, MemoryWorkDomainService},
     application::model::ModelService,
+    application::model_provider::{ModelProviderService, ProviderAwareLlmRuntimeResolver},
     application::navigation::NavigationService,
     application::open_app::OpenAppService,
     application::prompt::PromptService,
@@ -147,6 +151,7 @@ pub struct AppState {
     pub setup_transaction: SetupTransactionService,
     pub system_config: SystemConfigService,
     pub models: ModelService,
+    pub model_providers: ModelProviderService,
     pub prompts: PromptService,
     pub open_apps: OpenAppService,
     pub llm_runtime: LlmRuntimeService,
@@ -183,9 +188,6 @@ impl AppState {
         let model_inference_client = http_client_pool.model_inference_client();
         let runtime_http_client = http_client_pool.runtime_control_client();
         let document_parsing_client = http_client_pool.document_parsing_client();
-        let agent_model_client = Arc::new(HttpModelClient::new(Arc::new(
-            HttpModelProviderClient::new(model_inference_client.clone()),
-        )));
         let users = if config.database_url == ":memory:" {
             GLOBAL_USER_SERVICE
                 .get_or_init(|| build_user_service(&config, event_bus.clone()))
@@ -349,6 +351,16 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone(), variables.clone())
         };
+        let model_providers = build_model_provider_service(
+            &config.database_url,
+            variables.clone(),
+        );
+        let agent_model_client = Arc::new(HttpModelClient::new(Arc::new(
+            PersonAiModelProviderClient::new(
+                HttpModelProviderClient::new(model_inference_client.clone()),
+                model_providers.clone(),
+            ),
+        )));
         let prompts = build_prompt_service(
             &config.database_url,
             workspaces.clone(),
@@ -356,8 +368,14 @@ impl AppState {
             id_provider.clone(),
         );
         let llm_runtime = LlmRuntimeService::new(
-            Arc::new(models.clone()),
-            Arc::new(HttpLlmRuntimeClient::new(model_inference_client)),
+            Arc::new(ProviderAwareLlmRuntimeResolver::new(
+                models.clone(),
+                model_providers.clone(),
+            )),
+            Arc::new(PersonAiAwareLlmRuntimeClient::new(
+                HttpLlmRuntimeClient::new(model_inference_client),
+                model_providers.clone(),
+            )),
         );
         let prompts = prompts.with_llm_runtime(llm_runtime.clone());
         let graph_core = if config.graph_storage_path == ":memory:" {
@@ -511,6 +529,7 @@ impl AppState {
             ontologies,
             graph_explorer,
             models,
+            model_providers,
             prompts,
             open_apps,
             llm_runtime,
@@ -545,6 +564,7 @@ where
     I: SnowflakeIdProvider + IdGenerator + 'static,
 {
     let state = AppState::new_with_id_provider(config, id_provider)?;
+    state.model_providers.start_background_sync();
     let protected_routes = build_protected_routes(&state);
     let open_api_routes = build_open_api_routes(&state);
     let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone());

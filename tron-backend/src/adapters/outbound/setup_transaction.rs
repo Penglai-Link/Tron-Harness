@@ -12,6 +12,7 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Deserialize;
 
 use crate::{
+    application::model_provider::migrate_provider_catalog_model_schema,
     application::setup_state::SetupState,
     config::VariableCryptoConfig,
     domain::{
@@ -24,6 +25,8 @@ use crate::{
 
 const SYSTEM_INITIALIZATION_MIGRATION: &str =
     include_str!("../../../migrations/20260825_0001_create_system_initialization.sql");
+const MODEL_PROVIDER_MIGRATION: &str =
+    include_str!("../../../migrations/20260915_0001_create_model_provider_management.sql");
 const BCRYPT_COST: u32 = 4;
 
 #[derive(Clone)]
@@ -40,7 +43,17 @@ pub struct SetupCompletionCommand {
     pub encryption_key_base64: String,
     pub workspace_name: String,
     pub workspace_description: Option<String>,
-    pub models: SetupModelCommands,
+    #[serde(default)]
+    pub model_access: SetupModelAccess,
+    pub models: Option<SetupModelCommands>,
+}
+
+#[derive(Debug, Clone, Copy, Default, Deserialize)]
+#[serde(rename_all = "PascalCase")]
+pub enum SetupModelAccess {
+    #[default]
+    Manual,
+    PersonAi,
 }
 
 #[derive(Debug, Deserialize)]
@@ -48,7 +61,7 @@ pub struct SetupCompletionCommand {
 pub struct SetupModelCommands {
     pub text: SetupModelCommand,
     pub embedding: SetupModelCommand,
-    pub rerank: SetupModelCommand,
+    pub rerank: Option<SetupModelCommand>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -87,6 +100,7 @@ pub enum SetupTransactionError {
     InvalidDisplayName,
     InvalidWorkspaceName,
     InvalidModel(String),
+    PersonAiNotReady,
     AdminNotFound,
     Storage,
 }
@@ -101,6 +115,11 @@ impl SetupTransactionService {
         connection
             .execute_batch(SYSTEM_INITIALIZATION_MIGRATION)
             .map_err(|_| SetupTransactionError::Storage)?;
+        connection
+            .execute_batch(MODEL_PROVIDER_MIGRATION)
+            .map_err(|_| SetupTransactionError::Storage)?;
+        migrate_provider_catalog_model_schema(&connection)
+            .map_err(|_| SetupTransactionError::Storage)?;
         Ok(Self {
             application_config_path: application_config_path.into(),
             connection: Arc::new(Mutex::new(connection)),
@@ -108,7 +127,10 @@ impl SetupTransactionService {
     }
 
     pub fn get(&self) -> Result<SetupState, SetupTransactionError> {
-        let connection = self.connection.lock().map_err(|_| SetupTransactionError::Storage)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| SetupTransactionError::Storage)?;
         read_state(&connection)
     }
 
@@ -117,7 +139,10 @@ impl SetupTransactionService {
         actor_user_code: &str,
         command: SetupCompletionCommand,
     ) -> Result<SetupState, SetupTransactionError> {
-        let mut connection = self.connection.lock().map_err(|_| SetupTransactionError::Storage)?;
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| SetupTransactionError::Storage)?;
         let tx = connection
             .transaction()
             .map_err(|_| SetupTransactionError::Storage)?;
@@ -146,21 +171,33 @@ impl SetupTransactionService {
             return Err(SetupTransactionError::InvalidWorkspaceName);
         }
         let _key = decode_key(&command.encryption_key_base64)?;
-        let password_hash = hash(&command.new_password, BCRYPT_COST)
-            .map_err(|_| SetupTransactionError::Storage)?;
+        let password_hash =
+            hash(&command.new_password, BCRYPT_COST).map_err(|_| SetupTransactionError::Storage)?;
         let now = current_timestamp();
         let now_millis = crate::shared::time::timestamp_to_millis(&now);
-        tx
-            .query_row(
-                "SELECT id FROM users WHERE user_code = 'USR-ADMIN' AND status = 'active'",
-                [],
-                |row| row.get::<_, i64>(0),
-            )
-            .optional()
-            .map_err(|_| SetupTransactionError::Storage)?
-            .ok_or(SetupTransactionError::AdminNotFound)?;
+        tx.query_row(
+            "SELECT id FROM users WHERE user_code = 'USR-ADMIN' AND status = 'active'",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .optional()
+        .map_err(|_| SetupTransactionError::Storage)?
+        .ok_or(SetupTransactionError::AdminNotFound)?;
 
-        validate_models(&command.models)?;
+        let manual_models = match command.model_access {
+            SetupModelAccess::Manual => Some(command.models.as_ref().ok_or_else(|| {
+                SetupTransactionError::InvalidModel(
+                    "manual setup requires text and embedding models".into(),
+                )
+            })?),
+            SetupModelAccess::PersonAi => {
+                validate_person_ai_setup_ready(&tx)?;
+                None
+            }
+        };
+        if let Some(models) = manual_models {
+            validate_models(models)?;
+        }
         let cipher = crate::adapters::outbound::crypto::Sm4GcmVariableCipher::from_config(
             VariableCryptoConfig {
                 key_base64: command.encryption_key_base64.trim().to_owned(),
@@ -176,7 +213,14 @@ impl SetupTransactionService {
         )
         .map_err(|_| SetupTransactionError::Storage)?;
 
-        let workspace_id = next_id(&tx, &["workspaces", "workspace_user_access", "workspace_role_access"])?;
+        let workspace_id = next_id(
+            &tx,
+            &[
+                "workspaces",
+                "workspace_user_access",
+                "workspace_role_access",
+            ],
+        )?;
         let workspace_code = generate_workspace_code();
         tx.execute(
             "INSERT INTO workspaces (id, workspace_code, name, description, parent_workspace_code,
@@ -186,7 +230,11 @@ impl SetupTransactionService {
                 workspace_id,
                 workspace_code,
                 command.workspace_name.trim(),
-                command.workspace_description.as_deref().map(str::trim).filter(|v| !v.is_empty()),
+                command
+                    .workspace_description
+                    .as_deref()
+                    .map(str::trim)
+                    .filter(|v| !v.is_empty()),
                 now_millis
             ],
         )
@@ -199,22 +247,49 @@ impl SetupTransactionService {
         )
         .map_err(|_| SetupTransactionError::Storage)?;
 
-        let mut model_id = next_id(&tx, &["models"])?;
-        for (model_type, model) in [
-            (ModelType::Text, &command.models.text),
-            (ModelType::Embedding, &command.models.embedding),
-            (ModelType::Rerank, &command.models.rerank),
-        ] {
-            let model_code = format!("MODEL-{model_id}");
-            let encrypted_key = protect_api_key(&cipher, &model.api_key_ref)?;
-            insert_model(&tx, model_id, &model_code, &workspace_code, model, encrypted_key, now_millis)?;
-            tx.execute(
-                "INSERT INTO workspace_default_models (workspace_code, model_type, model_code, updated_at)
-                 VALUES (?1, ?2, ?3, ?4)",
-                params![workspace_code, model_type_storage(model_type), model_code, now_millis],
-            )
-            .map_err(|_| SetupTransactionError::Storage)?;
-            model_id += 1;
+        if let Some(models) = manual_models {
+            let mut model_id = next_id(&tx, &["models"])?;
+            let mut setup_models = vec![
+                (ModelType::Text, &models.text),
+                (ModelType::Embedding, &models.embedding),
+            ];
+            if let Some(rerank) = models.rerank.as_ref() {
+                setup_models.push((ModelType::Rerank, rerank));
+            }
+            for (model_type, model) in setup_models {
+                let model_code = format!("MODEL-{model_id}");
+                let encrypted_key = protect_api_key(&cipher, &model.api_key_ref)?;
+                insert_platform_model(
+                    &tx,
+                    model_id,
+                    &model_code,
+                    model,
+                    encrypted_key,
+                    now_millis,
+                )?;
+                tx.execute(
+                    "INSERT INTO platform_default_models (model_type, model_code, updated_at)
+                     VALUES (?1, ?2, ?3)
+                     ON CONFLICT(model_type) DO UPDATE SET model_code = excluded.model_code, updated_at = excluded.updated_at",
+                    params![model_type_storage(model_type), model_code, now_millis],
+                )
+                .map_err(|_| SetupTransactionError::Storage)?;
+                tx.execute(
+                    "INSERT INTO default_model_selections (
+                        scope_key, workspace_code, model_type, selection_kind, provider_code,
+                        model_code, route_code, created_at, updated_at
+                     ) VALUES ('platform', NULL, ?1, 'Fixed', NULL, ?2, NULL, ?3, ?3)
+                     ON CONFLICT(scope_key, model_type) DO UPDATE SET
+                        selection_kind = excluded.selection_kind,
+                        provider_code = NULL,
+                        model_code = excluded.model_code,
+                        route_code = NULL,
+                        updated_at = excluded.updated_at",
+                    params![model_type_storage(model_type), model_code, now_millis],
+                )
+                .map_err(|_| SetupTransactionError::Storage)?;
+                model_id += 1;
+            }
         }
 
         let initialized_at = Utc::now().to_rfc3339();
@@ -224,8 +299,8 @@ impl SetupTransactionService {
         )
         .map_err(|_| SetupTransactionError::Storage)?;
 
-        let original_config = fs::read(&self.application_config_path)
-            .map_err(|_| SetupTransactionError::Storage)?;
+        let original_config =
+            fs::read(&self.application_config_path).map_err(|_| SetupTransactionError::Storage)?;
         let next_config = update_config(&original_config, &command.encryption_key_base64)?;
         atomic_write(&self.application_config_path, &next_config)?;
 
@@ -242,7 +317,8 @@ impl SetupTransactionService {
 }
 
 fn open_connection(database_url: &str) -> Result<Connection, SetupTransactionError> {
-    if database_url != ":memory:" && !database_url.starts_with("file:")
+    if database_url != ":memory:"
+        && !database_url.starts_with("file:")
         && let Some(parent) = Path::new(database_url).parent()
         && !parent.as_os_str().is_empty()
     {
@@ -285,7 +361,11 @@ fn next_id(connection: &Connection, tables: &[&str]) -> Result<i64, SetupTransac
     let mut max_id = 0_i64;
     for table in tables {
         let sql = format!("SELECT COALESCE(MAX(id), 0) FROM {table}");
-        max_id = max_id.max(connection.query_row(&sql, [], |row| row.get(0)).map_err(|_| SetupTransactionError::Storage)?);
+        max_id = max_id.max(
+            connection
+                .query_row(&sql, [], |row| row.get(0))
+                .map_err(|_| SetupTransactionError::Storage)?,
+        );
     }
     Ok(max_id + 1)
 }
@@ -305,13 +385,18 @@ fn decode_key(value: &str) -> Result<[u8; 16], SetupTransactionError> {
 }
 
 fn validate_models(models: &SetupModelCommands) -> Result<(), SetupTransactionError> {
-    for (expected_type, model) in [
+    let mut setup_models = vec![
         (ModelType::Text, &models.text),
         (ModelType::Embedding, &models.embedding),
-        (ModelType::Rerank, &models.rerank),
-    ] {
+    ];
+    if let Some(rerank) = models.rerank.as_ref() {
+        setup_models.push((ModelType::Rerank, rerank));
+    }
+    for (expected_type, model) in setup_models {
         if model.model_type != expected_type {
-            return Err(SetupTransactionError::InvalidModel("model type does not match setup slot".into()));
+            return Err(SetupTransactionError::InvalidModel(
+                "model type does not match setup slot".into(),
+            ));
         }
         validate_model_configuration(
             &model.display_name,
@@ -326,8 +411,41 @@ fn validate_models(models: &SetupModelCommands) -> Result<(), SetupTransactionEr
         )
         .map_err(|error| SetupTransactionError::InvalidModel(error.to_string()))?;
         if model.model_type == ModelType::Text && model.context_window_tokens.is_none() {
-            return Err(SetupTransactionError::InvalidModel("contextWindowTokens is required".into()));
+            return Err(SetupTransactionError::InvalidModel(
+                "contextWindowTokens is required".into(),
+            ));
         }
+    }
+    Ok(())
+}
+
+fn validate_person_ai_setup_ready(connection: &Connection) -> Result<(), SetupTransactionError> {
+    let connected: i64 = connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM provider_connections
+                WHERE provider_code = 'PersonAi' AND status = 'Connected'
+                  AND credentials_encrypted IS NOT NULL
+            )",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|_| SetupTransactionError::Storage)?;
+    if connected == 0 {
+        return Err(SetupTransactionError::PersonAiNotReady);
+    }
+    let required_defaults: i64 = connection
+        .query_row(
+            "SELECT COUNT(*) FROM default_model_selections
+             WHERE scope_key = 'platform' AND provider_code = 'PersonAi'
+               AND model_type IN ('TEXT', 'EMBEDDING')
+               AND selection_kind = 'ProviderRoute'",
+            [],
+            |row| row.get(0),
+        )
+        .map_err(|_| SetupTransactionError::Storage)?;
+    if required_defaults != 2 {
+        return Err(SetupTransactionError::PersonAiNotReady);
     }
     Ok(())
 }
@@ -344,17 +462,18 @@ fn protect_api_key(
         .map_err(|_| SetupTransactionError::Storage)
 }
 
-fn insert_model(
+fn insert_platform_model(
     tx: &Connection,
     id: i64,
     model_code: &str,
-    workspace_code: &str,
     model: &SetupModelCommand,
     encrypted_key: String,
     now_millis: i64,
 ) -> Result<(), SetupTransactionError> {
-    let capabilities = serde_json::to_string(&model.model_capabilities).map_err(|_| SetupTransactionError::Storage)?;
-    let reasoning = serde_json::to_string(&model.supported_reasoning_efforts).map_err(|_| SetupTransactionError::Storage)?;
+    let capabilities = serde_json::to_string(&model.model_capabilities)
+        .map_err(|_| SetupTransactionError::Storage)?;
+    let reasoning = serde_json::to_string(&model.supported_reasoning_efforts)
+        .map_err(|_| SetupTransactionError::Storage)?;
     tx.execute(
         "INSERT INTO models (id, scope_kind, workspace_code, model_code, display_name, vendor, protocol,
          model_type, model_capabilities, base_url, api_path, api_key_ref, model_name, enabled, description,
@@ -362,10 +481,10 @@ fn insert_model(
          responses_stateful_enabled, temperature, max_tokens, context_window_tokens, top_p, max_retries,
          last_verified_at, last_verify_status, last_verify_message, source_kind, source_model_code,
          allow_inheritance, created_at, updated_at)
-         VALUES (?1, 'workspace', ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15, ?16,
-         ?17, ?18, ?19, ?20, ?21, ?22, ?23, ?24, NULL, NULL, NULL, 'workspace_local', NULL, 0, ?25, ?25)",
+         VALUES (?1, 'platform', NULL, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14, ?15,
+         ?16, ?17, ?18, ?19, ?20, ?21, ?22, ?23, NULL, NULL, NULL, 'platform', NULL, NULL, ?24, ?24)",
         params![
-            id, workspace_code, model_code, model.display_name.trim(), model.vendor.trim(),
+            id, model_code, model.display_name.trim(), model.vendor.trim(),
             protocol_storage(model.protocol), model_type_storage(model.model_type), capabilities,
             model.base_url.trim().trim_end_matches('/'), model.api_path.as_deref().map(str::trim),
             encrypted_key, model.model_name.trim(), i64::from(model.enabled),
@@ -399,12 +518,17 @@ fn model_type_storage(value: ModelType) -> &'static str {
 }
 
 fn update_config(original: &[u8], key: &str) -> Result<Vec<u8>, SetupTransactionError> {
-    let mut value: serde_yaml::Value = serde_yaml::from_slice(original).map_err(|_| SetupTransactionError::Storage)?;
-    let mapping = value.as_mapping_mut().ok_or(SetupTransactionError::Storage)?;
+    let mut value: serde_yaml::Value =
+        serde_yaml::from_slice(original).map_err(|_| SetupTransactionError::Storage)?;
+    let mapping = value
+        .as_mapping_mut()
+        .ok_or(SetupTransactionError::Storage)?;
     let crypto = mapping
         .entry(serde_yaml::Value::String("variableCrypto".into()))
         .or_insert_with(|| serde_yaml::Value::Mapping(Default::default()));
-    let crypto = crypto.as_mapping_mut().ok_or(SetupTransactionError::Storage)?;
+    let crypto = crypto
+        .as_mapping_mut()
+        .ok_or(SetupTransactionError::Storage)?;
     crypto.insert(
         serde_yaml::Value::String("keyBase64".into()),
         serde_yaml::Value::String(key.trim().into()),

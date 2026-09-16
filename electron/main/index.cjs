@@ -370,10 +370,6 @@ function startBackend(resourcesDir) {
     if (!logStream.destroyed && !logStream.writableEnded) {
       logStream.write(`${line}\n`);
     }
-    if (isDevMode()) {
-      const output = source === "stderr" ? process.stderr : process.stdout;
-      output.write(`[tron-backend] ${line}\n`);
-    }
   };
 
   writeLog("lifecycle", `using application config: ${configPath}`);

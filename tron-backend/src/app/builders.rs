@@ -202,6 +202,14 @@ fn build_model_service(
     ModelService::new(repository, workspaces, variables.cipher())
 }
 
+fn build_model_provider_service(
+    database_url: &str,
+    variables: VariableService,
+) -> crate::application::model_provider::ModelProviderService {
+    crate::application::model_provider::ModelProviderService::connect(database_url, variables.cipher())
+        .expect("model provider SQLite repository should initialize")
+}
+
 fn build_prompt_service(
     database_url: &str,
     workspaces: WorkspaceService,

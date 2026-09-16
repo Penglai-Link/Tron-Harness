@@ -127,6 +127,7 @@ export const shell = {
       menuArrangement: "Menu Arrangement",
       menuPool: "Menu Pool",
       memoryDomains: "Memory Domains",
+      modelProviders: "Model Providers",
       models: "Models",
       navigationDomains: "Navigation Domains",
       openapi: "OpenAPI",

@@ -5,7 +5,12 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{application::model::ModelService, response::ApiResponse};
+use crate::{
+    app::AppState,
+    application::model::ModelService,
+    domain::model::{ModelProtocol, ModelSelectOption, ModelViewSourceKind},
+    response::ApiResponse,
+};
 
 use super::{
     error_mapper::model_error_response,
@@ -23,11 +28,53 @@ pub async fn list_workspace_models(
 }
 
 pub async fn list_select_options(
-    State(models): State<ModelService>,
+    State(state): State<AppState>,
     Path(workspace_code): Path<String>,
 ) -> Response {
-    match models.list_workspace_select_options(&workspace_code) {
-        Ok(records) => Json(ApiResponse::success(records)).into_response(),
+    match state.models.list_workspace_select_options(&workspace_code) {
+        Ok(mut records) => match state
+            .model_providers
+            .list_text_select_options(&workspace_code)
+        {
+            Ok(provider_records) => {
+                records.extend(provider_records.into_iter().map(|record| {
+                    ModelSelectOption {
+                        option_code: record.option_code,
+                        model_code: record.selection.model_code.clone().unwrap_or_default(),
+                        display_name: record.display_name,
+                        model_name: record
+                            .selection
+                            .model_code
+                            .clone()
+                            .unwrap_or_else(|| "automatic".into()),
+                        source_kind: ModelViewSourceKind::Platform,
+                        source_label: record.access_platform.clone(),
+                        vendor: record
+                            .upstream_vendor_name
+                            .clone()
+                            .unwrap_or_else(|| record.access_platform.clone()),
+                        protocol: ModelProtocol::OpenAiCompatible,
+                        model_type: record.model_type,
+                        enabled: record.enabled,
+                        model_selection: record.selection,
+                        provider_code: Some(record.provider_code),
+                        access_platform: Some(record.access_platform),
+                        upstream_vendor_name: record.upstream_vendor_name,
+                        remote_status: Some(record.remote_status),
+                        context_window_tokens: record.context_window_tokens,
+                        quality_type: record.quality_type,
+                        input_coefficient: record.input_coefficient,
+                        cache_hit_coefficient: record.cache_hit_coefficient,
+                        output_coefficient: record.output_coefficient,
+                        supported_reasoning_efforts: Vec::new(),
+                        default_reasoning_effort: None,
+                        is_default: record.is_default,
+                    }
+                }));
+                Json(ApiResponse::success(records)).into_response()
+            }
+            Err(_) => model_error_response(crate::domain::model::ModelError::StorageFailure),
+        },
         Err(error) => model_error_response(error),
     }
 }

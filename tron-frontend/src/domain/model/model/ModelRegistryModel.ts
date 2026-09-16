@@ -7,6 +7,19 @@ export type ModelProtocol =
   | "RERANK";
 export type ModelType = "TEXT" | "EMBEDDING" | "RERANK" | "IMAGE";
 export type ModelVerifyStatus = "SUCCEEDED" | "FAILED";
+export type ModelProviderCode = "PersonAi";
+export type ModelSelectionKind = "Fixed" | "ProviderRoute";
+export type ProviderRouteCode = "ChatAuto" | "EmbeddingAuto" | "LlmFallback";
+export type ProviderCatalogModelStatus = "Available" | "Unavailable";
+export type ProviderCatalogModelType =
+  | "Chat"
+  | "Embedding"
+  | "Image"
+  | "Video"
+  | "Speech"
+  | "AigcTextDetection"
+  | "AigcImageDetection";
+export type ProviderModelQuality = "High" | "Middle" | "Low";
 export type ReasoningEffort =
   | "None"
   | "Minimal"
@@ -93,6 +106,7 @@ export interface WorkspaceModelCatalog {
 }
 
 export interface ModelSelectOption {
+  optionCode?: string;
   modelCode: string;
   displayName: string;
   modelName: string;
@@ -102,4 +116,29 @@ export interface ModelSelectOption {
   protocol: ModelProtocol;
   modelType: ModelType;
   enabled: boolean;
+  /**
+   * The server owns the selection contract. Existing mock records intentionally
+   * omit it and are normalized to a legacy Fixed selection by callers.
+   */
+  modelSelection?: ModelSelection;
+  providerCode?: ModelProviderCode | null;
+  accessPlatform?: string | null;
+  upstreamVendorName?: string | null;
+  remoteStatus?: ProviderCatalogModelStatus | null;
+  contextWindowTokens?: number | null;
+  qualityType?: ProviderModelQuality | null;
+  inputCoefficient?: number | null;
+  cacheHitCoefficient?: number | null;
+  outputCoefficient?: number | null;
+  supportedReasoningEfforts?: ReasoningEffort[];
+  defaultReasoningEffort?: ReasoningEffort | null;
+  isDefault?: boolean;
+}
+
+export interface ModelSelection {
+  kind: ModelSelectionKind;
+  providerCode?: ModelProviderCode | null;
+  modelCode?: string | null;
+  qualityType?: ProviderModelQuality | null;
+  routeCode?: ProviderRouteCode | null;
 }
