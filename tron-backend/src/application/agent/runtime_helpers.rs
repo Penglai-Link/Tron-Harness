@@ -110,7 +110,10 @@ pub(super) fn validate_context(context: &AgentRunContext) -> Result<(), AgentErr
             "workspaceCode is required".into(),
         ));
     }
-    if context.model.model_name.trim().is_empty() {
+    // Person-AI's ChatAuto route intentionally has no physical model name;
+    // the gateway selects the model from the authenticated provider session.
+    let person_ai_chat_auto_route = context.model.model_code == "PERSON_AI:ROUTE:ChatAuto";
+    if context.model.model_name.trim().is_empty() && !person_ai_chat_auto_route {
         return Err(AgentError::InvalidConfiguration(
             "modelName is required".into(),
         ));
