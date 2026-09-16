@@ -65,7 +65,7 @@ const setupDraft: SetupDraft = {
   newPassword: "",
   confirmPassword: "",
   encryptionKey: "",
-  modelAccess: "Manual",
+  modelAccess: "PersonAi",
   models: {},
   rerankConfigured: false,
   verified: { TEXT: false, EMBEDDING: false, RERANK: false },
@@ -78,7 +78,7 @@ function clearSetupDraft() {
   setupDraft.displayName = undefined;
   setupDraft.workspaceName = undefined;
   setupDraft.workspaceDescription = undefined;
-  setupDraft.modelAccess = "Manual";
+  setupDraft.modelAccess = "PersonAi";
   setupDraft.personAiAuthorization = undefined;
   setupDraft.models = {};
   setupDraft.rerankConfigured = false;
@@ -637,8 +637,8 @@ export function SetupPage() {
               <div className="space-y-8">
                 <div className="grid gap-3 sm:grid-cols-2" role="radiogroup" aria-label={t("models.access.label", "模型接入方式")}>
                   {([
-                    ["Manual", t("models.access.manual", "手动配置模型"), t("models.access.manualHint", "填写并验证文本和向量模型；重排模型可选。")],
                     ["PersonAi", t("models.access.personAi", "接入 Person-AI"), t("models.access.personAiHint", "浏览器授权后自动同步聊天模型和 Embedding。")],
+                    ["Manual", t("models.access.manual", "手动配置模型"), t("models.access.manualHint", "填写并验证文本和向量模型；重排模型可选。")],
                   ] as const).map(([access, label, hint]) => (
                     <button
                       aria-checked={modelAccess === access}

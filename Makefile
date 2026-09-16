@@ -195,6 +195,8 @@ help:
 	@echo "Common commands:"
 	@echo "  make install    Install frontend and backend dependencies"
 	@echo "  make clean      Run backend, frontend, integrated web, and desktop cleanup"
+	@echo "  make version VERSION=0.2.0  Set and synchronize the product revision"
+	@echo "  make version-check           Verify all product manifests use revision"
 	@echo ""
 	@echo "Frontend commands:"
 	@echo "  make fe-install   Install frontend dependencies"
@@ -243,6 +245,19 @@ clean: be-clean fe-clean web-clean desktop-clean
 
 .PHONY: install
 install: fe-install be-install
+
+.PHONY: version
+version:
+	$(NPM) --prefix . run version:sync -- $(if $(strip $(VERSION)),$(VERSION),$(word 2,$(MAKECMDGOALS)))
+
+# Allow the concise form: make version 0.2.0.  GNU Make treats the version
+# as another goal, so consume the positional version goal without running a
+# shell command.  An empty recipe is portable between cmd.exe and POSIX sh.
+%: ;
+
+.PHONY: version-check
+version-check:
+	$(NPM) --prefix . run version:check
 
 .PHONY: fe-install
 fe-install:
