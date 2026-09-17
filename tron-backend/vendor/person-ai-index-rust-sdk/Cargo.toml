@@ -1,0 +1,36 @@
+[package]
+name = "crab-serverapi"
+version = "0.1.0"
+edition = "2021"
+description = "Person-Ai 服务端 API 客户端 (认证/网关/仓库/A2A)，仅出站调用"
+
+[dependencies]
+# HTTP 客户端
+reqwest = { version = "0.12", features = ["json", "stream", "multipart"] }
+# 序列化
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+# 异步运行时
+tokio = { version = "1", features = ["full"] }
+tokio-util = { version = "0.7", features = ["io"] }
+# 异步 trait
+async-trait = "0.1"
+# 错误处理
+thiserror = "2"
+# 加密
+rsa = "0.9"
+aes-gcm = "0.10"
+sha1 = "0.10"
+sha2 = "0.10"
+sm3 = "0.4"
+rand = "0.8"
+base64 = "0.22"
+# URL 编码
+url = "2"
+# 日志
+tracing = "0.1"
+# UUID
+uuid = { version = "1", features = ["v4"] }
+# WebSocket
+tokio-tungstenite = { version = "0.24", features = ["rustls-tls-native-roots"] }
+futures-util = "0.3"
