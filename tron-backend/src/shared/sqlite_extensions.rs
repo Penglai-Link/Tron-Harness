@@ -125,7 +125,7 @@ impl SqliteExtensionContext {
             ))));
         };
         let extension_path = self.extract_extension(
-            Path::new(SIMPLE_RESOURCE_ROOT),
+            &native_resource_root("sqlite-simple", SQLITE_SIMPLE_VERSION, SIMPLE_RESOURCE_ROOT),
             SQLITE_SIMPLE_VERSION,
             platform,
             simple_file_name(platform),
@@ -148,7 +148,7 @@ impl SqliteExtensionContext {
             ))));
         };
         let extension_path = self.extract_extension(
-            Path::new(VEC_RESOURCE_ROOT),
+            &native_resource_root("sqlite-vec", SQLITE_VEC_VERSION, VEC_RESOURCE_ROOT),
             SQLITE_VEC_VERSION,
             platform,
             vec_file_name(platform),
@@ -178,11 +178,26 @@ impl SqliteExtensionContext {
     }
 
     fn extract_simple_dict(&self) -> Result<PathBuf, rusqlite::Error> {
-        let source_root = Path::new(SIMPLE_RESOURCE_ROOT).join("dict");
+        let source_root = native_resource_root(
+            "sqlite-simple",
+            SQLITE_SIMPLE_VERSION,
+            SIMPLE_RESOURCE_ROOT,
+        )
+        .join("dict");
         let target_root = self.runtime_root.join(SQLITE_SIMPLE_VERSION).join("dict");
         copy_dir_once(&source_root, &target_root)?;
         Ok(target_root)
     }
+}
+
+fn native_resource_root(name: &str, version: &str, source_root: &str) -> PathBuf {
+    let packaged_root = env::current_exe()
+        .ok()
+        .and_then(|executable| executable.parent()?.parent().map(Path::to_path_buf))
+        .map(|resources| resources.join("native").join(name).join(version));
+    packaged_root
+        .filter(|path| path.is_dir())
+        .unwrap_or_else(|| PathBuf::from(source_root))
 }
 
 trait AbsolutePath {

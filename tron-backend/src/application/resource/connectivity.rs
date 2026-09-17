@@ -92,7 +92,6 @@ pub struct KafkaConnectionTarget {
     pub security_protocol: String,
     pub sasl: Option<KafkaSaslTarget>,
     pub tls: Option<ConnectionTlsMaterial>,
-    pub properties: BTreeMap<String, String>,
 }
 
 #[derive(Clone)]

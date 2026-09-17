@@ -211,7 +211,15 @@ pub(super) fn validate_kafka_attributes(attributes: &KafkaAttributes) -> Result<
         _ => {}
     }
     match (security_protocol.ends_with("SSL"), attributes.tls.as_ref()) {
-        (true, Some(tls)) => validate_tls(tls, &["REQUIRED", "VERIFY_CA", "VERIFY_FULL"], true)?,
+        (true, Some(tls)) => {
+            validate_tls(tls, &["REQUIRED", "VERIFY_CA", "VERIFY_FULL"], true)?;
+            if tls.client_key_password.is_some() {
+                return Err(invalid(
+                    "tls.clientKeyPassword",
+                    "encrypted client keys are not supported; provide an unencrypted PEM key",
+                ));
+            }
+        }
         (true, None) => {
             return Err(invalid("tls", "is required for SSL security protocols"));
         }
@@ -220,7 +228,7 @@ pub(super) fn validate_kafka_attributes(attributes: &KafkaAttributes) -> Result<
         }
         _ => {}
     }
-    validate_properties(&attributes.properties)
+    Ok(())
 }
 
 fn validate_endpoints(

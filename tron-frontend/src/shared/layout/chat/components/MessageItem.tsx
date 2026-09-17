@@ -6,6 +6,7 @@ import { archiveChatSession, createChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
 import { cn } from "@/shared/lib/utils";
 import { useToast } from "@/components/ui/toast";
+import { useTabStore } from "@/store/tabStore";
 import IconButton from "./IconButton";
 import Item from "./Item";
 
@@ -69,6 +70,26 @@ const MessageItem = ({
         <Link
           to={`/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`}
           className="min-w-0 flex-1 truncate text-[14px]"
+          onClick={(event) => {
+            if (
+              event.defaultPrevented ||
+              event.button !== 0 ||
+              event.metaKey ||
+              event.ctrlKey ||
+              event.shiftKey ||
+              event.altKey
+            ) {
+              return;
+            }
+
+            const path = `/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`;
+            useTabStore.getState().addTab({
+              title: session.title,
+              path,
+              closable: true,
+              activeNav: `chat-session:${session.sessionCode}`,
+            });
+          }}
         >
           {session.title}
         </Link>

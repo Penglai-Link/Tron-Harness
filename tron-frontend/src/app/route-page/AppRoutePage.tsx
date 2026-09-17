@@ -35,6 +35,11 @@ function usesInPlaceSearch(pageId?: string) {
   );
 }
 
+function activeTabOwnsLocation(activeTabPath: string | undefined, pathname: string) {
+  if (!activeTabPath) return false;
+  return new URL(activeTabPath, "https://tron.local").pathname === pathname;
+}
+
 function routeRenderKeyForLocation(
   pathname: string,
   search: string,
@@ -105,6 +110,10 @@ export default function AppRoutePage() {
   const addToCache = useTabStore((state) => state.addToCache);
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
   const activeTabId = useTabStore((state) => state.activeTabId);
+  const activeTabPath = useTabStore((state) =>
+    state.tabs.find((tab) => tab.id === state.activeTabId)?.path,
+  );
+  const useActiveLocationSearch = activeTabOwnsLocation(activeTabPath, pathname);
   const resolved = resolveAppRoute(pathname, search);
   const routeRenderKey = routeRenderKeyForLocation(
     pathname,
@@ -121,7 +130,9 @@ export default function AppRoutePage() {
       // instance alive while injecting the current query into the active tab.
       const isCurrentTab = cachedTab.tabId === activeTabId;
       const useCurrentSearch =
-        isCurrentTab && usesInPlaceSearch(cachedTab.pageId);
+        isCurrentTab &&
+        usesInPlaceSearch(cachedTab.pageId) &&
+        useActiveLocationSearch;
 
       // cachedTab.path 可能包含查询参数，需要拆分为 pathname 和 search
       const questionMarkIndex = cachedTab.path.indexOf("?");
@@ -158,25 +169,41 @@ export default function AppRoutePage() {
         </div>
       );
     });
-  }, [activeTabId, cachedTabsList, search]);
+  }, [activeTabId, cachedTabsList, search, useActiveLocationSearch]);
 
   useEffect(() => {
     if (resolved && resolved.route.layout !== "settings") {
       const currentPath = `${pathname}${search}`;
+      const requestedSessionCode =
+        resolved.route.pageId === "chats.index"
+          ? new URLSearchParams(search).get("sessionCode")?.trim() ?? ""
+          : "";
+      const sessionActiveNav = requestedSessionCode
+        ? `chat-session:${requestedSessionCode}`
+        : undefined;
+      const existingSessionTab = sessionActiveNav
+        ? useTabStore
+            .getState()
+            .tabs.find((tab) => tab.activeNav === sessionActiveNav)
+        : undefined;
       const navItem =
         resolveActiveItem(pathname) ??
         resolveActiveItemByLabel(resolved.route.activeNav);
-      const titleTranslationKey =
-        navItem?.translationKey ?? resolved.route.titleTranslationKey;
-      const tabTitle = titleTranslationKey
-        ? t(titleTranslationKey)
-        : resolved.route.title;
-      const activeNav = resolved.route.activeNav;
+      const titleTranslationKey = sessionActiveNav
+        ? undefined
+        : navItem?.translationKey ?? resolved.route.titleTranslationKey;
+      const tabTitle = sessionActiveNav
+        ? existingSessionTab?.title ?? "New chat"
+        : titleTranslationKey
+          ? t(titleTranslationKey)
+          : resolved.route.title;
+      const activeNav = sessionActiveNav ?? resolved.route.activeNav;
 
       // Stateful detail pages react to their query themselves. Replacing their
       // cache entry on every version change races with that page-level reload.
       const shouldIgnoreSearch = usesInPlaceSearch(resolved.route.pageId);
-      const lookupPath = shouldIgnoreSearch ? pathname : currentPath;
+      const lookupPath =
+        shouldIgnoreSearch && !sessionActiveNav ? pathname : currentPath;
 
       // 调用 addTab，它会根据 activeNav 复用已存在的 tab，或创建新 tab
       const tabId = addTab({

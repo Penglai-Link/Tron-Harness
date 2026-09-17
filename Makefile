@@ -19,16 +19,6 @@ NPM_NODE_DIR := $(if $(wildcard $(NVM_NPM)),$(NVM_NODE_DIR),$(if $(wildcard $(LO
 ifneq ($(strip $(NPM_NODE_DIR)),)
 export PATH := $(subst /,\,$(NPM_NODE_DIR));$(PATH)
 endif
-# openssl-sys uses the vendored OpenSSL build on Windows.  Strawberry Perl
-# provides the Perl and Unix-like tools required by that build; add its
-# conventional install location when it is present so a fresh terminal can
-# run make without a manually adjusted PATH.
-STRAWBERRY_PERL_DIR ?= C:/Strawberry
-STRAWBERRY_PERL_BIN := $(STRAWBERRY_PERL_DIR)/perl/bin
-STRAWBERRY_C_BIN := $(STRAWBERRY_PERL_DIR)/c/bin
-ifneq ($(wildcard $(STRAWBERRY_PERL_BIN)/perl.exe),)
-export PATH := $(subst /,\,$(STRAWBERRY_PERL_BIN));$(subst /,\,$(STRAWBERRY_C_BIN));$(PATH)
-endif
 # npm is a .cmd batch file on Windows.  `call` is required so control returns
 # to cmd.exe when npm runs inside a parenthesized or chained recipe.
 NPM = call $(NPM_BIN)
@@ -78,7 +68,7 @@ if not exist "$(call WIN_PATH,$(1))" (echo Required file not found: $(1) & exit 
 endef
 
 define LOAD_ENV_FILE
-if exist "$(call WIN_PATH,$(1))" for /f "usebackq eol=# tokens=1,* delims==" %%A in ("$(call WIN_PATH,$(1))") do set "%%A=%%B"
+if exist "$(call WIN_PATH,$(1))" (for /f "usebackq eol=# tokens=1,* delims==" %%A in ("$(call WIN_PATH,$(1))") do set "%%A=%%B")
 endef
 
 FRONTEND_API_DATA_SOURCE_ENV = $(foreach assignment,$(FRONTEND_API_DATA_SOURCE_ASSIGNMENTS),set "$(assignment)" &)
@@ -323,8 +313,12 @@ be-clean:
 endif
 
 .PHONY: be-dev
+ifeq ($(HOST_OS),windows)
 be-dev:
+	$(POWERSHELL) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if (-not $$env:HOME -and $$env:USERPROFILE) { $$env:HOME = $$env:USERPROFILE }; if (Test-Path -LiteralPath '$(BACKEND_ENV_FILE)') { Get-Content -LiteralPath '$(BACKEND_ENV_FILE)' | Where-Object { $$_.Trim() -and -not $$_.TrimStart().StartsWith('#') } | ForEach-Object { $$parts = $$_.Split('=', 2); if ($$parts.Length -eq 2) { [Environment]::SetEnvironmentVariable($$parts[0].Trim(), $$parts[1].Trim(), 'Process') } } }; if ('$(PORT)') { $$env:TRON_BACKEND_PORT = '$(PORT)' }; if ('$(GRAPH_STORAGE_PATH)') { $$env:TRON_BACKEND_GRAPH_STORAGE_PATH = '$(GRAPH_STORAGE_PATH)' }; & '$(CARGO)' run --manifest-path '$(BACKEND_MANIFEST)' --bin tron-backend; exit $$LASTEXITCODE"
+else
 	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE)) $(COMMAND_SEPARATOR) $(call RUN_WITH_ENV,$(BE_RUN_ENV),$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)" --bin tron-backend)
+endif
 
 .PHONY: openapi
 openapi:
@@ -334,7 +328,7 @@ openapi:
 dev-api: install
 ifeq ($(HOST_OS),windows)
 dev-api:
-	$(POWERSHELL) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$backend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('be-dev','PORT=$(API_BACKEND_PORT)','GRAPH_STORAGE_PATH=$(API_GRAPH_STORAGE_PATH)') -WorkingDirectory '$(CURDIR)' -PassThru; $$frontend = $$null; try { do { if ($$backend.HasExited) { throw 'Backend exited before the health endpoint became ready.' }; Start-Sleep -Seconds 1; try { $$health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:$(API_BACKEND_PORT)/api/v1/health' -TimeoutSec 2 } catch { $$health = $$null } } while (-not $$health -or $$health.StatusCode -ne 200); Write-Host 'Starting frontend on http://localhost:$(API_FRONTEND_PORT) with /api proxy -> http://127.0.0.1:$(API_BACKEND_PORT)'; $$frontend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('fe-dev-api','PORT=$(API_BACKEND_PORT)','FE_PORT=$(API_FRONTEND_PORT)') -WorkingDirectory '$(CURDIR)' -PassThru; Wait-Process -Id $$frontend.Id } finally { if ($$frontend -and -not $$frontend.HasExited) { Stop-Process -Id $$frontend.Id -Force }; if ($$backend -and -not $$backend.HasExited) { Stop-Process -Id $$backend.Id -Force } }"
+	$(POWERSHELL) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "$$backend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('be-dev','PORT=$(API_BACKEND_PORT)','GRAPH_STORAGE_PATH=$(API_GRAPH_STORAGE_PATH)') -WorkingDirectory '$(CURDIR)' -PassThru -NoNewWindow; $$frontend = $$null; try { do { if ($$backend.HasExited) { throw 'Backend exited before the health endpoint became ready.' }; Start-Sleep -Seconds 1; try { $$health = Invoke-WebRequest -UseBasicParsing -Uri 'http://127.0.0.1:$(API_BACKEND_PORT)/api/v1/health' -TimeoutSec 2 } catch { $$health = $$null } } while (-not $$health -or $$health.StatusCode -ne 200); Write-Host 'Starting frontend on http://localhost:$(API_FRONTEND_PORT) with /api proxy -> http://127.0.0.1:$(API_BACKEND_PORT)'; $$frontend = Start-Process -FilePath '$(MAKE)' -ArgumentList @('fe-dev-api','PORT=$(API_BACKEND_PORT)','FE_PORT=$(API_FRONTEND_PORT)') -WorkingDirectory '$(CURDIR)' -PassThru -NoNewWindow; Wait-Process -Id $$frontend.Id } finally { if ($$frontend -and -not $$frontend.HasExited) { Stop-Process -Id $$frontend.Id -Force }; if ($$backend -and -not $$backend.HasExited) { Stop-Process -Id $$backend.Id -Force } }"
 else
 dev-api:
 	@set -eu; \
@@ -379,6 +373,7 @@ desktop-build: desktop-clean web-build
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_FILE,$(BACKEND_DIR)/application.yaml,$(ELECTRON_DIR)/resources/application.yaml)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
+	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	$(call ASSERT_FILE,$(BACKEND_RELEASE_PATH))
 	$(call COPY_FILE,$(BACKEND_RELEASE_PATH),$(DESKTOP_SIDECAR_PATH))
@@ -392,6 +387,7 @@ desktop-build: desktop-clean web-build
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
 	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
+	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	test -f $(BACKEND_RELEASE_PATH)
 	cp $(BACKEND_RELEASE_PATH) $(DESKTOP_SIDECAR_PATH)
@@ -415,6 +411,7 @@ desktop-clean:
 	$(call REMOVE,$(ELECTRON_DIR)/dist)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/binaries)
+	$(call REMOVE,$(ELECTRON_DIR)/resources/native)
 	$(call REMOVE,$(ELECTRON_DIR)/node_modules)
 
 .PHONY: skill-memory-dreaming-test

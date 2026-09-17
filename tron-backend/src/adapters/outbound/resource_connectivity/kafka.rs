@@ -1,79 +1,109 @@
-use std::time::Duration;
+use std::{io::BufReader, sync::Arc, time::Duration};
 
-use rdkafka::{
-    ClientConfig,
-    consumer::{BaseConsumer, Consumer},
-};
+use rskafka::client::{ClientBuilder, Credentials, SaslConfig};
+use rustls::{ClientConfig, RootCertStore};
 
 use crate::application::resource::KafkaConnectionTarget;
 
 pub(super) async fn verify(target: KafkaConnectionTarget, timeout: Duration) -> Result<(), ()> {
-    tokio::task::spawn_blocking(move || verify_blocking(target, timeout))
-        .await
-        .map_err(|_| ())?
-}
-
-fn verify_blocking(target: KafkaConnectionTarget, timeout: Duration) -> Result<(), ()> {
-    let mut config = ClientConfig::new();
-    for (key, value) in &target.properties {
-        config.set(key, value);
-    }
     let brokers = target
         .brokers
         .iter()
-        .map(|endpoint| format!("{}:{}", endpoint.host, endpoint.port))
-        .collect::<Vec<_>>()
-        .join(",");
-    config
-        .set("bootstrap.servers", brokers)
-        .set("group.id", "tron-resource-connectivity-verification")
-        .set("enable.auto.commit", "false")
-        .set(
-            "security.protocol",
-            kafka_security_protocol(&target.security_protocol)?,
-        );
-    if let Some(sasl) = &target.sasl {
-        config
-            .set("sasl.mechanism", kafka_sasl_mechanism(&sasl.mechanism)?)
-            .set("sasl.username", &sasl.username)
-            .set("sasl.password", &sasl.password);
+        .map(|endpoint| {
+            if endpoint.host.contains(':') && !endpoint.host.starts_with('[') {
+                format!("[{}]:{}", endpoint.host, endpoint.port)
+            } else {
+                format!("{}:{}", endpoint.host, endpoint.port)
+            }
+        })
+        .collect::<Vec<_>>();
+    if brokers.is_empty() {
+        return Err(());
     }
-    if let Some(tls) = &target.tls {
-        if let Some(value) = &tls.ca_certificate {
-            config.set("ssl.ca.pem", value);
-        }
-        if let Some(value) = &tls.client_certificate {
-            config.set("ssl.certificate.pem", value);
-        }
-        if let Some(value) = &tls.client_key {
-            config.set("ssl.key.pem", value);
-        }
-        if let Some(value) = &tls.client_key_password {
-            config.set("ssl.key.password", value);
-        }
+
+    let mut builder =
+        ClientBuilder::new(brokers).client_id("tron-resource-connectivity-verification");
+    if target.security_protocol.ends_with("SSL") {
+        let tls = target.tls.as_ref().ok_or(())?;
+        builder = builder.tls_config(Arc::new(build_tls_config(tls)?));
     }
-    let consumer: BaseConsumer = config.create().map_err(|_| ())?;
-    consumer
-        .fetch_metadata(None, timeout)
+    if target.security_protocol.starts_with("SASL_") {
+        let sasl = target.sasl.as_ref().ok_or(())?;
+        let credentials = Credentials::new(sasl.username.clone(), sasl.password.clone());
+        builder = builder.sasl_config(match sasl.mechanism.as_str() {
+            "PLAIN" => SaslConfig::Plain(credentials),
+            "SCRAM_SHA_256" => SaslConfig::ScramSha256(credentials),
+            "SCRAM_SHA_512" => SaslConfig::ScramSha512(credentials),
+            _ => return Err(()),
+        });
+    }
+
+    tokio::time::timeout(timeout, builder.build())
+        .await
+        .map_err(|_| ())?
         .map(|_| ())
         .map_err(|_| ())
 }
 
-fn kafka_security_protocol(value: &str) -> Result<&'static str, ()> {
-    match value {
-        "PLAINTEXT" => Ok("plaintext"),
-        "SSL" => Ok("ssl"),
-        "SASL_PLAINTEXT" => Ok("sasl_plaintext"),
-        "SASL_SSL" => Ok("sasl_ssl"),
+fn build_tls_config(
+    tls: &crate::application::resource::ConnectionTlsMaterial,
+) -> Result<ClientConfig, ()> {
+    if tls.client_key_password.is_some() {
+        return Err(());
+    }
+
+    let mut roots = RootCertStore::empty();
+    roots.extend(webpki_roots::TLS_SERVER_ROOTS.iter().cloned());
+    if let Some(ca_certificate) = &tls.ca_certificate {
+        let certificates = rustls_pemfile::certs(&mut BufReader::new(ca_certificate.as_bytes()))
+            .collect::<Result<Vec<_>, _>>()
+            .map_err(|_| ())?;
+        if certificates.is_empty() {
+            return Err(());
+        }
+        for certificate in certificates {
+            roots.add(certificate).map_err(|_| ())?;
+        }
+    }
+
+    let builder =
+        ClientConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
+            .with_safe_default_protocol_versions()
+            .map_err(|_| ())?
+            .with_root_certificates(roots);
+    match (&tls.client_certificate, &tls.client_key) {
+        (Some(certificate_pem), Some(key_pem)) => {
+            let certificates =
+                rustls_pemfile::certs(&mut BufReader::new(certificate_pem.as_bytes()))
+                    .collect::<Result<Vec<_>, _>>()
+                    .map_err(|_| ())?;
+            let private_key = rustls_pemfile::private_key(&mut BufReader::new(key_pem.as_bytes()))
+                .map_err(|_| ())?
+                .ok_or(())?;
+            builder
+                .with_client_auth_cert(certificates, private_key)
+                .map_err(|_| ())
+        }
+        (None, None) => Ok(builder.with_no_client_auth()),
         _ => Err(()),
     }
 }
 
-fn kafka_sasl_mechanism(value: &str) -> Result<&'static str, ()> {
-    match value {
-        "PLAIN" => Ok("PLAIN"),
-        "SCRAM_SHA_256" => Ok("SCRAM-SHA-256"),
-        "SCRAM_SHA_512" => Ok("SCRAM-SHA-512"),
-        _ => Err(()),
+#[cfg(test)]
+mod tests {
+    use super::build_tls_config;
+    use crate::application::resource::ConnectionTlsMaterial;
+
+    #[test]
+    fn tls_config_uses_a_concrete_crypto_provider() {
+        let config = build_tls_config(&ConnectionTlsMaterial {
+            mode: "VERIFY_FULL".to_string(),
+            ca_certificate: None,
+            client_certificate: None,
+            client_key: None,
+            client_key_password: None,
+        });
+
+        assert!(config.is_ok());
     }
 }

@@ -268,7 +268,8 @@ fn table_columns_for_migration(
         .map_err(storage_error)
 }
 
-fn storage_error(_error: rusqlite::Error) -> RagError {
+fn storage_error(error: rusqlite::Error) -> RagError {
+    eprintln!("RAG SQLite storage error: {error:?}");
     RagError::StorageFailure
 }
 

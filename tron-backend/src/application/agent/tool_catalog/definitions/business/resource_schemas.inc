@@ -140,8 +140,7 @@ fn kafka_connection_attributes_schema() -> Value {
                 },
                 "additionalProperties": false
             },
-            "tls": tls_schema(&["REQUIRED", "VERIFY_CA", "VERIFY_FULL"], true),
-            "properties": scalar_properties_schema()
+            "tls": kafka_tls_schema()
         },
         "allOf": [
             { "oneOf": [
@@ -253,6 +252,19 @@ fn tls_schema(modes: &[&str], enforce_client_key_dependencies: bool) -> Value {
             ] }
         ]);
     }
+    schema
+}
+
+fn kafka_tls_schema() -> Value {
+    let mut schema = tls_schema(&["REQUIRED", "VERIFY_CA", "VERIFY_FULL"], true);
+    schema["properties"]
+        .as_object_mut()
+        .expect("TLS schema properties are an object")
+        .remove("clientKeyPassword");
+    schema["allOf"]
+        .as_array_mut()
+        .expect("TLS schema dependencies are an array")
+        .pop();
     schema
 }
 

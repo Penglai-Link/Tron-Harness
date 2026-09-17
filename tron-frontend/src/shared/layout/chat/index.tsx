@@ -124,11 +124,6 @@ export function ChatSidebarPanel({ compact }: { compact: boolean }) {
             left={
               <Create
                 project={createTargetProject}
-                sessions={
-                  createTargetProject
-                    ? sessionsByProject.get(createTargetProject.projectCode) ?? []
-                    : []
-                }
                 workspaceCode={workspaceCode}
               />
             }

@@ -141,8 +141,6 @@ struct KafkaAttributes {
     sasl: Option<KafkaSaslAttributes>,
     #[serde(default)]
     tls: Option<TlsAttributes>,
-    #[serde(default)]
-    properties: BTreeMap<String, Value>,
 }
 
 impl ResourceService {
@@ -276,7 +274,6 @@ impl ResourceService {
                     security_protocol: attributes.security_protocol,
                     sasl,
                     tls,
-                    properties: scalar_properties(attributes.properties)?,
                 }))
             }
             _ => Err(ResourceError::InvalidInput),
