@@ -24,7 +24,7 @@ impl ReactAgent {
             context.model.protocol,
             context.model.responses_stateful_enabled,
         );
-        let turn_state_kind = turn_state.kind();
+        let mut turn_state_kind = turn_state.kind();
         self.publish(
             &context,
             "agent.run.requested",
@@ -41,6 +41,7 @@ impl ReactAgent {
         let mut tool_calls = 0;
         let mut token_usage: Option<ModelTokenUsage> = None;
         let mut overflow_retries = 0;
+        let mut request_model_calls = 0_u8;
         let mut final_output = String::new();
         let mut last_tool_failure = None;
         loop {
@@ -82,6 +83,7 @@ impl ReactAgent {
                     return Err(AgentError::InvalidConfiguration(message));
                 }
             };
+            let canonical_messages_for_request = context.messages.clone();
             let prepared_context = if let Some(short_term_memory) = self.short_term_memory.as_ref()
             {
                 record_failure_on_short_term_memory_error(
@@ -195,6 +197,7 @@ impl ReactAgent {
                 )?;
             }
             let output_started = Arc::new(Mutex::new(false));
+            request_model_calls = request_model_calls.saturating_add(1);
             let response_result = if let Some(sink) = sink.clone() {
                 let stream_sink = self.model_stream_event_sink(
                     context,
@@ -218,6 +221,7 @@ impl ReactAgent {
                             &message,
                             &output_started,
                             &mut overflow_retries,
+                            &mut request_model_calls,
                         )
                         .await
                     {
@@ -231,6 +235,67 @@ impl ReactAgent {
                             return Err(error);
                         }
                     }
+                    if request_model_calls < 3
+                        && !*output_started.lock().expect("output state lock poisoned")
+                        && is_retryable_auto_route_error(&message, &context.model)
+                        && let (Some(router), Some(route)) =
+                            (self.auto_model_router.as_ref(), context.auto_model_route.as_mut())
+                    {
+                        let person_ai_unavailable =
+                            is_person_ai_auth_or_connection_error(&message, &context.model);
+                        match router.next_fallback(
+                            &context.workspace_code,
+                            route,
+                            &context.model,
+                            context.model.reasoning_effort,
+                            person_ai_unavailable,
+                        ) {
+                            Ok(Some(mut model)) => {
+                                context.messages = canonical_messages_for_request;
+                                if let Some(session_code) = context
+                                    .auto_model_route
+                                    .as_ref()
+                                    .map(|route| route.session_code.as_str())
+                                {
+                                    model = crate::adapters::outbound::model::with_person_ai_conversation(
+                                        model,
+                                        session_code,
+                                        Some(&context.run_code),
+                                    );
+                                }
+                                self.publish_with_payload(
+                                    context,
+                                    "agent.model.fallback",
+                                    BusOutcome::Started,
+                                    Some("retryable_model_failure"),
+                                    vec![
+                                        ("failed_model_code".into(), context.model.model_code.clone()),
+                                        ("model_code".into(), model.model_code.clone()),
+                                        ("model_name".into(), model.model_name.clone()),
+                                        ("reason".into(), message.clone()),
+                                    ],
+                                )?;
+                                context.model = model;
+                                turn_state = TurnStateAdapter::new(
+                                    context.model.protocol,
+                                    context.model.responses_stateful_enabled,
+                                );
+                                turn_state_kind = turn_state.kind();
+                                step_count = step_count.saturating_sub(1);
+                                overflow_retries = 0;
+                                continue;
+                            }
+                            Ok(None) => {}
+                            Err(router_error) => {
+                                self.publish(
+                                    context,
+                                    "agent.model.fallback.failed",
+                                    BusOutcome::Failure,
+                                    Some(&router_error),
+                                )?;
+                            }
+                        }
+                    }
                     self.publish(
                         &context,
                         "agent.run.failed",
@@ -241,6 +306,19 @@ impl ReactAgent {
                     return Err(AgentError::ModelFailure(message));
                 }
             };
+            if let (Some(router), Some(route)) =
+                (self.auto_model_router.as_ref(), context.auto_model_route.as_mut())
+                && let Err(message) =
+                    router.mark_success(&context.workspace_code, route, &context.model)
+            {
+                self.publish(
+                    context,
+                    "agent.model.route.persist_failed",
+                    BusOutcome::Failure,
+                    Some(&message),
+                )?;
+            }
+            request_model_calls = 0;
             let next_token_usage = response.token_usage().map_or(token_usage, |usage| {
                 Some(match token_usage {
                     Some(current) => current.add(usage),
@@ -456,8 +534,10 @@ impl ReactAgent {
             .attr("workspace_code", context.workspace_code.clone())
             .attr("agent_kind", agent_kind_label(context.agent_kind))
             .attr("runtime_kind", "in_process")
-            .attr("model_code", context.model.model_code.clone())
-            .payload_field("model_name", context.model.model_name.clone());
+            .attr("model_code", context.model.model_code.clone());
+        if !context.model.model_name.trim().is_empty() {
+            draft = draft.payload_field("model_name", context.model.model_name.clone());
+        }
         if let Some(reasoning_effort) = context.model.reasoning_effort {
             draft = draft.payload_field(
                 "reasoning_effort",
@@ -529,8 +609,10 @@ impl ReactAgent {
                             .attr("workspace_code", workspace_code.clone())
                             .attr("agent_kind", agent_kind_label(agent_kind))
                             .attr("runtime_kind", "in_process")
-                            .attr("model_code", model_code.clone())
-                            .payload_field("model_name", model_name.clone());
+                            .attr("model_code", model_code.clone());
+                    if !model_name.trim().is_empty() {
+                        start_draft = start_draft.payload_field("model_name", model_name.clone());
+                    }
                     if let Some(context_window_tokens) = &context_window_tokens {
                         start_draft = start_draft
                             .payload_field("context_window_limit", context_window_tokens.clone());
@@ -554,8 +636,10 @@ impl ReactAgent {
                     .attr("agent_kind", agent_kind_label(agent_kind))
                     .attr("runtime_kind", "in_process")
                     .attr("model_code", model_code.clone())
-                    .payload_field("model_name", model_name.clone())
                     .payload_field("delta_json", delta_payload);
+                if !model_name.trim().is_empty() {
+                    draft = draft.payload_field("model_name", model_name.clone());
+                }
                 if let Some(context_window_tokens) = &context_window_tokens {
                     draft =
                         draft.payload_field("context_window_limit", context_window_tokens.clone());
@@ -580,4 +664,52 @@ fn empty_final_output_message(last_tool_failure: Option<&str>) -> String {
         ),
         None => "agent completed without an assistant response".into(),
     }
+}
+
+fn is_retryable_auto_route_error(message: &str, model: &AgentModelConfig) -> bool {
+    let normalized = message.to_ascii_lowercase();
+    if ["http 400", "http 403", "http 404", "http 422", "status 400", "status 403"]
+        .iter()
+        .any(|status| normalized.contains(status))
+    {
+        return false;
+    }
+    if model.model_code.starts_with("PERSON_AI:")
+        && ["401", "unauthorized", "authentication", "authorization"]
+            .iter()
+            .any(|marker| normalized.contains(marker))
+    {
+        return true;
+    }
+    [
+        "408", "429", "500", "502", "503", "504", "timed out", "timeout",
+        "connection", "network", "temporarily unavailable", "request failed",
+        "person-ai request failed",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
+}
+
+fn is_person_ai_auth_or_connection_error(message: &str, model: &AgentModelConfig) -> bool {
+    if !model.model_code.starts_with("PERSON_AI:") {
+        return false;
+    }
+    let normalized = message.to_ascii_lowercase();
+    [
+        "401",
+        "unauthorized",
+        "authentication",
+        "authorization",
+        "decrypt",
+        "密钥",
+        "授权",
+        "重新登录",
+        "connection refused",
+        "connection reset",
+        "network",
+        "timed out",
+        "timeout",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
 }

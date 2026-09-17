@@ -101,7 +101,11 @@ pub async fn get_provider_account_balance(
         Ok(provider_code) => provider_code,
         Err(response) => return response,
     };
-    match state.model_providers.get_account_balance(provider_code).await {
+    match state
+        .model_providers
+        .get_account_balance(provider_code)
+        .await
+    {
         Ok(record) => Json(ApiResponse::success(record)).into_response(),
         Err(error) => model_provider_error_response(error),
     }
@@ -307,6 +311,7 @@ fn model_provider_error_response(error: ModelProviderError) -> Response {
         ModelProviderError::AuthenticationRequired => {
             (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_REQUIRED")
         }
+        ModelProviderError::Unauthorized => (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_REQUIRED"),
         ModelProviderError::Remote(_) => (StatusCode::BAD_GATEWAY, "MODEL_PROVIDER_REMOTE_FAILED"),
         ModelProviderError::Storage => (
             StatusCode::INTERNAL_SERVER_ERROR,

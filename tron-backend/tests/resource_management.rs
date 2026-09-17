@@ -695,6 +695,7 @@ fn resource_tool_context(
         observations: Vec::new(),
         short_term_memory: None,
         started_at: "2026-07-16T00:00:00Z".to_string(),
+        auto_model_route: None,
     }
 }
 

@@ -162,10 +162,13 @@ pub async fn execute_task(
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
     };
-    let model = match prepare_send_model(&state, &session, &request, &runtime) {
+    let prepared_model = match prepare_send_model(&state, &session, &request, &runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
     };
+    let auto_model_route = prepared_model.auto_route;
+    let auto_model_router = prepared_model.auto_router;
+    let model = prepared_model.config;
     let agent_service = AgentInvocationService::new(
         state.workspaces.clone(),
         state.apps.clone(),
@@ -180,7 +183,8 @@ pub async fn execute_task(
         state.runtime_http_client.clone(),
     )
     .with_active_runs(state.active_runs.clone())
-    .with_prompt_service(state.prompts.clone());
+    .with_prompt_service(state.prompts.clone())
+    .with_auto_model_route(auto_model_route, auto_model_router);
     let chats = state.chats.clone();
     let session_code = session.session_code.clone();
     let background_session_code = session_code.clone();

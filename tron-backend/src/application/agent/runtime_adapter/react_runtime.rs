@@ -21,6 +21,7 @@ pub(super) struct ReactRuntime {
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
     active_runs: ActiveRunRegistry,
+    auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
 }
 
 impl ReactRuntime {
@@ -32,6 +33,7 @@ impl ReactRuntime {
         event_bus: EventBusHandle,
         short_term_memory: Option<ShortTermMemoryService>,
         active_runs: ActiveRunRegistry,
+        auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
     ) -> Self {
         Self {
             key,
@@ -41,6 +43,7 @@ impl ReactRuntime {
             event_bus,
             short_term_memory,
             active_runs,
+            auto_model_router,
         }
     }
 
@@ -65,6 +68,7 @@ impl ReactRuntime {
                 self.event_bus.clone(),
             )
             .with_short_term_memory(self.short_term_memory.clone())
+            .with_auto_model_router(self.auto_model_router.clone())
             .build()
             .map_err(map_agent_error)?;
             let mut cancellation_cleanup = ReactRuntimeCancellationCleanup::new(

@@ -26,6 +26,7 @@ import {
   ChatStreamOwnershipRegistry,
   buildContextMemoryBlocks,
   claimChatRunTerminalDrain,
+  defaultChatModelOption,
   latestTerminalChatRunCode,
   latestContextBudgetBreakdownFromEvents,
   latestShortTermMemoryRuntimeNotice,
@@ -34,6 +35,36 @@ import {
   shouldPollChatRecoveryData,
   shouldPollChatRunRecovery,
 } from "./ChatManagementPage";
+
+describe("chat model default selection", () => {
+  const fixedDefault = {
+    enabled: true,
+    isDefault: true,
+    modelSelection: { kind: "Fixed" as const, modelCode: "MODEL-1" },
+    source: "internal-agent" as const,
+  };
+  const autoRoute = {
+    enabled: true,
+    isDefault: false,
+    modelSelection: {
+      kind: "ProviderRoute" as const,
+      providerCode: "PersonAi" as const,
+      routeCode: "ChatAuto" as const,
+    },
+    source: "internal-agent" as const,
+  };
+
+  it("prefers enabled Person-AI Auto when a fixed model is marked as default", () => {
+    expect(defaultChatModelOption([fixedDefault, autoRoute])).toBe(autoRoute);
+  });
+
+  it("keeps the configured model default when the Auto route is unavailable", () => {
+    expect(defaultChatModelOption([
+      fixedDefault,
+      { ...autoRoute, enabled: false },
+    ])).toBe(fixedDefault);
+  });
+});
 
 describe("tool schema context budget", () => {
   it.each([6_000, 0])("uses the independent schema limit %s", (limit) => {

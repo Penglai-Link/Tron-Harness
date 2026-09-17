@@ -22,7 +22,8 @@ pub use collaboration::{
 };
 pub use context::{
     AgentExecutionScope, AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext,
-    AgentToolExposureState, EffectiveSkill, EffectiveTool, EffectiveVariable,
+    AgentToolExposureState, AutoModelRouteContext, EffectiveSkill, EffectiveTool,
+    EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{

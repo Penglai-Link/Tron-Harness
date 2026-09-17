@@ -116,9 +116,33 @@ describe("TronChatRuntimeWindow", () => {
     fireEvent.change(input, { target: { value: "Inspect context" } });
     fireEvent.keyDown(input, { key: "Enter" });
     await waitFor(() => expect(screen.getByRole("alert").textContent).toContain("Model is unavailable"));
-    expect(onError).toHaveBeenCalled();
+    expect(onError).not.toHaveBeenCalled();
     expect(screen.getByText(/^Run failed ·/)).toBeTruthy();
     expect(screen.getAllByRole("article")).toHaveLength(1);
+  });
+
+  it("renders a failed run notice when the request is rejected before RUN_STARTED", async () => {
+    const onError = vi.fn();
+    const adapter: ChatAdapter = {
+      ...createAdapter().adapter,
+      capabilities: { supportsAbort: true, supportsAgui: true, supportsProtocolReplay: true, supportsStreaming: true },
+      loadProtocolEvents: vi.fn().mockResolvedValue([]),
+      streamMessage: vi.fn().mockRejectedValue(new FetchTransportError(
+        "Person-AI authorization is required",
+        { code: "MODEL_PROVIDER_AUTH_REQUIRED", status: 409 },
+      )),
+    };
+    render(<TronChatRuntimeWindow adapter={adapter} config={{ floating: false, workspaceCode: "WS-1" }} initialSession={restoredSession()} onError={onError} />);
+    await waitFor(() => expect(adapter.loadMessages).toHaveBeenCalled());
+    const input = screen.getByRole("textbox");
+    fireEvent.change(input, { target: { value: "Who are you?" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    const failure = await screen.findByRole("alert");
+    expect(failure.textContent).toContain("Person-AI authorization is required");
+    expect(screen.getByText(/^Run failed ·/)).toBeTruthy();
+    expect(onError).not.toHaveBeenCalled();
+    expect(screen.queryByText("Waiting for assistant output...")).toBeNull();
   });
 
   it("shows pending images as thumbnails and files with name and type, then clears them after send", async () => {

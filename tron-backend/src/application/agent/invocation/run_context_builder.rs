@@ -9,7 +9,7 @@ use crate::{
     domain::{
         agent::{
             AgentExecutionScope, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunLimits,
-            AgentRuntimeType, AgentToolExposureState, EffectiveSkill, EffectiveVariable,
+            AgentRuntimeType, AgentToolExposureState, AutoModelRouteContext, EffectiveSkill, EffectiveVariable,
             ToolAvailabilityState, ToolExposureMode, ToolRegistry,
         },
         prompt::PromptRuntimeProvider,
@@ -30,7 +30,7 @@ use super::{
     attachments::user_prompt_message,
     build_system_runtime_model_config, generate_agent_run_code,
     helpers::{
-        agent_kind_for_runtime, is_internal_agent, is_main_agent, map_agent_error, map_mcp_error,
+        agent_kind_for_runtime, is_main_agent, map_agent_error, map_mcp_error,
         normalize_optional, required_runtime_command_name, runtime_type_label,
     },
     short_term_memory::activate_short_term_memory,
@@ -95,6 +95,7 @@ pub(crate) struct AgentRunContextBuilder {
     tool_registry: Arc<ToolRegistry>,
     short_term_memory: Option<ShortTermMemoryService>,
     prompt_service: Option<PromptService>,
+    auto_model_route: Option<AutoModelRouteContext>,
 }
 
 impl AgentRunContextBuilder {
@@ -109,6 +110,7 @@ impl AgentRunContextBuilder {
         tool_registry: Arc<ToolRegistry>,
         short_term_memory: Option<ShortTermMemoryService>,
         prompt_service: Option<PromptService>,
+        auto_model_route: Option<AutoModelRouteContext>,
     ) -> Self {
         Self {
             workspaces,
@@ -121,6 +123,7 @@ impl AgentRunContextBuilder {
             tool_registry,
             short_term_memory,
             prompt_service,
+            auto_model_route,
         }
     }
 
@@ -190,7 +193,14 @@ impl AgentRunContextBuilder {
         let mut tools = requested_tools;
         let mut effective_tools = tools.clone();
         let mut tool_exposure = AgentToolExposureState::default();
-        let internal_agent_policy = if is_internal_agent(&resolved_agent.agent_code) {
+        let internal_agents = self
+            .management
+            .list_workspace_internal_agents(&workspace.workspace_code)
+            .map_err(|error| map_agent_error(&resolved_agent.agent_code, error))?;
+        let internal_agent_policy = if internal_agents
+            .iter()
+            .any(|policy| policy.agent_code.eq_ignore_ascii_case(&resolved_agent.agent_code))
+        {
             Some(
                 self.management
                     .workspace_internal_agent_policy(
@@ -409,6 +419,7 @@ impl AgentRunContextBuilder {
         let requested_system_agent_session_id =
             normalize_optional(requested_system_agent_session_id);
         let mut context = AgentRunContext {
+            auto_model_route: self.auto_model_route.clone(),
             conversation_code: requested_conversation_code.clone(),
             run_code: run_code.clone(),
             workspace_code: workspace.workspace_code.clone(),

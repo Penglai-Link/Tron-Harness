@@ -18,10 +18,13 @@ pub async fn send_message(
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
     };
-    let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
+    let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
     };
+    let auto_model_route = prepared_model.auto_route.clone();
+    let auto_model_router = prepared_model.auto_router.clone();
+    let resolved_model = prepared_model.config;
     let agent_service = AgentInvocationService::new(
         state.workspaces.clone(),
         state.apps.clone(),
@@ -37,7 +40,8 @@ pub async fn send_message(
     )
     .with_short_term_memory(state.short_term_memory.clone())
     .with_active_runs(state.active_runs.clone())
-    .with_prompt_service(state.prompts.clone());
+    .with_prompt_service(state.prompts.clone())
+    .with_auto_model_route(auto_model_route, auto_model_router);
     match state
         .chats
         .send_message(
@@ -107,10 +111,13 @@ pub async fn stream_message(
     };
     let system_agent_live_stream = uses_system_live_stream(&resolved_runtime);
     let supports_steer = matches!(resolved_runtime.runtime_type, AgentRuntimeType::React);
-    let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
+    let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
     };
+    let auto_model_route = prepared_model.auto_route.clone();
+    let auto_model_router = prepared_model.auto_router.clone();
+    let resolved_model = prepared_model.config;
 
     let run_code = generate_agent_run_code();
     request.run_code = Some(run_code.clone());
@@ -151,7 +158,8 @@ pub async fn stream_message(
     )
     .with_short_term_memory(state.short_term_memory.clone())
     .with_active_runs(state.active_runs.clone())
-    .with_prompt_service(state.prompts.clone());
+    .with_prompt_service(state.prompts.clone())
+    .with_auto_model_route(auto_model_route, auto_model_router);
     let live_replay_recorder_for_sink = live_replay_recorder.clone();
     let forwarding_gate = ChatStreamForwardingGate::new();
     let forwarding_gate_for_sink = forwarding_gate.clone();

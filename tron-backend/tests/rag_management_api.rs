@@ -1982,6 +1982,7 @@ fn retrieval_profile_request(profile_id: &str, description: &str, rerank_enabled
         "graphExpansionPolicy": "",
         "contextStrategies": ["RESULT_LIST", "TOKEN_BUDGET_PACK"],
         "rerankEnabled": rerank_enabled,
+        "rerankStrategy": if rerank_enabled { "LlmFallback" } else { "Disabled" },
         "rerankModelCode": "",
         "degradePolicy": "SKIP_VECTOR_ON_UNAVAILABLE"
     })

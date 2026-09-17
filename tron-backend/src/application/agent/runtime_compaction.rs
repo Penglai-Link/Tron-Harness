@@ -52,6 +52,7 @@ impl ReactAgent {
         message: &str,
         output_started: &Arc<Mutex<bool>>,
         overflow_retries: &mut u32,
+        request_model_calls: &mut u8,
     ) -> Result<bool, AgentError> {
         if !is_context_overflow_error(message) {
             return Ok(false);
@@ -71,7 +72,12 @@ impl ReactAgent {
         if *overflow_retries >= short_term_memory.overflow_retry_limit() {
             return Ok(false);
         }
+        // Reserve a call for the model retry after compaction.
+        if *request_model_calls >= 2 {
+            return Ok(false);
+        }
         *overflow_retries = overflow_retries.saturating_add(1);
+        *request_model_calls = request_model_calls.saturating_add(1);
         let model = short_term_memory.compaction_model_config(&context.model);
         let input = short_term_memory
             .prepare_overflow_model_compaction_input(

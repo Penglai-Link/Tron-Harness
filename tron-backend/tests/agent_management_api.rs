@@ -1644,7 +1644,10 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     );
     assert_eq!(get_body["data"]["mcpAccessMode"], json!("DISABLED"));
     assert_eq!(get_body["data"]["selectedServerCodes"], json!([]));
-    assert_eq!(get_body["data"]["toolExposureMode"], json!("DIRECT_LIST"));
+    assert_eq!(
+        get_body["data"]["toolExposureMode"],
+        json!("DIRECT_LIST")
+    );
     assert_eq!(get_body["data"]["maxSteps"], json!(100));
     assert_eq!(get_body["data"]["maxToolCalls"], json!(100));
     assert_eq!(get_body["data"]["maxParallelToolCalls"], json!(4));

@@ -48,3 +48,4 @@ Pagable response body format:
 - `cargo fmt` can reformat unrelated tracked files; review and retain only feature-owned changes before committing.
 
 <!-- On macOS, electron/tests/fs-gateway.test.cjs registers os.tmpdir() paths without realpath normalization; a symlinked temporary directory can cause path-outside-root failures. Use TMPDIR=/private/tmp make desktop-test to run with a canonical temporary root. -->
+<!-- Person-AI crab-serverapi owns its reqwest client and exposes no client-level default-header hook; vendor the SDK and set X-Product-Code at client construction so SSE and regular SDK paths inherit it. -->

@@ -674,7 +674,6 @@ export const pages = {
           Middle: "Remote medium quality",
           Low: "Remote low quality",
         },
-        unavailable: "Unavailable; cannot send",
       },
       agentSelector: {
         selectAria: "Select chat agent",

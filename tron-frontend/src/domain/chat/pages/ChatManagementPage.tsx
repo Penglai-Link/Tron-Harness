@@ -93,9 +93,9 @@ import {
 } from "@/domain/chat/hooks";
 import { useAuthSession } from "@/domain/auth";
 import { useTranslation } from "react-i18next";
-import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
-import { listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
-import type { SystemAgentModelRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
+import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
+import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
+import type { SystemAgentModelRecord, WorkspaceInternalAgentRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
 import { fetchWorkspaceSelectOptions } from "@/domain/model/api";
 import { getWorkspaceSelectOptions } from "@/domain/model/mock";
 import type {
@@ -201,6 +201,10 @@ function useStableCallback<TArgs extends unknown[], TResult>(
 const chatSessionModelSelectionStorageKey = "tron.chat.session.model.selection";
 const modelDefaultReasoningEffortValue = "__model_default__";
 
+function sessionModelSelectionKey(sessionCode: string, agentCode: string) {
+  return `${sessionCode}::${agentCode.trim().toLowerCase() || "main-agent"}`;
+}
+
 function readChatSessionModelSelections() {
   if (typeof window === "undefined") return {} as Record<string, string>;
   try {
@@ -211,7 +215,7 @@ function readChatSessionModelSelections() {
     const selections: Record<string, string> = {};
     Object.entries(parsed).forEach(([sessionCode, optionCode]) => {
       if (typeof optionCode !== "string" || !optionCode.trim()) return;
-      selections[sessionCode] = optionCode;
+      selections[sessionCode.includes("::") ? sessionCode : `${sessionCode}::main-agent`] = optionCode;
     });
     return selections;
   } catch {
@@ -1795,7 +1799,8 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
 function availableChatModels(models: ModelSelectOption[]) {
   // Keep unavailable fixed models in this list. A persisted session selection
   // must remain visible (and disabled) instead of silently falling back.
-  return models.filter((model) => model.modelType === "TEXT");
+  return models.filter((model) => model.modelType === "TEXT"
+    && !(model.modelSelection?.kind === "ProviderRoute" && model.modelSelection.routeCode === "ChatAuto"));
 }
 
 interface ChatModelOption {
@@ -1814,7 +1819,7 @@ interface ChatModelOption {
   providerCode: string | null;
   remoteStatus: string | null;
   qualityType: "High" | "Middle" | "Low" | null;
-  source: "main-agent" | "system-agent";
+  source: "internal-agent" | "system-agent";
   supportedReasoningEfforts: ReasoningEffort[];
   upstreamVendorName: string | null;
   outputCoefficient: number | null;
@@ -1851,6 +1856,7 @@ interface ChatAgentOption {
   description: string;
   models: SystemAgentModelRecord[];
   name: string;
+  kind: "internal" | "system";
 }
 
 const mainChatAgentOption: ChatAgentOption = {
@@ -1858,18 +1864,30 @@ const mainChatAgentOption: ChatAgentOption = {
   description: "Platform main in-process agent runtime.",
   models: [],
   name: "Main Agent",
+  kind: "internal",
 };
 
-function availableChatAgents(records: WorkspaceSystemAgentRecord[]) {
-  const systemAgents = records
+function availableChatAgents(internalRecords: WorkspaceInternalAgentRecord[], systemRecords: WorkspaceSystemAgentRecord[]) {
+  const internalAgents: ChatAgentOption[] = internalRecords.map((record) => ({
+    agentCode: record.agentCode,
+    description: record.description,
+    models: [] as SystemAgentModelRecord[],
+    name: record.name,
+    kind: "internal" as const,
+  }));
+  if (!internalAgents.some((agent) => agent.agentCode === mainChatAgentOption.agentCode)) {
+    internalAgents.unshift(mainChatAgentOption);
+  }
+  const systemAgents = systemRecords
     .filter((record) => record.available && record.enabled)
     .map((record) => ({
       agentCode: record.agentCode,
       description: record.description,
       models: record.models,
       name: record.name,
+      kind: "system" as const,
     }));
-  return [mainChatAgentOption, ...systemAgents];
+  return [...internalAgents, ...systemAgents];
 }
 
 function isMainChatAgent(agentCode: string) {
@@ -1887,8 +1905,8 @@ function normalizeModelSelection(model: ModelSelectOption): ModelSelection {
 }
 
 function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOption | null): ChatModelOption[] {
-  if (!selectedAgent || isMainChatAgent(selectedAgent.agentCode)) {
-    return models.map((model) => ({
+  if (!selectedAgent || selectedAgent.kind === "internal") {
+    const fixedModels = models.map((model) => ({
       accessPlatform: model.accessPlatform ?? null,
       cacheHitCoefficient: model.cacheHitCoefficient ?? null,
       contextWindowTokens: model.contextWindowTokens ?? null,
@@ -1904,12 +1922,13 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
       providerCode: model.providerCode ?? null,
       remoteStatus: model.remoteStatus ?? null,
       qualityType: model.qualityType ?? model.modelSelection?.qualityType ?? null,
-      source: "main-agent",
+      source: "internal-agent" as const,
       supportedReasoningEfforts: model.supportedReasoningEfforts ?? [],
       upstreamVendorName: model.upstreamVendorName ?? null,
       outputCoefficient: model.outputCoefficient ?? null,
       vendor: model.vendor ?? null,
     }));
+    return [autoChatModelOption(selectedAgent?.agentCode ?? mainChatAgentOption.agentCode), ...fixedModels];
   }
 
   return selectedAgent.models.map((model) => ({
@@ -1928,7 +1947,7 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
     providerCode: null,
     remoteStatus: null,
     qualityType: null,
-    source: "system-agent",
+    source: "system-agent" as const,
     supportedReasoningEfforts: [],
     upstreamVendorName: null,
     outputCoefficient: null,
@@ -1936,13 +1955,52 @@ function modelsForAgent(models: ModelSelectOption[], selectedAgent: ChatAgentOpt
   }));
 }
 
-function defaultChatModelOption(options: ChatModelOption[], _models: ModelSelectOption[]) {
+function autoChatModelOption(agentCode: string): ChatModelOption {
+  return {
+    accessPlatform: null,
+    cacheHitCoefficient: null,
+    contextWindowTokens: null,
+    defaultReasoningEffort: null,
+    displayName: "Auto",
+    enabled: true,
+    inputCoefficient: null,
+    isDefault: true,
+    modelCode: null,
+    modelName: "",
+    modelSelection: {
+      kind: "Auto",
+      providerCode: null,
+      modelCode: null,
+      qualityType: null,
+      routeCode: null,
+    },
+    optionCode: `auto:${agentCode}`,
+    providerCode: null,
+    remoteStatus: null,
+    qualityType: null,
+    source: "internal-agent",
+    supportedReasoningEfforts: [],
+    upstreamVendorName: null,
+    outputCoefficient: null,
+    vendor: null,
+  };
+}
+
+export function defaultChatModelOption<
+  TOption extends {
+    enabled: boolean;
+    isDefault: boolean;
+    modelSelection: ModelSelection | null;
+    source: ChatModelOption["source"];
+  },
+>(options: TOption[]) {
   if (!options.length) return null;
   if (options[0].source === "system-agent") return options[0];
   const enabled = options.filter((option) => option.enabled);
-  return enabled.find((option) => option.isDefault)
+  return enabled.find((option) => option.modelSelection?.kind === "Auto")
     ?? enabled.find((option) => option.modelSelection?.kind === "ProviderRoute"
-      && option.modelSelection.routeCode === "ChatAuto")
+    && option.modelSelection.routeCode === "ChatAuto")
+    ?? enabled.find((option) => option.isDefault)
     ?? enabled[0]
     ?? options[0];
 }
@@ -1982,8 +2040,8 @@ function fuzzyModelMatch(query: string, model: ChatModelOption) {
 }
 
 function isPersonAiAutoModel(model: ChatModelOption) {
-  return model.modelSelection?.kind === "ProviderRoute"
-    && model.modelSelection.routeCode === "ChatAuto";
+  return model.modelSelection?.kind === "Auto"
+    || (model.modelSelection?.kind === "ProviderRoute" && model.modelSelection.routeCode === "ChatAuto");
 }
 
 function formatModelMultiplier(value: number | null) {
@@ -3405,11 +3463,10 @@ function ChatModelSelector({
     return [
       modelDisplayName(model),
       model.upstreamVendorName,
-      !model.enabled ? t("chat.management.modelSelector.unavailable") : null,
     ].filter(Boolean).join("\n");
   };
   const filteredModels = useMemo(
-    () => models.filter((model) => fuzzyModelMatch(searchQuery, model)),
+    () => models.filter((model) => model.enabled && fuzzyModelMatch(searchQuery, model)),
     [models, searchQuery],
   );
   const autoModels = useMemo(
@@ -3508,8 +3565,6 @@ function ChatModelSelector({
               {autoModels.map((model) => (
                 <DropdownMenuRadioItem
                   className="w-full items-center px-3 py-2"
-                  closeOnClick={model.enabled}
-                  disabled={!model.enabled}
                   key={model.optionCode}
                   title={modelTitle(model)}
                   value={model.optionCode}
@@ -3517,11 +3572,6 @@ function ChatModelSelector({
                   <span className="min-w-0 truncate font-medium">
                     {modelDisplayName(model)}
                   </span>
-                  {!model.enabled ? (
-                    <span className="ml-2 shrink-0 text-[10px] text-[var(--color-error)]">
-                      {t("chat.management.modelSelector.unavailable")}
-                    </span>
-                  ) : null}
                 </DropdownMenuRadioItem>
               ))}
               {groupedModels.map((group) => (
@@ -3532,8 +3582,6 @@ function ChatModelSelector({
                   {group.models.map((model) => (
                     <DropdownMenuRadioItem
                       className="w-full items-center px-3 py-2"
-                      closeOnClick={model.enabled}
-                      disabled={!model.enabled}
                       key={model.optionCode}
                       title={modelTitle(model)}
                       value={model.optionCode}
@@ -3545,11 +3593,6 @@ function ChatModelSelector({
                         {outputMultiplier(model) ? (
                           <span className="shrink-0 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
                             {outputMultiplier(model)}×
-                          </span>
-                        ) : null}
-                        {!model.enabled ? (
-                          <span className="shrink-0 text-[10px] text-[var(--color-error)]">
-                            {t("chat.management.modelSelector.unavailable")}
                           </span>
                         ) : null}
                       </span>
@@ -4649,7 +4692,7 @@ export function ChatManagementPage() {
   const selectedModel = agentScopedModels.find((model) => model.optionCode === selectedModelCode) ?? null;
   const selectedModelAgentCode = inferChatAgentCodeFromModel(selectedModel, selectedAgentCode || mainChatAgentOption.agentCode);
   const effectiveAgentCode = selectedModelAgentCode || selectedAgentCode || mainChatAgentOption.agentCode;
-  const selectedMainAgentModel = selectedModel?.source === "main-agent" ? selectedModel : null;
+  const selectedMainAgentModel = selectedModel?.source === "internal-agent" ? selectedModel : null;
   const selectedReasoningEffortOptions = useMemo(() => {
     const supported = new Set(selectedMainAgentModel?.supportedReasoningEfforts ?? []);
     return reasoningEffortOptions
@@ -5101,11 +5144,17 @@ export function ChatManagementPage() {
 
       setAgentsLoading(true);
       try {
-        const records = getServiceDataSource("agent") === "api"
-          ? await fetchWorkspaceSystemAgents(activeWorkspaceCode)
-          : listWorkspaceSystemAgentsMock(activeWorkspaceCode);
+        const [internalRecords, systemRecords] = getServiceDataSource("agent") === "api"
+          ? await Promise.all([
+            fetchWorkspaceInternalAgents(activeWorkspaceCode),
+            fetchWorkspaceSystemAgents(activeWorkspaceCode),
+          ])
+          : [
+            listWorkspaceInternalAgentsMock(activeWorkspaceCode),
+            listWorkspaceSystemAgentsMock(activeWorkspaceCode),
+          ];
         if (!active) return;
-        const agents = availableChatAgents(records);
+        const agents = availableChatAgents(internalRecords, systemRecords);
         setChatAgents(agents);
         setSelectedAgentCode((current) => (
           current && agents.some((agent) => agent.agentCode === current)
@@ -5144,12 +5193,14 @@ export function ChatManagementPage() {
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode ?? "";
+    const sessionAgentCode = (activeSession?.agentCode ?? selectedAgentCode ?? mainChatAgentOption.agentCode).toLowerCase();
+    const selectionKey = sessionCode ? sessionModelSelectionKey(sessionCode, sessionAgentCode) : "";
     const switchedSession = modelSelectionSessionRef.current !== sessionCode;
 
     if (switchedSession) {
       modelSelectionSessionRef.current = sessionCode;
-      const persistedOptionCode = sessionCode ? sessionModelSelections[sessionCode] : "";
-      const defaultModel = defaultChatModelOption(agentScopedModels, chatModels);
+      const persistedOptionCode = selectionKey ? sessionModelSelections[selectionKey] : "";
+      const defaultModel = defaultChatModelOption(agentScopedModels);
       const restoredOptionCode = persistedOptionCode && agentScopedModels.some((model) => model.optionCode === persistedOptionCode)
         ? persistedOptionCode
         : (defaultModel?.optionCode ?? "");
@@ -5161,13 +5212,13 @@ export function ChatManagementPage() {
       if (current && agentScopedModels.some((model) => model.optionCode === current)) {
         return current;
       }
-      const persistedOptionCode = sessionCode ? sessionModelSelections[sessionCode] : "";
+      const persistedOptionCode = selectionKey ? sessionModelSelections[selectionKey] : "";
       if (persistedOptionCode && agentScopedModels.some((model) => model.optionCode === persistedOptionCode)) {
         return persistedOptionCode;
       }
-      return defaultChatModelOption(agentScopedModels, chatModels)?.optionCode ?? "";
+      return defaultChatModelOption(agentScopedModels)?.optionCode ?? "";
     });
-  }, [activeSession?.sessionCode, agentScopedModels, chatModels, sessionModelSelections]);
+  }, [activeSession?.agentCode, activeSession?.sessionCode, agentScopedModels, chatModels, selectedAgentCode, sessionModelSelections]);
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode;
@@ -5175,12 +5226,13 @@ export function ChatManagementPage() {
     const activeSessionAgentCode = activeSession.agentCode ?? mainChatAgentOption.agentCode;
     if (selectedAgentCode !== activeSessionAgentCode) return;
     if (!agentScopedModels.some((model) => model.optionCode === selectedModelCode)) return;
+    const selectionKey = sessionModelSelectionKey(sessionCode, activeSessionAgentCode);
     setSessionModelSelections((current) => (
-      current[sessionCode] === selectedModelCode
+      current[selectionKey] === selectedModelCode
         ? current
         : {
           ...current,
-          [sessionCode]: selectedModelCode,
+          [selectionKey]: selectedModelCode,
         }
     ));
   }, [
@@ -5838,12 +5890,13 @@ export function ChatManagementPage() {
     }
     const sessionCode = activeSession?.sessionCode;
     if (!sessionCode) return;
+    const selectionKey = sessionModelSelectionKey(sessionCode, nextAgentCode);
     setSessionModelSelections((current) => (
-      current[sessionCode] === optionCode
+      current[selectionKey] === optionCode
         ? current
         : {
           ...current,
-          [sessionCode]: optionCode,
+          [selectionKey]: optionCode,
         }
     ));
   }

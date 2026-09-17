@@ -641,6 +641,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
         observations: Vec::new(),
         short_term_memory: None,
         started_at: "2026-05-27T00:00:00Z".into(),
+        auto_model_route: None,
     }
 }
 
@@ -799,6 +800,12 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
             "agent.run.completed",
         ]
     );
+    assert!(events.iter().all(|event| {
+        event
+            .payload_fields
+            .iter()
+            .any(|field| field.key == "model_name" && field.value == "gpt-test")
+    }));
     for event in events {
         let serialized = format!("{:?}", event);
         assert!(!serialized.contains("hello"));
@@ -807,6 +814,63 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
         assert!(!serialized.contains("prompt"));
         assert!(!serialized.contains("completion"));
     }
+}
+
+#[tokio::test]
+async fn react_agent_supports_auto_model_without_model_name() {
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "agent-runtime-auto",
+        BusRouteClass::Agui,
+    ));
+    let event_bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(200)),
+    )
+    .register_sink(sink.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
+            "done",
+        )])),
+        Arc::new(ToolRegistry::default()),
+        event_bus,
+    )
+    .build()
+    .expect("agent builder should succeed");
+    let mut context = base_context("RUN-AUTO");
+    context.model.model_code = "PERSON_AI:ROUTE:ChatAuto".into();
+    context.model.model_name.clear();
+
+    let result = agent
+        .run_stream(context, Arc::new(|_event| {}))
+        .await
+        .expect("Auto run should succeed without a physical model name");
+
+    assert_eq!(result.final_output, "done");
+    assert!(sink.wait_for_len(8, Duration::from_secs(2)));
+    let events = sink.events();
+    assert!(
+        events
+            .iter()
+            .any(|event| event.event_name == "agent.output.started")
+    );
+    assert!(
+        events
+            .iter()
+            .any(|event| event.event_name == "agent.output.delta")
+    );
+    assert!(events.iter().all(|event| {
+        event
+            .payload_fields
+            .iter()
+            .all(|field| field.key != "model_name")
+    }));
+    assert!(events.iter().all(|event| {
+        event
+            .attrs
+            .iter()
+            .any(|attr| attr.key == "model_code" && attr.value == "PERSON_AI:ROUTE:ChatAuto")
+    }));
 }
 
 #[tokio::test]

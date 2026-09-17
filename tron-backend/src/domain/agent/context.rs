@@ -86,6 +86,18 @@ pub struct AgentShortTermMemoryRunContext {
     pub todo_enabled: bool,
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AutoModelRouteContext {
+    pub session_code: String,
+    pub agent_code: String,
+    pub current_candidate_key: String,
+    #[serde(default)]
+    pub failed_candidate_keys: Vec<String>,
+    #[serde(default)]
+    pub fallback_attempts: u8,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentRunLimits {
@@ -122,6 +134,8 @@ pub struct AgentRunContext {
     pub agent_kind: AgentKind,
     pub system_agent_session_id: Option<String>,
     pub model: AgentModelConfig,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub auto_model_route: Option<AutoModelRouteContext>,
     pub variables: Vec<EffectiveVariable>,
     pub skills: Vec<EffectiveSkill>,
     /// Tool schemas currently exposed to the model.

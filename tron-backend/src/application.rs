@@ -2,6 +2,7 @@ pub mod agent;
 pub mod app;
 pub mod automation;
 pub mod chat;
+pub mod chat_auto_model_router;
 pub mod graph;
 pub mod llm;
 pub mod mcp;

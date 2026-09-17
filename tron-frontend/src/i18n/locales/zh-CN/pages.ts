@@ -661,7 +661,6 @@ export const pages = {
           Middle: "远程中质量",
           Low: "远程低质量",
         },
-        unavailable: "已下线，不可发送",
       },
       agentSelector: {
         selectAria: "选择智能体",

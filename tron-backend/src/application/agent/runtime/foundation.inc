@@ -5,6 +5,7 @@ use std::{
 };
 
 use crate::{
+    application::chat_auto_model_router::ChatAutoModelRouter,
     application::short_term_memory::{
         ModelResponseTranscriptFacts, PreparedModelContext, ShortTermMemoryService,
     },
@@ -74,6 +75,7 @@ pub struct ReactAgentBuilder {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
+    auto_model_router: Option<ChatAutoModelRouter>,
 }
 
 impl ReactAgentBuilder {
@@ -87,11 +89,17 @@ impl ReactAgentBuilder {
             tool_registry,
             event_bus,
             short_term_memory: None,
+            auto_model_router: None,
         }
     }
 
     pub fn with_short_term_memory(mut self, service: Option<ShortTermMemoryService>) -> Self {
         self.short_term_memory = service;
+        self
+    }
+
+    pub fn with_auto_model_router(mut self, router: Option<ChatAutoModelRouter>) -> Self {
+        self.auto_model_router = router;
         self
     }
 
@@ -101,6 +109,7 @@ impl ReactAgentBuilder {
             tool_registry: self.tool_registry,
             event_bus: self.event_bus,
             short_term_memory: self.short_term_memory,
+            auto_model_router: self.auto_model_router,
         })
     }
 }
@@ -111,4 +120,5 @@ pub struct ReactAgent {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
+    auto_model_router: Option<ChatAutoModelRouter>,
 }

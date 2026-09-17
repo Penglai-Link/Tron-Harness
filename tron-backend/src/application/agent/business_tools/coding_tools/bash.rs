@@ -215,6 +215,7 @@ mod tests {
 
     fn test_context() -> AgentRunContext {
         AgentRunContext {
+            auto_model_route: None,
             conversation_code: None,
             run_code: "RUN-BASH-TEST".into(),
             workspace_code: "TRON_CORE".into(),

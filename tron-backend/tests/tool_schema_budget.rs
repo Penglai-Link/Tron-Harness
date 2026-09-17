@@ -84,6 +84,7 @@ fn context() -> AgentRunContext {
         observations: Vec::new(),
         short_term_memory: None,
         started_at: "2026-09-07T00:00:00Z".into(),
+        auto_model_route: None,
     }
 }
 

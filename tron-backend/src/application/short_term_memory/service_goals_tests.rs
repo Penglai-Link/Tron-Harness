@@ -349,6 +349,7 @@ fn service_with_database_url(label: &str) -> (ShortTermMemoryService, String) {
 
 fn base_context() -> AgentRunContext {
     AgentRunContext {
+        auto_model_route: None,
         conversation_code: Some("SESSION-1".into()),
         run_code: "RUN-1".into(),
         workspace_code: "TRON_CORE".into(),

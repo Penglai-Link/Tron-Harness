@@ -233,11 +233,38 @@ pub(crate) fn prepare_send_model(
     session: &ChatSession,
     request: &SendChatMessageCommand,
     runtime: &ResolvedAgentRuntime,
-) -> Result<AgentModelConfig, ChatSendError> {
+) -> Result<PreparedChatModel, ChatSendError> {
     if let Some(selection) = request.model_selection.as_ref() {
         validate_chat_model_selection(selection)?;
     }
     if matches!(runtime.runtime_type, AgentRuntimeType::React) {
+        let is_auto = request.model_selection.as_ref().is_some_and(|selection| {
+            selection.kind == crate::domain::model_provider::ModelSelectionKind::Auto
+                || (selection.kind == crate::domain::model_provider::ModelSelectionKind::ProviderRoute
+                    && selection.route_code
+                        == Some(crate::domain::model_provider::ProviderRouteCode::ChatAuto))
+        });
+        if is_auto {
+            let router = crate::application::chat_auto_model_router::ChatAutoModelRouter::new(
+                state.models.clone(),
+                state.model_providers.clone(),
+            );
+            let (model, auto_route) = router
+                .resolve_initial(
+                    &session.workspace_code,
+                    &session.session_code,
+                    &runtime.agent_code,
+                    request.reasoning_effort,
+                )
+                .map_err(|message| {
+                    ChatSendError::Agent(AgentInvocationError::RuntimeFailed(message))
+                })?;
+            return Ok(PreparedChatModel {
+                config: model,
+                auto_route: Some(auto_route),
+                auto_router: Some(router),
+            });
+        }
         let fixed_model_code = request.model_selection.as_ref().and_then(|selection| {
             (selection.kind == crate::domain::model_provider::ModelSelectionKind::Fixed
                 && selection.provider_code.is_none())
@@ -257,7 +284,7 @@ pub(crate) fn prepare_send_model(
             request.reasoning_effort,
         ) {
             Ok(Some(config)) => {
-                return Ok(config);
+                return Ok(PreparedChatModel::fixed(config));
             }
             Ok(None) => {}
             Err(error) => {
@@ -266,7 +293,7 @@ pub(crate) fn prepare_send_model(
                 )));
             }
         }
-        return state
+        let config = state
             .models
             .text_agent_model_config_with_reasoning_effort(
                 &session.workspace_code,
@@ -279,7 +306,8 @@ pub(crate) fn prepare_send_model(
                 }
                 _ => ChatSendError::Chat(ChatError::StorageFailure),
             })?
-            .ok_or(ChatSendError::Agent(AgentInvocationError::ModelRequired));
+            .ok_or(ChatSendError::Agent(AgentInvocationError::ModelRequired))?;
+        return Ok(PreparedChatModel::fixed(config));
     }
 
     let model_name = request
@@ -308,10 +336,26 @@ pub(crate) fn prepare_send_model(
         })?;
 
     let matched_model = validate_system_agent_model(&system_agent, &model_name)?;
-    Ok(build_system_runtime_model_config(
+    Ok(PreparedChatModel::fixed(build_system_runtime_model_config(
         &model_name,
         matched_model.and_then(|item| item.context_window_tokens),
-    ))
+    )))
+}
+
+pub(crate) struct PreparedChatModel {
+    pub config: AgentModelConfig,
+    pub auto_route: Option<crate::domain::agent::AutoModelRouteContext>,
+    pub auto_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+}
+
+impl PreparedChatModel {
+    fn fixed(config: AgentModelConfig) -> Self {
+        Self {
+            config,
+            auto_route: None,
+            auto_router: None,
+        }
+    }
 }
 
 fn validate_chat_model_selection(selection: &ModelSelection) -> Result<(), ChatSendError> {
@@ -319,6 +363,16 @@ fn validate_chat_model_selection(selection: &ModelSelection) -> Result<(), ChatS
         ChatSendError::Agent(AgentInvocationError::RuntimeFailed(message.to_owned()))
     };
     match selection.kind {
+        ModelSelectionKind::Auto => {
+            if selection.provider_code.is_some()
+                || selection.model_code.is_some()
+                || selection.quality_type.is_some()
+                || selection.route_code.is_some()
+            {
+                return Err(invalid("Auto modelSelection cannot include a model or provider"));
+            }
+            Ok(())
+        }
         ModelSelectionKind::Fixed => {
             if selection.route_code.is_some() {
                 return Err(invalid("Fixed modelSelection cannot include routeCode"));

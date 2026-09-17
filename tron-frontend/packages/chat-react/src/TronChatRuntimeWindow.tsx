@@ -241,6 +241,7 @@ export function TronChatRuntimeWindow({
   const attachmentFileInputRef = useRef<HTMLInputElement | null>(null);
   const optimisticMessageSequenceRef = useRef(0);
   const currentLiveAguiRunCodesRef = useRef<Set<string>>(new Set());
+  const currentLiveAguiFailedRunCodesRef = useRef<Set<string>>(new Set());
   const observedRemoteRunRef = useRef<{ runCode: string; sessionCode: string } | null>(null);
   const drainedRemoteRunKeysRef = useRef<Set<string>>(new Set());
   const suppressedAutoDrainRunKeysRef = useRef<Set<string>>(new Set());
@@ -812,6 +813,7 @@ export function TronChatRuntimeWindow({
     abortRef.current = abortController;
     streamAbortReasonsRef.current.set(abortController, "none");
     currentLiveAguiRunCodesRef.current.clear();
+    currentLiveAguiFailedRunCodesRef.current.clear();
     activeRunCodeRef.current = "";
     setActiveRunCode("");
     setActiveRunSupportsSteer(null);
@@ -876,6 +878,10 @@ export function TronChatRuntimeWindow({
             setLiveAguiEvents((current) => [...current, event]);
             if (runCode) {
               currentLiveAguiRunCodesRef.current.add(runCode);
+              const eventType = String(event.type ?? "").toUpperCase();
+              if (eventType === "RUN_ERROR" || eventType === "AGENT.RUN.FAILED") {
+                currentLiveAguiFailedRunCodesRef.current.add(runCode);
+              }
               setLiveAguiAnchorMessageCodes((current) => (
                 current[runCode]
                   ? current
@@ -986,7 +992,43 @@ export function TronChatRuntimeWindow({
         if (!sourceSubmission && submittedAttachments.length) {
           setPendingAttachments((current) => [...submittedAttachments, ...current]);
         }
-        onError(error instanceof Error ? error.message : "Chat send failed", "Chat send failed");
+        const errorMessage = error instanceof Error ? error.message : "Chat send failed";
+        if (aguiEnabled) {
+          const existingRunCode = activeRunCodeRef.current;
+          const runCode = existingRunCode || `LOCAL-${optimisticKey}-FAILED`;
+          if (!currentLiveAguiFailedRunCodesRef.current.has(runCode)) {
+            const finishedAt = Date.now();
+            const failureEvents: ChatAguiStreamEvent[] = [
+              ...(!existingRunCode
+                ? [{
+                    runId: runCode,
+                    threadId: activeSession.sessionCode,
+                    timestamp: finishedAt - 1,
+                    type: "RUN_STARTED",
+                  }]
+                : []),
+              {
+                runId: runCode,
+                threadId: activeSession.sessionCode,
+                timestamp: finishedAt,
+                type: "RUN_ERROR",
+                code: error instanceof FetchTransportError
+                  ? error.code || "CHAT_SEND_FAILED"
+                  : "CHAT_SEND_FAILED",
+                message: errorMessage,
+              },
+            ];
+            setLiveAguiEvents((current) => [...current, ...failureEvents]);
+            setLiveAguiAnchorMessageCodes((current) => ({
+              ...current,
+              [runCode]: optimisticUserCode,
+            }));
+            currentLiveAguiRunCodesRef.current.add(runCode);
+            currentLiveAguiFailedRunCodesRef.current.add(runCode);
+          }
+        } else {
+          onError(errorMessage, "Chat send failed");
+        }
       }
     } finally {
       const ownsObserver = abortRef.current === abortController;

@@ -18,10 +18,6 @@ pub(super) fn is_main_agent(agent_code: &str) -> bool {
     agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
 }
 
-pub(super) fn is_internal_agent(agent_code: &str) -> bool {
-    agent_code.eq_ignore_ascii_case(MAIN_AGENT_CODE)
-}
-
 pub(super) fn agent_kind_for_runtime(runtime_type: AgentRuntimeType) -> AgentKind {
     match runtime_type {
         AgentRuntimeType::React => AgentKind::React,

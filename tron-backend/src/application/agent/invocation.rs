@@ -18,8 +18,8 @@ use crate::{
         variable::VariableService, workspace::WorkspaceService,
     },
     domain::agent::{
-        AgentModelConfig, AgentModelProtocol, AgentRunHistoryRecord, AgentRunStatus, ModelRequest,
-        ModelResponse, ToolRegistry,
+        AgentModelConfig, AgentModelProtocol, AgentRunHistoryRecord, AgentRunStatus,
+        AutoModelRouteContext, ModelRequest, ModelResponse, ToolRegistry,
     },
     shared::{event_bus::EventBusHandle, time::current_timestamp},
 };
@@ -51,6 +51,8 @@ pub struct AgentInvocationService {
     runtime_http_client: reqwest::Client,
     short_term_memory: Option<ShortTermMemoryService>,
     prompt_service: Option<PromptService>,
+    auto_model_route: Option<AutoModelRouteContext>,
+    auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
     active_runs: ActiveRunRegistry,
 }
 
@@ -82,6 +84,8 @@ impl AgentInvocationService {
             runtime_http_client,
             short_term_memory: None,
             prompt_service: None,
+            auto_model_route: None,
+            auto_model_router: None,
             active_runs: ActiveRunRegistry::new(),
         }
     }
@@ -93,6 +97,16 @@ impl AgentInvocationService {
 
     pub fn with_prompt_service(mut self, service: PromptService) -> Self {
         self.prompt_service = Some(service);
+        self
+    }
+
+    pub fn with_auto_model_route(
+        mut self,
+        route: Option<AutoModelRouteContext>,
+        router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+    ) -> Self {
+        self.auto_model_route = route;
+        self.auto_model_router = router;
         self
     }
 
@@ -117,6 +131,7 @@ impl AgentInvocationService {
             self.tool_registry.clone(),
             self.short_term_memory.clone(),
             self.prompt_service.clone(),
+            self.auto_model_route.clone(),
         )
     }
 
@@ -190,7 +205,8 @@ impl AgentInvocationService {
             self.runtime_http_client.clone(),
         )
         .with_short_term_memory(self.short_term_memory.clone())
-        .with_active_runs(self.active_runs.clone());
+        .with_active_runs(self.active_runs.clone())
+        .with_auto_model_router(self.auto_model_router.clone());
         let executor = AgentRunExecutor::new(runtime_registry);
         let orchestrator = AgentOrchestrator::new(self.run_context_builder(), executor);
         let AgentOrchestrationRun {

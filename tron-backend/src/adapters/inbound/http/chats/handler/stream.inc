@@ -19,10 +19,13 @@ pub async fn send_message(
     };
     let run_code = generate_agent_run_code();
     request.run_code = Some(run_code.clone());
-    let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
+    let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
     };
+    let auto_model_route = prepared_model.auto_route.clone();
+    let auto_model_router = prepared_model.auto_router.clone();
+    let resolved_model = prepared_model.config;
     if let Err(error) = state.model_providers.record_requested_runtime_snapshot(
         Some(&run_code),
         &session.session_code,
@@ -54,7 +57,8 @@ pub async fn send_message(
     )
     .with_short_term_memory(state.short_term_memory.clone())
     .with_active_runs(state.active_runs.clone())
-    .with_prompt_service(state.prompts.clone());
+    .with_prompt_service(state.prompts.clone())
+    .with_auto_model_route(auto_model_route, auto_model_router);
     match state
         .chats
         .send_message(
@@ -139,10 +143,13 @@ pub(crate) async fn stream_message_command(
     let supports_steer = matches!(resolved_runtime.runtime_type, AgentRuntimeType::React);
     let run_code = generate_agent_run_code();
     request.run_code = Some(run_code.clone());
-    let resolved_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
+    let prepared_model = match prepare_send_model(&state, &session, &request, &resolved_runtime) {
         Ok(model) => model,
         Err(error) => return chat_send_error_response(error),
     };
+    let auto_model_route = prepared_model.auto_route.clone();
+    let auto_model_router = prepared_model.auto_router.clone();
+    let resolved_model = prepared_model.config;
     if let Err(error) = state.model_providers.record_requested_runtime_snapshot(
         Some(&run_code),
         &session.session_code,
@@ -195,7 +202,8 @@ pub(crate) async fn stream_message_command(
     )
     .with_short_term_memory(state.short_term_memory.clone())
     .with_active_runs(state.active_runs.clone())
-    .with_prompt_service(state.prompts.clone());
+    .with_prompt_service(state.prompts.clone())
+    .with_auto_model_route(auto_model_route, auto_model_router);
     let live_replay_recorder_for_sink = live_replay_recorder.clone();
     let forwarding_gate = ChatStreamForwardingGate::new();
     let forwarding_gate_for_sink = forwarding_gate.clone();

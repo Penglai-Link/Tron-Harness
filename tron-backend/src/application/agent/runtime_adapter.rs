@@ -232,6 +232,7 @@ pub struct AgentRuntimeRegistry {
     runtime_http_client: reqwest::Client,
     short_term_memory: Option<ShortTermMemoryService>,
     active_runs: ActiveRunRegistry,
+    auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
 }
 
 impl AgentRuntimeRegistry {
@@ -248,6 +249,7 @@ impl AgentRuntimeRegistry {
             runtime_http_client,
             short_term_memory: None,
             active_runs: ActiveRunRegistry::new(),
+            auto_model_router: None,
         }
     }
 
@@ -258,6 +260,14 @@ impl AgentRuntimeRegistry {
 
     pub fn with_active_runs(mut self, active_runs: ActiveRunRegistry) -> Self {
         self.active_runs = active_runs;
+        self
+    }
+
+    pub fn with_auto_model_router(
+        mut self,
+        router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+    ) -> Self {
+        self.auto_model_router = router;
         self
     }
 
@@ -275,6 +285,7 @@ impl AgentRuntimeRegistry {
                 self.event_bus.clone(),
                 self.short_term_memory.clone(),
                 self.active_runs.clone(),
+                self.auto_model_router.clone(),
             )),
             RuntimeAdapterSelection::CodexExec {
                 command_name,

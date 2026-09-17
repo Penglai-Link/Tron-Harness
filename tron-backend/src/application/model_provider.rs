@@ -20,6 +20,9 @@ use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use url::Url;
 
+#[path = "model_provider/chat_auto_routes.rs"]
+mod chat_auto_routes;
+
 use crate::{
     adapters::outbound::crypto::Sm4GcmVariableCipher,
     application::{
@@ -49,7 +52,9 @@ const PROVIDER_RUNTIME_PREFIX: &str = "PERSON_AI:";
 const TOKEN_REFRESH_LEAD_MILLIS: i64 = 7 * 24 * 60 * 60 * 1000;
 const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
 
-pub(crate) fn migrate_provider_catalog_model_schema(connection: &Connection) -> rusqlite::Result<()> {
+pub(crate) fn migrate_provider_catalog_model_schema(
+    connection: &Connection,
+) -> rusqlite::Result<()> {
     ensure_sqlite_column(
         connection,
         "provider_catalog_models",
@@ -63,13 +68,22 @@ pub(crate) fn migrate_provider_catalog_model_schema(connection: &Connection) -> 
     ] {
         ensure_sqlite_column(connection, "provider_catalog_models", column, definition)?;
     }
-    ensure_sqlite_column(connection, "default_model_selections", "quality_type", "TEXT")?;
-    ensure_sqlite_column(
-        connection,
-        "provider_model_run_snapshots",
-        "quality_type",
-        "TEXT",
-    )?;
+    if sqlite_table_exists_raw(connection, "default_model_selections")? {
+        ensure_sqlite_column(
+            connection,
+            "default_model_selections",
+            "quality_type",
+            "TEXT",
+        )?;
+    }
+    if sqlite_table_exists_raw(connection, "provider_model_run_snapshots")? {
+        ensure_sqlite_column(
+            connection,
+            "provider_model_run_snapshots",
+            "quality_type",
+            "TEXT",
+        )?;
+    }
     Ok(())
 }
 
@@ -163,6 +177,7 @@ pub enum ModelProviderError {
     CatalogModelUnavailable(String),
     InvalidSelection(String),
     AuthenticationRequired,
+    Unauthorized,
     Remote(String),
     Storage,
 }
@@ -191,6 +206,9 @@ impl std::fmt::Display for ModelProviderError {
             Self::InvalidSelection(message) => formatter.write_str(message),
             Self::AuthenticationRequired => {
                 formatter.write_str("Person-AI authorization is required")
+            }
+            Self::Unauthorized => {
+                formatter.write_str("Person-AI access token was rejected (HTTP 401)")
             }
             Self::Remote(message) => formatter.write_str(message),
             Self::Storage => formatter.write_str("model provider storage failed"),
@@ -499,14 +517,14 @@ impl ModelProviderAdapter for PersonAiAdapter {
                 if catalog_model_type == ProviderCatalogModelType::Embedding {
                     continue;
                 }
-                distinct
-                    .entry(model.model_id.clone())
-                    .or_insert_with(|| ExternalMultimediaCatalogModel {
+                distinct.entry(model.model_id.clone()).or_insert_with(|| {
+                    ExternalMultimediaCatalogModel {
                         model_id: model.model_id,
                         model_name: model.model_name.unwrap_or_else(|| model.model_code.clone()),
                         model_code: model.model_code,
                         catalog_model_type,
-                    });
+                    }
+                });
             }
             Ok(distinct.into_values().collect())
         })
@@ -596,7 +614,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
                     conversation_id,
                 )
                 .await
-                .map_err(remote_error)
+                .map_err(person_ai_runtime_error)
         })
     }
 
@@ -630,7 +648,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
                     },
                 )
                 .await
-                .map_err(remote_error)
+                .map_err(person_ai_runtime_error)
         })
     }
 
@@ -653,6 +671,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
 #[derive(Clone)]
 pub struct ModelProviderService {
     connection: Arc<Mutex<Connection>>,
+    token_refresh_lock: Arc<tokio::sync::Mutex<()>>,
     cipher: Arc<dyn VariableCipher>,
     adapters: Arc<HashMap<ModelProviderCode, Arc<dyn ModelProviderAdapter>>>,
 }
@@ -666,16 +685,30 @@ impl ModelProviderService {
         connection
             .execute_batch(MODEL_PROVIDER_MIGRATION)
             .map_err(|_| ModelProviderError::Storage)?;
+        connection
+            .execute_batch(include_str!(
+                "../../migrations/20260917_0001_create_chat_auto_model_routes.sql"
+            ))
+            .map_err(|_| ModelProviderError::Storage)?;
         migrate_provider_catalog_model_schema(&connection)
             .map_err(|_| ModelProviderError::Storage)?;
         remove_legacy_person_ai_embedding_catalog_models(&connection)?;
         trim_provider_sync_runs(&connection, ModelProviderCode::PersonAi)?;
         migrate_legacy_default_model_selections(&connection)?;
+        if sqlite_table_exists(&connection, "default_model_selections")? {
+            connection
+                .execute(
+                    "DELETE FROM default_model_selections WHERE provider_code = 'PersonAi' AND route_code = 'ChatAuto'",
+                    [],
+                )
+                .map_err(|_| ModelProviderError::Storage)?;
+        }
         let adapter: Arc<dyn ModelProviderAdapter> = Arc::new(PersonAiAdapter);
         let mut adapters = HashMap::new();
         adapters.insert(adapter.code(), adapter);
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
+            token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             cipher,
             adapters: Arc::new(adapters),
         })
@@ -1061,7 +1094,9 @@ impl ModelProviderService {
                 return Err(error);
             }
         };
-        let result = self.fetch_catalog_snapshot(provider_code, &credentials).await;
+        let result = self
+            .fetch_catalog_snapshot(provider_code, &credentials)
+            .await;
         match result {
             Ok((catalog, multimedia_catalog)) => {
                 let completed_at = now_millis();
@@ -1271,7 +1306,9 @@ impl ModelProviderService {
             let enabled = active && model.status == ProviderCatalogModelStatus::Available;
             let selection = ModelSelection::person_ai_fixed(
                 model.model_code.clone(),
-                model.quality_type.expect("chat catalog models always have a quality"),
+                model
+                    .quality_type
+                    .expect("chat catalog models always have a quality"),
             );
             options.push(ProviderModelSelectOption {
                 is_default: default_selection.as_ref() == Some(&selection),
@@ -1318,12 +1355,7 @@ impl ModelProviderService {
                 .map(str::trim)
                 .filter(|value| !value.is_empty())
                 .and_then(|model_code| {
-                    read_catalog_model(
-                        &connection,
-                        ModelProviderCode::PersonAi,
-                        model_code,
-                        None,
-                    )
+                    read_catalog_model(&connection, ModelProviderCode::PersonAi, model_code, None)
                         .ok()
                         .flatten()
                         .map(|model| {
@@ -1362,6 +1394,9 @@ impl ModelProviderService {
             );
         }
         match selection.kind {
+            ModelSelectionKind::Auto => Err(ModelProviderError::InvalidSelection(
+                "Tron Auto must be resolved by the chat session router".into(),
+            )),
             ModelSelectionKind::ProviderRoute => {
                 if selection.route_code != Some(ProviderRouteCode::ChatAuto)
                     || selection.model_code.is_some()
@@ -1389,16 +1424,13 @@ impl ModelProviderService {
                             "Person-AI Fixed selection requires modelCode".into(),
                         )
                     })?;
-                let model =
-                    read_catalog_model(
-                        &connection,
-                        ModelProviderCode::PersonAi,
-                        model_code,
-                        selection.quality_type,
-                    )?
-                        .ok_or_else(|| {
-                            ModelProviderError::CatalogModelUnavailable(model_code.into())
-                        })?;
+                let model = read_catalog_model(
+                    &connection,
+                    ModelProviderCode::PersonAi,
+                    model_code,
+                    selection.quality_type,
+                )?
+                .ok_or_else(|| ModelProviderError::CatalogModelUnavailable(model_code.into()))?;
                 if model.status != ProviderCatalogModelStatus::Available {
                     return Err(ModelProviderError::CatalogModelUnavailable(
                         model_code.into(),
@@ -1537,12 +1569,30 @@ impl ModelProviderService {
             .map_err(|error| error.to_string())?;
         let quality_type = person_ai_runtime_quality(config)
             .ok_or_else(|| "Person-AI runtime model has no quality type".to_string())?;
-        let response = self
+        let adapter = self
             .adapter(ModelProviderCode::PersonAi)
-            .map_err(|error| error.to_string())?
-            .chat(&credentials, body, quality_type, conversation_id)
-            .await
             .map_err(|error| error.to_string())?;
+        let result = adapter
+            .chat(&credentials, body, quality_type, conversation_id)
+            .await;
+        let result = if matches!(&result, Err(ModelProviderError::Unauthorized)) {
+            let refreshed = self
+                .refresh_credentials_after_unauthorized(
+                    ModelProviderCode::PersonAi,
+                    &credentials.token,
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            adapter
+                .chat(&refreshed, body, quality_type, conversation_id)
+                .await
+        } else {
+            result
+        };
+        let response = result.map_err(|error| {
+            self.mark_auth_required_after_rejected_credentials(&error);
+            error.to_string()
+        })?;
         self.record_runtime_snapshot(run_code, "", config, &response)
             .map_err(|error| error.to_string())?;
         Ok(response)
@@ -1565,23 +1615,54 @@ impl ModelProviderService {
         let snapshot_service = self.clone();
         let snapshot_config = config.clone();
         let snapshot_run_code = run_code.map(ToOwned::to_owned);
-        let snapshot_sink = Arc::new(move |event: Value| {
-            snapshot_service
-                .record_runtime_snapshot(snapshot_run_code.as_deref(), "", &snapshot_config, &event)
-                .map_err(|error| error.to_string())?;
-            sink(event)
-        });
-        self.adapter(ModelProviderCode::PersonAi)
-            .map_err(|error| error.to_string())?
+        let snapshot_sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + '_> =
+            Arc::new(move |event: Value| {
+                snapshot_service
+                    .record_runtime_snapshot(
+                        snapshot_run_code.as_deref(),
+                        "",
+                        &snapshot_config,
+                        &event,
+                    )
+                    .map_err(|error| error.to_string())?;
+                sink(event)
+            });
+        let adapter = self
+            .adapter(ModelProviderCode::PersonAi)
+            .map_err(|error| error.to_string())?;
+        let result = adapter
             .chat_stream(
                 &credentials,
                 body,
                 quality_type,
                 conversation_id,
-                snapshot_sink,
+                Arc::clone(&snapshot_sink),
             )
-            .await
-            .map_err(|error| error.to_string())
+            .await;
+        let result = if matches!(&result, Err(ModelProviderError::Unauthorized)) {
+            let refreshed = self
+                .refresh_credentials_after_unauthorized(
+                    ModelProviderCode::PersonAi,
+                    &credentials.token,
+                )
+                .await
+                .map_err(|error| error.to_string())?;
+            adapter
+                .chat_stream(
+                    &refreshed,
+                    body,
+                    quality_type,
+                    conversation_id,
+                    snapshot_sink,
+                )
+                .await
+        } else {
+            result
+        };
+        result.map_err(|error| {
+            self.mark_auth_required_after_rejected_credentials(&error);
+            error.to_string()
+        })
     }
 
     pub async fn embedding(&self, body: &Value) -> Result<Value, String> {
@@ -1686,20 +1767,18 @@ impl ModelProviderService {
             .connection
             .lock()
             .map_err(|_| ModelProviderError::Storage)?;
-        Ok(read_catalog_model(
-            &connection,
-            ModelProviderCode::PersonAi,
-            model_code,
-            None,
-        )?
-        .map(|model| {
-            ModelSelection::person_ai_fixed(
-                model_code,
-                model
-                    .quality_type
-                    .expect("chat catalog models always have a quality"),
-            )
-        }))
+        Ok(
+            read_catalog_model(&connection, ModelProviderCode::PersonAi, model_code, None)?.map(
+                |model| {
+                    ModelSelection::person_ai_fixed(
+                        model_code,
+                        model
+                            .quality_type
+                            .expect("chat catalog models always have a quality"),
+                    )
+                },
+            ),
+        )
     }
 
     fn require_active_connection(
@@ -1749,7 +1828,7 @@ impl ModelProviderService {
             .credentials_encrypted
             .as_deref()
             .ok_or(ModelProviderError::AuthenticationRequired)?;
-        let mut credentials = match self.decrypt_credentials(encrypted) {
+        let credentials = match self.decrypt_credentials(encrypted) {
             Ok(credentials) => credentials,
             Err(_) => {
                 self.mark_auth_required(provider_code, "credential decryption failed")?;
@@ -1764,13 +1843,76 @@ impl ModelProviderService {
         {
             return Ok(credentials);
         }
-        let refreshed = self
+        self.refresh_credentials_for_request(provider_code, &credentials.token, false)
+            .await
+    }
+
+    async fn refresh_credentials_after_unauthorized(
+        &self,
+        provider_code: ModelProviderCode,
+        rejected_token: &str,
+    ) -> Result<ProviderCredentials, ModelProviderError> {
+        self.refresh_credentials_for_request(provider_code, rejected_token, true)
+            .await
+    }
+
+    async fn refresh_credentials_for_request(
+        &self,
+        provider_code: ModelProviderCode,
+        expected_token: &str,
+        force: bool,
+    ) -> Result<ProviderCredentials, ModelProviderError> {
+        let _refresh_guard = self.token_refresh_lock.lock().await;
+        let row = {
+            let connection = self
+                .connection
+                .lock()
+                .map_err(|_| ModelProviderError::Storage)?;
+            read_connection(&connection, provider_code)?
+                .ok_or(ModelProviderError::ConnectionNotReady)?
+        };
+        if !matches!(
+            row.status,
+            ProviderConnectionStatus::Connected | ProviderConnectionStatus::Degraded
+        ) {
+            return Err(if row.status == ProviderConnectionStatus::AuthRequired {
+                ModelProviderError::AuthenticationRequired
+            } else {
+                ModelProviderError::ConnectionNotReady
+            });
+        }
+        let encrypted = row
+            .credentials_encrypted
+            .as_deref()
+            .ok_or(ModelProviderError::AuthenticationRequired)?;
+        let mut credentials = self.decrypt_credentials(encrypted).map_err(|_| {
+            let _ = self.mark_auth_required(provider_code, "credential decryption failed");
+            ModelProviderError::AuthenticationRequired
+        })?;
+
+        // Another request may already have refreshed this token while we were
+        // waiting for the lock. Reuse its persisted credentials rather than
+        // rotating the same refresh token a second time.
+        if credentials.token != expected_token {
+            return Ok(credentials);
+        }
+        if !force
+            && credentials
+                .authorization_expires_at
+                .is_some_and(|expires_at| {
+                    expires_at > now_millis().saturating_add(TOKEN_REFRESH_LEAD_MILLIS)
+                })
+        {
+            return Ok(credentials);
+        }
+
+        let refreshed = match self
             .adapter(provider_code)?
             .refresh_credentials(&credentials.server_base_url, &credentials.refresh_token)
-            .await;
-        let refreshed = match refreshed {
-            Ok(refreshed) => refreshed,
-            Err(_) => {
+            .await
+        {
+            Ok(refreshed) if !refreshed.token.trim().is_empty() => refreshed,
+            Ok(_) | Err(_) => {
                 self.mark_auth_required(provider_code, "token refresh failed")?;
                 return Err(ModelProviderError::AuthenticationRequired);
             }
@@ -1778,7 +1920,16 @@ impl ModelProviderService {
         credentials.token = refreshed.token;
         credentials.refresh_token = refreshed.refresh_token;
         credentials.authorization_expires_at = refreshed.authorization_expires_at;
-        let encrypted = self.encrypt_credentials(&credentials)?;
+        self.persist_refreshed_credentials(provider_code, &credentials)?;
+        Ok(credentials)
+    }
+
+    fn persist_refreshed_credentials(
+        &self,
+        provider_code: ModelProviderCode,
+        credentials: &ProviderCredentials,
+    ) -> Result<(), ModelProviderError> {
+        let encrypted = self.encrypt_credentials(credentials)?;
         let now = now_millis();
         let connection = self
             .connection
@@ -1797,7 +1948,20 @@ impl ModelProviderService {
                 ],
             )
             .map_err(|_| ModelProviderError::Storage)?;
-        Ok(credentials)
+        Ok(())
+    }
+
+    fn mark_auth_required_after_rejected_credentials(&self, error: &ModelProviderError) {
+        if matches!(error, ModelProviderError::Unauthorized)
+            || is_person_ai_authorization_key_error(error)
+        {
+            let reason = if matches!(error, ModelProviderError::Unauthorized) {
+                "Person-AI rejected the refreshed access token; reauthorization required"
+            } else {
+                "Person-AI rejected the authorization key; reauthorization required"
+            };
+            let _ = self.mark_auth_required(ModelProviderCode::PersonAi, reason);
+        }
     }
 
     async fn finish_sync_failure(
@@ -2146,10 +2310,7 @@ fn person_ai_agent_config(
     }
 }
 
-fn person_ai_fixed_runtime_code(
-    quality_type: ProviderModelQuality,
-    model_code: &str,
-) -> String {
+fn person_ai_fixed_runtime_code(quality_type: ProviderModelQuality, model_code: &str) -> String {
     format!(
         "PERSON_AI:FIXED:{}:{model_code}",
         quality_type.storage_value(),
@@ -2286,6 +2447,10 @@ fn sqlite_table_exists(
     connection: &Connection,
     table_name: &str,
 ) -> Result<bool, ModelProviderError> {
+    sqlite_table_exists_raw(connection, table_name).map_err(|_| ModelProviderError::Storage)
+}
+
+fn sqlite_table_exists_raw(connection: &Connection, table_name: &str) -> rusqlite::Result<bool> {
     connection
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?1)",
@@ -2293,7 +2458,6 @@ fn sqlite_table_exists(
             |row| row.get::<_, i64>(0),
         )
         .map(|exists| exists != 0)
-        .map_err(|_| ModelProviderError::Storage)
 }
 
 fn normalize_server_base_url(raw: Option<&str>) -> Result<String, ModelProviderError> {
@@ -2469,7 +2633,12 @@ fn read_catalog_models(
                 left.catalog_model_type
                     .person_ai_media_type()
                     .unwrap_or(-1)
-                    .cmp(&right.catalog_model_type.person_ai_media_type().unwrap_or(-1))
+                    .cmp(
+                        &right
+                            .catalog_model_type
+                            .person_ai_media_type()
+                            .unwrap_or(-1),
+                    )
             })
             .then_with(|| left.model_name.cmp(&right.model_name))
             .then_with(|| left.model_code.cmp(&right.model_code))
@@ -2580,12 +2749,10 @@ fn read_catalog_model(
     quality_type: Option<ProviderModelQuality>,
 ) -> Result<Option<ProviderCatalogModelView>, ModelProviderError> {
     read_chat_catalog_models(connection, provider_code).map(|models| {
-        models
-            .into_iter()
-            .find(|model| {
-                model.model_code == model_code
-                    && quality_type.is_none_or(|quality| model.quality_type == Some(quality))
-            })
+        models.into_iter().find(|model| {
+            model.model_code == model_code
+                && quality_type.is_none_or(|quality| model.quality_type == Some(quality))
+        })
     })
 }
 
@@ -2822,8 +2989,8 @@ fn replace_authorized_connection(
                 now,
                 credentials.authorization_expires_at,
             ],
-    )
-    .map_err(|_| ModelProviderError::Storage)?;
+        )
+        .map_err(|_| ModelProviderError::Storage)?;
     apply_catalog_snapshot(transaction, provider_code, catalog, now)?;
     apply_multimedia_catalog_snapshot(transaction, provider_code, multimedia_catalog, now)?;
     transaction
@@ -3006,13 +3173,32 @@ fn required_remote_value(value: Option<String>, field: &str) -> Result<String, M
 }
 
 fn remote_error(error: impl std::fmt::Display) -> ModelProviderError {
-    let _ = error;
-    ModelProviderError::Remote("Person-AI request failed".into())
+    ModelProviderError::Remote(format!("Person-AI request failed: {error}"))
+}
+
+fn person_ai_runtime_error(error: ServerApiError) -> ModelProviderError {
+    match error {
+        ServerApiError::Unauthorized => ModelProviderError::Unauthorized,
+        other => remote_error(other),
+    }
+}
+
+fn is_person_ai_authorization_key_error(error: &ModelProviderError) -> bool {
+    let message = error.to_string().to_ascii_lowercase();
+    [
+        "decrypt_error",
+        "decryptfailed",
+        "服务端解密失败",
+        "授权密钥已失效",
+    ]
+    .iter()
+    .any(|marker| message.contains(marker))
 }
 
 fn account_info_error(error: ServerApiError) -> ModelProviderError {
     match error {
         ServerApiError::DecryptFailed => ModelProviderError::AuthenticationRequired,
+        ServerApiError::Unauthorized => ModelProviderError::Unauthorized,
         ServerApiError::Business { code, .. } => ModelProviderError::Remote(format!(
             "Person-AI account information request was rejected (code {code})"
         )),
@@ -3028,6 +3214,7 @@ fn account_info_error_kind(error: &ServerApiError) -> &'static str {
         ServerApiError::Json(_) | ServerApiError::Other(_) => "invalid-response",
         ServerApiError::Crypto(_) => "crypto",
         ServerApiError::DecryptFailed => "authorization-key",
+        ServerApiError::Unauthorized => "unauthorized",
         ServerApiError::WebSocket(_) => "websocket",
         ServerApiError::Io(_) => "io",
         ServerApiError::Url(_) => "url",
@@ -3056,10 +3243,7 @@ fn parse_person_ai_account_info(
         vip_level: optional_account_number(fields, &["vip_level", "vipLevel"])
             .and_then(|value| i32::try_from(value).ok()),
         // Person-AI defines remaining_tokens as the account's remaining points balance.
-        remaining_points: optional_account_number(
-            fields,
-            &["remaining_tokens", "remainingTokens"],
-        ),
+        remaining_points: optional_account_number(fields, &["remaining_tokens", "remainingTokens"]),
     })
 }
 
@@ -3083,11 +3267,13 @@ fn optional_account_number(fields: &serde_json::Map<String, Value>, names: &[&st
             Value::Number(value) => value
                 .as_i64()
                 .or_else(|| value.as_f64().and_then(account_number_from_float)),
-            Value::String(value) => value
-                .trim()
-                .parse::<i64>()
-                .ok()
-                .or_else(|| value.trim().parse::<f64>().ok().and_then(account_number_from_float)),
+            Value::String(value) => value.trim().parse::<i64>().ok().or_else(|| {
+                value
+                    .trim()
+                    .parse::<f64>()
+                    .ok()
+                    .and_then(account_number_from_float)
+            }),
             _ => None,
         })
     })
@@ -3138,6 +3324,254 @@ fn model_type_storage(model_type: ModelType) -> &'static str {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+
+    #[derive(Default)]
+    struct UnauthorizedOnceAdapter {
+        refresh_count: AtomicUsize,
+        refresh_tokens: Mutex<Vec<String>>,
+        chat_count: AtomicUsize,
+        chat_tokens: Mutex<Vec<String>>,
+        stream_count: AtomicUsize,
+        stream_tokens: Mutex<Vec<String>>,
+    }
+
+    impl ModelProviderAdapter for UnauthorizedOnceAdapter {
+        fn code(&self) -> ModelProviderCode {
+            ModelProviderCode::PersonAi
+        }
+
+        fn create_authorization<'a>(
+            &'a self,
+            _server_base_url: &'a str,
+            _client_name: &'a str,
+            _existing_client_id: Option<&'a str>,
+        ) -> ProviderFuture<'a, ExternalAuthorizationSession> {
+            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
+        }
+
+        fn poll_authorization<'a>(
+            &'a self,
+            _server_base_url: &'a str,
+            _session_id: &'a str,
+        ) -> ProviderFuture<'a, ExternalAuthorizationPoll> {
+            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
+        }
+
+        fn refresh_credentials<'a>(
+            &'a self,
+            server_base_url: &'a str,
+            refresh_token: &'a str,
+        ) -> ProviderFuture<'a, ProviderCredentials> {
+            let server_base_url = server_base_url.to_owned();
+            let refresh_token = refresh_token.to_owned();
+            Box::pin(async move {
+                self.refresh_tokens
+                    .lock()
+                    .expect("lock refresh tokens")
+                    .push(refresh_token);
+                let refresh_number = self.refresh_count.fetch_add(1, Ordering::SeqCst) + 1;
+                Ok(ProviderCredentials {
+                    token: format!("access-{refresh_number}"),
+                    refresh_token: format!("refresh-{refresh_number}"),
+                    client_id: String::new(),
+                    public_key: String::new(),
+                    server_base_url,
+                    authorization_expires_at: Some(now_millis() + 60 * 24 * 60 * 60 * 1000),
+                })
+            })
+        }
+
+        fn list_chat_models<'a>(
+            &'a self,
+            _credentials: &'a ProviderCredentials,
+        ) -> ProviderFuture<'a, Vec<ExternalCatalogModel>> {
+            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
+        }
+
+        fn list_multimedia_models<'a>(
+            &'a self,
+            _credentials: &'a ProviderCredentials,
+        ) -> ProviderFuture<'a, Vec<ExternalMultimediaCatalogModel>> {
+            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
+        }
+
+        fn verify_chat_auto<'a>(
+            &'a self,
+            _credentials: &'a ProviderCredentials,
+        ) -> ProviderFuture<'a, ()> {
+            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
+        }
+
+        fn verify_embedding<'a>(
+            &'a self,
+            _credentials: &'a ProviderCredentials,
+        ) -> ProviderFuture<'a, ()> {
+            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
+        }
+
+        fn chat<'a>(
+            &'a self,
+            credentials: &'a ProviderCredentials,
+            _body: &'a Value,
+            _quality_type: ProviderModelQuality,
+            _conversation_id: Option<&'a str>,
+        ) -> ProviderFuture<'a, Value> {
+            let token = credentials.token.clone();
+            Box::pin(async move {
+                self.chat_tokens
+                    .lock()
+                    .expect("lock chat tokens")
+                    .push(token);
+                if self.chat_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(ModelProviderError::Unauthorized)
+                } else {
+                    Ok(json!({"model": "mock-model"}))
+                }
+            })
+        }
+
+        fn chat_stream<'a>(
+            &'a self,
+            credentials: &'a ProviderCredentials,
+            _body: &'a Value,
+            _quality_type: ProviderModelQuality,
+            _conversation_id: Option<&'a str>,
+            _sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
+        ) -> ProviderFuture<'a, ()> {
+            let token = credentials.token.clone();
+            Box::pin(async move {
+                self.stream_tokens
+                    .lock()
+                    .expect("lock stream tokens")
+                    .push(token);
+                if self.stream_count.fetch_add(1, Ordering::SeqCst) == 0 {
+                    Err(ModelProviderError::Unauthorized)
+                } else {
+                    Ok(())
+                }
+            })
+        }
+
+        fn embed<'a>(
+            &'a self,
+            _credentials: &'a ProviderCredentials,
+            _body: &'a Value,
+        ) -> ProviderFuture<'a, Value> {
+            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
+        }
+    }
+
+    #[tokio::test]
+    async fn chat_and_stream_refresh_401_rebuild_requests_and_persist_rotated_tokens() {
+        let cipher: Arc<dyn VariableCipher> = Arc::new(
+            Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+                key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+            })
+            .expect("create test cipher"),
+        );
+        let connection = Connection::open_in_memory().expect("open provider test database");
+        connection
+            .execute_batch(MODEL_PROVIDER_MIGRATION)
+            .expect("create provider schema");
+        let adapter = Arc::new(UnauthorizedOnceAdapter::default());
+        let service = ModelProviderService {
+            connection: Arc::new(Mutex::new(connection)),
+            token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
+            cipher,
+            adapters: Arc::new(HashMap::from([(
+                ModelProviderCode::PersonAi,
+                adapter.clone() as Arc<dyn ModelProviderAdapter>,
+            )])),
+        };
+        let initial_credentials = ProviderCredentials {
+            token: "expired-access".into(),
+            refresh_token: "initial-refresh".into(),
+            client_id: "client-id".into(),
+            public_key: "public-key".into(),
+            server_base_url: "https://person-ai.invalid".into(),
+            authorization_expires_at: Some(now_millis() + 60 * 24 * 60 * 60 * 1000),
+        };
+        let encrypted = service
+            .encrypt_credentials(&initial_credentials)
+            .expect("encrypt initial credentials");
+        service
+            .connection
+            .lock()
+            .expect("lock provider database")
+            .execute(
+                "INSERT INTO provider_connections (
+                    provider_code, server_base_url, status, credentials_encrypted, authorized_at,
+                    authorization_expires_at, last_sync_at, last_error, created_at, updated_at
+                 ) VALUES ('PersonAi', ?1, 'Connected', ?2, ?3, ?4, NULL, NULL, ?3, ?3)",
+                params![
+                    initial_credentials.server_base_url,
+                    encrypted,
+                    now_millis(),
+                    initial_credentials.authorization_expires_at,
+                ],
+            )
+            .expect("seed provider credentials");
+
+        let config =
+            person_ai_agent_config("PERSON_AI:ROUTE:ChatAuto", "Auto", Some(256_000), None);
+        service
+            .chat_completion(&config, &json!({"messages": []}), None, None)
+            .await
+            .expect("chat should retry with refreshed credentials");
+        service
+            .chat_completion_stream(
+                &config,
+                &json!({"messages": []}),
+                None,
+                None,
+                Arc::new(|_| Ok(())),
+            )
+            .await
+            .expect("stream should retry with refreshed credentials");
+
+        assert_eq!(
+            *adapter.chat_tokens.lock().expect("read chat tokens"),
+            ["expired-access", "access-1"]
+        );
+        assert_eq!(
+            *adapter.stream_tokens.lock().expect("read stream tokens"),
+            ["access-1", "access-2"]
+        );
+        assert_eq!(
+            *adapter.refresh_tokens.lock().expect("read refresh tokens"),
+            ["initial-refresh", "refresh-1"]
+        );
+        let stored = {
+            let connection = service.connection.lock().expect("lock provider database");
+            read_connection(&connection, ModelProviderCode::PersonAi)
+                .expect("read provider connection")
+                .expect("provider connection exists")
+        };
+        let stored_credentials = service
+            .decrypt_credentials(
+                stored
+                    .credentials_encrypted
+                    .as_deref()
+                    .expect("stored encrypted credentials"),
+            )
+            .expect("decrypt stored credentials");
+        assert_eq!(stored_credentials.token, "access-2");
+        assert_eq!(stored_credentials.refresh_token, "refresh-2");
+        assert_eq!(stored_credentials.client_id, "client-id");
+        assert_eq!(stored_credentials.public_key, "public-key");
+    }
+
+    #[test]
+    fn person_ai_invalid_authorization_key_is_detected_from_remote_error() {
+        let error = ModelProviderError::Remote(
+            "Person-AI request failed: 服务端解密失败: 授权密钥已失效，请重新登录后再试".into(),
+        );
+        assert!(is_person_ai_authorization_key_error(&error));
+
+        let ordinary_error = ModelProviderError::Remote("Person-AI request failed: timeout".into());
+        assert!(!is_person_ai_authorization_key_error(&ordinary_error));
+    }
 
     fn catalog_model(
         code: &str,

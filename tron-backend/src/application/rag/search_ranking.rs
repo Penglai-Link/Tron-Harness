@@ -14,6 +14,7 @@ use super::{
 
 const PERSON_AI_LLM_FALLBACK_ROUTE: &str = "PERSON_AI:ROUTE:LlmFallback";
 
+
 pub(super) fn rank_route_rows(
     rows: Vec<RagSearchRow>,
     route: &RetrievalRoute,
@@ -598,7 +599,10 @@ mod tests {
         assert_eq!(hits[1].result.score, 0.42);
         let calls = calls.lock().expect("read rerank calls");
         assert_eq!(calls.len(), 1);
-        assert_eq!(calls[0].model_code, None);
+        assert_eq!(
+            calls[0].model_code.as_deref(),
+            Some(PERSON_AI_LLM_FALLBACK_ROUTE)
+        );
         assert_eq!(
             calls[0].documents,
             vec!["first candidate", "second candidate"]

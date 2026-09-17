@@ -188,6 +188,7 @@ impl ProviderSyncStatus {
 pub enum ModelSelectionKind {
     Fixed,
     ProviderRoute,
+    Auto,
 }
 
 impl ModelSelectionKind {
@@ -195,6 +196,7 @@ impl ModelSelectionKind {
         match self {
             Self::Fixed => "Fixed",
             Self::ProviderRoute => "ProviderRoute",
+            Self::Auto => "Auto",
         }
     }
 
@@ -202,6 +204,7 @@ impl ModelSelectionKind {
         match value {
             "Fixed" => Some(Self::Fixed),
             "ProviderRoute" => Some(Self::ProviderRoute),
+            "Auto" => Some(Self::Auto),
             _ => None,
         }
     }
@@ -245,6 +248,16 @@ pub struct ModelSelection {
 }
 
 impl ModelSelection {
+    pub fn auto() -> Self {
+        Self {
+            kind: ModelSelectionKind::Auto,
+            provider_code: None,
+            model_code: None,
+            quality_type: None,
+            route_code: None,
+        }
+    }
+
     pub fn fixed(model_code: impl Into<String>) -> Self {
         Self {
             kind: ModelSelectionKind::Fixed,
