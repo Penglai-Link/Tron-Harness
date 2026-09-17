@@ -30,7 +30,12 @@ export function EditableTabTrigger({ tab, onClose }: EditableTabTriggerProps) {
         value={tab.key}
         className="flex-auto w-1/2 bg-transparent! shadow-none! data-active:bg-transparent! data-active:text-inherit! dark:data-active:border-transparent! dark:data-active:bg-transparent! dark:data-active:text-inherit!"
       >
-        <span className="max-w-40 truncate">{tab.label}</span>
+        <span
+          className={cn("max-w-40 truncate", tab.labelClassName)}
+          title={typeof tab.label === "string" ? tab.label : ""}
+        >
+          {tab.label}
+        </span>
       </TabsTrigger>
       {tab.closable !== false ? (
         <Button

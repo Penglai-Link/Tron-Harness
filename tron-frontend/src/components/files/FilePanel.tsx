@@ -28,6 +28,8 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/components/ui/toast";
 
+import { useFileTabsStore } from "@/store/fileTabsStore";
+
 import { electronFs, fsErrorCode } from "@/shared/fs/electronFs";
 import { isBinaryExtension } from "@/shared/fs/binaryGuard";
 import type { FsEditor, FsEntry } from "@/shared/fs/types";
@@ -87,6 +89,14 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
   const contentRef = useRef<string>("");
 
   const isDesktop = electronFs.isAvailable();
+
+  const setFileTabLabel = useFileTabsStore((state) => state.setFileTabLabel);
+
+  useEffect(() => {
+    if (tabKey) {
+      setFileTabLabel(tabKey, root?.name ?? "");
+    }
+  }, [root, setFileTabLabel, tabKey]);
 
   const coordinatorRef = useRef(coordinator);
   useEffect(() => {
@@ -439,11 +449,12 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
 
       <ResizablePanelGroup orientation="horizontal" className="min-h-0 flex-1">
         <ResizablePanel defaultSize="280px" minSize="20px" className="flex min-w-0 flex-col">
-          <div className="flex items-center gap-1 border-b border-[var(--color-outline-variant)] px-2 py-1.5">
+          <div className="flex h-10 items-center gap-1 border-b border-[var(--color-outline-variant)] px-2">
             <Button
               size="icon-sm"
               variant="ghost"
               type="button"
+              title={t("files.createFile")}
               aria-label={t("files.createFile")}
               onClick={() => handleAction("createFile", "", { name: "", isDir: false, isFile: true, isSymlink: false, size: 0 })}
             >
@@ -453,6 +464,7 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
               size="icon-sm"
               variant="ghost"
               type="button"
+              title={t("files.createDirectory")}
               aria-label={t("files.createDirectory")}
               onClick={() => handleAction("createDirectory", "", { name: "", isDir: true, isFile: false, isSymlink: false, size: 0 })}
             >
@@ -475,7 +487,7 @@ export function FilePanel({ tabKey }: { tabKey?: string }) {
         <ResizableHandle className="bg-[var(--color-outline-variant)]" />
 
         <ResizablePanel className="flex min-w-0 flex-col">
-          <div className="flex items-center justify-between gap-2 border-b border-[var(--color-outline-variant)] px-3 py-1.5">
+          <div className="flex h-10 items-center justify-between gap-2 border-b border-[var(--color-outline-variant)] px-3">
             <div className="flex min-w-0 items-center gap-2">
               {isDirty ? (
                 <span

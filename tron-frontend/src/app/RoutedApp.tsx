@@ -10,6 +10,7 @@ import { appRoutes } from "@/router/routes";
 import AppRoutePage from "./route-page/AppRoutePage";
 import { lazy } from "react";
 import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegistry";
+import { FilePanelHostProvider } from "@/shared/layout/content/FilePanelHostProvider";
 
 const DesignStandardPage = lazy(() =>
   import("@/domain/design-standard/pages/DesignStandardPage").then(
@@ -34,8 +35,9 @@ export default function RoutedApp() {
   useBootstrapAuthSession();
 
   return (
-    <TabPanelRegistryProvider>
-      <Routes>
+    <FilePanelHostProvider>
+      <TabPanelRegistryProvider>
+        <Routes>
         <Route path="/login" element={<EntryRoutePage />} />
         <Route
           path="/setup"
@@ -134,7 +136,8 @@ export default function RoutedApp() {
             </ProtectedRoute>
           }
         />
-      </Routes>
-    </TabPanelRegistryProvider>
+        </Routes>
+      </TabPanelRegistryProvider>
+    </FilePanelHostProvider>
   );
 }

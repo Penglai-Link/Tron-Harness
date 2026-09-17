@@ -7,6 +7,8 @@ export interface EditableTab {
   hidden?: boolean;
   url?: string;
   label: ReactNode;
+  /** 覆盖 label 文本的截断样式（用于控制最大宽度等）。 */
+  labelClassName?: string;
   children: ReactNode;
   closable?: boolean;
 }
