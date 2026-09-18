@@ -2642,7 +2642,6 @@ type ContextDetailTreeLabels = {
   arraySummary: (count: number) => string;
   emptyArray: string;
   emptyObject: string;
-  objectLabel: string;
 };
 
 function ContextDetailTreeNode({
@@ -2706,9 +2705,7 @@ function ContextDetailTreeNode({
       >
         {expanded ? <ChevronDown className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" /> : <ChevronRight className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" />}
         {labelContent}
-        <span className="text-[var(--color-on-surface-variant)]">
-          {isArray ? labels.arraySummary(entries.length) : labels.objectLabel}
-        </span>
+        {isArray ? <span className="text-[var(--color-on-surface-variant)]">{labels.arraySummary(entries.length)}</span> : null}
       </button>
       {expanded ? (
         <div className="ml-2 border-l border-[var(--color-outline-variant)] py-0.5 pl-3">
@@ -2774,7 +2771,6 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     arraySummary: (count) => t("chat.shortTermMemory.contextPanel.detailArraySummary", { count }),
     emptyArray: t("chat.shortTermMemory.contextPanel.detailEmptyArray"),
     emptyObject: t("chat.shortTermMemory.contextPanel.detailEmptyObject"),
-    objectLabel: t("chat.shortTermMemory.contextPanel.detailObjectLabel"),
   };
   const contents = (
     <>

@@ -911,7 +911,6 @@ export const pages = {
         detailArraySummary: "Array · {{count}} items",
         detailEmptyArray: "Empty array",
         detailEmptyObject: "Empty object",
-        detailObjectLabel: "Object",
         checkpointName: "Current Session Checkpoint",
         workingStateName: "Current Session Working State",
         familyContextName: "Related Sessions",
