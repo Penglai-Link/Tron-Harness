@@ -3304,7 +3304,7 @@ function ChatSessionRightPanel({
       label: t("chat.shortTermMemory.context"),
       closable: false,
       children: (
-        <div className="h-full min-h-0 overflow-y-auto overscroll-y-contain">
+        <div className="absolute inset-0 min-h-0 overflow-y-auto overscroll-y-contain">
           <div className="m-4">
             <RightContextSidebar
               events={snapshot.contextEvents}
