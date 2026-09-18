@@ -67,17 +67,29 @@ describe("chat model default selection", () => {
 });
 
 describe("tool schema context budget", () => {
-  it("shows the system prompt label once in the active locale", () => {
+  it("localizes every context memory block name and avoids duplicate labels", () => {
     const blocks = buildContextMemoryBlocks({
       breakdown: null,
       requestEstimate: null,
-      translate: (key) => key.endsWith("systemPromptName") ? "系统提示词" : key,
+      translate: (key) => ({
+        "chat.shortTermMemory.contextPanel.systemPromptName": "系统提示词",
+        "chat.shortTermMemory.contextPanel.toolSchemaName": "工具定义",
+        "chat.shortTermMemory.contextPanel.checkpointName": "当前会话检查点",
+        "chat.shortTermMemory.contextPanel.workingStateName": "当前会话工作状态",
+        "chat.shortTermMemory.contextPanel.familyContextName": "会话族上下文",
+        "chat.shortTermMemory.contextPanel.sessionHistoryName": "当前会话历史",
+      }[key] ?? key),
     });
 
-    expect(blocks[0]).toMatchObject({
-      meta: "",
-      name: "系统提示词",
-    });
+    expect(blocks.map((block) => block.name)).toEqual([
+      "系统提示词",
+      "工具定义",
+      "当前会话检查点",
+      "当前会话工作状态",
+      "会话族上下文",
+      "当前会话历史",
+    ]);
+    expect(blocks.slice(0, 2).map((block) => block.meta)).toEqual(["", ""]);
   });
 
   it.each([6_000, 0])("uses the independent schema limit %s", (limit) => {
