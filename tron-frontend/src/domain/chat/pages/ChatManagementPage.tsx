@@ -2657,7 +2657,7 @@ function ContextStructurePanel({
           {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
         </button>
       </div>
-      <div className="space-y-2">
+      <div className="divide-y divide-[var(--color-outline-variant)] rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
         {blocks.map((block) => (
           <ContextMemoryBlockRow block={block} key={block.code} />
         ))}
@@ -2671,25 +2671,27 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
   const percent = contextPercent(block.tokens, block.limitTokens);
   const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
   return (
-    <div className="rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-2.5">
-      <div className="min-w-0">
-        <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
+    <div className="py-3 first:pt-0 last:pb-0">
+      <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
+        <div className="flex min-w-0 items-baseline gap-1">
           <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
-          <div className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface)]">
-            {formatTokenLimit(block.tokens, block.limitTokens)}
-          </div>
+          {block.stat ? (
+            <div className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</div>
+          ) : null}
         </div>
-        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-          <div
-            className={cn("h-full rounded-full", colors.fill)}
-            style={{ width: `${fallbackPercent}%` }}
-          />
-        </div>
-        <div className="mt-1.5 flex min-w-0 items-center justify-between gap-[12px] text-[10px] text-[var(--color-on-surface-variant)]">
-          <span className="min-w-0 truncate">{block.meta}</span>
-          {block.stat ? <span className="shrink-0">{block.stat}</span> : null}
+        <div className="shrink-0 font-mono text-[11px] text-[var(--color-on-surface)]">
+          {formatTokenLimit(block.tokens, block.limitTokens)}
         </div>
       </div>
+      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+        <div
+          className={cn("h-full rounded-full", colors.fill)}
+          style={{ width: `${fallbackPercent}%` }}
+        />
+      </div>
+      {block.meta ? (
+        <div className="mt-1.5 truncate text-[10px] text-[var(--color-on-surface-variant)]">{block.meta}</div>
+      ) : null}
     </div>
   );
 }
