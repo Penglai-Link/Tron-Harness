@@ -2,7 +2,7 @@ import { Archive, Icon, LoaderCircle } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { useTranslation } from "react-i18next";
-import { archiveChatSession, createChatSession } from "@/domain/chat/hooks";
+import { archiveChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
 import { cn } from "@/shared/lib/utils";
 import { useToast } from "@/components/ui/toast";
@@ -38,23 +38,20 @@ const MessageItem = ({
     }
 
     window.dispatchEvent(new Event("tron:chat-session-archived"));
-    const projectCode = session.projectCode?.trim();
-    if (active && projectCode) {
-      try {
-        const replacement = await createChatSession({
-          agentCode: "main-agent",
-          projectCode,
-          title: "New chat",
-          workspaceCode: session.workspaceCode,
-        });
-        window.dispatchEvent(new Event("tron:chat-session-created"));
-        navigate(`/chats?sessionCode=${encodeURIComponent(replacement.sessionCode)}`);
-      } catch (error) {
-        toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.createFailed"));
-        navigate("/chats");
+    const tabStore = useTabStore.getState();
+    const archivedTab = tabStore.tabs.find(
+      (tab) => tab.activeNav === `chat-session:${session.sessionCode}`,
+    );
+    if (archivedTab) {
+      const wasActive = tabStore.activeTabId === archivedTab.id;
+      const nextTab = tabStore.tabs.find(
+        (tab) => !tab.hide && tab.id !== archivedTab.id,
+      );
+      tabStore.removeTab(archivedTab.id);
+      if (wasActive && nextTab) {
+        useTabStore.getState().setActiveTab(nextTab.id);
+        navigate(nextTab.path);
       }
-    } else if (active) {
-      navigate("/chats");
     }
     toast.success(t("shell:chatSidebar.session.archived"));
     setArchiving(false);
