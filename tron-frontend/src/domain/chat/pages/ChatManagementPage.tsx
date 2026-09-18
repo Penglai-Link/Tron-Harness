@@ -2683,7 +2683,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   return (
     <div className="py-2 first:pt-0 last:pb-0">
       {block.detailCode ? (
-        <button className="group w-full rounded-md px-2 text-left outline-none transition-colors duration-150 hover:bg-[var(--color-surface-container-low)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" onClick={() => setDialogOpen(true)}>
+        <button className="group w-full cursor-pointer rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" onClick={() => setDialogOpen(true)}>
           {contents}
         </button>
       ) : contents}
