@@ -2637,10 +2637,86 @@ function ContextStructurePanel({
   );
 }
 
+function ContextDetailTreeNode({
+  value,
+  label,
+  labelKind = "key",
+  depth = 0,
+}: {
+  value: unknown;
+  label?: string;
+  labelKind?: "key" | "index";
+  depth?: number;
+}) {
+  const isArray = Array.isArray(value);
+  const isObject = value !== null && typeof value === "object" && !isArray;
+  const entries: [string, unknown][] = isArray
+    ? value.map((item, index) => [String(index), item])
+    : isObject
+      ? Object.entries(value as Record<string, unknown>)
+      : [];
+  const isContainer = isArray || isObject;
+  const [expanded, setExpanded] = useState(depth < 2);
+  const labelContent = label == null ? null : (
+    <span className="break-all text-[var(--color-primary)]">
+      {label}{labelKind === "key" ? ":" : ""}
+    </span>
+  );
+
+  if (!isContainer || entries.length === 0) {
+    const renderedValue = isContainer ? (isArray ? "[]" : "{}") : JSON.stringify(value) ?? String(value);
+    return (
+      <div className="flex min-w-0 items-start gap-1.5 py-0.5">
+        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--color-outline-variant)]" aria-hidden="true" />
+        <div className="min-w-0 break-all">
+          {labelContent ? <>{labelContent} </> : null}
+          <span className={cn(
+            value === null ? "text-[var(--color-on-surface-variant)]" : "text-[var(--color-on-surface)]",
+            typeof value === "string" && "text-[var(--color-primary)]",
+          )}>
+            {renderedValue}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <button
+        aria-expanded={expanded}
+        className="group flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left outline-none transition-colors hover:text-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        {expanded ? <ChevronDown className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" /> : <ChevronRight className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" />}
+        {labelContent}
+        <span className="text-[var(--color-on-surface-variant)]">
+          {isArray ? `[${entries.length}]` : `{${entries.length}}`}
+        </span>
+      </button>
+      {expanded ? (
+        <div className="ml-2 border-l border-[var(--color-outline-variant)] py-0.5 pl-3">
+          {entries.map(([entryKey, entryValue]) => (
+            <ContextDetailTreeNode
+              depth={depth + 1}
+              key={entryKey}
+              label={isArray ? `[${entryKey}]` : entryKey}
+              labelKind={isArray ? "index" : "key"}
+              value={entryValue}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlockItem; sessionCode: string }) {
   const { t } = useTranslation("pages");
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detail, setDetail] = useState<unknown>(null);
+  const [detailViewMode, setDetailViewMode] = useState<"tree" | "raw">("tree");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const colors = contextBlockColorClasses[block.color];
@@ -2662,6 +2738,21 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     });
     return () => controller.abort();
   }, [block.detailCode, dialogOpen, sessionCode]);
+  let parsedDetail = detail;
+  let isStructuredDetail = detail !== null && typeof detail === "object";
+  if (typeof detail === "string") {
+    try {
+      parsedDetail = JSON.parse(detail) as unknown;
+      isStructuredDetail = parsedDetail !== null && typeof parsedDetail === "object";
+    } catch {
+      isStructuredDetail = false;
+    }
+  }
+  const rawDetail = detail == null
+    ? ""
+    : typeof detail === "string"
+      ? (isStructuredDetail ? JSON.stringify(parsedDetail, null, 2) : detail)
+      : JSON.stringify(detail, null, 2) ?? String(detail);
   const contents = (
     <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
@@ -2687,13 +2778,40 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
           {contents}
         </button>
       ) : contents}
-      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (open) setDetailViewMode("tree");
+      }}>
         <DialogContent className="grid max-h-[80vh] max-w-2xl grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
-          <h2 className="pr-8 text-sm font-semibold text-[var(--color-on-surface)]">{block.name}</h2>
+          <div className="flex min-w-0 items-center justify-between gap-3 pr-8">
+            <h2 className="truncate text-sm font-semibold text-[var(--color-on-surface)]">{block.name}</h2>
+            {isStructuredDetail ? (
+              <div className="flex shrink-0 items-center rounded-md bg-[var(--color-surface-container-low)] p-0.5">
+                <button
+                  aria-pressed={detailViewMode === "tree"}
+                  className={cn("rounded px-2 py-1 text-xs transition-colors", detailViewMode === "tree" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]")}
+                  type="button"
+                  onClick={() => setDetailViewMode("tree")}
+                >
+                  {t("chat.shortTermMemory.contextPanel.detailViewTree")}
+                </button>
+                <button
+                  aria-pressed={detailViewMode === "raw"}
+                  className={cn("rounded px-2 py-1 text-xs transition-colors", detailViewMode === "raw" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]")}
+                  type="button"
+                  onClick={() => setDetailViewMode("raw")}
+                >
+                  {t("chat.shortTermMemory.contextPanel.detailViewRaw")}
+                </button>
+              </div>
+            ) : null}
+          </div>
           <div className="min-h-0 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3">
             {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
-                : <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-[var(--color-on-surface)]">{detail == null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail, null, 2)}</pre>}
+                : isStructuredDetail && detailViewMode === "tree"
+                  ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode value={parsedDetail} /></div>
+                  : <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[var(--color-on-surface)]">{rawDetail}</pre>}
           </div>
         </DialogContent>
       </Dialog>
