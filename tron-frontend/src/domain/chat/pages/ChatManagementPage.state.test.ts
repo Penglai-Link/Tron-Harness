@@ -89,7 +89,7 @@ describe("tool schema context budget", () => {
       "会话族上下文",
       "当前会话历史",
     ]);
-    expect(blocks.slice(0, 2).map((block) => block.meta)).toEqual(["", ""]);
+    expect(blocks.every((block) => !("meta" in block))).toBe(true);
   });
 
   it.each([6_000, 0])("uses the independent schema limit %s", (limit) => {

@@ -2368,7 +2368,6 @@ interface ContextMemoryBlockItem {
   code: string;
   color: ContextBlockColor;
   limitTokens: number | null;
-  meta: string;
   name: string;
   stat: string;
   tokens: number;
@@ -2411,16 +2410,6 @@ export function buildContextMemoryBlocks({
   const checkpointTokens = breakdown?.checkpointTokens ?? 0;
   const checkpointCode = contextValue(requestEstimate?.checkpointCode);
   const hasCheckpointInRequest = Boolean(latestCompaction || checkpointCode || checkpointTokens > 0);
-  const checkpointMeta = latestCompaction
-    ? translate("chat.shortTermMemory.contextPanel.checkpointMeta", {
-      end: latestCompaction.sourceEndSeq,
-      start: latestCompaction.sourceStartSeq,
-    })
-    : checkpointCode
-      ? translate("chat.shortTermMemory.contextPanel.checkpointCodeMeta", { code: checkpointCode })
-      : checkpointTokens > 0
-        ? translate("chat.shortTermMemory.contextPanel.checkpointLoadedMeta")
-        : translate("chat.shortTermMemory.contextPanel.noCheckpointMeta");
   const checkpointStat = latestCompaction || checkpointCode
     ? translate("chat.shortTermMemory.contextPanel.checkpointStat")
     : checkpointTokens > 0
@@ -2429,21 +2418,11 @@ export function buildContextMemoryBlocks({
   const sharedInputBudget = breakdown?.effectiveInputBudget ?? requestEstimate?.effectiveInputBudget ?? null;
   const toolSchemaTokens = breakdown?.toolSchemaTokens ?? requestEstimate?.toolSchemaTokenEstimate ?? 0;
   const toolSchemaLimit = breakdown?.toolSchemaBudgetTokens ?? sharedInputBudget ?? breakdown?.contextWindowLimit ?? requestEstimate?.contextWindowLimit ?? null;
-  const compressedCount = breakdown?.compressedHistoryMessageCount ?? 0;
-  const rawTailCount = breakdown?.rawTailMessageCount ?? 0;
-  const historyMeta = compressedCount > 0
-    ? translate("chat.shortTermMemory.contextPanel.compressedHistoryMeta", {
-      compressed: compressedCount,
-      tail: rawTailCount,
-    })
-    : translate("chat.shortTermMemory.contextPanel.historyMeta");
-
   return [
     {
       code: "01",
       color: "seed",
       limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
-      meta: "",
       name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
         count: breakdown?.promptPrefixMessageCount ?? 0,
@@ -2454,7 +2433,6 @@ export function buildContextMemoryBlocks({
       code: "02",
       color: "tool",
       limitTokens: toolSchemaLimit,
-      meta: "",
       name: translate("chat.shortTermMemory.contextPanel.toolSchemaName"),
       stat: "",
       tokens: toolSchemaTokens,
@@ -2463,7 +2441,6 @@ export function buildContextMemoryBlocks({
       code: "03",
       color: "checkpoint",
       limitTokens: breakdown?.checkpointBudgetTokens ?? null,
-      meta: checkpointMeta,
       name: translate("chat.shortTermMemory.contextPanel.checkpointName"),
       stat: hasCheckpointInRequest ? checkpointStat : translate("chat.shortTermMemory.contextPanel.none"),
       tokens: checkpointTokens,
@@ -2472,7 +2449,6 @@ export function buildContextMemoryBlocks({
       code: "04",
       color: "state",
       limitTokens: breakdown?.workingStateBudgetTokens ?? null,
-      meta: translate("chat.shortTermMemory.contextPanel.workingStateMeta"),
       name: translate("chat.shortTermMemory.contextPanel.workingStateName"),
       stat: translate("chat.shortTermMemory.contextPanel.workingStateStat", {
         goals: activeGoalCount,
@@ -2484,7 +2460,6 @@ export function buildContextMemoryBlocks({
       code: "05",
       color: "family",
       limitTokens: breakdown?.sessionFamilyContextBudgetTokens ?? null,
-      meta: translate("chat.shortTermMemory.contextPanel.familyMeta"),
       name: translate("chat.shortTermMemory.contextPanel.familyContextName"),
       stat: breakdown?.sessionFamilyContextTokens
         ? translate("chat.shortTermMemory.contextPanel.loaded")
@@ -2495,7 +2470,6 @@ export function buildContextMemoryBlocks({
       code: "06",
       color: "history",
       limitTokens: breakdown?.currentSessionHistoryBudgetTokens ?? null,
-      meta: historyMeta,
       name: translate("chat.shortTermMemory.contextPanel.sessionHistoryName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", { count: historyMessageCount }),
       tokens: breakdown?.recentTranscriptTokens ?? requestEstimate?.messageTokenEstimate ?? 0,
@@ -2657,7 +2631,7 @@ function ContextStructurePanel({
           {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
         </button>
       </div>
-      <div className="divide-y divide-[var(--color-outline-variant)] rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
+      <div className="divide-y divide-[var(--color-outline-variant)] rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-2">
         {blocks.map((block) => (
           <ContextMemoryBlockRow block={block} key={block.code} />
         ))}
@@ -2671,7 +2645,7 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
   const percent = contextPercent(block.tokens, block.limitTokens);
   const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
   return (
-    <div className="py-3 first:pt-0 last:pb-0">
+    <div className="py-2 first:pt-0 last:pb-0">
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
         <div className="flex min-w-0 items-baseline gap-1">
           <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
@@ -2683,15 +2657,12 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
           {formatTokenLimit(block.tokens, block.limitTokens)}
         </div>
       </div>
-      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
+      <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
         <div
           className={cn("h-full rounded-full", colors.fill)}
           style={{ width: `${fallbackPercent}%` }}
         />
       </div>
-      {block.meta ? (
-        <div className="mt-1.5 truncate text-[10px] text-[var(--color-on-surface-variant)]">{block.meta}</div>
-      ) : null}
     </div>
   );
 }
