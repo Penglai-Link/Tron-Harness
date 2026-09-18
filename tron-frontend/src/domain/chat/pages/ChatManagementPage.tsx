@@ -2794,7 +2794,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     : null;
   const detailTreeLabels: ContextDetailTreeLabels = {
     arrayItem: (index) => t("chat.shortTermMemory.contextPanel.detailArrayItem", { index }),
-    arraySummary: (count) => t("chat.shortTermMemory.contextPanel.detailArraySummary", { count }),
+    arraySummary: (count) => t("chat.shortTermMemory.contextPanel.detailArraySummary", { total: count }),
     emptyArray: t("chat.shortTermMemory.contextPanel.detailEmptyArray"),
     emptyObject: t("chat.shortTermMemory.contextPanel.detailEmptyObject"),
   };

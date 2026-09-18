@@ -908,7 +908,7 @@ export const pages = {
         detailViewTree: "Tree",
         detailViewRaw: "Raw JSON",
         detailArrayItem: "Item {{index}}",
-        detailArraySummary: "Array · {{count}} items",
+        detailArraySummary: "Array · {{total}} items",
         detailEmptyArray: "Empty array",
         detailEmptyObject: "Empty object",
         detailFullTextUnavailable: "This older snapshot only saved a truncated preview. The full messages cannot be recovered; a later run will save the complete content.",

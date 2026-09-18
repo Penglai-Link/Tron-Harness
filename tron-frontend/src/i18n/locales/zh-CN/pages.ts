@@ -887,7 +887,7 @@ export const pages = {
         detailViewTree: "结构",
         detailViewRaw: "原文",
         detailArrayItem: "第 {{index}} 项",
-        detailArraySummary: "数组 · {{count}} 项",
+        detailArraySummary: "数组 · {{total}} 项",
         detailEmptyArray: "空数组",
         detailEmptyObject: "空对象",
         detailFullTextUnavailable: "此会话的旧快照只保存了截断预览，无法还原完整消息。下次运行后可查看完整内容。",
