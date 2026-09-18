@@ -867,7 +867,7 @@ export const pages = {
         skills: "Skills",
       },
       contextPanel: {
-        overview: "Short-Term Memory Overview",
+        shortTermMemory: "Short-Term Memory",
         windowSuffix: "window",
         healthy: "Healthy",
         nearCompaction: "Near compaction",
@@ -905,15 +905,14 @@ export const pages = {
         toolSchemaName: "Tool Schema",
         checkpointName: "Current Session Checkpoint",
         workingStateName: "Current Session Working State",
-        familyContextName: "Session Family Context",
+        familyContextName: "Related Sessions",
         sessionHistoryName: "Current Session History",
-        structure: "Context Structure",
         budgetFormulaAria: "View context budget calculation",
         budgetFormulaTitle: "Budget calculation",
         effectiveInputFormula:
           "Effective input budget = model context window − output reserve",
         historyFormula:
-          "Current session history budget =\neffective input budget\n− Seed Prompt\n− Checkpoint\n− Session Family Context\n− Working State\n− Tool Schema",
+          "Current session history budget =\neffective input budget\n− Seed Prompt\n− Checkpoint\n− Related Sessions\n− Working State\n− Tool Schema",
         budgetFormulaNote:
           "Fixed input blocks are deducted first; the remainder retains recent conversation history.",
         checkpointStat: "1 checkpoint",

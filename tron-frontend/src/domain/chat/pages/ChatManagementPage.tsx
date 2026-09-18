@@ -2479,14 +2479,20 @@ export function buildContextMemoryBlocks({
 
 function ContextOverviewPanel({
   breakdown,
+  compactionBusy,
   fallbackWindowLimit,
   modelLabel,
+  onCreateCompaction,
   requestEstimate,
+  session,
 }: {
   breakdown: ChatContextBudgetBreakdown | null;
+  compactionBusy?: boolean;
   fallbackWindowLimit?: number | null;
   modelLabel: string;
+  onCreateCompaction?: () => void;
   requestEstimate: ChatTokenEstimateSnapshot | null;
+  session?: ChatSession;
 }) {
   const { t } = useTranslation("pages");
   const usedTokens = breakdown?.estimatedInputTokens ?? requestEstimate?.estimatedInputTokens ?? (fallbackWindowLimit ? 0 : null);
@@ -2497,33 +2503,48 @@ function ContextOverviewPanel({
   const statusTone = contextStatusTone(requestEstimate, breakdown);
 
   return (
-    <section className="space-y-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
+    <div className="min-w-0 space-y-3">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
-            {t("chat.shortTermMemory.contextPanel.overview")}
+          <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface)]">
+            {t("chat.shortTermMemory.contextPanel.shortTermMemory")}
           </h3>
           <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
             {requestEstimate?.modelName || requestEstimate?.modelCode || modelLabel}
             {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
           </p>
         </div>
-        <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
-          {statusLabel}
-        </Badge>
-      </div>
-      <div className="flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <div className="text-2xl font-semibold text-[var(--color-on-surface)]">
-            {formatCompactTokenCount(usedTokens)}
-          </div>
-          <div className="text-[11px] text-[var(--color-on-surface-variant)]">
-            {t("chat.shortTermMemory.contextPanel.inputBudget", {
-              budget: formatCompactTokenCount(inputBudget),
-            })}
-          </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
+            {statusLabel}
+          </Badge>
+          <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="end">
+            <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
+              <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
+              <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
+              <p className="whitespace-pre-line">{t("chat.shortTermMemory.contextPanel.historyFormula")}</p>
+              <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
+            </div>
+          </InfoTooltip>
+          <button
+            aria-label={t("chat.shortTermMemory.createCheckpoint")}
+            className={iconButtonClass()}
+            disabled={!session || compactionBusy}
+            title={t("chat.shortTermMemory.createCheckpoint")}
+            type="button"
+            onClick={onCreateCompaction}
+          >
+            {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
+          </button>
         </div>
-        <div className="pb-0.5 text-sm font-medium text-[var(--color-on-surface-variant)]">
+      </div>
+      <div className="flex min-w-0 items-baseline justify-between gap-3">
+        <div className="min-w-0 truncate text-2xl font-bold text-[var(--color-on-surface)]">
+          {formatCompactTokenCount(usedTokens)}
+          <span className="px-1">/</span>
+          {formatCompactTokenCount(inputBudget)}
+        </div>
+        <div className="shrink-0 text-sm font-medium text-[var(--color-on-surface-variant)]">
           {formatPercent(percent)}
         </div>
       </div>
@@ -2536,7 +2557,7 @@ function ContextOverviewPanel({
           style={{ width: `${percent}%` }}
         />
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -2594,49 +2615,17 @@ function ContextStat({ label, value }: { label: string; value: string }) {
 
 function ContextStructurePanel({
   blocks,
-  compactionBusy,
-  onCreateCompaction,
-  session,
 }: {
   blocks: ContextMemoryBlockItem[];
-  compactionBusy?: boolean;
-  onCreateCompaction?: () => void;
-  session?: ChatSession;
 }) {
-  const { t } = useTranslation("pages");
   return (
-    <section className="space-y-2">
-      <div className="flex min-w-0 items-center justify-between gap-[12px]">
-        <div className="flex min-w-0 items-center gap-1">
-          <h3 className="truncate text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
-            {t("chat.shortTermMemory.contextPanel.structure")}
-          </h3>
-          <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="start">
-            <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
-              <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
-              <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
-              <p className="whitespace-pre-line">{t("chat.shortTermMemory.contextPanel.historyFormula")}</p>
-              <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
-            </div>
-          </InfoTooltip>
-        </div>
-        <button
-          aria-label={t("chat.shortTermMemory.createCheckpoint")}
-          className={iconButtonClass()}
-          disabled={!session || compactionBusy}
-          title={t("chat.shortTermMemory.createCheckpoint")}
-          type="button"
-          onClick={onCreateCompaction}
-        >
-          {compactionBusy ? <LoaderCircle className="animate-spin" size={15} /> : <BookmarkPlus size={15} />}
-        </button>
-      </div>
-      <div className="divide-y divide-[var(--color-outline-variant)] rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-2">
+    <div>
+      <div className="divide-y divide-[var(--color-outline-variant)]">
         {blocks.map((block) => (
           <ContextMemoryBlockRow block={block} key={block.code} />
         ))}
       </div>
-    </section>
+    </div>
   );
 }
 
@@ -3190,20 +3179,22 @@ function RightContextSidebar({
     translate: (key, options) => t(key, options),
   });
   return (
-    <section className="space-y-5 text-sm">
-      <ContextOverviewPanel
-        breakdown={budgetBreakdown}
-        fallbackWindowLimit={fallbackWindowLimit}
-        modelLabel={modelLabel}
-        requestEstimate={requestEstimate}
-      />
-      {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
-      <ContextStructurePanel
-        blocks={contextBlocks}
-        compactionBusy={compactionBusy || latestCompactionStatus?.loading}
-        onCreateCompaction={onCreateCompaction}
-        session={session}
-      />
+    <section className="space-y-3 text-sm">
+      <div className="space-y-2 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3" data-testid="context-short-term-memory-card">
+        <ContextOverviewPanel
+          breakdown={budgetBreakdown}
+          compactionBusy={compactionBusy || latestCompactionStatus?.loading}
+          fallbackWindowLimit={fallbackWindowLimit}
+          modelLabel={modelLabel}
+          onCreateCompaction={onCreateCompaction}
+          requestEstimate={requestEstimate}
+          session={session}
+        />
+        <div className="border-t border-[var(--color-outline-variant)] pt-2">
+          {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
+          <ContextStructurePanel blocks={contextBlocks} />
+        </div>
+      </div>
       {latestCompactionStatus?.error ? (
         <QueryStatusLine
           errorText={t("chat.shortTermMemory.loadFailed")}

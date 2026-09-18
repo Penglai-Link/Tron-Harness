@@ -437,7 +437,8 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
   await expect(sidebar.getByText("Pending", { exact: true })).toBeVisible();
 
   await sidebar.getByRole("tab", { name: "Context" }).click();
-  await expect(sidebar.getByText("Context Structure")).toBeVisible();
+  await expect(sidebar.getByTestId("context-short-term-memory-card")).toBeVisible();
+  await expect(sidebar.getByText("Short-Term Memory", { exact: true })).toBeVisible();
   await expect(sidebar.getByTestId("context-runtime-notice")).toContainText("Context compacted");
   await expect(sidebar.getByText("Tool Schema", { exact: true }).locator("..")).toContainText("1.8k / 6k");
   await expect(sidebar.getByText("Current Session Checkpoint")).toBeVisible();
@@ -452,7 +453,7 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
   await page.locator("#tron-locale-select").click();
   await page.getByRole("option", { name: "Simplified Chinese" }).click();
   await page.keyboard.press("Escape");
-  await expect(sidebar.getByText("上下文结构")).toBeVisible();
+  await expect(sidebar.getByText("短期记忆", { exact: true })).toBeVisible();
   await expect(sidebar.getByTestId("context-runtime-notice")).toContainText("上下文已压缩");
   await expect(sidebar.getByText("Tool Schema", { exact: true }).locator("..")).toContainText("1.8k / 6k");
 });
