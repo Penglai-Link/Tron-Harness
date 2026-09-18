@@ -2637,16 +2637,26 @@ function ContextStructurePanel({
   );
 }
 
+type ContextDetailTreeLabels = {
+  arrayItem: (index: number) => string;
+  arraySummary: (count: number) => string;
+  emptyArray: string;
+  emptyObject: string;
+  objectSummary: (count: number) => string;
+};
+
 function ContextDetailTreeNode({
   value,
   label,
   labelKind = "key",
   depth = 0,
+  labels,
 }: {
   value: unknown;
   label?: string;
   labelKind?: "key" | "index";
   depth?: number;
+  labels: ContextDetailTreeLabels;
 }) {
   const isArray = Array.isArray(value);
   const isObject = value !== null && typeof value === "object" && !isArray;
@@ -2657,14 +2667,19 @@ function ContextDetailTreeNode({
       : [];
   const isContainer = isArray || isObject;
   const [expanded, setExpanded] = useState(depth < 2);
-  const labelContent = label == null ? null : (
+  const visibleLabel = labelKind === "index" && label != null
+    ? labels.arrayItem(Number(label) + 1)
+    : label;
+  const labelContent = visibleLabel == null ? null : (
     <span className="break-all text-[var(--color-primary)]">
-      {label}{labelKind === "key" ? ":" : ""}
+      {visibleLabel}{labelKind === "key" ? ":" : ""}
     </span>
   );
 
   if (!isContainer || entries.length === 0) {
-    const renderedValue = isContainer ? (isArray ? "[]" : "{}") : JSON.stringify(value) ?? String(value);
+    const renderedValue = isContainer
+      ? (isArray ? labels.emptyArray : labels.emptyObject)
+      : JSON.stringify(value) ?? String(value);
     return (
       <div className="flex min-w-0 items-start gap-1.5 py-0.5">
         <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--color-outline-variant)]" aria-hidden="true" />
@@ -2692,7 +2707,7 @@ function ContextDetailTreeNode({
         {expanded ? <ChevronDown className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" /> : <ChevronRight className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" />}
         {labelContent}
         <span className="text-[var(--color-on-surface-variant)]">
-          {isArray ? `[${entries.length}]` : `{${entries.length}}`}
+          {isArray ? labels.arraySummary(entries.length) : labels.objectSummary(entries.length)}
         </span>
       </button>
       {expanded ? (
@@ -2701,8 +2716,9 @@ function ContextDetailTreeNode({
             <ContextDetailTreeNode
               depth={depth + 1}
               key={entryKey}
-              label={isArray ? `[${entryKey}]` : entryKey}
+              label={entryKey}
               labelKind={isArray ? "index" : "key"}
+              labels={labels}
               value={entryValue}
             />
           ))}
@@ -2753,6 +2769,13 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     : typeof detail === "string"
       ? (isStructuredDetail ? JSON.stringify(parsedDetail, null, 2) : detail)
       : JSON.stringify(detail, null, 2) ?? String(detail);
+  const detailTreeLabels: ContextDetailTreeLabels = {
+    arrayItem: (index) => t("chat.shortTermMemory.contextPanel.detailArrayItem", { index }),
+    arraySummary: (count) => t("chat.shortTermMemory.contextPanel.detailArraySummary", { count }),
+    emptyArray: t("chat.shortTermMemory.contextPanel.detailEmptyArray"),
+    emptyObject: t("chat.shortTermMemory.contextPanel.detailEmptyObject"),
+    objectSummary: (count) => t("chat.shortTermMemory.contextPanel.detailObjectSummary", { count }),
+  };
   const contents = (
     <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
@@ -2810,7 +2833,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
             {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
                 : isStructuredDetail && detailViewMode === "tree"
-                  ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode value={parsedDetail} /></div>
+                  ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
                   : <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[var(--color-on-surface)]">{rawDetail}</pre>}
           </div>
         </DialogContent>
