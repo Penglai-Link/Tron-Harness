@@ -4494,6 +4494,8 @@ export function ChatManagementPage() {
   const [shortTermMemoryRefreshKey, setShortTermMemoryRefreshKey] = useState(0);
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
   const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
+  const sessionGroupsRef = useRef(sessionGroups);
+  sessionGroupsRef.current = sessionGroups;
   const pendingUserInputSessionCodes = useMemo(
     () => new Set(
       sessionGroups.flatMap((group) => group.pendingUserInputSessionCodes ?? []),
@@ -4766,16 +4768,28 @@ export function ChatManagementPage() {
   function scheduleSessionTitleRefresh(session: ChatSession) {
     const defaultTitle = session.title.trim().toLocaleLowerCase();
     if (defaultTitle !== "new chat" && defaultTitle !== "main agent") return;
-    [500, 1500, 3000, 6000, 12000].forEach((delay) => {
+    let attempts = 0;
+    const refreshUntilTitleChanges = () => {
+      attempts += 1;
+      setActiveChatDataRefreshKey((current) => current + 1);
+      window.dispatchEvent(new Event("tron:chat-session-updated"));
+
+      const refreshedSession = findSession(
+        sessionGroupsRef.current,
+        session.sessionCode,
+      );
+      if (refreshedSession && refreshedSession.title !== session.title) return;
+      if (attempts >= 35) return;
+
       const timer = window.setTimeout(() => {
         sessionTitleRefreshTimersRef.current = sessionTitleRefreshTimersRef.current.filter(
           (candidate) => candidate !== timer,
         );
-        setActiveChatDataRefreshKey((current) => current + 1);
-        window.dispatchEvent(new Event("tron:chat-session-updated"));
-      }, delay);
+        refreshUntilTitleChanges();
+      }, 1000);
       sessionTitleRefreshTimersRef.current.push(timer);
-    });
+    };
+    refreshUntilTitleChanges();
   }
 
   useEffect(() => () => {
