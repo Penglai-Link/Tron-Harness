@@ -2666,7 +2666,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
         <div className="flex min-w-0 items-baseline gap-1">
-          <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
+          <div className="truncate text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]">{block.name}</div>
           {block.stat ? (
             <div className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</div>
           ) : null}
@@ -2683,7 +2683,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   return (
     <div className="py-2 first:pt-0 last:pb-0">
       {block.detailCode ? (
-        <button className="w-full rounded text-left outline-none hover:bg-[var(--color-hover-surface)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" onClick={() => setDialogOpen(true)}>
+        <button className="group w-full rounded-md px-2 text-left outline-none transition-colors duration-150 hover:bg-[var(--color-surface-container-low)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" onClick={() => setDialogOpen(true)}>
           {contents}
         </button>
       ) : contents}
