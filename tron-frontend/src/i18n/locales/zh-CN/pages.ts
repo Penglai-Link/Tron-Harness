@@ -890,7 +890,7 @@ export const pages = {
         detailArraySummary: "数组 · {{count}} 项",
         detailEmptyArray: "空数组",
         detailEmptyObject: "空对象",
-        detailObjectSummary: "对象 · {{count}} 个字段",
+        detailObjectLabel: "对象",
         checkpointName: "当前会话检查点",
         workingStateName: "当前会话工作状态",
         familyContextName: "相关会话",
