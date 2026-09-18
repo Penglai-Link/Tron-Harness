@@ -67,6 +67,7 @@ impl ShortTermMemoryService {
                     "messageCount": memory.prompt_prefix.len(),
                     "hash": prompt_prefix_hash,
                     "preview": prompt_prefix_preview(&memory.prompt_prefix),
+                    "messages": prompt_prefix_messages(&memory.prompt_prefix),
                 },
                 "familyContext": family_context,
                 // Keep `tools` as the backward-compatible model-exposure snapshot.
@@ -192,6 +193,18 @@ fn prompt_prefix_preview(messages: &[AgentMessage]) -> Option<String> {
     } else {
         Some(truncate_chars(text, 512))
     }
+}
+
+fn prompt_prefix_messages(messages: &[AgentMessage]) -> Vec<Value> {
+    messages
+        .iter()
+        .map(|message| {
+            json!({
+                "role": message.role,
+                "content": message.text_content(),
+            })
+        })
+        .collect()
 }
 
 fn role_hash(messages: &[AgentMessage], role: &str) -> Option<String> {

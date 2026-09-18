@@ -2637,6 +2637,29 @@ function ContextStructurePanel({
   );
 }
 
+type ContextPromptPrefixMessage = {
+  role: string;
+  content: string;
+};
+
+function isContextDetailRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isContextPromptPrefixMessage(value: unknown): value is ContextPromptPrefixMessage {
+  return isContextDetailRecord(value)
+    && typeof value.role === "string"
+    && typeof value.content === "string";
+}
+
+function contextPromptPrefixMessages(detail: unknown): ContextPromptPrefixMessage[] | null {
+  if (!isContextDetailRecord(detail) || !isContextDetailRecord(detail.promptPrefix)) return null;
+  const messages = detail.promptPrefix.messages;
+  return Array.isArray(messages) && messages.every(isContextPromptPrefixMessage)
+    ? messages
+    : null;
+}
+
 type ContextDetailTreeLabels = {
   arrayItem: (index: number) => string;
   arraySummary: (count: number) => string;
@@ -2766,6 +2789,9 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     : typeof detail === "string"
       ? (isStructuredDetail ? JSON.stringify(parsedDetail, null, 2) : detail)
       : JSON.stringify(detail, null, 2) ?? String(detail);
+  const promptMessages = block.detailCode === "systemPrompt"
+    ? contextPromptPrefixMessages(parsedDetail)
+    : null;
   const detailTreeLabels: ContextDetailTreeLabels = {
     arrayItem: (index) => t("chat.shortTermMemory.contextPanel.detailArrayItem", { index }),
     arraySummary: (count) => t("chat.shortTermMemory.contextPanel.detailArraySummary", { count }),
@@ -2828,7 +2854,34 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
           <div className="min-h-0 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3">
             {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
-                : isStructuredDetail && detailViewMode === "tree"
+                : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "tree"
+                  ? <div className="space-y-3">
+                      <p className="rounded-md bg-[var(--color-surface-container-low)] px-3 py-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
+                        {t("chat.shortTermMemory.contextPanel.detailFullTextUnavailable")}
+                      </p>
+                      <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
+                    </div>
+                  : block.detailCode === "systemPrompt" && promptMessages && detailViewMode === "tree"
+                    ? promptMessages.length > 0
+                      ? <div className="space-y-3">
+                          {promptMessages.map((message, index) => (
+                            <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)]" key={`${index}-${message.role}`}>
+                              <div className="flex items-center justify-between gap-3 bg-[var(--color-surface-container-low)] px-3 py-2">
+                                <span className="text-xs font-semibold text-[var(--color-on-surface)]">
+                                  {t("chat.shortTermMemory.contextPanel.detailPromptMessage", { index: index + 1 })}
+                                </span>
+                                <span className="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
+                                  {message.role}
+                                </span>
+                              </div>
+                              <pre className="whitespace-pre-wrap break-words px-3 py-3 font-mono text-xs leading-5 text-[var(--color-on-surface)] [overflow-wrap:anywhere]">
+                                {message.content}
+                              </pre>
+                            </article>
+                          ))}
+                        </div>
+                      : <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailPromptEmpty")}</p>
+                    : isStructuredDetail && detailViewMode === "tree"
                   ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
                   : <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[var(--color-on-surface)]">{rawDetail}</pre>}
           </div>
