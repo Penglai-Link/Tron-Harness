@@ -880,7 +880,7 @@ export const pages = {
               "工具定义约 {{actual}} token，超过 {{limit}} 上限（{{count}} 个工具）。",
           },
         },
-        systemPromptName: "System Prompt",
+        systemPromptName: "系统提示词",
         structure: "上下文结构",
         budgetFormulaAria: "查看上下文预算计算方式",
         budgetFormulaTitle: "预算计算方式",
@@ -888,7 +888,6 @@ export const pages = {
         historyFormula:
           "当前会话历史预算 =\n有效输入预算\n− Seed Prompt\n− Checkpoint\n− Session Family Context\n− Working State\n− Tool Schema",
         budgetFormulaNote: "历史预算先扣除固定输入块，再用于保留最近对话。",
-        seedMeta: "系统提示词",
         toolMeta: "工具定义",
         checkpointMeta: "seq {{start}}-{{end}}",
         checkpointCodeMeta: "{{code}}",

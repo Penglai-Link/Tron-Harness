@@ -2443,7 +2443,7 @@ export function buildContextMemoryBlocks({
       code: "01",
       color: "seed",
       limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
-      meta: translate("chat.shortTermMemory.contextPanel.seedMeta"),
+      meta: "",
       name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
         count: breakdown?.promptPrefixMessageCount ?? 0,

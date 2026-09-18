@@ -911,7 +911,6 @@ export const pages = {
           "Current session history budget =\neffective input budget\n− Seed Prompt\n− Checkpoint\n− Session Family Context\n− Working State\n− Tool Schema",
         budgetFormulaNote:
           "Fixed input blocks are deducted first; the remainder retains recent conversation history.",
-        seedMeta: "system prompt",
         toolMeta: "tool definition",
         checkpointMeta: "seq {{start}}-{{end}}",
         checkpointCodeMeta: "{{code}}",

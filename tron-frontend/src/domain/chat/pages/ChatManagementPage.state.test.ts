@@ -67,6 +67,19 @@ describe("chat model default selection", () => {
 });
 
 describe("tool schema context budget", () => {
+  it("shows the system prompt label once in the active locale", () => {
+    const blocks = buildContextMemoryBlocks({
+      breakdown: null,
+      requestEstimate: null,
+      translate: (key) => key.endsWith("systemPromptName") ? "系统提示词" : key,
+    });
+
+    expect(blocks[0]).toMatchObject({
+      meta: "",
+      name: "系统提示词",
+    });
+  });
+
   it.each([6_000, 0])("uses the independent schema limit %s", (limit) => {
     const breakdown = normalizeContextBudgetBreakdown({
       estimatedInputTokens: 10_000,
