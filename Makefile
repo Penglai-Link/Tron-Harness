@@ -313,8 +313,8 @@ be-clean:
 endif
 
 .PHONY: be-dev
-ifeq ($(HOST_OS),windows)
 be-dev:
+ifeq ($(HOST_OS),windows)
 	$(POWERSHELL) -NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command "if (-not $$env:HOME -and $$env:USERPROFILE) { $$env:HOME = $$env:USERPROFILE }; if (Test-Path -LiteralPath '$(BACKEND_ENV_FILE)') { Get-Content -LiteralPath '$(BACKEND_ENV_FILE)' | Where-Object { $$_.Trim() -and -not $$_.TrimStart().StartsWith('#') } | ForEach-Object { $$parts = $$_.Split('=', 2); if ($$parts.Length -eq 2) { [Environment]::SetEnvironmentVariable($$parts[0].Trim(), $$parts[1].Trim(), 'Process') } } }; if ('$(PORT)') { $$env:TRON_BACKEND_PORT = '$(PORT)' }; if ('$(GRAPH_STORAGE_PATH)') { $$env:TRON_BACKEND_GRAPH_STORAGE_PATH = '$(GRAPH_STORAGE_PATH)' }; & '$(CARGO)' run --manifest-path '$(BACKEND_MANIFEST)' --bin tron-backend; exit $$LASTEXITCODE"
 else
 	$(call LOAD_ENV_FILE,$(BACKEND_ENV_FILE)) $(COMMAND_SEPARATOR) $(call RUN_WITH_ENV,$(BE_RUN_ENV),$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)" --bin tron-backend)
