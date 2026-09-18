@@ -93,6 +93,7 @@ import {
 } from "@/domain/chat/hooks";
 import { useAuthSession } from "@/domain/auth";
 import { useTranslation } from "react-i18next";
+import { useTabStore } from "@/store/tabStore";
 import { fetchWorkspaceInternalAgents, fetchWorkspaceSystemAgents } from "@/domain/agent/api";
 import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "@/domain/agent/mock";
 import type { SystemAgentModelRecord, WorkspaceInternalAgentRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
@@ -5024,6 +5025,22 @@ export function ChatManagementPage() {
   useEffect(() => {
     setSessionGroups(orderSessionGroups(groups));
   }, [groups]);
+
+  useEffect(() => {
+    const activeSession = requestedSessionCode
+      ? findSession(sessionGroups, requestedSessionCode)
+      : undefined;
+    if (!activeSession?.title.trim()) return;
+    const tab = useTabStore
+      .getState()
+      .tabs.find((item) => item.activeNav === `chat-session:${activeSession.sessionCode}`);
+    if (tab && tab.title !== activeSession.title) {
+      useTabStore.getState().updateTab(tab.id, {
+        title: activeSession.title,
+        titleTranslationKey: undefined,
+      });
+    }
+  }, [requestedSessionCode, sessionGroups]);
 
   useEffect(() => {
     const refresh = () => setActiveChatDataRefreshKey((current) => current + 1);
