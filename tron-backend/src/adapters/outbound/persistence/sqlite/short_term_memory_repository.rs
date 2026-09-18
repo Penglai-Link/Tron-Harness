@@ -237,6 +237,13 @@ impl ShortTermMemoryRepository for SqliteShortTermMemoryRepository {
         repository_context::latest_context_epoch_revision(&self.connection, session_code)
     }
 
+    fn latest_context_epoch_snapshot(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Option<serde_json::Value>, ShortTermMemoryError> {
+        repository_context::latest_context_epoch_snapshot(&self.connection, session_code)
+    }
+
     fn list_messages_after_seq(
         &mut self,
         session_code: &str,

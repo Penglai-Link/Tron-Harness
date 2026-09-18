@@ -9,7 +9,7 @@ use crate::{
         auth::RequestAuthContext,
         chats::{
             error_mapper::{chat_error_response, steer_chat_message_request_rejection_response},
-            handler::stream_message_command,
+            handler::{ensure_no_active_run, stream_message_command},
         },
     },
     app::AppState,
@@ -61,6 +61,9 @@ pub async fn answer_user_input(
             "resume payload must contain answers".into(),
         ));
     };
+    if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
     let command = match state
         .chats
         .answer_user_input(&session_code, &request_code, answers)

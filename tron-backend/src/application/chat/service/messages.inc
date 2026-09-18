@@ -75,6 +75,8 @@ impl ChatService {
         } else {
             resume_prompt(&command.resume)
         };
+        let transcript_user_content = resume_user_message(&command.resume)
+            .unwrap_or_else(|| content.clone());
         let should_generate_title = should_generate_manual_session_title(&session);
         let workspace_code = session.workspace_code.clone();
         let channel = if command
@@ -106,16 +108,16 @@ impl ChatService {
             .repository()
             .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)
             .map_err(ChatSendError::Chat)?;
-        let user_message = if content.is_empty() && attachments.is_empty() {
+        let user_message = if transcript_user_content.is_empty() && attachments.is_empty() {
             None
         } else {
             Some(self.create_message(
                 session_code,
-                None,
+                (!command.resume.is_empty()).then(|| run_code.clone()),
                 ChatMessageRole::User,
                 channel,
                 "User",
-                &content,
+                &transcript_user_content,
                 attachments.clone(),
                 None,
             )?)

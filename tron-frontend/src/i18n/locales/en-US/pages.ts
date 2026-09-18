@@ -903,6 +903,8 @@ export const pages = {
         },
         systemPromptName: "System Prompt",
         toolSchemaName: "Tool Schema",
+        detailLoading: "Loading context details...",
+        detailFailed: "Unable to load details. Run this session again if context has not been assembled yet.",
         checkpointName: "Current Session Checkpoint",
         workingStateName: "Current Session Working State",
         familyContextName: "Related Sessions",

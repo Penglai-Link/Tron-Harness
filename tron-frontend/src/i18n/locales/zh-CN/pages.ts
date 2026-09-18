@@ -882,6 +882,8 @@ export const pages = {
         },
         systemPromptName: "系统提示词",
         toolSchemaName: "工具定义",
+        detailLoading: "正在查询上下文内容...",
+        detailFailed: "查询失败，请稍后重试。若此会话尚未运行过，内容会在下一次运行后提供。",
         checkpointName: "当前会话检查点",
         workingStateName: "当前会话工作状态",
         familyContextName: "相关会话",

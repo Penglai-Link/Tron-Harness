@@ -150,6 +150,11 @@ fn agent_prompt_for_content(content: &str) -> String {
 }
 
 fn resume_prompt(resume: &[ChatResumeEntry]) -> String {
+    if let Some(summary) = resume_answer_summary(resume) {
+        return format!(
+            "Continue the interrupted task using the user's answers below. Treat them as the user's response to the questions you asked, then continue the task without asking the same questions again unless a new ambiguity blocks progress.\n\n{summary}"
+        );
+    }
     let payload = resume
         .iter()
         .map(|entry| {
@@ -164,6 +169,22 @@ fn resume_prompt(resume: &[ChatResumeEntry]) -> String {
         "Resume the interrupted task using these user responses: {}",
         json!(payload)
     )
+}
+
+fn resume_answer_summary(resume: &[ChatResumeEntry]) -> Option<String> {
+    let responses = resume.iter().flat_map(|entry| {
+        entry.payload.get("responses").and_then(Value::as_array).into_iter().flatten()
+    }).filter_map(|response| {
+        let question = response.get("question")?.as_str()?.trim();
+        let answer = response.get("answer")?.as_str()?.trim();
+        (!question.is_empty()).then(|| format!("- {question}\n  Answer: {}", if answer.is_empty() { "Skipped" } else { answer }))
+    }).collect::<Vec<_>>();
+    (!responses.is_empty()).then(|| responses.join("\n"))
+}
+
+fn resume_user_message(resume: &[ChatResumeEntry]) -> Option<String> {
+    resume_answer_summary(resume)
+        .map(|summary| format!("The user answered the questions you asked:\n{summary}"))
 }
 
 fn chat_error_from_resource(error: ResourceError) -> ChatError {

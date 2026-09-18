@@ -60,6 +60,23 @@ pub(super) fn latest_context_epoch_revision(
         .map_err(storage_error)
 }
 
+pub(super) fn latest_context_epoch_snapshot(
+    connection: &Connection,
+    session_code: &str,
+) -> Result<Option<serde_json::Value>, ShortTermMemoryError> {
+    connection
+        .query_row(
+            "SELECT snapshot_json FROM agent_transcript_context_epochs
+             WHERE session_code = ?1 ORDER BY revision DESC LIMIT 1",
+            [session_code],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()
+        .map_err(storage_error)?
+        .map(|value| serde_json::from_str(&value).map_err(|_| ShortTermMemoryError::StorageFailure))
+        .transpose()
+}
+
 pub(super) fn latest_compaction(
     connection: &Connection,
     session_code: &str,

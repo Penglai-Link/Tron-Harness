@@ -18,6 +18,7 @@ impl ShortTermMemoryService {
     pub(super) fn record_context_epoch(
         &self,
         context: &AgentRunContext,
+        prepared: &super::PreparedModelContext,
         budget_plan: &ModelContextBudgetPlan,
         assembled_message_count: usize,
         estimated_tokens: u32,
@@ -43,6 +44,12 @@ impl ShortTermMemoryService {
             "compaction": self.config.compaction,
             "goalLoop": self.config.goal_loop,
         });
+        let family_context = prepared.messages.iter().flat_map(|message| message.parts.iter()).filter_map(|part| {
+            match part {
+                crate::domain::agent::AgentMessagePart::Context { kind, text, .. } if kind == "session_family_context" => Some(text.clone()),
+                _ => None,
+            }
+        }).collect::<Vec<_>>().join("\n\n");
         let memory_hash = hash_json(&memory_policy);
         let epoch = ShortTermMemoryContextEpoch {
             id: 0,
@@ -61,6 +68,7 @@ impl ShortTermMemoryService {
                     "hash": prompt_prefix_hash,
                     "preview": prompt_prefix_preview(&memory.prompt_prefix),
                 },
+                "familyContext": family_context,
                 // Keep `tools` as the backward-compatible model-exposure snapshot.
                 "tools": exposed_tools_snapshot.clone(),
                 "exposedTools": exposed_tools_snapshot,

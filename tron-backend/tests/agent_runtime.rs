@@ -297,6 +297,13 @@ impl ShortTermMemoryRepository for ContextEpochFailingRepository {
         Ok(0)
     }
 
+    fn latest_context_epoch_snapshot(
+        &mut self,
+        _session_code: &str,
+    ) -> Result<Option<serde_json::Value>, ShortTermMemoryError> {
+        Ok(None)
+    }
+
     fn list_messages_after_seq(
         &mut self,
         _session_code: &str,

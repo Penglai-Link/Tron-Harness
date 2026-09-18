@@ -108,7 +108,8 @@ import {
   formatReasoningEffort,
   reasoningEffortOptions,
 } from "@/domain/model/constants/modelPageOptions";
-import { getApiAccessToken, isApiError } from "@/shared/api/httpClient";
+import { getApiAccessToken, isApiError, requestApi } from "@/shared/api/httpClient";
+import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { TronChatRuntimeWindow } from "@tron/chat-react";
@@ -172,6 +173,7 @@ import {
 } from "../api/chatAttachmentApi";
 import DraggleLine from "@/components/draggle-line";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -2367,6 +2369,7 @@ type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "family" | "
 interface ContextMemoryBlockItem {
   code: string;
   color: ContextBlockColor;
+  detailCode?: "systemPrompt" | "toolSchema" | "familyContext";
   limitTokens: number | null;
   name: string;
   stat: string;
@@ -2422,6 +2425,7 @@ export function buildContextMemoryBlocks({
     {
       code: "01",
       color: "seed",
+      detailCode: "systemPrompt",
       limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
       name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
@@ -2432,6 +2436,7 @@ export function buildContextMemoryBlocks({
     {
       code: "02",
       color: "tool",
+      detailCode: "toolSchema",
       limitTokens: toolSchemaLimit,
       name: translate("chat.shortTermMemory.contextPanel.toolSchemaName"),
       stat: "",
@@ -2459,6 +2464,7 @@ export function buildContextMemoryBlocks({
     {
       code: "05",
       color: "family",
+      detailCode: "familyContext",
       limitTokens: breakdown?.sessionFamilyContextBudgetTokens ?? null,
       name: translate("chat.shortTermMemory.contextPanel.familyContextName"),
       stat: breakdown?.sessionFamilyContextTokens
@@ -2614,27 +2620,50 @@ function ContextStat({ label, value }: { label: string; value: string }) {
 }
 
 function ContextStructurePanel({
+  sessionCode,
   blocks,
 }: {
+  sessionCode: string;
   blocks: ContextMemoryBlockItem[];
 }) {
   return (
     <div>
-      <div className="divide-y divide-[var(--color-outline-variant)]">
+      <div>
         {blocks.map((block) => (
-          <ContextMemoryBlockRow block={block} key={block.code} />
+          <ContextMemoryBlockRow block={block} key={block.code} sessionCode={sessionCode} />
         ))}
       </div>
     </div>
   );
 }
 
-function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
+function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlockItem; sessionCode: string }) {
+  const { t } = useTranslation("pages");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [detail, setDetail] = useState<unknown>(null);
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const colors = contextBlockColorClasses[block.color];
   const percent = contextPercent(block.tokens, block.limitTokens);
   const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
-  return (
-    <div className="py-2 first:pt-0 last:pb-0">
+  useEffect(() => {
+    if (!dialogOpen || !block.detailCode) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError(false);
+    setDetail(null);
+    void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
+      queryParams: { sessionCode, blockCode: block.detailCode },
+      signal: controller.signal,
+    }).then(setDetail).catch(() => {
+      if (!controller.signal.aborted) setLoadError(true);
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [block.detailCode, dialogOpen, sessionCode]);
+  const contents = (
+    <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
         <div className="flex min-w-0 items-baseline gap-1">
           <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
@@ -2647,11 +2676,27 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
         </div>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-        <div
-          className={cn("h-full rounded-full", colors.fill)}
-          style={{ width: `${fallbackPercent}%` }}
-        />
+        <div className={cn("h-full rounded-full", colors.fill)} style={{ width: `${fallbackPercent}%` }} />
       </div>
+    </>
+  );
+  return (
+    <div className="py-2 first:pt-0 last:pb-0">
+      {block.detailCode ? (
+        <button className="w-full rounded text-left outline-none hover:bg-[var(--color-hover-surface)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" onClick={() => setDialogOpen(true)}>
+          {contents}
+        </button>
+      ) : contents}
+      <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
+        <DialogContent className="grid max-h-[80vh] max-w-2xl grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+          <h2 className="pr-8 text-sm font-semibold text-[var(--color-on-surface)]">{block.name}</h2>
+          <div className="min-h-0 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3">
+            {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
+              : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
+                : <pre className="whitespace-pre-wrap break-words font-mono text-xs leading-5 text-[var(--color-on-surface)]">{detail == null ? "" : typeof detail === "string" ? detail : JSON.stringify(detail, null, 2)}</pre>}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -2707,7 +2752,7 @@ function ProviderUsagePanel({
           value={formatCompactTokenCount(reasoningTokens)}
         />
       </div>
-      <div className="border-t border-[var(--color-outline-variant)] pt-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
+      <div className="pt-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
         {requestEstimate ? (
           <span>
             {t("chat.shortTermMemory.contextPanel.providerDelta", {
@@ -3190,9 +3235,9 @@ function RightContextSidebar({
           requestEstimate={requestEstimate}
           session={session}
         />
-        <div className="border-t border-[var(--color-outline-variant)] pt-2">
+        <div className="pt-2">
           {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
-          <ContextStructurePanel blocks={contextBlocks} />
+          <ContextStructurePanel blocks={contextBlocks} sessionCode={session?.sessionCode ?? ""} />
         </div>
       </div>
       {latestCompactionStatus?.error ? (

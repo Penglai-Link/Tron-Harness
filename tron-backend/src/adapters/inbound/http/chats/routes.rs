@@ -13,7 +13,7 @@ use super::handler::{
 use super::run_control::{get_active_run, stop_run};
 use super::short_term_memory::{
     cancel_goal, clear_goal, create_compaction, get_goal, get_latest_compaction, get_latest_goal,
-    get_todos, pause_goal, resume_goal, set_goal, update_goal,
+    get_context_detail, get_todos, pause_goal, resume_goal, set_goal, update_goal,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -24,6 +24,7 @@ pub fn routes() -> Router<AppState> {
         .route("/api/v1/chats/sessions/steer-message", post(steer_message))
         .route("/api/v1/chats/sessions/stop-run", post(stop_run))
         .route("/api/v1/chats/sessions/get-todos", get(get_todos))
+        .route("/api/v1/chats/sessions/get-context-detail", get(get_context_detail))
         .route(
             "/api/v1/chats/sessions/get-latest-compaction",
             get(get_latest_compaction),

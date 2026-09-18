@@ -40,6 +40,37 @@ pub async fn get_todos(
     }
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct ContextDetailQuery {
+    session_code: String,
+    block_code: String,
+}
+
+pub async fn get_context_detail(
+    State(state): State<AppState>,
+    _auth: RequestAuthContext,
+    query: Result<Query<ContextDetailQuery>, QueryRejection>,
+) -> Response {
+    let Query(query) = match query {
+        Ok(query) => query,
+        Err(error) => return invalid_request_response(error.to_string()),
+    };
+    if query.session_code.trim().is_empty()
+        || !matches!(query.block_code.as_str(), "systemPrompt" | "toolSchema" | "familyContext")
+    {
+        return invalid_request_response("sessionCode and a supported blockCode are required");
+    }
+    match state.short_term_memory.context_detail(&query.session_code, &query.block_code) {
+        Ok(Some(detail)) => Json(ApiResponse::success(detail)).into_response(),
+        Ok(None) => (
+            StatusCode::NOT_FOUND,
+            Json(ApiResponse::error("CHAT_CONTEXT_DETAIL_NOT_FOUND", "context detail is not available for this session")),
+        ).into_response(),
+        Err(error) => short_term_memory_error_response(error),
+    }
+}
+
 pub async fn get_latest_compaction(
     State(state): State<AppState>,
     _auth: RequestAuthContext,

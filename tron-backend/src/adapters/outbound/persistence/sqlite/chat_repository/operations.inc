@@ -383,4 +383,5 @@ impl ChatRepository for SqliteChatRepository {
             .find(|item| item.request_code == request_code)
             .ok_or(ChatError::UserInputRequestNotFound)
     }
+
 }

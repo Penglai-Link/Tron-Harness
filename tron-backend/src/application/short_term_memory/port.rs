@@ -66,6 +66,10 @@ pub trait ShortTermMemoryRepository: Send {
         &mut self,
         session_code: &str,
     ) -> Result<i64, ShortTermMemoryError>;
+    fn latest_context_epoch_snapshot(
+        &mut self,
+        session_code: &str,
+    ) -> Result<Option<serde_json::Value>, ShortTermMemoryError>;
     fn list_messages_after_seq(
         &mut self,
         session_code: &str,

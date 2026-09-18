@@ -1,4 +1,23 @@
 impl ShortTermMemoryService {
+    pub fn context_detail(
+        &self,
+        session_code: &str,
+        block_code: &str,
+    ) -> Result<Option<serde_json::Value>, ShortTermMemoryError> {
+        let snapshot = self.repository().latest_context_epoch_snapshot(session_code)?;
+        let detail = match (block_code, snapshot.as_ref()) {
+            ("systemPrompt", Some(snapshot)) => snapshot.get("promptPrefix").cloned(),
+            ("toolSchema", Some(snapshot)) => snapshot
+                .get("exposedTools")
+                .or_else(|| snapshot.get("tools"))
+                .cloned(),
+            ("familyContext", Some(snapshot)) => snapshot.get("familyContext").cloned(),
+            (_, None) => None,
+            _ => None,
+        };
+        Ok(detail)
+    }
+
     pub fn prepare_model_context(
         &self,
         context: &AgentRunContext,
@@ -238,6 +257,7 @@ impl ShortTermMemoryService {
         let prepared = full_prepared;
         self.record_context_epoch(
             context,
+            &prepared,
             &budget_plan,
             prepared.messages.len(),
             prepared.estimated_tokens,
