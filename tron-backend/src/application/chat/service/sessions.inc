@@ -30,7 +30,7 @@ impl ChatService {
                     project_code.as_deref().expect("project code is checked"),
                 )
                 .map_err(|_| ChatError::ProjectInvalid)?;
-            Some(project.primary_app.app_code)
+            project.primary_app.map(|app| app.app_code)
         } else {
             normalized_optional(command.app_code)
         };

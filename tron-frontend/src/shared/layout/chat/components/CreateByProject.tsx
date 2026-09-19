@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { SquarePen } from "lucide-react";
+import { Plus } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router";
 import { createChatSession } from "@/domain/chat/hooks";
@@ -38,7 +38,9 @@ const CreateByProject = ({
         title: "New chat",
         agentCode: "main-agent",
       });
-      window.dispatchEvent(new Event("tron:chat-session-created"));
+      window.dispatchEvent(
+        new CustomEvent("tron:chat-session-created", { detail: session }),
+      );
       navigate(`/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("shell:chatSidebar.session.createFailed"));
@@ -51,7 +53,7 @@ const CreateByProject = ({
     <IconButton
       className="shrink-0 p-0"
       disabled={creating}
-      icon={SquarePen}
+      icon={Plus}
       needHover
       onClick={(event) => {
         event.stopPropagation();

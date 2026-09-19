@@ -6,7 +6,6 @@ pub fn project_error_response(error: ProjectError) -> Response {
         ProjectError::NotFound => (StatusCode::NOT_FOUND, "PROJECT_NOT_FOUND", "project was not found"),
         ProjectError::ProjectCodeInvalid => (StatusCode::BAD_REQUEST, "PROJECT_CODE_INVALID", "projectCode is invalid"),
         ProjectError::NameRequired => (StatusCode::BAD_REQUEST, "PROJECT_NAME_REQUIRED", "project name is required"),
-        ProjectError::AppsRequired => (StatusCode::BAD_REQUEST, "PROJECT_APPS_REQUIRED", "project requires at least one active app"),
         ProjectError::DuplicateApp => (StatusCode::BAD_REQUEST, "PROJECT_APP_DUPLICATE", "project cannot include an app more than once"),
         ProjectError::DuplicateName => (StatusCode::CONFLICT, "PROJECT_NAME_DUPLICATE", "project name already exists in the workspace"),
         ProjectError::PrimaryAppInvalid => (StatusCode::BAD_REQUEST, "PROJECT_PRIMARY_APP_INVALID", "primaryAppCode must be one of the selected apps"),

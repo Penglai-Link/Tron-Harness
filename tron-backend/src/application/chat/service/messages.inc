@@ -151,10 +151,10 @@ impl ChatService {
                 .map_err(|_| ChatSendError::Chat(ChatError::ProjectInvalid))?;
             Some(AgentExecutionScope {
                 project_code: Some(project.project_code),
-                app_code: Some(project.primary_app.app_code.clone()),
-                repository_url: project.primary_app.repository_url.clone(),
-                local_directory: Some(project.primary_app.local_directory.clone()),
-                branch_name: project.primary_app.default_branch.clone(),
+                app_code: project.primary_app.as_ref().map(|app| app.app_code.clone()),
+                repository_url: project.primary_app.as_ref().and_then(|app| app.repository_url.clone()),
+                local_directory: project.primary_app.as_ref().map(|app| app.local_directory.clone()),
+                branch_name: project.primary_app.as_ref().and_then(|app| app.default_branch.clone()),
                 task_code: session.task_code.clone(),
                 allowed_local_directories: project
                     .linked_apps

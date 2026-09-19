@@ -25,7 +25,6 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Settings2,
-  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -167,6 +166,7 @@ export function TronShell({
   const { src: avatarSrc } = useManagedAvatar(authSession?.user.avatarUrl);
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
+  const navigateToPath = useCallback((path: string) => navigate(path), [navigate]);
   const shellFrameMounted = useContext(TronShellFrameContext);
   const agentOpen = useAppShellStore((state) => state.agentOpen);
   const closeFloatingPanels = useAppShellStore((state) => state.closeFloatingPanels);
@@ -1110,17 +1110,6 @@ export function TronShell({
                 data-testid="tron-mobile-right-sidebar"
                 id="tron-mobile-right-sidebar"
               >
-                <div className="mb-4 flex justify-end">
-                  <Button
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                    aria-label={t("shell:aria.closeRightSidebar")}
-                    onClick={closeRightDrawer}
-                  >
-                    <X size={17} aria-hidden="true" />
-                  </Button>
-                </div>
                 <RightPanelContainer />
               </aside>
             </>
@@ -1129,12 +1118,20 @@ export function TronShell({
           <TronSidebar
             activeItem={activeItem}
             activeHref={pathname}
+            activeSessionCode={new URLSearchParams(search).get("sessionCode") ?? ""}
+            navigateToPath={navigateToPath}
             navigation={visibleNavigation}
             openNavigationItems={openNavigationItems}
             openSections={openSections}
             renderDomainSelector={renderNavigationDomainSelector}
             renderFooter={renderSidebarUserSection}
-            renderChatPanel={(compact) => <ChatSidebarPanel compact={compact} />}
+            renderChatPanel={(compact, activeSessionCode, navigateToPath) => (
+              <ChatSidebarPanel
+                activeSessionCode={activeSessionCode}
+                compact={compact}
+                navigateToPath={navigateToPath}
+              />
+            )}
             setOpenNavigationItems={setOpenNavigationItems}
             translate={(key, options) => t(key, options)}
             onNavigate={handleSidebarNavigationClick}

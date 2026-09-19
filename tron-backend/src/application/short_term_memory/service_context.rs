@@ -30,11 +30,15 @@ impl ShortTermMemoryService {
         };
         let now = current_timestamp();
         let prompt_prefix_hash = hash_json(&prompt_prefix_snapshot(&memory.prompt_prefix));
+        let epoch_code = self.next_code("ATCE")?;
         let exposed_tools_snapshot = tools_snapshot(&context.tools);
         let effective_tools_snapshot = tools_snapshot(context.authorized_tools());
+        let hidden_tools_snapshot = tools_snapshot(&context.tool_exposure.hidden_tools);
         let tool_hash = hash_json(&exposed_tools_snapshot);
-        let skill_hash = hash_json(&skills_snapshot(context));
-        let variable_hash = hash_json(&variables_snapshot(context));
+        let skills = skills_snapshot(context);
+        let skill_hash = hash_json(&skills);
+        let variables = variables_snapshot(context, self.variable_cipher.as_deref(), &epoch_code)?;
+        let variable_hash = hash_json(&variables_hash_snapshot(context));
         let execution_scope_hash = hash_json(&json!(context.execution_scope));
         let memory_policy = json!({
             "todoEnabled": memory.todo_enabled,
@@ -53,7 +57,7 @@ impl ShortTermMemoryService {
         let memory_hash = hash_json(&memory_policy);
         let epoch = ShortTermMemoryContextEpoch {
             id: 0,
-            epoch_code: self.next_code("ATCE")?,
+            epoch_code: epoch_code.clone(),
             session_code: memory.session_code.clone(),
             workspace_code: context.workspace_code.clone(),
             baseline_seq: 0,
@@ -61,12 +65,12 @@ impl ShortTermMemoryService {
             agent_code: memory.agent_code.clone(),
             prompt_prefix_message_count: memory.prompt_prefix.len() as u32,
             prompt_prefix_hash: Some(prompt_prefix_hash.clone()),
-            prompt_prefix_preview: prompt_prefix_preview(&memory.prompt_prefix),
+            // Full prompt messages are stored below; keep the legacy preview column empty.
+            prompt_prefix_preview: None,
             snapshot_json: json!({
                 "promptPrefix": {
                     "messageCount": memory.prompt_prefix.len(),
                     "hash": prompt_prefix_hash,
-                    "preview": prompt_prefix_preview(&memory.prompt_prefix),
                     "messages": prompt_prefix_messages(&memory.prompt_prefix),
                 },
                 "familyContext": family_context,
@@ -74,8 +78,15 @@ impl ShortTermMemoryService {
                 "tools": exposed_tools_snapshot.clone(),
                 "exposedTools": exposed_tools_snapshot,
                 "effectiveTools": effective_tools_snapshot,
-                "skills": skills_snapshot(context),
-                "variables": variables_snapshot(context),
+                "skills": skills,
+                "variables": variables,
+                "toolDiscovery": {
+                    "mode": context.tool_exposure.tool_exposure_mode,
+                    "expandedDomainPersistenceMode": context.tool_exposure.expanded_domain_persistence_mode,
+                    "visibleDomains": context.tool_exposure.visible_domains,
+                    "expandedDomainCodes": context.tool_exposure.expanded_domain_codes,
+                    "hiddenTools": hidden_tools_snapshot,
+                },
                 "executionScope": context.execution_scope,
                 "memory": {
                     "policyHash": memory_hash,
@@ -180,21 +191,6 @@ fn prompt_prefix_snapshot(messages: &[AgentMessage]) -> Value {
     )
 }
 
-fn prompt_prefix_preview(messages: &[AgentMessage]) -> Option<String> {
-    let text = messages
-        .iter()
-        .take(4)
-        .map(|message| format!("{}: {}", message.role, message.text_content()))
-        .collect::<Vec<_>>()
-        .join("\n");
-    let text = text.trim();
-    if text.is_empty() {
-        None
-    } else {
-        Some(truncate_chars(text, 512))
-    }
-}
-
 fn prompt_prefix_messages(messages: &[AgentMessage]) -> Vec<Value> {
     messages
         .iter()
@@ -224,6 +220,8 @@ fn tools_snapshot(tools: &[crate::domain::agent::EffectiveTool]) -> Value {
                 "name": tool.tool_name,
                 "domainCode": tool.domain_code,
                 "skillName": tool.skill_name,
+                "description": tool.description,
+                "inputSchema": tool.input_schema,
                 "schemaHash": hash_json(&tool.input_schema),
                 "requiredVariableKeys": tool.required_variable_keys,
             }))
@@ -238,6 +236,8 @@ fn skills_snapshot(context: &AgentRunContext) -> Value {
             .iter()
             .map(|skill| json!({
                 "name": skill.skill_name,
+                "description": skill.description,
+                "instruction": skill.instruction,
                 "instructionHash": skill.instruction.as_ref().map(|value| hash_text(value)),
                 "toolNames": skill.tool_names,
             }))
@@ -245,19 +245,45 @@ fn skills_snapshot(context: &AgentRunContext) -> Value {
     )
 }
 
-fn variables_snapshot(context: &AgentRunContext) -> Value {
-    json!(
-        context
-            .variables
-            .iter()
-            .map(|variable| json!({
+fn variables_snapshot(
+    context: &AgentRunContext,
+    cipher: Option<&dyn crate::application::variable::VariableCipher>,
+    epoch_code: &str,
+) -> Result<Value, ShortTermMemoryError> {
+    let variables = context
+        .variables
+        .iter()
+        .map(|variable| {
+            let mut snapshot = json!({
                 "key": variable.key,
                 "source": variable.source,
                 "sensitive": variable.sensitive,
                 "valueHash": hash_text(&variable.value),
-            }))
-            .collect::<Vec<_>>()
-    )
+            });
+            if variable.sensitive {
+                let cipher = cipher.ok_or(ShortTermMemoryError::StorageFailure)?;
+                let aad = format!("context-epoch:{epoch_code}:variable:{}", variable.key);
+                let encrypted = cipher
+                    .encrypt(&variable.value, aad.as_bytes())
+                    .map_err(|_| ShortTermMemoryError::StorageFailure)?;
+                snapshot["encryptedValue"] = serde_json::to_value(encrypted)
+                    .map_err(|_| ShortTermMemoryError::StorageFailure)?;
+            } else {
+                snapshot["value"] = Value::String(variable.value.clone());
+            }
+            Ok(snapshot)
+        })
+        .collect::<Result<Vec<_>, ShortTermMemoryError>>()?;
+    Ok(Value::Array(variables))
+}
+
+fn variables_hash_snapshot(context: &AgentRunContext) -> Value {
+    json!(context.variables.iter().map(|variable| json!({
+        "key": variable.key,
+        "source": variable.source,
+        "sensitive": variable.sensitive,
+        "valueHash": hash_text(&variable.value),
+    })).collect::<Vec<_>>())
 }
 
 fn hash_json(value: &Value) -> String {
@@ -268,16 +294,4 @@ fn hash_text(value: &str) -> String {
     let mut hasher = Sha256::new();
     hasher.update(value.as_bytes());
     format!("sha256:{}", hex::encode(hasher.finalize()))
-}
-
-fn truncate_chars(value: &str, max_chars: usize) -> String {
-    if value.chars().count() <= max_chars {
-        return value.to_string();
-    }
-    let mut text = value
-        .chars()
-        .take(max_chars.saturating_sub(24))
-        .collect::<String>();
-    text.push_str("\n...[preview truncated]");
-    text
 }

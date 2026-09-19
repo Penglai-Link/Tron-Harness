@@ -1,6 +1,5 @@
 import { AUTH_CALLBACK_PATH, useBootstrapAuthSession } from "@/domain/auth";
 import { Navigate, Route, Routes } from "react-router";
-import ConsoleFallbackRoutePage from "./route-page/ConsoleFallbackRoutePage";
 import EntryRoutePage from "./route-page/EntryRoutePage";
 import HomePage from "./route-page/HomePage";
 import PublicRoutePage from "./route-page/PublicRoutePage";
@@ -117,25 +116,18 @@ export default function RoutedApp() {
             </ProtectedRoute>
           }
         />
-        {appRoutePaths.map((path) => (
-          <Route
-            element={
-              <ProtectedRoute>
-                <AppRoutePage />
-              </ProtectedRoute>
-            }
-            key={path}
-            path={path}
-          />
-        ))}
         <Route
-          path="*"
           element={
             <ProtectedRoute>
-              <ConsoleFallbackRoutePage />
+              <AppRoutePage />
             </ProtectedRoute>
           }
-        />
+        >
+          {appRoutePaths.map((path) => (
+            <Route key={path} path={path} />
+          ))}
+          <Route path="*" />
+        </Route>
         </Routes>
       </TabPanelRegistryProvider>
     </FilePanelHostProvider>

@@ -724,6 +724,55 @@ function latestUsageAuditFromEvents(events: TranscriptAguiEvent[]) {
   return parsedUsageAudit(latestEventValue(events, "usage_audit_json"));
 }
 
+function sessionProviderUsageFromEvents(events: TranscriptAguiEvent[]): ChatTokenUsage | null {
+  const seen = new Set<string>();
+  const totals = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  let hasUsage = false;
+  let cachedInputTokens = 0;
+  let hasCachedInput = false;
+  let reasoningTokens = 0;
+  let hasReasoning = false;
+
+  events.forEach((event) => {
+    const metadata = aguiEventMetadata(event);
+    const audit = parsedUsageAudit(metadata?.usage_audit_json);
+    const usage = audit?.providerUsage;
+    if (!usage) return;
+
+    const eventId = "id" in event && typeof event.id === "string" ? event.id : "";
+    const key = eventId || [
+      aguiEventRunCode(event),
+      aguiEventTime(event),
+      audit.responseId ?? "",
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.totalTokens,
+    ].join("\u0000");
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    hasUsage = true;
+    totals.inputTokens += usage.inputTokens;
+    totals.outputTokens += usage.outputTokens;
+    totals.totalTokens += usage.totalTokens;
+    if (usage.cachedInputTokens != null) {
+      hasCachedInput = true;
+      cachedInputTokens += usage.cachedInputTokens;
+    }
+    if (usage.reasoningTokens != null) {
+      hasReasoning = true;
+      reasoningTokens += usage.reasoningTokens;
+    }
+  });
+
+  if (!hasUsage) return null;
+  return {
+    ...totals,
+    cachedInputTokens: hasCachedInput ? cachedInputTokens : null,
+    reasoningTokens: hasReasoning ? reasoningTokens : null,
+  };
+}
+
 function shortTermMemoryEventPayload(event: TranscriptAguiEvent): Record<string, unknown> | null {
   if ("value" in event && typeof event.value === "object" && event.value !== null) {
     return event.value as Record<string, unknown>;
@@ -820,13 +869,6 @@ function contextPercent(usedTokens: number | null | undefined, limitTokens: numb
 function formatPercent(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "-";
   return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)}%`;
-}
-
-function formatSignedPercentFromRatio(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "-";
-  const percent = (value - 1) * 100;
-  const sign = percent > 0 ? "+" : "";
-  return `${sign}${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(percent)}%`;
 }
 
 function safeSubtract(minuend: number | null | undefined, subtrahend: number | null | undefined) {
@@ -2512,9 +2554,27 @@ function ContextOverviewPanel({
     <div className="min-w-0 space-y-3">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface)]">
-            {t("chat.shortTermMemory.contextPanel.shortTermMemory")}
-          </h3>
+          <div className="flex items-center gap-1">
+            <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface)]">
+              {t("chat.shortTermMemory.contextPanel.shortTermMemory")}
+            </h3>
+            <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="start">
+              <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
+                <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
+                <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
+                <p className="whitespace-pre-line">
+                  {t("chat.shortTermMemory.contextPanel.historyFormula", {
+                    systemPrompt: t("chat.shortTermMemory.contextPanel.systemPromptName"),
+                    checkpoint: t("chat.shortTermMemory.contextPanel.checkpointName"),
+                    familyContext: t("chat.shortTermMemory.contextPanel.familyContextName"),
+                    workingState: t("chat.shortTermMemory.contextPanel.workingStateName"),
+                    toolSchema: t("chat.shortTermMemory.contextPanel.toolSchemaName"),
+                  })}
+                </p>
+                <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
+              </div>
+            </InfoTooltip>
+          </div>
           <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
             {requestEstimate?.modelName || requestEstimate?.modelCode || modelLabel}
             {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
@@ -2524,14 +2584,6 @@ function ContextOverviewPanel({
           <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
             {statusLabel}
           </Badge>
-          <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="end">
-            <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
-              <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
-              <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
-              <p className="whitespace-pre-line">{t("chat.shortTermMemory.contextPanel.historyFormula")}</p>
-              <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
-            </div>
-          </InfoTooltip>
           <button
             aria-label={t("chat.shortTermMemory.createCheckpoint")}
             className={iconButtonClass()}
@@ -2892,23 +2944,20 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
 }
 
 function ProviderUsagePanel({
+  events,
   fallbackSessionUsage,
   usageAudit,
 }: {
+  events: TranscriptAguiEvent[];
   fallbackSessionUsage: { input: number | null; output: number | null; total: number | null };
   usageAudit: ChatUsageAuditSnapshot | null;
 }) {
   const { t } = useTranslation("pages");
   const providerUsage = usageAudit?.providerUsage ?? null;
+  const previousRunUsage = usageAudit?.cumulativeRunUsage ?? providerUsage;
+  const sessionUsage = sessionProviderUsageFromEvents(events);
   const requestEstimate = usageAudit?.requestEstimate ?? null;
-  const actualInput = providerUsage?.inputTokens ?? fallbackSessionUsage.input;
-  const cachedInput = providerUsage?.cachedInputTokens ?? null;
-  const reasoningTokens = providerUsage?.reasoningTokens ?? null;
-  const actualTotal = providerUsage?.totalTokens ?? fallbackSessionUsage.total;
-  const inputBudget = requestEstimate?.effectiveInputBudget ?? requestEstimate?.contextWindowLimit ?? null;
-  const inputPercent = contextPercent(actualInput, inputBudget);
-  const cachedPercent = contextPercent(cachedInput, actualInput);
-  const reasoningPercent = contextPercent(reasoningTokens, actualTotal);
+  const sessionInput = sessionUsage?.inputTokens ?? fallbackSessionUsage.input;
 
   return (
     <section className="space-y-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
@@ -2916,74 +2965,46 @@ function ProviderUsagePanel({
         <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
           {t("chat.shortTermMemory.contextSections.providerUsage")}
         </h3>
-        <p className="text-[11px] text-[var(--color-on-surface-variant)]">
-          {t("chat.shortTermMemory.contextPanel.providerSubtitle")}
+      </div>
+      <div>
+        <h4 className="mb-1.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+          {t("chat.shortTermMemory.contextPanel.currentSessionUsage")}
+        </h4>
+        <div className="grid grid-cols-3 gap-1.5">
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(sessionInput)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(sessionUsage?.cachedInputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(sessionUsage?.reasoningTokens)} />
+        </div>
+      </div>
+      <div>
+        <h4 className="mb-1.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+          {t("chat.shortTermMemory.contextPanel.previousRunUsage")}
+        </h4>
+        <div className="grid grid-cols-3 gap-1.5">
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(previousRunUsage?.inputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(previousRunUsage?.cachedInputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(previousRunUsage?.reasoningTokens)} />
+        </div>
+        <p className="mt-2 rounded-md bg-[var(--color-surface-container-low)] px-2 py-1.5 text-[10px] leading-4 text-[var(--color-on-surface-variant)]">
+          {requestEstimate ? (
+            <>
+              {t("chat.shortTermMemory.contextPanel.providerDelta", {
+                actual: formatCompactTokenCount(providerUsage?.inputTokens),
+                delta: formatCompactTokenCount(usageAudit?.inputTokenDelta),
+                estimate: formatCompactTokenCount(requestEstimate.estimatedInputTokens),
+              })}
+              {usageAudit?.calibrationFactor ? (
+                <span> {t("chat.shortTermMemory.contextPanel.calibration", {
+                  factor: new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(usageAudit.calibrationFactor),
+                })}</span>
+              ) : null}
+            </>
+          ) : (
+            t("chat.shortTermMemory.contextPanel.providerUnavailable")
+          )}
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-1.5">
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(actualInput)} />
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(cachedInput)} />
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(reasoningTokens)} />
-      </div>
-      <div className="space-y-2">
-        <ProviderUsageLine
-          label={t("chat.shortTermMemory.contextPanel.input")}
-          percent={inputPercent}
-          value={usageAudit?.inputTokenRatio ? formatSignedPercentFromRatio(usageAudit.inputTokenRatio) : formatCompactTokenCount(actualInput)}
-        />
-        <ProviderUsageLine
-          label={t("chat.shortTermMemory.contextPanel.cached")}
-          percent={cachedPercent}
-          value={formatPercent(cachedInput == null ? null : cachedPercent)}
-        />
-        <ProviderUsageLine
-          label={t("chat.shortTermMemory.contextPanel.reasoning")}
-          percent={reasoningPercent}
-          value={formatCompactTokenCount(reasoningTokens)}
-        />
-      </div>
-      <div className="pt-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
-        {requestEstimate ? (
-          <span>
-            {t("chat.shortTermMemory.contextPanel.providerDelta", {
-              actual: formatCompactTokenCount(providerUsage?.inputTokens),
-              delta: formatCompactTokenCount(usageAudit?.inputTokenDelta),
-              estimate: formatCompactTokenCount(requestEstimate.estimatedInputTokens),
-            })}
-            {usageAudit?.calibrationFactor ? (
-              <span> {t("chat.shortTermMemory.contextPanel.calibration", {
-                factor: new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(usageAudit.calibrationFactor),
-              })}</span>
-            ) : null}
-          </span>
-        ) : (
-          t("chat.shortTermMemory.contextPanel.providerUnavailable")
-        )}
-      </div>
     </section>
-  );
-}
-
-function ProviderUsageLine({
-  label,
-  percent,
-  value,
-}: {
-  label: string;
-  percent: number;
-  value: string;
-}) {
-  return (
-    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)_3.75rem] items-center gap-[12px] text-[11px] text-[var(--color-on-surface-variant)]">
-      <span className="truncate">{label}</span>
-      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-        <span
-          className="block h-full rounded-full bg-[var(--color-on-surface-variant)]"
-          style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
-        />
-      </span>
-      <span className="truncate text-right font-mono text-[var(--color-on-surface)]">{value}</span>
-    </div>
   );
 }
 
@@ -3438,7 +3459,7 @@ function RightContextSidebar({
           status={latestCompactionStatus}
         />
       ) : null}
-      <ProviderUsagePanel fallbackSessionUsage={usage} usageAudit={usageAudit} />
+      <ProviderUsagePanel events={events} fallbackSessionUsage={usage} usageAudit={usageAudit} />
     </section>
   );
 }
@@ -7076,7 +7097,6 @@ export function ChatManagementPage() {
     try {
       const session = await createChatSession({
         agentCode: nextSessionAgentCode,
-        projectCode: activeSession?.projectCode ?? undefined,
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });

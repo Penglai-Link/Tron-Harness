@@ -25,7 +25,7 @@ export function saveMockProject(input: SaveProjectInput): ProjectRecord {
     workspaceCode: input.workspaceCode,
     name: input.name.trim(),
     appCodes: input.appCodes,
-    primaryAppCode: input.primaryAppCode ?? input.appCodes[0],
+    primaryAppCode: input.primaryAppCode ?? input.appCodes[0] ?? null,
     updatedAt: new Date().toISOString(),
   };
   projects = [

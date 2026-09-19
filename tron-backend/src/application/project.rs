@@ -28,7 +28,7 @@ pub struct SaveProjectCommand {
 #[derive(Debug, Clone)]
 pub struct ProjectExecutionContext {
     pub project_code: String,
-    pub primary_app: AppDetail,
+    pub primary_app: Option<AppDetail>,
     pub linked_apps: Vec<AppDetail>,
 }
 
@@ -112,9 +112,6 @@ impl ProjectService {
         if name.is_empty() {
             return Err(ProjectError::NameRequired);
         }
-        if command.app_codes.is_empty() {
-            return Err(ProjectError::AppsRequired);
-        }
         let mut app_codes = Vec::new();
         for app_code in command.app_codes {
             let app_code = app_code.trim().to_string();
@@ -130,15 +127,17 @@ impl ProjectService {
             }
             app_codes.push(app_code);
         }
-        let primary_app_code = command
-            .primary_app_code
-            .unwrap_or_else(|| app_codes[0].clone());
-        if !app_codes
-            .iter()
-            .any(|app_code| app_code == &primary_app_code)
-        {
-            return Err(ProjectError::PrimaryAppInvalid);
-        }
+        let primary_app_code = match (app_codes.first(), command.primary_app_code) {
+            (None, None) => None,
+            (None, Some(_)) => return Err(ProjectError::PrimaryAppInvalid),
+            (Some(first), requested) => {
+                let code = requested.unwrap_or_else(|| first.clone());
+                if !app_codes.iter().any(|app_code| app_code == &code) {
+                    return Err(ProjectError::PrimaryAppInvalid);
+                }
+                Some(code)
+            }
+        };
         let now = current_timestamp();
         let (id, project_code, created_at) = match command.project_code {
             Some(code) => {
@@ -189,7 +188,7 @@ impl ProjectService {
                 project_code: project_code.clone(),
                 app_code: app_code.clone(),
                 position,
-                is_primary: app_code == &primary_app_code,
+                is_primary: primary_app_code.as_deref() == Some(app_code.as_str()),
             });
         }
         {
@@ -241,9 +240,8 @@ impl ProjectService {
         }
         let primary_app = linked_apps
             .iter()
-            .find(|app| app.app_code == project.primary_app_code)
-            .cloned()
-            .ok_or(ProjectError::PrimaryAppInvalid)?;
+            .find(|app| Some(app.app_code.as_str()) == project.primary_app_code.as_deref())
+            .cloned();
         Ok(ProjectExecutionContext {
             project_code: project.project_code,
             primary_app,
@@ -271,8 +269,7 @@ impl ProjectService {
         let primary_app_code = links
             .iter()
             .find(|link| link.is_primary)
-            .map(|link| link.app_code.clone())
-            .ok_or(ProjectError::AppsRequired)?;
+            .map(|link| link.app_code.clone());
         Ok(ProjectView {
             project_code: project.project_code,
             workspace_code: project.workspace_code,

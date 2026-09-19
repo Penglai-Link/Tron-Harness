@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronRight, Folder, FolderOpen } from "lucide-react";
+import { ChevronDown, ChevronRight, Folder, FolderOpen, Pin } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { cn } from "@/shared/lib/utils";
 import { useState } from "react";
@@ -16,6 +16,8 @@ const sessionListPageSize = 5;
 const SessionGroup = ({
   project,
   runningSessionCode,
+  activeSessionCode,
+  onNavigate,
   sessions,
   selected,
   pinned,
@@ -26,6 +28,8 @@ const SessionGroup = ({
 }: {
   project: ProjectRecord;
   runningSessionCode: string;
+  activeSessionCode: string;
+  onNavigate: (path: string) => void;
   sessions: ChatSession[];
   selected: boolean;
   pinned: boolean;
@@ -51,13 +55,15 @@ const SessionGroup = ({
               onSelect(project.projectCode);
               setOpen((value) => !value);
             }}
-            icon={open ? FolderOpen : Folder}
           >
-            {project.name}
+            {pinned ? <Pin aria-hidden="true" className="shrink-0 text-[var(--color-primary)]" size={13} /> : null}
+            {open ? <FolderOpen aria-hidden="true" className="shrink-0" size={16} /> : <Folder aria-hidden="true" className="shrink-0" size={16} />}
+            <span className="truncate">{project.name}</span>
           </IconButton>
         }
         right={
           <div className="flex shrink-0 gap-2 items-center opacity-0 pointer-events-none group-hover/project:opacity-100 group-hover/project:pointer-events-auto has-[button[data-popup-open]]:opacity-100 has-[button[data-popup-open]]:pointer-events-auto">
+            <CreateByProject project={project} sessions={sessions} />
             <ActionsMenu
               pinned={pinned}
               project={project}
@@ -66,7 +72,6 @@ const SessionGroup = ({
               onPinnedChange={onPinnedChange}
               onRefresh={onRefresh}
             />
-            <CreateByProject project={project} sessions={sessions} />
           </div>
         }
       />
@@ -76,6 +81,8 @@ const SessionGroup = ({
             <MessageItem
               key={session.sessionCode}
               running={runningSessionCode === session.sessionCode}
+              active={activeSessionCode === session.sessionCode}
+              onNavigate={onNavigate}
               session={session}
             />
           ))}

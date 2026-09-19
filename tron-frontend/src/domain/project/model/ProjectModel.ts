@@ -3,7 +3,7 @@ export interface ProjectRecord {
   workspaceCode: string;
   name: string;
   appCodes: string[];
-  primaryAppCode: string;
+  primaryAppCode?: string | null;
   updatedAt: string;
 }
 

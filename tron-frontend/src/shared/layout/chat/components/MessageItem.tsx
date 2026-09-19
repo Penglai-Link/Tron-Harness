@@ -1,6 +1,6 @@
 import { Archive, Icon, LoaderCircle } from "lucide-react";
-import { useState } from "react";
-import { Link, useLocation, useNavigate } from "react-router";
+import { memo, useState } from "react";
+import { Link } from "react-router";
 import { useTranslation } from "react-i18next";
 import { archiveChatSession } from "@/domain/chat/hooks";
 import type { ChatSession } from "@/domain/chat/model";
@@ -11,21 +11,19 @@ import IconButton from "./IconButton";
 import Item from "./Item";
 
 const MessageItem = ({
+  active,
+  onNavigate,
   running,
   session,
 }: {
+  active: boolean;
+  onNavigate: (path: string) => void;
   running: boolean;
   session: ChatSession;
 }) => {
-  const location = useLocation();
-  const navigate = useNavigate();
   const toast = useToast();
   const { t } = useTranslation("shell");
   const [archiving, setArchiving] = useState(false);
-  const active =
-    new URLSearchParams(location.search).get("sessionCode") ===
-    session.sessionCode;
-
   async function archive() {
     if (archiving) return;
     setArchiving(true);
@@ -37,7 +35,11 @@ const MessageItem = ({
       return;
     }
 
-    window.dispatchEvent(new Event("tron:chat-session-archived"));
+    window.dispatchEvent(
+      new CustomEvent("tron:chat-session-archived", {
+        detail: { sessionCode: session.sessionCode },
+      }),
+    );
     const tabStore = useTabStore.getState();
     const archivedTab = tabStore.tabs.find(
       (tab) => tab.activeNav === `chat-session:${session.sessionCode}`,
@@ -50,7 +52,7 @@ const MessageItem = ({
       tabStore.removeTab(archivedTab.id);
       if (wasActive && nextTab) {
         useTabStore.getState().setActiveTab(nextTab.id);
-        navigate(nextTab.path);
+        onNavigate(nextTab.path);
       }
     }
     toast.success(t("shell:chatSidebar.session.archived"));
@@ -125,4 +127,4 @@ const MessageItem = ({
   );
 };
 
-export default MessageItem;
+export default memo(MessageItem);

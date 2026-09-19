@@ -860,7 +860,7 @@ export const pages = {
       },
       contextSections: {
         request: "Request Context",
-        providerUsage: "Provider Usage",
+        providerUsage: "Token Statistics",
         appTask: "App / Task",
         worktree: "Worktree",
         systemAgentSession: "System Agent Session",
@@ -923,7 +923,7 @@ export const pages = {
         effectiveInputFormula:
           "Effective input budget = model context window − output reserve",
         historyFormula:
-          "Current session history budget =\neffective input budget\n− Seed Prompt\n− Checkpoint\n− Related Sessions\n− Working State\n− Tool Schema",
+          "Current session history budget =\neffective input budget\n− {{systemPrompt}}\n− {{checkpoint}}\n− {{familyContext}}\n− {{workingState}}\n− {{toolSchema}}",
         budgetFormulaNote:
           "Fixed input blocks are deducted first; the remainder retains recent conversation history.",
         checkpointStat: "1 checkpoint",
@@ -931,7 +931,8 @@ export const pages = {
         workingStateStat: "{{goals}} goal · {{todos}} todos",
         loaded: "loaded",
         messageCount: "{{count}} messages",
-        providerSubtitle: "Actual provider usage compared with local estimate",
+        currentSessionUsage: "Total Usage",
+        previousRunUsage: "Previous Run Usage",
         actualInput: "Actual input",
         input: "Input",
         cached: "Cached",
