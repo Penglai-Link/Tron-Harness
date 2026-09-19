@@ -108,7 +108,8 @@ import {
   formatReasoningEffort,
   reasoningEffortOptions,
 } from "@/domain/model/constants/modelPageOptions";
-import { getApiAccessToken, isApiError } from "@/shared/api/httpClient";
+import { getApiAccessToken, isApiError, requestApi } from "@/shared/api/httpClient";
+import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { TronChatRuntimeWindow } from "@tron/chat-react";
@@ -172,6 +173,7 @@ import {
 } from "../api/chatAttachmentApi";
 import DraggleLine from "@/components/draggle-line";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -722,6 +724,55 @@ function latestUsageAuditFromEvents(events: TranscriptAguiEvent[]) {
   return parsedUsageAudit(latestEventValue(events, "usage_audit_json"));
 }
 
+function sessionProviderUsageFromEvents(events: TranscriptAguiEvent[]): ChatTokenUsage | null {
+  const seen = new Set<string>();
+  const totals = { inputTokens: 0, outputTokens: 0, totalTokens: 0 };
+  let hasUsage = false;
+  let cachedInputTokens = 0;
+  let hasCachedInput = false;
+  let reasoningTokens = 0;
+  let hasReasoning = false;
+
+  events.forEach((event) => {
+    const metadata = aguiEventMetadata(event);
+    const audit = parsedUsageAudit(metadata?.usage_audit_json);
+    const usage = audit?.providerUsage;
+    if (!usage) return;
+
+    const eventId = "id" in event && typeof event.id === "string" ? event.id : "";
+    const key = eventId || [
+      aguiEventRunCode(event),
+      aguiEventTime(event),
+      audit.responseId ?? "",
+      usage.inputTokens,
+      usage.outputTokens,
+      usage.totalTokens,
+    ].join("\u0000");
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    hasUsage = true;
+    totals.inputTokens += usage.inputTokens;
+    totals.outputTokens += usage.outputTokens;
+    totals.totalTokens += usage.totalTokens;
+    if (usage.cachedInputTokens != null) {
+      hasCachedInput = true;
+      cachedInputTokens += usage.cachedInputTokens;
+    }
+    if (usage.reasoningTokens != null) {
+      hasReasoning = true;
+      reasoningTokens += usage.reasoningTokens;
+    }
+  });
+
+  if (!hasUsage) return null;
+  return {
+    ...totals,
+    cachedInputTokens: hasCachedInput ? cachedInputTokens : null,
+    reasoningTokens: hasReasoning ? reasoningTokens : null,
+  };
+}
+
 function shortTermMemoryEventPayload(event: TranscriptAguiEvent): Record<string, unknown> | null {
   if ("value" in event && typeof event.value === "object" && event.value !== null) {
     return event.value as Record<string, unknown>;
@@ -818,13 +869,6 @@ function contextPercent(usedTokens: number | null | undefined, limitTokens: numb
 function formatPercent(value: number | null | undefined) {
   if (value == null || !Number.isFinite(value)) return "-";
   return `${new Intl.NumberFormat("en-US", { maximumFractionDigits: value < 10 ? 1 : 0 }).format(value)}%`;
-}
-
-function formatSignedPercentFromRatio(value: number | null | undefined) {
-  if (value == null || !Number.isFinite(value)) return "-";
-  const percent = (value - 1) * 100;
-  const sign = percent > 0 ? "+" : "";
-  return `${sign}${new Intl.NumberFormat("en-US", { maximumFractionDigits: 1 }).format(percent)}%`;
 }
 
 function safeSubtract(minuend: number | null | undefined, subtrahend: number | null | undefined) {
@@ -2367,6 +2411,7 @@ type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "family" | "
 interface ContextMemoryBlockItem {
   code: string;
   color: ContextBlockColor;
+  detailCode?: "systemPrompt" | "toolSchema" | "familyContext";
   limitTokens: number | null;
   name: string;
   stat: string;
@@ -2422,6 +2467,7 @@ export function buildContextMemoryBlocks({
     {
       code: "01",
       color: "seed",
+      detailCode: "systemPrompt",
       limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
       name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
@@ -2432,6 +2478,7 @@ export function buildContextMemoryBlocks({
     {
       code: "02",
       color: "tool",
+      detailCode: "toolSchema",
       limitTokens: toolSchemaLimit,
       name: translate("chat.shortTermMemory.contextPanel.toolSchemaName"),
       stat: "",
@@ -2459,6 +2506,7 @@ export function buildContextMemoryBlocks({
     {
       code: "05",
       color: "family",
+      detailCode: "familyContext",
       limitTokens: breakdown?.sessionFamilyContextBudgetTokens ?? null,
       name: translate("chat.shortTermMemory.contextPanel.familyContextName"),
       stat: breakdown?.sessionFamilyContextTokens
@@ -2506,9 +2554,27 @@ function ContextOverviewPanel({
     <div className="min-w-0 space-y-3">
       <div className="flex min-w-0 items-start justify-between gap-3">
         <div className="min-w-0">
-          <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface)]">
-            {t("chat.shortTermMemory.contextPanel.shortTermMemory")}
-          </h3>
+          <div className="flex items-center gap-1">
+            <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface)]">
+              {t("chat.shortTermMemory.contextPanel.shortTermMemory")}
+            </h3>
+            <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="start">
+              <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
+                <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
+                <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
+                <p className="whitespace-pre-line">
+                  {t("chat.shortTermMemory.contextPanel.historyFormula", {
+                    systemPrompt: t("chat.shortTermMemory.contextPanel.systemPromptName"),
+                    checkpoint: t("chat.shortTermMemory.contextPanel.checkpointName"),
+                    familyContext: t("chat.shortTermMemory.contextPanel.familyContextName"),
+                    workingState: t("chat.shortTermMemory.contextPanel.workingStateName"),
+                    toolSchema: t("chat.shortTermMemory.contextPanel.toolSchemaName"),
+                  })}
+                </p>
+                <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
+              </div>
+            </InfoTooltip>
+          </div>
           <p className="truncate text-[11px] text-[var(--color-on-surface-variant)]">
             {requestEstimate?.modelName || requestEstimate?.modelCode || modelLabel}
             {windowLimit ? ` · ${formatCompactTokenCount(windowLimit)} ${t("chat.shortTermMemory.contextPanel.windowSuffix")}` : ""}
@@ -2518,14 +2584,6 @@ function ContextOverviewPanel({
           <Badge className="h-5 rounded px-1.5 text-[11px]" variant={statusTone}>
             {statusLabel}
           </Badge>
-          <InfoTooltip ariaLabel={t("chat.shortTermMemory.contextPanel.budgetFormulaAria")} align="end">
-            <div className="max-w-[18rem] space-y-1 whitespace-normal leading-5">
-              <p className="font-medium">{t("chat.shortTermMemory.contextPanel.budgetFormulaTitle")}</p>
-              <p>{t("chat.shortTermMemory.contextPanel.effectiveInputFormula")}</p>
-              <p className="whitespace-pre-line">{t("chat.shortTermMemory.contextPanel.historyFormula")}</p>
-              <p className="text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.budgetFormulaNote")}</p>
-            </div>
-          </InfoTooltip>
           <button
             aria-label={t("chat.shortTermMemory.createCheckpoint")}
             className={iconButtonClass()}
@@ -2614,30 +2672,189 @@ function ContextStat({ label, value }: { label: string; value: string }) {
 }
 
 function ContextStructurePanel({
+  sessionCode,
   blocks,
 }: {
+  sessionCode: string;
   blocks: ContextMemoryBlockItem[];
 }) {
   return (
     <div>
-      <div className="divide-y divide-[var(--color-outline-variant)]">
+      <div>
         {blocks.map((block) => (
-          <ContextMemoryBlockRow block={block} key={block.code} />
+          <ContextMemoryBlockRow block={block} key={block.code} sessionCode={sessionCode} />
         ))}
       </div>
     </div>
   );
 }
 
-function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
+type ContextPromptPrefixMessage = {
+  role: string;
+  content: string;
+};
+
+function isContextDetailRecord(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function isContextPromptPrefixMessage(value: unknown): value is ContextPromptPrefixMessage {
+  return isContextDetailRecord(value)
+    && typeof value.role === "string"
+    && typeof value.content === "string";
+}
+
+function contextPromptPrefixMessages(detail: unknown): ContextPromptPrefixMessage[] | null {
+  if (!isContextDetailRecord(detail) || !isContextDetailRecord(detail.promptPrefix)) return null;
+  const messages = detail.promptPrefix.messages;
+  return Array.isArray(messages) && messages.every(isContextPromptPrefixMessage)
+    ? messages
+    : null;
+}
+
+type ContextDetailTreeLabels = {
+  arrayItem: (index: number) => string;
+  arraySummary: (count: number) => string;
+  emptyArray: string;
+  emptyObject: string;
+};
+
+function ContextDetailTreeNode({
+  value,
+  label,
+  labelKind = "key",
+  depth = 0,
+  labels,
+}: {
+  value: unknown;
+  label?: string;
+  labelKind?: "key" | "index";
+  depth?: number;
+  labels: ContextDetailTreeLabels;
+}) {
+  const isArray = Array.isArray(value);
+  const isObject = value !== null && typeof value === "object" && !isArray;
+  const entries: [string, unknown][] = isArray
+    ? value.map((item, index) => [String(index), item])
+    : isObject
+      ? Object.entries(value as Record<string, unknown>)
+      : [];
+  const isContainer = isArray || isObject;
+  const [expanded, setExpanded] = useState(depth < 2);
+  const visibleLabel = labelKind === "index" && label != null
+    ? labels.arrayItem(Number(label) + 1)
+    : label;
+  const labelContent = visibleLabel == null ? null : (
+    <span className="break-all text-[var(--color-primary)]">
+      {visibleLabel}{labelKind === "key" ? ":" : ""}
+    </span>
+  );
+
+  if (!isContainer || entries.length === 0) {
+    const renderedValue = isContainer
+      ? (isArray ? labels.emptyArray : labels.emptyObject)
+      : JSON.stringify(value) ?? String(value);
+    return (
+      <div className="flex min-w-0 items-start gap-1.5 py-0.5">
+        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--color-outline-variant)]" aria-hidden="true" />
+        <div className="min-w-0 break-all">
+          {labelContent ? <>{labelContent} </> : null}
+          <span className={cn(
+            value === null ? "text-[var(--color-on-surface-variant)]" : "text-[var(--color-on-surface)]",
+            typeof value === "string" && "text-[var(--color-primary)]",
+          )}>
+            {renderedValue}
+          </span>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-w-0">
+      <button
+        aria-expanded={expanded}
+        className="group flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left outline-none transition-colors hover:text-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+        type="button"
+        onClick={() => setExpanded((current) => !current)}
+      >
+        {expanded ? <ChevronDown className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" /> : <ChevronRight className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" />}
+        {labelContent}
+        {isArray ? <span className="text-[var(--color-on-surface-variant)]">{labels.arraySummary(entries.length)}</span> : null}
+      </button>
+      {expanded ? (
+        <div className="ml-2 border-l border-[var(--color-outline-variant)] py-0.5 pl-3">
+          {entries.map(([entryKey, entryValue]) => (
+            <ContextDetailTreeNode
+              depth={depth + 1}
+              key={entryKey}
+              label={entryKey}
+              labelKind={isArray ? "index" : "key"}
+              labels={labels}
+              value={entryValue}
+            />
+          ))}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlockItem; sessionCode: string }) {
+  const { t } = useTranslation("pages");
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [detail, setDetail] = useState<unknown>(null);
+  const [detailViewMode, setDetailViewMode] = useState<"tree" | "raw">("tree");
+  const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const colors = contextBlockColorClasses[block.color];
   const percent = contextPercent(block.tokens, block.limitTokens);
   const fallbackPercent = block.limitTokens == null && block.tokens > 0 ? 40 : percent;
-  return (
-    <div className="py-2 first:pt-0 last:pb-0">
+  useEffect(() => {
+    if (!dialogOpen || !block.detailCode) return;
+    const controller = new AbortController();
+    setLoading(true);
+    setLoadError(false);
+    setDetail(null);
+    void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
+      queryParams: { sessionCode, blockCode: block.detailCode },
+      signal: controller.signal,
+    }).then(setDetail).catch(() => {
+      if (!controller.signal.aborted) setLoadError(true);
+    }).finally(() => {
+      if (!controller.signal.aborted) setLoading(false);
+    });
+    return () => controller.abort();
+  }, [block.detailCode, dialogOpen, sessionCode]);
+  let parsedDetail = detail;
+  let isStructuredDetail = detail !== null && typeof detail === "object";
+  if (typeof detail === "string") {
+    try {
+      parsedDetail = JSON.parse(detail) as unknown;
+      isStructuredDetail = parsedDetail !== null && typeof parsedDetail === "object";
+    } catch {
+      isStructuredDetail = false;
+    }
+  }
+  const rawDetail = detail == null
+    ? ""
+    : typeof detail === "string"
+      ? (isStructuredDetail ? JSON.stringify(parsedDetail, null, 2) : detail)
+      : JSON.stringify(detail, null, 2) ?? String(detail);
+  const promptMessages = block.detailCode === "systemPrompt"
+    ? contextPromptPrefixMessages(parsedDetail)
+    : null;
+  const detailTreeLabels: ContextDetailTreeLabels = {
+    arrayItem: (index) => t("chat.shortTermMemory.contextPanel.detailArrayItem", { index }),
+    arraySummary: (count) => t("chat.shortTermMemory.contextPanel.detailArraySummary", { total: count }),
+    emptyArray: t("chat.shortTermMemory.contextPanel.detailEmptyArray"),
+    emptyObject: t("chat.shortTermMemory.contextPanel.detailEmptyObject"),
+  };
+  const contents = (
+    <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
         <div className="flex min-w-0 items-baseline gap-1">
-          <div className="truncate text-xs font-semibold text-[var(--color-on-surface)]">{block.name}</div>
+          <div className="truncate text-xs font-semibold text-[var(--color-on-surface)] transition-colors group-hover:text-[var(--color-primary)]">{block.name}</div>
           {block.stat ? (
             <div className="shrink-0 text-[10px] text-[var(--color-on-surface-variant)]">· {block.stat}</div>
           ) : null}
@@ -2647,33 +2864,100 @@ function ContextMemoryBlockRow({ block }: { block: ContextMemoryBlockItem }) {
         </div>
       </div>
       <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-        <div
-          className={cn("h-full rounded-full", colors.fill)}
-          style={{ width: `${fallbackPercent}%` }}
-        />
+        <div className={cn("h-full rounded-full", colors.fill)} style={{ width: `${fallbackPercent}%` }} />
       </div>
+    </>
+  );
+  return (
+    <div className="py-2 first:pt-0 last:pb-0">
+      {block.detailCode ? (
+        <button className="group w-full cursor-pointer rounded text-left outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]" type="button" onClick={() => setDialogOpen(true)}>
+          {contents}
+        </button>
+      ) : contents}
+      <Dialog open={dialogOpen} onOpenChange={(open) => {
+        setDialogOpen(open);
+        if (open) setDetailViewMode("tree");
+      }}>
+        <DialogContent className="grid max-h-[80vh] max-w-2xl grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+          <div className="flex min-w-0 items-center justify-between gap-3 pr-8">
+            <h2 className="truncate text-sm font-semibold text-[var(--color-on-surface)]">{block.name}</h2>
+            {isStructuredDetail ? (
+              <div className="flex shrink-0 items-center rounded-md bg-[var(--color-surface-container-low)] p-0.5">
+                <button
+                  aria-pressed={detailViewMode === "tree"}
+                  className={cn("rounded px-2 py-1 text-xs transition-colors", detailViewMode === "tree" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]")}
+                  type="button"
+                  onClick={() => setDetailViewMode("tree")}
+                >
+                  {t("chat.shortTermMemory.contextPanel.detailViewTree")}
+                </button>
+                <button
+                  aria-pressed={detailViewMode === "raw"}
+                  className={cn("rounded px-2 py-1 text-xs transition-colors", detailViewMode === "raw" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]")}
+                  type="button"
+                  onClick={() => setDetailViewMode("raw")}
+                >
+                  {t("chat.shortTermMemory.contextPanel.detailViewRaw")}
+                </button>
+              </div>
+            ) : null}
+          </div>
+          <div className="min-h-0 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3">
+            {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
+              : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
+                : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "tree"
+                  ? <div className="space-y-3">
+                      <p className="rounded-md bg-[var(--color-surface-container-low)] px-3 py-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
+                        {t("chat.shortTermMemory.contextPanel.detailFullTextUnavailable")}
+                      </p>
+                      <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
+                    </div>
+                  : block.detailCode === "systemPrompt" && promptMessages && detailViewMode === "tree"
+                    ? promptMessages.length > 0
+                      ? <div className="space-y-3">
+                          {promptMessages.map((message, index) => (
+                            <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)]" key={`${index}-${message.role}`}>
+                              <div className="flex items-center justify-between gap-3 bg-[var(--color-surface-container-low)] px-3 py-2">
+                                <span className="text-xs font-semibold text-[var(--color-on-surface)]">
+                                  {t("chat.shortTermMemory.contextPanel.detailPromptMessage", { index: index + 1 })}
+                                </span>
+                                <span className="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
+                                  {message.role}
+                                </span>
+                              </div>
+                              <pre className="whitespace-pre-wrap break-words px-3 py-3 font-mono text-xs leading-5 text-[var(--color-on-surface)] [overflow-wrap:anywhere]">
+                                {message.content}
+                              </pre>
+                            </article>
+                          ))}
+                        </div>
+                      : <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailPromptEmpty")}</p>
+                    : isStructuredDetail && detailViewMode === "tree"
+                  ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
+                  : <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[var(--color-on-surface)]">{rawDetail}</pre>}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
 
 function ProviderUsagePanel({
+  events,
   fallbackSessionUsage,
   usageAudit,
 }: {
+  events: TranscriptAguiEvent[];
   fallbackSessionUsage: { input: number | null; output: number | null; total: number | null };
   usageAudit: ChatUsageAuditSnapshot | null;
 }) {
   const { t } = useTranslation("pages");
   const providerUsage = usageAudit?.providerUsage ?? null;
+  const previousRunUsage = usageAudit?.cumulativeRunUsage ?? providerUsage;
+  const sessionUsage = sessionProviderUsageFromEvents(events);
   const requestEstimate = usageAudit?.requestEstimate ?? null;
-  const actualInput = providerUsage?.inputTokens ?? fallbackSessionUsage.input;
-  const cachedInput = providerUsage?.cachedInputTokens ?? null;
-  const reasoningTokens = providerUsage?.reasoningTokens ?? null;
-  const actualTotal = providerUsage?.totalTokens ?? fallbackSessionUsage.total;
-  const inputBudget = requestEstimate?.effectiveInputBudget ?? requestEstimate?.contextWindowLimit ?? null;
-  const inputPercent = contextPercent(actualInput, inputBudget);
-  const cachedPercent = contextPercent(cachedInput, actualInput);
-  const reasoningPercent = contextPercent(reasoningTokens, actualTotal);
+  const sessionInput = sessionUsage?.inputTokens ?? fallbackSessionUsage.input;
 
   return (
     <section className="space-y-3 rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)] p-3">
@@ -2681,74 +2965,46 @@ function ProviderUsagePanel({
         <h3 className="text-xs font-semibold uppercase text-[var(--color-on-surface-variant)]">
           {t("chat.shortTermMemory.contextSections.providerUsage")}
         </h3>
-        <p className="text-[11px] text-[var(--color-on-surface-variant)]">
-          {t("chat.shortTermMemory.contextPanel.providerSubtitle")}
+      </div>
+      <div>
+        <h4 className="mb-1.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+          {t("chat.shortTermMemory.contextPanel.currentSessionUsage")}
+        </h4>
+        <div className="grid grid-cols-3 gap-1.5">
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(sessionInput)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(sessionUsage?.cachedInputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(sessionUsage?.reasoningTokens)} />
+        </div>
+      </div>
+      <div>
+        <h4 className="mb-1.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
+          {t("chat.shortTermMemory.contextPanel.previousRunUsage")}
+        </h4>
+        <div className="grid grid-cols-3 gap-1.5">
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(previousRunUsage?.inputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(previousRunUsage?.cachedInputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(previousRunUsage?.reasoningTokens)} />
+        </div>
+        <p className="mt-2 rounded-md bg-[var(--color-surface-container-low)] px-2 py-1.5 text-[10px] leading-4 text-[var(--color-on-surface-variant)]">
+          {requestEstimate ? (
+            <>
+              {t("chat.shortTermMemory.contextPanel.providerDelta", {
+                actual: formatCompactTokenCount(providerUsage?.inputTokens),
+                delta: formatCompactTokenCount(usageAudit?.inputTokenDelta),
+                estimate: formatCompactTokenCount(requestEstimate.estimatedInputTokens),
+              })}
+              {usageAudit?.calibrationFactor ? (
+                <span> {t("chat.shortTermMemory.contextPanel.calibration", {
+                  factor: new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(usageAudit.calibrationFactor),
+                })}</span>
+              ) : null}
+            </>
+          ) : (
+            t("chat.shortTermMemory.contextPanel.providerUnavailable")
+          )}
         </p>
       </div>
-      <div className="grid grid-cols-3 gap-1.5">
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(actualInput)} />
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(cachedInput)} />
-        <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(reasoningTokens)} />
-      </div>
-      <div className="space-y-2">
-        <ProviderUsageLine
-          label={t("chat.shortTermMemory.contextPanel.input")}
-          percent={inputPercent}
-          value={usageAudit?.inputTokenRatio ? formatSignedPercentFromRatio(usageAudit.inputTokenRatio) : formatCompactTokenCount(actualInput)}
-        />
-        <ProviderUsageLine
-          label={t("chat.shortTermMemory.contextPanel.cached")}
-          percent={cachedPercent}
-          value={formatPercent(cachedInput == null ? null : cachedPercent)}
-        />
-        <ProviderUsageLine
-          label={t("chat.shortTermMemory.contextPanel.reasoning")}
-          percent={reasoningPercent}
-          value={formatCompactTokenCount(reasoningTokens)}
-        />
-      </div>
-      <div className="border-t border-[var(--color-outline-variant)] pt-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
-        {requestEstimate ? (
-          <span>
-            {t("chat.shortTermMemory.contextPanel.providerDelta", {
-              actual: formatCompactTokenCount(providerUsage?.inputTokens),
-              delta: formatCompactTokenCount(usageAudit?.inputTokenDelta),
-              estimate: formatCompactTokenCount(requestEstimate.estimatedInputTokens),
-            })}
-            {usageAudit?.calibrationFactor ? (
-              <span> {t("chat.shortTermMemory.contextPanel.calibration", {
-                factor: new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(usageAudit.calibrationFactor),
-              })}</span>
-            ) : null}
-          </span>
-        ) : (
-          t("chat.shortTermMemory.contextPanel.providerUnavailable")
-        )}
-      </div>
     </section>
-  );
-}
-
-function ProviderUsageLine({
-  label,
-  percent,
-  value,
-}: {
-  label: string;
-  percent: number;
-  value: string;
-}) {
-  return (
-    <div className="grid grid-cols-[4.25rem_minmax(0,1fr)_3.75rem] items-center gap-[12px] text-[11px] text-[var(--color-on-surface-variant)]">
-      <span className="truncate">{label}</span>
-      <span className="h-1.5 overflow-hidden rounded-full bg-[var(--color-surface-container-high)]">
-        <span
-          className="block h-full rounded-full bg-[var(--color-on-surface-variant)]"
-          style={{ width: `${Math.max(0, Math.min(100, percent))}%` }}
-        />
-      </span>
-      <span className="truncate text-right font-mono text-[var(--color-on-surface)]">{value}</span>
-    </div>
   );
 }
 
@@ -3190,9 +3446,9 @@ function RightContextSidebar({
           requestEstimate={requestEstimate}
           session={session}
         />
-        <div className="border-t border-[var(--color-outline-variant)] pt-2">
+        <div className="pt-2">
           {runtimeNotice ? <ContextRuntimeNoticePanel notice={runtimeNotice} /> : null}
-          <ContextStructurePanel blocks={contextBlocks} />
+          <ContextStructurePanel blocks={contextBlocks} sessionCode={session?.sessionCode ?? ""} />
         </div>
       </div>
       {latestCompactionStatus?.error ? (
@@ -3203,7 +3459,7 @@ function RightContextSidebar({
           status={latestCompactionStatus}
         />
       ) : null}
-      <ProviderUsagePanel fallbackSessionUsage={usage} usageAudit={usageAudit} />
+      <ProviderUsagePanel events={events} fallbackSessionUsage={usage} usageAudit={usageAudit} />
     </section>
   );
 }
@@ -6841,7 +7097,6 @@ export function ChatManagementPage() {
     try {
       const session = await createChatSession({
         agentCode: nextSessionAgentCode,
-        projectCode: activeSession?.projectCode ?? undefined,
         title: "New chat",
         workspaceCode: activeWorkspaceCode,
       });

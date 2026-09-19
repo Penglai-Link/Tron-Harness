@@ -179,6 +179,11 @@ pub async fn answer_user_input(
             "resume payload must contain answers".into(),
         ));
     };
+    // Do not mark the request answered if its previous run has not released
+    // the session yet; stream_message_command will reject that continuation.
+    if let Err(response) = ensure_no_active_run(&state, &session_code) {
+        return response;
+    }
     let command = match state
         .chats
         .answer_user_input(&session_code, &request_code, answers)

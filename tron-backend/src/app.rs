@@ -415,6 +415,7 @@ impl AppState {
                         ":memory:",
                         &config,
                         id_provider.clone(),
+                        variables.cipher(),
                     )
                 })
                 .clone_with_id_provider(id_provider.clone())
@@ -423,6 +424,7 @@ impl AppState {
                 &config.database_url,
                 &config,
                 id_provider.clone(),
+                variables.cipher(),
             )
         };
         let short_term_memory = short_term_memory.with_event_bus(event_bus.clone());

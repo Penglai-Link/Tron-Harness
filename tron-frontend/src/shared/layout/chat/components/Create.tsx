@@ -29,7 +29,9 @@ export function Create({
         title: "New chat",
         agentCode: "main-agent",
       });
-      window.dispatchEvent(new Event("tron:chat-session-created"));
+      window.dispatchEvent(
+        new CustomEvent("tron:chat-session-created", { detail: session }),
+      );
       const path = `/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`;
       const tabId = useTabStore.getState().addTab({
         title: session.title || "New chat",

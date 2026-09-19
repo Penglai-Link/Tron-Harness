@@ -47,7 +47,7 @@ export function ProjectCreateDialog({
     if (!open) return;
     setName(project?.name ?? "");
     setAppCodes(project?.appCodes ?? []);
-    setPrimaryAppCode(project?.primaryAppCode);
+    setPrimaryAppCode(project?.primaryAppCode ?? undefined);
   }, [open, project]);
   function toggleApp(appCode: string) {
     setAppCodes((current) => {
@@ -69,9 +69,9 @@ export function ProjectCreateDialog({
   }, [appCodes, options]);
   const resolvedPrimaryAppCode = appCodes.includes(primaryAppCode ?? "")
     ? primaryAppCode
-    : appCodes[0];
+    : appCodes[0] ?? null;
   async function submit() {
-    if (!name.trim() || appCodes.length === 0 || saving) return;
+    if (!name.trim() || saving) return;
     setSaving(true);
     try {
       const savedProject = await createProject({
@@ -79,7 +79,7 @@ export function ProjectCreateDialog({
         workspaceCode,
         name,
         appCodes,
-        primaryAppCode: primaryAppCode ?? appCodes[0],
+        primaryAppCode: resolvedPrimaryAppCode,
       });
       onSaved(savedProject);
       onOpenChange(false);
@@ -180,11 +180,6 @@ export function ProjectCreateDialog({
                 </DropdownMenuContent>
               </DropdownMenu>
             </div>
-            {selectedApps.length === 0 ? (
-              <FieldDescription className="text-destructive">
-                {t("shell:chatSidebar.projectDialog.selectAtLeastOneApp")}
-              </FieldDescription>
-            ) : null}
           </Field>
         </div>
         <DialogFooter>
@@ -192,7 +187,7 @@ export function ProjectCreateDialog({
             {t("shell:chatSidebar.project.cancel")}
           </Button>
           <Button
-            disabled={!name.trim() || appCodes.length === 0 || saving}
+            disabled={!name.trim() || saving}
             onClick={() => void submit()}
           >
             {saving

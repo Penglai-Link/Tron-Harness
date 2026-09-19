@@ -47,6 +47,8 @@ import type {
 interface TronSidebarProps {
   activeItem: string;
   activeHref?: string;
+  activeSessionCode: string;
+  navigateToPath: (path: string) => void;
   navigation: TronNavSection[];
   onNavigate: () => void;
   onToggleSection: (sectionLabel: string) => void;
@@ -54,7 +56,11 @@ interface TronSidebarProps {
   openSections: Record<string, boolean>;
   renderDomainSelector: (compact: boolean, mobile: boolean) => ReactNode;
   renderFooter: (compact: boolean, mobile: boolean) => ReactNode;
-  renderChatPanel?: (compact: boolean) => ReactNode;
+  renderChatPanel?: (
+    compact: boolean,
+    activeSessionCode: string,
+    navigateToPath: (path: string) => void,
+  ) => ReactNode;
   setOpenNavigationItems: Dispatch<SetStateAction<Record<string, boolean>>>;
   translate: (key: string, options?: Record<string, string>) => string;
 }
@@ -62,6 +68,8 @@ interface TronSidebarProps {
 export function TronSidebar({
   activeItem,
   activeHref,
+  activeSessionCode,
+  navigateToPath,
   navigation,
   onNavigate,
   onToggleSection,
@@ -220,7 +228,9 @@ export function TronSidebar({
         {renderDomainSelector(compact, isMobile)}
       </SidebarHeader>
       <SidebarContent>
-        {renderChatPanel ? renderChatPanel(compact) : null}
+        {renderChatPanel
+          ? renderChatPanel(compact, activeSessionCode, navigateToPath)
+          : null}
         <nav className={cn("flex flex-1 flex-col gap-[12px] p-2", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
           {navigation.map((section) => {
             const sectionKey = section.id ?? section.label;

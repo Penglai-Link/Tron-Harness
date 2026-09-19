@@ -32,6 +32,7 @@ use crate::{
         ChatUserInputAnswer, ChatUserInputAnswerKind, ChatUserInputOption, ChatUserInputQuestion,
         ChatUserInputRequest, ChatUserInputRequestStatus,
     },
+    domain::model_provider::{ModelSelection, ProviderModelQuality},
     domain::resource::{ChatSessionAttachmentRecord, ResourceError},
     shared::{
         id::{SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},

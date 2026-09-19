@@ -30,7 +30,7 @@ impl ChatService {
                     project_code.as_deref().expect("project code is checked"),
                 )
                 .map_err(|_| ChatError::ProjectInvalid)?;
-            Some(project.primary_app.app_code)
+            project.primary_app.map(|app| app.app_code)
         } else {
             normalized_optional(command.app_code)
         };
@@ -263,6 +263,19 @@ impl ChatService {
             return Err(ChatError::UserInputAlreadyAnswered);
         }
         validate_user_input_answers(&request.questions, &answers)?;
+        let responses = request.questions.iter().filter_map(|question| {
+            let answer = answers.iter().find(|answer| answer.question_code == question.question_code)?;
+            let answer_text = match answer.answer_kind {
+                ChatUserInputAnswerKind::Option => answer.option_code.as_deref()
+                    .and_then(|code| question.options.iter().find(|option| option.option_code == code))
+                    .map(|option| option.label.clone())
+                    .or_else(|| answer.option_code.clone())
+                    .unwrap_or_default(),
+                ChatUserInputAnswerKind::Other => answer.other_text.clone().unwrap_or_default(),
+                ChatUserInputAnswerKind::Skipped => "Skipped".into(),
+            };
+            Some(json!({ "question": question.question, "answer": answer_text }))
+        }).collect::<Vec<_>>();
         let answered_at = current_timestamp();
         let answered = self.repository().answer_user_input_request(
             session_code,
@@ -270,6 +283,7 @@ impl ChatService {
             &answers,
             &answered_at,
         )?;
+        let model_selection = Self::continuation_model_selection(answered.model_code.as_deref());
         Ok(SendChatMessageCommand {
             run_code: None,
             content: None,
@@ -277,7 +291,7 @@ impl ChatService {
             app_code: session.app_code,
             task_code: session.task_code,
             agent_code: session.agent_code,
-            model_selection: None,
+            model_selection,
             model_code: answered.model_code,
             system_model_id: None,
             reasoning_effort: answered.reasoning_effort,
@@ -290,9 +304,22 @@ impl ChatService {
             resume: vec![crate::application::chat::ChatResumeEntry {
                 interrupt_id: request_code.to_string(),
                 status: "resolved".into(),
-                payload: serde_json::json!({ "answers": answers }),
+                payload: json!({ "answers": answers, "responses": responses }),
             }],
         })
+    }
+
+    fn continuation_model_selection(model_code: Option<&str>) -> Option<ModelSelection> {
+        let model_code = model_code?;
+        if model_code == "PERSON_AI:ROUTE:ChatAuto" {
+            return Some(ModelSelection::auto());
+        }
+        let fixed = model_code.strip_prefix("PERSON_AI:FIXED:")?;
+        let (quality, catalog_model_code) = fixed.split_once(':')?;
+        Some(ModelSelection::person_ai_fixed(
+            catalog_model_code,
+            ProviderModelQuality::from_storage(quality)?,
+        ))
     }
 
     pub fn steer_message(

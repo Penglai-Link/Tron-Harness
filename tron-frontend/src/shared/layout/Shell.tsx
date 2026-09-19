@@ -25,7 +25,6 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Settings2,
-  X,
 } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import {
@@ -167,6 +166,7 @@ export function TronShell({
   const { src: avatarSrc } = useManagedAvatar(authSession?.user.avatarUrl);
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
+  const navigateToPath = useCallback((path: string) => navigate(path), [navigate]);
   const shellFrameMounted = useContext(TronShellFrameContext);
   const agentOpen = useAppShellStore((state) => state.agentOpen);
   const closeFloatingPanels = useAppShellStore((state) => state.closeFloatingPanels);
@@ -715,7 +715,7 @@ export function TronShell({
 
     return (
       <div key={space.workspaceCode} className="space-y-0.5">
-        <div className="flex items-center gap-1" style={{ paddingLeft: `${nestingLevel * 12}px` }}>
+        <div className="flex items-center gap-1" style={{ paddingLeft: `${nestingLevel * 8}px` }}>
           {hasChildren ? (
             <button
               className="flex size-6 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] hover:bg-[var(--color-menu-hover-surface)] hover:text-[var(--color-on-surface)]"
@@ -727,7 +727,7 @@ export function TronShell({
               <ChevronDown className={cn("transition-transform", expanded ? "rotate-180" : "-rotate-90")} size={14} aria-hidden="true" />
             </button>
           ) : (
-            <span className="block size-6 shrink-0" aria-hidden="true" />
+            <span className="block size-0 shrink-0" aria-hidden="true" />
           )}
           <button
             className={rowClassName}
@@ -1078,7 +1078,7 @@ export function TronShell({
               <div
                 ref={utilityPanelRef}
                 id="tron-workspace-selector-panel"
-                className="absolute left-4 top-[calc(100%+8px)] w-[min(260px,calc(100vw-2rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
+                className="absolute left-4 top-[calc(100%+8px)] w-[min(220px,calc(100vw-1rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-2 py-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
                 role="dialog"
                 aria-label={t("shell:workspace.selectorTitle")}
               >
@@ -1110,17 +1110,6 @@ export function TronShell({
                 data-testid="tron-mobile-right-sidebar"
                 id="tron-mobile-right-sidebar"
               >
-                <div className="mb-4 flex justify-end">
-                  <Button
-                    size="icon"
-                    type="button"
-                    variant="ghost"
-                    aria-label={t("shell:aria.closeRightSidebar")}
-                    onClick={closeRightDrawer}
-                  >
-                    <X size={17} aria-hidden="true" />
-                  </Button>
-                </div>
                 <RightPanelContainer />
               </aside>
             </>
@@ -1129,12 +1118,20 @@ export function TronShell({
           <TronSidebar
             activeItem={activeItem}
             activeHref={pathname}
+            activeSessionCode={new URLSearchParams(search).get("sessionCode") ?? ""}
+            navigateToPath={navigateToPath}
             navigation={visibleNavigation}
             openNavigationItems={openNavigationItems}
             openSections={openSections}
             renderDomainSelector={renderNavigationDomainSelector}
             renderFooter={renderSidebarUserSection}
-            renderChatPanel={(compact) => <ChatSidebarPanel compact={compact} />}
+            renderChatPanel={(compact, activeSessionCode, navigateToPath) => (
+              <ChatSidebarPanel
+                activeSessionCode={activeSessionCode}
+                compact={compact}
+                navigateToPath={navigateToPath}
+              />
+            )}
             setOpenNavigationItems={setOpenNavigationItems}
             translate={(key, options) => t(key, options)}
             onNavigate={handleSidebarNavigationClick}

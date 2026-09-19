@@ -8,6 +8,7 @@ export const chatApiEndpoints = {
   listChatMessages: "GET /api/v1/chats/sessions/{sessionCode}/messages",
   listChatUserInputRequests: "GET /api/v1/chats/sessions/{sessionCode}/user-input-requests",
   getChatSessionTodos: "GET /api/v1/chats/sessions/get-todos?sessionCode={sessionCode}",
+  getChatContextDetail: "GET /api/v1/chats/sessions/get-context-detail?sessionCode={sessionCode}&blockCode={blockCode}",
   getLatestChatCompaction: "GET /api/v1/chats/sessions/get-latest-compaction?sessionCode={sessionCode}",
   createChatCompaction: "POST /api/v1/chats/sessions/create-compaction",
   getChatSessionGoal: "GET /api/v1/chats/sessions/get-goal?sessionCode={sessionCode}",

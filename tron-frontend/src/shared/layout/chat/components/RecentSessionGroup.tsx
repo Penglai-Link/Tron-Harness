@@ -11,9 +11,13 @@ const recentSessionListPageSize = 5;
 
 export default function RecentSessionGroup({
   runningSessionCode,
+  activeSessionCode,
+  onNavigate,
   sessions,
 }: {
   runningSessionCode: string;
+  activeSessionCode: string;
+  onNavigate: (path: string) => void;
   sessions: ChatSession[];
 }) {
   const { t } = useTranslation("shell");
@@ -55,6 +59,8 @@ export default function RecentSessionGroup({
             <MessageItem
               key={session.sessionCode}
               running={runningSessionCode === session.sessionCode}
+              active={activeSessionCode === session.sessionCode}
+              onNavigate={onNavigate}
               session={session}
             />
           ))}

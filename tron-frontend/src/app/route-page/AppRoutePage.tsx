@@ -273,45 +273,41 @@ export default function AppRoutePage() {
     return <Navigate replace to="/apps" />;
   }
 
-  if (resolved) {
+  if (resolved?.route.layout === "settings") {
     const { route } = resolved;
-    if (route.layout === "settings") {
-      // Settings 页面不使用 keep-alive，直接渲染
-      return (
-        <SettingsShell
-          activeItem={route.settingsNav ?? route.title}
-          contentClassName={route.shellConfig?.contentClassName}
-          items={settingsNavigation}
-          roleCodes={session?.user.roleCodes}
-        >
-          <SuspendedRoute>
-            <resolved.Component key={routeRenderKey} />
-          </SuspendedRoute>
-        </SettingsShell>
-      );
-    }
+    // Settings 页面不使用 keep-alive，直接渲染
     return (
-      <TabPanelRegistryProvider>
-        <TronShell
-          activeItem={route.activeNav}
-          contentClassName={route.shellConfig?.contentClassName}
-          searchPlaceholder={
-            route.shellConfig?.searchPlaceholder
-              ? t("shell:placeholders.search")
-              : undefined
-          }
-          roleCodes={session?.user.roleCodes}
-          userMenuContent={<AuthUserMenuPanel />}
-        >
-          {cachedRouteContents}
-        </TronShell>
-      </TabPanelRegistryProvider>
+      <SettingsShell
+        activeItem={route.settingsNav ?? route.title}
+        contentClassName={route.shellConfig?.contentClassName}
+        items={settingsNavigation}
+        roleCodes={session?.user.roleCodes}
+      >
+        <SuspendedRoute>
+          <resolved.Component key={routeRenderKey} />
+        </SuspendedRoute>
+      </SettingsShell>
     );
   }
 
+  const route = resolved?.route;
   return (
-    <TronShell activeItem={resolveActiveItem(pathname)?.label ?? "Apps"}>
-      <ConsoleFallbackPage />
+    <TronShell
+      activeItem={
+        route?.activeNav ?? resolveActiveItem(pathname)?.label ?? "Apps"
+      }
+      contentClassName={route?.shellConfig?.contentClassName}
+      searchPlaceholder={
+        route?.shellConfig?.searchPlaceholder
+          ? t("shell:placeholders.search")
+          : undefined
+      }
+      roleCodes={session?.user.roleCodes}
+      userMenuContent={<AuthUserMenuPanel />}
+    >
+      <TabPanelRegistryProvider>
+        {resolved ? cachedRouteContents : <ConsoleFallbackPage />}
+      </TabPanelRegistryProvider>
     </TronShell>
   );
 }

@@ -3,6 +3,7 @@ use std::sync::{Arc, Mutex};
 use serde_json::json;
 
 use crate::{
+    application::variable::VariableCipher,
     application::short_term_memory::assembler::{
         assemble_context, checkpoint_message_from_parts, estimate_messages_tokens,
     },
@@ -35,6 +36,7 @@ pub struct ShortTermMemoryService {
     pub(super) id_provider: Arc<dyn SnowflakeIdProvider>,
     pub(super) config: ShortTermMemoryConfig,
     pub(super) event_bus: EventBusHandle,
+    pub(super) variable_cipher: Option<Arc<dyn VariableCipher>>,
 }
 
 impl ShortTermMemoryService {
@@ -59,11 +61,17 @@ impl ShortTermMemoryService {
             id_provider,
             config,
             event_bus: EventBusHandle::disabled(),
+            variable_cipher: None,
         }
     }
 
     pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
         self.event_bus = event_bus;
+        self
+    }
+
+    pub fn with_variable_cipher(mut self, variable_cipher: Arc<dyn VariableCipher>) -> Self {
+        self.variable_cipher = Some(variable_cipher);
         self
     }
 
@@ -73,6 +81,7 @@ impl ShortTermMemoryService {
             id_provider,
             config: self.config.clone(),
             event_bus: self.event_bus.clone(),
+            variable_cipher: self.variable_cipher.clone(),
         }
     }
 

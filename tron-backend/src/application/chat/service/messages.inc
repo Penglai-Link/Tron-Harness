@@ -75,6 +75,8 @@ impl ChatService {
         } else {
             resume_prompt(&command.resume)
         };
+        let transcript_user_content = resume_user_message(&command.resume)
+            .unwrap_or_else(|| content.clone());
         let should_generate_title = should_generate_manual_session_title(&session);
         let workspace_code = session.workspace_code.clone();
         let channel = if command
@@ -106,16 +108,16 @@ impl ChatService {
             .repository()
             .runtime_session_id(session_code, runtime_adapter_key, &effective_agent_code)
             .map_err(ChatSendError::Chat)?;
-        let user_message = if content.is_empty() && attachments.is_empty() {
+        let user_message = if transcript_user_content.is_empty() && attachments.is_empty() {
             None
         } else {
             Some(self.create_message(
                 session_code,
-                None,
+                (!command.resume.is_empty()).then(|| run_code.clone()),
                 ChatMessageRole::User,
                 channel,
                 "User",
-                &content,
+                &transcript_user_content,
                 attachments.clone(),
                 None,
             )?)
@@ -149,10 +151,10 @@ impl ChatService {
                 .map_err(|_| ChatSendError::Chat(ChatError::ProjectInvalid))?;
             Some(AgentExecutionScope {
                 project_code: Some(project.project_code),
-                app_code: Some(project.primary_app.app_code.clone()),
-                repository_url: project.primary_app.repository_url.clone(),
-                local_directory: Some(project.primary_app.local_directory.clone()),
-                branch_name: project.primary_app.default_branch.clone(),
+                app_code: project.primary_app.as_ref().map(|app| app.app_code.clone()),
+                repository_url: project.primary_app.as_ref().and_then(|app| app.repository_url.clone()),
+                local_directory: project.primary_app.as_ref().map(|app| app.local_directory.clone()),
+                branch_name: project.primary_app.as_ref().and_then(|app| app.default_branch.clone()),
                 task_code: session.task_code.clone(),
                 allowed_local_directories: project
                     .linked_apps

@@ -76,6 +76,7 @@ fn build_short_term_memory_service_with_id_provider<I>(
     database_url: &str,
     config: &AppConfig,
     id_provider: Arc<I>,
+    variable_cipher: Arc<dyn crate::application::variable::VariableCipher>,
 ) -> ShortTermMemoryService
 where
     I: SnowflakeIdProvider + 'static,
@@ -86,7 +87,8 @@ where
         repository,
         config.short_term_memory.clone(),
         id_provider,
-    );
+    )
+    .with_variable_cipher(variable_cipher);
     service
         .recover_goal_state_on_startup()
         .expect("short-term memory goal recovery should initialize");
