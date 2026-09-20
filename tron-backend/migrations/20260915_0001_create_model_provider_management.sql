@@ -21,7 +21,6 @@ CREATE TABLE IF NOT EXISTS provider_authorization_sessions (
     login_url TEXT NOT NULL,
     status TEXT NOT NULL,
     expires_at INTEGER,
-    requested_by TEXT NOT NULL,
     created_at INTEGER NOT NULL,
     updated_at INTEGER NOT NULL
 );

@@ -35,10 +35,7 @@ pub struct CreatePersonAiAuthorizationRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PollPersonAiAuthorizationRequest {
-    #[serde(default)]
-    pub encryption_key_base64: Option<String>,
-}
+pub struct PollPersonAiAuthorizationRequest {}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -112,7 +109,6 @@ async fn create_person_ai_authorization(
         .create_authorization_session(CreateProviderAuthorizationCommand {
             provider_code: ModelProviderCode::PersonAi,
             server_base_url: request.server_base_url,
-            requested_by: "bootstrap".to_owned(),
         })
         .await
     {
@@ -124,13 +120,30 @@ async fn create_person_ai_authorization(
 async fn poll_person_ai_authorization(
     State(state): State<AppState>,
     Path(session_id): Path<String>,
-    Json(request): Json<PollPersonAiAuthorizationRequest>,
+    Json(_request): Json<PollPersonAiAuthorizationRequest>,
 ) -> Response {
+    let encryption_key = match state.setup_transaction.ensure_encryption_key() {
+        Ok(key) => key,
+        Err(error) => {
+            return generic_profile_error(
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "PERSONAI_PROFILE_ENCRYPTION_FAILED",
+                format!("failed to initialize profile encryption: {error:?}"),
+            );
+        }
+    };
+    if let Err(error) = state.variables.configure_cipher(&encryption_key) {
+        return generic_profile_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PERSONAI_PROFILE_ENCRYPTION_FAILED",
+            format!("failed to activate profile encryption: {error}"),
+        );
+    }
     match state
         .model_providers
         .poll_authorization_session(CompleteProviderAuthorizationCommand {
             session_id: session_id.clone(),
-            encryption_key_base64: request.encryption_key_base64.clone(),
+            encryption_key_base64: Some(encryption_key),
         })
         .await
     {
@@ -139,17 +152,15 @@ async fn poll_person_ai_authorization(
                 result.connection.person_ai_user_id.as_deref(),
                 result.connection.person_ai_username.as_deref(),
             ) {
+                if let Err(error) = state.workspaces.ensure_default_workspace(user_id, username) {
+                    return generic_profile_error(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "PERSONAI_PROFILE_INITIALIZATION_FAILED",
+                        format!("failed to initialize default workspace: {error}"),
+                    );
+                }
                 if let Err(error) = state.profiles.register_or_update(user_id, username) {
                     return profile_error_response(error);
-                }
-                if let Some(key) = request.encryption_key_base64.as_deref() {
-                    if let Err(error) = state.setup_transaction.persist_encryption_key(key) {
-                        return generic_profile_error(
-                            StatusCode::INTERNAL_SERVER_ERROR,
-                            "PERSONAI_PROFILE_REGISTRY_FAILED",
-                            format!("failed to persist profile encryption key: {error:?}"),
-                        );
-                    }
                 }
             }
             Json(ApiResponse::success(PersonAiAuthorizationPollResponse {

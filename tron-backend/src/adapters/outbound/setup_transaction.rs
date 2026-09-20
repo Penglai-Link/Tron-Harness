@@ -146,6 +146,30 @@ impl SetupTransactionService {
         Ok(())
     }
 
+    pub fn ensure_encryption_key(&self) -> Result<String, SetupTransactionError> {
+        let original_config =
+            fs::read(&self.application_config_path).map_err(|_| SetupTransactionError::Storage)?;
+        let value: serde_yaml::Value =
+            serde_yaml::from_slice(&original_config).map_err(|_| SetupTransactionError::Storage)?;
+        let existing = value
+            .get("variableCrypto")
+            .and_then(|crypto| crypto.get("keyBase64"))
+            .and_then(serde_yaml::Value::as_str)
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .map(ToOwned::to_owned);
+        if let Some(key) = existing {
+            return Ok(key);
+        }
+
+        let mut bytes = [0_u8; 16];
+        rand::rng().fill_bytes(&mut bytes);
+        let key = BASE64.encode(bytes);
+        let next_config = update_config(&original_config, &key)?;
+        atomic_write(&self.application_config_path, &next_config)?;
+        Ok(key)
+    }
+
     pub fn complete(
         &self,
         actor_user_code: &str,

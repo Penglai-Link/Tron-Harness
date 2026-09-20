@@ -104,6 +104,19 @@ test("resolveBackendConfigPath initializes user config without overwriting it", 
   fs.rmSync(root, { recursive: true, force: true });
 });
 
+test("resolveBackendConfigPath clears the bundled crypto key for a new profile", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tron-config-profile-"));
+  const dataDir = path.join(root, "profile");
+  const resourcesDir = path.join(root, "resources");
+  fs.mkdirSync(dataDir, { recursive: true });
+  fs.mkdirSync(resourcesDir, { recursive: true });
+  fs.writeFileSync(path.join(resourcesDir, "application.yaml"), "variableCrypto:\n  keyBase64: bundled-key\n");
+
+  const configPath = resolveBackendConfigPath(dataDir, resourcesDir, { profileConfig: true });
+
+  assert.match(fs.readFileSync(configPath, "utf8"), /keyBase64: \"\"/);
+});
+
 test("iframeBlockReasonFromHeaders detects x-frame-options deny", () => {
   assert.equal(
     iframeBlockReasonFromHeaders({ "x-frame-options": "DENY" }),

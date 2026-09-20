@@ -86,16 +86,16 @@ export interface ProviderAuthorizationPollResult {
 }
 
 export const modelProviderApiEndpoints = {
-  list: "GET /api/v1/admin/model-providers",
-  detail: "GET /api/v1/admin/model-providers/{providerCode}",
-  catalog: "GET /api/v1/admin/model-providers/{providerCode}/catalog",
-  accountBalance: "GET /api/v1/admin/model-providers/{providerCode}/account-balance",
-  syncRuns: "GET /api/v1/admin/model-providers/{providerCode}/sync-runs",
-  authorize: "POST /api/v1/admin/model-providers/{providerCode}/authorization-sessions",
-  authorization: "GET /api/v1/admin/model-providers/{providerCode}/authorization-sessions/{sessionId}",
-  pollAuthorization: "POST /api/v1/admin/model-providers/{providerCode}/authorization-sessions/{sessionId}/poll",
-  sync: "POST /api/v1/admin/model-providers/{providerCode}/sync",
-  disconnect: "DELETE /api/v1/admin/model-providers/{providerCode}",
+  list: "GET /api/v1/model-providers",
+  detail: "GET /api/v1/model-providers/{providerCode}",
+  catalog: "GET /api/v1/model-providers/{providerCode}/catalog",
+  accountBalance: "GET /api/v1/model-providers/{providerCode}/account-balance",
+  syncRuns: "GET /api/v1/model-providers/{providerCode}/sync-runs",
+  authorize: "POST /api/v1/model-providers/{providerCode}/authorization-sessions",
+  authorization: "GET /api/v1/model-providers/{providerCode}/authorization-sessions/{sessionId}",
+  pollAuthorization: "POST /api/v1/model-providers/{providerCode}/authorization-sessions/{sessionId}/poll",
+  sync: "POST /api/v1/model-providers/{providerCode}/sync",
+  disconnect: "DELETE /api/v1/model-providers/{providerCode}",
 } as const;
 
 export function fetchModelProviderConnections(signal?: AbortSignal) {

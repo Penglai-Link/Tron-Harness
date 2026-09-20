@@ -15,12 +15,6 @@ import {
 } from "@/domain/profile/api";
 import { isApiError } from "@/shared/api/httpClient";
 
-function makeEncryptionKey() {
-  const bytes = new Uint8Array(16);
-  crypto.getRandomValues(bytes);
-  return btoa(String.fromCharCode(...bytes));
-}
-
 export function ProfileSelectionPage() {
   const { t } = useTranslation("pages");
   const [profiles, setProfiles] = useState<PersonAiProfile[]>([]);
@@ -29,7 +23,6 @@ export function ProfileSelectionPage() {
   const [activating, setActivating] = useState<string | null>(null);
   const [authorizing, setAuthorizing] = useState(false);
   const [authorization, setAuthorization] = useState<PersonAiAuthorizationSession | null>(null);
-  const [encryptionKey, setEncryptionKey] = useState("");
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -51,11 +44,11 @@ export function ProfileSelectionPage() {
   }, []);
 
   useEffect(() => {
-    if (!authorization || !encryptionKey) return;
+    if (!authorization) return;
     let active = true;
     const poll = async () => {
       try {
-        const result = await pollPersonAiAuthorization(authorization.sessionId, encryptionKey);
+        const result = await pollPersonAiAuthorization(authorization.sessionId);
         if (!active) return;
         setAuthorization(result.session);
         if (!result.completed) return;
@@ -80,7 +73,7 @@ export function ProfileSelectionPage() {
       active = false;
       window.clearInterval(timer);
     };
-  }, [authorization, encryptionKey, t]);
+  }, [authorization, t]);
 
   async function beginProfile() {
     setActivating("pending");
@@ -105,7 +98,6 @@ export function ProfileSelectionPage() {
     setError(null);
     try {
       const nextAuthorization = await createPersonAiAuthorization();
-      setEncryptionKey(makeEncryptionKey());
       setAuthorization(nextAuthorization);
       window.open(nextAuthorization.loginUrl, "_blank", "noopener,noreferrer");
     } catch (reason: unknown) {

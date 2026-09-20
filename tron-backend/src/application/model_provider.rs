@@ -159,7 +159,6 @@ pub struct ProviderAuthorizationSessionView {
 pub struct CreateProviderAuthorizationCommand {
     pub provider_code: ModelProviderCode,
     pub server_base_url: Option<String>,
-    pub requested_by: String,
 }
 
 #[derive(Debug, Clone)]
@@ -959,8 +958,8 @@ impl ModelProviderService {
             .execute(
                 "INSERT INTO provider_authorization_sessions (
                     session_id, provider_code, server_base_url, client_name, login_url, status,
-                    expires_at, requested_by, created_at, updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?9)
+                    expires_at, created_at, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?8)
                  ON CONFLICT(session_id) DO UPDATE SET status = excluded.status, updated_at = excluded.updated_at",
                 params![
                     view.session_id,
@@ -970,7 +969,6 @@ impl ModelProviderService {
                     view.login_url,
                     view.status,
                     view.expires_at,
-                    command.requested_by,
                     now,
                 ],
             )

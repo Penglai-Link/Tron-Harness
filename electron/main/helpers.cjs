@@ -146,7 +146,7 @@ function resolveUpdateServerUrl(resourcesDir) {
   return DEFAULT_PERSON_AI_SERVER_BASE_URL;
 }
 
-function resolveBackendConfigPath(appDataDir, resourcesDir) {
+function resolveBackendConfigPath(appDataDir, resourcesDir, options = {}) {
   const userConfigPath = path.join(appDataDir, "application.yaml");
   if (fs.existsSync(userConfigPath)) {
     return userConfigPath;
@@ -159,6 +159,14 @@ function resolveBackendConfigPath(appDataDir, resourcesDir) {
 
   try {
     fs.copyFileSync(bundledConfigPath, userConfigPath, fs.constants.COPYFILE_EXCL);
+    if (options.profileConfig) {
+      const profileConfig = fs.readFileSync(userConfigPath, "utf8");
+      const withoutBundledKey = profileConfig.replace(
+        /^([ \t]*keyBase64:)[ \t]*.*$/m,
+        "$1 \"\"",
+      );
+      fs.writeFileSync(userConfigPath, withoutBundledKey, "utf8");
+    }
     if (process.platform !== "win32") {
       fs.chmodSync(userConfigPath, 0o600);
     }

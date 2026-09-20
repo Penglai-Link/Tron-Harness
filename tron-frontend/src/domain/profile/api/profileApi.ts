@@ -83,12 +83,11 @@ export function createPersonAiAuthorization() {
 
 export function pollPersonAiAuthorization(
   sessionId: string,
-  encryptionKeyBase64: string,
 ) {
   return requestApi<PersonAiAuthorizationPollResult>(profileApiEndpoints.personAiPoll, {
     retryOnUnauthorized: false,
     pathParams: { sessionId },
-    body: { encryptionKeyBase64 },
+    body: {},
   });
 }
 

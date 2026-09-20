@@ -9,12 +9,17 @@ use crate::adapters::{
     inbound::http::{
         account::routes as account_routes,
         admin::{
+            model_providers::{
+                public_routes as public_model_provider_routes,
+                routes as admin_model_provider_routes,
+            },
             models::routes::routes as admin_model_routes,
-            model_providers::routes as admin_model_provider_routes,
             navigation::routes as admin_navigation_routes,
             open_apps::routes::routes as admin_open_app_routes,
-            prompts::routes::routes as admin_prompt_routes, roles::routes as role_routes,
-            users::routes as user_routes, variables::routes::routes as admin_variable_routes,
+            prompts::routes::routes as admin_prompt_routes,
+            roles::routes as role_routes,
+            users::routes as user_routes,
+            variables::routes::routes as admin_variable_routes,
             workspaces::routes as workspace_routes,
         },
         agents::routes::routes as agent_routes,
@@ -24,12 +29,12 @@ use crate::adapters::{
         chats::routes::routes as chat_routes,
         knowledge_graph::routes as knowledge_graph_routes,
         mcp::routes::management_routes as mcp_management_routes,
-        navigation::routes as navigation_routes,
         memory::routes as memory_routes,
         models::routes::routes as model_routes,
-        prompts::routes::routes as prompt_routes,
+        navigation::routes as navigation_routes,
         profiles::routes as profile_routes,
         projects::routes::routes as project_routes,
+        prompts::routes::routes as prompt_routes,
         rag::routes as rag_routes,
         resources::routes::routes as resource_routes,
         setup::complete as complete_setup,
@@ -87,7 +92,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
 }
 
 pub(super) fn build_profile_routes() -> Router<AppState> {
-    profile_routes()
+    profile_routes().merge(public_model_provider_routes())
 }
 
 pub(super) fn build_open_api_routes(state: &AppState) -> Router<AppState> {

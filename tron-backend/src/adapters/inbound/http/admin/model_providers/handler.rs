@@ -7,7 +7,6 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::model_provider::{
         CompleteProviderAuthorizationCommand, CreateProviderAuthorizationCommand,
@@ -40,13 +39,7 @@ struct AuthorizationPollResponse {
     embedding_verified: Option<bool>,
 }
 
-pub async fn list_provider_connections(
-    State(state): State<AppState>,
-    auth: RequestAuthContext,
-) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
+pub async fn list_provider_connections(State(state): State<AppState>) -> Response {
     match state.model_providers.list_connections() {
         Ok(records) => Json(ApiResponse::success(records)).into_response(),
         Err(error) => model_provider_error_response(error),
@@ -55,12 +48,8 @@ pub async fn list_provider_connections(
 
 pub async fn get_provider_connection(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path(provider_code): Path<String>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     let provider_code = match parse_provider_code(&provider_code) {
         Ok(provider_code) => provider_code,
         Err(response) => return response,
@@ -73,12 +62,8 @@ pub async fn get_provider_connection(
 
 pub async fn list_catalog_models(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path(provider_code): Path<String>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     let provider_code = match parse_provider_code(&provider_code) {
         Ok(provider_code) => provider_code,
         Err(response) => return response,
@@ -91,12 +76,8 @@ pub async fn list_catalog_models(
 
 pub async fn get_provider_account_balance(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path(provider_code): Path<String>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     let provider_code = match parse_provider_code(&provider_code) {
         Ok(provider_code) => provider_code,
         Err(response) => return response,
@@ -113,12 +94,8 @@ pub async fn get_provider_account_balance(
 
 pub async fn list_sync_runs(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path(provider_code): Path<String>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     let provider_code = match parse_provider_code(&provider_code) {
         Ok(provider_code) => provider_code,
         Err(response) => return response,
@@ -131,13 +108,9 @@ pub async fn list_sync_runs(
 
 pub async fn create_authorization_session(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path(provider_code): Path<String>,
     Json(request): Json<CreateAuthorizationRequest>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     let provider_code = match parse_provider_code(&provider_code) {
         Ok(provider_code) => provider_code,
         Err(response) => return response,
@@ -147,7 +120,6 @@ pub async fn create_authorization_session(
         .create_authorization_session(CreateProviderAuthorizationCommand {
             provider_code,
             server_base_url: request.server_base_url,
-            requested_by: auth.user().user_code.clone(),
         })
         .await
     {
@@ -158,12 +130,8 @@ pub async fn create_authorization_session(
 
 pub async fn get_authorization_session(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path((provider_code, session_id)): Path<(String, String)>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     if let Err(response) = parse_provider_code(&provider_code) {
         return response;
     }
@@ -175,32 +143,63 @@ pub async fn get_authorization_session(
 
 pub async fn poll_authorization_session(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path((provider_code, session_id)): Path<(String, String)>,
     Json(request): Json<PollAuthorizationRequest>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     if let Err(response) = parse_provider_code(&provider_code) {
         return response;
     }
+    let encryption_key = match request.encryption_key_base64 {
+        Some(key) => Some(key),
+        None => match state.setup_transaction.ensure_encryption_key() {
+            Ok(key) => {
+                if let Err(error) = state.variables.configure_cipher(&key) {
+                    return model_provider_profile_error(format!(
+                        "failed to activate profile encryption: {error}"
+                    ));
+                }
+                Some(key)
+            }
+            Err(error) => {
+                return model_provider_profile_error(format!(
+                    "failed to initialize profile encryption: {error:?}"
+                ));
+            }
+        },
+    };
     match state
         .model_providers
         .poll_authorization_session(CompleteProviderAuthorizationCommand {
             session_id: session_id.clone(),
-            encryption_key_base64: request.encryption_key_base64,
+            encryption_key_base64: encryption_key,
         })
         .await
     {
-        Ok(result) => Json(ApiResponse::success(AuthorizationPollResponse {
-            completed: true,
-            session: result.session,
-            connection: Some(result.connection),
-            text_verified: Some(result.text_verified),
-            embedding_verified: Some(result.embedding_verified),
-        }))
-        .into_response(),
+        Ok(result) => {
+            if let (Some(user_id), Some(username)) = (
+                result.connection.person_ai_user_id.as_deref(),
+                result.connection.person_ai_username.as_deref(),
+            ) {
+                if let Err(error) = state.workspaces.ensure_default_workspace(user_id, username) {
+                    return model_provider_profile_error(format!(
+                        "failed to initialize default workspace: {error}"
+                    ));
+                }
+                if let Err(error) = state.profiles.register_or_update(user_id, username) {
+                    return model_provider_profile_error(format!(
+                        "failed to register PersonAI profile: {error}"
+                    ));
+                }
+            }
+            Json(ApiResponse::success(AuthorizationPollResponse {
+                completed: true,
+                session: result.session,
+                connection: Some(result.connection),
+                text_verified: Some(result.text_verified),
+                embedding_verified: Some(result.embedding_verified),
+            }))
+            .into_response()
+        }
         Err(ModelProviderError::AuthorizationPending) => {
             match state.model_providers.get_authorization_session(&session_id) {
                 Ok(session) => Json(ApiResponse::success(AuthorizationPollResponse {
@@ -218,14 +217,21 @@ pub async fn poll_authorization_session(
     }
 }
 
+fn model_provider_profile_error(message: String) -> Response {
+    (
+        StatusCode::INTERNAL_SERVER_ERROR,
+        Json(ApiResponse::<EmptyData>::error(
+            "PERSONAI_PROFILE_INITIALIZATION_FAILED",
+            message,
+        )),
+    )
+        .into_response()
+}
+
 pub async fn sync_provider(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path(provider_code): Path<String>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     let provider_code = match parse_provider_code(&provider_code) {
         Ok(provider_code) => provider_code,
         Err(response) => return response,
@@ -238,12 +244,8 @@ pub async fn sync_provider(
 
 pub async fn disconnect_provider(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Path(provider_code): Path<String>,
 ) -> Response {
-    if let Err(response) = require_platform_admin(&auth) {
-        return response;
-    }
     let provider_code = match parse_provider_code(&provider_code) {
         Ok(provider_code) => provider_code,
         Err(response) => return response,
@@ -252,20 +254,6 @@ pub async fn disconnect_provider(
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => model_provider_error_response(error),
     }
-}
-
-fn require_platform_admin(auth: &RequestAuthContext) -> Result<(), Response> {
-    if auth.user().role_codes.iter().any(|role| role == "ADMIN") {
-        return Ok(());
-    }
-    Err((
-        StatusCode::FORBIDDEN,
-        Json(ApiResponse::<EmptyData>::error(
-            "MODEL_PROVIDER_ADMIN_REQUIRED",
-            "only a platform administrator can manage model providers",
-        )),
-    )
-        .into_response())
 }
 
 fn parse_provider_code(value: &str) -> Result<ModelProviderCode, Response> {

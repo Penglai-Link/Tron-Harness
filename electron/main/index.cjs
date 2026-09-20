@@ -385,7 +385,9 @@ function escapeHtml(value) {
 function startBackend(resourcesDir) {
   const sidecarPath = resolveSidecarPath(resourcesDir);
   const appDataDir = path.dirname(state.databasePath);
-  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir);
+  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir, {
+    profileConfig: Boolean(state.profileId),
+  });
   const logPath = resolveBackendLogPath(path.dirname(state.databasePath));
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logStream = fs.createWriteStream(logPath, { flags: "a" });

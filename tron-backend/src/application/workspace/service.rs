@@ -169,6 +169,39 @@ impl WorkspaceService {
         repository.list_workspaces()
     }
 
+    pub fn ensure_default_workspace(
+        &self,
+        person_ai_user_id: &str,
+        person_ai_username: &str,
+    ) -> Result<WorkspaceDetail, WorkspaceError> {
+        if let Some(workspace) = self
+            .all_workspaces()?
+            .into_iter()
+            .find(|workspace| workspace.status == WorkspaceStatus::Active)
+        {
+            return self.get_workspace(&workspace.workspace_code);
+        }
+
+        self.create_workspace(
+            &AuthenticatedUser {
+                avatar_url: None,
+                user_code: person_ai_user_id.trim().to_owned(),
+                username: person_ai_username.trim().to_owned(),
+                display_name: person_ai_username.trim().to_owned(),
+                email: String::new(),
+                role_codes: Vec::new(),
+                space_codes: Vec::new(),
+                status: UserStatus::Active,
+                password_reset_required: false,
+            },
+            CreateWorkspaceCommand {
+                name: "默认工作空间".to_owned(),
+                description: Some("PersonAI 档案的默认工作空间".to_owned()),
+                parent_workspace_code: None,
+            },
+        )
+    }
+
     fn list_raw_user_access(
         &self,
         workspace_code: &str,
