@@ -3105,11 +3105,6 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
                                   {t("chat.shortTermMemory.contextPanel.detailPromptMessage", { index: index + 1 })}
                                 </span>
                                 <div className="flex min-w-0 items-center justify-end gap-1.5">
-                                  <span className="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
-                                    {message.role === "system"
-                                      ? t("chat.shortTermMemory.contextPanel.detailPromptRoleSystem")
-                                      : message.role}
-                                  </span>
                                   {message.promptCode ? (
                                     <button
                                       className="shrink-0 rounded-sm px-2 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)] hover:text-[var(--color-on-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
