@@ -132,6 +132,11 @@
   gap: 0;
 }
 
+.tron-chat__content--with-history-rail {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+}
+
 .tron-chat__transcript {
   flex: 1;
   overflow: auto;
@@ -163,16 +168,14 @@
 }
 
 .tron-chat-history-rail {
-  position: absolute;
-  left: 10px;
-  top: 50%;
+  position: relative;
+  align-self: center;
   z-index: 5;
-  transform: translateY(-50%);
   display: flex;
   align-items: center;
   gap: 12px;
   pointer-events: auto;
-  width: 24px;
+  width: 34px;
 }
 
 .tron-chat-history-rail__line {

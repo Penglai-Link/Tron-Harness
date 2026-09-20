@@ -1495,6 +1495,7 @@ export function TronChatPanel({
             className={cx(
               "tron-chat__content",
               Boolean(sidebarContent) && "tron-chat__content--with-sidebar",
+              messages.length > 0 && "tron-chat__content--with-history-rail",
             )}
           >
             <ChatHistoryRail
