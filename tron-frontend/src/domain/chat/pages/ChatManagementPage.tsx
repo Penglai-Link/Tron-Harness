@@ -3102,8 +3102,8 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
                           ))}
                         </div>
                       : <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailPromptEmpty")}</p>
-                    : isStructuredDetail && detailViewMode === "tree"
-                  ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
+                  : isStructuredDetail && (detailViewMode === "tree" || detailViewMode === "raw")
+                    ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
                   : <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[var(--color-on-surface)]">{rawDetail}</pre>}
           </div>
         </DialogContent>

@@ -890,7 +890,7 @@ export const pages = {
         toolSchemaName: "工具定义",
         detailLoading: "正在查询上下文内容...",
         detailFailed: "查询失败，请稍后重试。若此会话尚未运行过，内容会在下一次运行后提供。",
-        detailViewTree: "结构",
+        detailViewTree: "预览",
         detailViewRaw: "原文",
         detailArrayItem: "第 {{index}} 项",
         detailArraySummary: "数组 · {{total}} 项",
