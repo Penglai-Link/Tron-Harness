@@ -99,6 +99,7 @@ import { listWorkspaceInternalAgentsMock, listWorkspaceSystemAgentsMock } from "
 import type { SystemAgentModelRecord, WorkspaceInternalAgentRecord, WorkspaceSystemAgentRecord } from "@/domain/agent/model";
 import { fetchWorkspaceSelectOptions } from "@/domain/model/api";
 import { getWorkspaceSelectOptions } from "@/domain/model/mock";
+import { applyCurrentLocaleHeader } from "@/i18n";
 import type {
   ModelSelectOption,
   ModelSelection,
@@ -4910,7 +4911,10 @@ export function ChatManagementPage() {
   const chatRuntimeAdapter = useMemo(
     () => getServiceDataSource("chat") === "mock"
       ? createMockChatAdapter()
-      : createInternalChatAdapter({ getAccessToken: getApiAccessToken }),
+      : createInternalChatAdapter({
+          getAccessToken: getApiAccessToken,
+          getHeaders: () => applyCurrentLocaleHeader(new Headers()),
+        }),
     [],
   );
   const [activeChatDataRefreshKey, setActiveChatDataRefreshKey] = useState(0);

@@ -35,6 +35,7 @@ export interface InternalAdapterOptions {
   baseUrl?: string;
   credentials?: RequestCredentials;
   getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>;
+  getHeaders?: () => HeadersInit | undefined | Promise<HeadersInit | undefined>;
 }
 
 interface AguiEventSnapshot {
@@ -46,19 +47,20 @@ interface AguiProtocolEvent {
   sseEvent: string;
 }
 
-async function authHeaders(
-  getAccessToken?: () => string | null | undefined | Promise<string | null | undefined>,
-) {
-  const accessToken = await getAccessToken?.();
-  if (!accessToken) return undefined;
-  return { Authorization: `Bearer ${accessToken}` };
+async function requestHeaders(options: InternalAdapterOptions) {
+  const headers = new Headers(await options.getHeaders?.());
+  const accessToken = await options.getAccessToken?.();
+  if (accessToken) {
+    headers.set("Authorization", `Bearer ${accessToken}`);
+  }
+  return headers;
 }
 
 export function createInternalChatAdapter(options: InternalAdapterOptions = {}): ChatAdapter {
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
     credentials: options.credentials ?? "include",
-    getHeaders: () => authHeaders(options.getAccessToken),
+    getHeaders: () => requestHeaders(options),
   });
 
   return {
@@ -109,7 +111,7 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
       );
       const response = await fetch(url, {
         credentials: options.credentials ?? "include",
-        headers: await authHeaders(options.getAccessToken),
+        headers: await requestHeaders(options),
         method: "GET",
         signal,
       });
@@ -296,7 +298,7 @@ export function createInternalTerminalAdapter(
   const transport = createFetchTransport({
     baseUrl: options.baseUrl,
     credentials: options.credentials ?? "include",
-    getHeaders: () => authHeaders(options.getAccessToken),
+    getHeaders: () => requestHeaders(options),
   });
 
   return {
