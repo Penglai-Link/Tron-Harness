@@ -12,6 +12,7 @@ import {
   useAguiWorkReplayPreferences,
 } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { SystemConfigTable } from "@/domain/settings/components/SystemConfigTable";
+import { UpdateSettingsCard } from "@/domain/update/UpdateSettingsCard";
 
 export function SettingsGeneralPage() {
   const { t: shellT } = useTranslation("shell");
@@ -26,6 +27,8 @@ export function SettingsGeneralPage() {
       <PageHeader title={shellT("settings.items.general")} />
 
       <div className="grid gap-4 xl:grid-cols-2">
+        <UpdateSettingsCard />
+
         <SystemConfigTable />
 
         <SurfaceCard className="space-y-4 xl:col-span-2">

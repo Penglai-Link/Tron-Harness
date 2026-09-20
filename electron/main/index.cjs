@@ -2,7 +2,15 @@ const fs = require("node:fs");
 const path = require("node:path");
 const readline = require("node:readline");
 const { spawn, exec } = require("node:child_process");
+
+const applyUpdateArgIndex = process.argv.indexOf("--_tron-apply-update");
+if (applyUpdateArgIndex >= 0) {
+  const { runApplyUpdate } = require("./updater.cjs");
+  const installerPath = process.argv[applyUpdateArgIndex + 1] || "";
+  void runApplyUpdate(installerPath).then((code) => process.exit(code));
+} else {
 const { app, BrowserWindow, clipboard, ipcMain, Menu, shell } = require("electron");
+const { createUpdater, UPDATE_STATUS_EVENT } = require("./updater.cjs");
 
 const {
   HOST,
@@ -18,6 +26,7 @@ const {
   resolveResourcesDir,
   resolveSidecarPath,
   resolveTronDatabasePath,
+  resolveUpdateServerUrl,
   sanitizeUrl,
   waitBackendReady
 } = require("./helpers.cjs");
@@ -65,8 +74,19 @@ const state = {
   frontendDistDir: "",
   graphPath: "",
   injectionEnabled: false,
-  mainWindow: null
+  mainWindow: null,
+  updater: null
 };
+
+function sendUpdaterStatus(status) {
+  if (!state.mainWindow || state.mainWindow.isDestroyed()) return;
+  state.mainWindow.webContents.send(UPDATE_STATUS_EVENT, status);
+}
+
+function requireUpdater() {
+  if (!state.updater) throw new Error("desktop updater is not initialized");
+  return state.updater;
+}
 
 function buildWebviewInjectionScript(pageId, enabled) {
   return injectionTemplate
@@ -437,6 +457,18 @@ async function bootstrap() {
   state.backendLogPath = resolveBackendLogPath(appDataDir);
   state.graphPath = path.join(appDataDir, "tron.graph.grafeo");
   state.frontendDistDir = resolveFrontendDistDir(resourcesDir);
+  state.updater = createUpdater({
+    dataDir: appDataDir,
+    getVersion: () => app.getVersion(),
+    getVersionServerUrl: () => resolveUpdateServerUrl(resourcesDir),
+    onStatus: sendUpdaterStatus,
+    openInstaller: (filePath) => shell.openPath(filePath),
+    exit: (code) => {
+      isQuitting = true;
+      stopBackend();
+      app.exit(code);
+    }
+  });
 
   const mainWindow = createMainWindow();
   await showStartupMessage("Backend starting...");
@@ -800,6 +832,36 @@ function registerIpcHandlers() {
       };
     }
 
+    if (command === "getAppVersion") {
+      return app.getVersion();
+    }
+
+    if (command === "checkUpdate") {
+      return requireUpdater().check(request.accessToken);
+    }
+
+    if (command === "startDownloadUpdate") {
+      const updater = requireUpdater();
+      if (updater.getStatus().type !== "updateAvailable") {
+        throw new Error("No downloadable update is available");
+      }
+      if (!String(request.accessToken || "").trim()) {
+        throw new Error("An access token is required to download the update");
+      }
+      void updater.startDownload(request.accessToken).catch((error) => {
+        console.warn(`update download failed: ${error instanceof Error ? error.message : String(error)}`);
+      });
+      return true;
+    }
+
+    if (command === "applyUpdate") {
+      return requireUpdater().apply();
+    }
+
+    if (command === "getUpdateStatus") {
+      return requireUpdater().getStatus();
+    }
+
     if (command === "checkTargetPageEmbedding") {
       return checkTargetPageEmbeddingStatus(request.url);
     }
@@ -913,3 +975,4 @@ app.on("before-quit", () => {
   isQuitting = true;
   stopBackend();
 });
+}

@@ -41,16 +41,16 @@
       "icon": "../src-tauri/icons/icon.icns"
     },
     "win": {
-      "target": ["nsis"],
-      "nsis": {
-        "oneClick": false,
-        "allowToChangeInstallationDirectory": true,
-        "createDesktopShortcut": true,
-        "createStartMenuShortcut": true,
-        "perMachine": false,
-        "unicode": true,
-        "guided": true
-      }
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "perMachine": false,
+      "unicode": true,
+      "runAfterFinish": true
     },
     "linux": {
       "target": ["AppImage"]

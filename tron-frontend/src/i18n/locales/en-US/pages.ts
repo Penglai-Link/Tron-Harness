@@ -2352,6 +2352,9 @@ export const pages = {
     unassigned: "Not assigned",
   },
   settingsGeneral: {
+    update: {
+      title: "Version updates",
+    },
     aguiWorkReplay: {
       description:
         "Controls how many recent completed conversation turns keep user-facing work rails after chat switching or page refresh.",
@@ -2541,6 +2544,33 @@ export const pages = {
       valueTypes: { boolean: "Boolean", number: "Number", string: "String" },
       values: { false: "Disabled", true: "Enabled" },
     },
+  },
+  update: {
+    actions: {
+      checking: "Checking...",
+      check: "Check for updates",
+      dismiss: "Dismiss update notice",
+      download: "Download update",
+      install: "Install update",
+      later: "Later",
+      retry: "Retry",
+    },
+    available: "A new version is available to download.",
+    currentVersion: "Current version",
+    downloaded: "The update package is ready to install.",
+    downloading: "Downloading update package ({{progress}}%)...",
+    errors: {
+      check: "Update check failed",
+      download: "Update download failed",
+      generic: "Update failed",
+      install: "Update installation failed",
+    },
+    installing: "Applying the update. Tron will restart shortly.",
+    status: {
+      available: "Available: v{{version}}",
+      upToDate: "You are up to date",
+    },
+    title: "A new Tron version is available",
   },
   settingsMcpServers: {
     actions: {

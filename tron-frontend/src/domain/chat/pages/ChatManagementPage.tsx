@@ -3111,12 +3111,14 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
                                       className="shrink-0 rounded-sm px-2 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)] hover:text-[var(--color-on-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
                                       type="button"
                                       onClick={() => {
-                                        const promptPath = `/prompts/detail?${new URLSearchParams({ promptCode: message.promptCode }).toString()}`;
+                                        const promptCode = message.promptCode;
+                                        if (!promptCode) return;
+                                        const promptPath = `/prompts/detail?${new URLSearchParams({ promptCode }).toString()}`;
                                         const tabId = useTabStore.getState().addTab({
                                           title: t("chat.shortTermMemory.contextPanel.detailPromptManagement"),
                                           path: promptPath,
                                           closable: true,
-                                          activeNav: `prompt-detail:${message.promptCode}`,
+                                          activeNav: `prompt-detail:${promptCode}`,
                                         });
                                         useTabStore.getState().updateTab(tabId, { path: promptPath });
                                         setDialogOpen(false);

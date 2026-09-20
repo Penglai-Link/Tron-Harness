@@ -2503,6 +2503,9 @@ export const pages = {
     unassigned: "未配置",
   },
   settingsGeneral: {
+    update: {
+      title: "版本更新",
+    },
     aguiWorkReplay: {
       description:
         "控制切换聊天或刷新页面后，保留多少个最近完成的对话回合及其面向用户的工作轨道。",
@@ -2642,6 +2645,33 @@ export const pages = {
       valueTypes: { boolean: "布尔值", number: "数字", string: "字符串" },
       values: { false: "禁用", true: "启用" },
     },
+  },
+  update: {
+    actions: {
+      checking: "检查中...",
+      check: "检查更新",
+      dismiss: "关闭更新提示",
+      download: "下载更新",
+      install: "安装更新",
+      later: "稍后",
+      retry: "重试",
+    },
+    available: "发现新版本，可以下载更新包。",
+    currentVersion: "当前版本",
+    downloaded: "更新包已下载完成，可以安装。",
+    downloading: "正在下载更新包（{{progress}}%）...",
+    errors: {
+      check: "检查更新失败",
+      download: "下载更新失败",
+      generic: "更新失败",
+      install: "安装更新失败",
+    },
+    installing: "正在应用更新，应用即将重启。",
+    status: {
+      available: "可更新至 v{{version}}",
+      upToDate: "当前已是最新版本",
+    },
+    title: "Tron 有新版本",
   },
   settingsMcpServers: {
     actions: {

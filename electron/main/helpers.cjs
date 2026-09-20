@@ -9,6 +9,7 @@ const SIDE_CAR_BASELINE_PORT = 8080;
 const MAX_PORT_PROBE = 80;
 const BACKEND_HEALTH_PATH = "/api/v1/health";
 const GITHUB_OAUTH_CALLBACK_PATH = "/api/v1/auth/oauth2/callback/github";
+const DEFAULT_PERSON_AI_SERVER_BASE_URL = "https://personai.chat/person-ai-index";
 
 function isHttpUrl(input) {
   try {
@@ -99,6 +100,23 @@ function resolveDesktopDataDir() {
 
 function resolveBackendLogPath(appDataDir) {
   return path.join(appDataDir, "logs", "tron-backend.log");
+}
+
+function resolveUpdateServerUrl(resourcesDir) {
+  const environmentUrl = String(process.env.TRON_VERSION_SERVER_URL || "").trim();
+  if (environmentUrl) return environmentUrl;
+
+  const configPath = path.join(resourcesDir, "update-config.json");
+  try {
+    const config = JSON.parse(fs.readFileSync(configPath, "utf8"));
+    if (typeof config.versionServerUrl === "string" && config.versionServerUrl.trim()) {
+      return config.versionServerUrl.trim();
+    }
+  } catch (_error) {
+    // Fall through to the Person-AI SDK default.
+  }
+
+  return DEFAULT_PERSON_AI_SERVER_BASE_URL;
 }
 
 function resolveBackendConfigPath(appDataDir, resourcesDir) {
@@ -244,6 +262,7 @@ async function checkTargetPageEmbeddingStatus(rawUrl) {
 
 module.exports = {
   BACKEND_HEALTH_PATH,
+  DEFAULT_PERSON_AI_SERVER_BASE_URL,
   HOST,
   SIDE_CAR_BASELINE_PORT,
   buildGitHubOAuthRedirectUri,
@@ -255,6 +274,7 @@ module.exports = {
   resolveDesktopDataDir,
   resolveBackendLogPath,
   resolveBackendConfigPath,
+  resolveUpdateServerUrl,
   resolveFrontendDistDir,
   resolveResourcesDir,
   resolveSidecarPath,

@@ -1,6 +1,7 @@
 import { useAuthSession, buildLoginUrl, NoWorkspaceAccessPage } from "@/domain/auth";
 import { ReactNode } from "react";
 import { useLocation, Navigate } from "react-router";
+import { UpdateNotification } from "@/domain/update/UpdateNotification";
 import RouteLoadingFallback from "./RouteLoadingFallback";
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
@@ -32,5 +33,10 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      {children}
+      <UpdateNotification />
+    </>
+  );
 }

@@ -179,6 +179,7 @@ BACKEND_RELEASE_BINARY := tron-backend$(HOST_EXE_SUFFIX)
 BACKEND_RELEASE_PATH := $(BACKEND_DIR)/target/release/$(BACKEND_RELEASE_BINARY)
 DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BINARY)
 ELECTRON_NPM := $(NPM)
+NODE ?= node
 
 .PHONY: help
 help:
@@ -373,6 +374,7 @@ desktop-build: desktop-clean web-build
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
 	$(call COPY_FILE,$(BACKEND_DIR)/application.yaml,$(ELECTRON_DIR)/resources/application.yaml)
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
+	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
 	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	$(call ASSERT_FILE,$(BACKEND_RELEASE_PATH))
@@ -387,6 +389,7 @@ desktop-build: desktop-clean web-build
 	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
 	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
 	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
+	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
 	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
 	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --release
 	test -f $(BACKEND_RELEASE_PATH)
@@ -412,6 +415,7 @@ desktop-clean:
 	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/binaries)
 	$(call REMOVE,$(ELECTRON_DIR)/resources/native)
+	$(call REMOVE_FILE,$(ELECTRON_DIR)/resources/update-config.json)
 	$(call REMOVE,$(ELECTRON_DIR)/node_modules)
 
 .PHONY: skill-memory-dreaming-test

@@ -6,6 +6,11 @@ contextBridge.exposeInMainWorld("tronDesktop", {
   targetPreloadUrl: pathToFileURL(path.resolve(__dirname, "target-preload.cjs")).href,
   invoke(command, payload) {
     return ipcRenderer.invoke("tron-desktop:invoke", command, payload || {});
+  },
+  onUpdateStatus(listener) {
+    const handler = (_event, payload) => listener(payload);
+    ipcRenderer.on("update:status-changed", handler);
+    return () => ipcRenderer.removeListener("update:status-changed", handler);
   }
 });
 

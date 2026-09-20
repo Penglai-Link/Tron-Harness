@@ -1,6 +1,7 @@
 docs/tasks/frontend-onboarding/evidence/
 docs/brainstorm/*/runtime/
 tron-backend/resources/frontend/
+electron/resources/update-config.json
 .intentforge-dreaming/
 **/.intentforge-dreaming/
 .tron/

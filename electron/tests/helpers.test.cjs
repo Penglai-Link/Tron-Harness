@@ -6,10 +6,12 @@ const path = require("node:path");
 
 const {
   buildGitHubOAuthRedirectUri,
+  DEFAULT_PERSON_AI_SERVER_BASE_URL,
   iframeBlockReasonFromHeaders,
   isHttpUrl,
   resolveBackendConfigPath,
   resolveBackendLogPath,
+  resolveUpdateServerUrl,
   sanitizeUrl
 } = require("../main/helpers.cjs");
 
@@ -35,6 +37,33 @@ test("resolveBackendLogPath stores sidecar logs below the desktop data directory
     resolveBackendLogPath("/tmp/tron-data"),
     "/tmp/tron-data/logs/tron-backend.log"
   );
+});
+
+test("resolveUpdateServerUrl prefers runtime environment over packaged config", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tron-update-config-"));
+  fs.writeFileSync(path.join(root, "update-config.json"), JSON.stringify({ versionServerUrl: "https://packaged.example.com" }));
+  const previous = process.env.TRON_VERSION_SERVER_URL;
+
+  delete process.env.TRON_VERSION_SERVER_URL;
+  assert.equal(resolveUpdateServerUrl(root), "https://packaged.example.com");
+  process.env.TRON_VERSION_SERVER_URL = "https://runtime.example.com";
+  assert.equal(resolveUpdateServerUrl(root), "https://runtime.example.com");
+
+  if (previous === undefined) delete process.env.TRON_VERSION_SERVER_URL;
+  else process.env.TRON_VERSION_SERVER_URL = previous;
+  fs.rmSync(root, { recursive: true, force: true });
+});
+
+test("resolveUpdateServerUrl falls back to the Person-AI SDK server", () => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), "tron-update-default-"));
+  const previous = process.env.TRON_VERSION_SERVER_URL;
+
+  delete process.env.TRON_VERSION_SERVER_URL;
+  assert.equal(resolveUpdateServerUrl(root), DEFAULT_PERSON_AI_SERVER_BASE_URL);
+
+  if (previous === undefined) delete process.env.TRON_VERSION_SERVER_URL;
+  else process.env.TRON_VERSION_SERVER_URL = previous;
+  fs.rmSync(root, { recursive: true, force: true });
 });
 
 test("resolveBackendConfigPath initializes user config without overwriting it", () => {

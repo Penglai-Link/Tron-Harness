@@ -6,6 +6,7 @@ import { DesktopBridge, sanitizeInjectionEventPayload } from "./DesktopBridge";
 type WindowWithTauriInternals = Window & {
   tronDesktop?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    onUpdateStatus?: (listener: (payload: unknown) => void) => () => void;
   };
   __TAURI_INTERNALS__?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
@@ -53,6 +54,41 @@ describe("DesktopBridge", () => {
       },
     });
     expect(tauriInvoke).not.toHaveBeenCalled();
+  });
+
+  it("exposes update commands and normalizes update status events", async () => {
+    const invoke = vi.fn(async (command: string) => {
+      if (command === "getAppVersion") return "1.2.0";
+      if (command === "checkUpdate") return { type: "updateAvailable", version: "2.0.0" };
+      if (command === "getUpdateStatus") return { type: "downloaded", version: "2.0.0", filePath: "/tmp/Tron.dmg" };
+      return true;
+    });
+    let emitStatus: ((payload: unknown) => void) | undefined;
+    const stopListening = vi.fn();
+    (window as unknown as WindowWithTauriInternals).tronDesktop = {
+      invoke,
+      onUpdateStatus: (listener) => {
+        emitStatus = listener;
+        return stopListening;
+      },
+    };
+
+    const bridge = new DesktopBridge();
+    expect(bridge.isElectron()).toBe(true);
+    const received: string[] = [];
+    const stop = bridge.onUpdateStatus((status) => received.push(status.type));
+
+    expect(await bridge.getAppVersion()).toBe("1.2.0");
+    expect(await bridge.checkUpdate("token-1")).toMatchObject({ type: "updateAvailable", version: "2.0.0" });
+    expect(await bridge.startDownloadUpdate("token-1")).toBe(true);
+    expect(await bridge.applyUpdate()).toBe(true);
+    expect(await bridge.getUpdateStatus()).toMatchObject({ type: "downloaded", filePath: "/tmp/Tron.dmg" });
+
+    emitStatus?.({ type: "downloading", progress: 42 });
+    expect(received).toEqual(["downloading"]);
+    stop();
+    expect(stopListening).toHaveBeenCalledTimes(1);
+    expect(invoke).toHaveBeenCalledWith("checkUpdate", { accessToken: "token-1" });
   });
 
   it("uses Tauri v2 internal invoke when the global Tauri object is not exposed", async () => {

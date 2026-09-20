@@ -16,6 +16,27 @@ export interface DesktopBackendStatus {
   graphPath?: string;
 }
 
+export type UpdateStatusType =
+  | "idle"
+  | "checking"
+  | "upToDate"
+  | "updateAvailable"
+  | "downloading"
+  | "downloaded"
+  | "installing"
+  | "error";
+
+export interface UpdateStatus {
+  type: UpdateStatusType;
+  version?: string;
+  versionId?: string;
+  releaseDate?: string;
+  fileName?: string;
+  filePath?: string;
+  progress?: number;
+  message?: string;
+}
+
 export interface OpenTargetPageRequest {
   url: string;
   mode?: DesktopTargetMode;
@@ -69,6 +90,7 @@ type WindowWithElectronDesktop = Window & {
   tronDesktop?: {
     targetPreloadUrl?: string;
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
+    onUpdateStatus?: (listener: (payload: unknown) => void) => () => void;
   };
   __TAURI_INTERNALS__?: {
     invoke?: (command: string, payload?: Record<string, unknown>) => Promise<unknown>;
@@ -105,6 +127,15 @@ function resolveInvoke(): InvokeCommand<unknown> | null {
   }
 
   return null;
+}
+
+function hasElectronBridge(): boolean {
+  if (typeof window === "undefined") {
+    return false;
+  }
+
+  const desktopWindow = window as unknown as WindowWithElectronDesktop;
+  return typeof desktopWindow.tronDesktop?.invoke === "function";
 }
 
 function sanitizeString(value: unknown): string {
@@ -211,6 +242,38 @@ export function isDesktopHost(): boolean {
   return resolveInvoke() !== null;
 }
 
+function normalizeUpdateStatus(value: unknown): UpdateStatus {
+  if (!value || typeof value !== "object") {
+    return { type: "idle" };
+  }
+
+  const payload = value as Record<string, unknown>;
+  const knownTypes: UpdateStatusType[] = [
+    "idle",
+    "checking",
+    "upToDate",
+    "updateAvailable",
+    "downloading",
+    "downloaded",
+    "installing",
+    "error",
+  ];
+  const type = knownTypes.includes(payload.type as UpdateStatusType)
+    ? payload.type as UpdateStatusType
+    : "idle";
+
+  return {
+    type,
+    version: typeof payload.version === "string" ? payload.version : undefined,
+    versionId: typeof payload.versionId === "string" ? payload.versionId : undefined,
+    releaseDate: typeof payload.releaseDate === "string" ? payload.releaseDate : undefined,
+    fileName: typeof payload.fileName === "string" ? payload.fileName : undefined,
+    filePath: typeof payload.filePath === "string" ? payload.filePath : undefined,
+    progress: typeof payload.progress === "number" ? payload.progress : undefined,
+    message: typeof payload.message === "string" ? payload.message : undefined,
+  };
+}
+
 export function resolveTargetWebviewPreloadUrl(): string {
   if (typeof window === "undefined") {
     return "";
@@ -240,13 +303,19 @@ export function cryptoRandomId(): string {
 
 export class DesktopBridge {
   private readonly invoke: InvokeCommand<unknown> | null;
+  private readonly electronHost: boolean;
 
   constructor() {
     this.invoke = resolveInvoke();
+    this.electronHost = hasElectronBridge();
   }
 
   public isDesktop(): boolean {
     return this.invoke !== null;
+  }
+
+  public isElectron(): boolean {
+    return this.electronHost;
   }
 
   public async getBackendStatus(): Promise<DesktopBackendStatus> {
@@ -282,6 +351,38 @@ export class DesktopBridge {
       databasePath: sanitizeString(payload.databasePath ?? payload.database_path),
       graphPath: sanitizeString(payload.graphPath ?? payload.graph_path),
     };
+  }
+
+  public async getAppVersion(): Promise<string> {
+    const response = await this.requireInvoke()("getAppVersion", {});
+    return typeof response === "string" ? response : "";
+  }
+
+  public async checkUpdate(accessToken: string): Promise<UpdateStatus> {
+    const response = await this.requireInvoke()("checkUpdate", { accessToken });
+    return normalizeUpdateStatus(response);
+  }
+
+  public async startDownloadUpdate(accessToken: string): Promise<boolean> {
+    const response = await this.requireInvoke()("startDownloadUpdate", { accessToken });
+    return Boolean(response);
+  }
+
+  public async applyUpdate(): Promise<boolean> {
+    const response = await this.requireInvoke()("applyUpdate", {});
+    return Boolean(response);
+  }
+
+  public async getUpdateStatus(): Promise<UpdateStatus> {
+    const response = await this.requireInvoke()("getUpdateStatus", {});
+    return normalizeUpdateStatus(response);
+  }
+
+  public onUpdateStatus(listener: (status: UpdateStatus) => void): () => void {
+    if (typeof window === "undefined") return () => {};
+    const desktopWindow = window as unknown as WindowWithElectronDesktop;
+    if (typeof desktopWindow.tronDesktop?.onUpdateStatus !== "function") return () => {};
+    return desktopWindow.tronDesktop.onUpdateStatus((payload) => listener(normalizeUpdateStatus(payload)));
   }
 
   public async openTargetPage(request: OpenTargetPageRequest): Promise<OpenTargetPageResponse> {
