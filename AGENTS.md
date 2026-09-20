@@ -52,4 +52,5 @@ Pagable response body format:
 <!-- Windows PowerShell sessions may omit HOME; make be-dev falls back to USERPROFILE so the backend resolves its default ~/.tron config and storage paths correctly. -->
 <!-- Keep the be-dev target declaration outside the HOST_OS conditional; otherwise its POSIX recipe is discarded and dev-api waits forever for a backend that never started. -->
 <!-- chat_ask_user answers must remain pending until the previous run releases the session; persist a readable answer summary as the continuation's user transcript so React short-term memory can consume it. -->
+<!-- Build Accept-Language from the active i18n language before localStorage; persisted locale can lag the visible UI across browser tabs. Keep ordinary API requests and chat SSE on the same header helper. -->
 <!-- OpenAI Chat Completions has no standard reasoning-summary field. Preserve explicit compatible-provider summary extensions, and when only raw reasoning_content is available, use its latest complete sentence as the user-facing fallback summary; Responses reasoning.summary remains the native OpenAI source. -->

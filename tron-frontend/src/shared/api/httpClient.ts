@@ -1,4 +1,4 @@
-import { getCurrentLocale } from "@/i18n";
+import { applyCurrentLocaleHeader } from "@/i18n";
 
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
 
@@ -64,7 +64,6 @@ function resolveRequestBody(body: ApiRequestOptions["body"]) {
 
 function resolveHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit) {
   const resolved = new Headers(headers);
-  const locale = getCurrentLocale();
 
   if (!(body === undefined || body instanceof Blob || body instanceof FormData || body instanceof URLSearchParams || typeof body === "string")) {
     resolved.set("Content-Type", "application/json");
@@ -74,11 +73,7 @@ function resolveHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit) 
     resolved.set("Authorization", `Bearer ${apiAccessToken}`);
   }
 
-  if (!resolved.has("Accept-Language")) {
-    resolved.set("Accept-Language", locale);
-  }
-
-  return resolved;
+  return applyCurrentLocaleHeader(resolved);
 }
 
 function createApiError(response: Response, payload: unknown, method: string) {

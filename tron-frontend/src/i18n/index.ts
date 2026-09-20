@@ -49,10 +49,15 @@ export function getInitialLocale(): SupportedLocale {
  * selection; `resolvedLanguage` may instead be the fallback locale.
  */
 export function getCurrentLocale(): SupportedLocale {
+  if (isSupportedLocale(i18n.language)) return i18n.language;
   const storedLocale = getStoredLocale();
   if (storedLocale) return storedLocale;
-  if (isSupportedLocale(i18n.language)) return i18n.language;
   return getBrowserLocale() ?? fallbackLocale;
+}
+
+export function applyCurrentLocaleHeader(headers: Headers) {
+  headers.set("Accept-Language", getCurrentLocale());
+  return headers;
 }
 
 function syncDocumentLocale(locale: SupportedLocale) {
@@ -94,6 +99,20 @@ i18n.on("languageChanged", (locale) => {
   persistLocale(locale);
   syncDocumentLocale(locale);
 });
+
+if (typeof window !== "undefined") {
+  window.addEventListener("storage", (event) => {
+    if (
+      event.key !== localeStorageKey
+      || !event.newValue
+      || !isSupportedLocale(event.newValue)
+      || event.newValue === i18n.language
+    ) {
+      return;
+    }
+    void i18n.changeLanguage(event.newValue);
+  });
+}
 
 export function useLocale() {
   const { i18n: i18next, t } = useTranslation("common");
