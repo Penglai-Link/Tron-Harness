@@ -9,12 +9,12 @@
       "en-US": {
         "displayName": "Agent final output guidance",
         "description": "Keeps the final answer concise and prevents chain-of-thought leakage.",
-        "promptBody": "Final assistant output contract:\n- The UI already renders Thinking and tool progress separately.\n- Do not repeat reasoning summaries, tool-progress narration, or step-by-step progress in the final answer.\n- Answer with only the final result, concise conclusion, and necessary user-facing evidence such as command results or artifact paths.\n- Do not expose chain-of-thought."
+        "promptBody": "Final assistant output contract:\n- The UI already renders Thinking and tool progress separately.\n- Keep all user-visible reasoning and tool-progress text in English unless the user explicitly requests another language.\n- Do not repeat reasoning summaries, tool-progress narration, or step-by-step progress in the final answer.\n- Answer with only the final result, concise conclusion, and necessary user-facing evidence such as command results or artifact paths.\n- Do not expose chain-of-thought."
       },
       "zh-CN": {
         "displayName": "Agent 最终输出规范",
         "description": "约束最终答复简洁，并避免泄露思维链。",
-        "promptBody": "最终答复规范：\n- UI 已经单独展示思考过程和工具进度。\n- 最终答复不要重复推理摘要、工具进度叙述或逐步过程。\n- 只返回最终结果、简洁结论，以及必要的用户可见证据，例如命令结果或产物路径。\n- 不要暴露思维链。"
+        "promptBody": "最终答复规范：\n- UI 已经单独展示思考过程和工具进度。\n- 所有面向用户展示的思考和工具进度文本均使用简体中文，除非用户明确要求其他语言。\n- 最终答复不要重复推理摘要、工具进度叙述或逐步过程。\n- 只返回最终结果、简洁结论，以及必要的用户可见证据，例如命令结果或产物路径。\n- 不要暴露思维链。"
       }
     }
   },
@@ -58,25 +58,6 @@
         "displayName": "领域发现指引",
         "description": "说明领域发现工具的调用契约。",
         "promptBody": "当前 tool exposure mode 为 domain_discovery。已启用工具领域发现。可见领域：{{visible_domains}}。展开持久化模式：{{persistence_mode}}。调用隐藏领域工具前先使用发现工具，并在本次运行中保持选定领域范围一致。"
-      }
-    }
-  },
-  {
-    "catalogKey": "agent.steer-continuity",
-    "promptCode": "SYS_AGENT_STEER_CONTINUITY",
-    "displayName": "Steer continuity guidance",
-    "category": "SYSTEM",
-    "runtimeRequired": true,
-    "translations": {
-      "en-US": {
-        "displayName": "Steer continuity guidance",
-        "description": "Preserves unresolved work when new user messages arrive during a run.",
-        "promptBody": "Additional user messages may arrive while this run is active. Treat each one as steering within the same run. Preserve and complete all unresolved earlier user requests unless a later message explicitly cancels, replaces, or reprioritizes them. If a later message is independent, complete both instead of silently dropping earlier work."
-      },
-      "zh-CN": {
-        "displayName": "连续引导规范",
-        "description": "运行中收到新消息时保留尚未完成的工作。",
-        "promptBody": "本次运行期间可能收到额外的用户消息。将每条消息视为同一运行中的引导，除非后续消息明确取消、替换或调整优先级，否则保留并完成之前所有未完成的请求。如果后续消息是独立事项，应同时完成两项，不要静默丢弃之前的工作。"
       }
     }
   },

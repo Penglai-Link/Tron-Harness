@@ -1,8 +1,8 @@
-import { reasoningCheckpointPreview } from "./display";
 import {
   aguiEventMillis,
   aguiEventType,
   buildAguiUserWorkCards,
+  summarizeReasoning,
 } from "./transcript";
 import type { TranscriptAguiEvent } from "./types";
 
@@ -35,11 +35,11 @@ export interface AguiWorkSnapshot {
   summary: string | null;
 }
 
-function currentReasoningCheckpoint(events: TranscriptAguiEvent[]) {
+function currentReasoningSummary(events: TranscriptAguiEvent[]) {
   const reasoningCards = buildAguiUserWorkCards(events)
     .filter((card) => card.kind === "reasoning");
   const latestReasoning = reasoningCards.at(-1)?.value;
-  return reasoningCheckpointPreview(latestReasoning?.content ?? "");
+  return latestReasoning ? summarizeReasoning(latestReasoning) : "";
 }
 
 export function currentAguiWorkSnapshot(events: TranscriptAguiEvent[]): AguiWorkSnapshot | null {
@@ -48,17 +48,13 @@ export function currentAguiWorkSnapshot(events: TranscriptAguiEvent[]): AguiWork
     if (!event || aguiEventType(event).toUpperCase() !== "ACTIVITY_SNAPSHOT") continue;
     const activity = String(("activity" in event ? event.activity : "") ?? "").toUpperCase();
     if (activity === "PREPARING" || activity === "THINKING" || activity === "RESPONDING") {
-      const summary = "summary" in event && typeof event.summary === "string"
-        ? event.summary.trim()
-        : "";
-      if (summary) return { activity, summary };
       if (activity === "THINKING") {
-        return { activity, summary: currentReasoningCheckpoint(events) || null };
+        return { activity, summary: currentReasoningSummary(events) || null };
       }
       return { activity, summary: null };
     }
   }
-  const summary = currentReasoningCheckpoint(events);
+  const summary = currentReasoningSummary(events);
   return summary ? { activity: "THINKING", summary } : null;
 }
 

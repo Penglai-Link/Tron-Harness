@@ -365,7 +365,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn chat_completions_stream_accumulates_reasoning_summary_and_tool_calls() {
+    async fn chat_completions_stream_accumulates_compatible_summary_and_tool_calls() {
         let client = HttpModelClient::new(Arc::new(StubProvider {
             stream_events: vec![
                 json!({

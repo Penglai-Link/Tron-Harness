@@ -18,7 +18,6 @@ impl ReactAgent {
         steer_control: Option<ActiveRunControl>,
     ) -> Result<AgentRunResult, AgentError> {
         let mut steering = RuntimeSteering::new(steer_control);
-        steering.install_continuity_guidance(context);
         validate_context(&context)?;
         let mut turn_state = TurnStateAdapter::new(
             context.model.protocol,

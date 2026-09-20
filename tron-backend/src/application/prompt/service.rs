@@ -30,6 +30,9 @@ mod template;
 mod validation;
 mod workspace;
 
+const RETIRED_BUILTIN_PROMPT_CATALOG_KEY: &str = "agent.steer-continuity";
+const RETIRED_BUILTIN_PROMPT_CODE: &str = "SYS_AGENT_STEER_CONTINUITY";
+
 #[derive(Clone)]
 pub struct PromptService {
     repository: Arc<Mutex<Box<dyn PromptRepository>>>,
@@ -163,6 +166,27 @@ impl PromptService {
                 .lock()
                 .expect("prompt repository mutex poisoned")
                 .create_prompt(&prompt)?;
+        }
+        Ok(())
+    }
+
+    pub fn retire_removed_builtins(&self) -> Result<(), crate::domain::prompt::PromptError> {
+        let retired_prompt_codes = self
+            .all_prompts()?
+            .into_iter()
+            .filter(|prompt| {
+                prompt.catalog_key.as_deref() == Some(RETIRED_BUILTIN_PROMPT_CATALOG_KEY)
+                    || prompt.prompt_code == RETIRED_BUILTIN_PROMPT_CODE
+                    || prompt.source_prompt_code.as_deref() == Some(RETIRED_BUILTIN_PROMPT_CODE)
+            })
+            .map(|prompt| prompt.prompt_code)
+            .collect::<Vec<_>>();
+        let mut repository = self
+            .repository
+            .lock()
+            .expect("prompt repository mutex poisoned");
+        for prompt_code in retired_prompt_codes {
+            repository.delete_prompt(&prompt_code)?;
         }
         Ok(())
     }

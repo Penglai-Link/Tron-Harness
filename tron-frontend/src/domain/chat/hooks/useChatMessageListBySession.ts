@@ -16,6 +16,7 @@ import type {
   StopChatRunResult,
 } from "@/domain/chat/model";
 import { normalizeChatUserInputRequest } from "@tron/chat-core";
+import { getCurrentLocale } from "@/i18n";
 import {
   ApiError,
   buildApiUrl,
@@ -412,6 +413,8 @@ async function streamChatSse(
 ): Promise<ChatSendResult> {
   const { path } = parseEndpoint(endpoint);
   const headers = new Headers({ "Content-Type": "application/json" });
+  const locale = getCurrentLocale();
+  headers.set("Accept-Language", locale);
   const accessToken = getApiAccessToken();
   if (accessToken) headers.set("Authorization", `Bearer ${accessToken}`);
 

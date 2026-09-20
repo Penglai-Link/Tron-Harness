@@ -61,6 +61,7 @@ interface ToolCatalogDomainRecordApi {
 
 interface ToolRecordApi {
   toolCode: string;
+  toolName: string;
   domainCode: string;
   name: string;
   description: string;
@@ -206,6 +207,7 @@ function normalizeToolRecord(record: ToolRecordApi): PlatformToolRecord {
     name: record.name,
     operationKind: normalizeToolOperationKind(record.operationKind),
     toolCode: record.toolCode,
+    toolName: record.toolName,
   };
 }
 

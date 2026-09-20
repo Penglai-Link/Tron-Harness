@@ -78,12 +78,22 @@ pub struct AgentShortTermMemoryRunContext {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub input_metadata: Option<Value>,
     pub prompt_prefix: Vec<AgentMessage>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub prompt_prefix_sources: Vec<Option<AgentPromptPrefixSource>>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub current_input_message: Option<AgentMessage>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub agent_code: Option<String>,
     #[serde(default)]
     pub todo_enabled: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct AgentPromptPrefixSource {
+    pub catalog_key: String,
+    pub prompt_code: String,
+    pub locale: String,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

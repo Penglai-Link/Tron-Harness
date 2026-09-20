@@ -259,7 +259,6 @@ pub enum ToolAvailabilityState {
 #[serde(rename_all = "camelCase")]
 pub struct ToolCatalogRecord {
     pub tool_code: String,
-    #[serde(skip)]
     pub tool_name: String,
     pub domain_code: String,
     pub name: String,

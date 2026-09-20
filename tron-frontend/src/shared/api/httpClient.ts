@@ -1,4 +1,4 @@
-import { fallbackLocale, i18n } from "@/i18n";
+import { getCurrentLocale } from "@/i18n";
 
 export type EndpointParams = Record<string, string | number | boolean | null | undefined>;
 
@@ -64,6 +64,7 @@ function resolveRequestBody(body: ApiRequestOptions["body"]) {
 
 function resolveHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit) {
   const resolved = new Headers(headers);
+  const locale = getCurrentLocale();
 
   if (!(body === undefined || body instanceof Blob || body instanceof FormData || body instanceof URLSearchParams || typeof body === "string")) {
     resolved.set("Content-Type", "application/json");
@@ -74,7 +75,6 @@ function resolveHeaders(body: ApiRequestOptions["body"], headers?: HeadersInit) 
   }
 
   if (!resolved.has("Accept-Language")) {
-    const locale = i18n.resolvedLanguage ?? i18n.language ?? fallbackLocale;
     resolved.set("Accept-Language", locale);
   }
 

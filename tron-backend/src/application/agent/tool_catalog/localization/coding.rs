@@ -16,7 +16,7 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.domains.search.description" => {
             Some("Search files and source text inside the local workspace.")
         }
-        "agent.toolCatalog.tools.bash.exec.name" => Some("Run command"),
+        "agent.toolCatalog.tools.bash.exec.name" => Some("Run shell command"),
         "agent.toolCatalog.tools.bash.exec.description" => {
             Some("Run one shell command directly when structured tools are not enough.")
         }
@@ -262,7 +262,7 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.domains.search.description" => {
             Some("在本地工作区内搜索文件和源码文本。")
         }
-        "agent.toolCatalog.tools.bash.exec.name" => Some("执行命令"),
+        "agent.toolCatalog.tools.bash.exec.name" => Some("执行 Shell 命令"),
         "agent.toolCatalog.tools.bash.exec.description" => {
             Some("在结构化工具不够用时直接执行一条 shell 命令。")
         }

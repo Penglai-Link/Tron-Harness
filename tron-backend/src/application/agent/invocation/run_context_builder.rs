@@ -8,15 +8,16 @@ use crate::{
     },
     domain::{
         agent::{
-            AgentExecutionScope, AgentMessage, AgentModelConfig, AgentRunContext, AgentRunLimits,
-            AgentRuntimeType, AgentToolExposureState, AutoModelRouteContext, EffectiveSkill, EffectiveVariable,
-            ToolAvailabilityState, ToolExposureMode, ToolRegistry,
+            AgentExecutionScope, AgentMessage, AgentModelConfig, AgentPromptPrefixSource,
+            AgentRunContext, AgentRunLimits, AgentRuntimeType, AgentToolExposureState,
+            AutoModelRouteContext, EffectiveSkill, EffectiveVariable, ToolAvailabilityState,
+            ToolExposureMode, ToolRegistry,
         },
         prompt::PromptRuntimeProvider,
         skill::WorkspaceSkillListQuery,
         workspace::WorkspaceStatus,
     },
-    shared::event_bus::EventBusHandle,
+    shared::{event_bus::EventBusHandle, locale::SupportedLocale},
 };
 
 use crate::application::agent::{
@@ -66,6 +67,22 @@ fn managed_system_prompt(
             .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"))
             .to_string(),
     )
+}
+
+fn managed_system_prompt_source(catalog_key: &str, locale: &str) -> AgentPromptPrefixSource {
+    let definition = crate::domain::prompt::builtin_prompt(catalog_key)
+        .unwrap_or_else(|| panic!("managed system prompt is missing: {catalog_key}"));
+    AgentPromptPrefixSource {
+        catalog_key: definition.catalog_key.clone(),
+        prompt_code: definition.prompt_code.clone(),
+        locale: locale.to_string(),
+    }
+}
+
+fn invocation_locale(request_locale: Option<&str>) -> String {
+    SupportedLocale::from_raw(request_locale.unwrap_or("zh-CN"))
+        .as_str()
+        .to_string()
 }
 
 pub(crate) struct PreparedAgentRun {
@@ -188,7 +205,7 @@ impl AgentRunContextBuilder {
             resolve_invocation_model(&resolved_agent, requested_model, requested_system_model_id)?;
         let model_code = model.model_code.clone();
         let agent_kind = agent_kind_for_runtime(resolved_agent.runtime_type);
-        let locale = locale.unwrap_or_else(|| "en-US".to_string());
+        let locale = invocation_locale(locale.as_deref());
         let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
         let mut tools = requested_tools;
         let mut effective_tools = tools.clone();
@@ -347,12 +364,14 @@ impl AgentRunContextBuilder {
         }
 
         let mut messages = Vec::new();
+        let mut prompt_prefix_sources = Vec::new();
         let empty_runtime_prompt_values = HashMap::new();
         if requested_task_code.is_none() && is_main_agent(&resolved_agent.agent_code) {
-            if let Some(guidance) = self.management.current_main_agent_guidance().map_err(|_| {
+            if let Some(guidance) = self.management.current_main_agent_guidance(&locale).map_err(|_| {
                 AgentInvocationError::RuntimeFailed("main agent config load failed".into())
             })? {
                 messages.push(AgentMessage::system(guidance));
+                prompt_prefix_sources.push(None);
             }
             messages.push(AgentMessage::system(managed_system_prompt(
                 self.prompt_service.as_ref(),
@@ -361,6 +380,10 @@ impl AgentRunContextBuilder {
                 &locale,
                 &empty_runtime_prompt_values,
             )?));
+            prompt_prefix_sources.push(Some(managed_system_prompt_source(
+                "agent.final-output",
+                &locale,
+            )));
         }
         if matches!(resolved_agent.runtime_type, AgentRuntimeType::React)
             && requested_conversation_code.is_some()
@@ -373,6 +396,10 @@ impl AgentRunContextBuilder {
                 &locale,
                 &empty_runtime_prompt_values,
             )?));
+            prompt_prefix_sources.push(Some(managed_system_prompt_source(
+                "chat.ask-user",
+                &locale,
+            )));
         }
         if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
             && !tool_exposure.visible_domains.is_empty()
@@ -392,6 +419,10 @@ impl AgentRunContextBuilder {
                 &locale,
                 &runtime_values,
             )?));
+            prompt_prefix_sources.push(Some(managed_system_prompt_source(
+                "agent.domain-discovery",
+                &locale,
+            )));
         }
         let prompt_prefix_messages = messages.clone();
         let user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
@@ -460,6 +491,7 @@ impl AgentRunContextBuilder {
             &resolved_agent.agent_code,
             &prompt,
             prompt_prefix_messages,
+            prompt_prefix_sources,
             Some(user_prompt_message),
             transcript_input_kind.as_deref(),
             transcript_input_metadata,

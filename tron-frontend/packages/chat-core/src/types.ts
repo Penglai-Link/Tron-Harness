@@ -193,6 +193,29 @@ export interface ChatRunNoticeLabels {
   toolSchemaBudgetHint: string;
 }
 
+export interface ChatToolWorkLabels {
+  ariaLabel: string;
+  completed: (name: string) => string;
+  running: (name: string) => string;
+  domainExpanded: (name: string) => string;
+  domainExpanding: (name: string) => string;
+  group: (count: number) => string;
+  statusDone: string;
+  statusRunning: string;
+  parameters: string;
+  result: string;
+  log: string;
+  noResult: string;
+  waitingActivity: string;
+  copyParameters: string;
+  copyResult: string;
+  reasoningCaptured: string;
+  reasoningThinking: string;
+  reasoningAria: string;
+  emptyReasoning: string;
+  resolveName: (runtimeName: string, args: unknown) => string;
+}
+
 export interface ChatWorkRailLabels {
   ariaLabel: string;
   preparing: string;
@@ -206,6 +229,7 @@ export interface ChatWorkRailLabels {
   askedQuestions?: (count: number) => string;
   waitingForAnswer?: string;
   skipped?: string;
+  tool?: Partial<ChatToolWorkLabels>;
 }
 
 export interface SendChatMessageInput {

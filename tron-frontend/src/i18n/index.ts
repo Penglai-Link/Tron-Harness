@@ -43,6 +43,24 @@ export function getInitialLocale(): SupportedLocale {
   return getStoredLocale() ?? getBrowserLocale() ?? fallbackLocale;
 }
 
+/**
+ * Resolves the application locale that is emitted through the standard
+ * Accept-Language request header. `i18n.language` preserves the user's active
+ * selection; `resolvedLanguage` may instead be the fallback locale.
+ */
+export function getCurrentLocale(): SupportedLocale {
+  const storedLocale = getStoredLocale();
+  if (storedLocale) return storedLocale;
+  if (isSupportedLocale(i18n.language)) return i18n.language;
+  return getBrowserLocale() ?? fallbackLocale;
+}
+
+function syncDocumentLocale(locale: SupportedLocale) {
+  if (typeof document !== "undefined") {
+    document.documentElement.lang = locale;
+  }
+}
+
 void i18n.use(initReactI18next).init({
   defaultNS: "common",
   fallbackLng: fallbackLocale,
@@ -63,7 +81,7 @@ void i18n.use(initReactI18next).init({
   returnEmptyString: false,
   saveMissing: import.meta.env.DEV,
   supportedLngs: [...supportedLocaleCodes],
-});
+}).then(() => syncDocumentLocale(getCurrentLocale()));
 
 export function persistLocale(locale: SupportedLocale) {
   if (typeof window !== "undefined") {
@@ -71,14 +89,18 @@ export function persistLocale(locale: SupportedLocale) {
   }
 }
 
+i18n.on("languageChanged", (locale) => {
+  if (!isSupportedLocale(locale)) return;
+  persistLocale(locale);
+  syncDocumentLocale(locale);
+});
+
 export function useLocale() {
   const { i18n: i18next, t } = useTranslation("common");
-  const resolvedLanguage = i18next.resolvedLanguage ?? i18next.language ?? fallbackLocale;
-  const currentLocale = isSupportedLocale(resolvedLanguage) ? resolvedLanguage : fallbackLocale;
+  const currentLocale = getCurrentLocale();
 
   async function changeLocale(locale: SupportedLocale) {
     await i18next.changeLanguage(locale);
-    persistLocale(locale);
   }
 
   return {

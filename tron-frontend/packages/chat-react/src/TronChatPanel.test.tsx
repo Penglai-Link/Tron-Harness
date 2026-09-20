@@ -182,7 +182,7 @@ describe("TronChatPanel submit controls", () => {
     const { rerender } = render(<TronChatPanel {...panelProps} protocolEvents={activeEvents} />);
 
     const summaryButton = screen.getByRole("button", { name: /Working for/ });
-    expect(screen.getByText("Inspecting the implementation plan.")).toBeTruthy();
+    expect(screen.getByText("Inspecting the implementation.")).toBeTruthy();
     fireEvent.click(summaryButton);
     expect(summaryButton.getAttribute("aria-expanded")).toBe("true");
 
@@ -198,7 +198,7 @@ describe("TronChatPanel submit controls", () => {
 
     const completedButton = screen.getByRole("button", { name: /Worked for/ });
     expect(completedButton.getAttribute("aria-expanded")).toBe("false");
-    expect(screen.queryByText("Inspecting the implementation plan.")).toBeNull();
+    expect(screen.queryByText("Inspecting the implementation.")).toBeNull();
     fireEvent.click(completedButton);
     expect(completedButton.getAttribute("aria-expanded")).toBe("true");
   });

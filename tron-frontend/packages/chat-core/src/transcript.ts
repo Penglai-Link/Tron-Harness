@@ -1,4 +1,9 @@
-import { deriveReasoningPreview, formatTime, truncateLabel } from "./display";
+import {
+  deriveReasoningPreview,
+  formatTime,
+  reasoningLastSentence,
+  truncateLabel,
+} from "./display";
 import type {
   ChatAguiStreamEvent,
   ChatDebugOptions,
@@ -75,6 +80,7 @@ export interface ReasoningWorkCard {
   firstMillis: number;
   id: string;
   runCode: string;
+  summary: string;
   toolCards: ToolWorkCard[];
 }
 
@@ -193,8 +199,19 @@ export function aguiEventToolCallId(event: TranscriptAguiEvent) {
 }
 
 export function aguiEventToolName(event: TranscriptAguiEvent) {
-  if ("toolCallName" in event && typeof event.toolCallName === "string" && event.toolCallName.trim()) return event.toolCallName;
-  return aguiEventSummary(event) || "tool";
+  return explicitAguiEventToolName(event) ?? "tool";
+}
+
+function explicitAguiEventToolName(event: TranscriptAguiEvent) {
+  if ("toolCallName" in event && typeof event.toolCallName === "string" && event.toolCallName.trim()) {
+    return event.toolCallName;
+  }
+  return null;
+}
+
+function updateToolCardName(card: ToolWorkCard, event: TranscriptAguiEvent) {
+  const toolName = explicitAguiEventToolName(event);
+  if (toolName) card.toolName = toolName;
 }
 
 export function aguiEventToolArgs(event: TranscriptAguiEvent) {
@@ -398,10 +415,75 @@ function toolActionLabel(toolName: string, args: unknown) {
 }
 
 export function toolSummaryLabel(toolName: string, args: unknown) {
-  const target = valueAtKnownKey(args);
-  const title = `${toolActionLabel(toolName, args)} ${toolName}`;
-  if (!target || target === toolName) return title;
-  return `${title} [${truncateLabel(target, 48)}]`;
+  const displayName = toolDisplayName(toolName, args);
+  return `${toolActionLabel(displayName, args)} ${displayName}`;
+}
+
+function commandArgumentPreview(value: string, shellScript = false) {
+  const normalized = value.replace(/\s+/g, " ").trim();
+  if (!normalized) return "''";
+  if (shellScript || /^[A-Za-z0-9_@%+=:,./-]+$/.test(normalized)) return normalized;
+  if (!normalized.includes("'")) return `'${normalized}'`;
+  return JSON.stringify(normalized);
+}
+
+/**
+ * Builds a compact, human-readable command line for command tools. This is a
+ * display preview only; it must never be executed or used to reconstruct args.
+ */
+export function toolCommandLinePreview(toolName: string, args: unknown, maxLength = 180) {
+  if (toolName.trim().toLowerCase() !== "bash_exec") return "";
+  const payload = parseToolPayload(args);
+  const command = typeof payload?.command === "string" ? payload.command.trim() : "";
+  if (!command) return "";
+  const rawArgs = Array.isArray(payload?.args)
+    ? payload.args.filter((value): value is string => typeof value === "string")
+    : [];
+  const parts = [command];
+  rawArgs.forEach((value, index) => {
+    parts.push(commandArgumentPreview(value, rawArgs[index - 1] === "-c"));
+  });
+  return truncateLabel(parts.join(" "), maxLength);
+}
+
+function toolDisplayName(toolName: string, args: unknown) {
+  const normalizedName = toolName.trim();
+  const domainCode = domainCodeFromToolPayload(normalizedName) || domainCodeFromToolPayload(args);
+
+  if (normalizedName === "discovery_expand_tool_domain" || domainCode) {
+    return humanizeToolName(domainCode || normalizedName);
+  }
+  return humanizeToolName(normalizedName);
+}
+
+function domainCodeFromToolPayload(value: unknown) {
+  const payload = parseToolPayload(value);
+  if (!payload || typeof payload.domainCode !== "string") return "";
+  return payload.domainCode.trim();
+}
+
+function parseToolPayload(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) {
+    return value as Record<string, unknown>;
+  }
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value);
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function humanizeToolName(value: string) {
+  return value
+    .trim()
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(" ") || "tool";
 }
 
 function activityLines(event: TranscriptAguiEvent) {
@@ -443,6 +525,7 @@ function createReasoningCard(
     firstMillis: aguiEventMillis(event) ?? Date.now(),
     id: key,
     runCode,
+    summary: "",
     toolCards: [],
   };
   cards.set(key, card);
@@ -531,7 +614,6 @@ export function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserW
   const activeReasoningCardIdsByRun = new Map<string, string>();
   const latestReasoningCardIdsByRun = new Map<string, string>();
   const reasoningSequenceByRun = new Map<string, number>();
-  const structuredReasoningCardIds = new Set<string>();
   const toolCards = new Map<string, ToolWorkCard>();
 
   events.forEach((event) => {
@@ -560,16 +642,11 @@ export function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserW
     if (type === "REASONING_MESSAGE_CONTENT") {
       const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
       const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
-      if (!structuredReasoningCardIds.has(card.id)) {
-        card.content = "";
-      }
-      structuredReasoningCardIds.add(card.id);
-      card.content = appendReasoningDelta(card.content, delta);
+      card.summary = appendReasoningDelta(card.summary, delta);
       return;
     }
     if (type === "REASONING_TEXT_CONTENT") {
       const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
-      if (structuredReasoningCardIds.has(card.id)) return;
       const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
       card.content = appendReasoningDelta(card.content, delta);
       return;
@@ -583,7 +660,7 @@ export function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserW
       const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (!card) return;
       card.started = card.started || type === "TOOL_CALL_START";
-      card.toolName = aguiEventToolName(event);
+      updateToolCardName(card, event);
       const args = aguiEventToolArgs(event);
       if (args !== undefined) card.args = args;
       const argumentDelta = "delta" in event && typeof event.delta === "string"
@@ -613,7 +690,7 @@ export function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserW
     if (type === "TOOL_CALL_RESULT") {
       const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (!card) return;
-      card.toolName = aguiEventToolName(event);
+      updateToolCardName(card, event);
       const result = "content" in event && typeof event.content === "string" ? event.content : "";
       card.result = result || aguiEventSummary(event);
       return;
@@ -645,7 +722,7 @@ export function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserW
 
   return [
     ...Array.from(reasoningCards.values())
-      .filter((value) => value.content.trim() || value.toolCards.length > 0 || !value.ended)
+      .filter((value) => value.content.trim() || value.summary.trim() || !value.ended)
       .map((value) => ({ kind: "reasoning" as const, value })),
     ...Array.from(toolGroupCards.values())
       .map((value) => ({
@@ -871,7 +948,7 @@ export function buildMockStreamingEvents(
 }
 
 export function summarizeReasoning(card: ReasoningWorkCard) {
-  return deriveReasoningPreview(card.content);
+  return deriveReasoningPreview(card.summary || reasoningLastSentence(card.content));
 }
 
 export function describeDebugEvent(event: TranscriptAguiEvent) {

@@ -40,7 +40,7 @@ impl ReactAgent {
                 prepared_context.effective_retained_history_tokens,
             )
             .map_err(short_term_memory_error)?;
-        self.run_model_compaction(short_term_memory, input, &model)
+        self.run_model_compaction(short_term_memory, input, &model, &context.locale)
             .await?;
         Ok(true)
     }
@@ -95,7 +95,7 @@ impl ReactAgent {
             .map_err(|error| {
                 AgentError::ModelFailure(format!("{message}; overflow compaction failed: {error}"))
             })?;
-        self.run_model_compaction(short_term_memory, input, &model)
+        self.run_model_compaction(short_term_memory, input, &model, &context.locale)
             .await
             .map_err(|error| {
                 AgentError::ModelFailure(format!("{message}; overflow compaction failed: {error}"))
@@ -108,8 +108,9 @@ impl ReactAgent {
         short_term_memory: &ShortTermMemoryService,
         input: PreparedCompactionInput,
         model: &AgentModelConfig,
+        locale: &str,
     ) -> Result<(), AgentError> {
-        let request = short_term_memory.compaction_model_request(&input);
+        let request = short_term_memory.compaction_model_request(&input, locale);
         let response = match self.model_client.generate(model, &request).await {
             Ok(response) => response,
             Err(message) => {

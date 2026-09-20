@@ -273,16 +273,10 @@ impl ShortTermMemoryService {
         config
     }
 
-    pub fn compaction_model_request(&self, input: &PreparedCompactionInput) -> ModelRequest {
+    pub fn compaction_model_request(&self, input: &PreparedCompactionInput, locale: &str) -> ModelRequest {
         ModelRequest {
             messages: vec![
-                AgentMessage::system(
-                    crate::domain::prompt::builtin_prompt_text(
-                        "memory.compaction-system",
-                        "en-US",
-                    )
-                    .expect("compaction prompt must be bundled"),
-                ),
+                AgentMessage::system(compaction_system_prompt(locale)),
                 AgentMessage::user(input.prompt.clone()),
             ],
             tools: Vec::new(),
@@ -505,6 +499,21 @@ impl ShortTermMemoryService {
                 .unwrap_or(&event_payload),
         );
         Ok(compaction)
+    }
+}
+
+fn compaction_system_prompt(locale: &str) -> &'static str {
+    crate::domain::prompt::builtin_prompt_text("memory.compaction-system", locale)
+        .expect("compaction prompt must be bundled")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::compaction_system_prompt;
+
+    #[test]
+    fn compaction_system_prompt_uses_the_requested_locale() {
+        assert_eq!(compaction_system_prompt("zh-CN"), "生成短期记忆压缩检查点。只返回最终文本。");
     }
 }
 

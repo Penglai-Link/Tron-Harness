@@ -48,15 +48,8 @@ export function reasoningLastSentence(value: string) {
   return sentences[sentences.length - 1] || normalized;
 }
 
-export function deriveReasoningPreview(detail: string, toolCount = 0) {
-  const sentence = reasoningLastSentence(detail);
-  const previewSource = sentence || detail;
-  const toolSummary = toolCount > 0 ? `Used ${toolCount} ${toolCount === 1 ? "tool" : "tools"}.` : "";
-  if (!toolSummary) return reasoningPreviewLabel(previewSource, 120);
-  const separator = previewSource ? " " : "";
-  const detailBudget = Math.max(0, 120 - toolSummary.length - separator.length);
-  const detailPreview = detailBudget > 0 ? reasoningPreviewLabel(previewSource, detailBudget) : "";
-  return `${detailPreview}${separator}${toolSummary}`.trim();
+export function deriveReasoningPreview(summary: string) {
+  return reasoningPreviewLabel(summary, 120);
 }
 
 /**

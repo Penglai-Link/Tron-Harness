@@ -5,7 +5,6 @@ import HomePage from "./route-page/HomePage";
 import PublicRoutePage from "./route-page/PublicRoutePage";
 import SuspendedRoute from "./route-page/SuspendedRoute";
 import ProtectedRoute from "./route-page/ProtectedRoute";
-import { appRoutes } from "@/router/routes";
 import AppRoutePage from "./route-page/AppRoutePage";
 import { lazy } from "react";
 import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegistry";
@@ -20,14 +19,6 @@ const SetupPage = lazy(() =>
   import("@/domain/setup/pages/SetupPage").then((module) => ({
     default: module.SetupPage,
   }))
-);
-
-const appRoutePaths = Array.from(
-  new Set(
-    appRoutes
-      .filter((route) => route.route !== "/login")
-      .map((route) => new URL(route.route, "https://tron.local").pathname)
-  )
 );
 
 export default function RoutedApp() {
@@ -117,17 +108,13 @@ export default function RoutedApp() {
           }
         />
         <Route
+          path="*"
           element={
             <ProtectedRoute>
               <AppRoutePage />
             </ProtectedRoute>
           }
-        >
-          {appRoutePaths.map((path) => (
-            <Route key={path} path={path} />
-          ))}
-          <Route path="*" />
-        </Route>
+        />
         </Routes>
       </TabPanelRegistryProvider>
     </FilePanelHostProvider>

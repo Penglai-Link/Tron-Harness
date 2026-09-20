@@ -71,7 +71,10 @@ impl ShortTermMemoryService {
                 "promptPrefix": {
                     "messageCount": memory.prompt_prefix.len(),
                     "hash": prompt_prefix_hash,
-                    "messages": prompt_prefix_messages(&memory.prompt_prefix),
+                    "messages": prompt_prefix_messages(
+                        &memory.prompt_prefix,
+                        &memory.prompt_prefix_sources,
+                    ),
                 },
                 "familyContext": family_context,
                 // Keep `tools` as the backward-compatible model-exposure snapshot.
@@ -191,14 +194,24 @@ fn prompt_prefix_snapshot(messages: &[AgentMessage]) -> Value {
     )
 }
 
-fn prompt_prefix_messages(messages: &[AgentMessage]) -> Vec<Value> {
+fn prompt_prefix_messages(
+    messages: &[AgentMessage],
+    sources: &[Option<crate::domain::agent::AgentPromptPrefixSource>],
+) -> Vec<Value> {
     messages
         .iter()
-        .map(|message| {
-            json!({
+        .enumerate()
+        .map(|(index, message)| {
+            let mut snapshot = json!({
                 "role": message.role,
                 "content": message.text_content(),
-            })
+            });
+            if let Some(Some(source)) = sources.get(index) {
+                snapshot["catalogKey"] = json!(source.catalog_key);
+                snapshot["promptCode"] = json!(source.prompt_code);
+                snapshot["locale"] = json!(source.locale);
+            }
+            snapshot
         })
         .collect()
 }

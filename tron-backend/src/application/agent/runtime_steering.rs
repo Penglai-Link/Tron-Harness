@@ -42,22 +42,6 @@ impl RuntimeSteering {
         }
     }
 
-    pub(super) fn install_continuity_guidance(&self, context: &mut AgentRunContext) {
-        if self.control.is_none() {
-            return;
-        }
-
-        let guidance = crate::domain::prompt::builtin_prompt_text(
-            "agent.steer-continuity",
-            &context.locale,
-        )
-        .expect("steer continuity prompt must be bundled");
-        insert_continuity_guidance(&mut context.messages, guidance);
-        if let Some(memory) = context.short_term_memory.as_mut() {
-            insert_continuity_guidance(&mut memory.prompt_prefix, guidance);
-        }
-    }
-
     pub(super) fn inject_at_loop_boundary(
         &mut self,
         context: &mut AgentRunContext,
@@ -129,20 +113,6 @@ impl RuntimeSteering {
             .map_err(control_error)
             .map(Option::unwrap_or_default)
     }
-}
-
-fn insert_continuity_guidance(messages: &mut Vec<AgentMessage>, guidance: &str) {
-    if messages.iter().any(|message| {
-        message.role == "system" && message.plain_text_content() == guidance
-    }) {
-        return;
-    }
-
-    let insert_at = messages
-        .iter()
-        .position(|message| message.role != "system" && message.role != "developer")
-        .unwrap_or(messages.len());
-    messages.insert(insert_at, AgentMessage::system(guidance));
 }
 
 fn record_inputs(

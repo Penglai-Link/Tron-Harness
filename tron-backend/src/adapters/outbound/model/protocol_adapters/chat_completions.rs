@@ -95,7 +95,7 @@ fn parse_chat_response(body: &Value) -> Option<ModelResponse> {
     if let Some(content) = message.get("content").and_then(text_from_content) {
         parts.push(AgentMessagePart::Text { text: content });
     }
-    if let Some(summary) = chat_reasoning_summary_delta(message) {
+    if let Some(summary) = chat_compatible_reasoning_summary(message) {
         parts.push(AgentMessagePart::ReasoningSummary { text: summary });
     }
     if let Some(tool_calls) = message
@@ -205,9 +205,11 @@ fn parse_chat_tool_call_arguments(function: &Value) -> (Value, Option<String>) {
 
 fn parse_chat_stream_event(body: &Value) -> Option<ModelStreamEvent> {
     let delta = body.get("choices")?.as_array()?.first()?.get("delta")?;
+    // OpenAI Chat Completions defines no structured reasoning-summary field,
+    // but compatible providers may expose an explicit summary extension.
     let event = if let Some(text) = delta.get("content").and_then(text_from_content) {
         ModelStreamEvent::text_delta(text)
-    } else if let Some(text) = chat_reasoning_summary_delta(delta) {
+    } else if let Some(text) = chat_compatible_reasoning_summary(delta) {
         ModelStreamEvent::reasoning_summary_delta(text)
     } else if let Some(text) = chat_reasoning_delta(delta) {
         ModelStreamEvent::reasoning_delta(text)
@@ -221,7 +223,7 @@ fn parse_chat_stream_event(body: &Value) -> Option<ModelStreamEvent> {
     }
 }
 
-fn chat_reasoning_summary_delta(delta: &Value) -> Option<String> {
+fn chat_compatible_reasoning_summary(delta: &Value) -> Option<String> {
     [
         "reasoning_summary_content",
         "reasoning_summary",

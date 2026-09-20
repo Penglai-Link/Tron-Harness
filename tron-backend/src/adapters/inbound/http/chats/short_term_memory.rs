@@ -88,7 +88,7 @@ pub async fn get_latest_compaction(
 
 pub async fn create_compaction(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     command: Result<Json<CreateCompactionCommand>, JsonRejection>,
 ) -> Response {
     let command = match parse_json_command(command) {
@@ -123,7 +123,9 @@ pub async fn create_compaction(
         Ok(input) => input,
         Err(error) => return short_term_memory_error_response(error),
     };
-    let request = state.short_term_memory.compaction_model_request(&input);
+    let request = state
+        .short_term_memory
+        .compaction_model_request(&input, &auth.locale);
     let response = match state.agent_model_client.generate(&model, &request).await {
         Ok(response) => response,
         Err(message) => {

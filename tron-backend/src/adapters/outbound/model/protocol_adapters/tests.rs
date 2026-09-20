@@ -354,7 +354,7 @@ fn chat_stream_maps_reasoning_content_to_raw_reasoning_delta() {
 }
 
 #[test]
-fn chat_stream_maps_reasoning_summary_content_to_summary_delta() {
+fn chat_stream_maps_compatible_reasoning_summary_extension() {
     let event = ChatCompletionsAdapter
         .parse_stream_event(&json!({
             "choices": [{

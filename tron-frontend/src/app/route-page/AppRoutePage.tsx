@@ -305,9 +305,7 @@ export default function AppRoutePage() {
       roleCodes={session?.user.roleCodes}
       userMenuContent={<AuthUserMenuPanel />}
     >
-      <TabPanelRegistryProvider>
-        {resolved ? cachedRouteContents : <ConsoleFallbackPage />}
-      </TabPanelRegistryProvider>
+      {resolved ? cachedRouteContents : <ConsoleFallbackPage />}
     </TronShell>
   );
 }

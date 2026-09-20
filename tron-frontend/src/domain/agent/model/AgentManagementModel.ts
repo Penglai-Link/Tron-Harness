@@ -56,6 +56,7 @@ export interface ToolCatalogDomainRecord {
 
 export interface PlatformToolRecord {
   toolCode: string;
+  toolName: string;
   domainCode: string;
   name: string;
   description: string;

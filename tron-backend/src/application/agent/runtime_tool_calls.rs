@@ -144,6 +144,7 @@ impl ReactAgent {
         let mut awaiting_user_input = false;
         match execution_result {
             Ok(execution) => {
+                let event_output = agui_tool_result_output(&execution);
                 if let Err(error_message) =
                     self.apply_tool_context_delta(context, &execution.context_delta, turn_state)
                 {
@@ -168,7 +169,7 @@ impl ReactAgent {
                     &tool_call_id,
                     &observation.tool_name,
                     None,
-                    Some(observation.output.as_str()),
+                    Some(event_output.as_str()),
                 )?;
                 let message = self.record_tool_observation_message(
                     context,
@@ -427,6 +428,7 @@ impl ReactAgent {
         sequence: u32,
         execution: ToolExecutionResult,
     ) -> Result<(), AgentError> {
+        let event_output = agui_tool_result_output(&execution);
         let observation = execution.observation;
         self.publish_tool(
             &context,
@@ -436,7 +438,7 @@ impl ReactAgent {
             tool_call_id,
             &observation.tool_name,
             None,
-            Some(observation.output.as_str()),
+            Some(event_output.as_str()),
         )?;
         let message = self.record_tool_observation_message(
             context,
@@ -583,6 +585,36 @@ impl ReactAgent {
         }
         Ok(())
     }
+}
+
+fn agui_tool_result_output(execution: &ToolExecutionResult) -> String {
+    if execution.observation.tool_name != DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL
+        || execution.context_delta.add_tools.is_empty()
+    {
+        return execution.observation.output.clone();
+    }
+
+    let mut output = serde_json::from_str::<serde_json::Value>(&execution.observation.output)
+        .unwrap_or_else(|_| serde_json::json!({
+            "result": execution.observation.output,
+        }));
+    let schemas = execution
+        .context_delta
+        .add_tools
+        .iter()
+        .map(|tool| {
+            serde_json::json!({
+                "toolName": tool.tool_name,
+                "domainCode": tool.domain_code,
+                "description": tool.description,
+                "inputSchema": tool.input_schema,
+            })
+        })
+        .collect::<Vec<_>>();
+    if let Some(object) = output.as_object_mut() {
+        object.insert("tools".to_string(), serde_json::Value::Array(schemas));
+    }
+    serde_json::to_string(&output).unwrap_or_else(|_| execution.observation.output.clone())
 }
 
 fn collapse_ephemeral_expanded_domains(context: &mut AgentRunContext, tool_name: &str) {

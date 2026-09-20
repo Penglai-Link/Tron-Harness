@@ -107,6 +107,7 @@ const toolDomainSeed: ToolDomainSeed[] = [
 
 type ToolSeed = {
   toolCode: string;
+  toolName?: string;
   domainCode: string;
   name: string;
   description: string;
@@ -361,7 +362,10 @@ function getToolDomains() {
 }
 
 function getTools(): PlatformToolRecord[] {
-  return toolSeed.map((tool) => ({ ...tool }));
+  return toolSeed.map((tool) => ({
+    ...tool,
+    toolName: tool.toolName ?? tool.toolCode.replaceAll(".", "_"),
+  }));
 }
 
 function getWorkspaceInternalAgentOverrides(workspaceCode: string) {

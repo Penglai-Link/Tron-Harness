@@ -266,9 +266,8 @@ impl SystemAgentLiveEventBuilder {
                     }),
                 ));
                 self.reasoning_summary.push_str(&delta);
-                if let Some(summary) = stable_reasoning_summary(&self.reasoning_summary)
-                    && summary != self.reasoning_summary_snapshot
-                {
+                let summary = compact_reasoning_summary(&self.reasoning_summary);
+                if !summary.is_empty() && summary != self.reasoning_summary_snapshot {
                     self.reasoning_summary_snapshot = summary.clone();
                     payloads.push(self.activity_snapshot_payload("THINKING", Some(&summary)));
                 }
@@ -381,7 +380,9 @@ fn stable_reasoning_summary(content: &str) -> Option<String> {
                 .char_indices()
                 .rev()
                 .skip(1)
-                .find(|(_, character)| matches!(character, '.' | '!' | '?' | '。' | '！' | '？'))
+                .find(|(_, character)| {
+                    matches!(character, '.' | '!' | '?' | '。' | '！' | '？')
+                })
                 .map_or(0, |(index, character)| index + character.len_utf8());
             complete[start..].trim()
         })

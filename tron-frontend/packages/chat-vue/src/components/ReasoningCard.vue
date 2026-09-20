@@ -10,7 +10,7 @@ export type ReasoningValue = Extract<
 <script setup lang="ts">
 import { BrainCircuit, ChevronDown, ChevronRight } from "lucide-vue-next";
 import { computed, ref } from "vue";
-import { deriveReasoningPreview } from "@tron/chat-core";
+import { summarizeReasoning } from "@tron/chat-core";
 import { cx } from "../utils";
 import MarkdownBlock from "./MarkdownBlock.vue";
 
@@ -22,9 +22,10 @@ const expanded = ref(false);
 
 const summary = computed(
   () =>
-    deriveReasoningPreview(props.card.content) ||
+    summarizeReasoning(props.card) ||
     (props.card.ended ? "Reasoning captured." : "Thinking..."),
 );
+const detail = computed(() => props.card.content || props.card.summary);
 </script>
 
 <template>
@@ -59,11 +60,11 @@ const summary = computed(
       </span>
     </button>
     <div
-      v-if="expanded && props.card.content"
+      v-if="expanded && detail"
       class="tron-chat__rail-entry-body"
     >
       <div class="tron-chat__rail-detail">
-        <MarkdownBlock :content="props.card.content" />
+        <MarkdownBlock :content="detail" />
       </div>
     </div>
   </section>

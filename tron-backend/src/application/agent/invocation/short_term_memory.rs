@@ -4,7 +4,8 @@ use crate::{
         short_term_memory::ShortTermMemoryService,
     },
     domain::agent::{
-        AgentMessage, AgentRunContext, AgentShortTermMemoryRunContext, ToolExposureMode,
+        AgentMessage, AgentPromptPrefixSource, AgentRunContext, AgentShortTermMemoryRunContext,
+        ToolExposureMode,
     },
 };
 
@@ -16,6 +17,7 @@ pub(super) fn activate_short_term_memory(
     agent_code: &str,
     prompt: &str,
     prompt_prefix_messages: Vec<AgentMessage>,
+    prompt_prefix_sources: Vec<Option<AgentPromptPrefixSource>>,
     user_prompt_message: Option<AgentMessage>,
     input_kind: Option<&str>,
     input_metadata: Option<serde_json::Value>,
@@ -44,6 +46,7 @@ pub(super) fn activate_short_term_memory(
         input_kind: input_kind.to_string(),
         input_metadata,
         prompt_prefix: context.messages.clone(),
+        prompt_prefix_sources,
         current_input_message,
         agent_code: Some(agent_code.to_string()),
         todo_enabled: resolve_todo_enabled(context),

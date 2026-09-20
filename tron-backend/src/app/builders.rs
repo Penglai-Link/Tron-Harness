@@ -221,6 +221,9 @@ fn build_prompt_service(
     let repository = SqlitePromptRepository::connect(database_url)
         .expect("prompt SQLite repository should initialize");
     let service = PromptService::new(repository, workspaces, variables, id_provider);
+    service
+        .retire_removed_builtins()
+        .expect("retired bundled prompts should be removed");
     if should_seed_builtin_prompts(database_url) {
         service
             .bootstrap_builtins()

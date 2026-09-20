@@ -120,7 +120,9 @@ import {
   isSteerQueueFallbackCode,
   mergeChatMessagesChronologically,
   removeQueuedChatSubmission,
+  reasoningLastSentence,
   takeNextQueuedChatSubmission,
+  toolCommandLinePreview,
   type ChatQueuedSubmission,
   type ChatAttachmentLabels,
   type ChatSubmitMode,
@@ -1339,8 +1341,19 @@ function aguiEventToolCallId(event: TranscriptAguiEvent) {
 }
 
 function aguiEventToolName(event: TranscriptAguiEvent) {
-  if ("toolCallName" in event && typeof event.toolCallName === "string" && event.toolCallName.trim()) return event.toolCallName;
-  return aguiEventSummary(event) || "tool";
+  return explicitAguiEventToolName(event) ?? "tool";
+}
+
+function explicitAguiEventToolName(event: TranscriptAguiEvent) {
+  if ("toolCallName" in event && typeof event.toolCallName === "string" && event.toolCallName.trim()) {
+    return event.toolCallName;
+  }
+  return null;
+}
+
+function updateToolCardName(card: ToolWorkCard, event: TranscriptAguiEvent) {
+  const toolName = explicitAguiEventToolName(event);
+  if (toolName) card.toolName = toolName;
 }
 
 function aguiEventToolArgs(event: TranscriptAguiEvent) {
@@ -1541,10 +1554,44 @@ function toolActionLabel(toolName: string, args: unknown, t: (key: string) => st
 }
 
 function toolSummaryLabel(toolName: string, args: unknown, t: (key: string) => string) {
-  const target = valueAtKnownKey(args);
-  const title = `${toolActionLabel(toolName, args, t)} ${toolName}`;
-  if (!target || target === toolName) return title;
-  return `${title} [${truncateLabel(target, 48)}]`;
+  const displayName = toolDisplayName(toolName, args);
+  return `${toolActionLabel(displayName, args, t)} ${displayName}`;
+}
+
+function toolDisplayName(toolName: string, args: unknown) {
+  const normalizedName = toolName.trim();
+  const domainCode = domainCodeFromToolPayload(normalizedName) || domainCodeFromToolPayload(args);
+  if (normalizedName === "discovery_expand_tool_domain" || domainCode) {
+    return humanizeToolName(domainCode || normalizedName);
+  }
+  return humanizeToolName(normalizedName);
+}
+
+function domainCodeFromToolPayload(value: unknown) {
+  const payload = parseToolPayload(value);
+  return payload && typeof payload.domainCode === "string" ? payload.domainCode.trim() : "";
+}
+
+function parseToolPayload(value: unknown): Record<string, unknown> | null {
+  if (value && typeof value === "object" && !Array.isArray(value)) return value as Record<string, unknown>;
+  if (typeof value !== "string") return null;
+  try {
+    const parsed = JSON.parse(value) as unknown;
+    return parsed && typeof parsed === "object" && !Array.isArray(parsed)
+      ? parsed as Record<string, unknown>
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function humanizeToolName(value: string) {
+  return value
+    .trim()
+    .split(/[._-]+/)
+    .filter(Boolean)
+    .map((part) => `${part.slice(0, 1).toUpperCase()}${part.slice(1)}`)
+    .join(" ") || "tool";
 }
 
 function isStructuredWorkEvent(event: ChatAguiStreamEvent) {
@@ -1610,6 +1657,7 @@ interface ReasoningWorkCard {
   firstMillis: number;
   id: string;
   runCode: string;
+  summary: string;
   toolCards: ToolWorkCard[];
 }
 
@@ -1661,6 +1709,7 @@ function createReasoningCard(
     firstMillis: aguiEventMillis(event) ?? Date.now(),
     id: key,
     runCode,
+    summary: "",
     toolCards: [],
   };
   cards.set(key, card);
@@ -1765,6 +1814,12 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
     if (type === "REASONING_MESSAGE_CONTENT") {
       const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
       const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
+      card.summary = appendReasoningDelta(card.summary, delta);
+      return;
+    }
+    if (type === "REASONING_TEXT_CONTENT") {
+      const card = ensureReasoningCard(reasoningCards, activeReasoningCardIdsByRun, latestReasoningCardIdsByRun, reasoningSequenceByRun, event);
+      const delta = "delta" in event && typeof event.delta === "string" ? event.delta : "";
       card.content = appendReasoningDelta(card.content, delta);
       return;
     }
@@ -1777,7 +1832,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
       const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (!card) return;
       card.started = card.started || type === "TOOL_CALL_START";
-      card.toolName = aguiEventToolName(event);
+      updateToolCardName(card, event);
       const args = aguiEventToolArgs(event);
       if (args !== undefined) card.args = args;
       return;
@@ -1791,7 +1846,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
     if (type === "TOOL_CALL_RESULT") {
       const card = ensureToolCard(toolCards, reasoningCards, latestReasoningCardIdsByRun, event);
       if (!card) return;
-      card.toolName = aguiEventToolName(event);
+      updateToolCardName(card, event);
       const result = "content" in event && typeof event.content === "string" ? event.content : "";
       card.result = result || aguiEventSummary(event);
       return;
@@ -1827,7 +1882,7 @@ function buildAguiUserWorkCards(events: TranscriptAguiEvent[]): AguiUserWorkCard
 
   return [
     ...Array.from(reasoningCards.values())
-      .filter((value) => value.content.trim() || value.toolCards.length > 0 || !value.ended)
+      .filter((value) => value.content.trim() || value.summary.trim() || !value.ended)
       .map((value) => ({ kind: "reasoning" as const, value })),
     ...Array.from(toolGroupCards.values())
       .map((value) => ({
@@ -2692,6 +2747,8 @@ function ContextStructurePanel({
 type ContextPromptPrefixMessage = {
   role: string;
   content: string;
+  catalogKey?: string;
+  promptCode?: string;
 };
 
 function isContextDetailRecord(value: unknown): value is Record<string, unknown> {
@@ -2701,15 +2758,107 @@ function isContextDetailRecord(value: unknown): value is Record<string, unknown>
 function isContextPromptPrefixMessage(value: unknown): value is ContextPromptPrefixMessage {
   return isContextDetailRecord(value)
     && typeof value.role === "string"
-    && typeof value.content === "string";
+    && typeof value.content === "string"
+    && (value.catalogKey === undefined || typeof value.catalogKey === "string")
+    && (value.promptCode === undefined || typeof value.promptCode === "string");
 }
 
 function contextPromptPrefixMessages(detail: unknown): ContextPromptPrefixMessage[] | null {
-  if (!isContextDetailRecord(detail) || !isContextDetailRecord(detail.promptPrefix)) return null;
-  const messages = detail.promptPrefix.messages;
-  return Array.isArray(messages) && messages.every(isContextPromptPrefixMessage)
-    ? messages
-    : null;
+  if (!isContextDetailRecord(detail)) return null;
+  const candidates = [detail.promptPrefix, detail];
+  for (const candidate of candidates) {
+    if (!isContextDetailRecord(candidate)) continue;
+    const messages = candidate.messages;
+    if (Array.isArray(messages) && messages.every(isContextPromptPrefixMessage)) {
+      return messages;
+    }
+  }
+  return null;
+}
+
+type ContextPromptContentPart =
+  | { kind: "text"; value: string }
+  | { kind: "json"; value: unknown };
+
+function embeddedJsonEnd(value: string, start: number) {
+  const opening = value[start];
+  if (opening !== "{" && opening !== "[") return null;
+  const expectedClosing = opening === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let index = start; index < value.length; index += 1) {
+    const character = value[index];
+    if (inString) {
+      if (escaped) {
+        escaped = false;
+      } else if (character === "\\") {
+        escaped = true;
+      } else if (character === "\"") {
+        inString = false;
+      }
+      continue;
+    }
+    if (character === "\"") {
+      inString = true;
+    } else if (character === opening) {
+      depth += 1;
+    } else if (character === expectedClosing) {
+      depth -= 1;
+      if (depth === 0) return index + 1;
+    }
+  }
+  return null;
+}
+
+function contextPromptContentParts(content: string): ContextPromptContentPart[] {
+  const trimmed = content.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed) as unknown;
+    if (typeof parsed === "string") return [{ kind: "text", value: parsed }];
+    return [{ kind: "json", value: parsed }];
+  } catch {
+    // System prompt templates often embed a JSON runtime value in prose.
+  }
+  for (let start = 0; start < trimmed.length; start += 1) {
+    const end = embeddedJsonEnd(trimmed, start);
+    if (end == null) continue;
+    try {
+      const json = JSON.parse(trimmed.slice(start, end)) as unknown;
+      return [
+        ...(trimmed.slice(0, start).trim() ? [{ kind: "text" as const, value: trimmed.slice(0, start).trim() }] : []),
+        { kind: "json", value: json },
+        ...(trimmed.slice(end).trim() ? [{ kind: "text" as const, value: trimmed.slice(end).trim() }] : []),
+      ];
+    } catch {
+      // Continue scanning in case this brace belongs to ordinary prompt text.
+    }
+  }
+  return [{ kind: "text", value: content }];
+}
+
+function ContextPromptMessageContent({ content }: { content: string }) {
+  const { t } = useTranslation("pages");
+  const parts = contextPromptContentParts(content);
+  return (
+    <div className="space-y-3 text-xs leading-6 text-[var(--color-on-surface)]">
+      {parts.map((part, index) => part.kind === "text" ? (
+        <pre className="whitespace-pre-wrap break-words font-sans" key={`text-${index}`}>
+          {part.value}
+        </pre>
+      ) : (
+        <details className="rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]" key={`json-${index}`}>
+          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-[var(--color-on-surface-variant)] marker:text-[var(--color-on-surface-variant)]">
+            {t("chat.shortTermMemory.contextPanel.detailPromptStructuredContent")}
+          </summary>
+          <pre className="max-h-80 overflow-auto border-t border-[var(--color-outline-variant)] px-3 py-3 font-mono text-[11px] leading-5 text-[var(--color-on-surface)]">
+            {JSON.stringify(part.value, null, 2)}
+          </pre>
+        </details>
+      ))}
+    </div>
+  );
 }
 
 type ContextDetailTreeLabels = {
@@ -2802,6 +2951,7 @@ function ContextDetailTreeNode({
 
 function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlockItem; sessionCode: string }) {
   const { t } = useTranslation("pages");
+  const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detail, setDetail] = useState<unknown>(null);
   const [detailViewMode, setDetailViewMode] = useState<"tree" | "raw">("tree");
@@ -2907,28 +3057,47 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
             {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
                 : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "tree"
-                  ? <div className="space-y-3">
-                      <p className="rounded-md bg-[var(--color-surface-container-low)] px-3 py-2 text-xs leading-5 text-[var(--color-on-surface-variant)]">
-                        {t("chat.shortTermMemory.contextPanel.detailFullTextUnavailable")}
-                      </p>
-                      <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
-                    </div>
+                  ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
                   : block.detailCode === "systemPrompt" && promptMessages && detailViewMode === "tree"
                     ? promptMessages.length > 0
                       ? <div className="space-y-3">
                           {promptMessages.map((message, index) => (
-                            <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)]" key={`${index}-${message.role}`}>
+                            <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]" key={`${index}-${message.role}`}>
                               <div className="flex items-center justify-between gap-3 bg-[var(--color-surface-container-low)] px-3 py-2">
                                 <span className="text-xs font-semibold text-[var(--color-on-surface)]">
                                   {t("chat.shortTermMemory.contextPanel.detailPromptMessage", { index: index + 1 })}
                                 </span>
-                                <span className="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
-                                  {message.role}
-                                </span>
+                                <div className="flex min-w-0 items-center justify-end gap-1.5">
+                                  <span className="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
+                                    {message.role === "system"
+                                      ? t("chat.shortTermMemory.contextPanel.detailPromptRoleSystem")
+                                      : message.role}
+                                  </span>
+                                  {message.promptCode ? (
+                                    <button
+                                      className="shrink-0 rounded-sm px-2 py-1 text-[11px] font-medium text-[var(--color-primary)] transition-colors hover:bg-[var(--color-primary)] hover:text-[var(--color-on-primary)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
+                                      type="button"
+                                      onClick={() => {
+                                        const promptPath = `/prompts/detail?${new URLSearchParams({ promptCode: message.promptCode }).toString()}`;
+                                        const tabId = useTabStore.getState().addTab({
+                                          title: t("chat.shortTermMemory.contextPanel.detailPromptManagement"),
+                                          path: promptPath,
+                                          closable: true,
+                                          activeNav: `prompt-detail:${message.promptCode}`,
+                                        });
+                                        useTabStore.getState().updateTab(tabId, { path: promptPath });
+                                        setDialogOpen(false);
+                                        navigate(promptPath);
+                                      }}
+                                    >
+                                      {t("chat.shortTermMemory.contextPanel.detailPromptManagement")}
+                                    </button>
+                                  ) : null}
+                                </div>
                               </div>
-                              <pre className="whitespace-pre-wrap break-words px-3 py-3 font-mono text-xs leading-5 text-[var(--color-on-surface)] [overflow-wrap:anywhere]">
-                                {message.content}
-                              </pre>
+                              <div className="px-3 py-3">
+                                <ContextPromptMessageContent content={message.content} />
+                              </div>
                             </article>
                           ))}
                         </div>
@@ -2954,7 +3123,6 @@ function ProviderUsagePanel({
 }) {
   const { t } = useTranslation("pages");
   const providerUsage = usageAudit?.providerUsage ?? null;
-  const previousRunUsage = usageAudit?.cumulativeRunUsage ?? providerUsage;
   const sessionUsage = sessionProviderUsageFromEvents(events);
   const requestEstimate = usageAudit?.requestEstimate ?? null;
   const sessionInput = sessionUsage?.inputTokens ?? fallbackSessionUsage.input;
@@ -2978,12 +3146,12 @@ function ProviderUsagePanel({
       </div>
       <div>
         <h4 className="mb-1.5 text-[11px] font-medium text-[var(--color-on-surface-variant)]">
-          {t("chat.shortTermMemory.contextPanel.previousRunUsage")}
+          {t("chat.shortTermMemory.contextPanel.latestRequestUsage")}
         </h4>
         <div className="grid grid-cols-3 gap-1.5">
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(previousRunUsage?.inputTokens)} />
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(previousRunUsage?.cachedInputTokens)} />
-          <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(previousRunUsage?.reasoningTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.actualInput")} value={formatCompactTokenCount(providerUsage?.inputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.cached")} value={formatCompactTokenCount(providerUsage?.cachedInputTokens)} />
+          <ContextStat label={t("chat.shortTermMemory.contextPanel.reasoning")} value={formatCompactTokenCount(providerUsage?.reasoningTokens)} />
         </div>
         <p className="mt-2 rounded-md bg-[var(--color-surface-container-low)] px-2 py-1.5 text-[10px] leading-4 text-[var(--color-on-surface-variant)]">
           {requestEstimate ? (
@@ -4311,8 +4479,8 @@ function ChatBubble({
 
 function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const { t } = useTranslation("pages");
-  const hasContent = card.content.trim().length > 0;
-  const detail = hasContent ? card.content : "";
+  const detail = card.content || card.summary;
+  const hasContent = detail.trim().length > 0;
   const initializingHint = !card.ended && !hasContent && card.runCode === "pending"
     ? t("chat.management.reasoning.initializing")
     : "";
@@ -4321,7 +4489,9 @@ function ReasoningUserCard({ card }: { card: ReasoningWorkCard }) {
   const nestedToolCards = card.toolCards.filter((toolCard) => toolCard.started);
   const hasRunningTool = nestedToolCards.some((toolCard) => toolCard.started && !toolCard.ended && !toolCard.result);
   const shouldStayExpanded = !card.ended || hasRunningTool;
-  const reasoningPreview = hasContent ? deriveReasoningPreview(detail, nestedToolCards) : "";
+  const reasoningPreview = deriveReasoningPreview(
+    card.summary || reasoningLastSentence(card.content),
+  );
   const headerSummary = initializingHint || reasoningPreview || (card.ended ? t("chat.management.reasoning.captured") : t("chat.management.reasoning.thinking"));
 
   useEffect(() => {
@@ -4458,7 +4628,10 @@ function CompactToolRow({
   const parametersText = hasParameters ? formatJsonBlockValue(card.args) : "";
   const resultText = hasResultPayload ? formatJsonBlockValue(card.result) : "";
   const toolLabel = toolSummaryLabel(card.toolName, card.args, t);
-  const nestedToolLabel = `${complete ? t("chat.management.tool.ranPrefix") : t("chat.management.tool.runningPrefix")} ${toolLabel.replace(/^(Run|Edit|运行|编辑)\s+/i, "")}`;
+  const commandLine = toolCommandLinePreview(card.toolName, card.args);
+  const nestedToolLabel = commandLine
+    ? t("chat.management.tool.commandSummary", { command: commandLine })
+    : `${complete ? t("chat.management.tool.ranPrefix") : t("chat.management.tool.runningPrefix")} ${toolLabel.replace(/^(Run|Edit|运行|编辑)\s+/i, "")}`;
   const [parametersExpanded, setParametersExpanded] = useState(false);
 
   useEffect(() => {

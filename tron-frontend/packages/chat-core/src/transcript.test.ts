@@ -118,7 +118,7 @@ describe("AG-UI run notices", () => {
 });
 
 describe("buildAguiUserWorkCards", () => {
-  it("prefers structured reasoning content over raw reasoning fallback and groups tools", () => {
+  it("keeps structured reasoning summary separate from raw reasoning and groups tools", () => {
     const cards = buildAguiUserWorkCards([
       event({ type: "RUN_STARTED", timestamp: 1_000 }),
       event({ type: "REASONING_START", timestamp: 1_001 }),
@@ -145,7 +145,8 @@ describe("buildAguiUserWorkCards", () => {
     expect(cards).toHaveLength(2);
     expect(cards[0]?.kind).toBe("reasoning");
     if (cards[0]?.kind !== "reasoning") throw new Error("expected reasoning card");
-    expect(cards[0].value.content).toBe("Structured summary");
+    expect(cards[0].value.content).toBe("Raw reasoning stream segment");
+    expect(cards[0].value.summary).toBe("Structured summary");
     expect(cards[0].value.toolCards).toHaveLength(1);
     expect(cards[1]?.kind).toBe("toolGroup");
     if (cards[1]?.kind !== "toolGroup") throw new Error("expected tool group card");
@@ -164,6 +165,35 @@ describe("buildAguiUserWorkCards", () => {
     expect(cards[0]?.kind).toBe("reasoning");
     if (cards[0]?.kind !== "reasoning") throw new Error("expected reasoning card");
     expect(cards[0].value.content).toBe("fallback reasoning");
+    expect(cards[0].value.summary).toBe("");
+  });
+
+  it("keeps the selected tool name when replayed argument and result events omit it", () => {
+    const cards = buildAguiUserWorkCards([
+      event({
+        type: "TOOL_CALL_START",
+        timestamp: 3_000,
+        toolCallId: "tool-bash",
+        toolCallName: "bash_exec",
+      }),
+      event({
+        type: "TOOL_CALL_ARGS",
+        delta: '{"command":"date"}',
+        timestamp: 3_001,
+        toolCallId: "tool-bash",
+      }),
+      event({
+        type: "TOOL_CALL_RESULT",
+        content: '{"command":"date","success":true}',
+        timestamp: 3_002,
+        toolCallId: "tool-bash",
+      }),
+      event({ type: "TOOL_CALL_END", timestamp: 3_003, toolCallId: "tool-bash" }),
+    ]);
+
+    const toolGroup = cards.find((card) => card.kind === "toolGroup");
+    if (!toolGroup || toolGroup.kind !== "toolGroup") throw new Error("expected tool group card");
+    expect(toolGroup.value.toolCards[0]?.toolName).toBe("bash_exec");
   });
 });
 
@@ -203,12 +233,12 @@ describe("AG-UI current work activity", () => {
     expect(currentAguiWorkActivity(events)).toBe("THINKING");
     expect(currentAguiWorkSnapshot(events)).toEqual({
       activity: "THINKING",
-      summary: "Preparing the implementation plan.",
+      summary: "Reviewing the repository. Preparing the implementation plan.",
     });
     expect(
       buildAguiUserWorkCards(events)
         .filter((card) => card.kind === "reasoning")
-        .map((card) => card.value.content),
+        .map((card) => card.value.summary),
     ).toEqual([
       "Reviewing the repository. Preparing the implementation plan.",
     ]);
@@ -220,7 +250,7 @@ describe("AG-UI current work activity", () => {
     expect(isAguiRunTerminal(finished)).toBe(true);
   });
 
-  it("derives one stable checkpoint from raw reasoning when no summary snapshot exists", () => {
+  it("does not derive a summary from raw reasoning", () => {
     const events = [
       event({ type: "RUN_STARTED", timestamp: 1_000 }),
       event({ activity: "THINKING", type: "ACTIVITY_SNAPSHOT", timestamp: 1_001 }),
@@ -231,11 +261,11 @@ describe("AG-UI current work activity", () => {
 
     expect(currentAguiWorkSnapshot(events)).toEqual({
       activity: "THINKING",
-      summary: "Inspecting the source code.",
+      summary: null,
     });
   });
 
-  it("omits a raw user-request restatement from the checkpoint", () => {
+  it("does not expose a raw user-request restatement as a summary", () => {
     const events = [
       event({ type: "REASONING_START", timestamp: 1_000 }),
       event({
@@ -245,13 +275,10 @@ describe("AG-UI current work activity", () => {
       }),
     ];
 
-    expect(currentAguiWorkSnapshot(events)).toEqual({
-      activity: "THINKING",
-      summary: "Reviewing the incomplete files.",
-    });
+    expect(currentAguiWorkSnapshot(events)).toBeNull();
   });
 
-  it("replaces the raw checkpoint only when a new reasoning turn begins", () => {
+  it("does not create checkpoints for raw reasoning turns", () => {
     const firstTurn = [
       event({ type: "REASONING_START", timestamp: 1_000 }),
       event({ type: "REASONING_TEXT_CONTENT", delta: "Inspecting the source code.", timestamp: 1_001 }),
@@ -263,10 +290,7 @@ describe("AG-UI current work activity", () => {
       event({ type: "REASONING_TEXT_CONTENT", delta: "Planning", timestamp: 1_004 }),
     ];
 
-    expect(currentAguiWorkSnapshot(firstTurn)).toEqual({
-      activity: "THINKING",
-      summary: "Inspecting the source code.",
-    });
+    expect(currentAguiWorkSnapshot(firstTurn)).toBeNull();
     expect(currentAguiWorkSnapshot(secondTurn)).toBeNull();
   });
 });

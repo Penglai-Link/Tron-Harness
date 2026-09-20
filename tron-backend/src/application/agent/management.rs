@@ -217,22 +217,9 @@ impl AgentManagementService {
         Ok(config)
     }
 
-    pub fn current_main_agent_guidance(&self) -> Result<Option<String>, AgentManagementError> {
+    pub fn current_main_agent_guidance(&self, locale: &str) -> Result<Option<String>, AgentManagementError> {
         let config = self.get_main_agent_config()?;
-        let mut sections = Vec::new();
-        if !config.personality.trim().is_empty() {
-            sections.push(format!("Personality:\n{}", config.personality.trim()));
-        }
-        if !config.instructions.trim().is_empty() {
-            sections.push(format!("Instructions:\n{}", config.instructions.trim()));
-        }
-        if sections.is_empty() {
-            return Ok(None);
-        }
-        Ok(Some(format!(
-            "You are Tron Main Agent.\n\n{}",
-            sections.join("\n\n")
-        )))
+        Ok(main_agent_guidance(&config, locale))
     }
 
     pub fn list_tool_domains(&self, locale: &str) -> Vec<ToolDomainRecord> {
@@ -286,6 +273,52 @@ impl AgentManagementService {
             .lock()
             .expect("agent management model catalog mutex poisoned")
             .insert(agent_code.to_string(), models);
+    }
+}
+
+fn main_agent_guidance(config: &PlatformMainAgentConfig, locale: &str) -> Option<String> {
+    let chinese = locale.trim().to_ascii_lowercase().starts_with("zh");
+    let separator = if chinese { "：" } else { ":" };
+    let mut sections = Vec::new();
+    if !config.personality.trim().is_empty() {
+        let label = if chinese { "人格" } else { "Personality" };
+        sections.push(format!("{label}{separator}\n{}", config.personality.trim()));
+    }
+    if !config.instructions.trim().is_empty() {
+        let label = if chinese { "指令" } else { "Instructions" };
+        sections.push(format!("{label}{separator}\n{}", config.instructions.trim()));
+    }
+    if sections.is_empty() {
+        return None;
+    }
+    let header = if chinese {
+        "你是 Tron 主智能体。所有面向用户的回复和对用户可见的推理摘要必须使用简体中文，除非用户明确要求其他语言。"
+    } else {
+        "You are Tron Main Agent. Use English for user-facing replies and visible reasoning summaries unless the user explicitly requests another language."
+    };
+    Some(format!("{header}\n\n{}", sections.join("\n\n")))
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::domain::agent::PlatformMainAgentConfig;
+
+    use super::main_agent_guidance;
+
+    #[test]
+    fn main_agent_guidance_uses_the_requested_locale() {
+        let config = PlatformMainAgentConfig {
+            personality: "谨慎且直接".into(),
+            instructions: "先给结论".into(),
+            created_at: None,
+            updated_at: None,
+        };
+
+        let guidance = main_agent_guidance(&config, "zh-CN").expect("guidance should exist");
+
+        assert!(guidance.starts_with("你是 Tron 主智能体"));
+        assert!(guidance.contains("人格："));
+        assert!(guidance.contains("指令："));
     }
 }
 

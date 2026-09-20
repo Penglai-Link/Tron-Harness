@@ -35,6 +35,7 @@ export function renderAgentActivity(state: AgentActivityState) {
         card.kind === "reasoning" &&
         !card.value.ended &&
         !card.value.content.trim() &&
+        !card.value.summary.trim() &&
         card.value.toolCards.length === 0,
     )
     .at(-1)?.value.id;
@@ -42,6 +43,7 @@ export function renderAgentActivity(state: AgentActivityState) {
     if (card.kind === "reasoning") {
       return (
         card.value.content.trim().length > 0 ||
+        card.value.summary.trim().length > 0 ||
         card.value.toolCards.length > 0 ||
         card.value.id === latestEmptyReasoningId
       );
@@ -74,6 +76,10 @@ function mergeReasoningCards(
       ...first,
       content: reasoningCards
         .map((card) => card.value.content.trim())
+        .filter(Boolean)
+        .join("\n\n"),
+      summary: reasoningCards
+        .map((card) => card.value.summary.trim())
         .filter(Boolean)
         .join("\n\n"),
       ended: reasoningCards.every((card) => card.value.ended),
@@ -118,14 +124,15 @@ function renderActivityCard(
   const { i18n } = state;
   if (card.kind === "reasoning") {
     const summary = activityStatusLabel(state, events, i18n);
+    const detail = card.value.content || card.value.summary;
     return html`<details class="ai-terminal-model-session__activity-item" ?open=${state.activityComplete ? nothing : false} @toggle=${(event: Event) => closeActivityToggle(event, state)}>
       <summary @click=${(event: MouseEvent) => preventActivityToggle(event, state)}>
         ${hasRunError(events) ? nothing : renderActivityChevron()}
         <span class=${activityStatusClass(state)}>${summary}</span>
       </summary>
-      ${card.value.content
+      ${detail
         ? html`<div class="ai-terminal-model-session__activity-detail ai-terminal-markdown">
-            ${guard([card.value.content], () => renderMarkdownContent(card.value.content))}
+            ${guard([detail], () => renderMarkdownContent(detail))}
           </div>`
         : nothing}
       ${card.value.toolCards.length

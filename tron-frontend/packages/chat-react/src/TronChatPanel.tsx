@@ -26,11 +26,10 @@ import {
   buildTranscriptPresentation,
   currentAguiWorkSnapshot,
   describeDebugEvent,
-  deriveReasoningPreview,
   formatJsonBlockValue,
   formatTime,
   sessionAgentTagLabel,
-  toolSummaryLabel,
+  summarizeReasoning,
   type AguiUserWorkCard,
   type AguiRunNotice,
   type ChatAguiStreamEvent,
@@ -42,6 +41,7 @@ import {
   type ChatRunNoticeLabels,
   type ChatRunningSubmitMode,
   type ChatSession,
+  type ChatToolWorkLabels,
   type ChatUserInputAnswer,
   type ChatUserInputLabels,
   type ChatUserInputRequest,
@@ -537,6 +537,29 @@ const defaultWorkRailLabels = {
   } satisfies ChatRunNoticeLabels,
 } satisfies ChatWorkRailLabels;
 
+const defaultToolWorkLabels = {
+  ariaLabel: "Tool run steps",
+  completed: (name: string) => name,
+  running: (name: string) => name,
+  domainExpanded: (name: string) => `Expand ${name}`,
+  domainExpanding: (name: string) => `Expanding ${name}`,
+  group: (count: number) => `${count} ${count === 1 ? "tool call" : "tool calls"}`,
+  statusDone: "done",
+  statusRunning: "running",
+  parameters: "Parameters",
+  result: "Result",
+  log: "Log",
+  noResult: "No result payload.",
+  waitingActivity: "Waiting for tool activity...",
+  copyParameters: "Copy parameters",
+  copyResult: "Copy result",
+  reasoningCaptured: "Reasoning captured.",
+  reasoningThinking: "Thinking...",
+  reasoningAria: "Thinking",
+  emptyReasoning: "No reasoning content was produced.",
+  resolveName: (runtimeName: string) => runtimeName,
+} satisfies ChatToolWorkLabels;
+
 interface TerminalWorkSummary {
   duration: string;
   failed: boolean;
@@ -559,10 +582,12 @@ function JsonBlock({ value }: { value: unknown }) {
 
 function ToolCard({
   card,
+  labels = defaultWorkRailLabels,
   nested = false,
   stepNumber,
 }: {
   card: ToolWorkCard;
+  labels?: ChatWorkRailLabels;
   nested?: boolean;
   stepNumber?: number;
 }) {
@@ -571,8 +596,13 @@ function ToolCard({
   const hasParameters = hasToolParameterPayload(card.args);
   const parametersText = hasParameters ? formatJsonBlockValue(card.args) : "";
   const resultText = card.result ? formatJsonBlockValue(card.result) : "";
-  const toolLabel = toolSummaryLabel(card.toolName, card.args);
-  const nestedToolLabel = `${complete ? "Ran" : "Running"} ${toolLabel.replace(/^Run\s+/i, "")}`;
+  const toolCopy = { ...defaultToolWorkLabels, ...labels.tool };
+  const toolName = toolCopy.resolveName(card.toolName, card.args);
+  const domainExpansion = card.toolName === "discovery_expand_tool_domain";
+  const toolLabel = domainExpansion
+    ? (complete ? toolCopy.domainExpanded(toolName) : toolCopy.domainExpanding(toolName))
+    : (complete ? toolCopy.completed(toolName) : toolCopy.running(toolName));
+  const nestedToolLabel = toolLabel;
   const [expanded, setExpanded] = useState(() => running);
   const [parametersExpanded, setParametersExpanded] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
@@ -646,7 +676,7 @@ function ToolCard({
                       : "tron-chat__tool-status--running",
                   )}
                 >
-                  {complete ? "done" : "running"}
+                  {complete ? toolCopy.statusDone : toolCopy.statusRunning}
                 </span>
               )}
             </span>
@@ -684,12 +714,12 @@ function ToolCard({
                       ) : (
                         <ChevronRight size={13} />
                       )}
-                      <span>Parameters</span>
+                      <span>{toolCopy.parameters}</span>
                     </span>
                   </button>
                   <CopyValueButton
-                    ariaLabel="Copy parameters"
-                    title="Copy parameters"
+                    ariaLabel={toolCopy.copyParameters}
+                    title={toolCopy.copyParameters}
                     value={parametersText}
                   />
                 </div>
@@ -702,10 +732,10 @@ function ToolCard({
                   className="tron-chat__tool-section-header"
                   style={{ marginBottom: 8 }}
                 >
-                  <h3 className="tron-chat__tool-section-title">Result</h3>
+                  <h3 className="tron-chat__tool-section-title">{toolCopy.result}</h3>
                   <CopyValueButton
-                    ariaLabel="Copy result"
-                    title="Copy result"
+                    ariaLabel={toolCopy.copyResult}
+                    title={toolCopy.copyResult}
                     value={resultText}
                   />
                 </div>
@@ -718,7 +748,7 @@ function ToolCard({
                   </div>
                 ) : (
                   <div className="tron-chat__result-block">
-                    No result payload.
+                    {toolCopy.noResult}
                   </div>
                 )}
               </section>
@@ -728,7 +758,7 @@ function ToolCard({
                   className="tron-chat__tool-section-title"
                   style={{ marginBottom: 8 }}
                 >
-                  Log
+                  {toolCopy.log}
                 </h3>
                 <div
                   ref={logRef}
@@ -745,7 +775,7 @@ function ToolCard({
                       </p>
                     ))
                   ) : (
-                    <p style={{ margin: 0 }}>Waiting for tool activity...</p>
+                    <p style={{ margin: 0 }}>{toolCopy.waitingActivity}</p>
                   )}
                 </div>
               </section>
@@ -757,7 +787,8 @@ function ToolCard({
   );
 }
 
-function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
+function ToolGroupCard({ card, labels = defaultWorkRailLabels }: { card: ToolGroupWorkCard; labels?: ChatWorkRailLabels }) {
+  const toolCopy = { ...defaultToolWorkLabels, ...labels.tool };
   const toolCards = card.toolCards.filter((toolCard) => toolCard.started);
   const hasRunningTool = toolCards.some(
     (toolCard) => toolCard.started && !toolCard.ended && !toolCard.result,
@@ -771,7 +802,7 @@ function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
   if (!toolCards.length) return null;
 
   return (
-    <section className="tron-chat__rail-entry" aria-label="Tool run steps">
+    <section className="tron-chat__rail-entry" aria-label={toolCopy.ariaLabel}>
       <button
         className="tron-chat__rail-entry-toggle"
         type="button"
@@ -786,7 +817,7 @@ function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
             />
           </span>
           <span className="tron-chat__rail-entry-summary tron-chat__rail-entry-summary--strong">
-            {`Ran ${toolCards.length} ${toolCards.length === 1 ? "command" : "commands"}`}
+            {toolCopy.group(toolCards.length)}
           </span>
         </span>
         <span className="tron-chat__rail-entry-chevron">
@@ -797,7 +828,7 @@ function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
         <ol className="tron-chat__rail-entry-list">
           {toolCards.map((toolCard, index) => (
             <li key={toolCard.id}>
-              <ToolCard card={toolCard} nested stepNumber={index + 1} />
+              <ToolCard card={toolCard} labels={labels} nested stepNumber={index + 1} />
             </li>
           ))}
         </ol>
@@ -808,19 +839,23 @@ function ToolGroupCard({ card }: { card: ToolGroupWorkCard }) {
 
 function ReasoningCard({
   card,
+  labels = defaultWorkRailLabels,
 }: {
   card: Extract<AguiUserWorkCard, { kind: "reasoning" }>["value"];
+  labels?: ChatWorkRailLabels;
 }) {
+  const toolCopy = { ...defaultToolWorkLabels, ...labels.tool };
   const hasRunningTool = card.toolCards.some(
     (toolCard) => toolCard.started && !toolCard.ended && !toolCard.result,
   );
   const summary =
-    deriveReasoningPreview(card.content) ||
-    (card.ended ? "Reasoning captured." : "Thinking...");
+    summarizeReasoning(card) ||
+    (card.ended ? toolCopy.reasoningCaptured : toolCopy.reasoningThinking);
+  const detail = card.content || card.summary;
   const [expanded, setExpanded] = useState(false);
 
   return (
-    <section className="tron-chat__rail-entry" aria-label="Thinking">
+    <section className="tron-chat__rail-entry" aria-label={toolCopy.reasoningAria}>
       <button
         className="tron-chat__rail-entry-toggle"
         type="button"
@@ -849,11 +884,11 @@ function ReasoningCard({
       </button>
       {expanded ? (
         <div className="tron-chat__rail-entry-body">
-          {card.content ? (
+          {detail ? (
             <div className="tron-chat__rail-detail">
               <MarkdownBlock
-                content={card.content}
-                emptyMessage="No reasoning content was produced."
+                content={detail}
+                emptyMessage={toolCopy.emptyReasoning}
               />
             </div>
           ) : null}
@@ -1120,11 +1155,11 @@ function AguiRunWorkRail({
               <div className="tron-chat__rail-card-list">
                 {userCards.map((card) =>
                   card.kind === "reasoning" ? (
-                    <ReasoningCard card={card.value} key={card.value.id} />
+                    <ReasoningCard card={card.value} key={card.value.id} labels={labels} />
                   ) : card.kind === "toolGroup" ? (
-                    <ToolGroupCard card={card.value} key={card.value.id} />
+                    <ToolGroupCard card={card.value} key={card.value.id} labels={labels} />
                   ) : (
-                    <ToolCard card={card.value} key={card.value.id} />
+                    <ToolCard card={card.value} key={card.value.id} labels={labels} />
                   ),
                 )}
               </div>
@@ -1154,14 +1189,14 @@ function AguiRunWorkRail({
   );
 }
 
-function WaitingRail() {
+function WaitingRail({ labels = defaultWorkRailLabels }: { labels?: ChatWorkRailLabels }) {
   return (
-    <section className="tron-chat__rail" aria-label="Waiting for model">
+    <section className="tron-chat__rail" aria-label={labels.ariaLabel}>
       <div className="tron-chat__waiting">
         <span className="tron-chat__waiting-line" />
         <span className="tron-chat__rail-toggle-label">
           <LoaderCircle size={14} className="animate-spin" />
-          <span>Waiting for model...</span>
+          <span>{labels.preparing}</span>
         </span>
         <span className="tron-chat__waiting-line" />
       </div>
@@ -1522,7 +1557,7 @@ export function TronChatPanel({
                           {showAgui &&
                             message.messageCode ===
                             presentation.waitingForModelAnchorMessageCode ? (
-                            <WaitingRail />
+                            <WaitingRail labels={workRailLabels} />
                           ) : null}
                           {showAgui
                             ? (

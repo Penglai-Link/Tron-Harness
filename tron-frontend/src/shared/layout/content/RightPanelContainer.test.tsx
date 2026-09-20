@@ -7,7 +7,11 @@ import type { EditableTab } from "@/components/editable-tabs";
 import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 
 import RightPanelContainer from "./RightPanelContainer";
-import { TabPanelRegistryProvider, useRightPanelTabs } from "./TabPanelRegistry";
+import {
+  TabPanelRegistryProvider,
+  useRightPanelTabs,
+  useTabPanelConfig,
+} from "./TabPanelRegistry";
 
 const pageViewState = vi.hoisted(() => ({
   unmountedUrls: [] as string[],
@@ -40,6 +44,11 @@ function OwnerScopedTabOpener({
   const { openTab } = useRightPanelTabs(ownerKey);
 
   useEffect(() => onReady(openTab), [onReady, openTab]);
+  return null;
+}
+
+function PageAttributes() {
+  useTabPanelConfig({ rightPanel: <div>Session attributes</div> });
   return null;
 }
 
@@ -114,6 +123,39 @@ describe("RightPanelContainer", () => {
 
     expect(screen.getByRole("tab", { name: "https://www.tencent.com" })).toBeTruthy();
     expect(screen.getByRole("tab", { name: "https://www.baidu.com" })).toBeTruthy();
+  });
+
+  it("keeps page attributes available alongside a session-scoped browser tab", () => {
+    const tabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/chats",
+      title: "Chats",
+    });
+    useTabStore.getState().addToCache(tabId, "/chats", "chats.index");
+    let openTab: ((tab: EditableTab) => void) | undefined;
+
+    render(
+      <TabPanelRegistryProvider>
+        <TabPanelRegistryProvider tabId={tabId}>
+          <PageAttributes />
+          <OwnerScopedTabOpener ownerKey="SESSION-A" onReady={(open) => { openTab = open; }} />
+        </TabPanelRegistryProvider>
+        <RightPanelContainer />
+      </TabPanelRegistryProvider>,
+    );
+
+    act(() => openTab?.({
+      children: null,
+      key: "browser",
+      label: "Browser",
+      stableId: "browser",
+      url: "https://browser.example.com",
+    }));
+
+    expect(screen.getByRole("tab", { name: /attributes/i })).toBeTruthy();
+    expect(screen.getByRole("tab", { name: "Browser" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("tab", { name: /attributes/i }));
+    expect(screen.getByText("Session attributes")).toBeTruthy();
   });
 
   it("preserves panel state independently for each main content tab", () => {

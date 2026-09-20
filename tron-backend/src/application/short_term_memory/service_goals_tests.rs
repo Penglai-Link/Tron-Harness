@@ -325,6 +325,7 @@ fn service_with_database_url(label: &str) -> (ShortTermMemoryService, String) {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system")],
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: true,

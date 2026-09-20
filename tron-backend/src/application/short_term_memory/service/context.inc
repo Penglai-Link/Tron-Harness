@@ -15,7 +15,7 @@ impl ShortTermMemoryService {
             (_, None) => None,
             _ => None,
         };
-        Ok(detail)
+        Ok(detail.map(enrich_builtin_prompt_sources))
     }
 
     pub fn prepare_model_context(
@@ -299,4 +299,50 @@ impl ShortTermMemoryService {
         )?;
         Ok(prepared)
     }
+}
+
+fn enrich_builtin_prompt_sources(mut detail: serde_json::Value) -> serde_json::Value {
+    let Some(messages) = detail
+        .get_mut("messages")
+        .and_then(serde_json::Value::as_array_mut)
+    else {
+        return detail;
+    };
+
+    for message in messages {
+        let Some(message_object) = message.as_object_mut() else {
+            continue;
+        };
+        if message_object.contains_key("promptCode") {
+            continue;
+        }
+        let Some(content) = message_object.get("content").and_then(serde_json::Value::as_str)
+        else {
+            continue;
+        };
+        let Some((definition, locale)) = crate::domain::prompt::builtin_prompts()
+            .iter()
+            .find_map(|definition| {
+                definition.translations.iter().find_map(|(locale, translation)| {
+                    (translation.prompt_body == content).then_some((definition, locale))
+                })
+            })
+        else {
+            continue;
+        };
+        message_object.insert(
+            "catalogKey".to_string(),
+            serde_json::Value::String(definition.catalog_key.clone()),
+        );
+        message_object.insert(
+            "promptCode".to_string(),
+            serde_json::Value::String(definition.prompt_code.clone()),
+        );
+        message_object.insert(
+            "locale".to_string(),
+            serde_json::Value::String(locale.clone()),
+        );
+    }
+
+    detail
 }

@@ -21,9 +21,9 @@ pub use collaboration::{
     CollaborationStepExecutionMode, CollaborationStepStatus, HandoffContext,
 };
 pub use context::{
-    AgentExecutionScope, AgentRunContext, AgentRunLimits, AgentShortTermMemoryRunContext,
-    AgentToolExposureState, AutoModelRouteContext, EffectiveSkill, EffectiveTool,
-    EffectiveVariable,
+    AgentExecutionScope, AgentPromptPrefixSource, AgentRunContext, AgentRunLimits,
+    AgentShortTermMemoryRunContext, AgentToolExposureState, AutoModelRouteContext,
+    EffectiveSkill, EffectiveTool, EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{
