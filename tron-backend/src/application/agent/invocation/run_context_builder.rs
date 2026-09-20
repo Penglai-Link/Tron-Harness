@@ -358,7 +358,7 @@ impl AgentRunContextBuilder {
                 .iter()
                 .all(|tool| tool.tool_name != crate::application::agent::CHAT_ASK_USER_TOOL)
         {
-            let ask_user = crate::application::agent::ask_user_definition();
+            let ask_user = crate::application::agent::ask_user_definition(&locale);
             tools.push(ask_user.clone());
             effective_tools.push(ask_user);
         }

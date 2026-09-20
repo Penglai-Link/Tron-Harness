@@ -372,6 +372,25 @@ fn translate_en_us(key: &str) -> &'static str {
             "Expand one visible tool domain into concrete callable tools."
         }
         "agent.toolCatalog.discovery.expand.params.domainCode" => "Visible domain code to expand.",
+        "agent.toolCatalog.tools.chat.ask_user.description" => {
+            "Ask the user a small set of structured questions when their answer materially changes the task. Stop all further work after calling this tool."
+        }
+        "agent.toolCatalog.tools.chat.ask_user.params.intro" => {
+            "Brief context shown before the questions."
+        }
+        "agent.toolCatalog.tools.chat.ask_user.params.questions" => {
+            "One to three structured questions for the user."
+        }
+        "agent.toolCatalog.tools.chat.ask_user.params.question" => {
+            "Question text shown to the user."
+        }
+        "agent.toolCatalog.tools.chat.ask_user.params.options" => {
+            "Two to five concrete answer options."
+        }
+        "agent.toolCatalog.tools.chat.ask_user.params.optionLabel" => "Short option label.",
+        "agent.toolCatalog.tools.chat.ask_user.params.optionDescription" => {
+            "Optional explanation of the option's impact or tradeoff."
+        }
         _ => business::translate_en_us(key)
             .or_else(|| coding::translate_en_us(key))
             .unwrap_or_else(key_leak_fallback),
@@ -568,6 +587,19 @@ fn translate_zh_cn(key: &str) -> &'static str {
             "展开一个可见工具领域，加载其中可直接调用的具体工具。"
         }
         "agent.toolCatalog.discovery.expand.params.domainCode" => "需要展开的可见领域编码。",
+        "agent.toolCatalog.tools.chat.ask_user.description" => {
+            "当用户的回答会实质影响任务时，向用户提出少量结构化问题。调用后停止后续工作并等待用户回答。"
+        }
+        "agent.toolCatalog.tools.chat.ask_user.params.intro" => "显示在问题前的简短说明。",
+        "agent.toolCatalog.tools.chat.ask_user.params.questions" => {
+            "向用户提出的一到三个结构化问题。"
+        }
+        "agent.toolCatalog.tools.chat.ask_user.params.question" => "向用户展示的问题内容。",
+        "agent.toolCatalog.tools.chat.ask_user.params.options" => "二到五个具体回答选项。",
+        "agent.toolCatalog.tools.chat.ask_user.params.optionLabel" => "简短的选项名称。",
+        "agent.toolCatalog.tools.chat.ask_user.params.optionDescription" => {
+            "可选的影响或取舍说明。"
+        }
         _ => business::translate_zh_cn(key)
             .or_else(|| coding::translate_zh_cn(key))
             .unwrap_or_else(key_leak_fallback),

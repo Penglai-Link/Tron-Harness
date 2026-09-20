@@ -7,43 +7,68 @@ use crate::domain::agent::{
     AgentRunContext, EffectiveTool, Tool, ToolError, ToolExecutionResult, ToolObservation,
     ToolRequest,
 };
+use crate::shared::locale::SupportedLocale;
+
+use crate::application::agent::tool_catalog::{materialize_schema, translate};
 
 pub const CHAT_ASK_USER_TOOL: &str = "chat_ask_user";
 
-pub fn ask_user_definition() -> EffectiveTool {
+pub fn ask_user_definition(locale: &str) -> EffectiveTool {
+    let locale = SupportedLocale::from_raw(locale);
     EffectiveTool {
         tool_name: CHAT_ASK_USER_TOOL.into(),
         domain_code: Some("chat".into()),
-        description: "Ask the user a small set of structured questions when their answer materially changes the task. Stop all further work after calling this tool.".into(),
-        input_schema: json!({
-            "type": "object",
-            "additionalProperties": false,
-            "required": ["intro", "questions"],
-            "properties": {
-                "intro": { "type": "string", "maxLength": 500 },
-                "questions": {
-                    "type": "array", "minItems": 1, "maxItems": 3,
-                    "items": {
-                        "type": "object", "additionalProperties": false,
-                        "required": ["question", "options"],
-                        "properties": {
-                            "question": { "type": "string", "maxLength": 500 },
-                            "options": {
-                                "type": "array", "minItems": 2, "maxItems": 5,
-                                "items": {
-                                    "type": "object", "additionalProperties": false,
-                                    "required": ["label"],
-                                    "properties": {
-                                        "label": { "type": "string", "maxLength": 120 },
-                                        "description": { "type": ["string", "null"], "maxLength": 240 }
+        description: translate(locale, "agent.toolCatalog.tools.chat.ask_user.description").into(),
+        input_schema: materialize_schema(
+            locale,
+            &json!({
+                "type": "object",
+                "additionalProperties": false,
+                "required": ["intro", "questions"],
+                "properties": {
+                    "intro": {
+                        "type": "string",
+                        "maxLength": 500,
+                        "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.intro"
+                    },
+                    "questions": {
+                        "type": "array", "minItems": 1, "maxItems": 3,
+                        "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.questions",
+                        "items": {
+                            "type": "object", "additionalProperties": false,
+                            "required": ["question", "options"],
+                            "properties": {
+                                "question": {
+                                    "type": "string",
+                                    "maxLength": 500,
+                                    "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.question"
+                                },
+                                "options": {
+                                    "type": "array", "minItems": 2, "maxItems": 5,
+                                    "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.options",
+                                    "items": {
+                                        "type": "object", "additionalProperties": false,
+                                        "required": ["label"],
+                                        "properties": {
+                                            "label": {
+                                                "type": "string",
+                                                "maxLength": 120,
+                                                "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.optionLabel"
+                                            },
+                                            "description": {
+                                                "type": ["string", "null"],
+                                                "maxLength": 240,
+                                                "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.optionDescription"
+                                            }
+                                        }
                                     }
                                 }
                             }
                         }
                     }
                 }
-            }
-        }),
+            }),
+        ),
         skill_name: None,
         required_variable_keys: Vec::new(),
     }
