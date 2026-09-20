@@ -2861,6 +2861,34 @@ function ContextPromptMessageContent({ content }: { content: string }) {
   );
 }
 
+function ToolSchemaPreview({ value }: { value: unknown }) {
+  if (!Array.isArray(value)) return null;
+  const tools = value.filter((item): item is Record<string, unknown> => (
+    item !== null && typeof item === "object" && !Array.isArray(item)
+  ));
+  if (tools.length === 0) return null;
+  return (
+    <div className="space-y-3">
+      {tools.map((tool, index) => {
+        const name = typeof tool.name === "string" ? tool.name : `Tool ${index + 1}`;
+        const domainCode = typeof tool.domainCode === "string" ? tool.domainCode : null;
+        const description = typeof tool.description === "string" ? tool.description : null;
+        return (
+          <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]" key={`${name}-${index}`}>
+            <div className="flex items-center justify-between gap-3 bg-[var(--color-surface-container-low)] px-3 py-2">
+              <span className="min-w-0 truncate font-mono text-xs font-semibold text-[var(--color-on-surface)]">{name}</span>
+              {domainCode ? (
+                <span className="shrink-0 rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">{domainCode}</span>
+              ) : null}
+            </div>
+            {description ? <div className="px-3 py-3 text-xs leading-5 text-[var(--color-on-surface)]">{description}</div> : null}
+          </article>
+        );
+      })}
+    </div>
+  );
+}
+
 type ContextDetailTreeLabels = {
   arrayItem: (index: number) => string;
   arraySummary: (count: number) => string;
@@ -3063,7 +3091,9 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
           <div className="min-h-0 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3">
             {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
-                : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "tree"
+                : block.detailCode === "toolSchema" && isStructuredDetail && detailViewMode === "tree"
+                  ? <ToolSchemaPreview value={parsedDetail} />
+                  : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "tree"
                   ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
                   : block.detailCode === "systemPrompt" && promptMessages && detailViewMode === "tree"
                     ? promptMessages.length > 0
