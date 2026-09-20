@@ -10,7 +10,7 @@ use std::{
 use chrono::DateTime;
 use crab_serverapi::{
     AuthorizedClientApi, AuthorizedClientContext, ServerApiError,
-    auth::{LoginClient, SessionRequest},
+    auth::{AccountClient, LoginClient, SessionRequest},
     gateway::{
         ChatCompletionsClient, EmbeddingsClient, ProtocolType, QualityType, ResponsesClient,
     },
@@ -63,6 +63,12 @@ pub(crate) fn migrate_provider_catalog_model_schema(
         "quality_type",
         "TEXT NOT NULL DEFAULT 'High'",
     )?;
+    for (column, definition) in [
+        ("person_ai_user_id", "TEXT"),
+        ("person_ai_username", "TEXT"),
+    ] {
+        ensure_sqlite_column(connection, "provider_connections", column, definition)?;
+    }
     for (column, definition) in [
         ("protocols", "TEXT NOT NULL DEFAULT '[\"ChatCompletions\"]'"),
         ("input_coefficient", "REAL"),
@@ -760,6 +766,30 @@ impl ModelProviderService {
         )])
     }
 
+    pub fn set_person_ai_identity(
+        &self,
+        person_ai_user_id: &str,
+        person_ai_username: &str,
+    ) -> Result<(), ModelProviderError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ModelProviderError::Storage)?;
+        connection
+            .execute(
+                "UPDATE provider_connections
+                 SET person_ai_user_id = ?1, person_ai_username = ?2, updated_at = ?3
+                 WHERE provider_code = 'PersonAi'",
+                params![
+                    person_ai_user_id.trim(),
+                    person_ai_username.trim(),
+                    now_millis()
+                ],
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+        Ok(())
+    }
+
     pub fn get_connection(
         &self,
         provider_code: ModelProviderCode,
@@ -1003,6 +1033,8 @@ impl ModelProviderService {
                 }
                 adapter.verify_chat_auto(&credentials).await?;
                 adapter.verify_embedding(&credentials).await?;
+                let (person_ai_user_id, person_ai_username) =
+                    self.fetch_person_ai_identity(&credentials).await?;
                 let supplied_encryption_key = command
                     .encryption_key_base64
                     .as_deref()
@@ -1035,6 +1067,8 @@ impl ModelProviderService {
                     &transaction,
                     stored.provider_code,
                     &credentials,
+                    &person_ai_user_id,
+                    &person_ai_username,
                     &encrypted,
                     &stored.session_id,
                     &catalog,
@@ -1066,6 +1100,42 @@ impl ModelProviderService {
                 })
             }
         }
+    }
+
+    async fn fetch_person_ai_identity(
+        &self,
+        credentials: &ProviderCredentials,
+    ) -> Result<(String, String), ModelProviderError> {
+        let login = LoginClient::new(credentials.server_base_url.clone())
+            .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?;
+        let token_status = login
+            .get_token_status(&credentials.token)
+            .await
+            .map_err(remote_error)?;
+        let person_ai_user_id = token_status
+            .subject
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ModelProviderError::Remote(
+                    "Person-AI token status did not contain a stable subject".into(),
+                )
+            })?;
+        let account = AccountClient::new(credentials.server_base_url.clone())
+            .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?
+            .get_info(&credentials.context())
+            .await
+            .map_err(remote_error)?;
+        let person_ai_username = account
+            .username
+            .map(|value| value.trim().to_owned())
+            .filter(|value| !value.is_empty())
+            .ok_or_else(|| {
+                ModelProviderError::Remote(
+                    "Person-AI account info did not contain a username".into(),
+                )
+            })?;
+        Ok((person_ai_user_id, person_ai_username))
     }
 
     pub async fn sync_now(
@@ -2420,6 +2490,8 @@ fn runtime_config_from_agent(config: AgentModelConfig) -> RuntimeModelConfig {
 #[derive(Debug, Clone)]
 struct ProviderConnectionRow {
     provider_code: ModelProviderCode,
+    person_ai_user_id: Option<String>,
+    person_ai_username: Option<String>,
     server_base_url: String,
     status: ProviderConnectionStatus,
     credentials_encrypted: Option<String>,
@@ -2550,7 +2622,8 @@ fn read_connection(
     connection
         .query_row(
             "SELECT provider_code, server_base_url, status, credentials_encrypted, authorized_at,
-                    authorization_expires_at, last_sync_at, last_error, updated_at
+                    authorization_expires_at, last_sync_at, last_error, updated_at,
+                    person_ai_user_id, person_ai_username
              FROM provider_connections WHERE provider_code = ?1",
             params![provider_code.storage_value()],
             |row| {
@@ -2559,6 +2632,8 @@ fn read_connection(
                 Ok(ProviderConnectionRow {
                     provider_code: ModelProviderCode::from_storage(&stored_code)
                         .ok_or(rusqlite::Error::InvalidQuery)?,
+                    person_ai_user_id: row.get(9)?,
+                    person_ai_username: row.get(10)?,
                     server_base_url: row.get(1)?,
                     status: ProviderConnectionStatus::from_storage(&status)
                         .ok_or(rusqlite::Error::InvalidQuery)?,
@@ -2667,6 +2742,8 @@ fn connection_view(
 ) -> ProviderConnectionView {
     let row = row.unwrap_or_else(|| ProviderConnectionRow {
         provider_code: ModelProviderCode::PersonAi,
+        person_ai_user_id: None,
+        person_ai_username: None,
         server_base_url: PERSON_AI_DEFAULT_SERVER_BASE_URL.into(),
         status: ProviderConnectionStatus::Disconnected,
         credentials_encrypted: None,
@@ -2678,6 +2755,8 @@ fn connection_view(
     });
     ProviderConnectionView {
         provider_code: row.provider_code,
+        person_ai_user_id: row.person_ai_user_id,
+        person_ai_username: row.person_ai_username,
         display_name: row.provider_code.display_name().into(),
         status: row.status,
         server_base_url: row.server_base_url,
@@ -3035,6 +3114,8 @@ fn replace_authorized_connection(
     transaction: &Transaction<'_>,
     provider_code: ModelProviderCode,
     credentials: &ProviderCredentials,
+    person_ai_user_id: &str,
+    person_ai_username: &str,
     encrypted: &str,
     authorization_session_id: &str,
     catalog: &[ExternalCatalogModel],
@@ -3045,10 +3126,12 @@ fn replace_authorized_connection(
     transaction
         .execute(
             "INSERT INTO provider_connections (
-                provider_code, server_base_url, status, credentials_encrypted, authorized_at,
+                provider_code, person_ai_user_id, person_ai_username, server_base_url, status, credentials_encrypted, authorized_at,
                 authorization_expires_at, last_sync_at, last_error, created_at, updated_at
-             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?5, NULL, ?5, ?5)
+             ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?7, NULL, ?7, ?7)
              ON CONFLICT(provider_code) DO UPDATE SET
+                person_ai_user_id = excluded.person_ai_user_id,
+                person_ai_username = excluded.person_ai_username,
                 server_base_url = excluded.server_base_url,
                 status = excluded.status,
                 credentials_encrypted = excluded.credentials_encrypted,
@@ -3059,6 +3142,8 @@ fn replace_authorized_connection(
                 updated_at = excluded.updated_at",
             params![
                 provider_code.storage_value(),
+                person_ai_user_id,
+                person_ai_username,
                 credentials.server_base_url,
                 ProviderConnectionStatus::Connected.storage_value(),
                 encrypted,

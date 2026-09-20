@@ -296,6 +296,8 @@ impl ModelSelection {
 #[serde(rename_all = "camelCase")]
 pub struct ProviderConnectionView {
     pub provider_code: ModelProviderCode,
+    pub person_ai_user_id: Option<String>,
+    pub person_ai_username: Option<String>,
     pub display_name: String,
     pub status: ProviderConnectionStatus,
     pub server_base_url: String,

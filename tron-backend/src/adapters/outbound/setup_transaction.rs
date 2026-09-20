@@ -134,6 +134,18 @@ impl SetupTransactionService {
         read_state(&connection)
     }
 
+    pub fn persist_encryption_key(
+        &self,
+        encryption_key_base64: &str,
+    ) -> Result<(), SetupTransactionError> {
+        let _ = decode_key(encryption_key_base64)?;
+        let original_config =
+            fs::read(&self.application_config_path).map_err(|_| SetupTransactionError::Storage)?;
+        let next_config = update_config(&original_config, encryption_key_base64)?;
+        atomic_write(&self.application_config_path, &next_config)?;
+        Ok(())
+    }
+
     pub fn complete(
         &self,
         actor_user_code: &str,

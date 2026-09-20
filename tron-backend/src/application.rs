@@ -12,6 +12,7 @@ pub mod model_provider;
 pub mod model_router;
 pub mod navigation;
 pub mod open_app;
+pub mod profile;
 pub mod prompt;
 pub mod project;
 pub mod rag;

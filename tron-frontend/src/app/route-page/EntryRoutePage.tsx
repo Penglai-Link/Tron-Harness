@@ -1,4 +1,5 @@
 import { SetupStatus, fetchSetupStatus } from "@/domain/setup/api";
+import { fetchBootstrapProfileStatus, type BootstrapProfileStatus } from "@/domain/profile/api";
 import { useState, useEffect } from "react";
 import { Navigate } from "react-router";
 import RouteLoadingFallback from "./RouteLoadingFallback";
@@ -6,13 +7,20 @@ import LoginRoutePage from "./LoginRoutePage";
 
 export default function EntryRoutePage() {
   const [setupStatus, setSetupStatus] = useState<SetupStatus | null>(null);
+  const [profileStatus, setProfileStatus] = useState<BootstrapProfileStatus | null>(null);
   const [setupError, setSetupError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    fetchSetupStatus()
+    fetchBootstrapProfileStatus()
       .then((next) => {
-        if (active) setSetupStatus(next);
+        if (!active) return;
+        setProfileStatus(next);
+        if (!next.hasProfiles || !next.activeProfile) return null;
+        return fetchSetupStatus();
+      })
+      .then((next) => {
+        if (active && next) setSetupStatus(next);
       })
       .catch((error: unknown) => {
         if (active)
@@ -36,6 +44,14 @@ export default function EntryRoutePage() {
         </div>
       </main>
     );
+  }
+
+  if (!profileStatus) {
+    return <RouteLoadingFallback fullScreen />;
+  }
+
+  if (!profileStatus.hasProfiles || !profileStatus.activeProfile || profileStatus.activeProfile.status === "PENDING") {
+    return <Navigate replace to="/profiles" />;
   }
 
   if (!setupStatus) {

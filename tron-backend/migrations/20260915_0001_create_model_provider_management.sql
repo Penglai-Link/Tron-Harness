@@ -1,5 +1,7 @@
 CREATE TABLE IF NOT EXISTS provider_connections (
     provider_code TEXT PRIMARY KEY,
+    person_ai_user_id TEXT,
+    person_ai_username TEXT,
     server_base_url TEXT NOT NULL,
     status TEXT NOT NULL,
     credentials_encrypted TEXT,

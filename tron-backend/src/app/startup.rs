@@ -89,6 +89,9 @@ impl AppReadiness {
 
 #[derive(Debug)]
 pub enum AppBootstrapError {
+    ProfileRegistryInitFailed {
+        source: crate::application::profile::ProfileRegistryError,
+    },
     GraphInitFailed {
         graph_storage_path: String,
         source: grafeo::Error,
@@ -102,6 +105,9 @@ pub enum AppBootstrapError {
 impl fmt::Display for AppBootstrapError {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
+            Self::ProfileRegistryInitFailed { .. } => {
+                formatter.write_str("profile registry failed to initialize")
+            }
             Self::GraphInitFailed {
                 graph_storage_path, ..
             } => write!(
@@ -119,6 +125,7 @@ impl fmt::Display for AppBootstrapError {
 impl Error for AppBootstrapError {
     fn source(&self) -> Option<&(dyn Error + 'static)> {
         match self {
+            Self::ProfileRegistryInitFailed { source } => Some(source),
             Self::GraphInitFailed { source, .. } => Some(source),
             Self::RagInitFailed { source, .. } => Some(source),
         }

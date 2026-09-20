@@ -11,6 +11,11 @@ const {
   isHttpUrl,
   resolveBackendConfigPath,
   resolveBackendLogPath,
+  resolveControlDatabasePath,
+  resolveControlDataDir,
+  resolveProfileDataDir,
+  resolveProfileDatabasePath,
+  resolveProfileGraphStoragePath,
   resolveUpdateServerUrl,
   sanitizeUrl
 } = require("../main/helpers.cjs");
@@ -37,6 +42,20 @@ test("resolveBackendLogPath stores sidecar logs below the desktop data directory
     resolveBackendLogPath("/tmp/tron-data"),
     "/tmp/tron-data/logs/tron-backend.log"
   );
+});
+
+test("profile paths keep control metadata separate from profile data", () => {
+  const root = "/tmp/tron-data";
+  assert.equal(resolveControlDataDir(root), "/tmp/tron-data/control");
+  assert.equal(resolveControlDatabasePath(root), "/tmp/tron-data/control/profiles.sqlite");
+  assert.equal(resolveProfileDataDir(root, "profile-a"), "/tmp/tron-data/profiles/profile-a");
+  assert.equal(resolveProfileDatabasePath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/tron.sqlite3");
+  assert.equal(resolveProfileGraphStoragePath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/tron.graph.grafeo");
+});
+
+test("profile paths reject traversal and absolute path injection", () => {
+  assert.throws(() => resolveProfileDataDir("/tmp/tron-data", "../other"), /invalid Tron profile id/);
+  assert.throws(() => resolveProfileDataDir("/tmp/tron-data", "/tmp/other"), /invalid Tron profile id/);
 });
 
 test("resolveUpdateServerUrl prefers runtime environment over packaged config", () => {

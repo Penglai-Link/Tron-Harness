@@ -10,6 +10,7 @@ import { useAuthStore } from "@/store/authStore";
 import { completeSetup, createSetupSession, fetchSetupStatus, type SetupStatus } from "@/domain/setup/api";
 import { useLocale, type SupportedLocale } from "@/i18n";
 import { isApiError } from "@/shared/api/httpClient";
+import { registerProfile } from "@/domain/profile/api";
 import {
   verifyPlatformModelDraft,
   type ModelMutationPayload,
@@ -462,6 +463,9 @@ export function SetupPage() {
         encryptionKeyBase64: key,
       });
       const verified = result.completed && result.textVerified === true && result.embeddingVerified === true;
+      if (verified && result.connection?.personAiUserId && result.connection.personAiUsername) {
+        await registerProfile(result.connection.personAiUserId, result.connection.personAiUsername);
+      }
       setPersonAiAuthorization({
         sessionId: result.session.sessionId,
         loginUrl: result.session.loginUrl,

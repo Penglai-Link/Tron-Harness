@@ -18,6 +18,8 @@ export type ProviderSyncStatus = "Running" | "Succeeded" | "Failed";
 
 export interface ModelProviderConnection {
   providerCode: ModelProviderCode;
+  personAiUserId: string | null;
+  personAiUsername: string | null;
   displayName: string;
   status: ProviderConnectionStatus;
   serverBaseUrl: string;

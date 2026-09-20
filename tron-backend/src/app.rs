@@ -59,6 +59,7 @@ use crate::{
     application::model_router::LlmModelRouter,
     application::navigation::NavigationService,
     application::open_app::OpenAppService,
+    application::profile::ProfileRegistryService,
     application::project::ProjectService,
     application::prompt::PromptService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
@@ -87,7 +88,7 @@ use crate::{
 pub use self::startup::{AppBootstrapError, AppReadiness, AppReadinessStatus};
 use self::{
     automation_runner::MainAgentAutomationRunner,
-    routing::{build_open_api_routes, build_protected_routes},
+    routing::{build_open_api_routes, build_profile_routes, build_protected_routes},
     startup::{build_graph_core, build_graph_services, build_rag_service},
 };
 
@@ -154,6 +155,7 @@ pub struct AppState {
     pub model_providers: ModelProviderService,
     pub prompts: PromptService,
     pub open_apps: OpenAppService,
+    pub profiles: ProfileRegistryService,
     pub llm_runtime: LlmRuntimeService,
     pub llm_router: LlmModelRouter,
     pub mcp: McpService,
@@ -175,6 +177,12 @@ impl AppState {
     where
         I: SnowflakeIdProvider + IdGenerator + 'static,
     {
+        let profiles = if config.database_url == ":memory:" {
+            ProfileRegistryService::new(":memory:")
+        } else {
+            ProfileRegistryService::from_environment()
+        }
+        .map_err(|source| AppBootstrapError::ProfileRegistryInitFailed { source })?;
         let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
         let agui_replay_store = Arc::new(
             SqliteAgentEventReplayStore::connect(&config.database_url)
@@ -537,6 +545,7 @@ impl AppState {
             model_providers,
             prompts,
             open_apps,
+            profiles,
             llm_runtime,
             llm_router,
             mcp,
@@ -572,6 +581,7 @@ where
     let state = AppState::new_with_id_provider(config, id_provider)?;
     state.model_providers.start_background_sync();
     let protected_routes = build_protected_routes(&state);
+    let profile_routes = build_profile_routes();
     let open_api_routes = build_open_api_routes(&state);
     let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone());
     let (socket_layer, socket_io) = SocketIo::builder()
@@ -585,6 +595,7 @@ where
         .route("/api/v1/readiness", get(readiness))
         .merge(openapi_routes())
         .merge(auth_routes())
+        .merge(profile_routes)
         .route("/api/v1/setup/status", axum::routing::get(setup::status))
         .route(
             "/api/v1/setup/session",

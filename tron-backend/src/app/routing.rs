@@ -28,6 +28,7 @@ use crate::adapters::{
         memory::routes as memory_routes,
         models::routes::routes as model_routes,
         prompts::routes::routes as prompt_routes,
+        profiles::routes as profile_routes,
         projects::routes::routes as project_routes,
         rag::routes as rag_routes,
         resources::routes::routes as resource_routes,
@@ -83,6 +84,10 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
             state.users.clone(),
             require_auth,
         ))
+}
+
+pub(super) fn build_profile_routes() -> Router<AppState> {
+    profile_routes()
 }
 
 pub(super) fn build_open_api_routes(state: &AppState) -> Router<AppState> {

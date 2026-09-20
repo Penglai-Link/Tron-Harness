@@ -21,9 +21,13 @@ const {
   loadPort,
   resolveBackendConfigPath,
   resolveBackendLogPath,
+  resolveControlDatabasePath,
   resolveDesktopDataDir,
   resolveFrontendDistDir,
   resolveResourcesDir,
+  resolveProfileDataDir,
+  resolveProfileDatabasePath,
+  resolveProfileGraphStoragePath,
   resolveSidecarPath,
   resolveTronDatabasePath,
   resolveUpdateServerUrl,
@@ -69,10 +73,13 @@ const state = {
   backendUrl: "",
   backendProcess: null,
   backendReady: false,
+  controlDatabasePath: "",
   databasePath: "",
   backendLogPath: "",
   frontendDistDir: "",
   graphPath: "",
+  profileDataDir: "",
+  profileId: "",
   injectionEnabled: false,
   mainWindow: null,
   updater: null
@@ -398,10 +405,12 @@ function startBackend(resourcesDir) {
     env: {
       ...process.env,
       TRON_BACKEND_DATABASE_URL: state.databasePath,
+      TRON_BACKEND_CONTROL_DATABASE_URL: state.controlDatabasePath,
       TRON_BACKEND_APPLICATION_CONFIG_PATH: configPath,
       TRON_BACKEND_FRONTEND_DIST_DIR: state.frontendDistDir,
       TRON_BACKEND_GRAPH_STORAGE_PATH: state.graphPath,
       TRON_BACKEND_PORT: String(state.backendPort),
+      TRON_PROFILE_ID: state.profileId,
       TRON_AUTH_GITHUB_REDIRECT_URI: buildGitHubOAuthRedirectUri(state.backendUrl)
     },
     cwd: appDataDir,
@@ -438,6 +447,35 @@ function stopBackend() {
   child.kill();
 }
 
+function requestedProfileId() {
+  const prefix = "--tron-profile-id=";
+  const inline = process.argv.find((argument) => argument.startsWith(prefix));
+  if (inline) {
+    return inline.slice(prefix.length).trim();
+  }
+  const index = process.argv.indexOf("--tron-profile-id");
+  if (index >= 0) {
+    return String(process.argv[index + 1] || "").trim();
+  }
+  return String(process.env.TRON_PROFILE_ID || "").trim();
+}
+
+function relaunchForProfile(profileId) {
+  const appDataDir = resolveDesktopDataDir();
+  resolveProfileDataDir(appDataDir, profileId);
+  const args = process.argv.slice(1).filter((argument, index, all) => {
+    if (argument === "--tron-profile-id") return false;
+    if (index > 0 && all[index - 1] === "--tron-profile-id") return false;
+    return !argument.startsWith("--tron-profile-id=");
+  });
+  args.push(`--tron-profile-id=${profileId}`);
+  isQuitting = true;
+  stopBackend();
+  app.relaunch({ args });
+  app.exit(0);
+  return { restarted: true, profileId };
+}
+
 function isDevMode() {
   return !app.isPackaged || process.env.TRON_ELECTRON_DEVTOOLS === "1";
 }
@@ -453,9 +491,19 @@ async function bootstrap() {
 
   state.backendPort = await findFreePort(loadPort());
   state.backendUrl = `http://${HOST}:${state.backendPort}`;
-  state.databasePath = resolveTronDatabasePath(appDataDir);
-  state.backendLogPath = resolveBackendLogPath(appDataDir);
-  state.graphPath = path.join(appDataDir, "tron.graph.grafeo");
+  state.profileId = requestedProfileId();
+  state.profileDataDir = state.profileId
+    ? resolveProfileDataDir(appDataDir, state.profileId)
+    : appDataDir;
+  fs.mkdirSync(state.profileDataDir, { recursive: true });
+  state.controlDatabasePath = resolveControlDatabasePath(appDataDir);
+  state.databasePath = state.profileId
+    ? resolveProfileDatabasePath(appDataDir, state.profileId)
+    : resolveTronDatabasePath(state.profileDataDir);
+  state.backendLogPath = resolveBackendLogPath(state.profileDataDir);
+  state.graphPath = state.profileId
+    ? resolveProfileGraphStoragePath(appDataDir, state.profileId)
+    : path.join(state.profileDataDir, "tron.graph.grafeo");
   state.frontendDistDir = resolveFrontendDistDir(resourcesDir);
   state.updater = createUpdater({
     dataDir: appDataDir,
@@ -827,9 +875,17 @@ function registerIpcHandlers() {
         backendPort: state.backendPort,
         ready: state.backendReady,
         injectionEnabled: state.injectionEnabled,
+        profileId: state.profileId,
+        profileDataDir: state.profileDataDir,
+        controlDatabasePath: state.controlDatabasePath,
         databasePath: state.databasePath,
         graphPath: state.graphPath
       };
+    }
+
+    if (command === "switchProfile") {
+      const profileId = String(request.profileId || "").trim();
+      return relaunchForProfile(profileId);
     }
 
     if (command === "getAppVersion") {

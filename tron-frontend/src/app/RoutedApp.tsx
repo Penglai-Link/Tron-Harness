@@ -9,6 +9,7 @@ import AppRoutePage from "./route-page/AppRoutePage";
 import { lazy } from "react";
 import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegistry";
 import { FilePanelHostProvider } from "@/shared/layout/content/FilePanelHostProvider";
+import { ProfileSelectionPage } from "@/domain/profile/pages/ProfileSelectionPage";
 
 const DesignStandardPage = lazy(() =>
   import("@/domain/design-standard/pages/DesignStandardPage").then(
@@ -29,6 +30,7 @@ export default function RoutedApp() {
       <TabPanelRegistryProvider>
         <Routes>
         <Route path="/login" element={<EntryRoutePage />} />
+        <Route path="/profiles" element={<ProfileSelectionPage />} />
         <Route
           path="/setup"
           element={

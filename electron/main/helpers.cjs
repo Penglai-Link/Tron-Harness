@@ -98,6 +98,33 @@ function resolveDesktopDataDir() {
   return path.join(os.homedir(), ".tron");
 }
 
+function resolveControlDataDir(appDataDir) {
+  return path.join(appDataDir, "control");
+}
+
+function resolveControlDatabasePath(appDataDir) {
+  return path.join(resolveControlDataDir(appDataDir), "profiles.sqlite");
+}
+
+function isSafeProfileId(profileId) {
+  return /^[a-z0-9][a-z0-9._-]{0,127}$/i.test(String(profileId || ""));
+}
+
+function resolveProfileDataDir(appDataDir, profileId) {
+  if (!isSafeProfileId(profileId)) {
+    throw new Error("invalid Tron profile id");
+  }
+  return path.join(appDataDir, "profiles", profileId);
+}
+
+function resolveProfileDatabasePath(appDataDir, profileId) {
+  return path.join(resolveProfileDataDir(appDataDir, profileId), "tron.sqlite3");
+}
+
+function resolveProfileGraphStoragePath(appDataDir, profileId) {
+  return path.join(resolveProfileDataDir(appDataDir, profileId), "tron.graph.grafeo");
+}
+
 function resolveBackendLogPath(appDataDir) {
   return path.join(appDataDir, "logs", "tron-backend.log");
 }
@@ -273,9 +300,14 @@ module.exports = {
   loadPort,
   resolveDesktopDataDir,
   resolveBackendLogPath,
+  resolveControlDataDir,
+  resolveControlDatabasePath,
   resolveBackendConfigPath,
   resolveUpdateServerUrl,
   resolveFrontendDistDir,
+  resolveProfileDataDir,
+  resolveProfileDatabasePath,
+  resolveProfileGraphStoragePath,
   resolveResourcesDir,
   resolveSidecarPath,
   resolveTronDatabasePath,
