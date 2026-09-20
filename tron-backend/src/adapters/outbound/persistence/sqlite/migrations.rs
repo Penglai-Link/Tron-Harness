@@ -38,9 +38,6 @@ pub(super) const CHAT_SESSION_ATTACHMENTS_RESOURCE_MIGRATION: &str =
 pub(super) const WORKSPACES_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260516_0006_create_workspace_management_workspaces.sql"
 );
-pub(super) const WORKSPACE_ACCESS_GRANTS_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260516_0007_create_workspace_management_access_grants.sql"
-);
 pub(super) const TASKS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260516_0008_create_task_management_tasks.sql");
 pub(super) const TASKS_SUPERPOWER_RESET_MIGRATION: &str =
@@ -173,8 +170,6 @@ pub(super) const MCP_WORKSPACE_POLICIES_MIGRATION: &str = include_str!(
 pub(super) const AGENT_MANAGEMENT_INTERNAL_AGENT_MCP_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260605_1001_add_internal_agent_mcp_access_to_workspace_internal_agent_policies.sql"
 );
-pub(super) const OPEN_APPS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260611_0001_create_platform_open_apps.sql");
 pub(super) const SHORT_TERM_MEMORY_TRANSCRIPT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260615_0001_create_short_term_memory_transcript.sql");
 pub(super) const CHAT_SESSION_LEGACY_SOURCE_MIGRATION: &str =

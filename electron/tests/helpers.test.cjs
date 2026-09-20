@@ -10,12 +10,14 @@ const {
   iframeBlockReasonFromHeaders,
   isHttpUrl,
   resolveBackendConfigPath,
+  resolveBackendHost,
   resolveBackendLogPath,
   resolveControlDatabasePath,
   resolveControlDataDir,
   resolveProfileDataDir,
   resolveProfileDatabasePath,
   resolveProfileGraphStoragePath,
+  resolveProfileConfigPath,
   resolveUpdateServerUrl,
   sanitizeUrl
 } = require("../main/helpers.cjs");
@@ -42,6 +44,10 @@ test("resolveBackendLogPath stores sidecar logs below the desktop data directory
     resolveBackendLogPath("/tmp/tron-data"),
     "/tmp/tron-data/logs/tron-backend.log"
   );
+  assert.equal(
+    resolveBackendLogPath("/tmp/tron-data/profiles/profile-a"),
+    "/tmp/tron-data/profiles/profile-a/logs/tron-backend.log"
+  );
 });
 
 test("profile paths keep control metadata separate from profile data", () => {
@@ -51,6 +57,18 @@ test("profile paths keep control metadata separate from profile data", () => {
   assert.equal(resolveProfileDataDir(root, "profile-a"), "/tmp/tron-data/profiles/profile-a");
   assert.equal(resolveProfileDatabasePath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/tron.sqlite3");
   assert.equal(resolveProfileGraphStoragePath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/tron.graph.grafeo");
+  assert.equal(resolveProfileConfigPath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/application.yaml");
+});
+
+test("LAN binding is opt-in and never enabled for packaged builds", () => {
+  const previous = process.env.TRON_ALLOW_LAN_DEV;
+  process.env.TRON_ALLOW_LAN_DEV = "true";
+  assert.equal(resolveBackendHost({ isPackaged: false }), "0.0.0.0");
+  assert.equal(resolveBackendHost({ isPackaged: true }), "127.0.0.1");
+  process.env.TRON_ALLOW_LAN_DEV = "false";
+  assert.equal(resolveBackendHost({ isPackaged: false }), "127.0.0.1");
+  if (previous === undefined) delete process.env.TRON_ALLOW_LAN_DEV;
+  else process.env.TRON_ALLOW_LAN_DEV = previous;
 });
 
 test("profile paths reject traversal and absolute path injection", () => {

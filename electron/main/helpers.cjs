@@ -5,6 +5,7 @@ const os = require("node:os");
 const path = require("node:path");
 
 const HOST = "127.0.0.1";
+const LAN_DEV_HOST = "0.0.0.0";
 const SIDE_CAR_BASELINE_PORT = 8080;
 const MAX_PORT_PROBE = 80;
 const BACKEND_HEALTH_PATH = "/api/v1/health";
@@ -46,22 +47,26 @@ function loadPort() {
   return Number.isInteger(parsed) && parsed > 0 ? parsed : SIDE_CAR_BASELINE_PORT;
 }
 
-function canBindPort(port) {
+function resolveBackendHost({ isPackaged = false } = {}) {
+  return !isPackaged && process.env.TRON_ALLOW_LAN_DEV === "true" ? LAN_DEV_HOST : HOST;
+}
+
+function canBindPort(port, host = resolveBackendHost()) {
   return new Promise((resolve) => {
     const server = net.createServer();
     server.once("error", () => resolve(false));
     server.once("listening", () => {
       server.close(() => resolve(true));
     });
-    server.listen(port, HOST);
+    server.listen(port, host);
   });
 }
 
-async function findFreePort(start) {
+async function findFreePort(start, host = resolveBackendHost()) {
   const base = start > 0 ? start : SIDE_CAR_BASELINE_PORT;
   for (let offset = 0; offset < MAX_PORT_PROBE; offset += 1) {
     const candidate = base + offset;
-    if (await canBindPort(candidate)) {
+    if (await canBindPort(candidate, host)) {
       return candidate;
     }
   }
@@ -125,6 +130,10 @@ function resolveProfileGraphStoragePath(appDataDir, profileId) {
   return path.join(resolveProfileDataDir(appDataDir, profileId), "tron.graph.grafeo");
 }
 
+function resolveProfileConfigPath(appDataDir, profileId) {
+  return path.join(resolveProfileDataDir(appDataDir, profileId), "application.yaml");
+}
+
 function resolveBackendLogPath(appDataDir) {
   return path.join(appDataDir, "logs", "tron-backend.log");
 }
@@ -177,15 +186,6 @@ function resolveBackendConfigPath(appDataDir, resourcesDir, options = {}) {
   }
 
   return userConfigPath;
-}
-
-function resolveTronDatabasePath(appDataDir) {
-  const legacyPath = path.join(appDataDir, "tron.sqlite");
-  if (fs.existsSync(legacyPath)) {
-    return legacyPath;
-  }
-
-  return path.join(appDataDir, "tron.sqlite3");
 }
 
 function resolveResourcesDir(app) {
@@ -299,6 +299,7 @@ module.exports = {
   BACKEND_HEALTH_PATH,
   DEFAULT_PERSON_AI_SERVER_BASE_URL,
   HOST,
+  LAN_DEV_HOST,
   SIDE_CAR_BASELINE_PORT,
   buildGitHubOAuthRedirectUri,
   checkTargetPageEmbeddingStatus,
@@ -316,9 +317,10 @@ module.exports = {
   resolveProfileDataDir,
   resolveProfileDatabasePath,
   resolveProfileGraphStoragePath,
+  resolveProfileConfigPath,
+  resolveBackendHost,
   resolveResourcesDir,
   resolveSidecarPath,
-  resolveTronDatabasePath,
   sanitizeUrl,
   waitBackendReady
 };

@@ -20,7 +20,6 @@ pub use sqlite::SqliteMcpRepository;
 pub use sqlite::SqliteMemoryWorkDomainRepository;
 pub use sqlite::SqliteNavigationRepository;
 pub use sqlite::SqliteModelRepository;
-pub use sqlite::SqliteOpenAppRepository;
 pub use sqlite::SqlitePromptRepository;
 pub use sqlite::SqliteProjectRepository;
 pub use sqlite::SqliteResourceRepository;

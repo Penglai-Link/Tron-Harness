@@ -14,7 +14,7 @@ use crate::{
             infer_task_role, task_default_status_for_role, task_options,
             task_status_allowed_for_role, task_statuses_for_role,
         },
-        workspace::{WorkspaceAccessListQuery, WorkspaceError, WorkspaceStatus},
+        workspace::{WorkspaceError, WorkspaceStatus},
     },
     shared::{
         event_bus::{BusEventDraft, EventBusHandle},

@@ -159,10 +159,9 @@ export function fetchModelProviderAuthorization(
 export function pollModelProviderAuthorization(
   providerCode: ModelProviderCode,
   sessionId: string,
-  _payload: { encryptionKeyBase64?: string | null } = {},
 ) {
   return requestApi<ProviderAuthorizationPollResult>(modelProviderApiEndpoints.pollAuthorization, {
-    body: _payload,
+    body: {},
     pathParams: { providerCode, sessionId },
   });
 }

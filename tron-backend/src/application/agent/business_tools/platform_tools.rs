@@ -4,7 +4,6 @@ mod common;
 mod model;
 mod platform_mcp;
 mod platform_model;
-mod platform_open_app;
 mod platform_prompt;
 mod platform_resource;
 mod platform_variable;
@@ -19,7 +18,7 @@ use std::sync::Arc;
 use crate::{
     application::{
         app::AppService, automation::AutomationService, mcp::McpService, model::ModelService,
-        open_app::OpenAppService, prompt::PromptService, resource::ResourceService,
+        prompt::PromptService, resource::ResourceService,
         skill::SkillRegistryService, task::TaskService, variable::VariableService,
         workspace::WorkspaceService,
     },
@@ -37,7 +36,6 @@ pub(super) fn platform_business_tools(
     resources: ResourceService,
     prompts: PromptService,
     mcp: McpService,
-    open_apps: OpenAppService,
 ) -> Vec<Arc<dyn Tool>> {
     let mut tools: Vec<Arc<dyn Tool>> = Vec::new();
     tools.extend(workspace::tools(workspaces));
@@ -47,7 +45,6 @@ pub(super) fn platform_business_tools(
     tools.extend(model::tools(models.clone()));
     tools.extend(platform_model::tools(models));
     tools.extend(platform_mcp::tools(mcp));
-    tools.extend(platform_open_app::tools(open_apps));
     tools.extend(platform_prompt::tools(prompts));
     tools.extend(platform_resource::tools(resources.clone()));
     tools.extend(skill::tools(skills));

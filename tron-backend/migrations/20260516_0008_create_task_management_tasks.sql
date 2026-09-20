@@ -20,14 +20,6 @@ CREATE TABLE IF NOT EXISTS tasks (
     archived_at INTEGER NULL
 );
 
-CREATE TABLE IF NOT EXISTS task_user_assignments (
-    id INTEGER PRIMARY KEY,
-    task_code TEXT NOT NULL REFERENCES tasks(task_code),
-    user_code TEXT NOT NULL,
-    assigned_at INTEGER NOT NULL,
-    UNIQUE (task_code, user_code)
-);
-
 CREATE TABLE IF NOT EXISTS task_agent_links (
     id INTEGER PRIMARY KEY,
     task_code TEXT NOT NULL REFERENCES tasks(task_code),
@@ -46,7 +38,5 @@ CREATE TABLE IF NOT EXISTS task_app_links (
 
 CREATE INDEX IF NOT EXISTS idx_tasks_workspace_status ON tasks(workspace_code, status);
 CREATE INDEX IF NOT EXISTS idx_tasks_parent_task_code ON tasks(parent_task_code);
-CREATE INDEX IF NOT EXISTS idx_task_user_assignments_user_code ON task_user_assignments(user_code);
-CREATE INDEX IF NOT EXISTS idx_task_user_assignments_task_code ON task_user_assignments(task_code);
 CREATE INDEX IF NOT EXISTS idx_task_agent_links_task_code ON task_agent_links(task_code);
 CREATE INDEX IF NOT EXISTS idx_task_app_links_task_code ON task_app_links(task_code);

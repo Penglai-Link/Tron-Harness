@@ -1,3 +1,5 @@
+use base64::{Engine, engine::general_purpose::STANDARD as BASE64};
+use rand::RngCore;
 use serde::Deserialize;
 use std::{
     env, fs,
@@ -39,6 +41,7 @@ impl AppConfig {
         config.application_config_path = path.display().to_string();
         config.apply_file_overrides(file_config)?;
         config.apply_env_overrides()?;
+        config.ensure_profile_crypto_key(path)?;
         Ok(config)
     }
 
@@ -113,6 +116,54 @@ impl AppConfig {
                 value: "must be greater than zero".into(),
             });
         }
+        Ok(())
+    }
+
+    /// Profile credentials are encrypted with a key owned by the backend.
+    /// The desktop bootstrap deliberately starts a new profile with an empty
+    /// key; provision it here and persist it next to that profile's database.
+    /// No client-supplied key is accepted by the authorization API.
+    fn ensure_profile_crypto_key(&mut self, path: &Path) -> Result<(), ConfigError> {
+        if std::env::var("TRON_PROFILE_ID")
+            .ok()
+            .is_none_or(|value| value.trim().is_empty())
+            || !self.variable_crypto.key_base64.trim().is_empty()
+        {
+            return Ok(());
+        }
+
+        let mut key = [0_u8; 16];
+        rand::rng().fill_bytes(&mut key);
+        let key_base64 = BASE64.encode(key);
+        let content = fs::read_to_string(path).map_err(|source| ConfigError::ConfigFileReadFailed {
+            path: path.display().to_string(),
+            source,
+        })?;
+        let next_content = if content
+            .lines()
+            .any(|line| line.trim_start().starts_with("keyBase64:"))
+        {
+            content
+                .lines()
+                .map(|line| {
+                    if line.trim_start().starts_with("keyBase64:") {
+                        let indent = &line[..line.len() - line.trim_start().len()];
+                        format!("{indent}keyBase64: {key_base64}")
+                    } else {
+                        line.to_owned()
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
+                + "\n"
+        } else {
+            format!("{content}\nvariableCrypto:\n  keyBase64: {key_base64}\n")
+        };
+        fs::write(path, next_content).map_err(|source| ConfigError::ConfigFileReadFailed {
+            path: path.display().to_string(),
+            source,
+        })?;
+        self.variable_crypto.key_base64 = key_base64;
         Ok(())
     }
 }

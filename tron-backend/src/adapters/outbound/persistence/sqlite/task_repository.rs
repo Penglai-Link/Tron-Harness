@@ -292,7 +292,7 @@ impl TaskRepository for SqliteTaskRepository {
 
     fn next_id(&mut self) -> Result<i64, TaskError> {
         let max_id = self.connection.query_row(
-            "SELECT max(id) FROM (SELECT id FROM tasks UNION ALL SELECT id FROM task_user_assignments UNION ALL SELECT id FROM task_agent_links UNION ALL SELECT id FROM task_app_links)",
+            "SELECT max(id) FROM (SELECT id FROM tasks UNION ALL SELECT id FROM task_agent_links UNION ALL SELECT id FROM task_app_links)",
             [],
             |row| row.get::<_, Option<i64>>(0),
         ).map_err(storage_error)?.unwrap_or(734_500_000_000_000_000);
@@ -317,39 +317,17 @@ impl TaskRepository for SqliteTaskRepository {
 
     fn list_user_assignments(
         &mut self,
-        task_code: &str,
+        _task_code: &str,
     ) -> Result<Vec<TaskUserAssignment>, TaskError> {
-        let mut statement = self.connection.prepare("SELECT user_code, assigned_at FROM task_user_assignments WHERE task_code = ?1 ORDER BY user_code ASC").map_err(storage_error)?;
-        statement
-            .query_map([task_code], |row| {
-                Ok(TaskUserAssignment {
-                    user_code: row.get(0)?,
-                    assigned_at: timestamp_from_millis(row.get(1)?),
-                })
-            })
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
+        Ok(Vec::new())
     }
 
     fn replace_user_assignments(
         &mut self,
-        task_code: &str,
-        entries: &[TaskUserAssignment],
+        _task_code: &str,
+        _entries: &[TaskUserAssignment],
     ) -> Result<Vec<TaskUserAssignment>, TaskError> {
-        let mut next_id = self.next_id()?;
-        let tx = self.connection.transaction().map_err(storage_error)?;
-        tx.execute(
-            "DELETE FROM task_user_assignments WHERE task_code = ?1",
-            [task_code],
-        )
-        .map_err(storage_error)?;
-        for entry in entries {
-            tx.execute("INSERT INTO task_user_assignments (id, task_code, user_code, assigned_at) VALUES (?1, ?2, ?3, ?4)", params![next_id, task_code, entry.user_code, timestamp_to_millis(&entry.assigned_at)]).map_err(storage_error)?;
-            next_id += 1;
-        }
-        tx.commit().map_err(storage_error)?;
-        self.list_user_assignments(task_code)
+        Ok(Vec::new())
     }
 
     fn list_agent_links(&mut self, task_code: &str) -> Result<Vec<TaskCodeLink>, TaskError> {

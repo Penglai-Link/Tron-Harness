@@ -23,6 +23,19 @@ pub fn routes() -> Router<AppState> {
             post(activate_profile),
         )
         .route("/api/v1/profiles/pending", post(create_pending_profile))
+        .route("/api/v1/profiles/prepare-switch", post(prepare_profile_switch))
+}
+
+async fn prepare_profile_switch(State(state): State<AppState>) -> Response {
+    match state.active_runs.request_stop_all() {
+        Ok(stopped) => Json(ApiResponse::success(serde_json::json!({ "stopped": stopped })))
+            .into_response(),
+        Err(_) => generic_profile_error(
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "PERSONAI_PROFILE_SWITCH_FAILED",
+            "active runs could not be interrupted before switching profiles",
+        ),
+    }
 }
 
 async fn bootstrap_status(State(profiles): State<ProfileRegistryService>) -> Response {

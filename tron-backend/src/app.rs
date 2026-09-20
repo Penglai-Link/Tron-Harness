@@ -31,7 +31,7 @@ use crate::{
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository,
-                SqliteNavigationRepository, SqliteOpenAppRepository, SqliteProjectRepository,
+                SqliteNavigationRepository, SqliteProjectRepository,
                 SqlitePromptRepository, SqliteResourceRepository, SqliteRoleRepository,
                 SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
@@ -40,7 +40,6 @@ use crate::{
             resource_connectivity::ProtocolResourceConnectionVerifier,
             resource_storage::LocalObjectStorage,
             s3_storage::S3ObjectStorage,
-            setup_transaction::SetupTransactionService,
         },
     },
     application::agent::{
@@ -58,7 +57,6 @@ use crate::{
     application::model_provider::{ModelProviderService, ProviderAwareLlmRuntimeResolver},
     application::model_router::LlmModelRouter,
     application::navigation::NavigationService,
-    application::open_app::OpenAppService,
     application::profile::ProfileRegistryService,
     application::project::ProjectService,
     application::prompt::PromptService,
@@ -78,7 +76,6 @@ use crate::{
     health::{health, readiness},
     openapi::routes as openapi_routes,
     shared::{
-        crypto::Aes256SecretBox,
         event_bus::{AguiEventSink, EventBusHandle, EventBusRuntimeBuilder},
         http_client::HttpClientPool,
         id::{IdGenerator, SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
@@ -104,7 +101,6 @@ static GLOBAL_SKILL_SERVICE: OnceLock<SkillRegistryService> = OnceLock::new();
 static GLOBAL_MODEL_SERVICE: OnceLock<ModelService> = OnceLock::new();
 static GLOBAL_CHAT_SERVICE: OnceLock<ChatService> = OnceLock::new();
 static GLOBAL_SHORT_TERM_MEMORY_SERVICE: OnceLock<ShortTermMemoryService> = OnceLock::new();
-static GLOBAL_OPEN_APP_SERVICE: OnceLock<OpenAppService> = OnceLock::new();
 static GLOBAL_MEMORY_WORK_DOMAIN_SERVICE: OnceLock<MemoryWorkDomainService> = OnceLock::new();
 static GLOBAL_NAVIGATION_SERVICE: OnceLock<NavigationService> = OnceLock::new();
 static GLOBAL_GRAPH_CORE: OnceLock<GrafeoStoreCore> = OnceLock::new();
@@ -149,12 +145,10 @@ pub struct AppState {
     pub resources: ResourceService,
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
-    pub setup_transaction: SetupTransactionService,
     pub system_config: SystemConfigService,
     pub models: ModelService,
     pub model_providers: ModelProviderService,
     pub prompts: PromptService,
-    pub open_apps: OpenAppService,
     pub profiles: ProfileRegistryService,
     pub llm_runtime: LlmRuntimeService,
     pub llm_router: LlmModelRouter,
@@ -313,15 +307,6 @@ impl AppState {
             variables.clone(),
             runtime_http_client.clone(),
         );
-        let open_apps = if config.database_url == ":memory:" {
-            GLOBAL_OPEN_APP_SERVICE
-                .get_or_init(|| {
-                    build_open_app_service(":memory:", users.clone(), &config.auth.jwt_secret)
-                })
-                .clone()
-        } else {
-            build_open_app_service(&config.database_url, users.clone(), &config.auth.jwt_secret)
-        };
         let skills = if config.database_url == ":memory:" {
             GLOBAL_SKILL_SERVICE
                 .get_or_init(|| {
@@ -448,7 +433,6 @@ impl AppState {
             resources.clone(),
             prompts.clone(),
             mcp.clone(),
-            open_apps.clone(),
             memory.clone(),
             short_term_memory.clone(),
         )
@@ -513,12 +497,6 @@ impl AppState {
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
             config.application_config_path.clone(),
         )));
-        let setup_transaction = SetupTransactionService::connect(
-            config.database_url.clone(),
-            config.application_config_path.clone(),
-        )
-        .expect("setup transaction service should initialize");
-
         Ok(Self {
             config,
             readiness,
@@ -542,7 +520,6 @@ impl AppState {
             models,
             model_providers,
             prompts,
-            open_apps,
             profiles,
             llm_runtime,
             llm_router,
@@ -552,7 +529,6 @@ impl AppState {
             navigation,
             rag,
             skills,
-            setup_transaction,
             system_config,
             roles,
             tasks,

@@ -13,7 +13,6 @@ use crate::{
         mcp::McpService,
         memory::MemoryService,
         model::ModelService,
-        open_app::OpenAppService,
         prompt::PromptService,
         rag::{
             RagDiagnosticsRepository, RagDocumentSourceRuntime, RagEmbeddingRuntime,
@@ -59,7 +58,6 @@ pub fn register_default_agent_tools<R, S, E>(
     resources: ResourceService,
     prompts: PromptService,
     mcp: McpService,
-    open_apps: OpenAppService,
     memory: MemoryService<R, S, E>,
     short_term_memory: ShortTermMemoryService,
 ) -> Result<(), ToolError>
@@ -86,7 +84,6 @@ where
         resources.clone(),
         prompts,
         mcp,
-        open_apps,
     );
     tools.extend(coding_tools::coding_domain_tools(resources.clone()));
     tools.extend(memory_tools::memory_business_tools(memory));

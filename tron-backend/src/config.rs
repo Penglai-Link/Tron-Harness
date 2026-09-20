@@ -200,6 +200,11 @@ impl AppConfig {
         if let Some(value) = env_port_override()? {
             self.port = value;
         }
+        if let Ok(value) = std::env::var("TRON_BACKEND_BIND_ADDRESS")
+            && !value.trim().is_empty()
+        {
+            self.bind_address = value.trim().to_owned();
+        }
         if let Some(value) = env_database_url_override() {
             self.database_url = value;
         }

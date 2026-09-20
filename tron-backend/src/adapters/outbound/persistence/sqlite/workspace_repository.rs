@@ -14,7 +14,7 @@ use crate::{
     },
 };
 
-use super::migrations::{WORKSPACE_ACCESS_GRANTS_MIGRATION, WORKSPACES_MIGRATION};
+use super::migrations::WORKSPACES_MIGRATION;
 
 pub struct SqliteWorkspaceRepository {
     connection: Connection,
@@ -44,9 +44,7 @@ impl SqliteWorkspaceRepository {
         self.connection
             .execute_batch(WORKSPACES_MIGRATION)
             .map_err(storage_error)?;
-        self.connection
-            .execute_batch(WORKSPACE_ACCESS_GRANTS_MIGRATION)
-            .map_err(storage_error)
+        Ok(())
     }
 }
 
@@ -84,11 +82,7 @@ impl WorkspaceRepository for SqliteWorkspaceRepository {
         let max_id: i64 = self
             .connection
             .query_row(
-                "SELECT max(id) FROM (
-                    SELECT id FROM workspaces
-                    UNION ALL SELECT id FROM workspace_user_access
-                    UNION ALL SELECT id FROM workspace_role_access
-                )",
+                "SELECT max(id) FROM workspaces",
                 [],
                 |row| row.get::<_, Option<i64>>(0),
             )

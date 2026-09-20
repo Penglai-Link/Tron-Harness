@@ -1,5 +1,5 @@
 fn build_user_service(config: &AppConfig, event_bus: EventBusHandle) -> UserService {
-    let repository = SqliteUserRepository::connect(&config.database_url)
+    let repository = SqliteUserRepository::connect(":memory:")
         .expect("user SQLite repository should initialize");
     UserService::with_event_bus(
         repository,
@@ -9,8 +9,8 @@ fn build_user_service(config: &AppConfig, event_bus: EventBusHandle) -> UserServ
     )
 }
 
-fn build_role_service(database_url: &str, event_bus: EventBusHandle) -> RoleService {
-    let repository = SqliteRoleRepository::connect(database_url)
+fn build_role_service(_database_url: &str, event_bus: EventBusHandle) -> RoleService {
+    let repository = SqliteRoleRepository::connect(":memory:")
         .expect("role SQLite repository should initialize");
     RoleService::with_event_bus(repository, event_bus)
 }
@@ -247,16 +247,6 @@ fn should_seed_builtin_prompts(database_url: &str) -> bool {
                     .is_some_and(|name| name.starts_with("tron-"))
         }
     }
-}
-
-fn build_open_app_service(
-    database_url: &str,
-    users: UserService,
-    jwt_secret: &str,
-) -> OpenAppService {
-    let repository = SqliteOpenAppRepository::connect(database_url)
-        .expect("open-app SQLite repository should initialize");
-    OpenAppService::new(repository, users, Aes256SecretBox::new(jwt_secret))
 }
 
 fn build_agent_run_history_service(database_url: &str) -> AgentRunHistoryService {

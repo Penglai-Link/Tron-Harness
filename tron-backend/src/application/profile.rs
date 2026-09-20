@@ -211,10 +211,7 @@ impl ProfileRegistryService {
                  VALUES (?1, ?2, ?3, 'ACTIVE', ?4)
                  ON CONFLICT(person_ai_user_id) DO UPDATE SET
                      person_ai_username = excluded.person_ai_username,
-                     status = CASE
-                         WHEN profiles.status = 'PENDING' THEN 'ACTIVE'
-                         ELSE profiles.status
-                     END",
+                     status = 'ACTIVE'",
                 params![profile_id, person_ai_user_id, person_ai_username, now],
             )?;
         }
@@ -359,6 +356,12 @@ impl ProfileRegistryService {
         let profile = self
             .active()?
             .ok_or(ProfileRegistryError::ProfileNotFound("active".into()))?;
+        if profile.status != "ACTIVE"
+            || Self::active_profile_id_from_environment()
+                .is_some_and(|profile_id| profile_id != profile.profile_id)
+        {
+            return Err(ProfileRegistryError::ProfileNotFound(profile.profile_id));
+        }
         Ok(CurrentProfileContext {
             profile_id: profile.profile_id,
             person_ai_user_id: profile.person_ai_user_id,

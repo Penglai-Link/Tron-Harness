@@ -14,6 +14,7 @@ const { createUpdater, UPDATE_STATUS_EVENT } = require("./updater.cjs");
 
 const {
   HOST,
+  resolveBackendHost,
   buildGitHubOAuthRedirectUri,
   checkTargetPageEmbeddingStatus,
   findFreePort,
@@ -29,7 +30,6 @@ const {
   resolveProfileDatabasePath,
   resolveProfileGraphStoragePath,
   resolveSidecarPath,
-  resolveTronDatabasePath,
   resolveUpdateServerUrl,
   sanitizeUrl,
   waitBackendReady
@@ -70,12 +70,15 @@ const injectionTemplate = fs.readFileSync(
 
 const state = {
   backendPort: 0,
+  backendHost: HOST,
+  clientHost: HOST,
   backendUrl: "",
   backendProcess: null,
   backendReady: false,
   controlDatabasePath: "",
   databasePath: "",
   backendLogPath: "",
+  appDataDir: "",
   frontendDistDir: "",
   graphPath: "",
   profileDataDir: "",
@@ -384,11 +387,15 @@ function escapeHtml(value) {
 
 function startBackend(resourcesDir) {
   const sidecarPath = resolveSidecarPath(resourcesDir);
-  const appDataDir = path.dirname(state.databasePath);
-  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir, {
-    profileConfig: Boolean(state.profileId),
-  });
-  const logPath = resolveBackendLogPath(path.dirname(state.databasePath));
+  const appDataDir = state.appDataDir;
+  const configPath = state.profileId
+    ? resolveBackendConfigPath(state.profileDataDir, resourcesDir, {
+        profileConfig: true,
+      })
+    : resolveBackendConfigPath(appDataDir, resourcesDir);
+  const logPath = resolveBackendLogPath(
+    state.profileId ? state.profileDataDir : path.join(appDataDir, "control"),
+  );
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
   logStream.on("error", (error) => {
@@ -412,6 +419,8 @@ function startBackend(resourcesDir) {
       TRON_BACKEND_FRONTEND_DIST_DIR: state.frontendDistDir,
       TRON_BACKEND_GRAPH_STORAGE_PATH: state.graphPath,
       TRON_BACKEND_PORT: String(state.backendPort),
+      TRON_BACKEND_BIND_ADDRESS: state.backendHost,
+      TRON_PROFILE_DATA_DIR: state.profileId ? state.profileDataDir : "",
       TRON_PROFILE_ID: state.profileId,
       TRON_AUTH_GITHUB_REDIRECT_URI: buildGitHubOAuthRedirectUri(state.backendUrl)
     },
@@ -462,8 +471,27 @@ function requestedProfileId() {
   return String(process.env.TRON_PROFILE_ID || "").trim();
 }
 
-function relaunchForProfile(profileId) {
+async function prepareBackendForProfileSwitch() {
+  if (!state.backendUrl) return;
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 1500);
+  try {
+    await fetch(`${state.backendUrl}/api/v1/profiles/prepare-switch`, {
+      method: "POST",
+      signal: controller.signal,
+      headers: { "content-type": "application/json" },
+      body: "{}"
+    });
+  } catch (_error) {
+    // The sidecar may already be unavailable while switching profiles.
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+async function relaunchForProfile(profileId) {
   const appDataDir = resolveDesktopDataDir();
+  state.appDataDir = appDataDir;
   resolveProfileDataDir(appDataDir, profileId);
   const args = process.argv.slice(1).filter((argument, index, all) => {
     if (argument === "--tron-profile-id") return false;
@@ -472,6 +500,7 @@ function relaunchForProfile(profileId) {
   });
   args.push(`--tron-profile-id=${profileId}`);
   isQuitting = true;
+  await prepareBackendForProfileSwitch();
   stopBackend();
   app.relaunch({ args });
   app.exit(0);
@@ -491,21 +520,23 @@ async function bootstrap() {
   const appDataDir = resolveDesktopDataDir();
   fs.mkdirSync(appDataDir, { recursive: true });
 
-  state.backendPort = await findFreePort(loadPort());
-  state.backendUrl = `http://${HOST}:${state.backendPort}`;
+  state.backendHost = resolveBackendHost({ isPackaged: app.isPackaged });
+  state.clientHost = HOST;
+  state.backendPort = await findFreePort(loadPort(), state.backendHost);
+  state.backendUrl = `http://${state.clientHost}:${state.backendPort}`;
   state.profileId = requestedProfileId();
   state.profileDataDir = state.profileId
     ? resolveProfileDataDir(appDataDir, state.profileId)
-    : appDataDir;
+    : path.join(appDataDir, "control");
   fs.mkdirSync(state.profileDataDir, { recursive: true });
   state.controlDatabasePath = resolveControlDatabasePath(appDataDir);
-  state.databasePath = state.profileId
-    ? resolveProfileDatabasePath(appDataDir, state.profileId)
-    : resolveTronDatabasePath(state.profileDataDir);
-  state.backendLogPath = resolveBackendLogPath(state.profileDataDir);
+  state.databasePath = state.profileId ? resolveProfileDatabasePath(appDataDir, state.profileId) : ":memory:";
+  state.backendLogPath = resolveBackendLogPath(
+    state.profileId ? state.profileDataDir : path.join(appDataDir, "control"),
+  );
   state.graphPath = state.profileId
     ? resolveProfileGraphStoragePath(appDataDir, state.profileId)
-    : path.join(state.profileDataDir, "tron.graph.grafeo");
+    : ":memory:";
   state.frontendDistDir = resolveFrontendDistDir(resourcesDir);
   state.updater = createUpdater({
     dataDir: appDataDir,

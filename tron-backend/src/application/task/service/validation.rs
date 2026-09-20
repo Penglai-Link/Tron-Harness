@@ -25,34 +25,15 @@ impl TaskService {
 
     pub(super) fn validated_assignees(
         &self,
-        workspace_code: &str,
+        _workspace_code: &str,
         user_codes: Vec<String>,
     ) -> Result<Vec<TaskUserAssignment>, TaskError> {
-        let effective_users = self
-            .workspaces
-            .list_effective_users(
-                workspace_code,
-                WorkspaceAccessListQuery {
-                    current: Some(1),
-                    size: Some(500),
-                    search: None,
-                },
-            )
-            .map_err(map_workspace_error)?;
-        let allowed_user_codes = effective_users
-            .records
-            .into_iter()
-            .map(|user| user.user_code)
-            .collect::<BTreeSet<_>>();
         let mut unique = BTreeSet::new();
         user_codes
             .into_iter()
             .filter_map(normalized_required)
             .filter(|user_code| unique.insert(user_code.clone()))
             .map(|user_code| {
-                if !allowed_user_codes.contains(&user_code) {
-                    return Err(TaskError::AssigneeNotInWorkspace);
-                }
                 Ok(TaskUserAssignment {
                     user_code,
                     assigned_at: current_timestamp(),

@@ -455,13 +455,10 @@ export function SetupPage() {
 
   const checkPersonAiAuthorization = useCallback(async (showPending = true) => {
     const authorization = personAiAuthorization;
-    const key = encryptionKey.trim();
-    if (!authorization || !key) return false;
+    if (!authorization) return false;
     setPersonAiPolling(true);
     try {
-      const result = await pollModelProviderAuthorization("PersonAi", authorization.sessionId, {
-        encryptionKeyBase64: key,
-      });
+      const result = await pollModelProviderAuthorization("PersonAi", authorization.sessionId);
       const verified = result.completed && result.textVerified === true && result.embeddingVerified === true;
       if (verified && result.connection?.personAiUserId && result.connection.personAiUsername) {
         await registerProfile(result.connection.personAiUserId, result.connection.personAiUsername);

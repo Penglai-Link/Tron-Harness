@@ -282,6 +282,31 @@ impl ActiveRunRegistry {
         })
     }
 
+    /// Cancel every in-process run before Electron tears down the profile
+    /// sidecar. This gives the run executor a chance to persist an interrupted
+    /// terminal state instead of leaving a run looking active after a switch.
+    pub fn request_stop_all(&self) -> Result<usize, ActiveRunError> {
+        let entries = self
+            .inner
+            .entries
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?;
+        let mut stopped = 0;
+        for entry in entries.values() {
+            let mut state = entry
+                .state
+                .lock()
+                .map_err(|_| ActiveRunError::RegistryUnavailable)?;
+            if !state.finishing {
+                state.finishing = true;
+                state.pending.clear();
+                entry.cancellation_sender.send_replace(true);
+                stopped += 1;
+            }
+        }
+        Ok(stopped)
+    }
+
     pub fn activate_reservation(
         &self,
         guard: &ActiveRunGuard,

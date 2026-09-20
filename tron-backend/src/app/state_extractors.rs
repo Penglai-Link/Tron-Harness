@@ -11,7 +11,6 @@ use crate::{
         mcp::McpService,
         memory::MemoryWorkDomainService,
         model::ModelService,
-        open_app::OpenAppService,
         profile::ProfileRegistryService,
         prompt::PromptService,
         resource::ResourceService,
@@ -152,12 +151,6 @@ impl FromRef<AppState> for ModelService {
 impl FromRef<AppState> for PromptService {
     fn from_ref(state: &AppState) -> Self {
         state.prompts.clone()
-    }
-}
-
-impl FromRef<AppState> for OpenAppService {
-    fn from_ref(state: &AppState) -> Self {
-        state.open_apps.clone()
     }
 }
 

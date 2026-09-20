@@ -149,26 +149,10 @@ pub async fn poll_authorization_session(
     if let Err(response) = parse_provider_code(&provider_code) {
         return response;
     }
-    let encryption_key = match state.setup_transaction.ensure_encryption_key() {
-        Ok(key) => {
-            if let Err(error) = state.variables.configure_cipher(&key) {
-                return model_provider_profile_error(format!(
-                    "failed to activate profile encryption: {error}"
-                ));
-            }
-            Some(key)
-        }
-        Err(error) => {
-            return model_provider_profile_error(format!(
-                "failed to initialize profile encryption: {error:?}"
-            ));
-        }
-    };
     match state
         .model_providers
         .poll_authorization_session(CompleteProviderAuthorizationCommand {
             session_id: session_id.clone(),
-            encryption_key_base64: encryption_key,
         })
         .await
     {

@@ -26,13 +26,11 @@ use url::Url;
 mod chat_auto_routes;
 
 use crate::{
-    adapters::outbound::crypto::Sm4GcmVariableCipher,
     application::{
         llm::LlmRuntimeModelResolver,
         model::{ModelService, RuntimeModelConfig},
         variable::VariableCipher,
     },
-    config::VariableCryptoConfig,
     domain::{
         agent::{AgentModelConfig, AgentModelProtocol},
         model::{ModelError, ModelProtocol, ModelType},
@@ -164,12 +162,6 @@ pub struct CreateProviderAuthorizationCommand {
 #[derive(Debug, Clone)]
 pub struct CompleteProviderAuthorizationCommand {
     pub session_id: String,
-    /// The setup wizard supplies the key before the process has reloaded its
-    /// persisted variable-crypto configuration. Normal administrator
-    /// re-authorization deliberately leaves this empty: it must use the
-    /// platform's existing credential cipher instead of asking an operator to
-    /// handle the master key again.
-    pub encryption_key_base64: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -1033,25 +1025,7 @@ impl ModelProviderService {
                 adapter.verify_embedding(&credentials).await?;
                 let (person_ai_user_id, person_ai_username) =
                     self.fetch_person_ai_identity(&credentials).await?;
-                let supplied_encryption_key = command
-                    .encryption_key_base64
-                    .as_deref()
-                    .map(str::trim)
-                    .filter(|value| !value.is_empty())
-                    .map(ToOwned::to_owned);
-                let setup_cipher = supplied_encryption_key
-                    .as_ref()
-                    .map(|key| {
-                        Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
-                            key_base64: key.clone(),
-                        })
-                    })
-                    .transpose()
-                    .map_err(|_| ModelProviderError::InvalidEncryptionKey)?;
-                let encrypted = match setup_cipher.as_ref() {
-                    Some(cipher) => encrypt_credentials(cipher, &credentials)?,
-                    None => self.encrypt_credentials(&credentials)?,
-                };
+                let encrypted = self.encrypt_credentials(&credentials)?;
                 let now = now_millis();
                 let run_code = sync_run_code(now);
                 let mut connection = self
@@ -1077,15 +1051,6 @@ impl ModelProviderService {
                 transaction
                     .commit()
                     .map_err(|_| ModelProviderError::Storage)?;
-                // Setup persists this same key in application.yml immediately
-                // after the provider handshake. Configure the shared cipher
-                // now as well, so the freshly authorized Person-AI connection
-                // is usable before the process is restarted.
-                if let Some(key) = supplied_encryption_key {
-                    self.cipher
-                        .configure_key_base64(&key)
-                        .map_err(|_| ModelProviderError::InvalidEncryptionKey)?;
-                }
                 let session =
                     read_authorization_session(&connection, &stored.session_id)?.to_view();
                 let row = read_connection(&connection, stored.provider_code)?;

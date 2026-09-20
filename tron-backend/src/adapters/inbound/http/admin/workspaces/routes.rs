@@ -6,10 +6,9 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    active_workspaces, archive_workspace, create_workspace, direct_user_grants, get_workspace,
-    list_effective_users, list_role_access, list_user_access, list_workspace_options,
-    list_workspaces, move_workspace, patch_workspace, replace_role_access, replace_user_access,
-    restore_workspace, role_grants, total_workspaces, workspace_switcher,
+    active_workspaces, archive_workspace, create_workspace, get_workspace,
+    list_workspace_options, list_workspaces, move_workspace, patch_workspace,
+    restore_workspace, total_workspaces, workspace_switcher,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -32,14 +31,6 @@ pub fn routes() -> Router<AppState> {
             get(active_workspaces),
         )
         .route(
-            "/api/v1/admin/workspaces/statistics/direct-user-grants",
-            get(direct_user_grants),
-        )
-        .route(
-            "/api/v1/admin/workspaces/statistics/role-grants",
-            get(role_grants),
-        )
-        .route(
             "/api/v1/admin/workspaces/{workspace_code}",
             get(get_workspace).patch(patch_workspace),
         )
@@ -54,17 +45,5 @@ pub fn routes() -> Router<AppState> {
         .route(
             "/api/v1/admin/workspaces/{workspace_code}/restore",
             post(restore_workspace),
-        )
-        .route(
-            "/api/v1/admin/workspaces/{workspace_code}/access/users",
-            get(list_user_access).put(replace_user_access),
-        )
-        .route(
-            "/api/v1/admin/workspaces/{workspace_code}/access/roles",
-            get(list_role_access).put(replace_role_access),
-        )
-        .route(
-            "/api/v1/admin/workspaces/{workspace_code}/access/effective-users",
-            get(list_effective_users),
         )
 }
