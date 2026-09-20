@@ -913,6 +913,7 @@ export const pages = {
         detailFailed: "Unable to load details. Run this session again if context has not been assembled yet.",
         detailViewTree: "Preview",
         detailViewRaw: "Raw JSON",
+        copyRawJson: "Copy raw JSON",
         detailArrayItem: "Item {{index}}",
         detailArraySummary: "Array · {{total}} items",
         detailEmptyArray: "Empty array",

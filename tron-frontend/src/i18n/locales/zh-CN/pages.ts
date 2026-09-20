@@ -892,6 +892,7 @@ export const pages = {
         detailFailed: "查询失败，请稍后重试。若此会话尚未运行过，内容会在下一次运行后提供。",
         detailViewTree: "预览",
         detailViewRaw: "原文",
+        copyRawJson: "复制原始 JSON",
         detailArrayItem: "第 {{index}} 项",
         detailArraySummary: "数组 · {{total}} 项",
         detailEmptyArray: "空数组",

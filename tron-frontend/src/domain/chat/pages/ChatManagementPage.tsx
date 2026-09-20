@@ -3033,7 +3033,13 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
           <div className="flex min-w-0 items-center justify-between gap-3 pr-8">
             <h2 className="truncate text-sm font-semibold text-[var(--color-on-surface)]">{block.name}</h2>
             {isStructuredDetail ? (
-              <div className="flex shrink-0 items-center rounded-md bg-[var(--color-surface-container-low)] p-0.5">
+              <div className="flex shrink-0 items-center gap-1">
+                <CopyValueButton
+                  ariaLabel={t("chat.shortTermMemory.contextPanel.copyRawJson")}
+                  title={t("chat.shortTermMemory.contextPanel.copyRawJson")}
+                  value={rawDetail}
+                />
+                <div className="flex items-center rounded-md bg-[var(--color-surface-container-low)] p-0.5">
                 <button
                   aria-pressed={detailViewMode === "tree"}
                   className={cn("rounded px-2 py-1 text-xs transition-colors", detailViewMode === "tree" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]")}
@@ -3050,6 +3056,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
                 >
                   {t("chat.shortTermMemory.contextPanel.detailViewRaw")}
                 </button>
+                </div>
               </div>
             ) : null}
           </div>
