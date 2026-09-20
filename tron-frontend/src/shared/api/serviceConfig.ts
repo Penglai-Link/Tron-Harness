@@ -13,6 +13,7 @@ import {
   type EndpointParams,
   parseEndpoint,
 } from "@/shared/api/httpClient";
+import { applyCurrentLocaleHeader } from "@/i18n";
 import { useToast } from "@/components/ui/toast";
 
 export type ServiceDataSource = "mock" | "api";
@@ -165,14 +166,16 @@ export function useServiceQueryState<T>({ apiInitialData, domain, enabled = true
 
     const controller = new AbortController();
     const accessToken = getApiAccessToken();
+    const headers = new Headers(
+      accessToken ? { Authorization: `Bearer ${accessToken}` } : undefined,
+    );
+    applyCurrentLocaleHeader(headers);
     setLoading(true);
     setError(null);
 
     fetch(request.url, {
       credentials: "include",
-      headers: accessToken
-        ? { Authorization: `Bearer ${accessToken}` }
-        : undefined,
+      headers,
       method: request.method,
       signal: controller.signal,
     })

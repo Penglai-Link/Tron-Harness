@@ -39,16 +39,24 @@ function getBrowserLocale() {
   return navigator.languages.find(isSupportedLocale) ?? (isSupportedLocale(navigator.language) ? navigator.language : undefined);
 }
 
+function getDocumentLocale() {
+  if (typeof document === "undefined") return undefined;
+  const locale = document.documentElement.lang;
+  return isSupportedLocale(locale) ? locale : undefined;
+}
+
 export function getInitialLocale(): SupportedLocale {
   return getStoredLocale() ?? getBrowserLocale() ?? fallbackLocale;
 }
 
 /**
  * Resolves the application locale that is emitted through the standard
- * Accept-Language request header. `i18n.language` preserves the user's active
- * selection; `resolvedLanguage` may instead be the fallback locale.
+ * Accept-Language request header. The document language is synchronized from
+ * the user's selection and remains the visible source of truth across HMR.
  */
 export function getCurrentLocale(): SupportedLocale {
+  const documentLocale = getDocumentLocale();
+  if (documentLocale) return documentLocale;
   if (isSupportedLocale(i18n.language)) return i18n.language;
   const storedLocale = getStoredLocale();
   if (storedLocale) return storedLocale;
