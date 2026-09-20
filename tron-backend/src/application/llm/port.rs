@@ -45,12 +45,6 @@ pub struct LlmRuntimeRerankHit {
 }
 
 pub trait LlmRuntimeModelResolver: Send + Sync {
-    fn text_runtime_model_config(
-        &self,
-        workspace_code: &str,
-        model_code: Option<&str>,
-    ) -> Result<Option<RuntimeModelConfig>, ModelError>;
-
     fn embedding_runtime_model_config(
         &self,
         workspace_code: &str,

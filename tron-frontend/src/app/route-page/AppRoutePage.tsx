@@ -5,10 +5,8 @@ import {
   TabPanelRegistryProvider,
   TronShell,
 } from "@/shared";
-import { useToast } from "@/components/ui/toast";
 import { useTabStore } from "@/store/tabStore";
 import {
-  useRef,
   useMemo,
   useEffect,
   ReactNode,
@@ -16,7 +14,6 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   matchPath,
-  Navigate,
   UNSAFE_LocationContext,
   useLocation,
   useNavigationType,
@@ -66,10 +63,6 @@ function resolveAppRoute(pathname: string, search: string) {
   return route && Component ? { Component, route } : undefined;
 }
 
-function isAdministrationRoute(pathname: string) {
-  return pathname === "/admin" || pathname.startsWith("/admin/");
-}
-
 function resolveActiveItemByLabel(label: string) {
   return consoleNavigationItems.find((item) => item.label === label);
 }
@@ -104,7 +97,6 @@ function CachedRouteLocationProvider({
 export default function AppRoutePage() {
   const { pathname, search } = useLocation();
   const { session } = useAuthSession();
-  const toast = useToast();
   const { t } = useTranslation();
   const addTab = useTabStore((state) => state.addTab);
   const addToCache = useTabStore((state) => state.addToCache);
@@ -120,9 +112,6 @@ export default function AppRoutePage() {
     search,
     resolved?.route.pageId,
   );
-  const isAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
-  const blocksAdministrationRoute = isAdministrationRoute(pathname) && !isAdmin;
-  const blockedAdministrationToastPath = useRef<string | null>(null);
   // 渲染所有缓存的 tab 内容
   const cachedRouteContents = useMemo(() => {
     return cachedTabsList.map((cachedTab) => {
@@ -252,26 +241,6 @@ export default function AppRoutePage() {
     search,
     resolved?.route.pageId,
   ]);
-
-  useEffect(() => {
-    if (!blocksAdministrationRoute) {
-      blockedAdministrationToastPath.current = null;
-      return;
-    }
-
-    if (blockedAdministrationToastPath.current === pathname) {
-      return;
-    }
-
-    blockedAdministrationToastPath.current = pathname;
-    toast.warning("Only Admin role users can access administration pages.", {
-      title: "Access restricted",
-    });
-  }, [blocksAdministrationRoute, pathname, toast]);
-
-  if (blocksAdministrationRoute) {
-    return <Navigate replace to="/apps" />;
-  }
 
   if (resolved?.route.layout === "settings") {
     const { route } = resolved;

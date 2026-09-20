@@ -127,6 +127,7 @@ pub struct WorkspaceService {
     users: UserService,
     roles: RoleService,
     event_bus: EventBusHandle,
+    profile_scoped: bool,
 }
 
 impl WorkspaceService {
@@ -149,7 +150,13 @@ impl WorkspaceService {
             users,
             roles,
             event_bus,
+            profile_scoped: false,
         }
+    }
+
+    pub fn with_profile_scope(mut self) -> Self {
+        self.profile_scoped = true;
+        self
     }
 
     fn ensure_workspace_exists(&self, workspace_code: &str) -> Result<(), WorkspaceError> {

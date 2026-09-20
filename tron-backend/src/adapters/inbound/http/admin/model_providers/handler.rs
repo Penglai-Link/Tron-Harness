@@ -25,8 +25,6 @@ pub struct CreateAuthorizationRequest {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct PollAuthorizationRequest {
-    #[serde(default)]
-    pub encryption_key_base64: Option<String>,
 }
 
 #[derive(Debug, Serialize)]
@@ -37,6 +35,8 @@ struct AuthorizationPollResponse {
     connection: Option<crate::domain::model_provider::ProviderConnectionView>,
     text_verified: Option<bool>,
     embedding_verified: Option<bool>,
+    profile_id: Option<String>,
+    restart_required: bool,
 }
 
 pub async fn list_provider_connections(State(state): State<AppState>) -> Response {
@@ -144,28 +144,25 @@ pub async fn get_authorization_session(
 pub async fn poll_authorization_session(
     State(state): State<AppState>,
     Path((provider_code, session_id)): Path<(String, String)>,
-    Json(request): Json<PollAuthorizationRequest>,
+    Json(_request): Json<PollAuthorizationRequest>,
 ) -> Response {
     if let Err(response) = parse_provider_code(&provider_code) {
         return response;
     }
-    let encryption_key = match request.encryption_key_base64 {
-        Some(key) => Some(key),
-        None => match state.setup_transaction.ensure_encryption_key() {
-            Ok(key) => {
-                if let Err(error) = state.variables.configure_cipher(&key) {
-                    return model_provider_profile_error(format!(
-                        "failed to activate profile encryption: {error}"
-                    ));
-                }
-                Some(key)
-            }
-            Err(error) => {
+    let encryption_key = match state.setup_transaction.ensure_encryption_key() {
+        Ok(key) => {
+            if let Err(error) = state.variables.configure_cipher(&key) {
                 return model_provider_profile_error(format!(
-                    "failed to initialize profile encryption: {error:?}"
+                    "failed to activate profile encryption: {error}"
                 ));
             }
-        },
+            Some(key)
+        }
+        Err(error) => {
+            return model_provider_profile_error(format!(
+                "failed to initialize profile encryption: {error:?}"
+            ));
+        }
     };
     match state
         .model_providers
@@ -176,6 +173,8 @@ pub async fn poll_authorization_session(
         .await
     {
         Ok(result) => {
+            let mut profile_id = None;
+            let mut restart_required = false;
             if let (Some(user_id), Some(username)) = (
                 result.connection.person_ai_user_id.as_deref(),
                 result.connection.person_ai_username.as_deref(),
@@ -185,11 +184,16 @@ pub async fn poll_authorization_session(
                         "failed to initialize default workspace: {error}"
                     ));
                 }
-                if let Err(error) = state.profiles.register_or_update(user_id, username) {
-                    return model_provider_profile_error(format!(
-                        "failed to register PersonAI profile: {error}"
-                    ));
-                }
+                let profile = match state.profiles.register_or_update(user_id, username) {
+                    Ok(profile) => profile,
+                    Err(error) => {
+                        return model_provider_profile_error(format!(
+                            "failed to register PersonAI profile: {error}"
+                        ));
+                    }
+                };
+                profile_id = Some(profile.profile_id);
+                restart_required = true;
             }
             Json(ApiResponse::success(AuthorizationPollResponse {
                 completed: true,
@@ -197,6 +201,8 @@ pub async fn poll_authorization_session(
                 connection: Some(result.connection),
                 text_verified: Some(result.text_verified),
                 embedding_verified: Some(result.embedding_verified),
+                profile_id,
+                restart_required,
             }))
             .into_response()
         }
@@ -208,6 +214,8 @@ pub async fn poll_authorization_session(
                     connection: None,
                     text_verified: None,
                     embedding_verified: None,
+                    profile_id: None,
+                    restart_required: false,
                 }))
                 .into_response(),
                 Err(error) => model_provider_error_response(error),

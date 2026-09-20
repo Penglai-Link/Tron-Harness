@@ -58,6 +58,9 @@ impl ResourceService {
         workspace_code: &str,
         permission_code: &str,
     ) -> Result<(), ResourceError> {
+        if self.profile_scoped {
+            return self.active_workspace(workspace_code);
+        }
         let role_codes = self.active_actor_role_codes(actor_user_code)?;
         if !self
             .roles

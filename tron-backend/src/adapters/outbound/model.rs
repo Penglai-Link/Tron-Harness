@@ -10,5 +10,5 @@ pub use person_ai_model_provider_client::{
 };
 pub use protocol_adapters::{
     ChatCompletionsAdapter, EmbeddingsAdapter, ModelProtocolAdapter, ResponsesAdapter,
-    chat_completions_request, embeddings_request, responses_request,
+    adapter_for_protocol, chat_completions_request, embeddings_request, responses_request,
 };

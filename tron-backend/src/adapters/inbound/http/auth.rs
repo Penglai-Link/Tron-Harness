@@ -8,12 +8,16 @@ use axum::{
     extract::{FromRequestParts, Request, State},
     http::{HeaderMap, header, request::Parts},
     middleware::Next,
-    response::Response,
+    response::{IntoResponse, Response},
 };
 
 use crate::{
+    application::profile::{CurrentProfileContext, ProfileRegistryError, ProfileRegistryService},
     application::user::UserService,
-    domain::auth::{AccessTokenIdentity, AuthError, AuthenticatedUser, CurrentSession},
+    domain::auth::{
+        AccessTokenIdentity, AuthError, AuthMethod, AuthProviderDescriptor, AuthProviderKind,
+        AuthenticatedUser, CurrentSession,
+    },
     shared::{
         auth_holder::{AuthHolder, AuthHolderContext},
         locale::resolve_request_locale,
@@ -30,6 +34,44 @@ pub struct RequestAuthContext {
     pub locale: String,
     pub session: CurrentSession,
     pub token_identity: AccessTokenIdentity,
+}
+
+impl RequestAuthContext {
+    pub fn from_profile(context: &CurrentProfileContext, locale: String) -> Self {
+        let user = AuthenticatedUser {
+            avatar_url: None,
+            user_code: context.person_ai_user_id.clone(),
+            username: context.person_ai_username.clone(),
+            display_name: context.person_ai_username.clone(),
+            email: String::new(),
+            role_codes: Vec::new(),
+            space_codes: Vec::new(),
+            status: crate::domain::user::UserStatus::Active,
+            password_reset_required: false,
+        };
+        Self {
+            access_token: String::new(),
+            locale,
+            session: CurrentSession {
+                authenticated: true,
+                auth_method: AuthMethod::Internal,
+                provider: Some(AuthProviderDescriptor {
+                    code: "person-ai".into(),
+                    name: "PersonAI".into(),
+                    kind: AuthProviderKind::Internal,
+                }),
+                user,
+            },
+            token_identity: AccessTokenIdentity {
+                user_code: context.person_ai_user_id.clone(),
+                session_code: format!("PERSONAI-PROFILE-{}", context.profile_id),
+                role_codes: Vec::new(),
+                space_codes: Vec::new(),
+                auth_method: AuthMethod::Internal,
+                provider_code: Some("person-ai".into()),
+            },
+        }
+    }
 }
 
 impl RequestAuthContext {
@@ -134,6 +176,52 @@ pub async fn require_auth(
         }
         Err(error) => auth_error_response(error),
     }
+}
+
+pub async fn require_profile(
+    State(profiles): State<ProfileRegistryService>,
+    mut request: Request,
+    next: Next,
+) -> Response {
+    let context = match profiles.current_context() {
+        Ok(context) => context,
+        Err(ProfileRegistryError::ProfileNotFound(_)) => {
+            return profile_required_response();
+        }
+        Err(_) => return profile_registry_error_response(),
+    };
+    let locale = resolve_request_locale(
+        request
+            .headers()
+            .get(header::ACCEPT_LANGUAGE)
+            .and_then(|value| value.to_str().ok()),
+    );
+    let auth = RequestAuthContext::from_profile(&context, locale);
+    request.extensions_mut().insert(context);
+    request.extensions_mut().insert(auth.clone());
+    AuthHolder::scope(auth.holder_context(), next.run(request)).await
+}
+
+fn profile_required_response() -> Response {
+    (
+        axum::http::StatusCode::CONFLICT,
+        axum::Json(crate::response::ApiResponse::<crate::response::EmptyData>::error(
+            "PERSONAI_PROFILE_REQUIRED",
+            "select a PersonAI profile before using this resource",
+        )),
+    )
+        .into_response()
+}
+
+fn profile_registry_error_response() -> Response {
+    (
+        axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+        axum::Json(crate::response::ApiResponse::<crate::response::EmptyData>::error(
+            "PERSONAI_PROFILE_REGISTRY_FAILED",
+            "the active PersonAI profile could not be resolved",
+        )),
+    )
+        .into_response()
 }
 
 #[cfg(test)]

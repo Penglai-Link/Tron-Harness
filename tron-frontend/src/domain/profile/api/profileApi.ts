@@ -1,4 +1,8 @@
 import { requestApi } from "@/shared/api/httpClient";
+import {
+  createModelProviderAuthorization,
+  pollModelProviderAuthorization,
+} from "@/domain/model/api/modelProviderApi";
 
 export interface PersonAiProfile {
   profileId: string;
@@ -34,16 +38,15 @@ export interface PersonAiAuthorizationPollResult {
   } | null;
   textVerified: boolean | null;
   embeddingVerified: boolean | null;
+  profileId: string | null;
+  restartRequired: boolean;
 }
 
 export const profileApiEndpoints = {
   bootstrapStatus: "GET /api/v1/bootstrap/status",
   list: "GET /api/v1/profiles",
-  register: "POST /api/v1/profiles",
   pending: "POST /api/v1/profiles/pending",
   activate: "POST /api/v1/profiles/{profileId}/activate",
-  personAiAuthorize: "POST /api/v1/profiles/person-ai/authorization-sessions",
-  personAiPoll: "POST /api/v1/profiles/person-ai/authorization-sessions/{sessionId}/poll",
 } as const;
 
 export function fetchBootstrapProfileStatus(signal?: AbortSignal) {
@@ -60,13 +63,6 @@ export function fetchProfiles(signal?: AbortSignal) {
   });
 }
 
-export function registerProfile(personAiUserId: string, personAiUsername: string) {
-  return requestApi<PersonAiProfile>(profileApiEndpoints.register, {
-    retryOnUnauthorized: false,
-    body: { personAiUserId, personAiUsername },
-  });
-}
-
 export function createPendingProfile() {
   return requestApi<PersonAiProfile>(profileApiEndpoints.pending, {
     retryOnUnauthorized: false,
@@ -75,19 +71,19 @@ export function createPendingProfile() {
 }
 
 export function createPersonAiAuthorization() {
-  return requestApi<PersonAiAuthorizationSession>(profileApiEndpoints.personAiAuthorize, {
-    retryOnUnauthorized: false,
-    body: {},
-  });
+  return createModelProviderAuthorization("PersonAi");
 }
 
 export function pollPersonAiAuthorization(
   sessionId: string,
 ) {
-  return requestApi<PersonAiAuthorizationPollResult>(profileApiEndpoints.personAiPoll, {
+  return pollModelProviderAuthorization("PersonAi", sessionId);
+}
+
+export function registerProfile(personAiUserId: string, personAiUsername: string) {
+  return requestApi<PersonAiProfile>("POST /api/v1/profiles", {
     retryOnUnauthorized: false,
-    pathParams: { sessionId },
-    body: {},
+    body: { personAiUserId, personAiUsername },
   });
 }
 

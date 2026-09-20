@@ -18,7 +18,7 @@ impl NavigationService {
 
     pub fn list_visible_domains(
         &self,
-        role_codes: &[String],
+        _role_codes: &[String],
         locale: &str,
     ) -> Result<Vec<NavigationDomain>, NavigationError> {
         let domains = self.list_domains()?;
@@ -27,7 +27,6 @@ impl NavigationService {
             .into_iter()
             .filter(|domain| {
                 domain.enabled
-                    && roles_match(&domain.visible_roles, role_codes)
                     && !PANEL_DOMAIN_CODES.contains(&domain.domain_code.as_str())
             })
             .collect())
@@ -269,7 +268,7 @@ impl NavigationService {
     ) -> Result<RuntimeNavigationTree, NavigationError> {
         let mut repository = self.lock_repository();
         let domain = repository.get_domain(domain_code)?;
-        if !domain.enabled || !roles_match(&domain.visible_roles, role_codes) {
+        if !domain.enabled {
             return Err(NavigationError::DomainAccessDenied);
         }
         let items = repository.list_items(domain_code)?;

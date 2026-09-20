@@ -47,6 +47,7 @@ pub struct ResourceService {
     storage: Arc<StorageRouter>,
     event_bus: EventBusHandle,
     connection_verifier: Arc<dyn ResourceConnectionVerifier>,
+    profile_scoped: bool,
 }
 
 impl ResourceService {
@@ -71,6 +72,7 @@ impl ResourceService {
             storage: Arc::new(storage),
             event_bus: EventBusHandle::disabled(),
             connection_verifier,
+            profile_scoped: false,
         })
     }
 
@@ -97,6 +99,11 @@ impl ResourceService {
         )?;
         service.event_bus = event_bus;
         Ok(service)
+    }
+
+    pub fn with_profile_scope(mut self) -> Self {
+        self.profile_scoped = true;
+        self
     }
 
     pub fn with_connection_verifier(

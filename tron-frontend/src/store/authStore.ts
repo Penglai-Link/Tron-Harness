@@ -5,7 +5,6 @@ import { buildLoginUrl } from "@/domain/auth/model";
 import {
   loginLdap,
   loginInternal,
-  logoutAuthSession,
   refreshAuthSession,
 } from "@/domain/auth/api";
 import type {
@@ -20,6 +19,7 @@ import {
   setApiUnauthorizedHandler,
 } from "@/shared/api/httpClient";
 import { useTabStore } from "@/store/tabStore";
+import { fetchBootstrapProfileStatus } from "@/domain/profile/api";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
@@ -53,6 +53,28 @@ let refreshPromise: Promise<boolean> | null = null;
 let sessionRefreshTimer: number | null = null;
 let accessTokenExpiresAtMs: number | null = null;
 let authEpoch = 0;
+
+function sessionFromProfile(profile: {
+  personAiUserId: string;
+  personAiUsername: string;
+}): AuthSession {
+  return {
+    authMethod: "internal",
+    authenticated: true,
+    provider: { code: "person-ai", name: "PersonAI", type: "internal" },
+    user: {
+      avatarUrl: null,
+      displayName: profile.personAiUsername,
+      email: "",
+      passwordResetRequired: false,
+      roleCodes: [],
+      spaceCodes: [],
+      status: "active",
+      userCode: profile.personAiUserId,
+      username: profile.personAiUsername,
+    },
+  };
+}
 
 function redirectToLoginIfNeeded() {
   if (typeof window === "undefined") {
@@ -235,11 +257,18 @@ export const useAuthStore = create<AuthState>((set) => ({
         : { session: null, status: "checking" }
     );
 
-    initializePromise = refreshSession(set, {
-      allowBootstrap: true,
-      failureMode: "unauthenticate",
-      markChecking: true,
-    })
+    initializePromise = fetchBootstrapProfileStatus()
+      .then((bootstrap) => {
+        if (bootstrap.activeProfile?.status !== "ACTIVE") {
+          transitionToUnauthenticated(set);
+          return;
+        }
+        setApiAccessToken(null);
+        set({ session: sessionFromProfile(bootstrap.activeProfile), status: "authenticated" });
+      })
+      .catch(() => {
+        transitionToUnauthenticated(set);
+      })
       .then(() => undefined)
       .finally(() => {
         initializePromise = null;
@@ -271,20 +300,13 @@ export const useAuthStore = create<AuthState>((set) => ({
       status: "checking",
     });
 
-    try {
-      await logoutAuthSession();
-    } finally {
-      transitionToUnauthenticated(set);
-    }
+    transitionToUnauthenticated(set);
   },
   markUnauthenticated: () => {
     transitionToUnauthenticated(set);
   },
-  recoverFromUnauthorized: async () => {
-    return refreshSession(set, {
-      allowBootstrap: false,
-      failureMode: "preserve-session",
-    });
+  recoverFromUnauthorized: async (): Promise<boolean> => {
+    return useAuthStore.getState().status === "authenticated";
   },
   updateSessionUser: (patch) => {
     set((state) =>

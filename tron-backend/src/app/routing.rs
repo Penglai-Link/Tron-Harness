@@ -1,30 +1,21 @@
-use axum::{
-    Router,
-    http::{Method, header},
-    middleware,
-};
-use tower_http::cors::{Any, CorsLayer};
+use axum::{Router, middleware};
 
 use crate::adapters::{
     inbound::http::{
-        account::routes as account_routes,
         admin::{
             model_providers::{
+                profile_routes as profile_model_provider_routes,
                 public_routes as public_model_provider_routes,
-                routes as admin_model_provider_routes,
             },
             models::routes::routes as admin_model_routes,
             navigation::routes as admin_navigation_routes,
-            open_apps::routes::routes as admin_open_app_routes,
             prompts::routes::routes as admin_prompt_routes,
-            roles::routes as role_routes,
-            users::routes as user_routes,
             variables::routes::routes as admin_variable_routes,
             workspaces::routes as workspace_routes,
         },
         agents::routes::routes as agent_routes,
         apps::routes::routes as app_routes,
-        auth::require_auth,
+        auth::require_profile,
         automations::routes as automation_routes,
         chats::routes::routes as chat_routes,
         knowledge_graph::routes as knowledge_graph_routes,
@@ -37,31 +28,22 @@ use crate::adapters::{
         prompts::routes::routes as prompt_routes,
         rag::routes as rag_routes,
         resources::routes::routes as resource_routes,
-        setup::complete as complete_setup,
         skills::routes::routes as skill_routes,
         system_config::routes as system_config_routes,
         tasks::routes as task_routes,
         terminals::routes::routes as terminal_routes,
         variables::routes::routes as variable_routes,
     },
-    inbound::open_api::{
-        auth::require_open_api_auth, chats::routes::routes as open_api_chat_routes,
-        terminals::routes::routes as open_api_terminal_routes,
-    },
 };
 
 use super::AppState;
 
 pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
-    account_routes()
-        .merge(user_routes())
-        .merge(admin_model_routes())
-        .merge(admin_model_provider_routes())
+    admin_model_routes()
+        .merge(profile_model_provider_routes())
         .merge(admin_navigation_routes())
         .merge(admin_prompt_routes())
-        .merge(admin_open_app_routes())
         .merge(admin_variable_routes())
-        .merge(role_routes())
         .merge(model_routes())
         .merge(prompt_routes())
         .merge(project_routes())
@@ -81,43 +63,12 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(system_config_routes())
         .merge(navigation_routes())
         .merge(terminal_routes())
-        .route(
-            "/api/v1/setup/complete",
-            axum::routing::post(complete_setup),
-        )
         .route_layer(middleware::from_fn_with_state(
-            state.users.clone(),
-            require_auth,
+            state.profiles.clone(),
+            require_profile,
         ))
 }
 
 pub(super) fn build_profile_routes() -> Router<AppState> {
     profile_routes().merge(public_model_provider_routes())
-}
-
-pub(super) fn build_open_api_routes(state: &AppState) -> Router<AppState> {
-    open_api_chat_routes()
-        .merge(open_api_terminal_routes())
-        .route_layer(middleware::from_fn_with_state(
-            state.open_apps.clone(),
-            require_open_api_auth,
-        ))
-        .layer(open_api_cors_layer())
-}
-
-fn open_api_cors_layer() -> CorsLayer {
-    CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods([Method::GET, Method::POST, Method::PATCH, Method::OPTIONS])
-        .allow_headers([
-            header::ACCEPT,
-            header::ACCEPT_LANGUAGE,
-            header::CONTENT_TYPE,
-            header::HeaderName::from_static("x-tron-app-code"),
-            header::HeaderName::from_static("x-tron-user-code"),
-            header::HeaderName::from_static("x-tron-timestamp"),
-            header::HeaderName::from_static("x-tron-nonce"),
-            header::HeaderName::from_static("x-tron-signature-version"),
-            header::HeaderName::from_static("x-tron-signature"),
-        ])
 }

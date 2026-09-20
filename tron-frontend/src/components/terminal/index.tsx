@@ -4,7 +4,7 @@ import type { ChatAguiStreamEvent, ChatUserInputAnswer } from "@tron/chat-core";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useLocale } from "@/i18n";
-import { buildApiUrl, getApiBaseUrl } from "@/shared/api/httpClient";
+import { getApiAccessToken, getApiBaseUrl } from "@/shared/api/httpClient";
 import { useTheme, useWorkspaceSpaces } from "@/shared";
 
 import { explainResultMessage, generateAiChatMessage, generateCommandMessage } from "./prompt";
@@ -283,15 +283,9 @@ const Terminal = ({ onExit }: TerminalProps) => {
 export default Terminal;
 
 async function createTerminalChatContext(workspaceCode: string) {
-  const { accessToken } = await fetch(buildApiUrl("/api/v1/auth/refresh"), {
-    credentials: "include",
-    method: "POST",
-  })
-    .then((response) => response.json())
-    .then((response) => response.data);
   const adapterOptions = {
     baseUrl: TERMINAL_API_BASE_URL,
-    getAccessToken: () => accessToken,
+    getAccessToken: getApiAccessToken,
   };
   const chatAdapter = createInternalChatAdapter(adapterOptions);
   const terminalAdapter = createInternalTerminalAdapter(adapterOptions);

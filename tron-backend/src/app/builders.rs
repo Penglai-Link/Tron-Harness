@@ -23,7 +23,7 @@ fn build_workspace_service(
 ) -> WorkspaceService {
     let repository = SqliteWorkspaceRepository::connect(database_url)
         .expect("workspace SQLite repository should initialize");
-    WorkspaceService::with_event_bus(repository, users, roles, event_bus)
+    WorkspaceService::with_event_bus(repository, users, roles, event_bus).with_profile_scope()
 }
 
 fn build_app_service(database_url: &str, workspaces: WorkspaceService) -> AppService {
@@ -159,6 +159,7 @@ fn build_resource_service(
         ))),
     )
     .expect("resource service should initialize")
+    .with_profile_scope()
 }
 
 fn build_memory_work_domain_service(database_url: &str) -> MemoryWorkDomainService {

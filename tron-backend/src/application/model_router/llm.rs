@@ -1,6 +1,6 @@
 use crate::{
     application::{
-        model::{ModelService, RuntimeModelConfig},
+        model::RuntimeModelConfig,
         model_provider::ModelProviderService,
     },
     domain::{
@@ -14,13 +14,12 @@ use crate::{
 
 #[derive(Clone)]
 pub struct LlmModelRouter {
-    models: ModelService,
     providers: ModelProviderService,
 }
 
 impl LlmModelRouter {
-    pub fn new(models: ModelService, providers: ModelProviderService) -> Self {
-        Self { models, providers }
+    pub fn new(providers: ModelProviderService) -> Self {
+        Self { providers }
     }
 
     pub fn route_text(
@@ -32,7 +31,7 @@ impl LlmModelRouter {
             if model_code.starts_with("PERSON_AI:") {
                 return self.route_person_ai(workspace_code, model_code);
             }
-            return self.route_local(workspace_code, Some(model_code));
+            return self.route_person_ai(workspace_code, model_code);
         }
 
         let mut person_ai = self
@@ -57,7 +56,7 @@ impl LlmModelRouter {
             return self.route_selection(workspace_code, &option.selection);
         }
 
-        self.route_local(workspace_code, None)
+        Err("no available middle- or low-quality Person-AI Text model".into())
     }
 
     fn route_person_ai(
@@ -109,22 +108,6 @@ impl LlmModelRouter {
         Ok(runtime_from_agent(config))
     }
 
-    fn route_local(
-        &self,
-        workspace_code: &str,
-        model_code: Option<&str>,
-    ) -> Result<RuntimeModelConfig, String> {
-        let config = self
-            .models
-            .text_runtime_model_config(workspace_code, model_code)
-            .map_err(|error| error.to_string())?
-            .ok_or_else(|| "LLM Text model is unavailable".to_string())?;
-        Ok(RuntimeModelConfig {
-            thinking_enabled: false,
-            reasoning_effort: None,
-            ..config
-        })
-    }
 }
 
 impl super::router::ModelRouter for LlmModelRouter {}

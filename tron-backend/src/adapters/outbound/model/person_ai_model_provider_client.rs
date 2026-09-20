@@ -10,13 +10,12 @@ use crate::{
     },
     domain::{
         agent::{AgentMessage, AgentModelConfig, AgentModelProtocol, ModelFinish, ModelRequest},
-        model::ModelType,
+        model::{ModelProtocol, ModelType},
     },
 };
 
 use super::{
-    ChatCompletionsAdapter, HttpLlmRuntimeClient, HttpModelProviderClient, ModelProtocolAdapter,
-    ModelProviderClient, chat_completions_request,
+    HttpLlmRuntimeClient, HttpModelProviderClient, ModelProviderClient, adapter_for_protocol,
 };
 
 const PERSON_AI_CONVERSATION_PATH_PREFIX: &str = "person-ai/conversations/";
@@ -110,20 +109,16 @@ impl LlmRuntimeClient for PersonAiAwareLlmRuntimeClient {
                 response_input_items: None,
                 previous_response_id: None,
             };
+            let adapter = adapter_for_protocol(model_config.protocol)
+                .ok_or_else(|| "Person-AI model protocol is unsupported".to_string())?;
+            let body = adapter.request_body(&model_config, &request)?;
             let response = self
                 .providers
-                .chat_completion(
-                    &model_config,
-                    &chat_completions_request(&model_config, &request),
-                    None,
-                    None,
-                )
+                .chat_completion(&model_config, &body, None, None)
                 .await?;
-            let response = ChatCompletionsAdapter
-                .parse_response(&response)
-                .map_err(|_| {
-                    "Person-AI text generation returned an unsupported response".to_string()
-                })?;
+            let response = adapter.parse_response(&response).map_err(|_| {
+                "Person-AI text generation returned an unsupported response".to_string()
+            })?;
             if response.finish != ModelFinish::Final {
                 return Err("Person-AI text generation unexpectedly requested tool calls".into());
             }
@@ -216,7 +211,11 @@ fn person_ai_runtime_metadata(config: &AgentModelConfig) -> (Option<&str>, Optio
 fn runtime_to_agent_config(config: &RuntimeModelConfig) -> AgentModelConfig {
     AgentModelConfig {
         model_code: config.model_code.clone(),
-        protocol: AgentModelProtocol::ChatCompletions,
+        protocol: match config.protocol {
+            ModelProtocol::Responses => AgentModelProtocol::Responses,
+            ModelProtocol::OpenAiCompatible => AgentModelProtocol::ChatCompletions,
+            _ => AgentModelProtocol::ChatCompletions,
+        },
         base_url: config.base_url.clone(),
         api_path: config.api_path.clone(),
         api_key: config.api_key.clone(),

@@ -6,6 +6,9 @@ impl WorkspaceService {
         workspace_code: &str,
         user_code: &str,
     ) -> Result<bool, WorkspaceError> {
+        if self.profile_scoped {
+            return Ok(self.get_workspace_record(workspace_code)?.status == WorkspaceStatus::Active);
+        }
         let workspaces = self.all_workspaces()?;
         let user = self.active_user_by_code(user_code)?;
         let workspace_path = build_workspace_path(&workspaces, workspace_code)?;

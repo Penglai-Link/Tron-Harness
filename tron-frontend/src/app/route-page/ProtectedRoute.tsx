@@ -1,13 +1,11 @@
-import { useAuthSession, buildLoginUrl, NoWorkspaceAccessPage } from "@/domain/auth";
+import { useAuthSession } from "@/domain/auth";
 import { ReactNode } from "react";
-import { useLocation, Navigate } from "react-router";
+import { Navigate } from "react-router";
 import { UpdateNotification } from "@/domain/update/UpdateNotification";
 import RouteLoadingFallback from "./RouteLoadingFallback";
 
 export default function ProtectedRoute({ children }: { children: ReactNode }) {
-  const location = useLocation();
   const { session, status } = useAuthSession();
-  const isPlatformAdmin = session?.user.roleCodes.includes("ADMIN") ?? false;
 
   if (status === "checking") {
     return <RouteLoadingFallback fullScreen />;
@@ -17,20 +15,13 @@ export default function ProtectedRoute({ children }: { children: ReactNode }) {
     return (
       <Navigate
         replace
-        to={buildLoginUrl(`${location.pathname}${location.search}`)}
+        to="/profiles"
       />
     );
   }
 
-  if (
-    !session?.authenticated ||
-    (!isPlatformAdmin && session.user.spaceCodes.length === 0)
-  ) {
-    return session ? (
-      <NoWorkspaceAccessPage session={session} />
-    ) : (
-      <RouteLoadingFallback fullScreen />
-    );
+  if (!session?.authenticated) {
+    return <Navigate replace to="/profiles" />;
   }
 
   return (

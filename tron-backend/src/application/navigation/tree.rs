@@ -22,7 +22,7 @@ fn visible_item(
     role_codes: &[String],
     locale: &str,
 ) -> Option<RuntimeMenu> {
-    if !item.menu.enabled || !roles_match(&item.visible_roles, role_codes) {
+    if !item.menu.enabled {
         return None;
     }
     let children = item
@@ -42,13 +42,6 @@ fn visible_item(
         url: item.menu.url,
         children,
     })
-}
-
-fn roles_match(required: &[String], actual: &[String]) -> bool {
-    required.is_empty()
-        || required
-            .iter()
-            .any(|role| actual.iter().any(|value| value == role))
 }
 
 fn normalize_optional(value: Option<String>) -> Option<String> {

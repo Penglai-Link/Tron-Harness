@@ -3,11 +3,6 @@ import { lazy, type ComponentType, type LazyExoticComponent } from "react";
 type RoutePageComponent = LazyExoticComponent<ComponentType>;
 
 export const routePages: Record<string, RoutePageComponent> = {
-  "account.center": lazy(() =>
-    import("@/domain/account/pages/AccountCenterPage").then((module) => ({
-      default: module.AccountCenterPage,
-    })),
-  ),
   "admin.auditLogs": lazy(() =>
     import("@/domain/admin/pages/AuditLogsPage").then((module) => ({
       default: module.AuditLogsPage,
@@ -28,29 +23,9 @@ export const routePages: Record<string, RoutePageComponent> = {
       (module) => ({ default: module.NavigationDomainMenuTreePage }),
     ),
   ),
-  "admin.roles": lazy(() =>
-    import("@/domain/admin/pages/RoleMatrixPage").then((module) => ({
-      default: module.RoleMatrixPage,
-    })),
-  ),
   "admin.workspace": lazy(() =>
     import("@/domain/admin/pages/WorkspaceManagementPage").then((module) => ({
       default: module.WorkspaceManagementPage,
-    })),
-  ),
-  "admin.userDetails": lazy(() =>
-    import("@/domain/admin/pages/UserDetailsPage").then((module) => ({
-      default: module.UserDetailsPage,
-    })),
-  ),
-  "admin.users": lazy(() =>
-    import("@/domain/admin/pages/UsersPage").then((module) => ({
-      default: module.UsersPage,
-    })),
-  ),
-  "admin.usersNew": lazy(() =>
-    import("@/domain/admin/pages/CreateUserPage").then((module) => ({
-      default: module.CreateUserPage,
     })),
   ),
   "agent.main": lazy(() =>
@@ -91,16 +66,6 @@ export const routePages: Record<string, RoutePageComponent> = {
   "apps.edit": lazy(() =>
     import("@/domain/app/pages/EditAppPage").then((module) => ({
       default: module.EditAppPage,
-    })),
-  ),
-  "auth.callback": lazy(() =>
-    import("@/domain/auth/pages/AuthCallbackPage").then((module) => ({
-      default: module.AuthCallbackPage,
-    })),
-  ),
-  "auth.login": lazy(() =>
-    import("@/domain/auth/pages/LoginPage").then((module) => ({
-      default: module.LoginPage,
     })),
   ),
   "automations.detail": lazy(() =>
@@ -423,26 +388,6 @@ export const routePages: Record<string, RoutePageComponent> = {
     import("@/domain/memory/pages/PlatformMemoryDomainsPage").then(
       (module) => ({ default: module.PlatformMemoryDomainsPage }),
     ),
-  ),
-  "settings.openApiDetail": lazy(() =>
-    import("@/domain/open-app/pages/PlatformOpenAppDetailsPage").then(
-      (module) => ({ default: module.PlatformOpenAppDetailsPage }),
-    ),
-  ),
-  "settings.openApiEdit": lazy(() =>
-    import("@/domain/open-app/pages/EditPlatformOpenAppPage").then(
-      (module) => ({ default: module.EditPlatformOpenAppPage }),
-    ),
-  ),
-  "settings.openApiNew": lazy(() =>
-    import("@/domain/open-app/pages/CreatePlatformOpenAppPage").then(
-      (module) => ({ default: module.CreatePlatformOpenAppPage }),
-    ),
-  ),
-  "settings.openApi": lazy(() =>
-    import("@/domain/open-app/pages/PlatformOpenAppsPage").then((module) => ({
-      default: module.PlatformOpenAppsPage,
-    })),
   ),
   "settings.variables": lazy(() =>
     import("@/domain/variable/pages/PlatformVariablesPage").then((module) => ({

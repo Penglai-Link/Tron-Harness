@@ -15,8 +15,8 @@ use socketioxide::SocketIo;
 use crate::{
     adapters::{
         inbound::http::{
-            auth::routes as auth_routes, frontend::routes as frontend_routes,
-            mcp::routes::transport_routes as mcp_transport_routes, setup,
+            auth::require_profile, frontend::routes as frontend_routes,
+            mcp::routes::transport_routes as mcp_transport_routes,
         },
         inbound::socket::terminal as terminal_socket,
         outbound::{
@@ -35,7 +35,7 @@ use crate::{
                 SqlitePromptRepository, SqliteResourceRepository, SqliteRoleRepository,
                 SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
-                SqliteWorkspaceRepository, bootstrap_platform_admin,
+                SqliteWorkspaceRepository,
             },
             resource_connectivity::ProtocolResourceConnectionVerifier,
             resource_storage::LocalObjectStorage,
@@ -88,7 +88,7 @@ use crate::{
 pub use self::startup::{AppBootstrapError, AppReadiness, AppReadinessStatus};
 use self::{
     automation_runner::MainAgentAutomationRunner,
-    routing::{build_open_api_routes, build_profile_routes, build_protected_routes},
+    routing::{build_profile_routes, build_protected_routes},
     startup::{build_graph_core, build_graph_services, build_rag_service},
 };
 
@@ -230,8 +230,6 @@ impl AppState {
                 event_bus.clone(),
             )
         };
-        bootstrap_platform_admin(&config.database_url)
-            .expect("bootstrap platform admin data should initialize");
         let navigation = if config.database_url == ":memory:" {
             GLOBAL_NAVIGATION_SERVICE
                 .get_or_init(|| build_navigation_service(":memory:", config.navigation.max_depth))
@@ -384,7 +382,7 @@ impl AppState {
             )),
         );
         let prompts = prompts.with_llm_runtime(llm_runtime.clone());
-        let llm_router = LlmModelRouter::new(models.clone(), model_providers.clone());
+        let llm_router = LlmModelRouter::new(model_providers.clone());
         let prompts = prompts.with_llm_router(llm_router.clone());
         let graph_core = if config.graph_storage_path == ":memory:" {
             if let Some(core) = GLOBAL_GRAPH_CORE.get() {
@@ -582,7 +580,6 @@ where
     state.model_providers.start_background_sync();
     let protected_routes = build_protected_routes(&state);
     let profile_routes = build_profile_routes();
-    let open_api_routes = build_open_api_routes(&state);
     let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone());
     let (socket_layer, socket_io) = SocketIo::builder()
         .with_state(terminal_gateway)
@@ -594,21 +591,15 @@ where
         .route("/api/v1/health", get(health))
         .route("/api/v1/readiness", get(readiness))
         .merge(openapi_routes())
-        .merge(auth_routes())
         .merge(profile_routes)
-        .route("/api/v1/setup/status", axum::routing::get(setup::status))
-        .route(
-            "/api/v1/setup/session",
-            axum::routing::post(setup::create_session),
+        .merge(
+            mcp_transport_routes().route_layer(axum::middleware::from_fn_with_state(
+                state.profiles.clone(),
+                require_profile,
+            )),
         )
-        .route(
-            "/api/v1/setup/activate-admin",
-            axum::routing::post(setup::activate_admin),
-        )
-        .merge(mcp_transport_routes())
         .merge(protected_routes)
         .merge(frontend_routes())
-        .merge(open_api_routes)
         .with_state(state)
         .layer(socket_layer))
 }

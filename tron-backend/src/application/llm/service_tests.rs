@@ -18,14 +18,6 @@ struct FakeModelResolver {
 }
 
 impl LlmRuntimeModelResolver for FakeModelResolver {
-    fn text_runtime_model_config(
-        &self,
-        _workspace_code: &str,
-        _model_code: Option<&str>,
-    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        Ok(self.text_config.clone())
-    }
-
     fn embedding_runtime_model_config(
         &self,
         _workspace_code: &str,

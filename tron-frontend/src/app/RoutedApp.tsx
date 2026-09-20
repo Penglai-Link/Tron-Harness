@@ -1,8 +1,7 @@
-import { AUTH_CALLBACK_PATH, useBootstrapAuthSession } from "@/domain/auth";
+import { useBootstrapAuthSession } from "@/domain/auth";
 import { Navigate, Route, Routes } from "react-router";
 import EntryRoutePage from "./route-page/EntryRoutePage";
 import HomePage from "./route-page/HomePage";
-import PublicRoutePage from "./route-page/PublicRoutePage";
 import SuspendedRoute from "./route-page/SuspendedRoute";
 import ProtectedRoute from "./route-page/ProtectedRoute";
 import AppRoutePage from "./route-page/AppRoutePage";
@@ -16,12 +15,6 @@ const DesignStandardPage = lazy(() =>
     (module) => ({ default: module.DesignStandardPage })
   )
 );
-const SetupPage = lazy(() =>
-  import("@/domain/setup/pages/SetupPage").then((module) => ({
-    default: module.SetupPage,
-  }))
-);
-
 export default function RoutedApp() {
   useBootstrapAuthSession();
 
@@ -29,20 +22,8 @@ export default function RoutedApp() {
     <FilePanelHostProvider>
       <TabPanelRegistryProvider>
         <Routes>
-        <Route path="/login" element={<EntryRoutePage />} />
+        <Route path="/" element={<EntryRoutePage />} />
         <Route path="/profiles" element={<ProfileSelectionPage />} />
-        <Route
-          path="/setup"
-          element={
-            <SuspendedRoute fullScreen>
-              <SetupPage />
-            </SuspendedRoute>
-          }
-        />
-        <Route
-          path={AUTH_CALLBACK_PATH}
-          element={<PublicRoutePage pageId="auth.callback" />}
-        />
         <Route
           path="/home"
           element={

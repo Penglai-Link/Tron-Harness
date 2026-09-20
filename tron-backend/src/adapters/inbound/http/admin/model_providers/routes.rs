@@ -50,6 +50,22 @@ pub fn routes() -> Router<AppState> {
 
 pub fn public_routes() -> Router<AppState> {
     Router::new()
+        .route(
+            "/api/v1/model-providers/{provider_code}/authorization-sessions",
+            post(create_authorization_session),
+        )
+        .route(
+            "/api/v1/model-providers/{provider_code}/authorization-sessions/{session_id}",
+            get(get_authorization_session),
+        )
+        .route(
+            "/api/v1/model-providers/{provider_code}/authorization-sessions/{session_id}/poll",
+            post(poll_authorization_session),
+        )
+}
+
+pub fn profile_routes() -> Router<AppState> {
+    Router::new()
         .route("/api/v1/model-providers", get(list_provider_connections))
         .route(
             "/api/v1/model-providers/{provider_code}",
@@ -66,18 +82,6 @@ pub fn public_routes() -> Router<AppState> {
         .route(
             "/api/v1/model-providers/{provider_code}/sync-runs",
             get(list_sync_runs),
-        )
-        .route(
-            "/api/v1/model-providers/{provider_code}/authorization-sessions",
-            post(create_authorization_session),
-        )
-        .route(
-            "/api/v1/model-providers/{provider_code}/authorization-sessions/{session_id}",
-            get(get_authorization_session),
-        )
-        .route(
-            "/api/v1/model-providers/{provider_code}/authorization-sessions/{session_id}/poll",
-            post(poll_authorization_session),
         )
         .route(
             "/api/v1/model-providers/{provider_code}/sync",

@@ -1,4 +1,3 @@
-pub mod account;
 pub mod admin;
 pub mod agents;
 pub mod apps;
@@ -16,7 +15,6 @@ pub mod profiles;
 pub mod projects;
 pub mod rag;
 pub mod resources;
-pub mod setup;
 pub mod skills;
 pub mod system_config;
 pub mod tasks;

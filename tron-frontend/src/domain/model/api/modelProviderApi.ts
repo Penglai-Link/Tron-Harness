@@ -83,6 +83,8 @@ export interface ProviderAuthorizationPollResult {
   connection: ModelProviderConnection | null;
   textVerified: boolean | null;
   embeddingVerified: boolean | null;
+  profileId: string | null;
+  restartRequired: boolean;
 }
 
 export const modelProviderApiEndpoints = {
@@ -157,10 +159,10 @@ export function fetchModelProviderAuthorization(
 export function pollModelProviderAuthorization(
   providerCode: ModelProviderCode,
   sessionId: string,
-  payload: { encryptionKeyBase64?: string | null } = {},
+  _payload: { encryptionKeyBase64?: string | null } = {},
 ) {
   return requestApi<ProviderAuthorizationPollResult>(modelProviderApiEndpoints.pollAuthorization, {
-    body: payload,
+    body: _payload,
     pathParams: { providerCode, sessionId },
   });
 }

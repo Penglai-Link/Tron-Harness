@@ -3,19 +3,15 @@ import {
   Palette,
   Bot,
   Boxes,
-  FileClock,
   KeyRound,
   ListTree,
-  LockKeyhole,
   Keyboard,
   Network,
   PanelTop,
   Package,
   MessageSquareText,
   Settings2,
-  ShieldCheck,
   Sparkles,
-  UsersRound,
   Wrench,
 } from "lucide-react";
 
@@ -124,38 +120,13 @@ export const settingsNavigation = [
         icon: Network,
         translationKey: "shell:settings.items.mcpServers",
       },
-      {
-        label: "OpenAPI",
-        href: "/settings/openapi",
-        icon: ShieldCheck,
-        translationKey: "shell:settings.items.openapi",
-      },
     ],
   },
   {
     groupKey: "administration",
     label: "Administration",
-    requiredRoleCodes: ["ADMIN"],
     translationKey: "shell:settings.groups.administration",
     items: [
-      {
-        label: "Users",
-        href: "/admin/users",
-        icon: UsersRound,
-        translationKey: "shell:settings.items.users",
-      },
-      {
-        label: "Roles",
-        href: "/admin/roles",
-        icon: LockKeyhole,
-        translationKey: "shell:settings.items.roles",
-      },
-      {
-        label: "Audit Logs",
-        href: "/admin/audit-logs",
-        icon: FileClock,
-        translationKey: "shell:settings.items.auditLogs",
-      },
       {
         label: "Workspace",
         href: "/admin/workspace",

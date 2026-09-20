@@ -60,7 +60,11 @@ export function ProfileSelectionPage() {
         setProfiles(nextProfiles);
         setBootstrap(nextBootstrap);
         setAuthorization(null);
-        window.location.assign("/login");
+        if (result.profileId && result.restartRequired && window.tronDesktop?.invoke) {
+          await window.tronDesktop.invoke("switchProfile", { profileId: result.profileId });
+        } else {
+          window.location.assign("/home");
+        }
       } catch (reason: unknown) {
         if (active) {
           setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.authorize"));

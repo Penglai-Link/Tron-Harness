@@ -2353,23 +2353,6 @@ impl ProviderAwareLlmRuntimeResolver {
 }
 
 impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
-    fn text_runtime_model_config(
-        &self,
-        workspace_code: &str,
-        model_code: Option<&str>,
-    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        match self
-            .providers
-            .text_runtime_model_config(workspace_code, model_code)
-        {
-            Ok(Some(config)) => Ok(Some(config)),
-            Ok(None) => self
-                .models
-                .text_runtime_model_config(workspace_code, model_code),
-            Err(_) => Err(ModelError::StorageFailure),
-        }
-    }
-
     fn embedding_runtime_model_config(
         &self,
         workspace_code: &str,
