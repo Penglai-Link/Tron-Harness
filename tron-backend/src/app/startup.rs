@@ -12,6 +12,7 @@ use crate::{
     application::{
         graph::{GraphExplorerService, GraphService, OntologyService, ScopeResolver},
         llm::LlmRuntimeService,
+        model_router::LlmModelRouter,
         prompt::PromptService,
         rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
         workspace::WorkspaceService,
@@ -129,6 +130,7 @@ pub(super) fn build_rag_service(
     graph_core: GrafeoStoreCore,
     workspaces: WorkspaceService,
     llm_runtime: LlmRuntimeService,
+    llm_router: LlmModelRouter,
     prompt_service: PromptService,
     project_doc_root: &str,
     mineru: MineruConfig,
@@ -149,7 +151,7 @@ pub(super) fn build_rag_service(
     Ok(RagService::new(
         Arc::new(Mutex::new(repository)),
         DefaultRagStrategyRegistry::default(),
-        DefaultRagRuntime::new(llm_runtime, project_doc_root)
+        DefaultRagRuntime::new(llm_runtime, llm_router, project_doc_root)
             .with_document_parser(mineru, document_parsing_client),
     )
     .with_event_bus(event_bus)

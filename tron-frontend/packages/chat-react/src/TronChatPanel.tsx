@@ -584,12 +584,10 @@ function ToolCard({
   card,
   labels = defaultWorkRailLabels,
   nested = false,
-  stepNumber,
 }: {
   card: ToolWorkCard;
   labels?: ChatWorkRailLabels;
   nested?: boolean;
-  stepNumber?: number;
 }) {
   const complete = card.ended || Boolean(card.result);
   const running = card.started && !complete;
@@ -647,8 +645,8 @@ function ToolCard({
                 : "tron-chat__tool-badge--standalone",
             )}
           >
-            {typeof stepNumber === "number" ? (
-              stepNumber
+            {nested ? (
+              <span className="tron-chat__tool-timeline-dot" aria-hidden="true" />
             ) : complete ? (
               <CheckCircle2 size={14} />
             ) : running ? (
@@ -826,9 +824,9 @@ function ToolGroupCard({ card, labels = defaultWorkRailLabels }: { card: ToolGro
       </button>
       {expanded ? (
         <ol className="tron-chat__rail-entry-list">
-          {toolCards.map((toolCard, index) => (
+          {toolCards.map((toolCard) => (
             <li key={toolCard.id}>
-              <ToolCard card={toolCard} labels={labels} nested stepNumber={index + 1} />
+              <ToolCard card={toolCard} labels={labels} nested />
             </li>
           ))}
         </ol>
@@ -1495,7 +1493,6 @@ export function TronChatPanel({
             className={cx(
               "tron-chat__content",
               Boolean(sidebarContent) && "tron-chat__content--with-sidebar",
-              messages.length > 0 && "tron-chat__content--with-history-rail",
             )}
           >
             <ChatHistoryRail

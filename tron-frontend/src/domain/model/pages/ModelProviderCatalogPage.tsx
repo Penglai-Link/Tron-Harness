@@ -91,6 +91,15 @@ export function ModelProviderCatalogPage() {
         ),
       },
       {
+        id: "protocols",
+        header: "Protocol",
+        render: (model) => model.protocols?.map((protocol) => (
+          <Badge key={protocol} className="mr-1" variant="outline">
+            {protocol === "Responses" ? "Responses" : "Chat Completions"}
+          </Badge>
+        )),
+      },
+      {
         id: "vendor",
         header: (
           <ColumnHeader

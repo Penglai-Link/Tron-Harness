@@ -34,6 +34,7 @@ CREATE TABLE IF NOT EXISTS provider_catalog_models (
     upstream_vendor_code TEXT,
     upstream_vendor_name TEXT,
     context_window_tokens INTEGER,
+    protocols TEXT NOT NULL DEFAULT '["ChatCompletions"]',
     quality_type TEXT NOT NULL DEFAULT 'High',
     input_coefficient REAL,
     cache_hit_coefficient REAL,

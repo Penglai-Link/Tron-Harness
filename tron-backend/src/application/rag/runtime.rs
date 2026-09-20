@@ -1,8 +1,7 @@
 use std::{future::Future, path::PathBuf, pin::Pin};
 
-use crate::application::llm::{
-    LlmEmbeddingCallCommand, LlmRerankCallCommand, LlmRuntimeService, LlmTextGenerationCallCommand,
-};
+use crate::application::llm::{LlmEmbeddingCallCommand, LlmRerankCallCommand, LlmRuntimeService};
+use crate::application::model_router::LlmModelRouter;
 use crate::config::MineruConfig;
 
 use super::{
@@ -21,15 +20,21 @@ use crate::domain::rag::RagError;
 #[derive(Clone)]
 pub struct DefaultRagRuntime {
     llm: LlmRuntimeService,
+    llm_router: LlmModelRouter,
     project_doc_root: PathBuf,
     mineru: MineruConfig,
     document_parser_client: reqwest::Client,
 }
 
 impl DefaultRagRuntime {
-    pub fn new(llm: LlmRuntimeService, project_doc_root: impl Into<PathBuf>) -> Self {
+    pub fn new(
+        llm: LlmRuntimeService,
+        llm_router: LlmModelRouter,
+        project_doc_root: impl Into<PathBuf>,
+    ) -> Self {
         Self {
             llm,
+            llm_router,
             project_doc_root: project_doc_root.into(),
             mineru: MineruConfig::default(),
             document_parser_client: reqwest::Client::new(),
@@ -105,12 +110,11 @@ impl RagTreeSummaryRuntime for DefaultRagRuntime {
         call: RagTreeSummaryCall,
     ) -> Pin<Box<dyn Future<Output = Result<RagTreeSummaryResult, String>> + Send + 'a>> {
         Box::pin(async move {
+            let config = self
+                .llm_router
+                .route_text(call.workspace_code.as_str(), call.model_code.as_deref())?;
             self.llm
-                .text_generation_call(LlmTextGenerationCallCommand {
-                    workspace_code: call.workspace_code,
-                    model_code: call.model_code,
-                    prompt: call.prompt,
-                })
+                .text_generation_call_with_config(config, call.prompt)
                 .await
                 .map(|result| RagTreeSummaryResult {
                     model_code: result.model_code,

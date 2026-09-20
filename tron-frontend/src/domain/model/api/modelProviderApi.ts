@@ -35,6 +35,7 @@ export interface ProviderCatalogModel {
   modelId: string | null;
   modelCode: string;
   modelName: string;
+  protocols: ("ChatCompletions" | "Responses")[];
   upstreamVendorCode: string | null;
   upstreamVendorName: string | null;
   contextWindowTokens: number | null;

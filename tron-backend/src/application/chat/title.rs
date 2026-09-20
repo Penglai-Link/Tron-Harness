@@ -4,7 +4,7 @@ use serde_json::Value;
 
 use crate::{
     application::{
-        llm::{LlmRuntimeService, LlmTextGenerationCallCommand},
+        llm::{LlmRuntimeError, LlmRuntimeService},
         prompt::PromptService,
     },
     domain::{
@@ -27,40 +27,136 @@ impl ChatService {
         session_code: &str,
         workspace_code: &str,
         user_message: &str,
+        run_code: &str,
         llm_runtime: LlmRuntimeService,
     ) {
-        let Some(prompt) = manual_session_title_prompt(
-            self.prompt_service.as_ref(),
-            workspace_code,
-            user_message,
-        ) else {
+        let Some(prompt) =
+            manual_session_title_prompt(self.prompt_service.as_ref(), workspace_code, user_message)
+        else {
+            self.publish_title_generation_failure(
+                session_code,
+                run_code,
+                "TITLE_PROMPT_UNAVAILABLE",
+                "标题生成提示词不可用",
+            );
             return;
+        };
+        let Some(llm_router) = self.llm_router.as_ref() else {
+            self.publish_title_generation_failure(
+                session_code,
+                run_code,
+                "LLM_MODEL_ROUTER_UNAVAILABLE",
+                "标题生成模型路由不可用",
+            );
+            return;
+        };
+        let config = match llm_router.route_text(workspace_code, None) {
+            Ok(config) => config,
+            Err(error) => {
+                self.publish_title_generation_failure(
+                    session_code,
+                    run_code,
+                    "LLM_MODEL_UNAVAILABLE",
+                    error,
+                );
+                return;
+            }
         };
         let result = tokio::time::timeout(
             TITLE_GENERATION_TIMEOUT,
-            llm_runtime.text_generation_call(LlmTextGenerationCallCommand {
-                workspace_code: workspace_code.to_string(),
-                model_code: None,
-                prompt,
-            }),
+            llm_runtime.text_generation_call_with_config(config, prompt),
         )
         .await;
-        let Ok(Ok(result)) = result else {
-            return;
+        let result = match result {
+            Ok(Ok(result)) => result,
+            Ok(Err(error)) => {
+                let code = title_generation_error_code(&error);
+                self.publish_title_generation_failure(
+                    session_code,
+                    run_code,
+                    code,
+                    error.to_string(),
+                );
+                return;
+            }
+            Err(_) => {
+                self.publish_title_generation_failure(
+                    session_code,
+                    run_code,
+                    "LLM_UPSTREAM_TIMEOUT",
+                    "标题生成模型调用超时",
+                );
+                return;
+            }
         };
         let Some(title) = normalize_generated_session_title(&result.output) else {
+            self.publish_title_generation_failure(
+                session_code,
+                run_code,
+                "TITLE_FORMAT_INVALID",
+                "模型返回的标题为空或格式无效",
+            );
             return;
         };
         let Ok(session) = self.repository().get_session(session_code) else {
+            self.publish_title_generation_failure(
+                session_code,
+                run_code,
+                "TITLE_PERSISTENCE_FAILED",
+                "读取会话失败，标题未保存",
+            );
             return;
         };
         if !should_generate_manual_session_title(&session) {
             return;
         }
         let updated_at = current_timestamp();
-        let _ = self
+        if self
             .repository()
-            .update_session_title(session_code, &title, &updated_at);
+            .update_session_title(session_code, &title, &updated_at)
+            .is_err()
+        {
+            self.publish_title_generation_failure(
+                session_code,
+                run_code,
+                "TITLE_PERSISTENCE_FAILED",
+                "会话标题保存失败",
+            );
+        }
+    }
+
+    fn publish_title_generation_failure(
+        &self,
+        session_code: &str,
+        run_code: &str,
+        code: &str,
+        message: impl Into<String>,
+    ) {
+        let message = message.into();
+        let _ = self.event_bus.publish(
+            crate::shared::event_bus::BusEventDraft::agui(
+                "agent.session_title_generation_failed",
+                "chat.title_generation",
+            )
+            .subject("agent_run", run_code)
+            .stream_key(session_code)
+            .summary(message.clone())
+            .outcome(crate::shared::event_bus::BusOutcome::Failure)
+            .payload_field("sessionCode", session_code)
+            .payload_field("runCode", run_code)
+            .payload_field("code", code)
+            .payload_field("message", message),
+        );
+    }
+}
+
+fn title_generation_error_code(error: &LlmRuntimeError) -> &'static str {
+    match error {
+        LlmRuntimeError::TextModelUnavailable => "LLM_MODEL_UNAVAILABLE",
+        LlmRuntimeError::ModelResolutionFailed(_) => "LLM_MODEL_ROUTING_FAILED",
+        LlmRuntimeError::ProviderFailed(_) => "LLM_UPSTREAM_FAILED",
+        LlmRuntimeError::InvalidProviderResponse(_) => "LLM_RESPONSE_INVALID",
+        _ => "LLM_TITLE_GENERATION_FAILED",
     }
 }
 

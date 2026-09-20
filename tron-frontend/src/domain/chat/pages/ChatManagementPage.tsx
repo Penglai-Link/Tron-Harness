@@ -4924,9 +4924,7 @@ export function ChatManagementPage() {
   const [activeRunRefreshKey, setActiveRunRefreshKey] = useState(0);
   const [shortTermMemoryRefreshKey, setShortTermMemoryRefreshKey] = useState(0);
   const groups = useChatSessionGroupList(activeWorkspaceCode, activeChatDataRefreshKey);
-  const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>([]);
-  const sessionGroupsRef = useRef(sessionGroups);
-  sessionGroupsRef.current = sessionGroups;
+  const [sessionGroups, setSessionGroups] = useState<ChatSessionGroup[]>(() => orderSessionGroups(groups));
   const pendingUserInputSessionCodes = useMemo(
     () => new Set(
       sessionGroups.flatMap((group) => group.pendingUserInputSessionCodes ?? []),
@@ -4934,6 +4932,7 @@ export function ChatManagementPage() {
     [sessionGroups],
   );
   const [activeSessionCode, setActiveSessionCode] = useState("");
+  const titleFailureNoticeKeysRef = useRef(new Set<string>());
   const [activeSourceTab, setActiveSourceTab] = useState<ChatSessionSourceTab>(() => (
     requestedSourceTab ?? defaultChatSessionSourceTab
   ));
@@ -4988,6 +4987,23 @@ export function ChatManagementPage() {
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
   const [liveAguiAnchorMessageCodesBySessionCode, setLiveAguiAnchorMessageCodesBySessionCode] = useState<Record<string, Record<string, string>>>({});
+
+  function handleTitleGenerationFailureEvent(event: ChatAguiStreamEvent, sessionCode: string) {
+    if (String(event.type).toUpperCase() !== "CUSTOM") return;
+    if (event.name !== "tron.session.title_generation_failed") return;
+    const value = event.value && typeof event.value === "object"
+      ? event.value as Record<string, unknown>
+      : {};
+    const code = typeof value.code === "string" ? value.code : "LLM_TITLE_GENERATION_FAILED";
+    const runCode = typeof value.runCode === "string" ? value.runCode : (event.runId ?? "");
+    const message = typeof value.message === "string" && value.message.trim()
+      ? value.message
+      : "会话标题生成失败";
+    const noticeKey = `${sessionCode}:${runCode}:${code}`;
+    if (titleFailureNoticeKeysRef.current.has(noticeKey)) return;
+    titleFailureNoticeKeysRef.current.add(noticeKey);
+    toast.error(message, { title: "标题生成失败" });
+  }
   const [liveAguiPendingAnchorMessageCodesBySessionCode, setLiveAguiPendingAnchorMessageCodesBySessionCode] = useState<Record<string, string>>({});
   const [latestRequestEstimatesBySessionCode, setLatestRequestEstimatesBySessionCode] = useState<Record<string, ChatTokenEstimateSnapshot>>({});
   const [latestUsageAuditsBySessionCode, setLatestUsageAuditsBySessionCode] = useState<Record<string, ChatUsageAuditSnapshot>>({});
@@ -5008,9 +5024,6 @@ export function ChatManagementPage() {
   const [chatAgents, setChatAgents] = useState<ChatAgentOption[]>(() => [mainChatAgentOption]);
   const [selectedAgentCode, setSelectedAgentCode] = useState(mainChatAgentOption.agentCode);
   const [agentsLoading, setAgentsLoading] = useState(false);
-  const [editingTitle, setEditingTitle] = useState(false);
-  const [titleDraft, setTitleDraft] = useState("");
-  const [renamingSession, setRenamingSession] = useState(false);
   const [runningSessionCode, setRunningSessionCode] = useState("");
   const [compactingSessionCode, setCompactingSessionCode] = useState("");
   const [goalActionSessionCode, setGoalActionSessionCode] = useState("");
@@ -5114,7 +5127,6 @@ export function ChatManagementPage() {
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
   const attachmentFileInputRef = useRef<HTMLInputElement | null>(null);
   const scrollFrameRef = useRef<number | null>(null);
-  const sessionTitleRefreshTimersRef = useRef<number[]>([]);
   const visibleSessionCodeRef = useRef("");
   const liveAssistantDraftRef = useRef("");
   const liveAguiObservedRef = useRef(false);
@@ -5153,9 +5165,6 @@ export function ChatManagementPage() {
   const hasActiveSession = Boolean(activeSession);
   const sessionStarted = Boolean(activeSession?.lastRunCode || visibleMessages.length > 0);
   const agentSelectionLocked = Boolean(activeSession && sessionStarted);
-  const displayedAgentCode = sessionStarted
-    ? (activeSession?.agentCode ?? selectedModelAgentCode ?? selectedAgentCode ?? mainChatAgentOption.agentCode)
-    : (selectedModelAgentCode || selectedAgentCode || activeSession?.agentCode || mainChatAgentOption.agentCode);
   const modelEmptyLabel = isMainChatAgent(effectiveAgentCode)
     ? t("chat.management.modelEmpty.noTextModel")
     : t("chat.management.modelEmpty.noneForAgent", { name: selectedAgent?.name ?? effectiveAgentCode });
@@ -5195,38 +5204,6 @@ export function ChatManagementPage() {
     sendingRef.current = value;
     setSending(value);
   }
-
-  function scheduleSessionTitleRefresh(session: ChatSession) {
-    const defaultTitle = session.title.trim().toLocaleLowerCase();
-    if (defaultTitle !== "new chat" && defaultTitle !== "main agent") return;
-    let attempts = 0;
-    const refreshUntilTitleChanges = () => {
-      attempts += 1;
-      setActiveChatDataRefreshKey((current) => current + 1);
-      window.dispatchEvent(new Event("tron:chat-session-updated"));
-
-      const refreshedSession = findSession(
-        sessionGroupsRef.current,
-        session.sessionCode,
-      );
-      if (refreshedSession && refreshedSession.title !== session.title) return;
-      if (attempts >= 35) return;
-
-      const timer = window.setTimeout(() => {
-        sessionTitleRefreshTimersRef.current = sessionTitleRefreshTimersRef.current.filter(
-          (candidate) => candidate !== timer,
-        );
-        refreshUntilTitleChanges();
-      }, 1000);
-      sessionTitleRefreshTimersRef.current.push(timer);
-    };
-    refreshUntilTitleChanges();
-  }
-
-  useEffect(() => () => {
-    sessionTitleRefreshTimersRef.current.forEach((timer) => window.clearTimeout(timer));
-    sessionTitleRefreshTimersRef.current = [];
-  }, []);
 
   function replaceQueuedSubmissions(next: ChatQueuedSubmission[]) {
     queuedSubmissionsRef.current = next;
@@ -5779,7 +5756,7 @@ export function ChatManagementPage() {
   }, [activeSession?.sessionCode]);
 
   useEffect(() => {
-    if (!activeSession?.sessionCode || editingTitle || deleteTargetSession || !shouldAutoFocusChatComposer()) {
+    if (!activeSession?.sessionCode || deleteTargetSession || !shouldAutoFocusChatComposer()) {
       return;
     }
     const composerElement = composerRef.current;
@@ -5790,7 +5767,7 @@ export function ChatManagementPage() {
     return () => {
       window.cancelAnimationFrame(focusId);
     };
-  }, [activeSession?.sessionCode, deleteTargetSession, editingTitle]);
+  }, [activeSession?.sessionCode, deleteTargetSession]);
 
   useEffect(() => {
     const sessionCode = activeSession?.sessionCode ?? "";
@@ -6333,9 +6310,13 @@ export function ChatManagementPage() {
   function handleAgentSelect(agentCode: string) {
     setSelectedAgentCode(agentCode);
     if (!activeSession) return;
-    setSessionGroups((current) => replaceSession(current, {
+    const nextSession = {
       ...activeSession,
       agentCode,
+    };
+    setSessionGroups((current) => replaceSession(current, nextSession));
+    window.dispatchEvent(new CustomEvent("tron:chat-session-updated", {
+      detail: { session: nextSession },
     }));
   }
 
@@ -6345,9 +6326,13 @@ export function ChatManagementPage() {
     const nextAgentCode = inferChatAgentCodeFromModel(selectedOption, selectedAgentCode || mainChatAgentOption.agentCode);
     setSelectedAgentCode((current) => (current === nextAgentCode ? current : nextAgentCode));
     if (activeSession) {
-      setSessionGroups((current) => replaceSession(current, {
+      const nextSession = {
         ...activeSession,
         agentCode: nextAgentCode,
+      };
+      setSessionGroups((current) => replaceSession(current, nextSession));
+      window.dispatchEvent(new CustomEvent("tron:chat-session-updated", {
+        detail: { session: nextSession },
       }));
     }
     const sessionCode = activeSession?.sessionCode;
@@ -6697,6 +6682,7 @@ export function ChatManagementPage() {
             if (event.threadId && event.threadId !== sendingSessionCode) return;
             const eventMillis = aguiEventMillis(event);
             if (eventMillis !== null && eventMillis < streamAcceptedAfter) return;
+            handleTitleGenerationFailureEvent(event, sendingSessionCode);
             const runCode = aguiEventRunCode(event);
             if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {
               activeRunCodeRef.current = runCode;
@@ -6777,7 +6763,6 @@ export function ChatManagementPage() {
       }
       setSessionGroups((current) => replaceSession(current, result.session));
       window.dispatchEvent(new Event("tron:chat-session-updated"));
-      scheduleSessionTitleRefresh(result.session);
       setLatestRequestEstimatesBySessionCode((current) => {
         if (result.run.latestRequestEstimate) {
           return {
@@ -6976,6 +6961,7 @@ export function ChatManagementPage() {
         {
           onAguiEvent: (event) => {
             if (activeSessionCodeRef.current !== targetSession.sessionCode) return;
+            handleTitleGenerationFailureEvent(event, targetSession.sessionCode);
             const runCode = aguiEventRunCode(event);
             if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {
               activeRunCodeRef.current = runCode;
@@ -7429,33 +7415,6 @@ export function ChatManagementPage() {
     }
   }
 
-  async function handleTitleSubmit() {
-    if (!activeSession || renamingSession) return;
-    const title = titleDraft.trim();
-    if (!title) {
-      toast.warning(t("chat.management.toasts.titleRequired"), { title: t("chat.management.toasts.renameSkippedTitle") });
-      return;
-    }
-    if (title === activeSession.title) {
-      setEditingTitle(false);
-      return;
-    }
-
-    setRenamingSession(true);
-    try {
-      const session = await updateChatSession(activeSession.sessionCode, { title });
-      setSessionGroups((current) => replaceSession(current, session));
-      window.dispatchEvent(new Event("tron:chat-session-updated"));
-      setEditingTitle(false);
-      toast.success(t("chat.management.toasts.sessionRenamed"), { title: session.sessionCode });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : t("chat.management.toasts.renameSessionFailed");
-      toast.error(message, { title: t("chat.management.toasts.renameSessionFailed") });
-    } finally {
-      setRenamingSession(false);
-    }
-  }
-
   async function handleSidebarRenameSession(session: ChatSession, title: string) {
     if (!title.trim()) {
       toast.warning(t("chat.management.toasts.titleRequired"), { title: t("chat.management.toasts.renameSkippedTitle") });
@@ -7521,123 +7480,50 @@ export function ChatManagementPage() {
         />
       </div>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
-        <header className="flex h-14 items-center justify-between px-5 shadow-[0_8px_24px_rgba(15,23,42,0.035)]">
-          <div className="min-w-0">
-            {editingTitle && activeSession ? (
-              <input
-                autoFocus
-                className="h-7 w-[min(420px,70vw)] rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-base font-semibold text-[var(--color-on-surface)] outline-none"
-                disabled={renamingSession}
-                value={titleDraft}
-                onBlur={() => {
-                  if (!renamingSession) setEditingTitle(false);
-                }}
-                onChange={(event) => setTitleDraft(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter") {
-                    event.preventDefault();
-                    void handleTitleSubmit();
-                  }
-                  if (event.key === "Escape") {
-                    setEditingTitle(false);
-                  }
-                }}
-              />
-            ) : (
-              <h1
-                className={cn(
-                  "truncate text-base font-semibold",
-                  activeSession && "cursor-text rounded-sm focus:outline-none focus:ring-2 focus:ring-[var(--color-focus-ring)]",
-                )}
-                tabIndex={activeSession ? 0 : undefined}
-                title={activeSession ? t("chat.management.header.doubleClickRename") : undefined}
-                onDoubleClick={() => {
-                  if (!activeSession) return;
-                  setTitleDraft(activeSession.title);
-                  setEditingTitle(true);
-                }}
-                onKeyDown={(event) => {
-                  if (!activeSession || event.key !== "Enter") return;
-                  setTitleDraft(activeSession.title);
-                  setEditingTitle(true);
-                }}
+        {activeSession ? (
+          <TronChatRuntimeWindow
+            adapter={chatRuntimeAdapter}
+            attachmentLabels={attachmentLabels}
+            autoFocusComposer={shouldAutoFocusChatComposer()}
+            composerRef={composerRef}
+            composerHeader={transcriptAttachmentHeader}
+            config={{
+              agentCode: effectiveAgentCode,
+              disabledInput: creatingSession || !selectedModel,
+              floating: false,
+              inputPlaceholder: t("chat.management.composer.inputPlaceholder"),
+              showAgui: true,
+              storageKey: "tron.chat.management.runtime",
+              title: activeSession.title,
+              userInputLabels,
+              workRailLabels,
+              workspaceCode: activeWorkspaceCode,
+            }}
+            createSendInput={createRuntimeSendInput}
+            currentUserDisplayName={currentUserDisplayName}
+            debugOptions={transcriptWorkReplayOptions}
+            formatAnnotationCount={formatAnnotationCount}
+            draft={composer}
+            initialSession={activeSession}
+            onDraftChange={setComposer}
+            onPendingAttachmentsChange={setPendingAttachments}
+            onRunStateChange={handleRuntimeRunStateChange}
+            onSessionChange={handleRuntimeSessionChange}
+            pendingAttachments={pendingAttachments}
+            showAttachmentControl={false}
+            showHeader={false}
+            footerAddon={transcriptFooterAddon}
+            renderMarkdownLink={({ href, children }) => (
+              <MarkdownLink
+                href={href}
+                onOpenInternal={openMarkdownInternalLink}
+                onOpenExternal={openMarkdownExternalLink}
               >
-                {activeSession?.title ?? t("chat.management.header.defaultTitle")}
-              </h1>
+                {children}
+              </MarkdownLink>
             )}
-            {hasActiveSession ? (
-              <p className="mt-0.5 flex items-center gap-[12px] text-xs text-[var(--color-on-surface-variant)]">
-                <CircleDot size={12} />
-                {activeSession?.sessionCode}
-                {currentSessionRunActive ? (
-                  <span className="inline-flex items-center gap-1 text-[var(--color-primary)]" role="status">
-                    <LoaderCircle className="size-3 animate-spin" />
-                    {t("chat.management.runIndicator.running")}
-                  </span>
-                ) : null}
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-full border px-1.5 py-0.5 text-[10px] font-semibold uppercase leading-none",
-                    sessionAgentTagTone(displayedAgentCode),
-                  )}
-                >
-                  {sessionAgentTagLabel(displayedAgentCode)}
-                </span>
-              </p>
-            ) : null}
-          </div>
-        </header>
-
-        <TronChatRuntimeWindow
-          adapter={chatRuntimeAdapter}
-          attachmentLabels={attachmentLabels}
-          autoFocusComposer={shouldAutoFocusChatComposer()}
-          composerRef={composerRef}
-          composerHeader={transcriptAttachmentHeader}
-          config={{
-            agentCode: effectiveAgentCode,
-            disabledInput: creatingSession || !activeSession || !selectedModel,
-            floating: false,
-            inputPlaceholder: t("chat.management.composer.inputPlaceholder"),
-            showAgui: true,
-            storageKey: "tron.chat.management.runtime",
-            title: activeSession?.title ?? t("chat.management.header.defaultTitle"),
-            userInputLabels,
-            workRailLabels,
-            workspaceCode: activeWorkspaceCode,
-          }}
-          createSendInput={createRuntimeSendInput}
-          createSessionLabel={t("chat.management.emptyState.startChat")}
-          currentUserDisplayName={currentUserDisplayName}
-          debugOptions={transcriptWorkReplayOptions}
-          emptyDescription={activeWorkspaceCode
-            ? t("chat.management.emptyState.withWorkspace")
-            : t("chat.management.emptyState.noWorkspace")}
-          emptyTitle={t("chat.management.emptyState.noSessionTitle")}
-          formatAnnotationCount={formatAnnotationCount}
-          draft={composer}
-          initialSession={activeSession ?? null}
-          onCreateSession={() => {
-            void handleCreateSession();
-          }}
-          onDraftChange={setComposer}
-          onPendingAttachmentsChange={setPendingAttachments}
-          onRunStateChange={handleRuntimeRunStateChange}
-          onSessionChange={handleRuntimeSessionChange}
-          pendingAttachments={pendingAttachments}
-          showAttachmentControl={false}
-          showHeader={false}
-          footerAddon={transcriptFooterAddon}
-          renderMarkdownLink={({ href, children }) => (
-            <MarkdownLink
-              href={href}
-              onOpenInternal={openMarkdownInternalLink}
-              onOpenExternal={openMarkdownExternalLink}
-            >
-              {children}
-            </MarkdownLink>
-          )}
-        />
+          />
+        ) : null}
       </main>
       <ConfirmDialog
         ariaLabel={t("chat.management.deleteDialog.aria")}

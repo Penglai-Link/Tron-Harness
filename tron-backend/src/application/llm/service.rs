@@ -9,8 +9,7 @@ use super::{
     LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmEmbeddingCallCommand,
     LlmEmbeddingCallResult, LlmEmbeddingChunkResultItem, LlmEmbeddingChunkStrategy,
     LlmRerankCallCommand, LlmRerankCallResult, LlmRerankResultItem, LlmRuntimeClient,
-    LlmRuntimeError, LlmRuntimeModelResolver, LlmTextGenerationCallCommand,
-    LlmTextGenerationCallResult,
+    LlmRuntimeError, LlmRuntimeModelResolver, LlmTextGenerationCallResult,
 };
 
 impl LlmRuntimeModelResolver for ModelService {
@@ -56,16 +55,12 @@ impl LlmRuntimeService {
         }
     }
 
-    pub async fn text_generation_call(
+    pub async fn text_generation_call_with_config(
         &self,
-        command: LlmTextGenerationCallCommand,
+        config: RuntimeModelConfig,
+        prompt: String,
     ) -> Result<LlmTextGenerationCallResult, LlmRuntimeError> {
-        let workspace_code =
-            required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
-        let prompt = required_trimmed(command.prompt, LlmRuntimeError::InputRequired)?;
-        let model_code = optional_trimmed(command.model_code);
-        let config =
-            self.resolve_text_model_config(workspace_code.as_str(), model_code.as_deref())?;
+        let prompt = required_trimmed(prompt, LlmRuntimeError::InputRequired)?;
         let output = self
             .client
             .generate(&config, prompt.as_str())
@@ -153,19 +148,6 @@ impl LlmRuntimeService {
             .embedding_runtime_model_config(workspace_code, model_code)
             .map_err(map_model_error)?
             .ok_or(LlmRuntimeError::EmbeddingModelUnavailable)?;
-        Ok(config)
-    }
-
-    fn resolve_text_model_config(
-        &self,
-        workspace_code: &str,
-        model_code: Option<&str>,
-    ) -> Result<RuntimeModelConfig, LlmRuntimeError> {
-        let config = self
-            .model_resolver
-            .text_runtime_model_config(workspace_code, model_code)
-            .map_err(map_model_error)?
-            .ok_or(LlmRuntimeError::TextModelUnavailable)?;
         Ok(config)
     }
 

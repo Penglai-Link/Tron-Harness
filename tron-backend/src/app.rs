@@ -30,10 +30,9 @@ use crate::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
-                SqliteMemoryWorkDomainRepository, SqliteModelRepository, SqliteOpenAppRepository,
+                SqliteMemoryWorkDomainRepository, SqliteModelRepository,
+                SqliteNavigationRepository, SqliteOpenAppRepository, SqliteProjectRepository,
                 SqlitePromptRepository, SqliteResourceRepository, SqliteRoleRepository,
-                SqliteNavigationRepository,
-                SqliteProjectRepository,
                 SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
                 SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository, bootstrap_platform_admin,
@@ -57,10 +56,11 @@ use crate::{
     application::memory::{MemoryService, MemoryWorkDomainService},
     application::model::ModelService,
     application::model_provider::{ModelProviderService, ProviderAwareLlmRuntimeResolver},
+    application::model_router::LlmModelRouter,
     application::navigation::NavigationService,
     application::open_app::OpenAppService,
-    application::prompt::PromptService,
     application::project::ProjectService,
+    application::prompt::PromptService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
     application::resource::{ObjectStorage, ResourceService},
     application::role::RoleService,
@@ -155,6 +155,7 @@ pub struct AppState {
     pub prompts: PromptService,
     pub open_apps: OpenAppService,
     pub llm_runtime: LlmRuntimeService,
+    pub llm_router: LlmModelRouter,
     pub mcp: McpService,
     pub memory: AppMemoryService,
     pub memory_work_domains: MemoryWorkDomainService,
@@ -351,10 +352,7 @@ impl AppState {
         } else {
             build_model_service(&config.database_url, workspaces.clone(), variables.clone())
         };
-        let model_providers = build_model_provider_service(
-            &config.database_url,
-            variables.clone(),
-        );
+        let model_providers = build_model_provider_service(&config.database_url, variables.clone());
         let agent_model_client = Arc::new(HttpModelClient::new(Arc::new(
             PersonAiModelProviderClient::new(
                 HttpModelProviderClient::new(model_inference_client.clone()),
@@ -378,6 +376,8 @@ impl AppState {
             )),
         );
         let prompts = prompts.with_llm_runtime(llm_runtime.clone());
+        let llm_router = LlmModelRouter::new(models.clone(), model_providers.clone());
+        let prompts = prompts.with_llm_router(llm_router.clone());
         let graph_core = if config.graph_storage_path == ":memory:" {
             if let Some(core) = GLOBAL_GRAPH_CORE.get() {
                 core.clone()
@@ -394,6 +394,7 @@ impl AppState {
             graph_core.clone(),
             workspaces.clone(),
             llm_runtime.clone(),
+            llm_router.clone(),
             prompts.clone(),
             &config.project_doc_root,
             config.mineru.clone(),
@@ -475,7 +476,9 @@ impl AppState {
         .with_active_runs(active_runs.clone())
         .with_projects(projects.clone())
         .with_resources(resources.clone())
-        .with_prompt_service(prompts.clone());
+        .with_prompt_service(prompts.clone())
+        .with_llm_router(llm_router.clone())
+        .with_event_bus(event_bus.clone());
         automations.set_execution_runner(Arc::new(MainAgentAutomationRunner::new(
             automations.clone(),
             chats.clone(),
@@ -535,6 +538,7 @@ impl AppState {
             prompts,
             open_apps,
             llm_runtime,
+            llm_router,
             mcp,
             memory,
             memory_work_domains,
@@ -582,8 +586,14 @@ where
         .merge(openapi_routes())
         .merge(auth_routes())
         .route("/api/v1/setup/status", axum::routing::get(setup::status))
-        .route("/api/v1/setup/session", axum::routing::post(setup::create_session))
-        .route("/api/v1/setup/activate-admin", axum::routing::post(setup::activate_admin))
+        .route(
+            "/api/v1/setup/session",
+            axum::routing::post(setup::create_session),
+        )
+        .route(
+            "/api/v1/setup/activate-admin",
+            axum::routing::post(setup::activate_admin),
+        )
         .merge(mcp_transport_routes())
         .merge(protected_routes)
         .merge(frontend_routes())

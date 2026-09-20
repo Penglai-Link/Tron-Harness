@@ -1,6 +1,6 @@
 use serde::{Deserialize, Serialize};
 
-use crate::domain::model::ModelType;
+use crate::domain::{agent::AgentModelProtocol, model::ModelType};
 
 /// A platform integration that owns a remote model catalogue and its credentials.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -315,6 +315,7 @@ pub struct ProviderCatalogModelView {
     pub model_id: Option<String>,
     pub model_code: String,
     pub model_name: String,
+    pub protocols: Vec<AgentModelProtocol>,
     pub upstream_vendor_code: Option<String>,
     pub upstream_vendor_name: Option<String>,
     pub context_window_tokens: Option<u32>,
@@ -368,6 +369,7 @@ pub struct ProviderModelSelectOption {
     pub access_platform: String,
     pub upstream_vendor_name: Option<String>,
     pub model_type: ModelType,
+    pub protocols: Vec<AgentModelProtocol>,
     pub enabled: bool,
     pub remote_status: ProviderCatalogModelStatus,
     pub context_window_tokens: Option<u32>,

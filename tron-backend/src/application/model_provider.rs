@@ -11,7 +11,9 @@ use chrono::DateTime;
 use crab_serverapi::{
     AuthorizedClientApi, AuthorizedClientContext, ServerApiError,
     auth::{LoginClient, SessionRequest},
-    gateway::{ChatCompletionsClient, EmbeddingsClient, QualityType},
+    gateway::{
+        ChatCompletionsClient, EmbeddingsClient, ProtocolType, QualityType, ResponsesClient,
+    },
     multimedia::MultimediaClient,
 };
 use reqwest::Method;
@@ -62,6 +64,7 @@ pub(crate) fn migrate_provider_catalog_model_schema(
         "TEXT NOT NULL DEFAULT 'High'",
     )?;
     for (column, definition) in [
+        ("protocols", "TEXT NOT NULL DEFAULT '[\"ChatCompletions\"]'"),
         ("input_coefficient", "REAL"),
         ("cache_hit_coefficient", "REAL"),
         ("output_coefficient", "REAL"),
@@ -124,6 +127,13 @@ fn provider_quality_to_sdk(quality: ProviderModelQuality) -> QualityType {
         ProviderModelQuality::High => QualityType::High,
         ProviderModelQuality::Middle => QualityType::Middle,
         ProviderModelQuality::Low => QualityType::Low,
+    }
+}
+
+fn agent_protocol_from_sdk(protocol: ProtocolType) -> AgentModelProtocol {
+    match protocol {
+        ProtocolType::ChatCompletions => AgentModelProtocol::ChatCompletions,
+        ProtocolType::Responses => AgentModelProtocol::Responses,
     }
 }
 
@@ -330,6 +340,7 @@ pub enum ExternalAuthorizationPoll {
 pub struct ExternalCatalogModel {
     model_code: String,
     model_name: String,
+    protocols: Vec<AgentModelProtocol>,
     upstream_vendor_code: Option<String>,
     upstream_vendor_name: Option<String>,
     context_window_tokens: Option<u32>,
@@ -475,6 +486,12 @@ impl ModelProviderAdapter for PersonAiAdapter {
                         ExternalCatalogModel {
                             model_code: model.model_code.clone(),
                             model_name: model.model_name.unwrap_or(model.model_code),
+                            protocols: model
+                                .protocol_types
+                                .unwrap_or_default()
+                                .into_iter()
+                                .map(agent_protocol_from_sdk)
+                                .collect(),
                             upstream_vendor_code: model.provider_code,
                             upstream_vendor_name: model.provider_name,
                             context_window_tokens: model
@@ -1293,6 +1310,7 @@ impl ModelProviderService {
                 access_platform: ModelProviderCode::PersonAi.display_name().into(),
                 upstream_vendor_name: None,
                 model_type: ModelType::Text,
+                protocols: vec![AgentModelProtocol::ChatCompletions],
                 enabled: true,
                 remote_status: ProviderCatalogModelStatus::Available,
                 context_window_tokens: None,
@@ -1326,6 +1344,7 @@ impl ModelProviderService {
                 access_platform: ModelProviderCode::PersonAi.display_name().into(),
                 upstream_vendor_name: model.upstream_vendor_name.clone(),
                 model_type: ModelType::Text,
+                protocols: model.protocols.clone(),
                 enabled,
                 remote_status: model.status,
                 context_window_tokens: model.context_window_tokens,
@@ -1411,6 +1430,7 @@ impl ModelProviderService {
                     "",
                     None,
                     reasoning_effort,
+                    AgentModelProtocol::ChatCompletions,
                 )))
             }
             ModelSelectionKind::Fixed => {
@@ -1446,6 +1466,7 @@ impl ModelProviderService {
                     model_code,
                     model.context_window_tokens,
                     reasoning_effort,
+                    preferred_protocol(&model.protocols),
                 )))
             }
         }
@@ -1569,6 +1590,14 @@ impl ModelProviderService {
             .map_err(|error| error.to_string())?;
         let quality_type = person_ai_runtime_quality(config)
             .ok_or_else(|| "Person-AI runtime model has no quality type".to_string())?;
+        if config.protocol == AgentModelProtocol::Responses {
+            let client = ResponsesClient::new(credentials.server_base_url.clone())
+                .map_err(|e| e.to_string())?;
+            return client
+                .create(&credentials.context(), &body.to_string())
+                .await
+                .map_err(|e| e.to_string());
+        }
         let adapter = self
             .adapter(ModelProviderCode::PersonAi)
             .map_err(|error| error.to_string())?;
@@ -1612,6 +1641,22 @@ impl ModelProviderService {
             .map_err(|error| error.to_string())?;
         let quality_type = person_ai_runtime_quality(config)
             .ok_or_else(|| "Person-AI runtime model has no quality type".to_string())?;
+        if config.protocol == AgentModelProtocol::Responses {
+            let client = ResponsesClient::new(credentials.server_base_url.clone())
+                .map_err(|e| e.to_string())?;
+            let response = client
+                .create_stream(&credentials.context(), &body.to_string(), |data| {
+                    if data.trim().is_empty() || data.trim() == "[DONE]" {
+                        return Ok(());
+                    }
+                    let event = serde_json::from_str(data)
+                        .map_err(|e| crab_serverapi::ServerApiError::Validation(e.to_string()))?;
+                    sink(event).map_err(crab_serverapi::ServerApiError::Validation)
+                })
+                .await
+                .map_err(|e| e.to_string());
+            return response;
+        }
         let snapshot_service = self.clone();
         let snapshot_config = config.clone();
         let snapshot_run_code = run_code.map(ToOwned::to_owned);
@@ -1684,7 +1729,13 @@ impl ModelProviderService {
         top_n: Option<usize>,
     ) -> Result<Vec<(usize, f64)>, String> {
         self.llm_rerank_with_config(
-            &person_ai_agent_config("PERSON_AI:ROUTE:ChatAuto", "", None, None),
+            &person_ai_agent_config(
+                "PERSON_AI:ROUTE:ChatAuto",
+                "",
+                None,
+                None,
+                AgentModelProtocol::ChatCompletions,
+            ),
             query,
             documents,
             top_n,
@@ -2291,12 +2342,20 @@ fn person_ai_agent_config(
     model_name: impl Into<String>,
     context_window_tokens: Option<u32>,
     reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    protocol: AgentModelProtocol,
 ) -> AgentModelConfig {
     AgentModelConfig {
         model_code: runtime_model_code.into(),
-        protocol: AgentModelProtocol::ChatCompletions,
+        protocol,
         base_url: "https://person-ai.invalid".into(),
-        api_path: Some("chat/completions".into()),
+        api_path: Some(
+            if protocol == AgentModelProtocol::Responses {
+                "responses"
+            } else {
+                "chat/completions"
+            }
+            .into(),
+        ),
         api_key: String::new(),
         model_name: model_name.into(),
         thinking_enabled: reasoning_effort.is_some(),
@@ -2307,6 +2366,14 @@ fn person_ai_agent_config(
         context_window_tokens,
         top_p: None,
         max_retries: Some(0),
+    }
+}
+
+fn preferred_protocol(protocols: &[AgentModelProtocol]) -> AgentModelProtocol {
+    if protocols.contains(&AgentModelProtocol::Responses) {
+        AgentModelProtocol::Responses
+    } else {
+        AgentModelProtocol::ChatCompletions
     }
 }
 
@@ -2329,7 +2396,11 @@ fn person_ai_runtime_quality(config: &AgentModelConfig) -> Option<ProviderModelQ
 fn runtime_config_from_agent(config: AgentModelConfig) -> RuntimeModelConfig {
     RuntimeModelConfig {
         model_code: config.model_code,
-        protocol: ModelProtocol::OpenAiCompatible,
+        protocol: match config.protocol {
+            AgentModelProtocol::Responses => ModelProtocol::Responses,
+            AgentModelProtocol::ChatCompletions => ModelProtocol::OpenAiCompatible,
+            AgentModelProtocol::Embeddings => ModelProtocol::OpenAiCompatibleEmbedding,
+        },
         model_type: ModelType::Text,
         base_url: config.base_url,
         api_path: config.api_path,
@@ -2653,7 +2724,7 @@ fn read_chat_catalog_models(
     let mut statement = connection
         .prepare(
             "SELECT provider_code, model_code, model_name, upstream_vendor_code, upstream_vendor_name,
-                    context_window_tokens, quality_type, input_coefficient, cache_hit_coefficient,
+                    context_window_tokens, protocols, quality_type, input_coefficient, cache_hit_coefficient,
                     output_coefficient, status, first_seen_at, last_seen_at, updated_at
              FROM provider_catalog_models WHERE provider_code = ?1
              ORDER BY CASE status WHEN 'Available' THEN 0 ELSE 1 END,
@@ -2664,8 +2735,8 @@ fn read_chat_catalog_models(
     statement
         .query_map(params![provider_code.storage_value()], |row| {
             let provider_code = row.get::<_, String>(0)?;
-            let quality_type = row.get::<_, String>(6)?;
-            let status = row.get::<_, String>(10)?;
+            let quality_type = row.get::<_, String>(7)?;
+            let status = row.get::<_, String>(11)?;
             Ok(ProviderCatalogModelView {
                 provider_code: ModelProviderCode::from_storage(&provider_code)
                     .ok_or(rusqlite::Error::InvalidQuery)?,
@@ -2673,6 +2744,8 @@ fn read_chat_catalog_models(
                 model_id: None,
                 model_code: row.get(1)?,
                 model_name: row.get(2)?,
+                protocols: serde_json::from_str(&row.get::<_, String>(6)?)
+                    .unwrap_or_else(|_| vec![AgentModelProtocol::ChatCompletions]),
                 upstream_vendor_code: row.get(3)?,
                 upstream_vendor_name: row.get(4)?,
                 context_window_tokens: row
@@ -2682,14 +2755,14 @@ fn read_chat_catalog_models(
                     ProviderModelQuality::from_storage(&quality_type)
                         .ok_or(rusqlite::Error::InvalidQuery)?,
                 ),
-                input_coefficient: row.get(7)?,
-                cache_hit_coefficient: row.get(8)?,
-                output_coefficient: row.get(9)?,
+                input_coefficient: row.get(8)?,
+                cache_hit_coefficient: row.get(9)?,
+                output_coefficient: row.get(10)?,
                 status: ProviderCatalogModelStatus::from_storage(&status)
                     .ok_or(rusqlite::Error::InvalidQuery)?,
-                first_seen_at: row.get(11)?,
-                last_seen_at: row.get(12)?,
-                updated_at: row.get(13)?,
+                first_seen_at: row.get(12)?,
+                last_seen_at: row.get(13)?,
+                updated_at: row.get(14)?,
             })
         })
         .map_err(|_| ModelProviderError::Storage)?
@@ -2723,6 +2796,7 @@ fn read_multimedia_catalog_models(
                 model_id: Some(row.get(1)?),
                 model_code: row.get(2)?,
                 model_name: row.get(3)?,
+                protocols: Vec::new(),
                 upstream_vendor_code: None,
                 upstream_vendor_name: None,
                 context_window_tokens: None,
@@ -2869,14 +2943,15 @@ fn apply_catalog_snapshot(
             .execute(
                 "INSERT INTO provider_catalog_models (
                     provider_code, model_code, model_name, upstream_vendor_code, upstream_vendor_name,
-                    context_window_tokens, quality_type, input_coefficient, cache_hit_coefficient,
+                    context_window_tokens, protocols, quality_type, input_coefficient, cache_hit_coefficient,
                     output_coefficient, status, first_seen_at, last_seen_at, updated_at
-                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?12, ?12)
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?13, ?13)
                  ON CONFLICT(provider_code, model_code) DO UPDATE SET
                     model_name = excluded.model_name,
                     upstream_vendor_code = excluded.upstream_vendor_code,
                     upstream_vendor_name = excluded.upstream_vendor_name,
                     context_window_tokens = excluded.context_window_tokens,
+                    protocols = excluded.protocols,
                     quality_type = excluded.quality_type,
                     input_coefficient = excluded.input_coefficient,
                     cache_hit_coefficient = excluded.cache_hit_coefficient,
@@ -2891,6 +2966,7 @@ fn apply_catalog_snapshot(
                     model.upstream_vendor_code,
                     model.upstream_vendor_name,
                     model.context_window_tokens.map(i64::from),
+                    serde_json::to_string(&model.protocols).unwrap_or_else(|_| "[\"ChatCompletions\"]".into()),
                     model.quality_type.storage_value(),
                     model.input_coefficient,
                     model.cache_hit_coefficient,
@@ -3177,10 +3253,7 @@ fn remote_error(error: impl std::fmt::Display) -> ModelProviderError {
 }
 
 fn person_ai_runtime_error(error: ServerApiError) -> ModelProviderError {
-    match error {
-        ServerApiError::Unauthorized => ModelProviderError::Unauthorized,
-        other => remote_error(other),
-    }
+    remote_error(error)
 }
 
 fn is_person_ai_authorization_key_error(error: &ModelProviderError) -> bool {
@@ -3198,7 +3271,6 @@ fn is_person_ai_authorization_key_error(error: &ModelProviderError) -> bool {
 fn account_info_error(error: ServerApiError) -> ModelProviderError {
     match error {
         ServerApiError::DecryptFailed => ModelProviderError::AuthenticationRequired,
-        ServerApiError::Unauthorized => ModelProviderError::Unauthorized,
         ServerApiError::Business { code, .. } => ModelProviderError::Remote(format!(
             "Person-AI account information request was rejected (code {code})"
         )),
@@ -3214,7 +3286,6 @@ fn account_info_error_kind(error: &ServerApiError) -> &'static str {
         ServerApiError::Json(_) | ServerApiError::Other(_) => "invalid-response",
         ServerApiError::Crypto(_) => "crypto",
         ServerApiError::DecryptFailed => "authorization-key",
-        ServerApiError::Unauthorized => "unauthorized",
         ServerApiError::WebSocket(_) => "websocket",
         ServerApiError::Io(_) => "io",
         ServerApiError::Url(_) => "url",
@@ -3513,8 +3584,13 @@ mod tests {
             )
             .expect("seed provider credentials");
 
-        let config =
-            person_ai_agent_config("PERSON_AI:ROUTE:ChatAuto", "Auto", Some(256_000), None);
+        let config = person_ai_agent_config(
+            "PERSON_AI:ROUTE:ChatAuto",
+            "Auto",
+            Some(256_000),
+            None,
+            AgentModelProtocol::ChatCompletions,
+        );
         service
             .chat_completion(&config, &json!({"messages": []}), None, None)
             .await
@@ -3582,6 +3658,7 @@ mod tests {
         ExternalCatalogModel {
             model_code: code.into(),
             model_name: name.into(),
+            protocols: vec![AgentModelProtocol::ChatCompletions],
             upstream_vendor_code: Some(vendor.to_ascii_lowercase()),
             upstream_vendor_name: Some(vendor.into()),
             context_window_tokens,
@@ -3757,6 +3834,7 @@ mod tests {
             "deepseek-v4",
             Some(64_000),
             None,
+            AgentModelProtocol::ChatCompletions,
         );
         service
             .record_requested_runtime_snapshot(Some("RUN-1"), "SESSION-1", "WS-1", &config)

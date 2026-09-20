@@ -8,7 +8,7 @@ mod service_tests;
 pub use dto::{
     LlmChunkedEmbeddingCallCommand, LlmChunkedEmbeddingCallResult, LlmEmbeddingCallCommand,
     LlmEmbeddingCallResult, LlmEmbeddingChunkResultItem, LlmRerankCallCommand, LlmRerankCallResult,
-    LlmRerankResultItem, LlmTextGenerationCallCommand, LlmTextGenerationCallResult,
+    LlmRerankResultItem, LlmTextGenerationCallResult,
 };
 pub use error::LlmRuntimeError;
 pub use port::{

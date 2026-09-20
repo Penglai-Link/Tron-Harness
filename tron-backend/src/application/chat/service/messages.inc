@@ -130,12 +130,14 @@ impl ChatService {
             let session_code = session_code.to_string();
             let workspace_code = workspace_code.clone();
             let user_message_content = content.clone();
+            let title_run_code = run_code.clone();
             tokio::spawn(async move {
                 chat_service
                     .try_generate_manual_session_title(
                         &session_code,
                         &workspace_code,
                         &user_message_content,
+                        &title_run_code,
                         llm_runtime,
                     )
                     .await;

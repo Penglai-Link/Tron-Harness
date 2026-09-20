@@ -23,6 +23,7 @@ pub enum CanonicalRuntimeEvent {
     CompactionFailed,
     RunCompleted,
     RunFailed,
+    SessionTitleGenerationFailed,
 }
 
 impl CanonicalRuntimeEvent {
@@ -51,6 +52,7 @@ impl CanonicalRuntimeEvent {
             Self::CompactionFailed => "COMPACTION_FAILED",
             Self::RunCompleted => "RUN_COMPLETED",
             Self::RunFailed => "RUN_FAILED",
+            Self::SessionTitleGenerationFailed => "SESSION_TITLE_GENERATION_FAILED",
         }
     }
 
@@ -79,6 +81,7 @@ impl CanonicalRuntimeEvent {
             "agent.compaction.failed" => Some(Self::CompactionFailed),
             "agent.run.completed" => Some(Self::RunCompleted),
             "agent.run.failed" => Some(Self::RunFailed),
+            "agent.session_title_generation_failed" => Some(Self::SessionTitleGenerationFailed),
             _ => None,
         }
     }

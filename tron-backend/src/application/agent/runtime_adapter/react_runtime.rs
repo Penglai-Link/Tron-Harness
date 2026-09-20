@@ -21,7 +21,7 @@ pub(super) struct ReactRuntime {
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
     active_runs: ActiveRunRegistry,
-    auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+    auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
 }
 
 impl ReactRuntime {
@@ -33,7 +33,7 @@ impl ReactRuntime {
         event_bus: EventBusHandle,
         short_term_memory: Option<ShortTermMemoryService>,
         active_runs: ActiveRunRegistry,
-        auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+        auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
     ) -> Self {
         Self {
             key,

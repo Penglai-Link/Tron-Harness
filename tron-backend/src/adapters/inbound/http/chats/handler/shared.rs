@@ -240,12 +240,13 @@ pub(crate) fn prepare_send_model(
     if matches!(runtime.runtime_type, AgentRuntimeType::React) {
         let is_auto = request.model_selection.as_ref().is_some_and(|selection| {
             selection.kind == crate::domain::model_provider::ModelSelectionKind::Auto
-                || (selection.kind == crate::domain::model_provider::ModelSelectionKind::ProviderRoute
+                || (selection.kind
+                    == crate::domain::model_provider::ModelSelectionKind::ProviderRoute
                     && selection.route_code
                         == Some(crate::domain::model_provider::ProviderRouteCode::ChatAuto))
         });
         if is_auto {
-            let router = crate::application::chat_auto_model_router::ChatAutoModelRouter::new(
+            let router = crate::application::model_router::AgentModelRouter::new(
                 state.models.clone(),
                 state.model_providers.clone(),
             );
@@ -345,7 +346,7 @@ pub(crate) fn prepare_send_model(
 pub(crate) struct PreparedChatModel {
     pub config: AgentModelConfig,
     pub auto_route: Option<crate::domain::agent::AutoModelRouteContext>,
-    pub auto_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+    pub auto_router: Option<crate::application::model_router::AgentModelRouter>,
 }
 
 impl PreparedChatModel {
@@ -369,7 +370,9 @@ fn validate_chat_model_selection(selection: &ModelSelection) -> Result<(), ChatS
                 || selection.quality_type.is_some()
                 || selection.route_code.is_some()
             {
-                return Err(invalid("Auto modelSelection cannot include a model or provider"));
+                return Err(invalid(
+                    "Auto modelSelection cannot include a model or provider",
+                ));
             }
             Ok(())
         }
@@ -379,10 +382,14 @@ fn validate_chat_model_selection(selection: &ModelSelection) -> Result<(), ChatS
             }
             match selection.provider_code {
                 Some(ModelProviderCode::PersonAi) if selection.quality_type.is_none() => {
-                    return Err(invalid("Person-AI Fixed modelSelection requires qualityType"));
+                    return Err(invalid(
+                        "Person-AI Fixed modelSelection requires qualityType",
+                    ));
                 }
                 None if selection.quality_type.is_some() => {
-                    return Err(invalid("platform Fixed modelSelection cannot include qualityType"));
+                    return Err(invalid(
+                        "platform Fixed modelSelection cannot include qualityType",
+                    ));
                 }
                 _ => {}
             }

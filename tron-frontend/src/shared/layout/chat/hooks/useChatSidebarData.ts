@@ -7,6 +7,7 @@ export function useChatSidebarData(workspaceCode: string) {
   const projects = useProjectList(workspaceCode);
   const [refreshKey, setRefreshKey] = useState(0);
   const [createdSessions, setCreatedSessions] = useState<ChatSession[]>([]);
+  const [sessionOverrides, setSessionOverrides] = useState<Record<string, ChatSession>>({});
   const sessionGroups = useChatSessionGroupList(workspaceCode, refreshKey);
   useEffect(() => {
     const refreshSessions = () => setRefreshKey((value) => value + 1);
@@ -25,6 +26,20 @@ export function useChatSidebarData(workspaceCode: string) {
       const sessionCode = (event as CustomEvent<{ sessionCode?: string }>).detail?.sessionCode;
       if (sessionCode) {
         setCreatedSessions((current) => current.filter((session) => session.sessionCode !== sessionCode));
+        setSessionOverrides((current) => {
+          if (!(sessionCode in current)) return current;
+          const next = { ...current };
+          delete next[sessionCode];
+          return next;
+        });
+      }
+      refreshSessions();
+    };
+    const handleSessionUpdated = (event: Event) => {
+      const session = (event as CustomEvent<{ session?: ChatSession }>).detail?.session;
+      if (session) {
+        setSessionOverrides((current) => ({ ...current, [session.sessionCode]: session }));
+        return;
       }
       refreshSessions();
     };
@@ -34,17 +49,21 @@ export function useChatSidebarData(workspaceCode: string) {
     };
     window.addEventListener("tron:chat-session-created", handleSessionCreated);
     window.addEventListener("tron:chat-session-archived", handleSessionArchived);
-    window.addEventListener("tron:chat-session-updated", refreshSessions);
+    window.addEventListener("tron:chat-session-updated", handleSessionUpdated);
     window.addEventListener("tron:project-created", refreshProjectAndSessions);
     return () => {
       window.removeEventListener("tron:chat-session-created", handleSessionCreated);
       window.removeEventListener("tron:chat-session-archived", handleSessionArchived);
-      window.removeEventListener("tron:chat-session-updated", refreshSessions);
+      window.removeEventListener("tron:chat-session-updated", handleSessionUpdated);
       window.removeEventListener("tron:project-created", refreshProjectAndSessions);
     };
   }, [projects.refresh]);
   const sessions = useMemo(() => {
-    const listedSessions = sessionGroups.flatMap((group) => group.sessions);
+    const listedSessions = sessionGroups.flatMap((group) => group.sessions).map((session) => (
+      sessionOverrides[session.sessionCode]
+        ? { ...session, ...sessionOverrides[session.sessionCode] }
+        : session
+    ));
     const listedCodes = new Set(listedSessions.map((session) => session.sessionCode));
     return [
       ...createdSessions.filter((session) => (
@@ -52,7 +71,23 @@ export function useChatSidebarData(workspaceCode: string) {
       )),
       ...listedSessions,
     ];
-  }, [createdSessions, sessionGroups, workspaceCode]);
+  }, [createdSessions, sessionGroups, sessionOverrides, workspaceCode]);
+  useEffect(() => {
+    const listedSessions = sessionGroups.flatMap((group) => group.sessions);
+    if (!listedSessions.length) return;
+    const listedByCode = new Map(listedSessions.map((session) => [session.sessionCode, session]));
+    setSessionOverrides((current) => {
+      let changed = false;
+      const next = { ...current };
+      Object.entries(current).forEach(([sessionCode, override]) => {
+        if (listedByCode.get(sessionCode)?.agentCode === override.agentCode) {
+          delete next[sessionCode];
+          changed = true;
+        }
+      });
+      return changed ? next : current;
+    });
+  }, [sessionGroups]);
   useEffect(() => {
     const listedCodes = new Set(
       sessionGroups.flatMap((group) => group.sessions.map((session) => session.sessionCode)),

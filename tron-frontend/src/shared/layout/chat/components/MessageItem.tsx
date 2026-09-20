@@ -10,6 +10,26 @@ import { useTabStore } from "@/store/tabStore";
 import IconButton from "./IconButton";
 import Item from "./Item";
 
+function sessionAgentTagLabel(agentCode: string | null | undefined) {
+  const normalized = agentCode?.trim().toLowerCase();
+  if (!normalized || normalized === "main-agent") return "MAIN";
+  return normalized.toUpperCase();
+}
+
+function sessionAgentTagTone(agentCode: string | null | undefined) {
+  const normalized = agentCode?.trim().toLowerCase();
+  if (!normalized || normalized === "main-agent") {
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  }
+  if (normalized === "opencode") {
+    return "border-amber-200 bg-amber-50 text-amber-700";
+  }
+  if (normalized === "codex") {
+    return "border-sky-200 bg-sky-50 text-sky-700";
+  }
+  return "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
+}
+
 const MessageItem = ({
   active,
   onNavigate,
@@ -68,7 +88,7 @@ const MessageItem = ({
       left={
         <Link
           to={`/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`}
-          className="min-w-0 flex-1 truncate text-[14px]"
+          className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[14px]"
           onClick={(event) => {
             if (
               event.defaultPrevented ||
@@ -90,7 +110,15 @@ const MessageItem = ({
             });
           }}
         >
-          {session.title}
+          <span
+            className={cn(
+              "inline-flex h-4 shrink-0 items-center rounded border px-1 font-mono text-[10px] leading-none",
+              sessionAgentTagTone(session.agentCode),
+            )}
+          >
+            {sessionAgentTagLabel(session.agentCode)}
+          </span>
+          <span className="min-w-0 truncate">{session.title}</span>
         </Link>
       }
       right={

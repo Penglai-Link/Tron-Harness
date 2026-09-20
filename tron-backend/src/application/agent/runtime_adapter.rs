@@ -232,7 +232,7 @@ pub struct AgentRuntimeRegistry {
     runtime_http_client: reqwest::Client,
     short_term_memory: Option<ShortTermMemoryService>,
     active_runs: ActiveRunRegistry,
-    auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+    auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
 }
 
 impl AgentRuntimeRegistry {
@@ -265,7 +265,7 @@ impl AgentRuntimeRegistry {
 
     pub fn with_auto_model_router(
         mut self,
-        router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+        router: Option<crate::application::model_router::AgentModelRouter>,
     ) -> Self {
         self.auto_model_router = router;
         self

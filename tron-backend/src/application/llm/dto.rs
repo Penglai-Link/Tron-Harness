@@ -1,11 +1,4 @@
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub struct LlmTextGenerationCallCommand {
-    pub workspace_code: String,
-    pub model_code: Option<String>,
-    pub prompt: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LlmTextGenerationCallResult {
     pub model_code: String,
     pub output: String,

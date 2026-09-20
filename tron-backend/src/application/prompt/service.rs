@@ -8,7 +8,8 @@ use serde_json::Value;
 
 use crate::{
     application::{
-        llm::{LlmRuntimeService, LlmTextGenerationCallCommand},
+        llm::LlmRuntimeService,
+        model_router::LlmModelRouter,
         prompt::{PromptPageQuery, PromptRepository},
         variable::VariableService,
         workspace::WorkspaceService,
@@ -40,6 +41,7 @@ pub struct PromptService {
     variables: VariableService,
     ids: Arc<dyn IdGenerator>,
     llm_runtime: Option<LlmRuntimeService>,
+    llm_router: Option<LlmModelRouter>,
 }
 
 #[derive(Clone)]
@@ -63,11 +65,17 @@ impl PromptService {
             variables,
             ids,
             llm_runtime: None,
+            llm_router: None,
         }
     }
 
     pub fn with_llm_runtime(mut self, llm_runtime: LlmRuntimeService) -> Self {
         self.llm_runtime = Some(llm_runtime);
+        self
+    }
+
+    pub fn with_llm_router(mut self, llm_router: LlmModelRouter) -> Self {
+        self.llm_router = Some(llm_router);
         self
     }
 
@@ -222,18 +230,25 @@ impl PromptService {
         let llm_runtime = self.llm_runtime.as_ref().ok_or_else(|| {
             crate::domain::prompt::PromptError::InvalidInput("LLM runtime is unavailable".into())
         })?;
+        let llm_router = self.llm_router.as_ref().ok_or_else(|| {
+            crate::domain::prompt::PromptError::InvalidInput(
+                "LLM model router is unavailable".into(),
+            )
+        })?;
+        let runtime_config = llm_router
+            .route_text(workspace_code, None)
+            .map_err(crate::domain::prompt::PromptError::InvalidInput)?;
         let generated = llm_runtime
-            .text_generation_call(LlmTextGenerationCallCommand {
-                workspace_code: workspace_code.to_string(),
-                model_code: None,
-                prompt: translation_prompt(
+            .text_generation_call_with_config(
+                runtime_config,
+                translation_prompt(
                     source_locale,
                     target_locale,
                     display_name,
                     prompt_body,
                     description,
                 ),
-            })
+            )
             .await
             .map_err(|error| crate::domain::prompt::PromptError::InvalidInput(error.to_string()))?;
         let translation = parse_translation_output(&generated.output, target_locale)?;
@@ -338,7 +353,9 @@ impl PromptService {
                 Some(workspace_code) => self
                     .variables
                     .resolve_workspace_prompt_variable_values(workspace_code, &keys),
-                None => self.variables.resolve_platform_prompt_variable_values(&keys),
+                None => self
+                    .variables
+                    .resolve_platform_prompt_variable_values(&keys),
             }
             .map_err(managed_variable_validation_error)?
         };
@@ -393,7 +410,11 @@ impl PromptService {
                 &managed_variable_keys(variables),
             )
             .map_err(managed_variable_validation_error)?;
-        validate_managed_variables(variables, options.iter().map(|option| option.key.as_str()), &values)
+        validate_managed_variables(
+            variables,
+            options.iter().map(|option| option.key.as_str()),
+            &values,
+        )
     }
 
     fn validate_platform_managed_variables(
@@ -402,15 +423,19 @@ impl PromptService {
     ) -> Result<(), crate::domain::prompt::PromptError> {
         let options = self
             .variables
-            .list_platform_prompt_variable_options(
-                crate::domain::variable::VariableCatalogQuery { search: None },
-            )
+            .list_platform_prompt_variable_options(crate::domain::variable::VariableCatalogQuery {
+                search: None,
+            })
             .map_err(managed_variable_validation_error)?;
         let values = self
             .variables
             .resolve_platform_prompt_variable_values(&managed_variable_keys(variables))
             .map_err(managed_variable_validation_error)?;
-        validate_managed_variables(variables, options.iter().map(|option| option.key.as_str()), &values)
+        validate_managed_variables(
+            variables,
+            options.iter().map(|option| option.key.as_str()),
+            &values,
+        )
     }
 }
 

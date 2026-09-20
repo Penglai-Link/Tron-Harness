@@ -8,7 +8,7 @@ use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::{
-        llm::LlmTextGenerationCallCommand,
+        llm::LlmRuntimeError,
         terminal::{
             IssueTerminalSocketTicketCommand, normalize_terminal_command,
             terminal_command_runtime_values,
@@ -19,8 +19,8 @@ use crate::{
 
 use super::{
     error_mapper::{
-        invalid_terminal_request_response, llm_runtime_error_response, terminal_error_response,
-        prompt_render_error_response,
+        invalid_terminal_request_response, llm_runtime_error_response,
+        prompt_render_error_response, terminal_error_response,
     },
     request::{OpenApiGenerateTerminalCommandRequest, OpenApiIssueTerminalSocketTicketRequest},
     response::{OpenApiGenerateTerminalCommandResponse, OpenApiIssueTerminalSocketTicketResponse},
@@ -57,13 +57,16 @@ pub async fn generate_command(
         Ok(Some(prompt)) => prompt,
         Ok(None) | Err(_) => return prompt_render_error_response(),
     };
+    let config = match state
+        .llm_router
+        .route_text(&request.workspace_code, request.model_code.as_deref())
+    {
+        Ok(config) => config,
+        Err(error) => return llm_runtime_error_response(LlmRuntimeError::model_resolution(error)),
+    };
     match state
         .llm_runtime
-        .text_generation_call(LlmTextGenerationCallCommand {
-            workspace_code: request.workspace_code,
-            model_code: request.model_code,
-            prompt,
-        })
+        .text_generation_call_with_config(config, prompt)
         .await
     {
         Ok(result) => Json(ApiResponse::success(

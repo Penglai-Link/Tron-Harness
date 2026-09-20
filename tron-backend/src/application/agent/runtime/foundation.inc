@@ -5,7 +5,7 @@ use std::{
 };
 
 use crate::{
-    application::chat_auto_model_router::ChatAutoModelRouter,
+    application::model_router::AgentModelRouter,
     application::short_term_memory::{
         ModelResponseTranscriptFacts, PreparedModelContext, ShortTermMemoryService,
     },
@@ -75,7 +75,7 @@ pub struct ReactAgentBuilder {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
-    auto_model_router: Option<ChatAutoModelRouter>,
+    auto_model_router: Option<AgentModelRouter>,
 }
 
 impl ReactAgentBuilder {
@@ -98,7 +98,7 @@ impl ReactAgentBuilder {
         self
     }
 
-    pub fn with_auto_model_router(mut self, router: Option<ChatAutoModelRouter>) -> Self {
+    pub fn with_auto_model_router(mut self, router: Option<AgentModelRouter>) -> Self {
         self.auto_model_router = router;
         self
     }
@@ -120,5 +120,5 @@ pub struct ReactAgent {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
-    auto_model_router: Option<ChatAutoModelRouter>,
+    auto_model_router: Option<AgentModelRouter>,
 }

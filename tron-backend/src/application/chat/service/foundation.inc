@@ -1,13 +1,13 @@
 use std::{
     collections::{BTreeMap, BTreeSet},
     sync::{
-        Arc, Mutex, OnceLock,
         atomic::{AtomicU64, Ordering},
+        Arc, Mutex, OnceLock,
     },
 };
 
-use base64::{Engine as _, engine::general_purpose::STANDARD as BASE64};
-use serde_json::{Value, json};
+use base64::{engine::general_purpose::STANDARD as BASE64, Engine as _};
+use serde_json::{json, Value};
 
 use crate::{
     application::{
@@ -21,6 +21,7 @@ use crate::{
             SendChatMessageCommand, SteerChatMessageCommand, UpdateChatSessionCommand,
         },
         llm::LlmRuntimeService,
+        model_router::LlmModelRouter,
         project::ProjectService,
         prompt::PromptService,
         resource::{ChatSessionAttachmentCreateCommand, ResourceService},
@@ -35,6 +36,7 @@ use crate::{
     domain::model_provider::{ModelSelection, ProviderModelQuality},
     domain::resource::{ChatSessionAttachmentRecord, ResourceError},
     shared::{
+        event_bus::EventBusHandle,
         id::{SnowflakeIdProvider, SnowflakedSnowflakeIdProvider},
         time::current_timestamp,
     },
@@ -42,7 +44,7 @@ use crate::{
 
 use super::{
     attachments::normalize_chat_attachments,
-    title::{DEFAULT_MANUAL_SESSION_TITLE, should_generate_manual_session_title},
+    title::{should_generate_manual_session_title, DEFAULT_MANUAL_SESSION_TITLE},
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
@@ -55,6 +57,8 @@ static CHAT_SERVICE_COORDINATOR_NAMESPACE: AtomicU64 = AtomicU64::new(1);
 pub struct ChatService {
     repository: Arc<Mutex<Box<dyn ChatRepository>>>,
     pub(super) prompt_service: Option<PromptService>,
+    pub(super) llm_router: Option<LlmModelRouter>,
+    pub(super) event_bus: EventBusHandle,
     resources: Option<ResourceService>,
     projects: Option<ProjectService>,
     id_provider: Arc<dyn SnowflakeIdProvider>,
@@ -82,6 +86,8 @@ impl ChatService {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             prompt_service: None,
+            llm_router: None,
+            event_bus: EventBusHandle::disabled(),
             resources: None,
             projects: None,
             id_provider,
@@ -95,6 +101,8 @@ impl ChatService {
         Self {
             repository: self.repository.clone(),
             prompt_service: self.prompt_service.clone(),
+            llm_router: self.llm_router.clone(),
+            event_bus: self.event_bus.clone(),
             resources: self.resources.clone(),
             projects: self.projects.clone(),
             id_provider,
@@ -120,6 +128,16 @@ impl ChatService {
 
     pub fn with_prompt_service(mut self, prompt_service: PromptService) -> Self {
         self.prompt_service = Some(prompt_service);
+        self
+    }
+
+    pub fn with_llm_router(mut self, router: LlmModelRouter) -> Self {
+        self.llm_router = Some(router);
+        self
+    }
+
+    pub fn with_event_bus(mut self, event_bus: EventBusHandle) -> Self {
+        self.event_bus = event_bus;
         self
     }
 }

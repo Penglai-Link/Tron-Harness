@@ -48,6 +48,10 @@ pub fn translate_agui_event(stream_key: &str, event: &BusEvent) -> Option<AgentA
                 | "failureCode"
                 | "usage_audit_json"
                 | "usage_estimate_json"
+                | "code"
+                | "message"
+                | "runCode"
+                | "sessionCode"
         ) {
             metadata.insert(field.key.clone(), field.value.clone());
         }
@@ -245,6 +249,23 @@ pub fn translate_protocol_events(
                 "runId": run_code,
                 "code": payload_value(event, "failureCode"),
                 "message": event.summary.clone().unwrap_or_else(|| "agent run failed".into()),
+                "timestamp": timestamp,
+            }),
+        )],
+        CanonicalRuntimeEvent::SessionTitleGenerationFailed => vec![protocol_event(
+            "CUSTOM",
+            json!({
+                "type": "CUSTOM",
+                "name": "tron.session.title_generation_failed",
+                "value": {
+                    "type": "SESSION_TITLE_GENERATION_FAILED",
+                    "sessionCode": payload_value(event, "sessionCode").unwrap_or_else(|| stream_key.to_string()),
+                    "runCode": payload_value(event, "runCode").unwrap_or_else(|| run_code.clone()),
+                    "code": payload_value(event, "code"),
+                    "message": payload_value(event, "message").or_else(|| event.summary.clone()),
+                },
+                "threadId": stream_key,
+                "runId": run_code,
                 "timestamp": timestamp,
             }),
         )],
@@ -543,6 +564,39 @@ mod tests {
         let protocol_events = translate_protocol_events("SESSION-1", &event);
         assert_eq!(protocol_events[0].sse_event, "RUN_ERROR");
         assert_eq!(protocol_events[0].data["code"], "tool_schema_over_budget");
+    }
+
+    #[test]
+    fn title_generation_failure_translates_to_custom_protocol_event() {
+        let event = BusEvent::from_draft(
+            BusEventDraft::agui(
+                "agent.session_title_generation_failed",
+                "chat.title_generation",
+            )
+            .outcome(BusOutcome::Failure)
+            .subject("agent_run", "RUN-1")
+            .stream_key("SESSION-1")
+            .payload_field("sessionCode", "SESSION-1")
+            .payload_field("runCode", "RUN-1")
+            .payload_field("code", "LLM_MODEL_UNAVAILABLE")
+            .payload_field("message", "no temporary text model"),
+            &FixedSnowflakeIdProvider::new(1),
+            &EventBusConfig::default(),
+        )
+        .expect("event should validate");
+
+        let protocol_events = translate_protocol_events("SESSION-1", &event);
+        assert_eq!(protocol_events.len(), 1);
+        assert_eq!(protocol_events[0].sse_event, "CUSTOM");
+        assert_eq!(
+            protocol_events[0].data["name"],
+            "tron.session.title_generation_failed"
+        );
+        assert_eq!(
+            protocol_events[0].data["value"]["code"],
+            "LLM_MODEL_UNAVAILABLE"
+        );
+        assert_eq!(protocol_events[0].data["runId"], "RUN-1");
     }
 }
 

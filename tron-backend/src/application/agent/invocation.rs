@@ -52,7 +52,7 @@ pub struct AgentInvocationService {
     short_term_memory: Option<ShortTermMemoryService>,
     prompt_service: Option<PromptService>,
     auto_model_route: Option<AutoModelRouteContext>,
-    auto_model_router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+    auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
     active_runs: ActiveRunRegistry,
 }
 
@@ -103,7 +103,7 @@ impl AgentInvocationService {
     pub fn with_auto_model_route(
         mut self,
         route: Option<AutoModelRouteContext>,
-        router: Option<crate::application::chat_auto_model_router::ChatAutoModelRouter>,
+        router: Option<crate::application::model_router::AgentModelRouter>,
     ) -> Self {
         self.auto_model_route = route;
         self.auto_model_router = router;

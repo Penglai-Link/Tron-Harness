@@ -330,11 +330,7 @@ async fn text_generation_call_uses_resolved_model_and_returns_output() {
     );
 
     let result = service
-        .text_generation_call(LlmTextGenerationCallCommand {
-            workspace_code: "TRON_CORE".into(),
-            model_code: Some("MODEL-TEXT".into()),
-            prompt: "summarize this conversation".into(),
-        })
+        .text_generation_call_with_config(text_config(), "summarize this conversation".into())
         .await
         .expect("text generation call should succeed");
 

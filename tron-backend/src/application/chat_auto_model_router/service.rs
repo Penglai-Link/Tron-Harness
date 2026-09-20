@@ -16,6 +16,7 @@ struct Candidate {
     config: AgentModelConfig,
     key: String,
     provider: bool,
+    prefers_responses: bool,
 }
 
 #[derive(Clone)]
@@ -180,11 +181,13 @@ impl ChatAutoModelRouter {
                 .map_err(|error| error.to_string())?
             {
                 config.reasoning_effort = reasoning_effort;
+                let prefers_responses = config.protocol == crate::domain::agent::AgentModelProtocol::Responses;
                 candidates.push(Candidate {
                     key: candidate_key(&option.selection),
                     selection: option.selection,
                     config,
                     provider: true,
+                    prefers_responses,
                 });
             }
         }
@@ -217,6 +220,7 @@ impl ChatAutoModelRouter {
                 selection,
                 config,
                 provider: false,
+                prefers_responses: false,
             });
         }
         Ok(candidates)
@@ -239,7 +243,7 @@ fn choose_initial_candidate(
         pool
     };
     pool.into_iter()
-        .max_by_key(|candidate| rendezvous_score(workspace_code, session_code, agent_code, &candidate.key))
+        .max_by_key(|candidate| (u8::from(candidate.prefers_responses), rendezvous_score(workspace_code, session_code, agent_code, &candidate.key)))
         .cloned()
 }
 

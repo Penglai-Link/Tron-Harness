@@ -9,6 +9,7 @@ pub mod mcp;
 pub mod memory;
 pub mod model;
 pub mod model_provider;
+pub mod model_router;
 pub mod navigation;
 pub mod open_app;
 pub mod prompt;
