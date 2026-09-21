@@ -11,7 +11,7 @@ use crate::{
     application::workspace::WorkspaceService,
     domain::{
         app::{AppError, AppStatus},
-        workspace::{WorkspaceError, WorkspaceStatus},
+        workspace::WorkspaceError,
     },
     shared::random::random_base64url,
 };
@@ -62,7 +62,7 @@ impl TerminalService {
         let user_code = required(command.user_code, TerminalError::UserRequired)?;
         let (app_code, current_directory) =
             self.resolve_terminal_directory(&workspace_code, command.app_code)?;
-        self.authorize_workspace_user(&workspace_code, &user_code)?;
+        self.authorize_workspace(&workspace_code)?;
         let expires_at = Utc::now().timestamp_millis() + TERMINAL_TICKET_TTL_MILLIS;
         let ticket = random_base64url(32);
         let authorization = TerminalSessionAuthorization {
@@ -142,26 +142,14 @@ impl TerminalService {
         Ok(record.authorization)
     }
 
-    pub fn authorize_workspace_user(
-        &self,
-        workspace_code: &str,
-        user_code: &str,
-    ) -> Result<(), TerminalError> {
+    pub fn authorize_workspace(&self, workspace_code: &str) -> Result<(), TerminalError> {
         let workspace_code = required(workspace_code.to_owned(), TerminalError::WorkspaceRequired)?;
-        let user_code = required(user_code.to_owned(), TerminalError::UserRequired)?;
-        let workspace = self
+        let is_active = self
             .workspaces
-            .get_workspace(&workspace_code)
+            .workspace_is_active(&workspace_code)
             .map_err(map_workspace_error)?;
-        if workspace.status != WorkspaceStatus::Active {
+        if !is_active {
             return Err(TerminalError::WorkspaceArchived);
-        }
-        let has_access = self
-            .workspaces
-            .user_has_effective_access(&workspace_code, &user_code)
-            .map_err(map_workspace_error)?;
-        if !has_access {
-            return Err(TerminalError::WorkspaceAccessDenied);
         }
         Ok(())
     }
@@ -202,13 +190,10 @@ fn map_workspace_error(error: WorkspaceError) -> TerminalError {
         WorkspaceError::NotFound | WorkspaceError::InvalidWorkspaceCode => {
             TerminalError::WorkspaceNotFound
         }
-        WorkspaceError::InvalidAccessUser => TerminalError::WorkspaceAccessDenied,
         WorkspaceError::DuplicateWorkspaceCode
         | WorkspaceError::WorkspaceNameRequired
         | WorkspaceError::InvalidHierarchy
         | WorkspaceError::ArchivedMutationDenied
-        | WorkspaceError::InvalidAccessRole
-        | WorkspaceError::DuplicateAccessGrant
         | WorkspaceError::StorageFailure => TerminalError::StorageFailure,
     }
 }

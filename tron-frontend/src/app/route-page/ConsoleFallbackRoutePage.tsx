@@ -1,4 +1,4 @@
-import { AuthUserMenuPanel, useAuthSession } from "@/domain/auth";
+import { AuthUserMenuPanel } from "@/domain/auth";
 import { tronNavigation, TronNavItem, TronShell } from "@/shared";
 import { useLocation } from "react-router";
 import ConsoleFallbackPage from "./ConsoleFallbackPage";
@@ -23,12 +23,9 @@ export function resolveActiveItem(pathname: string) {
 
 export default function ConsoleFallbackRoutePage() {
   const { pathname } = useLocation();
-  const { session } = useAuthSession();
-
   return (
     <TronShell
       activeItem={resolveActiveItem(pathname)?.label ?? "Apps"}
-      roleCodes={session?.user.roleCodes}
       userMenuContent={<AuthUserMenuPanel />}
     >
       <ConsoleFallbackPage />

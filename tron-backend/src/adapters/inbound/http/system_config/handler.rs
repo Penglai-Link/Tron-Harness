@@ -6,24 +6,19 @@ use axum::{
 };
 
 use crate::{
-    adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::system_config::SystemConfigService,
     response::{ApiResponse, EmptyData},
 };
 
 use super::{
-    error_mapper::{admin_required_response, system_config_error_response},
+    error_mapper::system_config_error_response,
     request::UpdateSystemConfigRequest,
 };
 
 pub async fn get_system_config(
     State(service): State<SystemConfigService>,
-    auth: RequestAuthContext,
 ) -> Response {
-    if !auth.user().role_codes.iter().any(|role| role == "ADMIN") {
-        return admin_required_response();
-    }
     match service.get() {
         Ok(document) => Json(ApiResponse::success(document)).into_response(),
         Err(error) => system_config_error_response(error),
@@ -32,12 +27,8 @@ pub async fn get_system_config(
 
 pub async fn update_system_config(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Json(request): Json<UpdateSystemConfigRequest>,
 ) -> Response {
-    if !auth.user().role_codes.iter().any(|role| role == "ADMIN") {
-        return admin_required_response();
-    }
     match state.system_config.update(
         &request.revision,
         request.changes,

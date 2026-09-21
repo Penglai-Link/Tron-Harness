@@ -1,1 +1,1 @@
-export * from "./AuthTopbarActions";
+export * from "./AuthUserMenuPanel";

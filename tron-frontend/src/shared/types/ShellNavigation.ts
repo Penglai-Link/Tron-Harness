@@ -13,6 +13,5 @@ export interface TronNavSection {
   id?: string;
   label: string;
   items: TronNavItem[];
-  requiredRoleCodes?: string[];
   translationKey: string;
 }

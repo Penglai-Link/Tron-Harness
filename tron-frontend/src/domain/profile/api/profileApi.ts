@@ -17,6 +17,7 @@ export interface BootstrapProfileStatus {
   hasProfiles: boolean;
   activeProfileId: string | null;
   activeProfile: PersonAiProfile | null;
+  avatarUrl: string | null;
 }
 
 export interface PersonAiAuthorizationSession {
@@ -39,7 +40,6 @@ export interface PersonAiAuthorizationPollResult {
   textVerified: boolean | null;
   embeddingVerified: boolean | null;
   profileId: string | null;
-  restartRequired: boolean;
 }
 
 export const profileApiEndpoints = {
@@ -89,6 +89,13 @@ export function registerProfile(personAiUserId: string, personAiUsername: string
 
 export function activateProfile(profileId: string) {
   return requestApi<PersonAiProfile>(profileApiEndpoints.activate, {
+    retryOnUnauthorized: false,
+    pathParams: { profileId },
+  });
+}
+
+export function removeProfile(profileId: string) {
+  return requestApi<Record<string, never>>("DELETE /api/v1/profiles/{profileId}", {
     retryOnUnauthorized: false,
     pathParams: { profileId },
   });

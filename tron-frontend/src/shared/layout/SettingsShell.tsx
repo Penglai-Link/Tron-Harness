@@ -32,7 +32,6 @@ interface SettingsNavGroup {
   groupKey: string;
   items: readonly SettingsNavItem[];
   label: string;
-  requiredRoleCodes?: readonly string[];
   translationKey: string;
 }
 
@@ -41,7 +40,6 @@ interface SettingsShellProps {
   children: ReactNode;
   contentClassName?: string;
   items: readonly SettingsNavGroup[];
-  roleCodes?: readonly string[];
 }
 
 const settingsReturnToStorageKey = "tron.settings.returnTo";
@@ -61,24 +59,11 @@ function resolveReturnTo(state: unknown) {
   return "/apps";
 }
 
-export function SettingsShell({ activeItem, children, contentClassName, items, roleCodes }: SettingsShellProps) {
+export function SettingsShell({ activeItem, children, contentClassName, items }: SettingsShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const location = useLocation();
   const returnTo = resolveReturnTo(location.state);
-  const visibleItems = useMemo(
-    () => items.filter((group) => {
-      if (!group.requiredRoleCodes?.length) {
-        return true;
-      }
-
-      if (!roleCodes) {
-        return true;
-      }
-
-      return group.requiredRoleCodes.some((roleCode) => roleCodes.includes(roleCode));
-    }),
-    [items, roleCodes],
-  );
+  const visibleItems = useMemo(() => items, [items]);
   const flatItems = useMemo(() => visibleItems.flatMap((group) => group.items), [visibleItems]);
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>(() => (
     Object.fromEntries(visibleItems.map((group) => [group.groupKey, false]))

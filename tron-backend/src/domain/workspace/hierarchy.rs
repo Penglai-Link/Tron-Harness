@@ -10,13 +10,6 @@ pub enum WorkspaceStatus {
     Archived,
 }
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
-pub enum EffectiveWorkspaceAccessSource {
-    Direct,
-    Role,
-    DirectAndRole,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Workspace {
     pub id: SnowflakeId,
@@ -41,9 +34,6 @@ pub struct WorkspaceTreeNode {
     pub depth: usize,
     pub status: WorkspaceStatus,
     pub child_count: usize,
-    pub direct_user_count: usize,
-    pub role_grant_count: usize,
-    pub effective_user_count: usize,
     pub children: Vec<WorkspaceTreeNode>,
 }
 
@@ -79,63 +69,9 @@ pub struct WorkspaceDetail {
     pub status: WorkspaceStatus,
     pub path: Vec<WorkspaceLineageItem>,
     pub children: Vec<WorkspaceTreeNode>,
-    pub direct_user_count: usize,
-    pub role_grant_count: usize,
-    pub effective_user_count: usize,
     pub created_at: String,
     pub updated_at: String,
     pub archived_at: Option<String>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkspaceUserAccess {
-    pub user_code: String,
-    pub is_owner: bool,
-    pub granted_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceUserAccessListItem {
-    pub user_code: String,
-    pub display_name: String,
-    pub email: String,
-    pub is_owner: bool,
-    pub granted_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct WorkspaceRoleAccess {
-    pub role_code: String,
-    pub granted_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceRoleAccessListItem {
-    pub role_code: String,
-    pub role_name: String,
-    pub matched_user_count: usize,
-    pub granted_at: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceEffectiveUser {
-    pub user_code: String,
-    pub display_name: String,
-    pub email: String,
-    pub source: EffectiveWorkspaceAccessSource,
-    pub matched_role_codes: Vec<String>,
-    pub is_owner: bool,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct WorkspaceStatistics {
-    pub total_workspaces: usize,
-    pub active_workspaces: usize,
-    pub direct_user_grants: usize,
-    pub role_grants: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -160,7 +96,6 @@ pub struct WorkspaceSwitcherSecondarySpace {
     pub status: WorkspaceStatus,
     pub depth: usize,
     pub child_count: usize,
-    pub effective_user_count: usize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
@@ -197,14 +132,6 @@ pub struct WorkspaceListQuery {
     pub root_only: Option<bool>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceAccessListQuery {
-    pub current: Option<usize>,
-    pub size: Option<usize>,
-    pub search: Option<String>,
-}
-
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum WorkspaceError {
     NotFound,
@@ -213,9 +140,6 @@ pub enum WorkspaceError {
     WorkspaceNameRequired,
     InvalidHierarchy,
     ArchivedMutationDenied,
-    InvalidAccessUser,
-    InvalidAccessRole,
-    DuplicateAccessGrant,
     StorageFailure,
 }
 
@@ -230,9 +154,6 @@ impl fmt::Display for WorkspaceError {
             Self::ArchivedMutationDenied => {
                 formatter.write_str("archived workspace cannot be modified")
             }
-            Self::InvalidAccessUser => formatter.write_str("invalid workspace access user"),
-            Self::InvalidAccessRole => formatter.write_str("invalid workspace access role"),
-            Self::DuplicateAccessGrant => formatter.write_str("duplicate workspace access grant"),
             Self::StorageFailure => formatter.write_str("workspace storage failure"),
         }
     }

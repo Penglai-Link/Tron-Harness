@@ -116,12 +116,6 @@ fn tool_key_for_platform(tool_code: &'static str, suffix: &'static str) -> &'sta
         ("platform.mcp.delete", "description") => {
             "agent.toolCatalog.tools.platform.mcp.delete.description"
         }
-        ("platform.open_app.get", "description") => {
-            "agent.toolCatalog.tools.platform.open_app.get.description"
-        }
-        ("platform.open_app.disable", "description") => {
-            "agent.toolCatalog.tools.platform.open_app.disable.description"
-        }
         ("platform.resource.get", "description") => {
             "agent.toolCatalog.tools.platform.resource.get.description"
         }

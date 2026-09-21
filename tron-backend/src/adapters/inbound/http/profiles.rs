@@ -3,7 +3,7 @@ use axum::{
     extract::{Path, State},
     http::StatusCode,
     response::{IntoResponse, Response},
-    routing::{get, post},
+    routing::{delete, get, post},
 };
 use crate::{
     app::AppState,
@@ -22,27 +22,41 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/profiles/{profile_id}/activate",
             post(activate_profile),
         )
+        .route("/api/v1/profiles/{profile_id}", delete(remove_profile))
         .route("/api/v1/profiles/pending", post(create_pending_profile))
-        .route("/api/v1/profiles/prepare-switch", post(prepare_profile_switch))
 }
 
-async fn prepare_profile_switch(State(state): State<AppState>) -> Response {
-    match state.active_runs.request_stop_all() {
-        Ok(stopped) => Json(ApiResponse::success(serde_json::json!({ "stopped": stopped })))
-            .into_response(),
-        Err(_) => generic_profile_error(
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "PERSONAI_PROFILE_SWITCH_FAILED",
-            "active runs could not be interrupted before switching profiles",
-        ),
-    }
-}
-
-async fn bootstrap_status(State(profiles): State<ProfileRegistryService>) -> Response {
-    match profiles.bootstrap_status() {
-        Ok(status) => Json(ApiResponse::success(status)).into_response(),
+async fn remove_profile(
+    State(profiles): State<ProfileRegistryService>,
+    Path(profile_id): Path<String>,
+) -> Response {
+    match profiles.remove(&profile_id) {
+        Ok(()) => Json(ApiResponse::success(serde_json::json!({}))).into_response(),
         Err(error) => profile_error_response(error),
     }
+}
+
+async fn bootstrap_status(State(state): State<AppState>) -> Response {
+    let mut status = match state.profiles.bootstrap_status() {
+        Ok(status) => status,
+        Err(error) => return profile_error_response(error),
+    };
+
+    if let Some(profile) = status.active_profile.as_ref() {
+        let username = profile.person_ai_username.clone();
+        if let Ok(account) = state.model_providers.get_person_ai_account_info().await {
+            if account
+                .username
+                .as_deref()
+                .map(str::trim)
+                .is_some_and(|account_username| account_username == username)
+            {
+                status.avatar_url = account.avatar_url;
+            }
+        }
+    }
+
+    Json(ApiResponse::success(status)).into_response()
 }
 
 async fn list_profiles(State(profiles): State<ProfileRegistryService>) -> Response {

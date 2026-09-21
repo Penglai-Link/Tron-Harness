@@ -1,4 +1,4 @@
-import { useAuthSession, AuthUserMenuPanel } from "@/domain/auth";
+import { AuthUserMenuPanel } from "@/domain/auth";
 import { settingsNavigation } from "@/domain/settings/constants/settingsNavigation";
 import {
   SettingsShell,
@@ -14,6 +14,7 @@ import {
 import { useTranslation } from "react-i18next";
 import {
   matchPath,
+  Navigate,
   UNSAFE_LocationContext,
   useLocation,
   useNavigationType,
@@ -96,8 +97,13 @@ function CachedRouteLocationProvider({
 
 export default function AppRoutePage() {
   const { pathname, search } = useLocation();
-  const { session } = useAuthSession();
   const { t } = useTranslation();
+  const chatSessionCode =
+    pathname === "/chats"
+      ? new URLSearchParams(search).get("sessionCode")?.trim() ?? ""
+      : "";
+  const isBareChatsRoute = pathname === "/chats" && !chatSessionCode;
+
   const addTab = useTabStore((state) => state.addTab);
   const addToCache = useTabStore((state) => state.addToCache);
   const cachedTabsList = useTabStore((state) => state.cachedTabsList);
@@ -161,12 +167,10 @@ export default function AppRoutePage() {
   }, [activeTabId, cachedTabsList, search, useActiveLocationSearch]);
 
   useEffect(() => {
-    if (resolved && resolved.route.layout !== "settings") {
+    if (!isBareChatsRoute && resolved && resolved.route.layout !== "settings") {
       const currentPath = `${pathname}${search}`;
       const requestedSessionCode =
-        resolved.route.pageId === "chats.index"
-          ? new URLSearchParams(search).get("sessionCode")?.trim() ?? ""
-          : "";
+        resolved.route.pageId === "chats.index" ? chatSessionCode : "";
       const sessionActiveNav = requestedSessionCode
         ? `chat-session:${requestedSessionCode}`
         : undefined;
@@ -242,6 +246,10 @@ export default function AppRoutePage() {
     resolved?.route.pageId,
   ]);
 
+  if (isBareChatsRoute) {
+    return <Navigate replace to="/workspace" />;
+  }
+
   if (resolved?.route.layout === "settings") {
     const { route } = resolved;
     // Settings 页面不使用 keep-alive，直接渲染
@@ -250,7 +258,6 @@ export default function AppRoutePage() {
         activeItem={route.settingsNav ?? route.title}
         contentClassName={route.shellConfig?.contentClassName}
         items={settingsNavigation}
-        roleCodes={session?.user.roleCodes}
       >
         <SuspendedRoute>
           <resolved.Component key={routeRenderKey} />
@@ -271,7 +278,6 @@ export default function AppRoutePage() {
           ? t("shell:placeholders.search")
           : undefined
       }
-      roleCodes={session?.user.roleCodes}
       userMenuContent={<AuthUserMenuPanel />}
     >
       {resolved ? cachedRouteContents : <ConsoleFallbackPage />}

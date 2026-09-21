@@ -20,14 +20,12 @@ import {
   fetchPlatformVariables,
   revealPlatformVariable,
   updatePlatformVariable,
-  verifyStepUpPassword,
 } from "@/domain/variable/api";
 import {
   deletePlatformVariableRecord,
   listPlatformVariableRecords,
   revealPlatformVariableRecord,
   updatePlatformVariableRecord,
-  verifyStepUpPasswordRecord,
 } from "@/domain/variable/mock/data";
 import type { PlatformVariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -45,7 +43,6 @@ import {
   SensitiveDataBadge,
   SensitiveRevealIconButton,
   SensitiveValueCode,
-  StepUpRevealDialog,
   emptyPlatformVariableForm,
   findPlatformVariable,
   formatPlatformVariableTimestamp,
@@ -55,8 +52,6 @@ import {
   normalizePlatformVariableDescription,
   platformVariableFormFromRecord,
 } from "./platformVariablePageHelpers";
-
-type StepUpIntent = "edit" | "reveal";
 
 export function PlatformVariableDetailsPage() {
   const { t } = useTranslation(["pages"]);
@@ -73,9 +68,6 @@ export function PlatformVariableDetailsPage() {
   const [deleting, setDeleting] = useState(false);
   const [editing, setEditing] = useState(false);
   const [revealedValue, setRevealedValue] = useState("");
-  const [stepUpIntent, setStepUpIntent] = useState<StepUpIntent | null>(null);
-  const [revealPending, setRevealPending] = useState(false);
-  const [revealError, setRevealError] = useState("");
 
   useEffect(() => {
     if (!variableKey) return;
@@ -91,8 +83,6 @@ export function PlatformVariableDetailsPage() {
         if (active) {
           setRecord(findPlatformVariable(records, variableKey));
           setRevealedValue("");
-          setStepUpIntent(null);
-          setRevealError("");
         }
       } catch (error) {
         if (active) toast.error(error instanceof Error ? error.message : t("pages:variablesPlatform.errors.load", "Platform variable could not be loaded"));
@@ -115,15 +105,7 @@ export function PlatformVariableDetailsPage() {
 
   useEffect(() => {
     if (!record) return;
-    if (startsInEditMode && isSensitiveRecord(record)) {
-      setEditing(false);
-      setStepUpIntent("edit");
-      setRevealError("");
-      return;
-    }
-
     setEditing(startsInEditMode);
-    if (!startsInEditMode) setStepUpIntent(null);
   }, [record, startsInEditMode]);
 
   if (!variableKey) {
@@ -136,32 +118,14 @@ export function PlatformVariableDetailsPage() {
 
   function enterEditing() {
     if (!record) return;
-    if (isSensitiveRecord(record)) {
-      setEditing(false);
-      setRevealedValue("");
-      setRevealError("");
-      setStepUpIntent("edit");
-      navigate(`${detailPath(record.key)}&mode=edit`, { replace: true });
-      return;
-    }
-
     setEditing(true);
     setRevealedValue("");
-    setStepUpIntent(null);
-    setRevealError("");
     navigate(`${detailPath(record.key)}&mode=edit`, { replace: true });
   }
 
   function exitEditing(key = variableKey) {
     setEditing(false);
-    setStepUpIntent(null);
     navigate(detailPath(key), { replace: true });
-  }
-
-  function cancelStepUp() {
-    setStepUpIntent(null);
-    setRevealError("");
-    if (startsInEditMode) navigate(detailPath(), { replace: true });
   }
 
   function resetDraft() {
@@ -200,8 +164,6 @@ export function PlatformVariableDetailsPage() {
       toast.success(t("pages:variables.messages.saved", "{{key}} saved", { key: saved.key }));
       setRecord(saved);
       setRevealedValue("");
-      setStepUpIntent(null);
-      setRevealError("");
       exitEditing(saved.key);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t("pages:variables.errors.save", "Platform variable could not be saved"));
@@ -228,50 +190,17 @@ export function PlatformVariableDetailsPage() {
     }
   }
 
-  async function revealSensitiveValue(password: string) {
+  async function revealSensitiveValue() {
     if (!record) return;
-    const intent = stepUpIntent ?? "reveal";
-    setRevealPending(true);
-    setRevealError("");
     try {
-      const stepUp = dataSource === "api"
-        ? await verifyStepUpPassword({
-          password,
-          target: {
-            scope: "platform",
-            variableKey: record.key,
-          },
-        })
-        : verifyStepUpPasswordRecord({
-          password,
-          target: {
-            scope: "platform",
-            variableKey: record.key,
-          },
-        });
       const revealed = dataSource === "api"
         ? await revealPlatformVariable({
           variableKey: record.key,
-          stepUpToken: stepUp.stepUpToken,
         })
-        : revealPlatformVariableRecord(record.key, stepUp.stepUpToken);
-      if (intent === "edit") {
-        setForm({
-          ...platformVariableFormFromRecord(record),
-          value: revealed.value,
-          valueMode: "REPLACE",
-        });
-        setEditing(true);
-        setRevealedValue("");
-      } else {
-        setRevealedValue(revealed.value);
-      }
-      setStepUpIntent(null);
-      setRevealError("");
+        : revealPlatformVariableRecord(record.key);
+      setRevealedValue(revealed.value);
     } catch (error) {
-      setRevealError(error instanceof Error ? error.message : "Sensitive value could not be revealed");
-    } finally {
-      setRevealPending(false);
+      toast.error(error instanceof Error ? error.message : "Sensitive value could not be revealed");
     }
   }
 
@@ -374,8 +303,7 @@ export function PlatformVariableDetailsPage() {
                             if (revealedValue) {
                               setRevealedValue("");
                             } else {
-                              setRevealError("");
-                              setStepUpIntent("reveal");
+                              void revealSensitiveValue();
                             }
                           }}
                         />
@@ -395,14 +323,6 @@ export function PlatformVariableDetailsPage() {
           )}
         </SurfaceCard>
       </div>
-      <StepUpRevealDialog
-        error={revealError}
-        onCancel={cancelStepUp}
-        onSubmit={(password) => void revealSensitiveValue(password)}
-        open={stepUpIntent !== null}
-        pending={revealPending}
-        variableKey={record.key}
-      />
     </>
   );
 }

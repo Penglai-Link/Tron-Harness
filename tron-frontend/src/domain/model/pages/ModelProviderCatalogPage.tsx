@@ -7,15 +7,27 @@ import { DataTable, type DataTableColumn } from "@/components/data-table";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { SelectItem } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { useToast } from "@/components/ui/toast";
+import { SelectInput } from "@/components/forms";
 import { PageHeader, useLocaleFormatters } from "@/shared";
 import {
   fetchProviderCatalog,
+  type ProviderCatalogProtocol,
   type ProviderCatalogModel,
 } from "@/domain/model/api";
+import type { ProviderModelQuality } from "@/domain/model/model";
 
 const personAiProviderCode = "PersonAi" as const;
+const catalogProtocols: ProviderCatalogProtocol[] = [
+  "CHAT_COMPLETIONS",
+  "RESPONSES",
+  "EMBEDDINGS",
+];
+const catalogQualities = ["High", "Middle", "Low"] as const;
+type CatalogProtocolFilter = "ALL" | ProviderCatalogProtocol;
+type CatalogQualityFilter = "ALL" | "UNKNOWN" | ProviderModelQuality;
 
 function ColumnHeader({ label, help }: { label: string; help: string }) {
   return (
@@ -33,6 +45,8 @@ export function ModelProviderCatalogPage() {
   const { formatDateTime, formatNumber } = useLocaleFormatters();
   const [records, setRecords] = useState<ProviderCatalogModel[]>([]);
   const [loading, setLoading] = useState(true);
+  const [protocolFilter, setProtocolFilter] = useState<CatalogProtocolFilter>("ALL");
+  const [qualityFilter, setQualityFilter] = useState<CatalogQualityFilter>("ALL");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -56,6 +70,20 @@ export function ModelProviderCatalogPage() {
   const formatCoefficient = useCallback(
     (value: number) => formatNumber(value, { maximumFractionDigits: 6 }),
     [formatNumber],
+  );
+
+  const filteredRecords = useMemo(
+    () => records.filter((model) => {
+      const matchesProtocol =
+        protocolFilter === "ALL" || model.protocols.includes(protocolFilter);
+      const matchesQuality =
+        qualityFilter === "ALL"
+        || (qualityFilter === "UNKNOWN"
+          ? model.qualityType === null
+          : model.qualityType === qualityFilter);
+      return matchesProtocol && matchesQuality;
+    }),
+    [protocolFilter, qualityFilter, records],
   );
 
   const columns = useMemo<DataTableColumn<ProviderCatalogModel>[]>(
@@ -92,10 +120,10 @@ export function ModelProviderCatalogPage() {
       },
       {
         id: "protocols",
-        header: "Protocol",
+        header: t("modelProviders.columns.protocol"),
         render: (model) => model.protocols?.map((protocol) => (
           <Badge key={protocol} className="mr-1" variant="outline">
-            {protocol === "Responses" ? "Responses" : "Chat Completions"}
+            {t(`modelProviders.protocols.${protocol}`)}
           </Badge>
         )),
       },
@@ -245,6 +273,8 @@ export function ModelProviderCatalogPage() {
               <Spinner size={16} aria-hidden="true" />
               {t("modelProviders.loading")}
             </span>
+          ) : records.length > 0 && filteredRecords.length === 0 ? (
+            t("modelProviders.empty.catalogFiltered")
           ) : (
             t("modelProviders.empty.catalog")
           )
@@ -254,18 +284,47 @@ export function ModelProviderCatalogPage() {
             {loading
               ? `${t("modelProviders.loading")}…`
               : t("modelProviders.pagination.catalog", {
-                  count: records.length,
+                  count: filteredRecords.length,
                 })}
           </span>
         }
         rowKey={(model) => `${model.catalogModelType}:${model.modelId ?? model.modelCode}`}
-        rows={loading ? [] : records}
+        rows={loading ? [] : filteredRecords}
         tableClassName="min-w-[1240px]"
         title={t("modelProviders.columns.catalogModels")}
         toolbar={
-          <InfoTooltip ariaLabel={t("modelProviders.aria.catalogHelp")}>
-            {t("modelProviders.help.catalog")}
-          </InfoTooltip>
+          <div className="flex w-full flex-wrap items-center justify-end gap-3">
+            <SelectInput
+              aria-label={t("modelProviders.filters.protocol")}
+              className="w-[160px]"
+              value={protocolFilter}
+              onValueChange={(value) => setProtocolFilter((value ?? "ALL") as CatalogProtocolFilter)}
+            >
+              <SelectItem value="ALL">{t("modelProviders.filters.allProtocols")}</SelectItem>
+              {catalogProtocols.map((protocol) => (
+                <SelectItem key={protocol} value={protocol}>
+                  {t(`modelProviders.protocols.${protocol}`)}
+                </SelectItem>
+              ))}
+            </SelectInput>
+            <SelectInput
+              aria-label={t("modelProviders.filters.quality")}
+              className="w-[140px]"
+              value={qualityFilter}
+              onValueChange={(value) => setQualityFilter((value ?? "ALL") as CatalogQualityFilter)}
+            >
+              <SelectItem value="ALL">{t("modelProviders.filters.allQualities")}</SelectItem>
+              {catalogQualities.map((quality) => (
+                <SelectItem key={quality} value={quality}>
+                  {t(`modelProviders.quality.${quality}`)}
+                </SelectItem>
+              ))}
+              <SelectItem value="UNKNOWN">{t("modelProviders.filters.unknownQuality")}</SelectItem>
+            </SelectInput>
+            <InfoTooltip ariaLabel={t("modelProviders.aria.catalogHelp")}>
+              {t("modelProviders.help.catalog")}
+            </InfoTooltip>
+          </div>
         }
       />
     </>

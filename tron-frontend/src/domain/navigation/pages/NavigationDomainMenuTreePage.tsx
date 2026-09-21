@@ -49,10 +49,6 @@ function menuTypeLabel(type: NavigationMenuType, text: ReturnType<typeof useNavi
   return text("types.internal", "内部页面", "Internal page");
 }
 
-function rolesFromInput(value: string) {
-  return [...new Set(value.split(",").map((role) => role.trim()).filter(Boolean))];
-}
-
 function TreeNode({
   item,
   level,
@@ -78,7 +74,7 @@ function TreeNode({
     <div>
       <div className="group flex items-center gap-2 rounded-xl px-2 py-2 hover:bg-[var(--color-hover-surface)]" style={{ marginLeft: `${Math.min(level, 3) * 18}px` }}>
         <FolderTree className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
-        <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="truncate text-sm font-medium">{item.translations[locale]}</span><Badge variant="default">{menuTypeLabel(item.menuType, text)}</Badge>{item.source === "BuiltIn" ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}</div><div className="mt-0.5 flex flex-wrap gap-2 text-xs text-[var(--color-on-surface-variant)]"><span className="font-mono">{item.menuCode}</span>{item.visibleRoles.length ? <span>{item.visibleRoles.join(", ")}</span> : <span>{text("tree.allUsers", "所有登录用户", "All signed-in users")}</span>}</div></div>
+        <div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><span className="truncate text-sm font-medium">{item.translations[locale]}</span><Badge variant="default">{menuTypeLabel(item.menuType, text)}</Badge>{item.source === "BuiltIn" ? <Badge variant="info">{text("status.builtIn", "内置", "Built-in")}</Badge> : null}</div><div className="mt-0.5 flex flex-wrap gap-2 text-xs text-[var(--color-on-surface-variant)]"><span className="font-mono">{item.menuCode}</span></div></div>
         <div className="flex shrink-0 items-center gap-0.5 opacity-70 transition-opacity group-hover:opacity-100"><Button size="icon" variant="ghost" className="size-8" disabled={siblingIndex === 0} aria-label={text("aria.moveUp", "上移", "Move up")} onClick={() => onMove(item, parentMenuCode, siblingIndex - 1)}><ArrowUp size={14} aria-hidden="true" /></Button><Button size="icon" variant="ghost" className="size-8" disabled={siblingIndex === siblingCount - 1} aria-label={text("aria.moveDown", "下移", "Move down")} onClick={() => onMove(item, parentMenuCode, siblingIndex + 1)}><ArrowDown size={14} aria-hidden="true" /></Button><Button size="icon" variant="ghost" className="size-8" disabled={item.children.length > 0} aria-label={text("aria.remove", `移除 ${item.menuCode}`, `Remove ${item.menuCode}`)} onClick={() => onRemove(item)}><Trash2 size={14} aria-hidden="true" /></Button></div>
       </div>
       {item.children.length ? <div className="space-y-1">{item.children.map((child, index) => <TreeNode key={child.menuCode} item={child} level={level + 1} siblingIndex={index} siblingCount={item.children.length} parentMenuCode={item.menuCode} onMove={onMove} onRemove={onRemove} locale={locale} text={text} />)}</div> : null}
@@ -105,7 +101,6 @@ export function NavigationDomainMenuTreePage() {
   const [position, setPosition] = useState("0");
   const [newMenuCode, setNewMenuCode] = useState("");
   const [newParentMenuCode, setNewParentMenuCode] = useState(ROOT_VALUE);
-  const [newVisibleRoles, setNewVisibleRoles] = useState("");
   const [copyPosition, setCopyPosition] = useState("0");
   const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -184,7 +179,6 @@ export function NavigationDomainMenuTreePage() {
     setNewMenuCode("");
     setNewParentMenuCode(ROOT_VALUE);
     setPosition("0");
-    setNewVisibleRoles("");
     setAddMenuOpen(true);
   }
 
@@ -200,10 +194,9 @@ export function NavigationDomainMenuTreePage() {
     if (!selectedDomainCode || !newMenuCode) return;
     setSaving(true);
     try {
-      const nextTree = await addNavigationMenuItem(selectedDomainCode, { menuCode: newMenuCode, parentMenuCode: newParentMenuCode === ROOT_VALUE ? null : newParentMenuCode, position: Number(position) || 0, visibleRoles: rolesFromInput(newVisibleRoles) });
+      const nextTree = await addNavigationMenuItem(selectedDomainCode, { menuCode: newMenuCode, parentMenuCode: newParentMenuCode === ROOT_VALUE ? null : newParentMenuCode, position: Number(position) || 0 });
       setTree(nextTree);
       setNewMenuCode("");
-      setNewVisibleRoles("");
       setAddMenuOpen(false);
       toast.success(text("messages.itemAdded", "菜单已加入领域", "Menu added to domain"));
     } catch (error) {
@@ -216,7 +209,7 @@ export function NavigationDomainMenuTreePage() {
   async function moveMenu(item: NavigationAdminTreeItem, parent: string | null, nextPosition: number) {
     if (!selectedDomainCode) return;
     try {
-      const nextTree = await updateNavigationMenuItem(selectedDomainCode, item.menuCode, { parentMenuCode: parent, position: nextPosition, visibleRoles: item.visibleRoles });
+      const nextTree = await updateNavigationMenuItem(selectedDomainCode, item.menuCode, { parentMenuCode: parent, position: nextPosition });
       setTree(nextTree);
     } catch (error) {
       toast.error(error instanceof Error ? error.message : text("errors.moveItem", "菜单移动失败", "Menu could not be moved"));
@@ -285,7 +278,7 @@ export function NavigationDomainMenuTreePage() {
           <form className="space-y-4" onSubmit={(event) => void addMenu(event)}>
             <Field label={text("fields.menu", "菜单", "Menu")} required><SelectInput value={newMenuCode} placeholder={text("tree.selectMenu", "选择菜单定义", "Select a menu definition")} onValueChange={(value) => { if (value) setNewMenuCode(value); }}>{availableMenus.length ? availableMenus.map((menu) => <SelectItem key={menu.menuCode} value={menu.menuCode}>{menu.translations[locale]} · {menu.menuCode}</SelectItem>) : <SelectItem disabled value="__NO_AVAILABLE_MENU__">{text("tree.noAvailableMenus", "暂无可加入的菜单", "No menus available")}</SelectItem>}</SelectInput></Field>
             <Field label={text("fields.parent", "父级分组", "Parent group")}><SelectInput value={newParentMenuCode} onValueChange={(value) => { if (value) setNewParentMenuCode(value); }}><SelectItem value={ROOT_VALUE}>{text("tree.root", "根节点", "Root")}</SelectItem>{groupOptions.map((item) => <SelectItem key={item.menuCode} value={item.menuCode}>{item.translations[locale]}</SelectItem>)}</SelectInput></Field>
-            <div className="grid grid-cols-2 gap-3"><Field label={text("fields.position", "位置", "Position")}><TextInput type="number" min="0" value={position} onChange={(event) => setPosition(event.target.value)} /></Field><Field label={text("fields.visibleRoles", "可见角色", "Visible roles")}><TextInput value={newVisibleRoles} placeholder="ADMIN" onChange={(event) => setNewVisibleRoles(event.target.value)} /></Field></div>
+            <Field label={text("fields.position", "位置", "Position")}><TextInput type="number" min="0" value={position} onChange={(event) => setPosition(event.target.value)} /></Field>
             <div className="flex justify-end gap-2"><Button type="button" variant="ghost" disabled={saving} onClick={() => setAddMenuOpen(false)}>{text("actions.cancel", "取消", "Cancel")}</Button><Button type="submit" disabled={!newMenuCode || saving} aria-busy={saving}><Plus size={15} aria-hidden="true" />{text("actions.add", "加入", "Add")}</Button></div>
           </form>
       </ModalDialog>

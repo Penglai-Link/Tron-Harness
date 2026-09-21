@@ -17,13 +17,11 @@ import {
   deletePlatformVariable,
   fetchPlatformVariables,
   revealPlatformVariable,
-  verifyStepUpPassword,
 } from "@/domain/variable/api";
 import {
   deletePlatformVariableRecord,
   listPlatformVariableRecords,
   revealPlatformVariableRecord,
-  verifyStepUpPasswordRecord,
 } from "@/domain/variable/mock/data";
 import type { PlatformVariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -42,7 +40,6 @@ import {
   SensitiveDataBadge,
   SensitiveRevealIconButton,
   SensitiveValueCode,
-  StepUpRevealDialog,
   formatPlatformVariableTimestamp,
   getSensitiveDisplayValue,
   getSensitiveState,
@@ -77,9 +74,7 @@ export function PlatformVariablesPage() {
   const [rowBusyKey, setRowBusyKey] = useState("");
   const [openRowMenu, setOpenRowMenu] = useState<RowMenuState | null>(null);
   const [revealedValues, setRevealedValues] = useState<Record<string, string>>({});
-  const [revealTargetKey, setRevealTargetKey] = useState("");
-  const [revealPending, setRevealPending] = useState(false);
-  const [revealError, setRevealError] = useState("");
+  const [revealPendingKey, setRevealPendingKey] = useState("");
   const rowMenuRef = useRef<HTMLDivElement | null>(null);
 
   const filteredRecords = useMemo(
@@ -95,9 +90,6 @@ export function PlatformVariablesPage() {
   const openMenuRow = openRowMenu
     ? records.find((record) => record.key === openRowMenu.variableKey) ?? null
     : null;
-  const revealTarget = revealTargetKey
-    ? records.find((record) => record.key === revealTargetKey) ?? null
-    : null;
 
   async function refreshPlatformVariables() {
     setLoading(true);
@@ -107,8 +99,7 @@ export function PlatformVariablesPage() {
         : listPlatformVariableRecords();
       setRecords(nextRecords);
       setRevealedValues({});
-      setRevealTargetKey("");
-      setRevealError("");
+      setRevealPendingKey("");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform variables could not be loaded"));
     } finally {
@@ -128,8 +119,7 @@ export function PlatformVariablesPage() {
         if (active) setRecords(nextRecords);
         if (active) {
           setRevealedValues({});
-          setRevealTargetKey("");
-          setRevealError("");
+          setRevealPendingKey("");
         }
       } catch (error) {
         if (active) toast.error(error instanceof Error ? error.message : pageT("errors.load", "Platform variables could not be loaded"));
@@ -239,50 +229,25 @@ export function PlatformVariablesPage() {
     });
   }
 
-  function openSensitiveReveal(record: PlatformVariableRecord) {
-    if (!isSensitiveRecord(record)) return;
-    setRevealTargetKey(record.key);
-    setRevealError("");
-  }
+  async function revealSensitiveValue(record: PlatformVariableRecord) {
+    if (!isSensitiveRecord(record) || revealPendingKey === record.key) return;
 
-  async function revealSensitiveValue(password: string) {
-    if (!revealTarget) return;
-
-    setRevealPending(true);
-    setRevealError("");
+    setRevealPendingKey(record.key);
     try {
-      const stepUp = dataSource === "api"
-        ? await verifyStepUpPassword({
-          password,
-          target: {
-            scope: "platform",
-            variableKey: revealTarget.key,
-          },
-        })
-        : verifyStepUpPasswordRecord({
-          password,
-          target: {
-            scope: "platform",
-            variableKey: revealTarget.key,
-          },
-        });
       const revealed = dataSource === "api"
         ? await revealPlatformVariable({
-          variableKey: revealTarget.key,
-          stepUpToken: stepUp.stepUpToken,
+          variableKey: record.key,
         })
-        : revealPlatformVariableRecord(revealTarget.key, stepUp.stepUpToken);
+        : revealPlatformVariableRecord(record.key);
 
       setRevealedValues((current) => ({
         ...current,
-        [revealTarget.key]: revealed.value,
+        [record.key]: revealed.value,
       }));
-      setRevealTargetKey("");
-      setRevealError("");
     } catch (error) {
-      setRevealError(error instanceof Error ? error.message : pageT("errors.reveal", "Sensitive value could not be revealed"));
+      toast.error(error instanceof Error ? error.message : pageT("errors.reveal", "Sensitive value could not be revealed"));
     } finally {
-      setRevealPending(false);
+      setRevealPendingKey("");
     }
   }
 
@@ -378,7 +343,7 @@ export function PlatformVariablesPage() {
                           if (revealedValue) {
                             hideSensitiveValue(row);
                           } else {
-                            openSensitiveReveal(row);
+                            void revealSensitiveValue(row);
                           }
                         }}
                       />
@@ -474,19 +439,6 @@ export function PlatformVariablesPage() {
           document.body,
         )
         : null}
-      {revealTarget ? (
-        <StepUpRevealDialog
-          error={revealError}
-          onCancel={() => {
-            setRevealTargetKey("");
-            setRevealError("");
-          }}
-          onSubmit={(password) => void revealSensitiveValue(password)}
-          open={Boolean(revealTarget)}
-          pending={revealPending}
-          variableKey={revealTarget.key}
-        />
-      ) : null}
     </>
   );
 }

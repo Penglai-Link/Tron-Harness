@@ -10,7 +10,7 @@ use std::{
 use chrono::DateTime;
 use crab_serverapi::{
     AuthorizedClientApi, AuthorizedClientContext, ServerApiError,
-    auth::{AccountClient, LoginClient, SessionRequest},
+    auth::{AccountClient, AccountInfo, LoginClient, SessionRequest},
     gateway::{
         ChatCompletionsClient, EmbeddingsClient, ProtocolType, QualityType, ResponsesClient,
     },
@@ -475,7 +475,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
             let mut distinct = BTreeMap::<String, ExternalCatalogModel>::new();
             for quality in [QualityType::High, QualityType::Middle, QualityType::Low] {
                 for model in client
-                    .list_models(&context, Some(quality))
+                    .list_models(&context, Some(quality), None, None)
                     .await
                     .map_err(remote_error)?
                 {
@@ -755,6 +755,18 @@ impl ModelProviderService {
             existing,
             catalog_model_count(&connection, ModelProviderCode::PersonAi)?,
         )])
+    }
+
+    /// Fetch the current Person-AI account information, including the latest
+    /// signed avatar URL. The SDK deliberately refreshes the credentials before
+    /// this call when necessary; callers must not persist the returned avatar URL.
+    pub async fn get_person_ai_account_info(&self) -> Result<AccountInfo, ModelProviderError> {
+        let credentials = self.active_credentials(ModelProviderCode::PersonAi).await?;
+        AccountClient::new(credentials.server_base_url.clone())
+            .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?
+            .get_info(&credentials.context())
+            .await
+            .map_err(remote_error)
     }
 
     pub fn set_person_ai_identity(
@@ -3425,6 +3437,9 @@ fn model_type_storage(model_type: ModelType) -> &'static str {
 
 #[cfg(test)]
 mod tests {
+    use crate::adapters::outbound::crypto::Sm4GcmVariableCipher;
+    use crate::config::VariableCryptoConfig;
+
     use super::*;
     use std::sync::atomic::{AtomicUsize, Ordering};
 

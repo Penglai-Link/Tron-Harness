@@ -28,7 +28,7 @@ use super::{
 
 pub async fn generate_command(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
+    _auth: RequestAuthContext,
     request: Result<Json<GenerateTerminalCommandRequest>, JsonRejection>,
 ) -> Response {
     let Json(request) = match request {
@@ -41,10 +41,7 @@ pub async fn generate_command(
             );
         }
     };
-    if let Err(error) = state
-        .terminal
-        .authorize_workspace_user(&request.workspace_code, &auth.user().user_code)
-    {
+    if let Err(error) = state.terminal.authorize_workspace(&request.workspace_code) {
         return terminal_error_response(error);
     }
     let runtime_values = terminal_command_runtime_values(&request.prompt);

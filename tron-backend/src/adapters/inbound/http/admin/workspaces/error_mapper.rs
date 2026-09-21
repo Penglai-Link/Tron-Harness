@@ -38,21 +38,6 @@ pub fn workspace_error_response(error: WorkspaceError) -> Response {
             "ADMIN_WORKSPACE_ARCHIVED_INVALID",
             "archived workspace cannot be modified in this operation",
         ),
-        WorkspaceError::InvalidAccessUser => (
-            StatusCode::BAD_REQUEST,
-            "ADMIN_WORKSPACE_ACCESS_USER_INVALID",
-            "workspace direct user grants must reference active existing users",
-        ),
-        WorkspaceError::InvalidAccessRole => (
-            StatusCode::BAD_REQUEST,
-            "ADMIN_WORKSPACE_ACCESS_ROLE_INVALID",
-            "workspace role grants must reference existing role codes",
-        ),
-        WorkspaceError::DuplicateAccessGrant => (
-            StatusCode::BAD_REQUEST,
-            "ADMIN_WORKSPACE_ACCESS_DUPLICATE",
-            "workspace access payload contains duplicate grants",
-        ),
         WorkspaceError::StorageFailure => (
             StatusCode::INTERNAL_SERVER_ERROR,
             "ADMIN_WORKSPACE_STORAGE_FAILED",

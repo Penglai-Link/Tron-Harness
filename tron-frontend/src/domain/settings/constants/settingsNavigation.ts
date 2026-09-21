@@ -34,12 +34,6 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.appearance",
       },
       {
-        label: "Variables",
-        href: "/settings/variables",
-        icon: KeyRound,
-        translationKey: "shell:settings.items.variables",
-      },
-      {
         label: "Shortcuts",
         href: "/settings/shortcuts",
         icon: Keyboard,
@@ -87,6 +81,12 @@ export const settingsNavigation = [
         href: "/settings/tools",
         icon: Wrench,
         translationKey: "shell:settings.items.tools",
+      },
+      {
+        label: "Public Variables",
+        href: "/settings/variables",
+        icon: KeyRound,
+        translationKey: "shell:settings.items.variables",
       },
     ],
   },

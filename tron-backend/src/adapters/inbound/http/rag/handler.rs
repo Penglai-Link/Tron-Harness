@@ -41,7 +41,7 @@ pub async fn ingest(
     if request.access_context.user_code != auth.user().user_code {
         return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
     }
-    if !user_has_workspace_access(&workspaces, &request.workspace_code, &auth.user().user_code) {
+    if !workspace_is_active(&workspaces, &request.workspace_code) {
         return rag_error_response(crate::domain::rag::RagError::IngestScopeInvalid);
     }
 
@@ -135,7 +135,7 @@ pub async fn search(
         return rag_error_response(crate::domain::rag::RagError::SearchRequestInvalid);
     }
     if request.access_context.user_code != auth.user().user_code
-        || !user_has_workspace_access(&workspaces, &request.workspace_code, &auth.user().user_code)
+        || !workspace_is_active(&workspaces, &request.workspace_code)
     {
         return rag_error_response(crate::domain::rag::RagError::SearchScopeInvalid);
     }
@@ -266,7 +266,7 @@ pub async fn validate_filters_management(
 pub async fn debug_profile(
     State(workspaces): State<WorkspaceService>,
     State(rag): State<AppRagService>,
-    auth: RequestAuthContext,
+    _auth: RequestAuthContext,
     Query(query): Query<RagDebugProfileHttpQuery>,
 ) -> Response {
     let workspace_code = query.workspace_code.unwrap_or_default();
@@ -274,7 +274,7 @@ pub async fn debug_profile(
     if workspace_code.trim().is_empty() || profile_id.trim().is_empty() {
         return rag_error_response(crate::domain::rag::RagError::DebugRequestInvalid);
     }
-    if !user_has_workspace_access(&workspaces, &workspace_code, &auth.user().user_code) {
+    if !workspace_is_active(&workspaces, &workspace_code) {
         return rag_error_response(crate::domain::rag::RagError::DebugScopeInvalid);
     }
     match rag.debug_profile(&workspace_code, &profile_id) {
@@ -295,7 +295,7 @@ pub async fn debug_source(
     if !debug_source_required(&request) {
         return rag_error_response(crate::domain::rag::RagError::DebugRequestInvalid);
     }
-    if !user_has_workspace_access(&workspaces, &request.workspace_code, &auth.user().user_code)
+    if !workspace_is_active(&workspaces, &request.workspace_code)
         || !scope_allowed_for_http(
             &request.scope_type,
             &request.scope_code,
@@ -323,7 +323,7 @@ pub async fn retry_index(
     if !retry_required(&request) {
         return rag_error_response(crate::domain::rag::RagError::RetryRequestInvalid);
     }
-    if !user_has_workspace_access(&workspaces, &request.workspace_code, &auth.user().user_code)
+    if !workspace_is_active(&workspaces, &request.workspace_code)
         || !scope_allowed_for_http(
             &request.scope_type,
             &request.scope_code,
@@ -341,13 +341,9 @@ pub async fn retry_index(
     }
 }
 
-fn user_has_workspace_access(
-    workspaces: &WorkspaceService,
-    workspace_code: &str,
-    user_code: &str,
-) -> bool {
+fn workspace_is_active(workspaces: &WorkspaceService, workspace_code: &str) -> bool {
     workspaces
-        .user_has_effective_access(workspace_code, user_code)
+        .workspace_is_active(workspace_code)
         .unwrap_or(false)
 }
 

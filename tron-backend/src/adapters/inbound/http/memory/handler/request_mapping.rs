@@ -88,17 +88,13 @@ async fn record_by_code(
 fn workspace_detail(
     workspaces: &WorkspaceService,
     workspace_code: &str,
-    auth: &RequestAuthContext,
+    _auth: &RequestAuthContext,
 ) -> Result<WorkspaceDetail, MemoryError> {
     let workspace_code = normalize_required(workspace_code, "workspaceCode")?;
     let workspace = workspaces
         .get_workspace(&workspace_code)
         .map_err(|_| MemoryError::NotFound("workspace was not found".into()))?;
-    if user_has_workspace_access(
-        workspaces,
-        &workspace.workspace_code,
-        &auth.user().user_code,
-    ) {
+    if workspace_is_active(workspaces, &workspace.workspace_code) {
         Ok(workspace)
     } else {
         Err(MemoryError::Forbidden(
@@ -107,13 +103,9 @@ fn workspace_detail(
     }
 }
 
-fn user_has_workspace_access(
-    workspaces: &WorkspaceService,
-    workspace_code: &str,
-    user_code: &str,
-) -> bool {
+fn workspace_is_active(workspaces: &WorkspaceService, workspace_code: &str) -> bool {
     workspaces
-        .user_has_effective_access(workspace_code, user_code)
+        .workspace_is_active(workspace_code)
         .unwrap_or(false)
 }
 

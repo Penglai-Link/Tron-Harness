@@ -1,7 +1,11 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router";
+import { Globe, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { ParticlesBackground } from "@/components/particles-bg/ParticlesBackground";
 import {
   activateProfile,
   createPendingProfile,
@@ -9,20 +13,40 @@ import {
   fetchBootstrapProfileStatus,
   fetchProfiles,
   pollPersonAiAuthorization,
+  removeProfile,
   type BootstrapProfileStatus,
   type PersonAiAuthorizationSession,
   type PersonAiProfile,
 } from "@/domain/profile/api";
+import { useLocale } from "@/i18n";
 import { isApiError } from "@/shared/api/httpClient";
+
+function firstAvailableProfileId(profiles: PersonAiProfile[], activeProfileId: string | null) {
+  return profiles.find((profile) => profile.profileId === activeProfileId && profile.status !== "PENDING")?.profileId
+    ?? profiles.find((profile) => profile.status !== "PENDING")?.profileId
+    ?? null;
+}
 
 export function ProfileSelectionPage() {
   const { t } = useTranslation("pages");
+  const { changeLocale, currentLocale, supportedLocales } = useLocale();
+  const nextLocale = supportedLocales.find((locale) => locale.code !== currentLocale)?.code ?? currentLocale;
+  const [searchParams] = useSearchParams();
+  const forceSelection = searchParams.get("mode") === "switch";
   const [profiles, setProfiles] = useState<PersonAiProfile[]>([]);
   const [bootstrap, setBootstrap] = useState<BootstrapProfileStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [activating, setActivating] = useState<string | null>(null);
+  const [selectedProfileId, setSelectedProfileId] = useState<string | null>(null);
   const [authorizing, setAuthorizing] = useState(false);
+  const [agreementChecked, setAgreementChecked] = useState(false);
+  const [agreementOpen, setAgreementOpen] = useState(false);
+  const [profileToRemove, setProfileToRemove] = useState<PersonAiProfile | null>(null);
+  const [removingProfile, setRemovingProfile] = useState(false);
   const [authorization, setAuthorization] = useState<PersonAiAuthorizationSession | null>(null);
+  const authorizationWindowRef = useRef<Window | null>(null);
+  const authorizationPollTimerRef = useRef<number | null>(null);
+  const autoEnteredProfileRef = useRef<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,6 +55,7 @@ export function ProfileSelectionPage() {
       .then(([nextProfiles, nextBootstrap]) => {
         setProfiles(nextProfiles);
         setBootstrap(nextBootstrap);
+        setSelectedProfileId(firstAvailableProfileId(nextProfiles, nextBootstrap.activeProfileId));
       })
       .catch((reason: unknown) => {
         if (!controller.signal.aborted) {
@@ -44,14 +69,33 @@ export function ProfileSelectionPage() {
   }, []);
 
   useEffect(() => {
+    if (forceSelection || loading || authorization || error || bootstrap?.activeProfile?.status === "PENDING") return;
+    const availableProfiles = profiles.filter((profile) => profile.status !== "PENDING");
+    if (availableProfiles.length !== 1) return;
+    const [profile] = availableProfiles;
+    if (autoEnteredProfileRef.current === profile.profileId) return;
+    autoEnteredProfileRef.current = profile.profileId;
+    if (bootstrap?.activeProfileId === profile.profileId) {
+      window.location.assign("/workspace");
+      return;
+    }
+    void selectProfile(profile);
+  }, [authorization, bootstrap, error, forceSelection, loading, profiles]);
+
+  useEffect(() => {
     if (!authorization) return;
     let active = true;
     const poll = async () => {
       try {
         const result = await pollPersonAiAuthorization(authorization.sessionId);
         if (!active) return;
-        setAuthorization(result.session);
-        if (!result.completed) return;
+        if (!result.completed) {
+          authorizationPollTimerRef.current = window.setTimeout(() => {
+            authorizationPollTimerRef.current = null;
+            void poll();
+          }, 1_500);
+          return;
+        }
         const [nextProfiles, nextBootstrap] = await Promise.all([
           fetchProfiles(),
           fetchBootstrapProfileStatus(),
@@ -60,42 +104,25 @@ export function ProfileSelectionPage() {
         setProfiles(nextProfiles);
         setBootstrap(nextBootstrap);
         setAuthorization(null);
-        if (result.profileId && result.restartRequired && window.tronDesktop?.invoke) {
-          await window.tronDesktop.invoke("switchProfile", { profileId: result.profileId });
-        } else {
-          window.location.assign("/home");
-        }
+        closeAuthorizationWindow();
+        window.location.assign("/workspace");
       } catch (reason: unknown) {
         if (active) {
+          setAuthorization(null);
+          closeAuthorizationWindow();
           setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.authorize"));
         }
       }
     };
     void poll();
-    const timer = window.setInterval(() => void poll(), 3_000);
     return () => {
       active = false;
-      window.clearInterval(timer);
+      if (authorizationPollTimerRef.current !== null) {
+        window.clearTimeout(authorizationPollTimerRef.current);
+        authorizationPollTimerRef.current = null;
+      }
     };
   }, [authorization, t]);
-
-  async function beginProfile() {
-    setActivating("pending");
-    setError(null);
-    try {
-      const profile = await createPendingProfile();
-      const invoke = window.tronDesktop?.invoke;
-      if (invoke) {
-        await invoke("switchProfile", { profileId: profile.profileId });
-        return;
-      }
-      setError(t("personAiProfiles.errors.restart"));
-    } catch (reason: unknown) {
-      setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.create"));
-    } finally {
-      setActivating(null);
-    }
-  }
 
   async function beginPersonAiAuthorization() {
     setAuthorizing(true);
@@ -103,7 +130,7 @@ export function ProfileSelectionPage() {
     try {
       const nextAuthorization = await createPersonAiAuthorization();
       setAuthorization(nextAuthorization);
-      window.open(nextAuthorization.loginUrl, "_blank", "noopener,noreferrer");
+      authorizationWindowRef.current = window.open(nextAuthorization.loginUrl, "_blank", "noopener,noreferrer");
     } catch (reason: unknown) {
       setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.authorize"));
     } finally {
@@ -111,17 +138,47 @@ export function ProfileSelectionPage() {
     }
   }
 
+  async function beginNewAccountAuthorization() {
+    setActivating("pending");
+    setError(null);
+    try {
+      const profile = await createPendingProfile();
+      setProfiles((current) =>
+        current.some((item) => item.profileId === profile.profileId) ? current : [...current, profile],
+      );
+      setBootstrap({
+        hasProfiles: true,
+        activeProfileId: profile.profileId,
+        activeProfile: profile,
+        avatarUrl: null,
+      });
+      await beginPersonAiAuthorization();
+    } catch (reason: unknown) {
+      setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.create"));
+    } finally {
+      setActivating(null);
+    }
+  }
+
+  function closeAuthorizationWindow() {
+    if (authorizationWindowRef.current && !authorizationWindowRef.current.closed) {
+      authorizationWindowRef.current.close();
+    }
+    authorizationWindowRef.current = null;
+  }
+
+  function cancelPersonAiAuthorization() {
+    closeAuthorizationWindow();
+    setAuthorization(null);
+    setError(null);
+  }
+
   async function selectProfile(profile: PersonAiProfile) {
     setActivating(profile.profileId);
     setError(null);
     try {
       await activateProfile(profile.profileId);
-      const invoke = window.tronDesktop?.invoke;
-      if (invoke) {
-        await invoke("switchProfile", { profileId: profile.profileId });
-        return;
-      }
-      setError(t("personAiProfiles.errors.restart"));
+      window.location.assign("/workspace");
     } catch (reason: unknown) {
       setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.activate"));
     } finally {
@@ -129,46 +186,179 @@ export function ProfileSelectionPage() {
     }
   }
 
+  async function confirmRemoveProfile() {
+    if (!profileToRemove) return;
+    setRemovingProfile(true);
+    setError(null);
+    try {
+      await removeProfile(profileToRemove.profileId);
+      const [nextProfiles, nextBootstrap] = await Promise.all([fetchProfiles(), fetchBootstrapProfileStatus()]);
+      setProfiles(nextProfiles);
+      setBootstrap(nextBootstrap);
+      setSelectedProfileId(firstAvailableProfileId(nextProfiles, nextBootstrap.activeProfileId));
+      setProfileToRemove(null);
+    } catch (reason: unknown) {
+      setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.remove"));
+    } finally {
+      setRemovingProfile(false);
+    }
+  }
+
+  function profileInitials(username: string) {
+    const value = username.trim();
+    return value ? value.slice(0, 2).toUpperCase() : "PA";
+  }
+
+  const agreementRules = [1, 2, 3, 4, 5].map((index) => t(`personAiProfiles.agreement.rules.rule${index}`));
+  const availableProfiles = profiles.filter((profile) => profile.status !== "PENDING");
+
   return (
-    <main className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6 text-[var(--color-on-surface)]">
-      <section className="w-full max-w-xl rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-8 shadow-sm">
-        <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-primary)]">Tron</p>
-        <h1 className="mt-3 text-2xl font-semibold">{t("personAiProfiles.title")}</h1>
-        <p className="mt-2 text-sm text-[var(--color-on-surface-variant)]">
-          {t("personAiProfiles.description")}
-        </p>
-        {loading ? <p className="mt-8 text-sm">{t("personAiProfiles.loading")}</p> : null}
-        {!loading && profiles.length === 0 ? (
-          <div className="mt-8 rounded-xl border border-dashed border-[var(--color-outline-variant)] p-5 text-sm text-[var(--color-on-surface-variant)]">
-            {t("personAiProfiles.empty")}
-            <Button className="mt-4" type="button" disabled={activating !== null} onClick={() => void beginProfile()}>
-              {activating === "pending" ? t("personAiProfiles.switching") : t("personAiProfiles.create")}
-            </Button>
+    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--color-background)] px-6 text-[var(--color-on-surface)]">
+      <ParticlesBackground />
+      <section className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--color-outline)] bg-[var(--color-surface)] p-8 shadow-sm">
+        <header className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-primary)]">Tron</p>
+            <h1 className="mt-3 text-2xl font-semibold">{t("personAiProfiles.title")}</h1>
+          </div>
+          <button
+            type="button"
+            className="inline-flex h-8 shrink-0 items-center gap-1.5 rounded-md px-2 text-xs text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--color-primary)]"
+            aria-label={t("common:locale.label")}
+            title={t("common:locale.label")}
+            onClick={() => void changeLocale(nextLocale)}
+          >
+            <Globe className="size-4 text-[var(--color-on-surface-variant)]" aria-hidden="true" />
+            <span>{currentLocale === "zh-CN" ? t("common:locale.shortSimplifiedChinese") : t("common:locale.english")}</span>
+          </button>
+        </header>
+        {loading ? <p className="mt-8 text-sm text-[var(--color-on-surface-variant)]">{t("personAiProfiles.loading")}</p> : null}
+        {!loading && !authorization && bootstrap?.activeProfile?.status !== "PENDING" ? (
+          <div className="mt-8 flex items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] px-3 py-3 text-sm text-[var(--color-on-surface-variant)]">
+            <input
+              id="person-ai-agreement"
+              type="checkbox"
+              checked={agreementChecked}
+              onChange={(event) => setAgreementChecked(event.target.checked)}
+              className="size-4 accent-[var(--color-primary)]"
+            />
+            <label htmlFor="person-ai-agreement">{t("personAiProfiles.agreement.checkboxLabel")}</label>
+            <button type="button" className="font-medium text-[var(--color-on-surface)] underline underline-offset-2" onClick={() => setAgreementOpen(true)}>
+              {t("personAiProfiles.agreement.linkLabel")}
+            </button>
           </div>
         ) : null}
         {!loading && bootstrap?.activeProfile?.status === "PENDING" ? (
-          <div className="mt-8 rounded-xl border border-[var(--color-outline-variant)] p-5">
-            <p className="text-sm text-[var(--color-on-surface-variant)]">{t("personAiProfiles.authorizationDescription")}</p>
-            <Button className="mt-4" type="button" disabled={authorizing || authorization !== null} onClick={() => void beginPersonAiAuthorization()}>
-              {authorization ? t("personAiProfiles.authorizing") : t("personAiProfiles.authorize")}
+          <div className="mt-8">
+            {authorization ? (
+              <div className="space-y-2">
+                <Button className="h-10 w-full" type="button" disabled>
+                  {t("personAiProfiles.authorizing")}
+                </Button>
+                <Button className="h-10 w-full" type="button" variant="secondary" onClick={cancelPersonAiAuthorization}>
+                  {t("personAiProfiles.cancelAuthorization")}
+                </Button>
+              </div>
+            ) : (
+              <Button className="h-10 w-full" type="button" disabled={authorizing} onClick={() => void beginPersonAiAuthorization()}>
+                {authorizing ? t("personAiProfiles.authorizing") : t("personAiProfiles.authorizeNewAccount")}
+              </Button>
+            )}
+          </div>
+        ) : null}
+        {!loading && bootstrap?.activeProfile?.status !== "PENDING" && availableProfiles.length === 0 ? (
+          <div className="mt-8">
+            <Button className="h-10 w-full" type="button" disabled={activating !== null || !agreementChecked} onClick={() => void beginNewAccountAuthorization()}>
+              {activating === "pending" ? t("personAiProfiles.switching") : t("personAiProfiles.authorizeNewAccount")}
             </Button>
           </div>
         ) : null}
-        <div className="mt-6 space-y-3">
-          {profiles.map((profile) => (
-            <div key={profile.profileId} className="flex items-center justify-between gap-4 rounded-xl border border-[var(--color-outline-variant)] p-4">
-              <div className="min-w-0">
+        {!loading && !authorization && !authorizing && activating !== "pending" && availableProfiles.length > 0 ? (
+          <div className="mt-3 space-y-3">
+            {availableProfiles.map((profile) => (
+            <div
+              key={profile.profileId}
+              role="button"
+              tabIndex={0}
+              onClick={() => setSelectedProfileId(profile.profileId)}
+              onKeyDown={(event) => { if (event.key === "Enter" || event.key === " ") setSelectedProfileId(profile.profileId); }}
+              aria-current={bootstrap?.activeProfileId === profile.profileId ? "true" : undefined}
+              className={`flex w-full items-center gap-4 rounded-xl border-2 bg-[var(--color-surface)] p-4 text-left shadow-sm transition-colors ${
+                selectedProfileId === profile.profileId
+                  ? "border-[var(--color-primary)] shadow-[0_0_0_3px_color-mix(in_srgb,var(--color-primary)_10%,transparent)]"
+                  : "border-[var(--color-outline-variant)]"
+              }`}
+            >
+              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-sm font-semibold text-white">
+                {profileInitials(profile.personAiUsername)}
+              </span>
+              <span className="min-w-0">
                 <p className="truncate font-medium">{profile.personAiUsername}</p>
-                <p className="mt-1 truncate text-xs text-[var(--color-on-surface-variant)]">{profile.personAiUserId}</p>
-              </div>
-              <Button type="button" variant={profile.status === "ACTIVE" ? "secondary" : "default"} disabled={activating !== null || profile.status === "ACTIVE" || profile.status === "PENDING"} onClick={() => void selectProfile(profile)}>
-                {activating === profile.profileId ? t("personAiProfiles.switching") : profile.status === "ACTIVE" ? t("personAiProfiles.current") : profile.status === "PENDING" ? t("personAiProfiles.authorize") : t("personAiProfiles.use")}
+              </span>
+              <Button
+                type="button"
+                variant="ghost"
+                size="icon-sm"
+                className="ml-auto shrink-0 text-[var(--color-on-surface)] hover:bg-[var(--color-surface-container)] hover:text-[var(--color-on-surface)]"
+                aria-label={t("personAiProfiles.remove.ariaLabel")}
+                title={t("personAiProfiles.remove.ariaLabel")}
+                onClick={(event) => { event.stopPropagation(); setError(null); setProfileToRemove(profile); }}
+              >
+                <Trash2 className="size-4" />
               </Button>
             </div>
-          ))}
-        </div>
-        {error ? <p role="alert" className="mt-5 text-sm text-[var(--color-destructive)]">{error}</p> : null}
+            ))}
+            <Button
+              className="h-10 w-full"
+              type="button"
+              disabled={activating !== null || selectedProfileId === null}
+              onClick={() => {
+                const profile = availableProfiles.find((item) => item.profileId === selectedProfileId);
+                if (profile) void selectProfile(profile);
+              }}
+            >
+              {activating && activating !== "pending" ? t("personAiProfiles.switching") : t("personAiProfiles.startUsing")}
+            </Button>
+            {bootstrap?.activeProfile?.status !== "PENDING" ? (
+              <Button className="h-10 w-full" type="button" variant="secondary" disabled={activating !== null || !agreementChecked} onClick={() => void beginNewAccountAuthorization()}>
+                {activating === "pending" ? t("personAiProfiles.switching") : t("personAiProfiles.authorizeNewAccount")}
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
+        {error && !profileToRemove ? <p role="alert" className="mt-5 text-sm text-[var(--color-destructive)]">{error}</p> : null}
       </section>
+      <Dialog open={agreementOpen} onOpenChange={setAgreementOpen}>
+        <DialogContent className="max-h-[80vh] overflow-y-auto sm:max-w-xl">
+          <DialogHeader>
+            <DialogTitle>{t("personAiProfiles.agreement.title")}</DialogTitle>
+            <DialogDescription>{t("personAiProfiles.agreement.description")}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] p-4 text-sm leading-6 text-[var(--color-on-surface-variant)]">
+            {agreementRules.map((rule, index) => <p key={rule}><span className="mr-2 font-semibold text-[var(--color-on-surface)]">{index + 1}.</span>{rule}</p>)}
+          </div>
+          <DialogFooter>
+            <Button type="button" onClick={() => { setAgreementChecked(true); setAgreementOpen(false); }}>{t("personAiProfiles.agreement.acknowledge")}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+      <Dialog open={profileToRemove !== null} onOpenChange={(open) => { if (!open) { setProfileToRemove(null); setError(null); } }}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>{t("personAiProfiles.remove.title")}</DialogTitle>
+            <DialogDescription>
+              {t("personAiProfiles.remove.description", { username: profileToRemove?.personAiUsername ?? t("personAiProfiles.remove.unknownAccount") })}
+            </DialogDescription>
+          </DialogHeader>
+          {error ? <p role="alert" className="text-sm text-[var(--color-destructive)]">{error}</p> : null}
+          <DialogFooter>
+            <Button type="button" variant="secondary" onClick={() => setProfileToRemove(null)}>{t("personAiProfiles.remove.cancel")}</Button>
+            <Button type="button" variant="destructive" disabled={removingProfile || activating !== null} onClick={() => void confirmRemoveProfile()}>
+              {removingProfile ? t("personAiProfiles.remove.confirming") : t("personAiProfiles.remove.confirm")}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </main>
   );
 }

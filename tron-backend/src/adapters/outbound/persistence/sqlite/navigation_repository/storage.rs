@@ -26,7 +26,7 @@ impl SqliteNavigationRepository {
 
     fn all_domains(&self) -> Result<Vec<NavigationDomain>, NavigationError> {
         let mut statement = self.connection.prepare(
-            "SELECT id, domain_code, built_in, enabled, is_default, position, visible_roles, created_at, updated_at,
+            "SELECT id, domain_code, built_in, enabled, is_default, position, created_at, updated_at,
                     (SELECT name FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'zh-CN'),
                     (SELECT name FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'en-US'),
                     (SELECT description FROM navigation_domain_translations WHERE domain_id = d.id AND locale = 'zh-CN'),
@@ -43,17 +43,15 @@ impl SqliteNavigationRepository {
                     enabled: row.get::<_, i64>(3)? == 1,
                     is_default: row.get::<_, i64>(4)? == 1,
                     position: row.get(5)?,
-                    visible_roles: parse_roles(&row.get::<_, String>(6)?)
-                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    created_at: row.get(7)?,
-                    updated_at: row.get(8)?,
+                    created_at: row.get(6)?,
+                    updated_at: row.get(7)?,
                     name: LocalizedText {
-                        zh_cn: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
-                        en_us: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                        zh_cn: row.get::<_, Option<String>>(8)?.unwrap_or_default(),
+                        en_us: row.get::<_, Option<String>>(9)?.unwrap_or_default(),
                     },
                     description: LocalizedText {
-                        zh_cn: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
-                        en_us: row.get::<_, Option<String>>(12)?.unwrap_or_default(),
+                        zh_cn: row.get::<_, Option<String>>(10)?.unwrap_or_default(),
+                        en_us: row.get::<_, Option<String>>(11)?.unwrap_or_default(),
                     },
                 })
             })
@@ -98,7 +96,7 @@ impl SqliteNavigationRepository {
 
     fn load_items(&self, domain_code: &str) -> Result<Vec<NavigationTreeItem>, NavigationError> {
         let mut statement = self.connection.prepare(
-            "SELECT i.id, i.position, i.visible_roles, pm.menu_code,
+            "SELECT i.id, i.position, pm.menu_code,
                     m.id, m.menu_code, m.source, m.menu_type, m.page_code, m.url, m.icon, m.enabled, m.created_at, m.updated_at,
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'zh-CN'),
                     (SELECT label FROM navigation_menu_translations WHERE menu_id = m.id AND locale = 'en-US')
@@ -115,25 +113,23 @@ impl SqliteNavigationRepository {
                 Ok(NavigationTreeItem {
                     id: SnowflakeId::new(row.get(0)?),
                     position: row.get(1)?,
-                    visible_roles: parse_roles(&row.get::<_, String>(2)?)
-                        .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                    parent_menu_code: row.get(3)?,
+                    parent_menu_code: row.get(2)?,
                     menu: NavigationMenu {
-                        id: SnowflakeId::new(row.get(4)?),
-                        menu_code: row.get(5)?,
-                        source: MenuSource::from_storage(&row.get::<_, String>(6)?)
+                    id: SnowflakeId::new(row.get(3)?),
+                    menu_code: row.get(4)?,
+                    source: MenuSource::from_storage(&row.get::<_, String>(5)?)
                             .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                        menu_type: MenuType::from_storage(&row.get::<_, String>(7)?)
+                    menu_type: MenuType::from_storage(&row.get::<_, String>(6)?)
                             .map_err(|_| rusqlite::Error::InvalidQuery)?,
-                        page_code: row.get(8)?,
-                        url: row.get(9)?,
-                        icon: row.get(10)?,
-                        enabled: row.get::<_, i64>(11)? == 1,
-                        created_at: row.get(12)?,
-                        updated_at: row.get(13)?,
+                    page_code: row.get(7)?,
+                    url: row.get(8)?,
+                    icon: row.get(9)?,
+                    enabled: row.get::<_, i64>(10)? == 1,
+                    created_at: row.get(11)?,
+                    updated_at: row.get(12)?,
                         translations: LocalizedText {
-                            zh_cn: row.get::<_, Option<String>>(14)?.unwrap_or_default(),
-                            en_us: row.get::<_, Option<String>>(15)?.unwrap_or_default(),
+                        zh_cn: row.get::<_, Option<String>>(13)?.unwrap_or_default(),
+                        en_us: row.get::<_, Option<String>>(14)?.unwrap_or_default(),
                         },
                     },
                     children: Vec::new(),

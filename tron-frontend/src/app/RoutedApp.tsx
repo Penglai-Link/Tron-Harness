@@ -1,20 +1,12 @@
 import { useBootstrapAuthSession } from "@/domain/auth";
 import { Navigate, Route, Routes } from "react-router";
 import EntryRoutePage from "./route-page/EntryRoutePage";
-import HomePage from "./route-page/HomePage";
-import SuspendedRoute from "./route-page/SuspendedRoute";
 import ProtectedRoute from "./route-page/ProtectedRoute";
 import AppRoutePage from "./route-page/AppRoutePage";
-import { lazy } from "react";
 import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegistry";
 import { FilePanelHostProvider } from "@/shared/layout/content/FilePanelHostProvider";
 import { ProfileSelectionPage } from "@/domain/profile/pages/ProfileSelectionPage";
 
-const DesignStandardPage = lazy(() =>
-  import("@/domain/design-standard/pages/DesignStandardPage").then(
-    (module) => ({ default: module.DesignStandardPage })
-  )
-);
 export default function RoutedApp() {
   useBootstrapAuthSession();
 
@@ -24,24 +16,8 @@ export default function RoutedApp() {
         <Routes>
         <Route path="/" element={<EntryRoutePage />} />
         <Route path="/profiles" element={<ProfileSelectionPage />} />
-        <Route
-          path="/home"
-          element={
-            <ProtectedRoute>
-              <HomePage />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/design-standard"
-          element={
-            <ProtectedRoute>
-              <SuspendedRoute fullScreen>
-                <DesignStandardPage />
-              </SuspendedRoute>
-            </ProtectedRoute>
-          }
-        />
+        <Route path="/home" element={<Navigate replace to="/workspace" />} />
+        <Route path="/design-standard" element={<Navigate replace to="/workspace" />} />
         <Route
           path="/settings"
           element={

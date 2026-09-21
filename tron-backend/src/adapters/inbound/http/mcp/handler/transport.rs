@@ -1,7 +1,7 @@
 use axum::{
     Json,
     extract::State,
-    http::{HeaderMap, HeaderValue, StatusCode, header},
+    http::StatusCode,
     response::{IntoResponse, Response},
 };
 use serde_json::{Value, json};
@@ -9,10 +9,9 @@ use serde_json::{Value, json};
 mod variable_errors;
 
 use crate::{
-    adapters::inbound::http::auth::authenticate_headers,
+    adapters::inbound::http::auth::RequestAuthContext,
     application::{
         mcp::McpService,
-        user::UserService,
         variable::{CreateVariableCommand, VariableService},
     },
     shared::auth_holder::AuthHolder,
@@ -31,21 +30,10 @@ const MCP_VARIABLE_DELETE_TOOL: &str = "variable.delete_workspace_local";
 
 pub async fn variables_transport(
     State(mcp): State<McpService>,
-    State(users): State<UserService>,
     State(variables): State<VariableService>,
-    headers: HeaderMap,
+    request_auth: RequestAuthContext,
     Json(payload): Json<Value>,
 ) -> Response {
-    let request_auth = match authenticate_headers(&users, &headers) {
-        Ok(auth) => auth,
-        Err(_) => {
-            return mcp_bearer_error(
-                payload.get("id").cloned(),
-                "Bearer access token is invalid or expired",
-            );
-        }
-    };
-
     match mcp.variables_transport_availability() {
         Ok(availability)
             if !availability.gateway_enabled || !availability.variables_endpoint_enabled =>
@@ -512,14 +500,6 @@ fn parse_variable_resource_uri(uri: &str) -> Result<VariableResourceTarget, &'st
         }
         _ => Err("uri must match a declared variable resource template"),
     }
-}
-
-fn mcp_bearer_error(id: Option<Value>, message: &str) -> Response {
-    let mut response = mcp_jsonrpc_error(StatusCode::UNAUTHORIZED, id, -32001, message);
-    response
-        .headers_mut()
-        .insert(header::WWW_AUTHENTICATE, HeaderValue::from_static("Bearer"));
-    response
 }
 
 fn mcp_jsonrpc_result(id: Option<Value>, result: Value) -> Response {

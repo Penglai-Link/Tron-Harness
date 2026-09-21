@@ -137,7 +137,7 @@ export const shell = {
       tools: "Tools",
       skillCenter: "Skill Center",
       users: "Users",
-      variables: "Variables",
+      variables: "Public Variables",
       workspaceAdmin: "Workspace",
     },
     navigation: "Configuration",

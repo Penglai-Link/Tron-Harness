@@ -53,15 +53,6 @@ pub(super) fn normalize_storage_path(value: String) -> String {
 }
 
 fn expand_home_path(value: String) -> String {
-    if let Ok(profile_dir) = env::var("TRON_PROFILE_DATA_DIR")
-        && !profile_dir.trim().is_empty()
-        && let Some(suffix) = value.strip_prefix("~/.tron")
-    {
-        return PathBuf::from(profile_dir.trim())
-            .join(suffix.trim_start_matches('/'))
-            .display()
-            .to_string();
-    }
     if value == "~" {
         return env::var("HOME")
             .map(|home| PathBuf::from(home).display().to_string())
@@ -76,15 +67,6 @@ fn expand_home_path(value: String) -> String {
 }
 
 fn default_path_from_home(home: Option<String>, suffix: &str) -> String {
-    if let Ok(profile_dir) = env::var("TRON_PROFILE_DATA_DIR")
-        && !profile_dir.trim().is_empty()
-        && let Some(rest) = suffix.strip_prefix(".tron")
-    {
-        return PathBuf::from(profile_dir.trim())
-            .join(rest.trim_start_matches('/'))
-            .display()
-            .to_string();
-    }
     home.map(|home| PathBuf::from(home).join(suffix))
         .unwrap_or_else(|| PathBuf::from(suffix))
         .display()

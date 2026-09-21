@@ -15,7 +15,7 @@ use std::{
 
 use crate::{
     application::{
-        role::RoleService, user::UserService, variable::VariableService,
+        variable::VariableService,
         workspace::WorkspaceService,
     },
     config::ResourceConfig,
@@ -40,8 +40,6 @@ pub const SYSTEM_AVATAR_REFERENCE: &str = "system://avatar";
 pub struct ResourceService {
     repository: Arc<Mutex<Box<dyn ResourceRepository>>>,
     workspaces: WorkspaceService,
-    roles: RoleService,
-    users: UserService,
     variables: VariableService,
     config: ResourceConfig,
     storage: Arc<StorageRouter>,
@@ -54,8 +52,6 @@ impl ResourceService {
     pub fn new(
         repository: impl ResourceRepository + 'static,
         workspaces: WorkspaceService,
-        roles: RoleService,
-        users: UserService,
         variables: VariableService,
         config: ResourceConfig,
         storage_profiles: std::collections::BTreeMap<String, Arc<dyn ObjectStorage>>,
@@ -65,8 +61,6 @@ impl ResourceService {
         Ok(Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
-            roles,
-            users,
             variables,
             config,
             storage: Arc::new(storage),
@@ -79,8 +73,6 @@ impl ResourceService {
     pub fn with_event_bus(
         repository: impl ResourceRepository + 'static,
         workspaces: WorkspaceService,
-        roles: RoleService,
-        users: UserService,
         variables: VariableService,
         config: ResourceConfig,
         storage_profiles: std::collections::BTreeMap<String, Arc<dyn ObjectStorage>>,
@@ -90,8 +82,6 @@ impl ResourceService {
         let mut service = Self::new(
             repository,
             workspaces,
-            roles,
-            users,
             variables,
             config,
             storage_profiles,

@@ -189,6 +189,7 @@ export const common = {
   locale: {
     english: "English",
     simplifiedChinese: "简体中文",
+    shortSimplifiedChinese: "中文",
     label: "语言",
     unavailable: "切换后立即生效，刷新后仍会保持当前语言。",
   },

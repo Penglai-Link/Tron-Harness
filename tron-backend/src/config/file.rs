@@ -7,11 +7,8 @@ use std::{
 };
 
 use super::{
-    AppConfig, AuthConfig, ConfigError, DEFAULT_AUTH_GITHUB_AUTHORIZE_URL,
-    DEFAULT_AUTH_GITHUB_EMAILS_API_URL, DEFAULT_AUTH_GITHUB_NAME, DEFAULT_AUTH_GITHUB_SCOPE,
-    DEFAULT_AUTH_GITHUB_TOKEN_URL, DEFAULT_AUTH_GITHUB_USER_API_URL, DEFAULT_AUTH_LDAP_NAME,
-    GitHubOAuthConfig, HttpClientProfileConfig, HttpClientProfilesConfig, LdapConfig,
-    SystemAgentConfig, mineru::MineruFileConfig, parsing::required_config_string,
+    AppConfig, ConfigError, HttpClientProfileConfig, HttpClientProfilesConfig,
+    SystemAgentConfig, mineru::MineruFileConfig,
     paths::default_application_config_path_from_home, paths::normalize_storage_path,
     resource::ResourceFileConfig, variable_crypto,
 };
@@ -99,9 +96,6 @@ impl AppConfig {
         if let Some(value) = overrides.short_term_memory {
             self.short_term_memory.apply_overrides(value);
         }
-        if let Some(value) = overrides.auth {
-            self.auth.apply_overrides(value)?;
-        }
         if let Some(value) = overrides.event_bus {
             self.event_bus.apply_overrides(value);
         }
@@ -124,11 +118,7 @@ impl AppConfig {
     /// key; provision it here and persist it next to that profile's database.
     /// No client-supplied key is accepted by the authorization API.
     fn ensure_profile_crypto_key(&mut self, path: &Path) -> Result<(), ConfigError> {
-        if std::env::var("TRON_PROFILE_ID")
-            .ok()
-            .is_none_or(|value| value.trim().is_empty())
-            || !self.variable_crypto.key_base64.trim().is_empty()
-        {
+        if !self.variable_crypto.key_base64.trim().is_empty() {
             return Ok(());
         }
 
@@ -219,7 +209,6 @@ struct AppConfigFile {
     http_clients: Option<HttpClientProfilesFileConfig>,
     mineru: Option<MineruFileConfig>,
     short_term_memory: Option<ShortTermMemoryFileConfig>,
-    auth: Option<AuthFileConfig>,
     event_bus: Option<EventBusFileConfig>,
     navigation: Option<NavigationFileConfig>,
 }
@@ -275,44 +264,6 @@ struct HttpClientProfileFileConfig {
     tcp_keepalive_ms: Option<u64>,
 }
 
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct AuthFileConfig {
-    jwt_secret: Option<String>,
-    access_token_ttl_seconds: Option<i64>,
-    refresh_token_ttl_seconds: Option<i64>,
-    cookie_secure: Option<bool>,
-    dev_oauth2_enabled: Option<bool>,
-    dev_oauth2_name: Option<String>,
-    github_oauth: Option<GitHubOAuthFileConfig>,
-    ldap: Option<LdapFileConfig>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct GitHubOAuthFileConfig {
-    enabled: Option<bool>,
-    client_id: Option<String>,
-    client_secret: Option<String>,
-    redirect_uri: Option<String>,
-    name: Option<String>,
-    scope: Option<String>,
-    authorize_url: Option<String>,
-    token_url: Option<String>,
-    user_api_url: Option<String>,
-    emails_api_url: Option<String>,
-}
-
-#[derive(Debug, Deserialize, Default)]
-#[serde(rename_all = "camelCase")]
-struct LdapFileConfig {
-    url: Option<String>,
-    bind_dn: Option<String>,
-    bind_password: Option<String>,
-    search_base: Option<String>,
-    search_filter: Option<String>,
-}
-
 impl SystemAgentConfig {
     fn apply_overrides(&mut self, overrides: SystemAgentFileConfig) {
         if let Some(value) = overrides.codex_command {
@@ -321,87 +272,5 @@ impl SystemAgentConfig {
         if let Some(value) = overrides.opencode_command {
             self.opencode_command = value;
         }
-    }
-}
-
-impl AuthConfig {
-    fn apply_overrides(&mut self, overrides: AuthFileConfig) -> Result<(), ConfigError> {
-        if let Some(value) = overrides.jwt_secret {
-            self.jwt_secret = value;
-        }
-        if let Some(value) = overrides.access_token_ttl_seconds {
-            self.access_token_ttl_seconds = value;
-        }
-        if let Some(value) = overrides.refresh_token_ttl_seconds {
-            self.refresh_token_ttl_seconds = value;
-        }
-        if let Some(value) = overrides.cookie_secure {
-            self.cookie_secure = value;
-        }
-        if let Some(value) = overrides.dev_oauth2_enabled {
-            self.dev_oauth2_enabled = value;
-        }
-        if let Some(value) = overrides.dev_oauth2_name {
-            self.dev_oauth2_name = value;
-        }
-        if let Some(value) = overrides.github_oauth {
-            self.github_oauth = value.into_runtime_config()?;
-        }
-        if let Some(value) = overrides.ldap {
-            self.ldap = Some(value.into_runtime_config()?);
-        }
-        Ok(())
-    }
-}
-
-impl GitHubOAuthFileConfig {
-    fn into_runtime_config(self) -> Result<Option<GitHubOAuthConfig>, ConfigError> {
-        let enabled = self.enabled.unwrap_or(false);
-        if !enabled {
-            return Ok(None);
-        }
-
-        Ok(Some(GitHubOAuthConfig {
-            client_id: required_config_string(self.client_id, "auth.githubOauth.clientId")?,
-            client_secret: required_config_string(
-                self.client_secret,
-                "auth.githubOauth.clientSecret",
-            )?,
-            redirect_uri: required_config_string(
-                self.redirect_uri,
-                "auth.githubOauth.redirectUri",
-            )?,
-            name: self
-                .name
-                .unwrap_or_else(|| DEFAULT_AUTH_GITHUB_NAME.to_string()),
-            scope: self
-                .scope
-                .unwrap_or_else(|| DEFAULT_AUTH_GITHUB_SCOPE.to_string()),
-            authorize_url: self
-                .authorize_url
-                .unwrap_or_else(|| DEFAULT_AUTH_GITHUB_AUTHORIZE_URL.to_string()),
-            token_url: self
-                .token_url
-                .unwrap_or_else(|| DEFAULT_AUTH_GITHUB_TOKEN_URL.to_string()),
-            user_api_url: self
-                .user_api_url
-                .unwrap_or_else(|| DEFAULT_AUTH_GITHUB_USER_API_URL.to_string()),
-            emails_api_url: self
-                .emails_api_url
-                .unwrap_or_else(|| DEFAULT_AUTH_GITHUB_EMAILS_API_URL.to_string()),
-        }))
-    }
-}
-
-impl LdapFileConfig {
-    fn into_runtime_config(self) -> Result<LdapConfig, ConfigError> {
-        Ok(LdapConfig {
-            name: DEFAULT_AUTH_LDAP_NAME.into(),
-            url: required_config_string(self.url, "auth.ldap.url")?,
-            bind_dn: required_config_string(self.bind_dn, "auth.ldap.bindDn")?,
-            bind_password: required_config_string(self.bind_password, "auth.ldap.bindPassword")?,
-            search_base: required_config_string(self.search_base, "auth.ldap.searchBase")?,
-            search_filter: required_config_string(self.search_filter, "auth.ldap.searchFilter")?,
-        })
     }
 }

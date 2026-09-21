@@ -89,7 +89,6 @@ async fn create_domain(
         domain_code: request.domain_code,
         name: request_to_localized(request.name),
         description: request_to_localized(request.description),
-        visible_roles: request.visible_roles,
         enabled: request.enabled,
         is_default: request.is_default,
         position: request.position,
@@ -126,7 +125,6 @@ async fn update_domain(
     let command = UpdateDomainCommand {
         name: request_to_localized(request.name),
         description: request_to_localized(request.description),
-        visible_roles: request.visible_roles,
         enabled: request.enabled,
         is_default: request.is_default,
         position: request.position,
@@ -274,7 +272,6 @@ async fn add_item(
         menu_code: request.menu_code,
         parent_menu_code: request.parent_menu_code,
         position: request.position,
-        visible_roles: request.visible_roles,
     };
     match state.navigation.add_item(&domain_code, command) {
         Ok(items) => Json(ApiResponse::protocol_success(
@@ -297,7 +294,6 @@ async fn update_item(
     let command = UpdateMenuItemCommand {
         parent_menu_code: request.parent_menu_code,
         position: request.position,
-        visible_roles: request.visible_roles,
     };
     match state
         .navigation
@@ -394,7 +390,6 @@ fn domain_vo(domain: NavigationDomain) -> DomainVo {
         enabled: domain.enabled,
         is_default: domain.is_default,
         position: domain.position,
-        visible_roles: domain.visible_roles,
         created_at: timestamp_to_millis(&domain.created_at),
         updated_at: timestamp_to_millis(&domain.updated_at),
     }
@@ -426,7 +421,6 @@ fn tree_item_vo(item: NavigationTreeItem) -> MenuTreeItemVo {
         icon: item.menu.icon,
         enabled: item.menu.enabled,
         position: item.position,
-        visible_roles: item.visible_roles,
         children: item.children.into_iter().map(tree_item_vo).collect(),
     }
 }

@@ -45,7 +45,6 @@ export const secondarySpaceMocks: SecondarySpace[] = [
     status: "Active",
     depth: 1,
     childCount: 1,
-    effectiveUserCount: 1,
   },
   {
     workspaceCode: "PLATFORM",
@@ -57,7 +56,6 @@ export const secondarySpaceMocks: SecondarySpace[] = [
     status: "Active",
     depth: 2,
     childCount: 1,
-    effectiveUserCount: 3,
   },
   {
     workspaceCode: "TRON_CORE",
@@ -69,7 +67,6 @@ export const secondarySpaceMocks: SecondarySpace[] = [
     status: "Active",
     depth: 3,
     childCount: 0,
-    effectiveUserCount: 2,
   },
   {
     workspaceCode: "COMPLIANCE",
@@ -81,7 +78,6 @@ export const secondarySpaceMocks: SecondarySpace[] = [
     status: "Active",
     depth: 1,
     childCount: 0,
-    effectiveUserCount: 1,
   },
 ];
 

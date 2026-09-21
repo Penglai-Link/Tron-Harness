@@ -28,7 +28,6 @@ export interface SecondarySpace {
   status: WorkspaceStatus;
   depth: number;
   childCount: number;
-  effectiveUserCount: number;
 }
 
 export interface WorkspaceSwitcherData {

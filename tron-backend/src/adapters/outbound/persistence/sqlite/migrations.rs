@@ -1,23 +1,3 @@
-pub(super) const USERS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260511_0001_create_user_management_users.sql");
-pub(super) const ASSIGNMENTS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260511_0002_create_user_management_assignments.sql");
-pub(super) const PASSWORD_RESET_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260511_0003_create_user_password_reset_events.sql");
-pub(super) const AUTH_REFRESH_SESSIONS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260515_0004_create_auth_refresh_sessions.sql");
-pub(super) const AUTH_REFRESH_SESSIONS_LDAP_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260609_0001_add_ldap_auth_method_to_auth_refresh_sessions.sql"
-);
-pub(super) const AUTH_OAUTH_IDENTITIES_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260515_0005_create_user_oauth_identities.sql");
-pub(super) const ROLES_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260515_0004_create_role_management_roles.sql");
-pub(super) const ROLE_PERMISSIONS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260515_0005_create_role_management_permissions.sql");
-pub(super) const NAVIGATION_ROLE_PERMISSION_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260829_0001_add_navigation_permission_domain.sql"
-);
 pub(super) const NAVIGATION_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260829_0002_create_navigation_management.sql"
 );
@@ -27,10 +7,6 @@ pub(super) const NAVIGATION_AGENTS_SPLIT_MIGRATION: &str = include_str!(
 pub(super) const CHAT_PANEL_NAVIGATION_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260915_0001_chat_panel_navigation.sql"
 );
-pub(super) const RESOURCE_ROLE_PERMISSION_DOMAIN_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260716_0001_add_resource_permission_domain.sql");
-pub(super) const RESOURCE_ROLE_DEFAULTS_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260716_0002_seed_resource_role_permissions.sql");
 pub(super) const RESOURCE_MANAGEMENT_SIMPLIFY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260818_0001_simplify_resource_management.sql");
 pub(super) const CHAT_SESSION_ATTACHMENTS_RESOURCE_MIGRATION: &str =
@@ -85,8 +61,6 @@ pub(super) const MODEL_DEFAULT_REASONING_EFFORT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260817_0002_add_model_default_reasoning_effort.sql");
 pub(super) const SKILL_REGISTRY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0011_create_skill_registry.sql");
-pub(super) const BOOTSTRAP_PLATFORM_ADMIN_MIGRATION: &str =
-    include_str!("../../../../../migrations/20260526_0017_bootstrap_platform_admin.sql");
 pub(super) const AGENT_RUN_HISTORY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260527_0017_create_agent_run_history.sql");
 pub(super) const AGENT_RUN_TOKEN_USAGE_MIGRATION: &str =

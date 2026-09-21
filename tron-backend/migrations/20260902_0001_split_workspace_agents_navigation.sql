@@ -22,7 +22,7 @@ VALUES
     (734540100000000004, 734540000000000002, 'en-US', 'System Agents');
 
 INSERT OR IGNORE INTO navigation_domain_menu_items (
-    id, domain_id, menu_id, parent_item_id, position, visible_roles
+    id, domain_id, menu_id, parent_item_id, position
 )
 VALUES
     (
@@ -30,14 +30,12 @@ VALUES
         734500000000000001,
         734540000000000001,
         734520000000000007,
-        0,
-        '[]'
+        0
     ),
     (
         734540200000000002,
         734500000000000001,
         734540000000000002,
         734520000000000007,
-        1,
-        '[]'
+        1
     );

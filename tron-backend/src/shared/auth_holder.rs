@@ -21,13 +21,6 @@ impl AuthHolderContext {
         &self.token_identity.session_code
     }
 
-    pub fn role_codes(&self) -> &[String] {
-        &self.token_identity.role_codes
-    }
-
-    pub fn space_codes(&self) -> &[String] {
-        &self.token_identity.space_codes
-    }
 }
 
 task_local! {

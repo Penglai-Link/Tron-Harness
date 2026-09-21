@@ -7,14 +7,13 @@ use axum::{
 use serde::Serialize;
 
 use crate::{
-    adapters::inbound::http::auth::RequestAuthContext,
     adapters::inbound::http::variables::{
         error_mapper::variable_error_response,
         handler::{PromptVariableOptionsQuery, prompt_variable_options},
         request::{CreateVariableRequest, RevealPlatformVariableRequest, UpdateVariableRequest},
     },
     app::AppState,
-    application::{user::StepUpVariableRevealTarget, variable::VariableService},
+    application::variable::VariableService,
     domain::variable::VariableError,
     response::{ApiResponse, EmptyData},
 };
@@ -98,17 +97,8 @@ pub async fn delete_platform_variable(
 
 pub async fn reveal_platform_variable(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Json(request): Json<RevealPlatformVariableRequest>,
 ) -> Response {
-    let step_up_target = StepUpVariableRevealTarget::platform(&request.variable_key);
-    if let Err(error) = state.users.verify_step_up_token(
-        &auth.user().user_code,
-        &request.step_up_token,
-        &step_up_target,
-    ) {
-        return crate::adapters::inbound::http::auth::error_mapper::auth_error_response(error);
-    }
     match state
         .variables
         .reveal_platform_variable(&request.variable_key)

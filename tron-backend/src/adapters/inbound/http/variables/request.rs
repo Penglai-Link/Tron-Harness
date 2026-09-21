@@ -67,12 +67,10 @@ impl From<RequestVariableValueMode> for VariableValueMode {
 pub struct RevealWorkspaceVariableRequest {
     pub workspace_code: String,
     pub variable_key: String,
-    pub step_up_token: String,
 }
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct RevealPlatformVariableRequest {
     pub variable_key: String,
-    pub step_up_token: String,
 }

@@ -15,6 +15,10 @@ export type ProviderConnectionStatus =
   | "AuthRequired";
 
 export type ProviderSyncStatus = "Running" | "Succeeded" | "Failed";
+export type ProviderCatalogProtocol =
+  | "CHAT_COMPLETIONS"
+  | "RESPONSES"
+  | "EMBEDDINGS";
 
 export interface ModelProviderConnection {
   providerCode: ModelProviderCode;
@@ -37,7 +41,7 @@ export interface ProviderCatalogModel {
   modelId: string | null;
   modelCode: string;
   modelName: string;
-  protocols: ("ChatCompletions" | "Responses")[];
+  protocols: ProviderCatalogProtocol[];
   upstreamVendorCode: string | null;
   upstreamVendorName: string | null;
   contextWindowTokens: number | null;
@@ -84,7 +88,6 @@ export interface ProviderAuthorizationPollResult {
   textVerified: boolean | null;
   embeddingVerified: boolean | null;
   profileId: string | null;
-  restartRequired: boolean;
 }
 
 export const modelProviderApiEndpoints = {

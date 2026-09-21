@@ -1,4 +1,7 @@
 /// <reference types="vite/client" />
+
+declare const __TRON_APP_VERSION__: string;
+
 interface ImportMetaEnv {
   readonly VITE_TRON_API_BASE_URL?: string;
   readonly VITE_TRON_TERMINAL_APP_CODE?: string;

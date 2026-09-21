@@ -137,7 +137,7 @@ export const shell = {
       tools: "工具",
       skillCenter: "技能中心",
       users: "用户",
-      variables: "变量",
+      variables: "公共变量",
       workspaceAdmin: "工作区",
     },
     navigation: "配置",

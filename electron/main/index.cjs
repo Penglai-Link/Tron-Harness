@@ -15,7 +15,6 @@ const { createUpdater, UPDATE_STATUS_EVENT } = require("./updater.cjs");
 const {
   HOST,
   resolveBackendHost,
-  buildGitHubOAuthRedirectUri,
   checkTargetPageEmbeddingStatus,
   findFreePort,
   isHttpUrl,
@@ -26,9 +25,8 @@ const {
   resolveDesktopDataDir,
   resolveFrontendDistDir,
   resolveResourcesDir,
-  resolveProfileDataDir,
-  resolveProfileDatabasePath,
-  resolveProfileGraphStoragePath,
+  resolveSharedDatabasePath,
+  resolveSharedGraphStoragePath,
   resolveSidecarPath,
   resolveUpdateServerUrl,
   sanitizeUrl,
@@ -388,14 +386,8 @@ function escapeHtml(value) {
 function startBackend(resourcesDir) {
   const sidecarPath = resolveSidecarPath(resourcesDir);
   const appDataDir = state.appDataDir;
-  const configPath = state.profileId
-    ? resolveBackendConfigPath(state.profileDataDir, resourcesDir, {
-        profileConfig: true,
-      })
-    : resolveBackendConfigPath(appDataDir, resourcesDir);
-  const logPath = resolveBackendLogPath(
-    state.profileId ? state.profileDataDir : path.join(appDataDir, "control"),
-  );
+  const configPath = resolveBackendConfigPath(appDataDir, resourcesDir);
+  const logPath = resolveBackendLogPath(appDataDir);
   fs.mkdirSync(path.dirname(logPath), { recursive: true });
   const logStream = fs.createWriteStream(logPath, { flags: "a" });
   logStream.on("error", (error) => {
@@ -419,10 +411,7 @@ function startBackend(resourcesDir) {
       TRON_BACKEND_FRONTEND_DIST_DIR: state.frontendDistDir,
       TRON_BACKEND_GRAPH_STORAGE_PATH: state.graphPath,
       TRON_BACKEND_PORT: String(state.backendPort),
-      TRON_BACKEND_BIND_ADDRESS: state.backendHost,
-      TRON_PROFILE_DATA_DIR: state.profileId ? state.profileDataDir : "",
-      TRON_PROFILE_ID: state.profileId,
-      TRON_AUTH_GITHUB_REDIRECT_URI: buildGitHubOAuthRedirectUri(state.backendUrl)
+      TRON_BACKEND_BIND_ADDRESS: state.backendHost
     },
     cwd: appDataDir,
     stdio: ["ignore", "pipe", "pipe"]
@@ -458,55 +447,6 @@ function stopBackend() {
   child.kill();
 }
 
-function requestedProfileId() {
-  const prefix = "--tron-profile-id=";
-  const inline = process.argv.find((argument) => argument.startsWith(prefix));
-  if (inline) {
-    return inline.slice(prefix.length).trim();
-  }
-  const index = process.argv.indexOf("--tron-profile-id");
-  if (index >= 0) {
-    return String(process.argv[index + 1] || "").trim();
-  }
-  return String(process.env.TRON_PROFILE_ID || "").trim();
-}
-
-async function prepareBackendForProfileSwitch() {
-  if (!state.backendUrl) return;
-  const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 1500);
-  try {
-    await fetch(`${state.backendUrl}/api/v1/profiles/prepare-switch`, {
-      method: "POST",
-      signal: controller.signal,
-      headers: { "content-type": "application/json" },
-      body: "{}"
-    });
-  } catch (_error) {
-    // The sidecar may already be unavailable while switching profiles.
-  } finally {
-    clearTimeout(timeout);
-  }
-}
-
-async function relaunchForProfile(profileId) {
-  const appDataDir = resolveDesktopDataDir();
-  state.appDataDir = appDataDir;
-  resolveProfileDataDir(appDataDir, profileId);
-  const args = process.argv.slice(1).filter((argument, index, all) => {
-    if (argument === "--tron-profile-id") return false;
-    if (index > 0 && all[index - 1] === "--tron-profile-id") return false;
-    return !argument.startsWith("--tron-profile-id=");
-  });
-  args.push(`--tron-profile-id=${profileId}`);
-  isQuitting = true;
-  await prepareBackendForProfileSwitch();
-  stopBackend();
-  app.relaunch({ args });
-  app.exit(0);
-  return { restarted: true, profileId };
-}
-
 function isDevMode() {
   return !app.isPackaged || process.env.TRON_ELECTRON_DEVTOOLS === "1";
 }
@@ -524,19 +464,13 @@ async function bootstrap() {
   state.clientHost = HOST;
   state.backendPort = await findFreePort(loadPort(), state.backendHost);
   state.backendUrl = `http://${state.clientHost}:${state.backendPort}`;
-  state.profileId = requestedProfileId();
-  state.profileDataDir = state.profileId
-    ? resolveProfileDataDir(appDataDir, state.profileId)
-    : path.join(appDataDir, "control");
+  state.profileId = "";
+  state.profileDataDir = appDataDir;
   fs.mkdirSync(state.profileDataDir, { recursive: true });
   state.controlDatabasePath = resolveControlDatabasePath(appDataDir);
-  state.databasePath = state.profileId ? resolveProfileDatabasePath(appDataDir, state.profileId) : ":memory:";
-  state.backendLogPath = resolveBackendLogPath(
-    state.profileId ? state.profileDataDir : path.join(appDataDir, "control"),
-  );
-  state.graphPath = state.profileId
-    ? resolveProfileGraphStoragePath(appDataDir, state.profileId)
-    : ":memory:";
+  state.databasePath = resolveSharedDatabasePath(appDataDir);
+  state.backendLogPath = resolveBackendLogPath(appDataDir);
+  state.graphPath = resolveSharedGraphStoragePath(appDataDir);
   state.frontendDistDir = resolveFrontendDistDir(resourcesDir);
   state.updater = createUpdater({
     dataDir: appDataDir,
@@ -914,11 +848,6 @@ function registerIpcHandlers() {
         databasePath: state.databasePath,
         graphPath: state.graphPath
       };
-    }
-
-    if (command === "switchProfile") {
-      const profileId = String(request.profileId || "").trim();
-      return relaunchForProfile(profileId);
     }
 
     if (command === "getAppVersion") {

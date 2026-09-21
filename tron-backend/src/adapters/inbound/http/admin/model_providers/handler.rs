@@ -36,7 +36,6 @@ struct AuthorizationPollResponse {
     text_verified: Option<bool>,
     embedding_verified: Option<bool>,
     profile_id: Option<String>,
-    restart_required: bool,
 }
 
 pub async fn list_provider_connections(State(state): State<AppState>) -> Response {
@@ -158,7 +157,6 @@ pub async fn poll_authorization_session(
     {
         Ok(result) => {
             let mut profile_id = None;
-            let mut restart_required = false;
             if let (Some(user_id), Some(username)) = (
                 result.connection.person_ai_user_id.as_deref(),
                 result.connection.person_ai_username.as_deref(),
@@ -177,7 +175,6 @@ pub async fn poll_authorization_session(
                     }
                 };
                 profile_id = Some(profile.profile_id);
-                restart_required = true;
             }
             Json(ApiResponse::success(AuthorizationPollResponse {
                 completed: true,
@@ -186,7 +183,6 @@ pub async fn poll_authorization_session(
                 text_verified: Some(result.text_verified),
                 embedding_verified: Some(result.embedding_verified),
                 profile_id,
-                restart_required,
             }))
             .into_response()
         }
@@ -199,7 +195,6 @@ pub async fn poll_authorization_session(
                     text_verified: None,
                     embedding_verified: None,
                     profile_id: None,
-                    restart_required: false,
                 }))
                 .into_response(),
                 Err(error) => model_provider_error_response(error),

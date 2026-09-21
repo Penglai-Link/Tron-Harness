@@ -5,7 +5,7 @@ import RouteLoadingFallback from "./RouteLoadingFallback";
 
 export default function EntryRoutePage() {
   const [profileStatus, setProfileStatus] = useState<BootstrapProfileStatus | null>(null);
-  const [setupError, setSetupError] = useState<string | null>(null);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
@@ -17,8 +17,8 @@ export default function EntryRoutePage() {
       })
       .catch((error: unknown) => {
         if (active)
-          setSetupError(
-            error instanceof Error ? error.message : "无法读取初始化状态",
+          setProfileError(
+            error instanceof Error ? error.message : "无法读取 PersonAI 档案状态",
           );
       });
     return () => {
@@ -26,13 +26,13 @@ export default function EntryRoutePage() {
     };
   }, []);
 
-  if (setupError) {
+  if (profileError) {
     return (
       <main className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6 text-center">
         <div>
-          <h1 className="text-xl font-semibold">无法读取初始化状态</h1>
+          <h1 className="text-xl font-semibold">无法读取 PersonAI 档案状态</h1>
           <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">
-            {setupError}
+            {profileError}
           </p>
         </div>
       </main>
@@ -47,5 +47,5 @@ export default function EntryRoutePage() {
     return <Navigate replace to="/profiles" />;
   }
 
-  return <Navigate replace to="/home" />;
+  return <Navigate replace to="/workspace" />;
 }

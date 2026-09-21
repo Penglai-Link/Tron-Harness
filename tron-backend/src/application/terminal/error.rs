@@ -9,7 +9,6 @@ pub enum TerminalError {
     AppArchived,
     LocalDirectoryUnavailable,
     WorkingDirectoryUnavailable,
-    WorkspaceAccessDenied,
     WorkspaceArchived,
     WorkspaceNotFound,
     TicketInvalid,
@@ -32,9 +31,6 @@ impl fmt::Display for TerminalError {
             }
             Self::WorkingDirectoryUnavailable => {
                 formatter.write_str("terminal working directory is unavailable")
-            }
-            Self::WorkspaceAccessDenied => {
-                formatter.write_str("user cannot access the terminal workspace")
             }
             Self::WorkspaceArchived => formatter.write_str("terminal workspace must be active"),
             Self::WorkspaceNotFound => formatter.write_str("terminal workspace was not found"),

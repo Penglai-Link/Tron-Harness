@@ -19,7 +19,6 @@ pub struct RuntimeMenu {
 
 fn visible_item(
     item: NavigationTreeItem,
-    role_codes: &[String],
     locale: &str,
 ) -> Option<RuntimeMenu> {
     if !item.menu.enabled {
@@ -28,7 +27,7 @@ fn visible_item(
     let children = item
         .children
         .into_iter()
-        .filter_map(|child| visible_item(child, role_codes, locale))
+        .filter_map(|child| visible_item(child, locale))
         .collect::<Vec<_>>();
     if item.menu.menu_type == MenuType::Group && children.is_empty() {
         return None;

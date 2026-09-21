@@ -22,12 +22,7 @@ impl WorkspaceService {
                         .clone()
                         .unwrap_or_else(|| "ROOT".into()),
                 )
-                .attr("directUserCount", detail.direct_user_count.to_string())
-                .attr("roleGrantCount", detail.role_grant_count.to_string())
-                .attr(
-                    "effectiveUserCount",
-                    detail.effective_user_count.to_string(),
-                ),
+                ,
         );
     }
 
@@ -51,20 +46,4 @@ impl WorkspaceService {
         );
     }
 
-    pub(super) fn publish_workspace_access_event(
-        &self,
-        event_name: &'static str,
-        summary: &'static str,
-        actor: &AuthenticatedUser,
-        workspace_code: &str,
-        grant_count: usize,
-    ) {
-        let _ = self.event_bus.publish(
-            BusEventDraft::audit(event_name, "workspace_service")
-                .subject("workspace", workspace_code.to_string())
-                .actor(actor)
-                .summary(summary)
-                .attr("grantCount", grant_count.to_string()),
-        );
-    }
 }

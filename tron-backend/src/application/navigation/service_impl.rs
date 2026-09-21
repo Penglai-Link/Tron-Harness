@@ -18,7 +18,6 @@ impl NavigationService {
 
     pub fn list_visible_domains(
         &self,
-        _role_codes: &[String],
         locale: &str,
     ) -> Result<Vec<NavigationDomain>, NavigationError> {
         let domains = self.list_domains()?;
@@ -49,7 +48,6 @@ impl NavigationService {
         let domain_code = validate_domain_code(&command.domain_code)?;
         validate_translations(&command.name)?;
         validate_translations(&command.description)?;
-        validate_roles(&command.visible_roles)?;
         if command.position < 0 {
             return Err(NavigationError::InvalidHierarchy);
         }
@@ -63,7 +61,6 @@ impl NavigationService {
             enabled: command.enabled,
             is_default: command.is_default,
             position: 0,
-            visible_roles: command.visible_roles,
             created_at: timestamp.clone(),
             updated_at: timestamp,
         };
@@ -93,7 +90,6 @@ impl NavigationService {
     ) -> Result<NavigationDomain, NavigationError> {
         validate_translations(&command.name)?;
         validate_translations(&command.description)?;
-        validate_roles(&command.visible_roles)?;
         if command.position < 0 {
             return Err(NavigationError::InvalidHierarchy);
         }
@@ -106,7 +102,6 @@ impl NavigationService {
             updated_at: current_timestamp(),
             name: command.name,
             description: command.description,
-            visible_roles: command.visible_roles,
             enabled: command.enabled,
             is_default: command.is_default,
             position: current.position,
@@ -263,7 +258,6 @@ impl NavigationService {
     pub fn runtime_tree(
         &self,
         domain_code: &str,
-        role_codes: &[String],
         locale: &str,
     ) -> Result<RuntimeNavigationTree, NavigationError> {
         let mut repository = self.lock_repository();
@@ -275,7 +269,7 @@ impl NavigationService {
         validate_flat_tree(&items, self.max_depth)?;
         let visible = build_tree(items)
             .into_iter()
-            .filter_map(|item| visible_item(item, role_codes, locale))
+            .filter_map(|item| visible_item(item, locale))
             .collect();
         Ok(RuntimeNavigationTree {
             domain_code: domain.domain_code,
@@ -291,7 +285,6 @@ impl NavigationService {
         command: AddMenuItemCommand,
     ) -> Result<Vec<NavigationTreeItem>, NavigationError> {
         validate_menu_code(&command.menu_code)?;
-        validate_roles(&command.visible_roles)?;
         if command.position < 0 {
             return Err(NavigationError::InvalidHierarchy);
         }
@@ -316,7 +309,6 @@ impl NavigationService {
             menu,
             parent_menu_code: command.parent_menu_code,
             position: command.position,
-            visible_roles: command.visible_roles,
             children: Vec::new(),
         };
         repository.add_item(domain_code, &item)?;
@@ -331,7 +323,6 @@ impl NavigationService {
         menu_code: &str,
         command: UpdateMenuItemCommand,
     ) -> Result<Vec<NavigationTreeItem>, NavigationError> {
-        validate_roles(&command.visible_roles)?;
         if command.position < 0 {
             return Err(NavigationError::InvalidHierarchy);
         }

@@ -8,7 +8,6 @@ import type {
 } from "@/domain/variable/model";
 
 export const variableApiEndpoints = {
-  verifyStepUpPassword: "POST /api/v1/auth/verify-step-up-password",
   listPlatformVariables: "GET /api/v1/admin/platform/variables",
   listPlatformPromptOptions: "GET /api/v1/admin/platform/variables/prompt-options",
   createPlatformVariable: "POST /api/v1/admin/platform/variables",
@@ -47,44 +46,17 @@ export interface VariableMutationResult {
   workspaceCode: string;
 }
 
-export interface StepUpPasswordPayload {
-  password: string;
-  target:
-    | {
-      scope: "platform";
-      variableKey: string;
-    }
-    | {
-      scope: "workspace";
-      variableKey: string;
-      workspaceCode: string;
-    };
-}
-
-export interface StepUpPasswordResult {
-  expiresAt: string;
-  stepUpToken: string;
-}
-
 export interface RevealWorkspaceVariablePayload {
-  stepUpToken: string;
   variableKey: string;
   workspaceCode: string;
 }
 
 export interface RevealPlatformVariablePayload {
-  stepUpToken: string;
   variableKey: string;
 }
 
 export interface RevealVariableResult {
   value: string;
-}
-
-export function verifyStepUpPassword(payload: StepUpPasswordPayload) {
-  return requestApi<StepUpPasswordResult>(variableApiEndpoints.verifyStepUpPassword, {
-    body: payload,
-  });
 }
 
 export function fetchPlatformVariables(signal?: AbortSignal) {

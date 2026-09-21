@@ -48,7 +48,6 @@ export interface NavigationDomainPayload {
   domainCode?: string;
   name: NavigationLocalizedText;
   description: NavigationLocalizedText;
-  visibleRoles: string[];
   enabled: boolean;
   isDefault: boolean;
   position: number;
@@ -68,7 +67,6 @@ export interface NavigationMenuItemPayload {
   menuCode?: string;
   parentMenuCode: string | null;
   position: number;
-  visibleRoles: string[];
 }
 
 export interface NavigationCopyMenuTreePayload {

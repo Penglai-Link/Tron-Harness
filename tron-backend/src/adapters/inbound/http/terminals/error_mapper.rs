@@ -113,11 +113,6 @@ pub fn terminal_error_response(error: TerminalError) -> Response {
             "TERMINAL_WORKING_DIRECTORY_UNAVAILABLE",
             "terminal working directory is unavailable",
         ),
-        TerminalError::WorkspaceAccessDenied => (
-            StatusCode::FORBIDDEN,
-            "TERMINAL_WORKSPACE_FORBIDDEN",
-            "authenticated user cannot access workspaceCode",
-        ),
         TerminalError::WorkspaceArchived => (
             StatusCode::BAD_REQUEST,
             "TERMINAL_WORKSPACE_ARCHIVED",

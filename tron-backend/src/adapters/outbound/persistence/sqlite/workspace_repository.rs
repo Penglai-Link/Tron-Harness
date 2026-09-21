@@ -5,7 +5,7 @@ use rusqlite::{Connection, params};
 use crate::{
     application::workspace::WorkspaceRepository,
     domain::workspace::{
-        Workspace, WorkspaceError, WorkspaceRoleAccess, WorkspaceStatus, WorkspaceUserAccess,
+        Workspace, WorkspaceError, WorkspaceStatus,
         workspace_status_from_storage, workspace_status_to_storage,
     },
     shared::{
@@ -135,120 +135,6 @@ impl WorkspaceRepository for SqliteWorkspaceRepository {
             )
             .map_err(storage_error)?;
         Ok(())
-    }
-
-    fn list_user_access(
-        &mut self,
-        workspace_code: &str,
-    ) -> Result<Vec<WorkspaceUserAccess>, WorkspaceError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT user_code, is_owner, created_at
-                 FROM workspace_user_access
-                 WHERE workspace_code = ?1
-                 ORDER BY user_code ASC",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map([workspace_code], |row| {
-                Ok(WorkspaceUserAccess {
-                    user_code: row.get(0)?,
-                    is_owner: row.get::<_, i64>(1)? == 1,
-                    granted_at: timestamp_from_millis(row.get(2)?),
-                })
-            })
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
-    }
-
-    fn replace_user_access(
-        &mut self,
-        workspace_code: &str,
-        entries: &[WorkspaceUserAccess],
-    ) -> Result<Vec<WorkspaceUserAccess>, WorkspaceError> {
-        let mut next_id = self.next_id()?;
-        let tx = self.connection.transaction().map_err(storage_error)?;
-        tx.execute(
-            "DELETE FROM workspace_user_access WHERE workspace_code = ?1",
-            [workspace_code],
-        )
-        .map_err(storage_error)?;
-        for entry in entries {
-            tx.execute(
-                "INSERT INTO workspace_user_access (id, workspace_code, user_code, is_owner, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
-                params![
-                    next_id,
-                    workspace_code,
-                    entry.user_code,
-                    i64::from(entry.is_owner),
-                    timestamp_to_millis(&entry.granted_at),
-                    timestamp_to_millis(&entry.granted_at),
-                ],
-            )
-            .map_err(storage_error)?;
-            next_id += 1;
-        }
-        tx.commit().map_err(storage_error)?;
-        self.list_user_access(workspace_code)
-    }
-
-    fn list_role_access(
-        &mut self,
-        workspace_code: &str,
-    ) -> Result<Vec<WorkspaceRoleAccess>, WorkspaceError> {
-        let mut statement = self
-            .connection
-            .prepare(
-                "SELECT role_code, created_at
-                 FROM workspace_role_access
-                 WHERE workspace_code = ?1
-                 ORDER BY role_code ASC",
-            )
-            .map_err(storage_error)?;
-        statement
-            .query_map([workspace_code], |row| {
-                Ok(WorkspaceRoleAccess {
-                    role_code: row.get(0)?,
-                    granted_at: timestamp_from_millis(row.get(1)?),
-                })
-            })
-            .map_err(storage_error)?
-            .collect::<Result<Vec<_>, _>>()
-            .map_err(storage_error)
-    }
-
-    fn replace_role_access(
-        &mut self,
-        workspace_code: &str,
-        entries: &[WorkspaceRoleAccess],
-    ) -> Result<Vec<WorkspaceRoleAccess>, WorkspaceError> {
-        let mut next_id = self.next_id()?;
-        let tx = self.connection.transaction().map_err(storage_error)?;
-        tx.execute(
-            "DELETE FROM workspace_role_access WHERE workspace_code = ?1",
-            [workspace_code],
-        )
-        .map_err(storage_error)?;
-        for entry in entries {
-            tx.execute(
-                "INSERT INTO workspace_role_access (id, workspace_code, role_code, created_at, updated_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
-                params![
-                    next_id,
-                    workspace_code,
-                    entry.role_code,
-                    timestamp_to_millis(&entry.granted_at),
-                    timestamp_to_millis(&entry.granted_at),
-                ],
-            )
-            .map_err(storage_error)?;
-            next_id += 1;
-        }
-        tx.commit().map_err(storage_error)?;
-        self.list_role_access(workspace_code)
     }
 
     fn archive_subtree(

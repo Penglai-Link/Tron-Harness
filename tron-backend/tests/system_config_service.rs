@@ -24,10 +24,21 @@ fn exposes_structured_items_and_masks_sensitive_values() {
     let secret = document
         .items
         .iter()
-        .find(|item| item.path == "auth.jwtSecret")
+        .find(|item| item.path == "variableCrypto.keyBase64")
         .expect("secret item should exist");
     assert!(secret.sensitive);
     assert!(secret.value.is_none());
+    assert!(
+        !document
+            .items
+            .iter()
+            .any(|item| item.path.starts_with("auth."))
+    );
+    assert!(
+        !fs::read_to_string(&fixture.path)
+            .expect("yaml should be readable")
+            .contains("auth:")
+    );
 }
 
 #[test]
@@ -106,7 +117,7 @@ impl ConfigFixture {
         ));
         fs::create_dir_all(&directory).expect("fixture directory should be created");
         let path = directory.join("application.yaml");
-        fs::write(&path, "bindAddress: 127.0.0.1\nport: 8080\ndatabaseUrl: tron.sqlite3\nauth:\n  jwtSecret: test-secret\n").expect("fixture should be written");
+        fs::write(&path, "bindAddress: 127.0.0.1\nport: 8080\ndatabaseUrl: tron.sqlite3\nvariableCrypto:\n  keyBase64: dGVzdC1zZWNyZXQ=\nauth:\n  jwtSecret: test-secret\n").expect("fixture should be written");
         Self {
             service: SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(path.clone()))),
             path,

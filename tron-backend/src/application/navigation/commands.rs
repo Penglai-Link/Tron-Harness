@@ -5,7 +5,6 @@ pub struct CreateDomainCommand {
     pub domain_code: String,
     pub name: LocalizedText,
     pub description: LocalizedText,
-    pub visible_roles: Vec<String>,
     pub enabled: bool,
     pub is_default: bool,
     pub position: i64,
@@ -15,7 +14,6 @@ pub struct CreateDomainCommand {
 pub struct UpdateDomainCommand {
     pub name: LocalizedText,
     pub description: LocalizedText,
-    pub visible_roles: Vec<String>,
     pub enabled: bool,
     pub is_default: bool,
     pub position: i64,
@@ -47,14 +45,12 @@ pub struct AddMenuItemCommand {
     pub menu_code: String,
     pub parent_menu_code: Option<String>,
     pub position: i64,
-    pub visible_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone)]
 pub struct UpdateMenuItemCommand {
     pub parent_menu_code: Option<String>,
     pub position: i64,
-    pub visible_roles: Vec<String>,
 }
 
 #[derive(Debug, Clone)]

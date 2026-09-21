@@ -14,11 +14,9 @@ use crate::{
         profile::ProfileRegistryService,
         prompt::PromptService,
         resource::ResourceService,
-        role::RoleService,
         short_term_memory::ShortTermMemoryService,
         skill::SkillRegistryService,
         task::TaskService,
-        user::UserService,
         variable::VariableService,
         workspace::WorkspaceService,
     },
@@ -46,12 +44,6 @@ impl FromRef<AppState> for AppReadiness {
     }
 }
 
-impl FromRef<AppState> for UserService {
-    fn from_ref(state: &AppState) -> Self {
-        state.users.clone()
-    }
-}
-
 impl FromRef<AppState> for ProfileRegistryService {
     fn from_ref(state: &AppState) -> Self {
         state.profiles.clone()
@@ -67,12 +59,6 @@ impl FromRef<AppState> for AppService {
 impl FromRef<AppState> for EventBusHandle {
     fn from_ref(state: &AppState) -> Self {
         state.event_bus.clone()
-    }
-}
-
-impl FromRef<AppState> for RoleService {
-    fn from_ref(state: &AppState) -> Self {
-        state.roles.clone()
     }
 }
 

@@ -1,14 +1,10 @@
-use axum::{
-    Router,
-    routing::{get, post},
-};
+use axum::{Router, routing::{get, post}};
 
 use crate::app::AppState;
 
 use super::handler::{
-    active_workspaces, archive_workspace, create_workspace, get_workspace,
-    list_workspace_options, list_workspaces, move_workspace, patch_workspace,
-    restore_workspace, total_workspaces, workspace_switcher,
+    archive_workspace, create_workspace, get_workspace, list_workspace_options,
+    list_workspaces, move_workspace, patch_workspace, restore_workspace, workspace_switcher,
 };
 
 pub fn routes() -> Router<AppState> {
@@ -22,14 +18,6 @@ pub fn routes() -> Router<AppState> {
             get(list_workspace_options),
         )
         .route("/api/v1/admin/workspaces/switcher", get(workspace_switcher))
-        .route(
-            "/api/v1/admin/workspaces/statistics/total-workspaces",
-            get(total_workspaces),
-        )
-        .route(
-            "/api/v1/admin/workspaces/statistics/active-workspaces",
-            get(active_workspaces),
-        )
         .route(
             "/api/v1/admin/workspaces/{workspace_code}",
             get(get_workspace).patch(patch_workspace),

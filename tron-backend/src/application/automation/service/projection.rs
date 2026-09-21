@@ -168,10 +168,7 @@ pub(super) fn map_workspace_error(error: WorkspaceError) -> AutomationError {
         WorkspaceError::StorageFailure => AutomationError::StorageFailure,
         WorkspaceError::DuplicateWorkspaceCode
         | WorkspaceError::WorkspaceNameRequired
-        | WorkspaceError::InvalidHierarchy
-        | WorkspaceError::InvalidAccessUser
-        | WorkspaceError::InvalidAccessRole
-        | WorkspaceError::DuplicateAccessGrant => AutomationError::InvalidWorkspace,
+        | WorkspaceError::InvalidHierarchy => AutomationError::InvalidWorkspace,
     }
 }
 

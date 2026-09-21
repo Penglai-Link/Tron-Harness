@@ -354,9 +354,6 @@ mod tests {
             status,
             path,
             children: Vec::<WorkspaceTreeNode>::new(),
-            direct_user_count: 0,
-            role_grant_count: 0,
-            effective_user_count: 0,
             created_at: "2026-05-29T00:00:00Z".to_owned(),
             updated_at: "2026-05-29T00:00:00Z".to_owned(),
             archived_at: (status == WorkspaceStatus::Archived)

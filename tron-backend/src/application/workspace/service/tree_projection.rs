@@ -1,10 +1,9 @@
+use std::collections::BTreeSet;
+
 use super::*;
 
 pub(super) fn build_workspace_tree(
     workspaces: &[Workspace],
-    direct_counts: &BTreeMap<String, usize>,
-    role_counts: &BTreeMap<String, usize>,
-    effective_counts: &BTreeMap<String, usize>,
     query: WorkspaceListQuery,
 ) -> Vec<WorkspaceTreeNode> {
     let visible_status = visible_workspace_status(query.status, query.include_archived);
@@ -25,9 +24,6 @@ pub(super) fn build_workspace_tree(
                 1,
                 visible_status,
                 included_codes.as_ref(),
-                direct_counts,
-                role_counts,
-                effective_counts,
                 query.root_only.unwrap_or(false),
             )
         })
@@ -112,7 +108,6 @@ fn collect_workspace_switcher_secondary(
         status: node.status,
         depth: node.depth,
         child_count: node.child_count,
-        effective_user_count: node.effective_user_count,
     });
 
     for child in &node.children {
@@ -128,9 +123,6 @@ fn build_workspace_node(
     depth: usize,
     visible_status: Option<WorkspaceStatus>,
     included_codes: Option<&BTreeSet<String>>,
-    direct_counts: &BTreeMap<String, usize>,
-    role_counts: &BTreeMap<String, usize>,
-    effective_counts: &BTreeMap<String, usize>,
     root_only: bool,
 ) -> WorkspaceTreeNode {
     let mut children = if root_only {
@@ -152,9 +144,6 @@ fn build_workspace_node(
                     depth + 1,
                     visible_status,
                     included_codes,
-                    direct_counts,
-                    role_counts,
-                    effective_counts,
                     false,
                 )
             })
@@ -170,11 +159,6 @@ fn build_workspace_node(
         depth,
         status: workspace.status,
         child_count: children.len(),
-        direct_user_count: *direct_counts.get(&workspace.workspace_code).unwrap_or(&0),
-        role_grant_count: *role_counts.get(&workspace.workspace_code).unwrap_or(&0),
-        effective_user_count: *effective_counts
-            .get(&workspace.workspace_code)
-            .unwrap_or(&0),
         children,
     }
 }
@@ -183,9 +167,6 @@ pub(super) fn build_child_summaries(
     workspaces: &[Workspace],
     workspace_code: &str,
     parent_depth: usize,
-    direct_counts: &BTreeMap<String, usize>,
-    role_counts: &BTreeMap<String, usize>,
-    effective_counts: &BTreeMap<String, usize>,
 ) -> Vec<WorkspaceTreeNode> {
     let mut children = workspaces
         .iter()
@@ -204,11 +185,6 @@ pub(super) fn build_child_summaries(
                     candidate.parent_workspace_code.as_deref() == Some(&workspace.workspace_code)
                 })
                 .count(),
-            direct_user_count: *direct_counts.get(&workspace.workspace_code).unwrap_or(&0),
-            role_grant_count: *role_counts.get(&workspace.workspace_code).unwrap_or(&0),
-            effective_user_count: *effective_counts
-                .get(&workspace.workspace_code)
-                .unwrap_or(&0),
             children: Vec::new(),
         })
         .collect::<Vec<_>>();

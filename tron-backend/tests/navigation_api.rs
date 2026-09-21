@@ -124,7 +124,6 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
             "domainCode": "COMPLIANCE",
             "name": { "zh-CN": "合规", "en-US": "Compliance" },
             "description": { "zh-CN": "合规领域", "en-US": "Compliance domain" },
-            "visibleRoles": [],
             "enabled": true,
             "isDefault": false,
             "position": 1
@@ -176,7 +175,6 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
             "menuCode": "COMPLIANCE_PORTAL",
             "parentMenuCode": null,
             "position": 0,
-            "visibleRoles": ["VIEWER"]
         })),
         Some(&token),
         None,
@@ -313,7 +311,6 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
             "domainCode": "ARRANGEMENT",
             "name": { "zh-CN": "编排测试", "en-US": "Arrangement test" },
             "description": { "zh-CN": "编排测试领域", "en-US": "Arrangement test domain" },
-            "visibleRoles": [],
             "enabled": true,
             "isDefault": false,
             "position": 1
@@ -366,7 +363,6 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
             "menuCode": "ARRANGEMENT_GROUP",
             "parentMenuCode": null,
             "position": 0,
-            "visibleRoles": []
         })),
         Some(&token),
         None,
@@ -382,7 +378,6 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
             "menuCode": "ARRANGEMENT_PAGE",
             "parentMenuCode": null,
             "position": 1,
-            "visibleRoles": []
         })),
         Some(&token),
         None,
@@ -397,7 +392,6 @@ async fn adding_and_moving_items_under_a_group_preserves_root_items() {
         Some(json!({
             "parentMenuCode": "ARRANGEMENT_GROUP",
             "position": 0,
-            "visibleRoles": []
         })),
         Some(&token),
         None,
@@ -604,7 +598,6 @@ async fn chat_panel_widgets_are_hidden_from_domain_list_but_rendered_in_tree() {
             "menuCode": "CHATS",
             "parentMenuCode": "CHAT_PROJECTS",
             "position": 0,
-            "visibleRoles": []
         })),
         Some(&token),
         None,

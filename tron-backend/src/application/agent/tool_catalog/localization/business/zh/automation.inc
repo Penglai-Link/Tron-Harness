@@ -32,66 +32,6 @@
         "返回平台 MCP 删除结果。",
     ),
     (
-        "agent.toolCatalog.tools.platform.open_app.page.name",
-        "分页查询平台 OpenAPI 应用",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.page.description",
-        "分页查询平台设置中的 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.page.sampleResultSummary",
-        "返回分页后的平台 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.get.name",
-        "获取平台 OpenAPI 应用",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.get.description",
-        "读取单个平台 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.get.sampleResultSummary",
-        "返回单个平台 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.create.name",
-        "创建平台 OpenAPI 应用",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.create.description",
-        "在平台设置中创建 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.create.sampleResultSummary",
-        "返回新建的平台 OpenAPI 应用，不暴露密钥。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.update.name",
-        "修改平台 OpenAPI 应用",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.update.description",
-        "修改平台 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.update.sampleResultSummary",
-        "返回修改后的平台 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.disable.name",
-        "停用平台 OpenAPI 应用",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.disable.description",
-        "停用平台 OpenAPI 应用。",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.disable.sampleResultSummary",
-        "返回已停用的平台 OpenAPI 应用。",
-    ),
-    (
         "agent.toolCatalog.tools.platform.resource.query.name",
         "查询平台资源",
     ),

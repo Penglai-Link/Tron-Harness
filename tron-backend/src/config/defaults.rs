@@ -3,8 +3,7 @@ use crate::{
 };
 
 use super::{
-    AppConfig, AuthConfig, DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS, DEFAULT_AUTH_DEV_OAUTH2_NAME,
-    DEFAULT_AUTH_JWT_SECRET, DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS, DEFAULT_BIND_ADDRESS,
+    AppConfig, DEFAULT_BIND_ADDRESS,
     DEFAULT_PORT, DEFAULT_SYSTEM_AGENT_CODEX_COMMAND, DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND,
     HttpClientProfilesConfig, MineruConfig, NavigationConfig, ResourceConfig, SystemAgentConfig,
     TEST_DATABASE_URL, VariableCryptoConfig,
@@ -40,16 +39,6 @@ impl Default for AppConfig {
             http_clients: HttpClientProfilesConfig::default_profiles(),
             mineru: MineruConfig::default(),
             short_term_memory: ShortTermMemoryConfig::default(),
-            auth: AuthConfig {
-                jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
-                access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,
-                refresh_token_ttl_seconds: DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS,
-                cookie_secure: false,
-                dev_oauth2_enabled: true,
-                dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
-                github_oauth: None,
-                ldap: None,
-            },
             event_bus: EventBusConfig::default(),
             navigation: NavigationConfig { max_depth: 3 },
         }

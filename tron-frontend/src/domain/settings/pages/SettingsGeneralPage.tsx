@@ -1,3 +1,4 @@
+import { useMemo } from "react";
 import { useTranslation } from "react-i18next";
 
 import { Field, TextInput } from "@/components/forms";
@@ -12,11 +13,14 @@ import {
   useAguiWorkReplayPreferences,
 } from "@/domain/settings/model/aguiWorkReplayPreferences";
 import { SystemConfigTable } from "@/domain/settings/components/SystemConfigTable";
+import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { UpdateSettingsCard } from "@/domain/update/UpdateSettingsCard";
+import { WebVersionCard } from "@/domain/update/WebVersionCard";
 
 export function SettingsGeneralPage() {
   const { t: shellT } = useTranslation("shell");
   const { t: pageT } = useTranslation("pages");
+  const desktopBridge = useMemo(() => new DesktopBridge(), []);
   const {
     preferences: aguiWorkReplayPreferences,
     setRecentTurnLimit,
@@ -27,7 +31,7 @@ export function SettingsGeneralPage() {
       <PageHeader title={shellT("settings.items.general")} />
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <UpdateSettingsCard />
+        {desktopBridge.isDesktop() ? <UpdateSettingsCard /> : <WebVersionCard />}
 
         <SystemConfigTable />
 

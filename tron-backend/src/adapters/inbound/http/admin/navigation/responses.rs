@@ -8,7 +8,6 @@ struct DomainVo {
     enabled: bool,
     is_default: bool,
     position: i64,
-    visible_roles: Vec<String>,
     created_at: i64,
     updated_at: i64,
 }
@@ -49,7 +48,6 @@ struct MenuTreeItemVo {
     icon: Option<String>,
     enabled: bool,
     position: i64,
-    visible_roles: Vec<String>,
     children: Vec<MenuTreeItemVo>,
 }
 

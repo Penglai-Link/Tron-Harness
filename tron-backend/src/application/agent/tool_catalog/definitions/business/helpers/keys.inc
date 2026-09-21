@@ -344,47 +344,6 @@ fn tool_key(tool_code: &'static str, suffix: &'static str) -> &'static str {
         ("platform.mcp.delete", "sampleResultSummary") => {
             "agent.toolCatalog.tools.platform.mcp.delete.sampleResultSummary"
         }
-        ("platform.open_app.page", "name") => "agent.toolCatalog.tools.platform.open_app.page.name",
-        ("platform.open_app.page", "description") => {
-            "agent.toolCatalog.tools.platform.open_app.page.description"
-        }
-        ("platform.open_app.page", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.open_app.page.sampleResultSummary"
-        }
-        ("platform.open_app.get", "name") => "agent.toolCatalog.tools.platform.open_app.get.name",
-        ("platform.open_app.get", "description") => {
-            "agent.toolCatalog.tools.platform.open_app.get.description"
-        }
-        ("platform.open_app.get", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.open_app.get.sampleResultSummary"
-        }
-        ("platform.open_app.create", "name") => {
-            "agent.toolCatalog.tools.platform.open_app.create.name"
-        }
-        ("platform.open_app.create", "description") => {
-            "agent.toolCatalog.tools.platform.open_app.create.description"
-        }
-        ("platform.open_app.create", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.open_app.create.sampleResultSummary"
-        }
-        ("platform.open_app.update", "name") => {
-            "agent.toolCatalog.tools.platform.open_app.update.name"
-        }
-        ("platform.open_app.update", "description") => {
-            "agent.toolCatalog.tools.platform.open_app.update.description"
-        }
-        ("platform.open_app.update", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.open_app.update.sampleResultSummary"
-        }
-        ("platform.open_app.disable", "name") => {
-            "agent.toolCatalog.tools.platform.open_app.disable.name"
-        }
-        ("platform.open_app.disable", "description") => {
-            "agent.toolCatalog.tools.platform.open_app.disable.description"
-        }
-        ("platform.open_app.disable", "sampleResultSummary") => {
-            "agent.toolCatalog.tools.platform.open_app.disable.sampleResultSummary"
-        }
         ("platform.resource.query", "name") => {
             "agent.toolCatalog.tools.platform.resource.query.name"
         }

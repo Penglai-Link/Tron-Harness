@@ -118,7 +118,7 @@ export const appRoutes: AppRoute[] = [
     archetype: "data-table",
     layout: "settings",
     settingsNav: "Audit Logs",
-    shellConfig: { searchPlaceholder: "Search users, roles, logs..." },
+    shellConfig: { searchPlaceholder: "Search audit logs..." },
   },
   {
     pageId: "admin.navigationDomains",

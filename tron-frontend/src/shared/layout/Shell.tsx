@@ -3,9 +3,11 @@ import {
   createContext,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from "react";
 
@@ -33,7 +35,6 @@ import {
 } from "react-router";
 
 import { fetchWorkspaceSwitcher } from "@/domain/admin/api";
-import { fetchAccountProfile } from "@/domain/account/api";
 import { fetchNavigationDomains, fetchNavigationMenuTree } from "@/domain/navigation/api";
 import { useAuthSession } from "@/domain/auth";
 import { MainAgentChatWindow } from "@/domain/agent/components/MainAgentChatWindow";
@@ -63,6 +64,7 @@ import { SelectInput } from "@/components/forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useShellShortcuts } from "@/shared/hooks/useShellShortcuts";
+import { useIsMobile } from "@/hooks/use-mobile";
 import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import { useAuthStore } from "@/store/authStore";
 import type { TronNavItem, TronNavSection } from "@/shared/types/ShellNavigation";
@@ -87,7 +89,6 @@ interface TronShellProps {
   activeItem?: string;
   children: ReactNode;
   contentClassName?: string;
-  roleCodes?: string[];
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
   userMenuContent?: ReactNode;
@@ -98,6 +99,7 @@ const TronShellFrameContext = createContext(false);
 type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["secondarySpaces"][number]>;
 
 const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
+const PERSON_AI_WEBSITE_URL = "https://personai.chat/person-ai-index/user/home/usage";
 
 export function useOpenRightSidebar() {
   const activeTabId = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
@@ -153,7 +155,6 @@ export function TronShell({
   activeItem = "Apps",
   children,
   contentClassName,
-  roleCodes,
   searchPlaceholder,
   topbarActions,
   userMenuContent,
@@ -162,8 +163,12 @@ export function TronShell({
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
   const { setTheme, theme, themes } = useTheme();
   const { session: authSession } = useAuthSession();
-  const updateSessionUser = useAuthStore((state) => state.updateSessionUser);
+  const ensureSessionFresh = useAuthStore((state) => state.ensureSessionFresh);
   const { src: avatarSrc } = useManagedAvatar(authSession?.user.avatarUrl);
+  const handleAvatarLoadError = useCallback(() => {
+    void ensureSessionFresh();
+  }, [ensureSessionFresh]);
+  const isMobileViewport = useIsMobile();
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const navigateToPath = useCallback((path: string) => navigate(path), [navigate]);
@@ -247,33 +252,93 @@ export function TronShell({
   const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
   const [showBottomPanel, setBottomPanel] = useState(false)
+  const [userPanelStyle, setUserPanelStyle] = useState<CSSProperties | undefined>();
 
-  useEffect(() => {
-    if (!authSession) return;
+  const updateUserPanelPosition = useCallback(() => {
+    if (utilityPanel !== "user" || !userMenuTriggerRef.current || !utilityPanelRef.current) {
+      return;
+    }
 
-    const controller = new AbortController();
-    void fetchAccountProfile(controller.signal)
-      .then((profile) => {
-        updateSessionUser({ avatarUrl: profile.avatarUrl });
-      })
-      .catch(() => undefined);
+    const triggerRect = userMenuTriggerRef.current.getBoundingClientRect();
+    const panelElement = utilityPanelRef.current;
+    const panelRect = panelElement.getBoundingClientRect();
+    const viewport = window.visualViewport;
+    const viewportWidth = viewport?.width ?? window.innerWidth;
+    const viewportHeight = viewport?.height ?? window.innerHeight;
+    const margin = 8;
+    const gap = 8;
+    const panelHeight = Math.max(panelElement.scrollHeight, panelRect.height);
+    const panelWidth = panelRect.width;
+    const clamp = (value: number, min: number, max: number) => Math.min(Math.max(value, min), Math.max(min, max));
 
-    return () => controller.abort();
-  }, [authSession?.user.userCode, updateSessionUser]);
+    let top: number;
+    let left: number;
+
+    if (isMobileViewport) {
+      const spaceAbove = Math.max(1, triggerRect.top - gap - margin);
+      const spaceBelow = Math.max(1, viewportHeight - triggerRect.bottom - gap - margin);
+      const openAbove = panelHeight <= spaceAbove || spaceAbove >= spaceBelow;
+      top = openAbove
+        ? triggerRect.top - gap - panelHeight
+        : triggerRect.bottom + gap;
+      left = clamp(triggerRect.left, margin, viewportWidth - panelWidth - margin);
+    } else {
+      top = triggerRect.top;
+      left = clamp(triggerRect.right + gap, margin, viewportWidth - panelWidth - margin);
+    }
+
+    top = clamp(top, margin, viewportHeight - panelHeight - margin);
+
+    const nextStyle: CSSProperties = {
+      left,
+      top,
+      visibility: "visible",
+    };
+
+    setUserPanelStyle((current) => (
+      current
+      && current.left === nextStyle.left
+      && current.top === nextStyle.top
+      && current.visibility === nextStyle.visibility
+        ? current
+        : nextStyle
+    ));
+  }, [isMobileViewport, utilityPanel]);
+
+  useLayoutEffect(() => {
+    if (utilityPanel !== "user") {
+      setUserPanelStyle(undefined);
+      return;
+    }
+
+    let frame = window.requestAnimationFrame(updateUserPanelPosition);
+    const scheduleUpdate = () => {
+      window.cancelAnimationFrame(frame);
+      frame = window.requestAnimationFrame(updateUserPanelPosition);
+    };
+    const visualViewport = window.visualViewport;
+    const resizeObserver = new ResizeObserver(scheduleUpdate);
+
+    window.addEventListener("resize", scheduleUpdate);
+    window.addEventListener("scroll", scheduleUpdate, true);
+    visualViewport?.addEventListener("resize", scheduleUpdate);
+    visualViewport?.addEventListener("scroll", scheduleUpdate);
+    if (userMenuTriggerRef.current) resizeObserver.observe(userMenuTriggerRef.current);
+    if (utilityPanelRef.current) resizeObserver.observe(utilityPanelRef.current);
+
+    return () => {
+      window.cancelAnimationFrame(frame);
+      window.removeEventListener("resize", scheduleUpdate);
+      window.removeEventListener("scroll", scheduleUpdate, true);
+      visualViewport?.removeEventListener("resize", scheduleUpdate);
+      visualViewport?.removeEventListener("scroll", scheduleUpdate);
+      resizeObserver.disconnect();
+    };
+  }, [updateUserPanelPosition, utilityPanel]);
 
   const visibleNavigation = useMemo(
-    () => (navigationMenuTree ? mapNavigationTree(navigationMenuTree) : tronNavigation).filter((section) => {
-      if (!section.requiredRoleCodes?.length) {
-        return true;
-      }
-
-      if (!roleCodes) {
-        return true;
-      }
-
-      return section.requiredRoleCodes.some((roleCode) => roleCodes.includes(roleCode));
-    }),
-    [navigationMenuTree, roleCodes],
+    () => navigationMenuTree ? mapNavigationTree(navigationMenuTree) : tronNavigation,
+    [navigationMenuTree],
   );
 
   const selectedNavigationDomain = navigationDomains.find((domain) => domain.domainCode === selectedDomainCode)
@@ -842,11 +907,6 @@ export function TronShell({
             </SelectInput>
           </div>
         </div>
-        {userMenuContent ? (
-          <div className="">
-            {userMenuContent}
-          </div>
-        ) : null}
       </>
     );
   }
@@ -871,7 +931,7 @@ export function TronShell({
           onClick={() => handleUtilityPanelClick("user")}
         >
           <span className="flex size-9 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
-            {avatarSrc ? <img alt="" className="size-full object-cover" src={avatarSrc} /> : initial}
+            {avatarSrc ? <img alt="" className="size-full object-cover" onError={handleAvatarLoadError} src={avatarSrc} /> : initial}
           </span>
           {compact ? null : (
             <>
@@ -887,20 +947,29 @@ export function TronShell({
           <div
             ref={utilityPanelRef}
             className={cn(
-              "absolute z-[70] w-[min(20rem,calc(100vw-1rem))] overflow-y-auto rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
-              mobile ? "bottom-[calc(100%+8px)] left-0 max-h-[min(70vh,36rem)]" : "bottom-0 left-[calc(100%+8px)] max-h-[min(80vh,36rem)]",
+              "fixed z-[70] w-[min(20rem,calc(100vw-1rem))] overflow-visible rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
             )}
+            style={userPanelStyle ?? { visibility: "hidden" }}
             role="dialog"
             aria-label={t("shell:utilityPanel.user")}
           >
-            <div className="flex min-w-0 items-center gap-3 px-3 py-3">
-              <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
-                {avatarSrc ? <img alt="" className="size-full object-cover" src={avatarSrc} /> : initial}
-              </span>
-              <span className="min-w-0">
-                <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
-                {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
-              </span>
+            <div className="flex min-w-0 items-center gap-2 px-3 py-2">
+              <a
+                aria-label="打开 PersonAI 官网"
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-md py-1 transition-colors hover:bg-[var(--color-hover-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
+                href={PERSON_AI_WEBSITE_URL}
+                rel="noreferrer"
+                target="_blank"
+              >
+                <span className="flex size-10 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]" aria-hidden="true">
+                  {avatarSrc ? <img alt="" className="size-full object-cover" onError={handleAvatarLoadError} src={avatarSrc} /> : initial}
+                </span>
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
+                  {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
+                </span>
+              </a>
+              {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
             </div>
             <div className="border-t border-[var(--color-card-border)]">{renderUserPanelContent()}</div>
           </div>

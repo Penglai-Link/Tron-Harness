@@ -40,7 +40,6 @@ export interface NavigationAdminDomain {
   enabled: boolean;
   isDefault: boolean;
   position: number;
-  visibleRoles: string[];
   createdAt: number;
   updatedAt: number;
 }
@@ -60,7 +59,6 @@ export interface NavigationAdminMenu {
 
 export interface NavigationAdminTreeItem extends NavigationAdminMenu {
   position: number;
-  visibleRoles: string[];
   children: NavigationAdminTreeItem[];
 }
 

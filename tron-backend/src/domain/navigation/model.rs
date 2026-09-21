@@ -94,7 +94,6 @@ pub struct NavigationDomain {
     pub enabled: bool,
     pub is_default: bool,
     pub position: i64,
-    pub visible_roles: Vec<String>,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -120,7 +119,6 @@ pub struct NavigationTreeItem {
     pub menu: NavigationMenu,
     pub parent_menu_code: Option<String>,
     pub position: i64,
-    pub visible_roles: Vec<String>,
     pub children: Vec<Self>,
 }
 
@@ -168,7 +166,6 @@ pub enum NavigationError {
     DomainNotEmpty,
     DomainAccessDenied,
     ManagementAccessDenied,
-    InvalidRoleCode,
     StorageFailure,
 }
 
@@ -206,7 +203,6 @@ impl fmt::Display for NavigationError {
             Self::DomainNotEmpty => "navigation domain must be empty before deletion",
             Self::DomainAccessDenied => "navigation domain is not accessible",
             Self::ManagementAccessDenied => "navigation management permission is required",
-            Self::InvalidRoleCode => "navigation role code is invalid",
             Self::StorageFailure => "navigation storage operation failed",
         })
     }
@@ -238,19 +234,6 @@ fn validate_code(value: &str, error: NavigationError) -> Result<String, Navigati
 pub fn validate_translations(text: &LocalizedText) -> Result<(), NavigationError> {
     if text.zh_cn.trim().is_empty() || text.en_us.trim().is_empty() {
         return Err(NavigationError::InvalidTranslation);
-    }
-    Ok(())
-}
-
-pub fn validate_roles(roles: &[String]) -> Result<(), NavigationError> {
-    if roles.iter().any(|role| {
-        role.trim().is_empty()
-            || role.len() > 64
-            || !role
-                .chars()
-                .all(|ch| ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '_')
-    }) {
-        return Err(NavigationError::InvalidRoleCode);
     }
     Ok(())
 }

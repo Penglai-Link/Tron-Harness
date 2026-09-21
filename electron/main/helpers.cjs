@@ -9,7 +9,6 @@ const LAN_DEV_HOST = "0.0.0.0";
 const SIDE_CAR_BASELINE_PORT = 8080;
 const MAX_PORT_PROBE = 80;
 const BACKEND_HEALTH_PATH = "/api/v1/health";
-const GITHUB_OAUTH_CALLBACK_PATH = "/api/v1/auth/oauth2/callback/github";
 const DEFAULT_PERSON_AI_SERVER_BASE_URL = "https://personai.chat/person-ai-index";
 
 function isHttpUrl(input) {
@@ -35,11 +34,6 @@ function normalizeTargetUrl(input) {
 
 function sanitizeUrl(raw) {
   return normalizeTargetUrl(String(raw || "").trim());
-}
-
-function buildGitHubOAuthRedirectUri(backendUrl) {
-  const origin = String(backendUrl || "").replace(/\/+$/, "");
-  return `${origin}${GITHUB_OAUTH_CALLBACK_PATH}`;
 }
 
 function loadPort() {
@@ -111,27 +105,12 @@ function resolveControlDatabasePath(appDataDir) {
   return path.join(resolveControlDataDir(appDataDir), "profiles.sqlite");
 }
 
-function isSafeProfileId(profileId) {
-  return /^[a-z0-9][a-z0-9._-]{0,127}$/i.test(String(profileId || ""));
+function resolveSharedDatabasePath(appDataDir) {
+  return path.join(appDataDir, "tron.sqlite3");
 }
 
-function resolveProfileDataDir(appDataDir, profileId) {
-  if (!isSafeProfileId(profileId)) {
-    throw new Error("invalid Tron profile id");
-  }
-  return path.join(appDataDir, "profiles", profileId);
-}
-
-function resolveProfileDatabasePath(appDataDir, profileId) {
-  return path.join(resolveProfileDataDir(appDataDir, profileId), "tron.sqlite3");
-}
-
-function resolveProfileGraphStoragePath(appDataDir, profileId) {
-  return path.join(resolveProfileDataDir(appDataDir, profileId), "tron.graph.grafeo");
-}
-
-function resolveProfileConfigPath(appDataDir, profileId) {
-  return path.join(resolveProfileDataDir(appDataDir, profileId), "application.yaml");
+function resolveSharedGraphStoragePath(appDataDir) {
+  return path.join(appDataDir, "tron.graph.grafeo");
 }
 
 function resolveBackendLogPath(appDataDir) {
@@ -301,7 +280,6 @@ module.exports = {
   HOST,
   LAN_DEV_HOST,
   SIDE_CAR_BASELINE_PORT,
-  buildGitHubOAuthRedirectUri,
   checkTargetPageEmbeddingStatus,
   findFreePort,
   iframeBlockReasonFromHeaders,
@@ -314,10 +292,8 @@ module.exports = {
   resolveBackendConfigPath,
   resolveUpdateServerUrl,
   resolveFrontendDistDir,
-  resolveProfileDataDir,
-  resolveProfileDatabasePath,
-  resolveProfileGraphStoragePath,
-  resolveProfileConfigPath,
+  resolveSharedDatabasePath,
+  resolveSharedGraphStoragePath,
   resolveBackendHost,
   resolveResourcesDir,
   resolveSidecarPath,

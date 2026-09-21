@@ -59,7 +59,7 @@ pub fn routes() -> Router<AppState> {
 async fn list_domains(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
     match state
         .navigation
-        .list_visible_domains(&auth.user().role_codes, &auth.locale)
+        .list_visible_domains(&auth.locale)
     {
         Ok(domains) => Json(ApiResponse::protocol_success(
             domains
@@ -79,7 +79,7 @@ async fn menu_tree(
 ) -> Response {
     match state
         .navigation
-        .runtime_tree(&domain_code, &auth.user().role_codes, &auth.locale)
+        .runtime_tree(&domain_code, &auth.locale)
     {
         Ok(tree) => Json(ApiResponse::protocol_success(runtime_tree_vo(tree))).into_response(),
         Err(error) => navigation_error_response(error, &auth.locale),

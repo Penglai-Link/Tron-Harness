@@ -12,7 +12,6 @@ use rusqlite::{Connection, OptionalExtension, params};
 use serde::Serialize;
 
 const CONTROL_DATABASE_ENV: &str = "TRON_BACKEND_CONTROL_DATABASE_URL";
-const ACTIVE_PROFILE_ENV: &str = "TRON_PROFILE_ID";
 const PROFILE_REGISTRY_MIGRATION: &str =
     include_str!("../../migrations/20260921_0001_create_profile_registry.sql");
 
@@ -38,6 +37,7 @@ pub struct BootstrapProfileStatus {
     pub has_profiles: bool,
     pub active_profile_id: Option<String>,
     pub active_profile: Option<ProfileRecord>,
+    pub avatar_url: Option<String>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -125,11 +125,12 @@ impl ProfileRegistryService {
             .map_err(|_| ProfileRegistryError::LockPoisoned)?;
         connection
             .query_row(
-                "SELECT p.profile_id, p.person_ai_user_id, p.person_ai_username, p.status,
-                        p.created_at, p.last_activated_at
-                 FROM profile_runtime_state s
-                 JOIN profiles p ON p.profile_id = s.active_profile_id
-                 WHERE s.singleton = 1",
+                "SELECT profile_id, person_ai_user_id, person_ai_username, status,
+                        created_at, last_activated_at
+                 FROM profiles
+                 WHERE status = 'ACTIVE'
+                 ORDER BY last_activated_at DESC, created_at DESC
+                 LIMIT 1",
                 [],
                 map_profile,
             )
@@ -154,6 +155,7 @@ impl ProfileRegistryService {
                 .as_ref()
                 .map(|profile| profile.profile_id.clone()),
             active_profile,
+            avatar_url: None,
         })
     }
 
@@ -209,19 +211,16 @@ impl ProfileRegistryService {
             connection.execute(
                 "INSERT INTO profiles(profile_id, person_ai_user_id, person_ai_username, status, created_at)
                  VALUES (?1, ?2, ?3, 'ACTIVE', ?4)
-                 ON CONFLICT(person_ai_user_id) DO UPDATE SET
+                ON CONFLICT(person_ai_user_id) DO UPDATE SET
                      person_ai_username = excluded.person_ai_username,
-                     status = 'ACTIVE'",
+                     status = 'ACTIVE',
+                     last_activated_at = excluded.created_at",
                 params![profile_id, person_ai_user_id, person_ai_username, now],
             )?;
         }
         connection.execute(
             "UPDATE profiles SET status = 'INACTIVE'
              WHERE profile_id <> ?1 AND status = 'ACTIVE'",
-            [profile_id.as_str()],
-        )?;
-        connection.execute(
-            "UPDATE profile_runtime_state SET active_profile_id = ?1 WHERE singleton = 1",
             [profile_id.as_str()],
         )?;
         connection
@@ -260,10 +259,6 @@ impl ProfileRegistryService {
                 "UPDATE profiles SET status = 'PENDING' WHERE profile_id = ?1",
                 [profile.profile_id.as_str()],
             )?;
-            transaction.execute(
-                "UPDATE profile_runtime_state SET active_profile_id = ?1 WHERE singleton = 1",
-                [profile.profile_id.as_str()],
-            )?;
             transaction.commit()?;
             return Ok(ProfileRecord {
                 status: "PENDING".to_owned(),
@@ -281,10 +276,6 @@ impl ProfileRegistryService {
                 profile_id, person_ai_user_id, person_ai_username, status, created_at
              ) VALUES (?1, '', '', 'PENDING', ?2)",
             params![profile_id, now],
-        )?;
-        transaction.execute(
-            "UPDATE profile_runtime_state SET active_profile_id = ?1 WHERE singleton = 1",
-            [profile_id.as_str()],
         )?;
         let profile = transaction
             .query_row(
@@ -329,10 +320,6 @@ impl ProfileRegistryService {
             "UPDATE profiles SET status = 'ACTIVE', last_activated_at = ?2 WHERE profile_id = ?1",
             params![profile_id, now],
         )?;
-        transaction.execute(
-            "UPDATE profile_runtime_state SET active_profile_id = ?1 WHERE singleton = 1",
-            [profile_id],
-        )?;
         let profile = transaction
             .query_row(
                 "SELECT profile_id, person_ai_user_id, person_ai_username, status,
@@ -346,20 +333,50 @@ impl ProfileRegistryService {
         Ok(profile)
     }
 
-    pub fn active_profile_id_from_environment() -> Option<String> {
-        env::var(ACTIVE_PROFILE_ENV)
-            .ok()
-            .filter(|value| !value.trim().is_empty())
+    pub fn remove(&self, profile_id: &str) -> Result<(), ProfileRegistryError> {
+        let profile_id = profile_id.trim();
+        if profile_id.is_empty() {
+            return Err(ProfileRegistryError::InvalidInput("profileId"));
+        }
+        let connection = self.connection.lock().map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        let transaction = connection.unchecked_transaction()?;
+        let exists = transaction
+            .query_row("SELECT EXISTS(SELECT 1 FROM profiles WHERE profile_id = ?1)", [profile_id], |row| row.get::<_, bool>(0))?;
+        if !exists {
+            return Err(ProfileRegistryError::ProfileNotFound(profile_id.to_owned()));
+        }
+        let was_active = transaction.query_row(
+            "SELECT status = 'ACTIVE' FROM profiles WHERE profile_id = ?1",
+            [profile_id],
+            |row| row.get::<_, bool>(0),
+        )?;
+        if was_active {
+            if let Some(next_profile_id) = transaction
+                .query_row(
+                    "SELECT profile_id FROM profiles
+                     WHERE profile_id <> ?1 AND status <> 'PENDING'
+                     ORDER BY last_activated_at DESC, created_at DESC LIMIT 1",
+                    [profile_id],
+                    |row| row.get::<_, String>(0),
+                )
+                .optional()?
+            {
+                transaction.execute(
+                    "UPDATE profiles SET status = 'ACTIVE', last_activated_at = ?2 WHERE profile_id = ?1",
+                    params![next_profile_id, Utc::now().to_rfc3339()],
+                )?;
+            }
+        }
+        transaction.execute("DELETE FROM profiles WHERE profile_id = ?1", [profile_id])?;
+        transaction.commit()?;
+        Ok(())
     }
 
     pub fn current_context(&self) -> Result<CurrentProfileContext, ProfileRegistryError> {
         let profile = self
             .active()?
             .ok_or(ProfileRegistryError::ProfileNotFound("active".into()))?;
-        if profile.status != "ACTIVE"
-            || Self::active_profile_id_from_environment()
-                .is_some_and(|profile_id| profile_id != profile.profile_id)
-        {
+        if profile.status != "ACTIVE" {
             return Err(ProfileRegistryError::ProfileNotFound(profile.profile_id));
         }
         Ok(CurrentProfileContext {
@@ -388,11 +405,6 @@ fn default_control_database_url() -> String {
         .display()
         .to_string()
 }
-
-pub fn default_profile_data_dir(base_dir: impl AsRef<Path>, profile_id: &str) -> PathBuf {
-    base_dir.as_ref().join("profiles").join(profile_id)
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -467,10 +479,22 @@ mod tests {
     }
 
     #[test]
-    fn profile_data_is_nested_under_a_non_identity_directory() {
-        assert_eq!(
-            default_profile_data_dir("/tmp/tron", "profile-123"),
-            PathBuf::from("/tmp/tron/profiles/profile-123")
-        );
+    fn removing_active_profile_promotes_the_most_recent_remaining_account() {
+        let registry = ProfileRegistryService::new(":memory:").expect("registry");
+        let first = registry
+            .register_or_update("person-1", "alice")
+            .expect("first profile");
+        let second = registry
+            .register_or_update("person-2", "bob")
+            .expect("second profile");
+
+        registry.activate(&first.profile_id).expect("activate first");
+        registry.remove(&first.profile_id).expect("remove first");
+
+        let active = registry
+            .current_context()
+            .expect("remaining account should stay active");
+        assert_eq!(active.profile_id, second.profile_id);
+        assert_eq!(active.person_ai_user_id, "person-2");
     }
 }

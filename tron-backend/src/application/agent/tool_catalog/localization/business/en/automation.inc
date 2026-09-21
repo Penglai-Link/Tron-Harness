@@ -52,66 +52,6 @@
         "Returns the platform MCP delete result.",
     ),
     (
-        "agent.toolCatalog.tools.platform.open_app.page.name",
-        "Page platform OpenAPI apps",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.page.description",
-        "Page OpenAPI apps configured in platform settings.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.page.sampleResultSummary",
-        "Returns paged platform OpenAPI apps.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.get.name",
-        "Get platform OpenAPI app",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.get.description",
-        "Read one platform OpenAPI app.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.get.sampleResultSummary",
-        "Returns one platform OpenAPI app.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.create.name",
-        "Create platform OpenAPI app",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.create.description",
-        "Create an OpenAPI app in platform settings.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.create.sampleResultSummary",
-        "Returns the created platform OpenAPI app without exposing its secret key.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.update.name",
-        "Update platform OpenAPI app",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.update.description",
-        "Update a platform OpenAPI app.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.update.sampleResultSummary",
-        "Returns the updated platform OpenAPI app.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.disable.name",
-        "Disable platform OpenAPI app",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.disable.description",
-        "Disable a platform OpenAPI app.",
-    ),
-    (
-        "agent.toolCatalog.tools.platform.open_app.disable.sampleResultSummary",
-        "Returns the disabled platform OpenAPI app.",
-    ),
-    (
         "agent.toolCatalog.tools.platform.resource.query.name",
         "Query platform resources",
     ),

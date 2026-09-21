@@ -1,29 +1,7 @@
-fn build_user_service(config: &AppConfig, event_bus: EventBusHandle) -> UserService {
-    let repository = SqliteUserRepository::connect(":memory:")
-        .expect("user SQLite repository should initialize");
-    UserService::with_event_bus(
-        repository,
-        BcryptPasswordHasher,
-        config.auth.clone(),
-        event_bus,
-    )
-}
-
-fn build_role_service(_database_url: &str, event_bus: EventBusHandle) -> RoleService {
-    let repository = SqliteRoleRepository::connect(":memory:")
-        .expect("role SQLite repository should initialize");
-    RoleService::with_event_bus(repository, event_bus)
-}
-
-fn build_workspace_service(
-    database_url: &str,
-    users: UserService,
-    roles: RoleService,
-    event_bus: EventBusHandle,
-) -> WorkspaceService {
+fn build_workspace_service(database_url: &str, event_bus: EventBusHandle) -> WorkspaceService {
     let repository = SqliteWorkspaceRepository::connect(database_url)
         .expect("workspace SQLite repository should initialize");
-    WorkspaceService::with_event_bus(repository, users, roles, event_bus).with_profile_scope()
+    WorkspaceService::with_event_bus(repository, event_bus)
 }
 
 fn build_app_service(database_url: &str, workspaces: WorkspaceService) -> AppService {
@@ -118,8 +96,6 @@ fn build_variable_service(
 fn build_resource_service(
     database_url: &str,
     workspaces: WorkspaceService,
-    roles: RoleService,
-    users: UserService,
     variables: VariableService,
     config: &AppConfig,
     event_bus: EventBusHandle,
@@ -148,8 +124,6 @@ fn build_resource_service(
     ResourceService::with_event_bus(
         repository,
         workspaces,
-        roles,
-        users,
         variables,
         config.resource.clone(),
         storage_profiles,

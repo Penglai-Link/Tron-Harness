@@ -4,7 +4,7 @@ use crate::shared::{event_bus::config::EventBusConfig, id::IdGenerationError};
 
 use super::{BusActorRef, BusEventAttr, BusRequestRef, BusSubjectRef};
 
-const FORBIDDEN_FIELD_TOKENS: [&str; 13] = [
+const FORBIDDEN_FIELD_TOKENS: [&str; 12] = [
     "password",
     "secret",
     "token",
@@ -15,7 +15,6 @@ const FORBIDDEN_FIELD_TOKENS: [&str; 13] = [
     "prompt",
     "completion",
     "plaintext",
-    "oauth_code",
     "access_token",
     "refresh_token",
 ];

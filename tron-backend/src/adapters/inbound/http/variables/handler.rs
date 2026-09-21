@@ -8,10 +8,8 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use crate::{
-    adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::{
-        user::StepUpVariableRevealTarget,
         variable::{PromptVariableOption, VariableService},
     },
     domain::{
@@ -180,18 +178,8 @@ pub async fn delete_variable(
 
 pub async fn reveal_workspace_variable(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
     Json(request): Json<RevealWorkspaceVariableRequest>,
 ) -> Response {
-    let step_up_target =
-        StepUpVariableRevealTarget::workspace(&request.workspace_code, &request.variable_key);
-    if let Err(error) = state.users.verify_step_up_token(
-        &auth.user().user_code,
-        &request.step_up_token,
-        &step_up_target,
-    ) {
-        return crate::adapters::inbound::http::auth::error_mapper::auth_error_response(error);
-    }
     match state
         .variables
         .reveal_workspace_variable(&request.workspace_code, &request.variable_key)

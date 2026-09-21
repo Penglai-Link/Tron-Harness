@@ -31,14 +31,12 @@ import {
 import {
   deleteVariable,
   revealWorkspaceVariable,
-  verifyStepUpPassword,
 } from "@/domain/variable/api";
 import { getVariableSourceTone } from "@/domain/variable/constants";
 import { useVariableCatalog } from "@/domain/variable/hooks";
 import {
   deleteVariableRecord,
   revealWorkspaceVariableRecord,
-  verifyStepUpPasswordRecord,
 } from "@/domain/variable/mock/data";
 import type { VariableRecord } from "@/domain/variable/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
@@ -47,7 +45,6 @@ import {
   SensitiveDataBadge,
   SensitiveRevealIconButton,
   SensitiveValueCode,
-  StepUpRevealDialog,
   getSensitiveDisplayValue,
   getSensitiveState,
   isSensitiveRecord,
@@ -96,12 +93,7 @@ export function VariablesPage() {
   const [revealedValues, setRevealedValues] = useState<Record<string, string>>(
     {},
   );
-  const [revealTargetKey, setRevealTargetKey] = useState("");
-  const [revealPending, setRevealPending] = useState(false);
-  const [revealError, setRevealError] = useState("");
-  const revealTarget = revealTargetKey
-    ? variables.find((record) => record.key === revealTargetKey) ?? null
-    : null;
+  const [revealPendingKey, setRevealPendingKey] = useState("");
 
   const filteredVariables = useMemo(
     () =>
@@ -123,8 +115,7 @@ export function VariablesPage() {
 
   useEffect(() => {
     setRevealedValues({});
-    setRevealTargetKey("");
-    setRevealError("");
+    setRevealPendingKey("");
   }, [activeWorkspaceCode]);
 
   function navigateToDetail(
@@ -203,63 +194,30 @@ export function VariablesPage() {
     });
   }
 
-  function openSensitiveReveal(record: VariableRecord) {
-    if (!activeWorkspaceCode || !isSensitiveRecord(record)) return;
-    setRevealTargetKey(record.key);
-    setRevealError("");
-  }
+  async function revealSensitiveValue(record: VariableRecord) {
+    if (!activeWorkspaceCode || !isSensitiveRecord(record) || revealPendingKey === record.key) return;
 
-  async function revealSensitiveValue(password: string) {
-    if (!activeWorkspaceCode || !revealTarget) return;
-
-    setRevealPending(true);
-    setRevealError("");
+    setRevealPendingKey(record.key);
     try {
-      const stepUp =
-        dataSource === "api"
-          ? await verifyStepUpPassword({
-              password,
-              target: {
-                scope: "workspace",
-                workspaceCode: activeWorkspaceCode,
-                variableKey: revealTarget.key,
-              },
-            })
-          : verifyStepUpPasswordRecord({
-              password,
-              target: {
-                scope: "workspace",
-                workspaceCode: activeWorkspaceCode,
-                variableKey: revealTarget.key,
-              },
-            });
       const revealed =
         dataSource === "api"
           ? await revealWorkspaceVariable({
               workspaceCode: activeWorkspaceCode,
-              variableKey: revealTarget.key,
-              stepUpToken: stepUp.stepUpToken,
+              variableKey: record.key,
             })
           : revealWorkspaceVariableRecord(
               activeWorkspaceCode,
-              revealTarget.key,
-              stepUp.stepUpToken,
+              record.key,
             );
 
       setRevealedValues((current) => ({
         ...current,
-        [revealTarget.key]: revealed.value,
+        [record.key]: revealed.value,
       }));
-      setRevealTargetKey("");
-      setRevealError("");
     } catch (error) {
-      setRevealError(
-        error instanceof Error
-          ? error.message
-          : pageT("errors.reveal", "Sensitive value could not be revealed"),
-      );
+      toast.error(error instanceof Error ? error.message : pageT("errors.reveal", "Sensitive value could not be revealed"));
     } finally {
-      setRevealPending(false);
+      setRevealPendingKey("");
     }
   }
 
@@ -316,7 +274,7 @@ export function VariablesPage() {
                     if (revealedValue) {
                       hideSensitiveValue(row.original);
                     } else {
-                      openSensitiveReveal(row.original);
+                      void revealSensitiveValue(row.original);
                     }
                   }}
                 />
@@ -547,19 +505,6 @@ export function VariablesPage() {
         />
       </>
 
-      {revealTarget ? (
-        <StepUpRevealDialog
-          error={revealError}
-          onCancel={() => {
-            setRevealTargetKey("");
-            setRevealError("");
-          }}
-          onSubmit={(password) => void revealSensitiveValue(password)}
-          open={Boolean(revealTarget)}
-          pending={revealPending}
-          variableKey={revealTarget.key}
-        />
-      ) : null}
     </>
   );
 }

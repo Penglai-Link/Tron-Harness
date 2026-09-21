@@ -1,16 +1,6 @@
-import {
-  useEffect,
-  useState,
-  type MouseEvent,
-  type ReactNode,
-} from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { useTranslation } from "react-i18next";
-import { createPortal } from "react-dom";
-import {
-  Eye,
-  EyeOff,
-  ShieldCheck,
-} from "lucide-react";
+import { Eye, EyeOff } from "lucide-react";
 
 import { Field, TextArea, TextInput } from "@/components/forms";
 import { Badge } from "@/components/ui/badge";
@@ -154,100 +144,6 @@ export function SensitiveRevealIconButton({
   );
 }
 
-export function StepUpRevealDialog({
-  error,
-  onCancel,
-  onSubmit,
-  open,
-  pending,
-  variableKey,
-}: {
-  error?: string;
-  onCancel: () => void;
-  onSubmit: (password: string) => void;
-  open: boolean;
-  pending?: boolean;
-  variableKey: string;
-}) {
-  const { t } = useTranslation(["pages"]);
-  const pageT = (key: string, defaultValue: string) => t(`variablesCommon.${key}`, { defaultValue });
-  const [password, setPassword] = useState("");
-
-  useEffect(() => {
-    setPassword("");
-  }, [open, variableKey]);
-
-  useEffect(() => {
-    if (!open) return undefined;
-
-    const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === "Escape" && !pending) {
-        onCancel();
-      }
-    };
-
-    window.addEventListener("keydown", handleKeyDown);
-    return () => window.removeEventListener("keydown", handleKeyDown);
-  }, [onCancel, open, pending]);
-
-  if (!open) return null;
-
-  return createPortal(
-    <div
-      className="fixed inset-0 z-[110] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm"
-      onMouseDown={(event) => {
-        if (event.target !== event.currentTarget || pending) return;
-        onCancel();
-      }}
-    >
-      <div
-        className="w-[min(92vw,32rem)] rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-        role="dialog"
-        aria-modal="true"
-        aria-label={`${pageT("reveal", "Reveal")} ${variableKey}`}
-      >
-        <div className="flex items-start gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
-          <div className="mt-0.5 rounded-full bg-[var(--color-primary-container)] p-2 text-[var(--color-on-primary-container)]">
-            <ShieldCheck size={18} aria-hidden="true" />
-          </div>
-          <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-[var(--color-on-surface)]">{pageT("dialog.title", "Reveal Sensitive Value")}</h2>
-            <p className="mt-1 text-sm text-[var(--color-on-surface-variant)]">
-              {pageT("dialog.description", "Verify your current password to reveal this value temporarily.")}
-            </p>
-          </div>
-        </div>
-        <form
-          className="space-y-4 px-5 py-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            onSubmit(password);
-          }}
-        >
-          <Field label={pageT("dialog.password", "Step-up Password")} error={error}>
-            <TextInput
-              aria-label={pageT("dialog.password", "Step-up password")}
-              autoFocus
-              type="password"
-              value={password}
-              onChange={(event) => setPassword(event.target.value)}
-            />
-          </Field>
-          <div className="flex justify-end gap-[12px]">
-            <Button type="button" variant="ghost" disabled={pending} onClick={onCancel}>
-              {pageT("dialog.cancel", "Cancel")}
-            </Button>
-            <Button type="submit" disabled={pending || !password.trim()} aria-busy={pending}>
-              <Eye size={16} aria-hidden="true" />
-              {pending ? pageT("dialog.revealing", "Revealing...") : pageT("dialog.revealValue", "Reveal Value")}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>,
-    document.body,
-  );
-}
 
 export function SensitiveDataCheckbox({
   checked,

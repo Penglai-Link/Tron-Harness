@@ -41,7 +41,6 @@ mod request {
         pub domain_code: String,
         pub name: LocalizedTextRequest,
         pub description: LocalizedTextRequest,
-        pub visible_roles: Vec<String>,
         pub enabled: bool,
         pub is_default: bool,
         pub position: i64,
@@ -52,7 +51,6 @@ mod request {
     pub struct UpdateDomainRequest {
         pub name: LocalizedTextRequest,
         pub description: LocalizedTextRequest,
-        pub visible_roles: Vec<String>,
         pub enabled: bool,
         pub is_default: bool,
         pub position: i64,
@@ -98,7 +96,6 @@ mod request {
         pub menu_code: String,
         pub parent_menu_code: Option<String>,
         pub position: i64,
-        pub visible_roles: Vec<String>,
     }
 
     #[derive(Debug, Deserialize)]
@@ -106,7 +103,6 @@ mod request {
     pub struct UpdateMenuItemRequest {
         pub parent_menu_code: Option<String>,
         pub position: i64,
-        pub visible_roles: Vec<String>,
     }
 
     #[derive(Debug, Deserialize)]

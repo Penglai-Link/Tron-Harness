@@ -16,7 +16,7 @@ use crate::{
 
 pub use self::error::ConfigError;
 pub use self::mineru::MineruConfig;
-use self::parsing::{env_port_override, ldap_env_override};
+use self::parsing::env_port_override;
 use self::paths::{
     default_application_config_path_from_home, default_database_url_from_home,
     default_graph_storage_path_from_home, default_resource_storage_root_from_home,
@@ -34,25 +34,8 @@ const DEFAULT_PORT: u16 = 8080;
 const DEFAULT_FRONTEND_DIST_DIR: &str = concat!(env!("CARGO_MANIFEST_DIR"), "/resources/frontend");
 const DEFAULT_PROJECT_DOC_ROOT: &str = ".";
 const TEST_DATABASE_URL: &str = ":memory:";
-const DEFAULT_AUTH_JWT_SECRET: &str = "tron-dev-jwt-secret";
-const DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS: i64 = 900;
-const DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS: i64 = 604_800;
-const DEFAULT_AUTH_DEV_OAUTH2_NAME: &str = "OAuth2";
-const DEFAULT_AUTH_GITHUB_NAME: &str = "GitHub";
-const DEFAULT_AUTH_GITHUB_AUTHORIZE_URL: &str = "https://github.com/login/oauth/authorize";
-const DEFAULT_AUTH_GITHUB_TOKEN_URL: &str = "https://github.com/login/oauth/access_token";
-const DEFAULT_AUTH_GITHUB_USER_API_URL: &str = "https://api.github.com/user";
-const DEFAULT_AUTH_GITHUB_EMAILS_API_URL: &str = "https://api.github.com/user/emails";
-const DEFAULT_AUTH_GITHUB_SCOPE: &str = "read:user user:email";
-const DEFAULT_AUTH_LDAP_NAME: &str = "LDAP";
 const DEFAULT_SYSTEM_AGENT_CODEX_COMMAND: &str = "codex";
 const DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND: &str = "opencode";
-const ENV_BACKEND_PORT: &str = "TRON_BACKEND_PORT";
-const ENV_LDAP_URL: &str = "LDAP_URL";
-const ENV_LDAP_BIND_DN: &str = "LDAP_BIND_DN";
-const ENV_LDAP_BIND_PASSWORD: &str = "LDAP_BIND_PASSWORD";
-const ENV_LDAP_SEARCH_BASE: &str = "LDAP_SEARCH_BASE";
-const ENV_LDAP_SEARCH_FILTER: &str = "LDAP_SEARCH_FILTER";
 
 const DEFAULT_HTTP_CONNECT_TIMEOUT_MS: u64 = 1_500;
 const DEFAULT_HTTP_POOL_IDLE_TIMEOUT_MS: u64 = 90_000;
@@ -76,7 +59,6 @@ pub struct AppConfig {
     pub http_clients: HttpClientProfilesConfig,
     pub mineru: MineruConfig,
     pub short_term_memory: ShortTermMemoryConfig,
-    pub auth: AuthConfig,
     pub event_bus: EventBusConfig,
     pub navigation: NavigationConfig,
 }
@@ -125,41 +107,6 @@ pub struct SystemAgentConfig {
     pub opencode_command: String,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct AuthConfig {
-    pub jwt_secret: String,
-    pub access_token_ttl_seconds: i64,
-    pub refresh_token_ttl_seconds: i64,
-    pub cookie_secure: bool,
-    pub dev_oauth2_enabled: bool,
-    pub dev_oauth2_name: String,
-    pub github_oauth: Option<GitHubOAuthConfig>,
-    pub ldap: Option<LdapConfig>,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct GitHubOAuthConfig {
-    pub client_id: String,
-    pub client_secret: String,
-    pub redirect_uri: String,
-    pub name: String,
-    pub scope: String,
-    pub authorize_url: String,
-    pub token_url: String,
-    pub user_api_url: String,
-    pub emails_api_url: String,
-}
-
-#[derive(Clone, Debug, Eq, PartialEq)]
-pub struct LdapConfig {
-    pub name: String,
-    pub url: String,
-    pub bind_dn: String,
-    pub bind_password: String,
-    pub search_base: String,
-    pub search_filter: String,
-}
-
 impl AppConfig {
     fn runtime_defaults() -> Self {
         Self {
@@ -181,16 +128,6 @@ impl AppConfig {
             http_clients: HttpClientProfilesConfig::default_profiles(),
             mineru: MineruConfig::default(),
             short_term_memory: ShortTermMemoryConfig::default(),
-            auth: AuthConfig {
-                jwt_secret: DEFAULT_AUTH_JWT_SECRET.into(),
-                access_token_ttl_seconds: DEFAULT_AUTH_ACCESS_TOKEN_TTL_SECONDS,
-                refresh_token_ttl_seconds: DEFAULT_AUTH_REFRESH_TOKEN_TTL_SECONDS,
-                cookie_secure: false,
-                dev_oauth2_enabled: false,
-                dev_oauth2_name: DEFAULT_AUTH_DEV_OAUTH2_NAME.into(),
-                github_oauth: None,
-                ldap: None,
-            },
             event_bus: EventBusConfig::default(),
             navigation: NavigationConfig { max_depth: 3 },
         }
@@ -225,10 +162,6 @@ impl AppConfig {
             && !value.trim().is_empty()
         {
             self.terminal_working_directory = normalize_storage_path(value);
-        }
-        self.auth.github_oauth = parsing::github_oauth_env_override(self.auth.github_oauth.take())?;
-        if let Some(value) = ldap_env_override().transpose()? {
-            self.auth.ldap = Some(value);
         }
         Ok(())
     }

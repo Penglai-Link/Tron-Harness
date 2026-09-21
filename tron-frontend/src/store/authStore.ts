@@ -1,25 +1,12 @@
 import { create } from "zustand";
 
-import { LOGIN_PATH } from "@/domain/auth/constants";
-import { buildLoginUrl } from "@/domain/auth/model";
-import {
-  loginLdap,
-  loginInternal,
-  refreshAuthSession,
-} from "@/domain/auth/api";
 import type {
-  AuthGrant,
   AuthSession,
   AuthenticatedUser,
-  InternalLoginPayload,
 } from "@/domain/auth/model";
-import {
-  isUnauthorizedApiError,
-  setApiAccessToken,
-  setApiUnauthorizedHandler,
-} from "@/shared/api/httpClient";
-import { useTabStore } from "@/store/tabStore";
 import { fetchBootstrapProfileStatus } from "@/domain/profile/api";
+import { useTabStore } from "@/store/tabStore";
+import { setApiUnauthorizedHandler } from "@/shared/api/httpClient";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
@@ -28,47 +15,26 @@ interface AuthState {
   status: AuthStatus;
   ensureSessionFresh: () => Promise<boolean>;
   initialize: () => Promise<void>;
-  loginWithInternalAccount: (
-    payload: InternalLoginPayload
-  ) => Promise<AuthSession>;
-  loginWithLdapAccount: (payload: InternalLoginPayload) => Promise<AuthSession>;
-  acceptAuthGrant: (grant: AuthGrant) => AuthSession;
   markUnauthenticated: () => void;
   logout: () => Promise<void>;
   recoverFromUnauthorized: () => Promise<boolean>;
   updateSessionUser: (patch: Partial<AuthenticatedUser>) => void;
 }
 
-type AuthStateSetter = (
-  partial: Partial<AuthState> | ((state: AuthState) => Partial<AuthState>)
-) => void;
-
-type RefreshFailureMode = "preserve-session" | "unauthenticate";
-
-const FOREGROUND_REFRESH_WINDOW_MS = 30_000;
-const REFRESH_RETRY_DELAY_MS = 30_000;
-
 let initializePromise: Promise<void> | null = null;
-let refreshPromise: Promise<boolean> | null = null;
-let sessionRefreshTimer: number | null = null;
-let accessTokenExpiresAtMs: number | null = null;
-let authEpoch = 0;
 
 function sessionFromProfile(profile: {
   personAiUserId: string;
   personAiUsername: string;
-}): AuthSession {
+}, avatarUrl: string | null): AuthSession {
   return {
     authMethod: "internal",
     authenticated: true,
     provider: { code: "person-ai", name: "PersonAI", type: "internal" },
     user: {
-      avatarUrl: null,
+      avatarUrl,
       displayName: profile.personAiUsername,
       email: "",
-      passwordResetRequired: false,
-      roleCodes: [],
-      spaceCodes: [],
       status: "active",
       userCode: profile.personAiUserId,
       username: profile.personAiUsername,
@@ -76,255 +42,55 @@ function sessionFromProfile(profile: {
   };
 }
 
-function redirectToLoginIfNeeded() {
-  if (typeof window === "undefined") {
-    return;
-  }
-
-  const { pathname, search } = window.location;
-  if (pathname === LOGIN_PATH) {
-    return;
-  }
-
-  window.location.replace(buildLoginUrl(`${pathname}${search}`));
-}
-
-function applyAuthenticatedSession(
-  set: AuthStateSetter,
-  grant: AuthGrant,
-  epoch: number
-) {
-  if (epoch !== authEpoch) {
-    return false;
-  }
-
-  setApiAccessToken(grant.accessToken);
-  accessTokenExpiresAtMs = Date.now() + Math.max(grant.expiresIn, 1) * 1000;
-  set({
-    session: grant.session,
-    status: "authenticated",
-  });
-
-  scheduleSessionRefresh(set, grant.expiresIn, epoch);
-  return true;
-}
-
-function clearSessionRefreshTimer() {
-  if (sessionRefreshTimer === null) {
-    return;
-  }
-
-  window.clearTimeout(sessionRefreshTimer);
-  sessionRefreshTimer = null;
-}
-
-function transitionToUnauthenticated(
-  set: AuthStateSetter,
-  status: AuthStatus = "unauthenticated"
-) {
-  authEpoch += 1;
-  clearSessionRefreshTimer();
-  accessTokenExpiresAtMs = null;
-  setApiAccessToken(null);
-  // 会话失效后重置导航和面板缓存，避免残留到下一次登录
+function transitionToUnauthenticated(set: (state: Partial<AuthState>) => void) {
   useTabStore.getState().resetAllTabs();
-  set({
-    session: null,
-    status,
-  });
+  set({ session: null, status: "unauthenticated" });
 }
 
-function computeRefreshDelayMs(expiresInSeconds: number) {
-  const ttlMs = Math.max(expiresInSeconds * 1000, 1_000);
-
-  if (ttlMs <= 90_000) {
-    return Math.max(Math.floor(ttlMs * 0.6), 500);
-  }
-
-  return Math.max(ttlMs - 60_000, 30_000);
-}
-
-function scheduleSessionRefresh(
-  set: AuthStateSetter,
-  expiresInSeconds: number,
-  epoch: number
-) {
-  clearSessionRefreshTimer();
-  sessionRefreshTimer = window.setTimeout(() => {
-    void refreshSession(set, {
-      allowBootstrap: false,
-      epoch,
-      failureMode: "preserve-session",
+async function loadActiveProfile(
+  set: (state: Partial<AuthState>) => void,
+): Promise<boolean> {
+  try {
+    const bootstrap = await fetchBootstrapProfileStatus();
+    const activeProfile = bootstrap.activeProfile;
+    if (!activeProfile || activeProfile.status !== "ACTIVE") {
+      transitionToUnauthenticated(set);
+      return false;
+    }
+    set({
+      session: sessionFromProfile(activeProfile, bootstrap.avatarUrl),
+      status: "authenticated",
     });
-  }, computeRefreshDelayMs(expiresInSeconds));
-}
-
-function scheduleSessionRefreshRetry(set: AuthStateSetter, epoch: number) {
-  clearSessionRefreshTimer();
-  sessionRefreshTimer = window.setTimeout(() => {
-    void refreshSession(set, {
-      allowBootstrap: false,
-      epoch,
-      failureMode: "preserve-session",
-    });
-  }, REFRESH_RETRY_DELAY_MS);
-}
-
-async function refreshSession(
-  set: AuthStateSetter,
-  options: {
-    allowBootstrap: boolean;
-    epoch?: number;
-    failureMode: RefreshFailureMode;
-    markChecking?: boolean;
-  }
-) {
-  const { status, session } = useAuthStore.getState();
-  if (!options.allowBootstrap && (status !== "authenticated" || !session)) {
+    return true;
+  } catch {
+    transitionToUnauthenticated(set);
     return false;
   }
-
-  if (refreshPromise) {
-    return refreshPromise;
-  }
-
-  const epoch = options.epoch ?? authEpoch;
-  if (options.markChecking) {
-    set((state) =>
-      state.status === "authenticated"
-        ? state
-        : { session: null, status: "checking" }
-    );
-  }
-
-  const pendingRefresh = refreshAuthSession()
-    .then((grant) => applyAuthenticatedSession(set, grant, epoch))
-    .catch((error: unknown) => {
-      if (epoch !== authEpoch) {
-        return false;
-      }
-
-      if (
-        options.failureMode === "unauthenticate" ||
-        isUnauthorizedApiError(error)
-      ) {
-        transitionToUnauthenticated(set);
-        return false;
-      }
-
-      scheduleSessionRefreshRetry(set, epoch);
-      return false;
-    })
-    .finally(() => {
-      if (refreshPromise === pendingRefresh) {
-        refreshPromise = null;
-      }
-    });
-
-  refreshPromise = pendingRefresh;
-  return pendingRefresh;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   status: "checking",
-  ensureSessionFresh: async () => {
-    const { status } = useAuthStore.getState();
-    if (status !== "authenticated") {
-      return false;
-    }
-
-    if (
-      accessTokenExpiresAtMs === null ||
-      accessTokenExpiresAtMs - Date.now() > FOREGROUND_REFRESH_WINDOW_MS
-    ) {
-      return true;
-    }
-
-    return refreshSession(set, {
-      allowBootstrap: false,
-      failureMode: "preserve-session",
-    });
-  },
+  ensureSessionFresh: () => loadActiveProfile(set),
   initialize: async () => {
-    if (initializePromise) {
-      return initializePromise;
-    }
-
-    set((state) =>
-      state.status === "authenticated"
-        ? state
-        : { session: null, status: "checking" }
-    );
-
-    initializePromise = fetchBootstrapProfileStatus()
-      .then((bootstrap) => {
-        if (bootstrap.activeProfile?.status !== "ACTIVE") {
-          transitionToUnauthenticated(set);
-          return;
-        }
-        setApiAccessToken(null);
-        set({ session: sessionFromProfile(bootstrap.activeProfile), status: "authenticated" });
-      })
-      .catch(() => {
-        transitionToUnauthenticated(set);
-      })
-      .then(() => undefined)
-      .finally(() => {
-        initializePromise = null;
-      });
-
+    if (initializePromise) return initializePromise;
+    set((state) => state.status === "authenticated" ? state : { session: null, status: "checking" });
+    initializePromise = loadActiveProfile(set).then(() => undefined).finally(() => {
+      initializePromise = null;
+    });
     return initializePromise;
   },
-  loginWithInternalAccount: async (payload) => {
-    const loginEpoch = ++authEpoch;
-    const grant = await loginInternal(payload);
-    applyAuthenticatedSession(set, grant, loginEpoch);
-    return grant.session;
-  },
-  loginWithLdapAccount: async (payload) => {
-    const loginEpoch = ++authEpoch;
-    const grant = await loginLdap(payload);
-    applyAuthenticatedSession(set, grant, loginEpoch);
-    return grant.session;
-  },
-  acceptAuthGrant: (grant) => {
-    const grantEpoch = ++authEpoch;
-    applyAuthenticatedSession(set, grant, grantEpoch);
-    return grant.session;
-  },
-  logout: async () => {
-    authEpoch += 1;
-    clearSessionRefreshTimer();
-    set({
-      status: "checking",
-    });
-
-    transitionToUnauthenticated(set);
-  },
-  markUnauthenticated: () => {
-    transitionToUnauthenticated(set);
-  },
-  recoverFromUnauthorized: async (): Promise<boolean> => {
-    return useAuthStore.getState().status === "authenticated";
-  },
+  markUnauthenticated: () => transitionToUnauthenticated(set),
+  logout: async () => transitionToUnauthenticated(set),
+  recoverFromUnauthorized: async (): Promise<boolean> => true,
   updateSessionUser: (patch) => {
-    set((state) =>
-      state.session
-        ? {
-            session: {
-              ...state.session,
-              user: {
-                ...state.session.user,
-                ...patch,
-              },
-            },
-          }
-        : state
-    );
+    set((state) => state.session ? {
+      session: {
+        ...state.session,
+        user: { ...state.session.user, ...patch },
+      },
+    } : state);
   },
 }));
 
-setApiUnauthorizedHandler(() => {
-  return useAuthStore.getState().recoverFromUnauthorized();
-});
+setApiUnauthorizedHandler(() => useAuthStore.getState().recoverFromUnauthorized());

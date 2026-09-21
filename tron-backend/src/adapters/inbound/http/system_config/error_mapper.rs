@@ -7,17 +7,6 @@ use serde_json::json;
 
 use crate::{application::system_config::SystemConfigError, response::ApiResponse};
 
-pub fn admin_required_response() -> Response {
-    (
-        StatusCode::FORBIDDEN,
-        Json(ApiResponse::error(
-            "SYSTEM_CONFIG_FORBIDDEN",
-            "administrator role is required",
-        )),
-    )
-        .into_response()
-}
-
 pub fn system_config_error_response(error: SystemConfigError) -> Response {
     let (status, code, message, data) = match error {
         SystemConfigError::ReadFailed => (

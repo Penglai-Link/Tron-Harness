@@ -31,7 +31,7 @@ pub async fn list_namespaces(
     if query.workspace_code.trim().is_empty() {
         return knowledge_graph_request_invalid();
     }
-    if !user_has_workspace_access(&workspaces, &query.workspace_code, &auth.user().user_code) {
+    if !workspace_is_active(&workspaces, &query.workspace_code) {
         return knowledge_graph_scope_forbidden();
     }
 
@@ -50,7 +50,7 @@ pub async fn snapshot(
     if query.namespace.trim().is_empty() || query.workspace_code.trim().is_empty() {
         return knowledge_graph_request_invalid();
     }
-    if !user_has_workspace_access(&workspaces, &query.workspace_code, &auth.user().user_code) {
+    if !workspace_is_active(&workspaces, &query.workspace_code) {
         return knowledge_graph_scope_forbidden();
     }
 
@@ -77,7 +77,7 @@ pub async fn query(
         Ok(command) => command,
         Err(_) => return knowledge_graph_request_invalid(),
     };
-    if !user_has_workspace_access(&workspaces, &command.workspace_code, &auth.user().user_code) {
+    if !workspace_is_active(&workspaces, &command.workspace_code) {
         return knowledge_graph_scope_forbidden();
     }
 
@@ -100,7 +100,7 @@ pub async fn expand(
         Ok(command) => command,
         Err(_) => return knowledge_graph_request_invalid(),
     };
-    if !user_has_workspace_access(&workspaces, &command.workspace_code, &auth.user().user_code) {
+    if !workspace_is_active(&workspaces, &command.workspace_code) {
         return knowledge_graph_scope_forbidden();
     }
 
@@ -113,12 +113,8 @@ pub async fn expand(
     }
 }
 
-fn user_has_workspace_access(
-    workspaces: &WorkspaceService,
-    workspace_code: &str,
-    user_code: &str,
-) -> bool {
+fn workspace_is_active(workspaces: &WorkspaceService, workspace_code: &str) -> bool {
     workspaces
-        .user_has_effective_access(workspace_code, user_code)
+        .workspace_is_active(workspace_code)
         .unwrap_or(false)
 }

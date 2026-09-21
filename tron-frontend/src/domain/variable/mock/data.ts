@@ -142,24 +142,6 @@ export interface VariableWritePayload {
   valueMode?: VariableValueMode;
 }
 
-export type StepUpTarget =
-  | {
-    scope: "platform";
-    variableKey: string;
-  }
-  | {
-    scope: "workspace";
-    variableKey: string;
-    workspaceCode: string;
-  };
-
-export interface StepUpPasswordMockPayload {
-  password: string;
-  target: StepUpTarget;
-}
-
-const mockStepUpTargets = new Map<string, StepUpTarget>();
-
 export function listVariableCatalog(workspaceCode: string): VariableRecord[] {
   const lineage = workspaceLineage(workspaceCode);
   const currentWorkspace = lineage.at(-1);
@@ -369,26 +351,7 @@ function normalizeDescription(value?: string | null) {
   return value?.trim() ? value.trim() : null;
 }
 
-export function verifyStepUpPasswordRecord(payload: StepUpPasswordMockPayload) {
-  if (!payload.password.trim()) throw new Error("Step-up password is required");
-  if (!payload.target.variableKey.trim()) throw new Error("Step-up target variable key is required");
-  if (payload.target.scope === "workspace" && !payload.target.workspaceCode.trim()) {
-    throw new Error("Step-up target workspace is required");
-  }
-  const stepUpToken = `mock-step-up-${Date.now()}-${mockStepUpTargets.size + 1}`;
-  mockStepUpTargets.set(stepUpToken, payload.target);
-  return {
-    stepUpToken,
-    expiresAt: new Date(Date.now() + 15 * 60 * 1000).toISOString(),
-  };
-}
-
-export function revealWorkspaceVariableRecord(workspaceCode: string, variableKey: string, stepUpToken: string) {
-  if (!stepUpToken.trim()) throw new Error("Step-up token is required");
-  const target = mockStepUpTargets.get(stepUpToken);
-  if (target?.scope !== "workspace" || target.workspaceCode !== workspaceCode || target.variableKey !== variableKey) {
-    throw new Error("Step-up token target mismatch");
-  }
+export function revealWorkspaceVariableRecord(workspaceCode: string, variableKey: string) {
   const record = listVariableCatalog(workspaceCode).find((variable) => variable.key === variableKey);
   if (!record) throw new Error("Variable was not found");
   return {
@@ -396,12 +359,7 @@ export function revealWorkspaceVariableRecord(workspaceCode: string, variableKey
   };
 }
 
-export function revealPlatformVariableRecord(variableKey: string, stepUpToken: string) {
-  if (!stepUpToken.trim()) throw new Error("Step-up token is required");
-  const target = mockStepUpTargets.get(stepUpToken);
-  if (target?.scope !== "platform" || target.variableKey !== variableKey) {
-    throw new Error("Step-up token target mismatch");
-  }
+export function revealPlatformVariableRecord(variableKey: string) {
   const record = mockPlatformVariables.find((variable) => variable.key === variableKey);
   if (!record) throw new Error("Variable was not found");
   return {

@@ -21,7 +21,7 @@ use crate::{
         inbound::socket::terminal as terminal_socket,
         outbound::{
             config::YamlSystemConfigStore,
-            crypto::{BcryptPasswordHasher, VariableCipherProvider},
+            crypto::VariableCipherProvider,
             model::{
                 HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient,
                 PersonAiAwareLlmRuntimeClient, PersonAiModelProviderClient,
@@ -32,9 +32,9 @@ use crate::{
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository,
                 SqliteNavigationRepository, SqliteProjectRepository,
-                SqlitePromptRepository, SqliteResourceRepository, SqliteRoleRepository,
+                SqlitePromptRepository, SqliteResourceRepository,
                 SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
-                SqliteTaskRepository, SqliteUserRepository, SqliteVariableRepository,
+                SqliteTaskRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository,
             },
             resource_connectivity::ProtocolResourceConnectionVerifier,
@@ -62,13 +62,11 @@ use crate::{
     application::prompt::PromptService,
     application::rag::{DefaultRagRuntime, DefaultRagStrategyRegistry, RagService},
     application::resource::{ObjectStorage, ResourceService},
-    application::role::RoleService,
     application::short_term_memory::ShortTermMemoryService,
     application::skill::SkillRegistryService,
     application::system_config::SystemConfigService,
     application::task::TaskService,
     application::terminal::TerminalService,
-    application::user::UserService,
     application::variable::VariableService,
     application::workspace::WorkspaceService,
     config::{AppConfig, ResourceStorageProfile},
@@ -89,8 +87,6 @@ use self::{
     startup::{build_graph_core, build_graph_services, build_rag_service},
 };
 
-static GLOBAL_USER_SERVICE: OnceLock<UserService> = OnceLock::new();
-static GLOBAL_ROLE_SERVICE: OnceLock<RoleService> = OnceLock::new();
 static GLOBAL_WORKSPACE_SERVICE: OnceLock<WorkspaceService> = OnceLock::new();
 static GLOBAL_APP_SERVICE: OnceLock<AppService> = OnceLock::new();
 static GLOBAL_PROJECT_SERVICE: OnceLock<ProjectService> = OnceLock::new();
@@ -137,10 +133,8 @@ pub struct AppState {
     pub graphs: GraphService,
     pub ontologies: OntologyService,
     pub graph_explorer: GraphExplorerService,
-    pub roles: RoleService,
     pub tasks: TaskService,
     pub terminal: TerminalService,
-    pub users: UserService,
     pub variables: VariableService,
     pub resources: ResourceService,
     pub workspaces: WorkspaceService,
@@ -191,27 +185,11 @@ impl AppState {
         let model_inference_client = http_client_pool.model_inference_client();
         let runtime_http_client = http_client_pool.runtime_control_client();
         let document_parsing_client = http_client_pool.document_parsing_client();
-        let users = if config.database_url == ":memory:" {
-            GLOBAL_USER_SERVICE
-                .get_or_init(|| build_user_service(&config, event_bus.clone()))
-                .clone()
-        } else {
-            build_user_service(&config, event_bus.clone())
-        };
-        let roles = if config.database_url == ":memory:" {
-            GLOBAL_ROLE_SERVICE
-                .get_or_init(|| build_role_service(":memory:", event_bus.clone()))
-                .clone()
-        } else {
-            build_role_service(&config.database_url, event_bus.clone())
-        };
         let workspaces = if config.database_url == ":memory:" {
             GLOBAL_WORKSPACE_SERVICE
                 .get_or_init(|| {
                     build_workspace_service(
                         ":memory:",
-                        users.clone(),
-                        roles.clone(),
                         event_bus.clone(),
                     )
                 })
@@ -219,8 +197,6 @@ impl AppState {
         } else {
             build_workspace_service(
                 &config.database_url,
-                users.clone(),
-                roles.clone(),
                 event_bus.clone(),
             )
         };
@@ -282,8 +258,6 @@ impl AppState {
                     build_resource_service(
                         ":memory:",
                         workspaces.clone(),
-                        roles.clone(),
-                        users.clone(),
                         variables.clone(),
                         &config,
                         event_bus.clone(),
@@ -294,8 +268,6 @@ impl AppState {
             build_resource_service(
                 &config.database_url,
                 workspaces.clone(),
-                roles.clone(),
-                users.clone(),
                 variables.clone(),
                 &config,
                 event_bus.clone(),
@@ -530,10 +502,8 @@ impl AppState {
             rag,
             skills,
             system_config,
-            roles,
             tasks,
             terminal,
-            users,
             variables,
             resources,
             workspaces,

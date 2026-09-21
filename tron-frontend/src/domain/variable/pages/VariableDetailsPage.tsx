@@ -21,14 +21,12 @@ import {
   deleteVariable,
   revealWorkspaceVariable,
   updateVariable,
-  verifyStepUpPassword,
 } from "@/domain/variable/api";
 import {
   createVariableRecord,
   deleteVariableRecord,
   revealWorkspaceVariableRecord,
   updateVariableRecord,
-  verifyStepUpPasswordRecord,
 } from "@/domain/variable/mock/data";
 import type { VariableRecord } from "@/domain/variable/model";
 import { getVariableSourceTone } from "@/domain/variable/constants";
@@ -49,7 +47,6 @@ import {
   SensitiveDataBadge,
   SensitiveRevealIconButton,
   SensitiveValueCode,
-  StepUpRevealDialog,
   getSensitiveDisplayValue,
   getSensitiveState,
   isSensitiveRecord,
@@ -68,7 +65,6 @@ import {
 } from "./workspaceVariablePageHelpers";
 
 type WorkspaceVariablePageMode = "view" | "edit" | "override";
-type StepUpIntent = "edit" | "override" | "reveal";
 
 function sourceLabel(record: VariableRecord) {
   if (record.sourceKind === "Inherited") {
@@ -98,9 +94,6 @@ export function VariableDetailsPage() {
   const [submitting, setSubmitting] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [revealedValue, setRevealedValue] = useState("");
-  const [stepUpIntent, setStepUpIntent] = useState<StepUpIntent | null>(null);
-  const [revealPending, setRevealPending] = useState(false);
-  const [revealError, setRevealError] = useState("");
 
   const editing = mode === "edit" || mode === "override";
   const inheritedWorkspace = selectedRecord ? getWorkspaceVariableInheritedFrom(selectedRecord) : null;
@@ -113,21 +106,9 @@ export function VariableDetailsPage() {
     }
 
     if (requestedMode === "override" && selectedRecord.sourceKind === "Inherited") {
-      if (isSensitiveRecord(selectedRecord)) {
-        setMode("view");
-        setForm(workspaceVariableFormFromOverride(selectedRecord));
-        setStepUpIntent("override");
-        return;
-      }
       setMode("override");
       setForm(workspaceVariableFormFromOverride(selectedRecord));
     } else if (requestedMode === "edit" && isWorkspaceVariableEditable(selectedRecord)) {
-      if (isSensitiveRecord(selectedRecord)) {
-        setMode("view");
-        setForm(workspaceVariableFormFromRecord(selectedRecord));
-        setStepUpIntent("edit");
-        return;
-      }
       setMode("edit");
       setForm(workspaceVariableFormFromRecord(selectedRecord));
     } else {
@@ -138,8 +119,6 @@ export function VariableDetailsPage() {
 
   useEffect(() => {
     setRevealedValue("");
-    setStepUpIntent(null);
-    setRevealError("");
   }, [activeWorkspaceCode, variableKey]);
 
   if (!variableKey) {
@@ -154,13 +133,6 @@ export function VariableDetailsPage() {
 
   function beginEdit() {
     if (!selectedRecord || !isWorkspaceVariableEditable(selectedRecord)) return;
-    if (isSensitiveRecord(selectedRecord)) {
-      setRevealError("");
-      setStepUpIntent("edit");
-      navigate(detailHref("edit"), { replace: true });
-      return;
-    }
-
     setMode("edit");
     setForm(workspaceVariableFormFromRecord(selectedRecord));
     navigate(detailHref("edit"), { replace: true });
@@ -168,13 +140,6 @@ export function VariableDetailsPage() {
 
   function beginOverride() {
     if (!selectedRecord || selectedRecord.sourceKind !== "Inherited") return;
-    if (isSensitiveRecord(selectedRecord)) {
-      setRevealError("");
-      setStepUpIntent("override");
-      navigate(detailHref("override"), { replace: true });
-      return;
-    }
-
     setMode("override");
     setForm(workspaceVariableFormFromOverride(selectedRecord));
     navigate(detailHref("override"), { replace: true });
@@ -183,17 +148,7 @@ export function VariableDetailsPage() {
   function exitEditing() {
     setMode("view");
     if (selectedRecord) setForm(workspaceVariableFormFromRecord(selectedRecord));
-    setStepUpIntent(null);
     navigate(detailHref(), { replace: true });
-  }
-
-  function cancelStepUp() {
-    const currentIntent = stepUpIntent;
-    setStepUpIntent(null);
-    setRevealError("");
-    if (currentIntent === "edit" || currentIntent === "override" || requestedMode === "edit" || requestedMode === "override") {
-      navigate(detailHref(), { replace: true });
-    }
   }
 
   async function saveVariable() {
@@ -286,61 +241,18 @@ export function VariableDetailsPage() {
     }
   }
 
-  async function revealSensitiveValue(password: string) {
+  async function revealSensitiveValue() {
     if (!selectedRecord || !activeWorkspaceCode) return;
-    const intent = stepUpIntent ?? "reveal";
-    setRevealPending(true);
-    setRevealError("");
     try {
-      const stepUp = dataSource === "api"
-        ? await verifyStepUpPassword({
-          password,
-          target: {
-            scope: "workspace",
-            workspaceCode: activeWorkspaceCode,
-            variableKey: selectedRecord.key,
-          },
-        })
-        : verifyStepUpPasswordRecord({
-          password,
-          target: {
-            scope: "workspace",
-            workspaceCode: activeWorkspaceCode,
-            variableKey: selectedRecord.key,
-          },
-        });
       const revealed = dataSource === "api"
         ? await revealWorkspaceVariable({
           workspaceCode: activeWorkspaceCode,
           variableKey: selectedRecord.key,
-          stepUpToken: stepUp.stepUpToken,
         })
-        : revealWorkspaceVariableRecord(activeWorkspaceCode, selectedRecord.key, stepUp.stepUpToken);
-      if (intent === "edit") {
-        setMode("edit");
-        setForm({
-          ...workspaceVariableFormFromRecord(selectedRecord),
-          value: revealed.value,
-          valueMode: "REPLACE",
-        });
-        setRevealedValue("");
-      } else if (intent === "override") {
-        setMode("override");
-        setForm({
-          ...workspaceVariableFormFromOverride(selectedRecord),
-          value: revealed.value,
-          valueMode: "REPLACE",
-        });
-        setRevealedValue("");
-      } else {
-        setRevealedValue(revealed.value);
-      }
-      setStepUpIntent(null);
-      setRevealError("");
+        : revealWorkspaceVariableRecord(activeWorkspaceCode, selectedRecord.key);
+      setRevealedValue(revealed.value);
     } catch (error) {
-      setRevealError(error instanceof Error ? error.message : t("pages:variables.errors.reveal", "Sensitive value could not be revealed"));
-    } finally {
-      setRevealPending(false);
+      toast.error(error instanceof Error ? error.message : t("pages:variables.errors.reveal", "Sensitive value could not be revealed"));
     }
   }
 
@@ -479,8 +391,7 @@ export function VariableDetailsPage() {
                             if (revealedValue) {
                               setRevealedValue("");
                             } else {
-                              setRevealError("");
-                              setStepUpIntent("reveal");
+                              void revealSensitiveValue();
                             }
                           }}
                         />
@@ -501,14 +412,6 @@ export function VariableDetailsPage() {
         </SurfaceCard>
       </div>
 
-      <StepUpRevealDialog
-        error={revealError}
-        onCancel={cancelStepUp}
-        onSubmit={(password) => void revealSensitiveValue(password)}
-        open={stepUpIntent !== null}
-        pending={revealPending}
-        variableKey={selectedRecord.key}
-      />
     </>
   );
 }

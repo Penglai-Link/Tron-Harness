@@ -8,23 +8,16 @@ use axum::{
 use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     application::workspace::WorkspaceService,
-    domain::workspace::{WorkspaceAccessListQuery, WorkspaceListQuery, WorkspaceStatistics},
+    domain::workspace::WorkspaceListQuery,
     response::ApiResponse,
 };
 
 use super::{
     error_mapper::workspace_error_response,
     request::{
-        CreateWorkspaceRequest, MoveWorkspaceRequest, ReplaceWorkspaceRolesRequest,
-        ReplaceWorkspaceUsersRequest, UpdateWorkspaceRequest,
+        CreateWorkspaceRequest, MoveWorkspaceRequest, UpdateWorkspaceRequest,
     },
 };
-
-#[derive(Debug, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct CountDto {
-    count: usize,
-}
 
 pub async fn list_workspaces(
     State(workspaces): State<WorkspaceService>,
@@ -49,35 +42,6 @@ pub async fn list_workspace_options(
 pub async fn workspace_switcher(State(workspaces): State<WorkspaceService>) -> Response {
     match workspaces.workspace_switcher() {
         Ok(data) => Json(ApiResponse::success(data)).into_response(),
-        Err(error) => workspace_error_response(error),
-    }
-}
-
-pub async fn total_workspaces(State(workspaces): State<WorkspaceService>) -> Response {
-    statistics_response(workspaces, |statistics| statistics.total_workspaces)
-}
-
-pub async fn active_workspaces(State(workspaces): State<WorkspaceService>) -> Response {
-    statistics_response(workspaces, |statistics| statistics.active_workspaces)
-}
-
-pub async fn direct_user_grants(State(workspaces): State<WorkspaceService>) -> Response {
-    statistics_response(workspaces, |statistics| statistics.direct_user_grants)
-}
-
-pub async fn role_grants(State(workspaces): State<WorkspaceService>) -> Response {
-    statistics_response(workspaces, |statistics| statistics.role_grants)
-}
-
-fn statistics_response(
-    workspaces: WorkspaceService,
-    select_count: impl FnOnce(WorkspaceStatistics) -> usize,
-) -> Response {
-    match workspaces.statistics() {
-        Ok(statistics) => Json(ApiResponse::success(CountDto {
-            count: select_count(statistics),
-        }))
-        .into_response(),
         Err(error) => workspace_error_response(error),
     }
 }
@@ -144,62 +108,6 @@ pub async fn restore_workspace(
     Path(workspace_code): Path<String>,
 ) -> Response {
     match workspaces.restore_workspace(auth.user(), &workspace_code) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => workspace_error_response(error),
-    }
-}
-
-pub async fn list_user_access(
-    State(workspaces): State<WorkspaceService>,
-    Path(workspace_code): Path<String>,
-    Query(query): Query<WorkspaceAccessListQuery>,
-) -> Response {
-    match workspaces.list_user_access(&workspace_code, query) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => workspace_error_response(error),
-    }
-}
-
-pub async fn replace_user_access(
-    State(workspaces): State<WorkspaceService>,
-    auth: RequestAuthContext,
-    Path(workspace_code): Path<String>,
-    Json(request): Json<ReplaceWorkspaceUsersRequest>,
-) -> Response {
-    match workspaces.replace_user_access(auth.user(), &workspace_code, request.into()) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => workspace_error_response(error),
-    }
-}
-
-pub async fn list_role_access(
-    State(workspaces): State<WorkspaceService>,
-    Path(workspace_code): Path<String>,
-) -> Response {
-    match workspaces.list_role_access(&workspace_code) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => workspace_error_response(error),
-    }
-}
-
-pub async fn replace_role_access(
-    State(workspaces): State<WorkspaceService>,
-    auth: RequestAuthContext,
-    Path(workspace_code): Path<String>,
-    Json(request): Json<ReplaceWorkspaceRolesRequest>,
-) -> Response {
-    match workspaces.replace_role_access(auth.user(), &workspace_code, request.into()) {
-        Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => workspace_error_response(error),
-    }
-}
-
-pub async fn list_effective_users(
-    State(workspaces): State<WorkspaceService>,
-    Path(workspace_code): Path<String>,
-    Query(query): Query<WorkspaceAccessListQuery>,
-) -> Response {
-    match workspaces.list_effective_users(&workspace_code, query) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
         Err(error) => workspace_error_response(error),
     }

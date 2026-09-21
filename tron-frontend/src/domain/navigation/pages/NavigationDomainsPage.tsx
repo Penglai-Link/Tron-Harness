@@ -41,7 +41,6 @@ interface DomainFormState {
   nameEn: string;
   descriptionZh: string;
   descriptionEn: string;
-  visibleRoles: string;
   enabled: boolean;
   isDefault: boolean;
   position: string;
@@ -54,7 +53,6 @@ function emptyDomainForm(): DomainFormState {
     nameEn: "",
     descriptionZh: "",
     descriptionEn: "",
-    visibleRoles: "",
     enabled: true,
     isDefault: false,
     position: "0",
@@ -68,15 +66,10 @@ function formFromDomain(domain: NavigationAdminDomain): DomainFormState {
     nameEn: domain.name["en-US"],
     descriptionZh: domain.description["zh-CN"],
     descriptionEn: domain.description["en-US"],
-    visibleRoles: domain.visibleRoles.join(", "),
     enabled: domain.enabled,
     isDefault: domain.isDefault,
     position: String(domain.position),
   };
-}
-
-function rolesFromInput(value: string) {
-  return [...new Set(value.split(",").map((role) => role.trim()).filter(Boolean))];
 }
 
 function domainPayload(form: DomainFormState): NavigationDomainPayload {
@@ -84,7 +77,6 @@ function domainPayload(form: DomainFormState): NavigationDomainPayload {
     domainCode: form.domainCode.trim(),
     name: { "zh-CN": form.nameZh.trim(), "en-US": form.nameEn.trim() },
     description: { "zh-CN": form.descriptionZh.trim(), "en-US": form.descriptionEn.trim() },
-    visibleRoles: rolesFromInput(form.visibleRoles),
     enabled: form.enabled,
     isDefault: form.isDefault,
     position: Number(form.position) || 0,
@@ -95,7 +87,6 @@ function domainUpdatePayload(domain: NavigationAdminDomain, position = domain.po
   return {
     name: domain.name,
     description: domain.description,
-    visibleRoles: domain.visibleRoles,
     enabled: domain.enabled,
     isDefault: domain.isDefault,
     position,
@@ -262,7 +253,6 @@ export function NavigationDomainsPage() {
                 <Field label={text("fields.nameEn", "英文名称", "English name")} required><TextInput value={editor.nameEn} onChange={(event) => setEditor({ ...editor, nameEn: event.target.value })} /></Field>
                 <Field label={text("fields.descriptionZh", "中文描述", "Chinese description")}><TextArea value={editor.descriptionZh} onChange={(event) => setEditor({ ...editor, descriptionZh: event.target.value })} /></Field>
                 <Field label={text("fields.descriptionEn", "英文描述", "English description")}><TextArea value={editor.descriptionEn} onChange={(event) => setEditor({ ...editor, descriptionEn: event.target.value })} /></Field>
-                <Field className="lg:col-span-2" label={text("fields.visibleRoles", "可见角色", "Visible roles")} hint={text("fields.visibleRolesHint", "多个角色编码用逗号分隔，留空表示所有已登录用户。", "Comma-separated role codes; empty means every signed-in user.")}><TextInput value={editor.visibleRoles} placeholder="ADMIN, OPERATOR" onChange={(event) => setEditor({ ...editor, visibleRoles: event.target.value })} /></Field>
                 <div className="flex flex-wrap items-center gap-5 lg:col-span-2"><ToggleSwitch checked={editor.enabled} disabled={editingCode === "ADVANCED"} label={text("fields.enabled", "启用", "Enabled")} onCheckedChange={(enabled) => setEditor({ ...editor, enabled })} /><ToggleSwitch checked={editor.isDefault} label={text("fields.default", "默认领域", "Default domain")} onCheckedChange={(isDefault) => setEditor({ ...editor, isDefault })} /></div>
                 <div className="flex justify-end gap-2 lg:col-span-2">
                   <Button type="button" variant="ghost" disabled={saving} onClick={() => setEditor(null)}>{text("actions.cancel", "取消", "Cancel")}</Button>

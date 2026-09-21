@@ -4,7 +4,6 @@ use crate::domain::{
     resource::{
         ManagedResource, ResourceError, ResourceFileRecord, ResourceKind, validate_resource_code,
     },
-    user::UserStatus,
 };
 
 use super::{ResourceService, SYSTEM_RESOURCE_SCOPE};
@@ -18,18 +17,6 @@ impl ResourceService {
         file_name: &str,
         source: &mut dyn Read,
     ) -> Result<ResourceFileRecord, ResourceError> {
-        let user = self
-            .users
-            .get_user(actor_user_code)
-            .map_err(|_| ResourceError::Forbidden)?;
-        if user.status != UserStatus::Active {
-            return Err(ResourceError::Forbidden);
-        }
-
-        if let Some(reference) = user.avatar_url.as_deref() {
-            self.delete_legacy_avatar_reference(reference)?;
-        }
-
         let resource_code = system_avatar_resource_code(actor_user_code)?;
         if let Some(resource) = self.managed_resource(SYSTEM_RESOURCE_SCOPE, &resource_code)? {
             let old = match resource {
@@ -56,27 +43,6 @@ impl ResourceService {
         )
     }
 
-    fn delete_legacy_avatar_reference(&self, reference: &str) -> Result<(), ResourceError> {
-        let Some(reference) = reference.strip_prefix("resource://") else {
-            return Ok(());
-        };
-        let Some((workspace_code, resource_code)) = reference.split_once('/') else {
-            return Ok(());
-        };
-        let Some(resource) = self.managed_resource(workspace_code, resource_code)? else {
-            return Ok(());
-        };
-        let ManagedResource::File(record) = resource else {
-            return Ok(());
-        };
-        if self.repository(|repository| {
-            repository.delete_file(workspace_code, resource_code, record.revision)
-        })? {
-            self.delete_unreferenced_locator(&record.storage_locator);
-        }
-        Ok(())
-    }
-
     pub fn download_system_avatar(
         &self,
         actor_user_code: &str,
@@ -87,13 +53,6 @@ impl ResourceService {
         ),
         ResourceError,
     > {
-        let user = self
-            .users
-            .get_user(actor_user_code)
-            .map_err(|_| ResourceError::Forbidden)?;
-        if user.status != UserStatus::Active {
-            return Err(ResourceError::Forbidden);
-        }
         let resource_code = system_avatar_resource_code(actor_user_code)?;
         let record = match self.managed_resource(SYSTEM_RESOURCE_SCOPE, &resource_code)? {
             Some(ManagedResource::File(record)) => record,

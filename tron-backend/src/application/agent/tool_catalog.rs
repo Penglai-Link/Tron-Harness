@@ -129,7 +129,6 @@ mod tests {
             "platform.model.page",
             "platform.prompt.page",
             "platform.mcp.page",
-            "platform.open_app.page",
             "platform.resource.query",
         ] {
             assert!(

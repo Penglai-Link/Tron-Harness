@@ -1,9 +1,15 @@
+import { readFileSync } from "node:fs";
 import tailwindcss from "@tailwindcss/vite";
 import react from "@vitejs/plugin-react";
 import { fileURLToPath, URL } from "node:url";
 import { defineConfig, loadEnv } from "vite";
 
 const DEFAULT_BACKEND_PROXY_TARGET = "http://127.0.0.1:8080";
+
+function readProductVersion() {
+  const versionProperties = readFileSync(new URL("../version.properties", import.meta.url), "utf8");
+  return versionProperties.match(/^revision\s*=\s*(\S+)\s*$/m)?.[1] ?? "unknown";
+}
 
 export default defineConfig(({ mode }) => {
   const runtimeEnv = {
@@ -15,6 +21,9 @@ export default defineConfig(({ mode }) => {
   const frontendOutDir = runtimeEnv.TRON_FRONTEND_OUT_DIR;
 
   return {
+    define: {
+      __TRON_APP_VERSION__: JSON.stringify(readProductVersion()),
+    },
     plugins: [react(), tailwindcss()],
     build: {
       // Desktop packages are distributed to end users.  Keep source maps out

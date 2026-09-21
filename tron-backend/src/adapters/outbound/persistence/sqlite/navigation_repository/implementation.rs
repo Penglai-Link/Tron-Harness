@@ -37,11 +37,11 @@ impl NavigationRepository for SqliteNavigationRepository {
             .map_err(storage_error)?;
         }
         tx.execute(
-            "INSERT INTO navigation_domains (id, domain_code, built_in, enabled, is_default, position, visible_roles, created_at, updated_at)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+            "INSERT INTO navigation_domains (id, domain_code, built_in, enabled, is_default, position, created_at, updated_at)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
              ON CONFLICT(domain_code) DO UPDATE SET enabled = excluded.enabled, is_default = excluded.is_default,
-                 position = excluded.position, visible_roles = excluded.visible_roles, updated_at = excluded.updated_at",
-            params![domain.id.value(), domain.domain_code, i64::from(domain.built_in), i64::from(domain.enabled), i64::from(domain.is_default), domain.position, serde_json::to_string(&domain.visible_roles).map_err(|_| NavigationError::StorageFailure)?, domain.created_at, domain.updated_at],
+                 position = excluded.position, updated_at = excluded.updated_at",
+            params![domain.id.value(), domain.domain_code, i64::from(domain.built_in), i64::from(domain.enabled), i64::from(domain.is_default), domain.position, domain.created_at, domain.updated_at],
         ).map_err(storage_error)?;
         let domain_id: i64 = tx
             .query_row(
@@ -211,7 +211,7 @@ impl NavigationRepository for SqliteNavigationRepository {
         );
         let tx = self.connection.transaction().map_err(storage_error)?;
         move_positions_out_of_way(&tx, domain_id)?;
-        tx.execute("INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position, visible_roles) SELECT ?1, ?2, id, ?3, ?4, ?5 FROM navigation_menus WHERE menu_code = ?6", params![item.id.value(), domain_id, parent_id, 2 * POSITION_WORK_OFFSET, serde_json::to_string(&item.visible_roles).map_err(|_| NavigationError::StorageFailure)?, item.menu.menu_code]).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateDomainItem } else { NavigationError::StorageFailure })?;
+        tx.execute("INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position) SELECT ?1, ?2, id, ?3, ?4 FROM navigation_menus WHERE menu_code = ?5", params![item.id.value(), domain_id, parent_id, 2 * POSITION_WORK_OFFSET, item.menu.menu_code]).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateDomainItem } else { NavigationError::StorageFailure })?;
         apply_position_assignments(&tx, domain_id, &mut assignments)?;
         tx.commit().map_err(storage_error)
     }
@@ -239,7 +239,7 @@ impl NavigationRepository for SqliteNavigationRepository {
         );
         let tx = self.connection.transaction().map_err(storage_error)?;
         move_positions_out_of_way(&tx, domain_id)?;
-        tx.execute("UPDATE navigation_domain_menu_items SET parent_item_id = ?2, position = ?3, visible_roles = ?4 WHERE id = ?1", params![item_id, parent_id, 2 * POSITION_WORK_OFFSET, serde_json::to_string(&command.visible_roles).map_err(|_| NavigationError::StorageFailure)?]).map_err(storage_error)?;
+        tx.execute("UPDATE navigation_domain_menu_items SET parent_item_id = ?2, position = ?3 WHERE id = ?1", params![item_id, parent_id, 2 * POSITION_WORK_OFFSET]).map_err(storage_error)?;
         apply_position_assignments(&tx, domain_id, &mut assignments)?;
         tx.commit().map_err(storage_error)
     }
@@ -311,7 +311,7 @@ impl NavigationRepository for SqliteNavigationRepository {
             };
             let id = *next_id;
             *next_id += 1;
-            tx.execute("INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position, visible_roles) SELECT ?1, (SELECT id FROM navigation_domains WHERE domain_code = ?2), m.id, ?3, ?4, ?5 FROM navigation_menus m WHERE m.menu_code = ?6", params![id, target_domain_code, parent_id, position, serde_json::to_string(&item.visible_roles).map_err(|_| NavigationError::StorageFailure)?, item.menu.menu_code]).map_err(storage_error)?;
+            tx.execute("INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position) SELECT ?1, (SELECT id FROM navigation_domains WHERE domain_code = ?2), m.id, ?3, ?4 FROM navigation_menus m WHERE m.menu_code = ?5", params![id, target_domain_code, parent_id, position, item.menu.menu_code]).map_err(storage_error)?;
             mapped.insert(item.menu.menu_code.clone(), id);
             let mut children = source
                 .iter()
@@ -438,16 +438,14 @@ impl NavigationRepository for SqliteNavigationRepository {
                 .ok_or(NavigationError::MenuNotFound)?;
             tx.execute(
                 "INSERT INTO navigation_domain_menu_items
-                    (id, domain_id, menu_id, parent_item_id, position, visible_roles)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
+                    (id, domain_id, menu_id, parent_item_id, position)
+                 VALUES (?1, ?2, ?3, ?4, ?5)",
                 params![
                     next_id,
                     domain_id,
                     menu_id,
                     parent_item_id,
                     item.position,
-                    serde_json::to_string(item.visible_roles)
-                        .map_err(|_| NavigationError::StorageFailure)?,
                 ],
             )
             .map_err(storage_error)?;
@@ -571,10 +569,6 @@ fn selected_codes(
         }
     }
     Ok(result)
-}
-
-fn parse_roles(value: &str) -> Result<Vec<String>, serde_json::Error> {
-    serde_json::from_str(value)
 }
 
 fn ensure_database_parent(database_url: &str) -> Result<(), NavigationError> {

@@ -5,7 +5,6 @@ const os = require("node:os");
 const path = require("node:path");
 
 const {
-  buildGitHubOAuthRedirectUri,
   DEFAULT_PERSON_AI_SERVER_BASE_URL,
   iframeBlockReasonFromHeaders,
   isHttpUrl,
@@ -14,10 +13,8 @@ const {
   resolveBackendLogPath,
   resolveControlDatabasePath,
   resolveControlDataDir,
-  resolveProfileDataDir,
-  resolveProfileDatabasePath,
-  resolveProfileGraphStoragePath,
-  resolveProfileConfigPath,
+  resolveSharedDatabasePath,
+  resolveSharedGraphStoragePath,
   resolveUpdateServerUrl,
   sanitizeUrl
 } = require("../main/helpers.cjs");
@@ -32,13 +29,6 @@ test("isHttpUrl accepts only http and https URLs", () => {
   assert.equal(isHttpUrl("file:///tmp/index.html"), false);
 });
 
-test("buildGitHubOAuthRedirectUri follows the desktop backend origin", () => {
-  assert.equal(
-    buildGitHubOAuthRedirectUri("http://127.0.0.1:8081/"),
-    "http://127.0.0.1:8081/api/v1/auth/oauth2/callback/github"
-  );
-});
-
 test("resolveBackendLogPath stores sidecar logs below the desktop data directory", () => {
   assert.equal(
     resolveBackendLogPath("/tmp/tron-data"),
@@ -50,14 +40,12 @@ test("resolveBackendLogPath stores sidecar logs below the desktop data directory
   );
 });
 
-test("profile paths keep control metadata separate from profile data", () => {
+test("shared data paths keep control metadata separate from shared profile data", () => {
   const root = "/tmp/tron-data";
   assert.equal(resolveControlDataDir(root), "/tmp/tron-data/control");
   assert.equal(resolveControlDatabasePath(root), "/tmp/tron-data/control/profiles.sqlite");
-  assert.equal(resolveProfileDataDir(root, "profile-a"), "/tmp/tron-data/profiles/profile-a");
-  assert.equal(resolveProfileDatabasePath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/tron.sqlite3");
-  assert.equal(resolveProfileGraphStoragePath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/tron.graph.grafeo");
-  assert.equal(resolveProfileConfigPath(root, "profile-a"), "/tmp/tron-data/profiles/profile-a/application.yaml");
+  assert.equal(resolveSharedDatabasePath(root), "/tmp/tron-data/tron.sqlite3");
+  assert.equal(resolveSharedGraphStoragePath(root), "/tmp/tron-data/tron.graph.grafeo");
 });
 
 test("LAN binding is opt-in and never enabled for packaged builds", () => {
@@ -69,11 +57,6 @@ test("LAN binding is opt-in and never enabled for packaged builds", () => {
   assert.equal(resolveBackendHost({ isPackaged: false }), "127.0.0.1");
   if (previous === undefined) delete process.env.TRON_ALLOW_LAN_DEV;
   else process.env.TRON_ALLOW_LAN_DEV = previous;
-});
-
-test("profile paths reject traversal and absolute path injection", () => {
-  assert.throws(() => resolveProfileDataDir("/tmp/tron-data", "../other"), /invalid Tron profile id/);
-  assert.throws(() => resolveProfileDataDir("/tmp/tron-data", "/tmp/other"), /invalid Tron profile id/);
 });
 
 test("resolveUpdateServerUrl prefers runtime environment over packaged config", () => {

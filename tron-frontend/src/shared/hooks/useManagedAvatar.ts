@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 
-import { downloadAccountAvatar } from "@/domain/account/api";
-import { getAuthDataSource } from "@/domain/auth/api/authDataSource";
 import { downloadResourceBinary } from "@/domain/resource/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { parseAvatarResourceReference } from "@/shared/lib/avatarResource";
@@ -31,7 +29,7 @@ export function useManagedAvatar(avatarUrl: string | null | undefined) {
       return () => undefined;
     }
 
-    if (isSystemAvatar && getAuthDataSource() !== "api") {
+    if (isSystemAvatar) {
       setLoading(false);
       return () => undefined;
     }
@@ -42,9 +40,7 @@ export function useManagedAvatar(avatarUrl: string | null | undefined) {
     }
 
     const controller = new AbortController();
-    const download = isSystemAvatar
-      ? downloadAccountAvatar(controller.signal)
-      : downloadResourceBinary(reference!, controller.signal);
+    const download = downloadResourceBinary(reference!, controller.signal);
     void download
       .then(({ blob }) => {
         if (disposed) return;

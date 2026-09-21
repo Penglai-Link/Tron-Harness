@@ -5,6 +5,8 @@ use serde_yaml::Value;
 
 use super::{SystemConfigError, SystemConfigItem};
 
+const REMOVED_CONFIG_SECTIONS: &[&str] = &["auth"];
+
 pub(super) fn parse_yaml(content: &str, path: &Path) -> Result<Value, SystemConfigError> {
     AppConfig::validate_yaml(content, path)
         .map_err(|error| SystemConfigError::InvalidYaml(error.to_string()))?;
@@ -22,6 +24,7 @@ pub(super) fn leaf_paths(value: &Value) -> Vec<String> {
 pub(super) fn config_items(value: &Value) -> Vec<SystemConfigItem> {
     leaf_paths(value)
         .into_iter()
+        .filter(|path| !is_removed_config_path(path))
         .filter_map(|path| {
             let yaml_value = value_at_path(value, &path)?;
             let sensitive = is_sensitive(&path);
@@ -39,6 +42,26 @@ pub(super) fn config_items(value: &Value) -> Vec<SystemConfigItem> {
             })
         })
         .collect()
+}
+
+pub(super) fn remove_removed_config_sections(value: &mut Value) -> bool {
+    let Some(mapping) = value.as_mapping_mut() else {
+        return false;
+    };
+
+    let mut removed = false;
+    for section in REMOVED_CONFIG_SECTIONS {
+        removed |= mapping
+            .remove(Value::String((*section).to_owned()))
+            .is_some();
+    }
+    removed
+}
+
+fn is_removed_config_path(path: &str) -> bool {
+    REMOVED_CONFIG_SECTIONS
+        .iter()
+        .any(|section| path == *section || path.starts_with(&format!("{section}.")))
 }
 
 fn value_type(value: &Value) -> &'static str {
@@ -78,11 +101,6 @@ fn is_environment_overridden(path: &str) -> bool {
         "graphStoragePath" => Some("TRON_BACKEND_GRAPH_STORAGE_PATH"),
         "frontendDistDir" => Some("TRON_BACKEND_FRONTEND_DIST_DIR"),
         "projectDocRoot" => Some("TRON_PROJECT_DOC_ROOT"),
-        "auth.ldap.url" => Some("LDAP_URL"),
-        "auth.ldap.bindDn" => Some("LDAP_BIND_DN"),
-        "auth.ldap.bindPassword" => Some("LDAP_BIND_PASSWORD"),
-        "auth.ldap.searchBase" => Some("LDAP_SEARCH_BASE"),
-        "auth.ldap.searchFilter" => Some("LDAP_SEARCH_FILTER"),
         _ => None,
     };
     variable.is_some_and(|name| std::env::var_os(name).is_some())
