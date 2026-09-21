@@ -103,7 +103,12 @@ function isShortcutBinding(value: unknown): value is ShellShortcutBinding {
 export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
   return {
     closeCurrentTab: null,
-    newSession: null,
+    newSession: {
+      altKey: false,
+      key: "N",
+      modKey: true,
+      shiftKey: false,
+    },
     toggleBottomPanel: {
       altKey: true,
       key: "J",
