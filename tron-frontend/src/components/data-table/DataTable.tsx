@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { Fragment, type ReactNode } from "react";
 import { useTranslation } from "react-i18next";
 
 import {
@@ -26,10 +26,13 @@ interface DataTableProps<T> {
   className?: string;
   columns: DataTableColumn<T>[];
   emptyState?: ReactNode;
+  expandedRowClassName?: string;
+  isRowExpanded?: (row: T, index: number) => boolean;
   onRowClick?: (row: T, index: number) => void;
   pagination: ReactNode;
   rowKey: (row: T, index: number) => string;
   rowClassName?: (row: T) => string | undefined;
+  renderExpandedRow?: (row: T, index: number) => ReactNode;
   rows: T[];
   tableClassName?: string;
   title?: string;
@@ -41,10 +44,13 @@ export function DataTable<T>({
   className,
   columns,
   emptyState,
+  expandedRowClassName,
+  isRowExpanded,
   onRowClick,
   pagination,
   rowKey,
   rowClassName,
+  renderExpandedRow,
   rows,
   tableClassName,
   title,
@@ -114,40 +120,52 @@ export function DataTable<T>({
         </TableHeader>
         <TableBody>
           {rows.length ? (
-            rows.map((row, index) => (
-              <TableRow
-                className={cn(
-                  onRowClick ? "cursor-pointer" : null,
-                  rowClassName?.(row),
-                )}
-                key={rowKey(row, index)}
-                tabIndex={onRowClick ? 0 : undefined}
-                onClick={onRowClick ? () => onRowClick(row, index) : undefined}
-                onKeyDown={
-                  onRowClick
-                    ? (event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          onRowClick(row, index);
-                        }
-                      }
-                    : undefined
-                }
-              >
-                {columns.map((column) => (
-                  <TableCell
+            rows.map((row, index) => {
+              const expanded = isRowExpanded?.(row, index) ?? false;
+              return (
+                <Fragment key={rowKey(row, index)}>
+                  <TableRow
+                    aria-expanded={onRowClick ? expanded : undefined}
                     className={cn(
-                      "px-5 py-3 align-middle",
-                      column.align === "right" ? "text-right" : "text-left",
-                      column.cellClassName,
+                      onRowClick ? "cursor-pointer" : null,
+                      rowClassName?.(row),
                     )}
-                    key={column.id}
+                    tabIndex={onRowClick ? 0 : undefined}
+                    onClick={onRowClick ? () => onRowClick(row, index) : undefined}
+                    onKeyDown={
+                      onRowClick
+                        ? (event) => {
+                            if (event.key === "Enter" || event.key === " ") {
+                              event.preventDefault();
+                              onRowClick(row, index);
+                            }
+                          }
+                        : undefined
+                    }
                   >
-                    {column.render(row)}
-                  </TableCell>
-                ))}
-              </TableRow>
-            ))
+                    {columns.map((column) => (
+                      <TableCell
+                        className={cn(
+                          "px-5 py-3 align-middle",
+                          column.align === "right" ? "text-right" : "text-left",
+                          column.cellClassName,
+                        )}
+                        key={column.id}
+                      >
+                        {column.render(row)}
+                      </TableCell>
+                    ))}
+                  </TableRow>
+                  {expanded && renderExpandedRow ? (
+                    <TableRow className={expandedRowClassName}>
+                      <TableCell className="px-5 py-3" colSpan={columns.length}>
+                        {renderExpandedRow(row, index)}
+                      </TableCell>
+                    </TableRow>
+                  ) : null}
+                </Fragment>
+              );
+            })
           ) : (
             <TableRow>
               <TableCell

@@ -483,7 +483,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     assert_eq!(restore_payload["code"], "0");
     assert_eq!(
         restore_payload["data"]["restoredDomainCodes"],
-        json!(["ADVANCED", "CHAT"])
+        json!(["ADVANCED", "CHAT_PANEL"])
     );
     assert_eq!(restore_payload["data"]["restoredItemCount"], 25);
 
@@ -499,6 +499,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
     let restored_payload = response_json(restored_tree).await;
     assert_eq!(restored_payload["data"].as_array().map(Vec::len), Some(3));
     assert_eq!(restored_payload["data"][0]["menuCode"], "CORE");
+    assert_eq!(restored_payload["data"][0]["childDisplay"], "Flyout");
     assert_eq!(restored_payload["data"][1]["menuCode"], "AGENT_OPERATIONS");
     assert_eq!(
         restored_payload["data"][1]["children"][1]["children"][0]["menuCode"],
@@ -526,7 +527,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
 }
 
 #[tokio::test]
-async fn chat_panel_widgets_are_hidden_from_domain_list_but_rendered_in_tree() {
+async fn chat_panel_is_a_menu_tree_not_a_navigation_domain() {
     let router = app();
     let token = authenticated_bearer_token(&router).await;
 
@@ -551,10 +552,28 @@ async fn chat_panel_widgets_are_hidden_from_domain_list_but_rendered_in_tree() {
         "panel domain must not appear in the primary domain list: {domain_codes:?}"
     );
 
+    let menu_trees = request_json(
+        &router,
+        Method::GET,
+        "/api/v1/admin/navigation/menu-trees",
+        None,
+        Some(&token),
+        None,
+    )
+    .await;
+    let menu_trees_payload = response_json(menu_trees).await;
+    let chat_panel = menu_trees_payload["data"]
+        .as_array()
+        .expect("menu trees should be an array")
+        .iter()
+        .find(|tree| tree["treeCode"] == "CHAT_PANEL")
+        .expect("chat panel menu tree should be configurable");
+    assert_eq!(chat_panel["treeKind"], "Panel");
+
     let tree = request_json(
         &router,
         Method::GET,
-        "/api/v1/navigation/domains/CHAT/menu-tree",
+        "/api/v1/navigation/chat-panel/menu-tree",
         None,
         Some(&token),
         None,
@@ -567,12 +586,13 @@ async fn chat_panel_widgets_are_hidden_from_domain_list_but_rendered_in_tree() {
         StatusCode::OK,
         "chat panel tree response: {tree_payload}"
     );
-    assert_eq!(tree_payload["data"]["domainCode"], "CHAT");
+    assert_eq!(tree_payload["data"]["domainCode"], "CHAT_PANEL");
     let menus = tree_payload["data"]["menus"]
         .as_array()
         .expect("chat tree should have menus");
     assert_eq!(menus[0]["menuCode"], "CHAT_SESSIONS");
     assert_eq!(menus[0]["menuType"], "Group");
+    assert_eq!(menus[0]["childDisplay"], "Inline");
     let children = menus[0]["children"]
         .as_array()
         .expect("chat sessions group should have children");
@@ -593,7 +613,7 @@ async fn chat_panel_widgets_are_hidden_from_domain_list_but_rendered_in_tree() {
     let add_child = request_json(
         &router,
         Method::POST,
-        "/api/v1/admin/navigation/domains/CHAT/menu-items",
+        "/api/v1/admin/navigation/menu-trees/CHAT_PANEL/menu-items",
         Some(json!({
             "menuCode": "CHATS",
             "parentMenuCode": "CHAT_PROJECTS",

@@ -27,6 +27,13 @@ mod request {
     }
 
     #[derive(Debug, Deserialize)]
+    #[serde(rename_all = "PascalCase")]
+    pub enum MenuChildDisplayRequest {
+        Inline,
+        Flyout,
+    }
+
+    #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct DomainQueryRequest {
         pub current: i64,
@@ -103,12 +110,14 @@ mod request {
     pub struct UpdateMenuItemRequest {
         pub parent_menu_code: Option<String>,
         pub position: i64,
+        pub child_display: Option<MenuChildDisplayRequest>,
     }
 
     #[derive(Debug, Deserialize)]
     #[serde(rename_all = "camelCase")]
     pub struct CopyMenuTreeRequest {
-        pub source_domain_code: String,
+        #[serde(alias = "sourceDomainCode")]
+        pub source_tree_code: String,
         pub source_menu_code: Option<String>,
         pub target_parent_menu_code: Option<String>,
         pub position: i64,
@@ -130,6 +139,15 @@ mod request {
             match value {
                 MenuSourceRequest::BuiltIn => Self::BuiltIn,
                 MenuSourceRequest::Custom => Self::Custom,
+            }
+        }
+    }
+
+    impl From<MenuChildDisplayRequest> for NavigationMenuChildDisplay {
+        fn from(value: MenuChildDisplayRequest) -> Self {
+            match value {
+                MenuChildDisplayRequest::Inline => Self::Inline,
+                MenuChildDisplayRequest::Flyout => Self::Flyout,
             }
         }
     }

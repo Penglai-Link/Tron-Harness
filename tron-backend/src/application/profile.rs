@@ -14,6 +14,8 @@ use serde::Serialize;
 const CONTROL_DATABASE_ENV: &str = "TRON_BACKEND_CONTROL_DATABASE_URL";
 const PROFILE_REGISTRY_MIGRATION: &str =
     include_str!("../../migrations/20260921_0001_create_profile_registry.sql");
+const PROFILE_AVATAR_CACHE_MIGRATION: &str =
+    include_str!("../../migrations/20260921_0004_create_profile_avatar_cache.sql");
 
 #[derive(Clone)]
 pub struct ProfileRegistryService {
@@ -29,15 +31,30 @@ pub struct ProfileRecord {
     pub status: String,
     pub created_at: String,
     pub last_activated_at: Option<String>,
+    pub avatar_url: Option<String>,
 }
 
-#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub struct CachedProfileAvatar {
+    pub content_type: String,
+    pub image_bytes: Vec<u8>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PersonAiAccountSummary {
+    pub vip_level: Option<i32>,
+    pub remaining_points: Option<f64>,
+}
+
+#[derive(Clone, Debug, PartialEq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BootstrapProfileStatus {
     pub has_profiles: bool,
     pub active_profile_id: Option<String>,
     pub active_profile: Option<ProfileRecord>,
     pub avatar_url: Option<String>,
+    pub account: Option<PersonAiAccountSummary>,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -99,6 +116,7 @@ impl ProfileRegistryService {
         let connection = Connection::open(database_url)?;
         connection.execute_batch("PRAGMA foreign_keys = ON;")?;
         connection.execute_batch(PROFILE_REGISTRY_MIGRATION)?;
+        connection.execute_batch(PROFILE_AVATAR_CACHE_MIGRATION)?;
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
         })
@@ -109,13 +127,19 @@ impl ProfileRegistryService {
             .connection
             .lock()
             .map_err(|_| ProfileRegistryError::LockPoisoned)?;
-        let mut statement = connection.prepare(
-            "SELECT profile_id, person_ai_user_id, person_ai_username, status,
-                    created_at, last_activated_at
-             FROM profiles ORDER BY last_activated_at DESC, created_at DESC",
-        )?;
-        let rows = statement.query_map([], map_profile)?;
-        rows.collect::<Result<Vec<_>, _>>().map_err(Into::into)
+        let records = {
+            let mut statement = connection.prepare(
+                "SELECT profile_id, person_ai_user_id, person_ai_username, status,
+                        created_at, last_activated_at
+                 FROM profiles ORDER BY last_activated_at DESC, created_at DESC",
+            )?;
+            let rows = statement.query_map([], map_profile)?;
+            rows.collect::<Result<Vec<_>, _>>()?
+        };
+        records
+            .into_iter()
+            .map(|record| profile_with_cached_avatar_url(&connection, record))
+            .collect()
     }
 
     pub fn active(&self) -> Result<Option<ProfileRecord>, ProfileRegistryError> {
@@ -123,7 +147,7 @@ impl ProfileRegistryService {
             .connection
             .lock()
             .map_err(|_| ProfileRegistryError::LockPoisoned)?;
-        connection
+        let profile = connection
             .query_row(
                 "SELECT profile_id, person_ai_user_id, person_ai_username, status,
                         created_at, last_activated_at
@@ -135,11 +159,17 @@ impl ProfileRegistryService {
                 map_profile,
             )
             .optional()
-            .map_err(Into::into)
+            .map_err(ProfileRegistryError::from)?;
+        profile
+            .map(|record| profile_with_cached_avatar_url(&connection, record))
+            .transpose()
     }
 
     pub fn bootstrap_status(&self) -> Result<BootstrapProfileStatus, ProfileRegistryError> {
         let active_profile = self.active()?;
+        let avatar_url = active_profile
+            .as_ref()
+            .and_then(|profile| profile.avatar_url.clone());
         let has_profiles = {
             let connection = self
                 .connection
@@ -155,7 +185,8 @@ impl ProfileRegistryService {
                 .as_ref()
                 .map(|profile| profile.profile_id.clone()),
             active_profile,
-            avatar_url: None,
+            avatar_url,
+            account: None,
         })
     }
 
@@ -223,7 +254,7 @@ impl ProfileRegistryService {
              WHERE profile_id <> ?1 AND status = 'ACTIVE'",
             [profile_id.as_str()],
         )?;
-        connection
+        let profile = connection
             .query_row(
                 "SELECT profile_id, person_ai_user_id, person_ai_username, status,
                         created_at, last_activated_at
@@ -231,7 +262,8 @@ impl ProfileRegistryService {
                 [person_ai_user_id],
                 map_profile,
             )
-            .map_err(Into::into)
+            .map_err(ProfileRegistryError::from)?;
+        profile_with_cached_avatar_url(&connection, profile)
     }
 
     pub fn create_pending(&self) -> Result<ProfileRecord, ProfileRegistryError> {
@@ -287,7 +319,7 @@ impl ProfileRegistryService {
             )
             .map_err(ProfileRegistryError::from)?;
         transaction.commit()?;
-        Ok(profile)
+        profile_with_cached_avatar_url(&connection, profile)
     }
 
     pub fn activate(&self, profile_id: &str) -> Result<ProfileRecord, ProfileRegistryError> {
@@ -330,7 +362,7 @@ impl ProfileRegistryService {
             )
             .map_err(ProfileRegistryError::from)?;
         transaction.commit()?;
-        Ok(profile)
+        profile_with_cached_avatar_url(&connection, profile)
     }
 
     pub fn remove(&self, profile_id: &str) -> Result<(), ProfileRegistryError> {
@@ -338,10 +370,16 @@ impl ProfileRegistryService {
         if profile_id.is_empty() {
             return Err(ProfileRegistryError::InvalidInput("profileId"));
         }
-        let connection = self.connection.lock().map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ProfileRegistryError::LockPoisoned)?;
         let transaction = connection.unchecked_transaction()?;
-        let exists = transaction
-            .query_row("SELECT EXISTS(SELECT 1 FROM profiles WHERE profile_id = ?1)", [profile_id], |row| row.get::<_, bool>(0))?;
+        let exists = transaction.query_row(
+            "SELECT EXISTS(SELECT 1 FROM profiles WHERE profile_id = ?1)",
+            [profile_id],
+            |row| row.get::<_, bool>(0),
+        )?;
         if !exists {
             return Err(ProfileRegistryError::ProfileNotFound(profile_id.to_owned()));
         }
@@ -385,6 +423,87 @@ impl ProfileRegistryService {
             person_ai_username: profile.person_ai_username,
         })
     }
+
+    pub fn cache_avatar(
+        &self,
+        person_ai_user_id: &str,
+        content_type: &str,
+        image_bytes: &[u8],
+    ) -> Result<(), ProfileRegistryError> {
+        let person_ai_user_id = person_ai_user_id.trim();
+        if person_ai_user_id.is_empty() {
+            return Err(ProfileRegistryError::InvalidInput("personAiUserId"));
+        }
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        connection.execute(
+            "INSERT INTO profile_avatar_cache(person_ai_user_id, content_type, image_bytes, updated_at)
+             VALUES (?1, ?2, ?3, ?4)
+             ON CONFLICT(person_ai_user_id) DO UPDATE SET
+                  content_type = excluded.content_type,
+                  image_bytes = excluded.image_bytes,
+                  updated_at = excluded.updated_at",
+            params![
+                person_ai_user_id,
+                content_type.trim(),
+                image_bytes,
+                Utc::now().to_rfc3339(),
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_cached_avatar(&self, person_ai_user_id: &str) -> Result<(), ProfileRegistryError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        connection.execute(
+            "DELETE FROM profile_avatar_cache WHERE person_ai_user_id = ?1",
+            [person_ai_user_id.trim()],
+        )?;
+        Ok(())
+    }
+
+    pub fn cached_avatar(
+        &self,
+        profile_id: &str,
+    ) -> Result<Option<CachedProfileAvatar>, ProfileRegistryError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        connection
+            .query_row(
+                "SELECT cache.content_type, cache.image_bytes
+                 FROM profiles
+                 INNER JOIN profile_avatar_cache AS cache
+                   ON cache.person_ai_user_id = profiles.person_ai_user_id
+                 WHERE profiles.profile_id = ?1",
+                [profile_id],
+                |row| {
+                    Ok(CachedProfileAvatar {
+                        content_type: row.get(0)?,
+                        image_bytes: row.get(1)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(Into::into)
+    }
+
+    pub fn cached_avatar_url(
+        &self,
+        profile_id: &str,
+    ) -> Result<Option<String>, ProfileRegistryError> {
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ProfileRegistryError::LockPoisoned)?;
+        cached_avatar_url_for_profile(&connection, profile_id)
+    }
 }
 
 fn map_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProfileRecord> {
@@ -395,7 +514,40 @@ fn map_profile(row: &rusqlite::Row<'_>) -> rusqlite::Result<ProfileRecord> {
         status: row.get(3)?,
         created_at: row.get(4)?,
         last_activated_at: row.get(5)?,
+        avatar_url: None,
     })
+}
+
+fn profile_with_cached_avatar_url(
+    connection: &Connection,
+    mut profile: ProfileRecord,
+) -> Result<ProfileRecord, ProfileRegistryError> {
+    profile.avatar_url = cached_avatar_url_for_profile(connection, &profile.profile_id)?;
+    Ok(profile)
+}
+
+fn cached_avatar_url_for_profile(
+    connection: &Connection,
+    profile_id: &str,
+) -> Result<Option<String>, ProfileRegistryError> {
+    let updated_at = connection
+        .query_row(
+            "SELECT cache.updated_at
+             FROM profiles
+             INNER JOIN profile_avatar_cache AS cache
+               ON cache.person_ai_user_id = profiles.person_ai_user_id
+             WHERE profiles.profile_id = ?1",
+            [profile_id],
+            |row| row.get::<_, String>(0),
+        )
+        .optional()?;
+    Ok(updated_at.map(|updated_at| {
+        format!(
+            "/api/v1/profiles/{}/avatar?v={}",
+            profile_id,
+            url::form_urlencoded::byte_serialize(updated_at.as_bytes()).collect::<String>()
+        )
+    }))
 }
 
 fn default_control_database_url() -> String {
@@ -488,7 +640,9 @@ mod tests {
             .register_or_update("person-2", "bob")
             .expect("second profile");
 
-        registry.activate(&first.profile_id).expect("activate first");
+        registry
+            .activate(&first.profile_id)
+            .expect("activate first");
         registry.remove(&first.profile_id).expect("remove first");
 
         let active = registry
@@ -496,5 +650,36 @@ mod tests {
             .expect("remaining account should stay active");
         assert_eq!(active.profile_id, second.profile_id);
         assert_eq!(active.person_ai_user_id, "person-2");
+    }
+
+    #[test]
+    fn avatar_cache_keeps_image_bytes_without_the_temporary_source_url() {
+        let registry = ProfileRegistryService::new(":memory:").expect("registry");
+        let profile = registry
+            .register_or_update("person-1", "alice")
+            .expect("profile");
+        let image_bytes = [0x89, b'P', b'N', b'G'];
+
+        registry
+            .cache_avatar("person-1", "image/png", &image_bytes)
+            .expect("cache avatar");
+
+        let listed = registry.list().expect("profiles");
+        let avatar_url = listed[0].avatar_url.as_deref().expect("cached avatar URL");
+        assert!(avatar_url.starts_with(&format!(
+            "/api/v1/profiles/{}/avatar?v=",
+            profile.profile_id
+        )));
+        assert!(!avatar_url.contains("person-ai.example"));
+        assert_eq!(
+            registry
+                .cached_avatar(&profile.profile_id)
+                .expect("cached avatar")
+                .expect("avatar bytes"),
+            CachedProfileAvatar {
+                content_type: "image/png".to_owned(),
+                image_bytes: image_bytes.to_vec(),
+            }
+        );
     }
 }

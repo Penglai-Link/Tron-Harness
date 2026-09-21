@@ -38,6 +38,7 @@ describe("mapNavigationTree", () => {
             menuType: "Internal",
             pageCode: "tasks.index",
             url: null,
+            childDisplay: "Inline",
           },
           {
             children: [],
@@ -47,6 +48,7 @@ describe("mapNavigationTree", () => {
             menuType: "ExternalLink",
             pageCode: null,
             url: "https://example.com/docs",
+            childDisplay: "Inline",
           },
         ],
         icon: "LayoutDashboard",
@@ -55,11 +57,13 @@ describe("mapNavigationTree", () => {
         menuType: "Group",
         pageCode: null,
         url: null,
+        childDisplay: "Flyout",
       }],
     });
 
     expect(section.id).toBe("OPERATIONS");
     expect(section.label).toBe("Operations");
+    expect(section.flyout).toBe(true);
     expect(section.items[0].href).toBe("/tasks");
     expect(section.items[1].external).toBe(true);
     expect(section.items[1].href).toBe("https://example.com/docs");

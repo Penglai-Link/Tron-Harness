@@ -1,0 +1,139 @@
+bindAddress: 127.0.0.1
+navigation:
+  maxDepth: 3
+port: 8080
+frontendDistDir: tron-backend/resources/frontend
+projectDocRoot: .
+terminalWorkingDirectory: .
+
+resource:
+  connectionVerificationTimeoutMs: 5000
+  storage:
+    defaultProfile: local-default
+    profiles:
+      local-default:
+        type: local
+        root: ~/.tron/resources
+      # Example S3-compatible profile. Set defaultProfile to this profile and
+      # export the three credential variables before starting the backend.
+      # s3-default:
+      #   type: s3
+      #   endpoint: https://s3.example.com
+      #   region: us-east-1
+      #   bucket: tron-resources
+      #   prefix: attachments
+      #   forcePathStyle: false
+      #   accessKeyIdEnv: AWS_ACCESS_KEY_ID
+      #   secretAccessKeyEnv: AWS_SECRET_ACCESS_KEY
+      #   sessionTokenEnv: AWS_SESSION_TOKEN
+  limits:
+    schemaMaxBytes: 1048576
+    attributesMaxBytes: 1048576
+    maxDepth: 128
+    maxValidationErrors: 100
+    maxBinaries: 500
+    maxBinaryBytes: 1073741824
+    maxCommitBytes: 1073741824
+    maxBinaryNameLength: 255
+
+systemAgents:
+  codexCommand: codex
+  opencodeCommand: opencode
+
+httpClients:
+  default:
+    connectTimeoutMs: 1500
+    poolIdleTimeoutMs: 90000
+    poolMaxIdlePerHost: 32
+    tcpKeepaliveMs: 30000
+  documentParsing:
+    connectTimeoutMs: 1500
+    poolIdleTimeoutMs: 90000
+    poolMaxIdlePerHost: 8
+    tcpKeepaliveMs: 30000
+
+mineru:
+  enabled: true
+  baseUrl: https://pre-platform.cisdigital.cn/mineru
+  parseEndpoint: /file_parse
+  timeoutSeconds: 300
+  maxBytes: 52428800
+  backend: pipeline
+  parseMethod: auto
+  returnContentList: false
+
+shortTermMemory:
+  toolOutput:
+    root: ~/.tron/artifacts/short-term-memory/tool-results
+    externalizeAboveBytes: 32768
+  eventLog:
+    mode: full
+    retentionDays: 5
+    maxPayloadBytes: 8192
+    cleanupOnStartup: true
+    cleanupBatchSize: 5000
+    cleanupMaxRowsPerStartup: 50000
+  context:
+    defaultContextWindowTokens: 32000
+    familyContextMaxChars: 6000
+    reasoningSummaryReplayEnabled: false
+    blocks:
+      seedPromptPrefix:
+        maxRatio: "50%"
+        maxTokens: 16000
+      currentSessionCheckpoint:
+        maxRatio: "20%"
+        maxTokens: 6000
+      sessionFamilyContext:
+        maxRatio: "10%"
+        maxTokens: 12000
+      currentSessionWorkingState:
+        maxRatio: "10%"
+        maxTokens: 2000
+      toolSchema:
+        # Preserve existing DirectList agents. Set a tighter measured limit per deployment.
+        # Example: maxRatio: "20%" and maxTokens: 6000.
+        maxRatio: "60%"
+  familyLoad:
+    defaultMaxSessions: 3
+    defaultSnapshotMaxChars: 2000
+    defaultTtlHours: 72
+    taskWeight: "65%"
+    requirementWeight: "25%"
+    workspaceChatWeight: "10%"
+    workspaceHeartbeatWeight: "10%"
+    otherWeight: "5%"
+  compaction:
+    triggerRatio: "80%"
+    retainedHistoryRatio: "20%"
+  goalLoop:
+    maxRuns: 20
+    maxConsecutiveJudgeFailures: 3
+    judgeInputMaxChars: 12000
+    judgeOutputMaxTokens: 1024
+
+variableCrypto:
+  keyBase64: sbxNdQm4XiwQyfXNEtjZCQ==
+
+eventBus:
+  enabled: true
+  criticalIngressCapacity: 128
+  standardIngressCapacity: 512
+  defaultSinkCapacity: 256
+  maxNameBytes: 96
+  maxProducerBytes: 48
+  maxSummaryBytes: 160
+  maxAttrs: 8
+  maxAttrKeyBytes: 32
+  maxAttrValueBytes: 8192
+  maxPayloadFields: 8
+  maxPayloadBytes: 8192
+  maxSubjectTypeBytes: 32
+  maxSubjectCodeBytes: 64
+  maxActorUserCodeBytes: 64
+  maxActorUsernameBytes: 64
+  maxRequestFieldBytes: 64
+  aguiReplayEventsPerStream: 32
+  aguiReplayBytesPerStream: 65536
+  aguiGlobalReplayBytes: 2097152
+  aguiStreamIdleTtlSeconds: 30

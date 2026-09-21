@@ -1,35 +1,4 @@
-use super::{TaskError, TaskPriority, TaskSourceType, TaskStatus, TaskType};
-
-pub fn task_status_to_storage(status: TaskStatus) -> &'static str {
-    match status {
-        TaskStatus::Open => "Open",
-        TaskStatus::Designing => "Designing",
-        TaskStatus::Red => "Red",
-        TaskStatus::Green => "Green",
-        TaskStatus::Regressioning => "Regressioning",
-        TaskStatus::Review => "Review",
-        TaskStatus::InProgress => "InProgress",
-        TaskStatus::Reopen => "Reopen",
-        TaskStatus::Completed => "Completed",
-        TaskStatus::Archived => "Archived",
-    }
-}
-
-pub fn task_status_from_storage(value: &str) -> Result<TaskStatus, TaskError> {
-    match value {
-        "Open" => Ok(TaskStatus::Open),
-        "Designing" => Ok(TaskStatus::Designing),
-        "Red" => Ok(TaskStatus::Red),
-        "Green" => Ok(TaskStatus::Green),
-        "Regressioning" => Ok(TaskStatus::Regressioning),
-        "Review" => Ok(TaskStatus::Review),
-        "InProgress" => Ok(TaskStatus::InProgress),
-        "Reopen" => Ok(TaskStatus::Reopen),
-        "Completed" => Ok(TaskStatus::Completed),
-        "Archived" => Ok(TaskStatus::Archived),
-        _ => Err(TaskError::InvalidRequest),
-    }
-}
+use super::{TaskError, TaskPriority, TaskSourceType, TaskType};
 
 pub fn task_priority_to_storage(priority: TaskPriority) -> &'static str {
     match priority {

@@ -9,16 +9,17 @@ use std::{
 
 use crate::{
     domain::navigation::{
-        MenuQuery, MenuSource, MenuType, NavigationDomain, NavigationError, NavigationMenu,
-        NavigationPage, NavigationTreeItem, PANEL_DOMAIN_CODES, validate_domain_code,
-        validate_menu_code, validate_menu_target, validate_translations,
+        CHAT_PANEL_MENU_TREE_CODE, MenuQuery, MenuSource, MenuType, NavigationDomain,
+        NavigationError, NavigationMenu, NavigationMenuChildDisplay, NavigationMenuTree,
+        NavigationPage, NavigationTreeItem, validate_domain_code, validate_menu_code,
+        validate_menu_target, validate_translations,
     },
     shared::time::current_timestamp,
 };
 
 pub use commands::*;
 pub use default_tree::{
-    DEFAULT_NAVIGATION_MENU_TREE_DOMAINS, DEFAULT_NAVIGATION_MENU_TREE_ITEMS,
+    DEFAULT_NAVIGATION_MENU_TREE_CODES, DEFAULT_NAVIGATION_MENU_TREE_ITEMS,
     DefaultNavigationMenuTreeItem,
 };
 pub use repository::NavigationRepository;

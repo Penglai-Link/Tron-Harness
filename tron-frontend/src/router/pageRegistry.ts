@@ -319,6 +319,21 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.PlatformModelsPage,
     })),
   ),
+  "settings.taskFlows": lazy(() =>
+    import("@/domain/task/pages/TaskFlowsPage").then((module) => ({
+      default: module.TaskFlowsPage,
+    })),
+  ),
+  "settings.taskFlowsNew": lazy(() =>
+    import("@/domain/task/pages/TaskFlowEditorPage").then((module) => ({
+      default: module.TaskFlowEditorPage,
+    })),
+  ),
+  "settings.taskFlowsEdit": lazy(() =>
+    import("@/domain/task/pages/TaskFlowEditorPage").then((module) => ({
+      default: module.TaskFlowEditorPage,
+    })),
+  ),
   "settings.modelProviders": lazy(() =>
     import("@/domain/model/pages/ModelProvidersPage").then((module) => ({
       default: module.ModelProvidersPage,

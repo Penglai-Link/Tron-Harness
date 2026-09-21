@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 
 import { downloadResourceBinary } from "@/domain/resource/api";
+import { buildApiUrl } from "@/shared/api/httpClient";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { parseAvatarResourceReference } from "@/shared/lib/avatarResource";
 
@@ -13,18 +14,19 @@ export function useManagedAvatar(avatarUrl: string | null | undefined) {
   useEffect(() => {
     let disposed = false;
     let objectUrl: string | null = null;
-    const reference = parseAvatarResourceReference(avatarUrl);
-    const isSystemAvatar = avatarUrl === SYSTEM_AVATAR_REFERENCE;
+    const resolvedAvatarUrl = avatarUrl?.startsWith("/") ? buildApiUrl(avatarUrl) : avatarUrl;
+    const reference = parseAvatarResourceReference(resolvedAvatarUrl);
+    const isSystemAvatar = resolvedAvatarUrl === SYSTEM_AVATAR_REFERENCE;
 
     setSrc(null);
     setLoading(Boolean(reference || isSystemAvatar));
 
-    if (!avatarUrl) {
+    if (!resolvedAvatarUrl) {
       return () => undefined;
     }
 
     if (!reference && !isSystemAvatar) {
-      setSrc(avatarUrl);
+      setSrc(resolvedAvatarUrl);
       setLoading(false);
       return () => undefined;
     }

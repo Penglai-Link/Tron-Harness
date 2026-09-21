@@ -18,7 +18,8 @@ use crate::{
     },
     domain::navigation::{
         LocalizedText, MenuQuery, MenuSource, MenuType, NavigationDomain, NavigationError,
-        NavigationMenu, NavigationTreeItem,
+        NavigationMenu, NavigationMenuChildDisplay, NavigationMenuTree, NavigationMenuTreeKind,
+        NavigationTreeItem,
     },
     response::ApiResponse,
     shared::time::timestamp_to_millis,

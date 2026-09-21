@@ -8,10 +8,7 @@ use crate::{
     },
     domain::{
         agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest},
-        task::{
-            TaskError, TaskListQuery, TaskPriority, TaskSourceType, TaskStatus, TaskType,
-            infer_task_role, task_status_allowed_for_role,
-        },
+        task::{TaskListQuery, TaskPriority, TaskSourceType, TaskType},
     },
 };
 
@@ -209,14 +206,6 @@ impl Tool for TaskUpdateTool {
         let task_type = parse_task_type(input.task_type.as_deref())?;
         let source_type = parse_task_source_type(input.source_type.as_deref())?;
         let status = parse_task_status(input.status.as_deref())?;
-        if let Some(status) = status {
-            let effective_task_type = task_type.unwrap_or(current.task_type);
-            let task_role =
-                infer_task_role(effective_task_type, current.parent_task_code.as_deref());
-            if status == TaskStatus::Archived || !task_status_allowed_for_role(task_role, status) {
-                return Err(service_tool_error(TaskError::StatusRoleInvalid));
-            }
-        }
         let mut output = self
             .tasks
             .update_task(
@@ -319,21 +308,12 @@ impl Tool for TaskRestoreTool {
     }
 }
 
-fn parse_task_status(value: Option<&str>) -> Result<Option<TaskStatus>, ToolError> {
-    match normalize_optional_token(value).as_deref() {
-        None => Ok(None),
-        Some("open") => Ok(Some(TaskStatus::Open)),
-        Some("designing") => Ok(Some(TaskStatus::Designing)),
-        Some("red") => Ok(Some(TaskStatus::Red)),
-        Some("green") => Ok(Some(TaskStatus::Green)),
-        Some("regressioning") => Ok(Some(TaskStatus::Regressioning)),
-        Some("review") => Ok(Some(TaskStatus::Review)),
-        Some("in_progress") => Ok(Some(TaskStatus::InProgress)),
-        Some("reopen") => Ok(Some(TaskStatus::Reopen)),
-        Some("completed") => Ok(Some(TaskStatus::Completed)),
-        Some("archived") => Ok(Some(TaskStatus::Archived)),
-        Some(other) => Err(enum_tool_error("status", other)),
-    }
+fn parse_task_status(value: Option<&str>) -> Result<Option<String>, ToolError> {
+    Ok(normalize_optional_token(value).map(|value| match value.as_str() {
+        "open" | "not_started" => "NOT_STARTED".to_string(),
+        "completed" | "closed" => "CLOSED".to_string(),
+        other => other.to_ascii_uppercase(),
+    }))
 }
 
 fn parse_task_priority(value: Option<&str>) -> Result<Option<TaskPriority>, ToolError> {

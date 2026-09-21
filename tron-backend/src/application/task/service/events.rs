@@ -38,7 +38,8 @@ impl TaskService {
                     "previousStatus",
                     result
                         .previous_status
-                        .map(|status| format!("{status:?}"))
+                        .as_ref()
+                        .map(|status| status.to_string())
                         .unwrap_or_else(|| "None".into()),
                 ),
         );

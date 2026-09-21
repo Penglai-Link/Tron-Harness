@@ -1,6 +1,6 @@
 use serde::Deserialize;
 
-use super::{TaskPriority, TaskSourceType, TaskStatus, TaskType};
+use super::{TaskPriority, TaskSourceType, TaskType};
 
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -9,7 +9,7 @@ pub struct TaskListQuery {
     pub current: Option<usize>,
     pub size: Option<usize>,
     pub search: Option<String>,
-    pub status: Option<TaskStatus>,
+    pub status: Option<String>,
     pub priority: Option<TaskPriority>,
     pub task_type: Option<TaskType>,
     pub source_type: Option<TaskSourceType>,

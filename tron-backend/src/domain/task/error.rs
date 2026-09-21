@@ -10,7 +10,11 @@ pub enum TaskError {
     InvalidApp,
     ActiveSubtaskExists,
     ArchivedMutationDenied,
-    StatusRoleInvalid,
+    FlowNotFound,
+    FlowCodeConflict,
+    FlowInUse,
+    WorkspaceFlowHasOpenTasks,
+    StatusNotInFlow,
     InvalidProgress,
     InvalidRequest,
     StorageFailure,
@@ -27,9 +31,13 @@ impl fmt::Display for TaskError {
             Self::InvalidApp => formatter.write_str("task app is invalid"),
             Self::ActiveSubtaskExists => formatter.write_str("task has active subtasks"),
             Self::ArchivedMutationDenied => formatter.write_str("archived task cannot be modified"),
-            Self::StatusRoleInvalid => {
-                formatter.write_str("task status does not match the inferred task role")
+            Self::FlowNotFound => formatter.write_str("task flow was not found"),
+            Self::FlowCodeConflict => formatter.write_str("task flow code already exists"),
+            Self::FlowInUse => formatter.write_str("task flow is used by a workspace"),
+            Self::WorkspaceFlowHasOpenTasks => {
+                formatter.write_str("close every task before switching the task flow")
             }
+            Self::StatusNotInFlow => formatter.write_str("task status is not in the task flow"),
             Self::InvalidProgress => formatter.write_str("task progress is invalid"),
             Self::InvalidRequest => formatter.write_str("task request is invalid"),
             Self::StorageFailure => formatter.write_str("task storage failure"),

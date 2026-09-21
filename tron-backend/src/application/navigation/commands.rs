@@ -1,4 +1,4 @@
-use crate::domain::navigation::{LocalizedText, MenuType};
+use crate::domain::navigation::{LocalizedText, MenuType, NavigationMenuChildDisplay};
 
 #[derive(Debug, Clone)]
 pub struct CreateDomainCommand {
@@ -51,6 +51,7 @@ pub struct AddMenuItemCommand {
 pub struct UpdateMenuItemCommand {
     pub parent_menu_code: Option<String>,
     pub position: i64,
+    pub child_display: Option<NavigationMenuChildDisplay>,
 }
 
 #[derive(Debug, Clone)]

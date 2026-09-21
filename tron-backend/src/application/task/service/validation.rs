@@ -17,7 +17,7 @@ impl TaskService {
         workspace_code: &str,
     ) -> Result<(), TaskError> {
         let parent = self.get_task_record(parent_task_code)?;
-        if parent.workspace_code != workspace_code || parent.status == TaskStatus::Archived {
+        if parent.workspace_code != workspace_code || parent.archived_at.is_some() {
             return Err(TaskError::InvalidParent);
         }
         Ok(())

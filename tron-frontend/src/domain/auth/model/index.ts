@@ -11,6 +11,8 @@ export interface AuthenticatedUser {
   status: string;
   userCode: string;
   username: string;
+  vipLevel: number | null;
+  remainingPoints: number | null;
 }
 
 export interface AuthSession {

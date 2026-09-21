@@ -10,6 +10,7 @@ import {
 import {
   ChevronDown,
   ChevronRight,
+  Folder,
 } from "lucide-react";
 import { Link } from "react-router";
 
@@ -36,6 +37,9 @@ import {
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/shared/lib/utils";
@@ -101,6 +105,42 @@ export function TronSidebar({
     };
   }, [setOpenMobile, toggleSidebar]);
 
+  function renderDropdownNavigationItem(item: TronNavItem, itemKey: string): ReactNode {
+    const Icon = item.icon;
+    const itemLabel = item.translationKey ? translate(item.translationKey) : item.label;
+    const active = item.label === activeItem
+      || Boolean(item.href && activeHref && (item.href === activeHref || activeHref.startsWith(`${item.href}/`)));
+    if (item.children?.length) {
+      return (
+        <DropdownMenuSub key={itemKey}>
+          <DropdownMenuSubTrigger className="h-9 gap-[12px] rounded-md px-2 text-[var(--color-on-surface-variant)]">
+            <Icon size={16} aria-hidden="true" />
+            <span className="truncate">{itemLabel}</span>
+          </DropdownMenuSubTrigger>
+          <DropdownMenuSubContent className="w-60 rounded-lg p-1.5">
+            {item.children.map((child) => renderDropdownNavigationItem(child, `${itemKey}/${child.label}`))}
+          </DropdownMenuSubContent>
+        </DropdownMenuSub>
+      );
+    }
+
+    return (
+      <DropdownMenuItem
+        className={cn(
+          "h-9 gap-[12px] rounded-md px-2 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
+          active && "bg-[var(--color-hover-surface)] font-medium text-[var(--color-on-surface)]",
+        )}
+        key={itemKey}
+        render={item.external
+          ? <a aria-current={active ? "page" : undefined} href={item.href} target="_blank" rel="noreferrer" />
+          : <Link aria-current={active ? "page" : undefined} to={item.href} />}
+      >
+        <Icon size={16} aria-hidden="true" />
+        <span className="truncate">{itemLabel}</span>
+      </DropdownMenuItem>
+    );
+  }
+
   function renderNavigationItem(item: TronNavItem, itemKey: string, nestingLevel = 0): ReactNode {
     const Icon = item.icon;
     const active = item.label === activeItem || Boolean(item.href && activeHref && (item.href === activeHref || activeHref.startsWith(`${item.href}/`)));
@@ -129,18 +169,19 @@ export function TronSidebar({
 
     return (
       <SidebarMenuItem className="space-y-1" key={itemKey}>
-        {hasChildren && compact ? (
+        {hasChildren && (compact || item.childDisplay === "Flyout") ? (
           <DropdownMenu>
             <DropdownMenuTrigger
               render={(
                 <SidebarMenuButton
                   isActive={active}
                   tooltip={itemLabel}
-                  className="justify-center px-0 mb-0"
+                  className={cn(compact ? "justify-center px-0" : "gap-[12px] px-3", "mb-0")}
                   aria-label={itemLabel}
                 >
                   <Icon className="shrink-0" size={17} aria-hidden="true" />
-                  <span className="sr-only">{itemLabel}</span>
+                  <span className={cn("min-w-0 flex-1 truncate text-left", compact ? "sr-only" : "")}>{itemLabel}</span>
+                  {compact ? null : <ChevronRight className="shrink-0" size={14} aria-hidden="true" />}
                 </SidebarMenuButton>
               )}
             />
@@ -150,27 +191,7 @@ export function TronSidebar({
                   {itemLabel}
                 </DropdownMenuLabel>
                 <DropdownMenuSeparator className="mx-0 my-1 bg-[var(--color-card-border)]" />
-                {item.children?.map((child) => {
-                  const ChildIcon = child.icon;
-                  const childActive = child.label === activeItem || Boolean(child.href && activeHref && (child.href === activeHref || activeHref.startsWith(`${child.href}/`)));
-                  const childLabel = child.translationKey ? translate(child.translationKey) : child.label;
-
-                  return (
-                    <DropdownMenuItem
-                      className={cn(
-                        "h-9 gap-[12px] rounded-md px-2 text-[var(--color-on-surface-variant)] hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)]",
-                        childActive && "bg-[var(--color-hover-surface)] font-medium text-[var(--color-on-surface)]",
-                      )}
-                      key={`${itemKey}/${child.label}`}
-                      render={child.external
-                        ? <a aria-current={childActive ? "page" : undefined} href={child.href} target="_blank" rel="noreferrer" />
-                        : <Link aria-current={childActive ? "page" : undefined} to={child.href} />}
-                    >
-                      <ChildIcon size={16} aria-hidden="true" />
-                      <span className="truncate">{childLabel}</span>
-                    </DropdownMenuItem>
-                  );
-                })}
+                {item.children?.map((child) => renderDropdownNavigationItem(child, `${itemKey}/${child.label}`))}
               </DropdownMenuGroup>
             </DropdownMenuContent>
           </DropdownMenu>
@@ -235,10 +256,18 @@ export function TronSidebar({
           {navigation.map((section) => {
             const sectionKey = section.id ?? section.label;
             const open = openSections[sectionKey] ?? true;
+            const sectionItems: TronNavItem[] = section.flyout ? [{
+              childDisplay: "Flyout" as const,
+              children: section.items,
+              href: "",
+              icon: section.icon ?? section.items[0]?.icon ?? Folder,
+              label: section.label,
+              translationKey: section.translationKey,
+            }] : section.items;
 
             return (
               <SidebarGroup className="p-0" key={sectionKey}>
-                {compact ? null : (
+                {compact || section.flyout ? null : (
                   <SidebarGroupLabel
                     aria-expanded={open}
                     className="h-8 w-full justify-between px-2 text-sm font-semibold text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
@@ -249,10 +278,10 @@ export function TronSidebar({
                     <ChevronRight className={cn("transition-transform", open ? "rotate-90" : "")} size={14} aria-hidden="true" />
                   </SidebarGroupLabel>
                 )}
-                {open || compact ? (
+                {section.flyout || open || compact ? (
                   <SidebarGroupContent>
                     <SidebarMenu className={cn(compact ? "" : "mt-1")}>
-                      {section.items.map((item) => renderNavigationItem(item, `${section.label}/${item.label}`))}
+                      {sectionItems.map((item) => renderNavigationItem(item, `${section.label}/${item.label}`))}
                     </SidebarMenu>
                   </SidebarGroupContent>
                 ) : null}

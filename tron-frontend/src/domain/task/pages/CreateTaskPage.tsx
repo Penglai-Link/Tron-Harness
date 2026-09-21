@@ -61,7 +61,6 @@ export function CreateTaskPage() {
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`tasks.${key}`, { defaultValue, ...options })
   );
-  const options = useTaskOptions();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [taskType, setTaskType] = useState<TaskType>("Feature");
@@ -84,6 +83,7 @@ export function CreateTaskPage() {
   const { selectedPrimarySpace, selectedSecondarySpace } = useWorkspaceSpaces();
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
+  const options = useTaskOptions(activeWorkspaceCode);
   const { appOptions, effectiveUsers, loading: workspaceOptionsLoading, onUserPageChange, userPage, userPageCount } = useTaskWorkspaceOptions(activeWorkspaceCode);
   const executionAgentSelectOptions = useMemo(
     () => agentOptions.map((agent) => ({

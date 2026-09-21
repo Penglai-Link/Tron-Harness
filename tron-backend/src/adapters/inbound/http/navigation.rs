@@ -44,6 +44,7 @@ struct RuntimeMenuVo {
     icon: Option<String>,
     page_code: Option<String>,
     url: Option<String>,
+    child_display: String,
     children: Vec<RuntimeMenuVo>,
 }
 
@@ -54,13 +55,14 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/navigation/domains/{domain_code}/menu-tree",
             get(menu_tree),
         )
+        .route(
+            "/api/v1/navigation/chat-panel/menu-tree",
+            get(chat_panel_menu_tree),
+        )
 }
 
 async fn list_domains(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
-    match state
-        .navigation
-        .list_visible_domains(&auth.locale)
-    {
+    match state.navigation.list_visible_domains(&auth.locale) {
         Ok(domains) => Json(ApiResponse::protocol_success(
             domains
                 .into_iter()
@@ -77,10 +79,14 @@ async fn menu_tree(
     auth: RequestAuthContext,
     Path(domain_code): Path<String>,
 ) -> Response {
-    match state
-        .navigation
-        .runtime_tree(&domain_code, &auth.locale)
-    {
+    match state.navigation.runtime_tree(&domain_code, &auth.locale) {
+        Ok(tree) => Json(ApiResponse::protocol_success(runtime_tree_vo(tree))).into_response(),
+        Err(error) => navigation_error_response(error, &auth.locale),
+    }
+}
+
+async fn chat_panel_menu_tree(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
+    match state.navigation.chat_panel_runtime_tree(&auth.locale) {
         Ok(tree) => Json(ApiResponse::protocol_success(runtime_tree_vo(tree))).into_response(),
         Err(error) => navigation_error_response(error, &auth.locale),
     }
@@ -114,6 +120,7 @@ fn runtime_menu_vo(menu: RuntimeMenu) -> RuntimeMenuVo {
         icon: menu.icon,
         page_code: menu.page_code,
         url: menu.url,
+        child_display: child_display_name(menu.child_display).into(),
         children: menu.children.into_iter().map(runtime_menu_vo).collect(),
     }
 }
@@ -124,6 +131,15 @@ pub(crate) fn menu_type_name(menu_type: MenuType) -> &'static str {
         MenuType::Internal => "Internal",
         MenuType::ExternalLink => "ExternalLink",
         MenuType::Widget => "Widget",
+    }
+}
+
+fn child_display_name(
+    display: crate::domain::navigation::NavigationMenuChildDisplay,
+) -> &'static str {
+    match display {
+        crate::domain::navigation::NavigationMenuChildDisplay::Inline => "Inline",
+        crate::domain::navigation::NavigationMenuChildDisplay::Flyout => "Flyout",
     }
 }
 

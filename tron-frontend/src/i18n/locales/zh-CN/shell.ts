@@ -108,6 +108,17 @@ export const shell = {
   placeholders: {
     search: "搜索 Tron...",
   },
+  userMenu: {
+    plan: "套餐",
+    remainingPoints: "剩余积分",
+    plans: {
+      free: "免费版",
+      vip: "VIP",
+      pro: "Pro",
+      max: "Max",
+      level: "VIP {{level}}",
+    },
+  },
   settings: {
     back: "返回",
     groups: {
@@ -124,7 +135,7 @@ export const shell = {
       general: "通用",
       mcpServers: "MCP 服务",
       menuArrangement: "菜单编排",
-      menuPool: "菜单池",
+      menuPool: "菜单定义",
       memoryDomains: "记忆领域",
       modelProviders: "模型供应商",
       models: "模型",
@@ -134,6 +145,7 @@ export const shell = {
       resources: "资源",
       roles: "角色",
       shortcuts: "快捷键",
+      taskFlows: "任务流",
       tools: "工具",
       skillCenter: "技能中心",
       users: "用户",

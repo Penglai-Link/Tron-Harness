@@ -6,7 +6,7 @@ pub struct DefaultNavigationMenuTreeItem {
     pub position: i64,
 }
 
-pub const DEFAULT_NAVIGATION_MENU_TREE_DOMAINS: &[&str] = &["ADVANCED", "CHAT"];
+pub const DEFAULT_NAVIGATION_MENU_TREE_CODES: &[&str] = &["ADVANCED", "CHAT_PANEL"];
 
 // Keep this in the same parent-before-child order as the built-in navigation seed.
 // It provides a runtime recovery path when an administrator removes all assignments.
@@ -162,25 +162,25 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         position: 6,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT",
+        domain_code: "CHAT_PANEL",
         menu_code: "CHAT_SESSIONS",
         parent_menu_code: None,
         position: 0,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT",
+        domain_code: "CHAT_PANEL",
         menu_code: "CHAT_NEW_SESSION",
         parent_menu_code: Some("CHAT_SESSIONS"),
         position: 0,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT",
+        domain_code: "CHAT_PANEL",
         menu_code: "CHAT_PROJECTS",
         parent_menu_code: Some("CHAT_SESSIONS"),
         position: 1,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "CHAT",
+        domain_code: "CHAT_PANEL",
         menu_code: "CHAT_RECENTS",
         parent_menu_code: Some("CHAT_SESSIONS"),
         position: 2,

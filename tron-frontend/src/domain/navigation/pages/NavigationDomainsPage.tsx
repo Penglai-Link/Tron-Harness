@@ -335,7 +335,7 @@ export function NavigationDomainsPage() {
                     />
                     <DropdownMenuContent align="end" className="w-36">
                       <DropdownMenuItem onClick={() => openEdit(row)}>{text("actions.edit", "编辑", "Edit")}</DropdownMenuItem>
-                      <DropdownMenuItem onClick={() => navigate(`/admin/navigation/menu-tree?domainCode=${encodeURIComponent(row.domainCode)}`)}>{text("actions.arrange", "编排菜单", "Arrange menu")}</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => navigate(`/admin/navigation/menu-tree?treeCode=${encodeURIComponent(row.domainCode)}`)}>{text("actions.arrange", "编排菜单", "Arrange menu")}</DropdownMenuItem>
                       {!row.builtIn ? (
                         <>
                           <DropdownMenuSeparator />

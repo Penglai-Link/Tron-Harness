@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
+import { ChevronRight } from "lucide-react";
 
 import { fetchToolDomains, listTools } from "@/domain/agent/api";
 import { listToolDomainsMock, listToolsMock } from "@/domain/agent/mock";
 import type { PlatformToolRecord, ToolCatalogDomainRecord } from "@/domain/agent/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DataTable } from "@/components/data-table";
-import { SelectInput } from "@/components/forms";
 import { SearchField } from "@/components/search-field";
 import { TablePagination } from "@/components/table-pagination";
 import {
@@ -14,7 +14,6 @@ import {
   useTablePagination,
 } from "@/shared";
 import { useToast } from "@/components/ui/toast";
-import { SelectItem } from "@/components/ui/select";
 
 export function PlatformToolsPage() {
   const { t } = useTranslation(["pages", "common"]);
@@ -24,10 +23,8 @@ export function PlatformToolsPage() {
   const [tools, setTools] = useState<PlatformToolRecord[]>([]);
   const [loading, setLoading] = useState(false);
   const [domainSearch, setDomainSearch] = useState("");
-  const [toolSearch, setToolSearch] = useState("");
-  const [selectedToolDomainCode, setSelectedToolDomainCode] = useState("all");
   const [debouncedDomainSearch, setDebouncedDomainSearch] = useState("");
-  const [debouncedToolSearch, setDebouncedToolSearch] = useState("");
+  const [expandedDomainCodes, setExpandedDomainCodes] = useState<Set<string>>(() => new Set());
 
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:settingsTools.${key}`, { defaultValue, ...options })
@@ -40,14 +37,6 @@ export function PlatformToolsPage() {
 
     return () => window.clearTimeout(timer);
   }, [domainSearch]);
-
-  useEffect(() => {
-    const timer = window.setTimeout(() => {
-      setDebouncedToolSearch(toolSearch.trim().toLowerCase());
-    }, 260);
-
-    return () => window.clearTimeout(timer);
-  }, [toolSearch]);
 
   const visibleDomains = useMemo(() => {
     const normalizedSearch = debouncedDomainSearch;
@@ -65,30 +54,16 @@ export function PlatformToolsPage() {
     ));
   }, [debouncedDomainSearch, domains]);
 
-  const visibleTools = useMemo(() => {
-    const normalizedSearch = debouncedToolSearch;
-    return tools.filter((tool) => {
-      if (selectedToolDomainCode !== "all" && tool.domainCode !== selectedToolDomainCode) {
-        return false;
-      }
-
-      if (!normalizedSearch) {
-        return true;
-      }
-
-      return [
-        tool.toolCode,
-        tool.domainCode,
-        tool.name,
-        tool.description,
-        tool.operationKind,
-        t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind }),
-      ].join(" ").toLowerCase().includes(normalizedSearch);
-    });
-  }, [debouncedToolSearch, selectedToolDomainCode, t, tools]);
-
   const domainPagination = useTablePagination(visibleDomains);
-  const toolPagination = useTablePagination(visibleTools);
+  const toolsByDomain = useMemo(() => {
+    const grouped = new Map<string, PlatformToolRecord[]>();
+    for (const tool of tools) {
+      const domainTools = grouped.get(tool.domainCode) ?? [];
+      domainTools.push(tool);
+      grouped.set(tool.domainCode, domainTools);
+    }
+    return grouped;
+  }, [tools]);
 
   async function refreshTools() {
     setLoading(true);
@@ -116,16 +91,17 @@ export function PlatformToolsPage() {
     void refreshTools();
   }, [dataSource]);
 
-  useEffect(() => {
-    if (selectedToolDomainCode === "all") {
-      return;
-    }
-
-    const domainStillPresent = domains.some((domain) => domain.domainCode === selectedToolDomainCode);
-    if (!domainStillPresent) {
-      setSelectedToolDomainCode("all");
-    }
-  }, [domains, selectedToolDomainCode]);
+  function toggleDomain(domainCode: string) {
+    setExpandedDomainCodes((current) => {
+      const next = new Set(current);
+      if (next.has(domainCode)) {
+        next.delete(domainCode);
+      } else {
+        next.add(domainCode);
+      }
+      return next;
+    });
+  }
 
   return (
     <div className="space-y-6">
@@ -136,12 +112,42 @@ export function PlatformToolsPage() {
           rowKey={(row) => row.domainCode}
           rows={domainPagination.visibleItems}
           tableClassName="[&_td]:py-2 [&_th]:py-2"
+          expandedRowClassName="bg-[var(--color-surface-container)]"
+          isRowExpanded={(row) => expandedDomainCodes.has(row.domainCode)}
+          onRowClick={(row) => toggleDomain(row.domainCode)}
           pagination={
             <TablePagination
               itemLabel={pageT("domains.itemLabel", "tool domains")}
               {...domainPagination.paginationProps}
             />
           }
+          renderExpandedRow={(domain) => {
+            const domainTools = toolsByDomain.get(domain.domainCode) ?? [];
+            return domainTools.length ? (
+              <div className="overflow-x-auto rounded-md border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]">
+                <table className="w-full min-w-[680px] text-left text-sm">
+                  <thead className="border-b border-[var(--color-card-border)] text-xs font-medium text-[var(--color-on-surface-variant)]">
+                    <tr>
+                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.name", "工具名称")}</th>
+                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.englishName", "工具名称英文")}</th>
+                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.description", "描述")}</th>
+                      <th className="px-4 py-2.5">{pageT("domains.tools.columns.type", "类型")}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {domainTools.map((tool) => (
+                      <tr className="border-b border-[var(--color-card-border)] last:border-b-0" key={tool.toolCode}>
+                        <td className="px-4 py-2.5 font-medium text-[var(--color-on-surface)]">{tool.name}</td>
+                        <td className="px-4 py-2.5 font-mono text-xs text-[var(--color-on-surface-variant)]">{tool.toolName}</td>
+                        <td className="px-4 py-2.5 text-[13px] text-[var(--color-on-surface-variant)]">{tool.description}</td>
+                        <td className="px-4 py-2.5">{t(`common:toolOperationKind.${tool.operationKind}`, { defaultValue: tool.operationKind })}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ) : <p className="py-2 text-sm text-[var(--color-on-surface-variant)]">{pageT("domains.tools.empty", "该领域没有可用工具。")}</p>;
+          }}
           toolbar={
             <SearchField
               ariaLabel={pageT("domains.searchAria", "Search tool domains")}
@@ -159,9 +165,7 @@ export function PlatformToolsPage() {
               id: "domain",
               header: pageT("domains.columns.domainCode", "Domain"),
               width: "18%",
-              render: (row) => (
-                <span className="font-medium text-[var(--color-on-surface)]">{row.domainCode}</span>
-              ),
+              render: (row) => <span className="flex items-center gap-2 font-medium text-[var(--color-on-surface)]"><ChevronRight className={expandedDomainCodes.has(row.domainCode) ? "rotate-90 transition-transform" : "transition-transform"} size={16} aria-hidden="true" />{row.domainCode}</span>,
             },
             {
               id: "description",
@@ -206,89 +210,6 @@ export function PlatformToolsPage() {
           ]}
         />
 
-        <DataTable<PlatformToolRecord>
-          rowKey={(row) => row.toolCode}
-          rows={toolPagination.visibleItems}
-          tableClassName="[&_td]:py-2 [&_th]:py-2"
-          pagination={
-            <TablePagination
-              itemLabel={pageT("tools.itemLabel", "tools")}
-              {...toolPagination.paginationProps}
-            />
-          }
-          toolbar={
-            <div className="flex w-full flex-wrap gap-3">
-              <SearchField
-                ariaLabel={pageT("tools.searchAria", "Search platform tools")}
-                className="min-w-0 grow basis-full sm:basis-0 sm:max-w-[360px]"
-                disabled={loading}
-                placeholder={pageT("tools.searchPlaceholder", "Search platform tools...")}
-                value={toolSearch}
-                onChange={setToolSearch}
-              />
-              <SelectInput
-                aria-label={pageT("tools.domainFilterAria", "Filter platform tools by domain")}
-                className="min-w-[180px] sm:max-w-[220px]"
-                disabled={loading}
-                value={selectedToolDomainCode}
-                onValueChange={(event) => {
-                  setSelectedToolDomainCode(event!);
-                }}
-              >
-                <SelectItem value="all">
-                  {pageT("tools.domainFilterAll", "All domains")}
-                </SelectItem>
-                {domains.map((domain) => (
-                  <SelectItem key={domain.domainCode} value={domain.domainCode}>
-                    {domain.name}
-                  </SelectItem>
-                ))}
-              </SelectInput>
-            </div>
-          }
-          title={pageT("tools.title", "Tools")}
-          emptyState={pageT("tools.empty", "No tools match the current filters.")}
-          columns={[
-            {
-              id: "toolCode",
-              header: pageT("tools.columns.toolCode", "Tool Code"),
-              width: "22%",
-              render: (row) => <span className="font-mono text-[13px]">{row.toolCode}</span>,
-            },
-            {
-              id: "domainCode",
-              header: pageT("tools.columns.domainCode", "Domain"),
-              width: "16%",
-              render: (row) => row.domainCode,
-            },
-            {
-              id: "name",
-              header: pageT("tools.columns.name", "Name"),
-              width: "16%",
-              render: (row) => (
-                <span className="font-medium text-[var(--color-on-surface)]">
-                  {row.name}
-                </span>
-              ),
-            },
-            {
-              id: "operation",
-              header: pageT("tools.columns.operationKind", "Kind"),
-              width: "12%",
-              align: "right",
-              render: (row) => t(`common:toolOperationKind.${row.operationKind}`, { defaultValue: row.operationKind }),
-            },
-            {
-              id: "description",
-              header: pageT("tools.columns.description", "Description"),
-              render: (row) => (
-                <p className="text-[13px] text-[var(--color-on-surface-variant)]">
-                  {row.description}
-                </p>
-              ),
-            },
-          ]}
-        />
       </div>
     </div>
   );

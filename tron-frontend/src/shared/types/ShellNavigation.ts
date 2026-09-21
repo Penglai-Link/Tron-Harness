@@ -7,6 +7,7 @@ export interface TronNavItem {
   icon: LucideIcon;
   translationKey: string;
   external?: boolean;
+  childDisplay?: "Inline" | "Flyout";
 }
 
 export interface TronNavSection {
@@ -14,4 +15,6 @@ export interface TronNavSection {
   label: string;
   items: TronNavItem[];
   translationKey: string;
+  flyout?: boolean;
+  icon?: LucideIcon;
 }

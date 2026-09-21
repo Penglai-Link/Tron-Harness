@@ -1,8 +1,18 @@
+use crate::domain::task::{TASK_PRIORITIES, TASK_SOURCE_TYPES, TASK_TYPES};
+
+use super::flows::normalized_flow_code;
 use super::*;
 
 impl TaskService {
-    pub fn options(&self) -> TaskOptions {
-        task_options()
+    pub fn options(&self, workspace_code: &str) -> Result<TaskOptions, TaskError> {
+        let flow = self.task_flow_for_workspace(workspace_code)?;
+        Ok(TaskOptions {
+            statuses: flow.statuses.clone(),
+            flow,
+            priorities: TASK_PRIORITIES.to_vec(),
+            task_types: TASK_TYPES.to_vec(),
+            source_types: TASK_SOURCE_TYPES.to_vec(),
+        })
     }
 
     pub fn list_tasks(
@@ -23,29 +33,25 @@ impl TaskService {
     }
 
     pub fn kanban(&self, query: TaskListQuery) -> Result<Vec<TaskKanbanColumn>, TaskError> {
-        let include_archived = query.include_archived.unwrap_or(false);
+        let workspace_code = query
+            .workspace_code
+            .as_deref()
+            .and_then(|value| normalized_required(value.to_owned()))
+            .ok_or(TaskError::WorkspaceRequired)?;
+        let flow = self.task_flow_for_workspace(&workspace_code)?;
         let mut items = self.filtered_task_items(&query)?;
         sort_kanban_task_items(&mut items);
-        let statuses = match query.task_type {
-            Some(TaskType::Bug) => {
-                task_statuses_for_role(crate::domain::task::TaskRole::Bug).to_vec()
-            }
-            Some(TaskType::Feature) => {
-                task_statuses_for_role(crate::domain::task::TaskRole::FeatureRoot).to_vec()
-            }
-            None => TASK_STATUSES.to_vec(),
-        };
-        Ok(statuses
+        Ok(flow
+            .statuses
             .into_iter()
-            .filter(|status| include_archived || *status != TaskStatus::Archived)
             .map(|status| TaskKanbanColumn {
-                status,
-                title: status_title(status).into(),
                 tasks: items
                     .iter()
-                    .filter(|item| item.status == status)
+                    .filter(|item| item.status == status.status_code)
                     .cloned()
                     .collect(),
+                title: status.name,
+                status: status.status_code,
             })
             .collect())
     }
@@ -59,7 +65,7 @@ impl TaskService {
         if let Some(parent_code) = parent_task_code.as_deref() {
             self.ensure_valid_parent(parent_code, &workspace_code)?;
         }
-        let task_role = infer_task_role(command.task_type, parent_task_code.as_deref());
+        let flow = self.task_flow_for_workspace(&workspace_code)?;
         let assignees = self.validated_assignees(&workspace_code, command.assignee_user_codes)?;
         let agent_links = normalized_code_links(command.agent_codes);
         let app_links =
@@ -78,7 +84,8 @@ impl TaskService {
             title,
             description: optional_trimmed(command.description),
             execution_result: None,
-            status: task_default_status_for_role(task_role),
+            flow_code: flow.flow_code,
+            status: crate::domain::task::NOT_STARTED_STATUS_CODE.to_string(),
             previous_status: None,
             priority: command.priority,
             task_type: command.task_type,
@@ -117,7 +124,7 @@ impl TaskService {
         command: UpdateTaskCommand,
     ) -> Result<TaskDetail, TaskError> {
         let mut task = self.get_task_record(task_code)?;
-        if task.status == TaskStatus::Archived {
+        if task.archived_at.is_some() {
             return Err(TaskError::ArchivedMutationDenied);
         }
         if let Some(title) = command.title {
@@ -130,10 +137,6 @@ impl TaskService {
             task.priority = priority;
         }
         if let Some(task_type) = command.task_type {
-            let next_role = infer_task_role(task_type, task.parent_task_code.as_deref());
-            if !task_status_allowed_for_role(next_role, task.status) {
-                return Err(TaskError::StatusRoleInvalid);
-            }
             task.task_type = task_type;
         }
         if let Some(source_type) = command.source_type {
@@ -187,19 +190,17 @@ impl TaskService {
         task_code: &str,
         command: UpdateTaskStatusCommand,
     ) -> Result<TaskDetail, TaskError> {
-        if command.status == TaskStatus::Archived {
-            return Err(TaskError::InvalidRequest);
-        }
         let mut task = self.get_task_record(task_code)?;
-        if task.status == TaskStatus::Archived {
+        if task.archived_at.is_some() {
             return Err(TaskError::ArchivedMutationDenied);
         }
-        let task_role = infer_task_role(task.task_type, task.parent_task_code.as_deref());
-        if !task_status_allowed_for_role(task_role, command.status) {
-            return Err(TaskError::StatusRoleInvalid);
+        let status = normalized_flow_code(&command.status).ok_or(TaskError::InvalidRequest)?;
+        let flow = self.get_task_flow(&task.flow_code)?;
+        if !Self::flow_contains_status(&flow, &status) {
+            return Err(TaskError::StatusNotInFlow);
         }
-        task.status = command.status;
-        task.progress = if command.status == TaskStatus::Completed {
+        task.status = status.clone();
+        task.progress = if status == crate::domain::task::CLOSED_STATUS_CODE {
             100
         } else {
             command.progress.unwrap_or(task.progress).min(100)
@@ -220,11 +221,11 @@ impl TaskService {
         execution_result: String,
     ) -> Result<TaskDetail, TaskError> {
         let mut task = self.get_task_record(task_code)?;
-        if task.status == TaskStatus::Archived {
+        if task.archived_at.is_some() {
             return Err(TaskError::ArchivedMutationDenied);
         }
         task.execution_result = optional_trimmed(Some(execution_result));
-        task.status = TaskStatus::Completed;
+        task.status = crate::domain::task::CLOSED_STATUS_CODE.to_string();
         task.progress = 100;
         task.updated_at = current_timestamp();
         self.repository
@@ -242,16 +243,16 @@ impl TaskService {
 
     pub fn archive_task(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
         let mut task = self.get_task_record(task_code)?;
-        if task.status != TaskStatus::Archived {
+        if task.archived_at.is_none() {
             let has_active_subtasks = self.all_tasks()?.iter().any(|candidate| {
                 candidate.parent_task_code.as_deref() == Some(&task.task_code)
-                    && candidate.status != TaskStatus::Archived
+                    && candidate.archived_at.is_none()
             });
             if has_active_subtasks {
                 return Err(TaskError::ActiveSubtaskExists);
             }
             task.previous_status = Some(task.status);
-            task.status = TaskStatus::Archived;
+            task.status = crate::domain::task::CLOSED_STATUS_CODE.to_string();
             task.archived_at = Some(current_timestamp());
             task.updated_at = current_timestamp();
             self.repository
@@ -266,12 +267,12 @@ impl TaskService {
 
     pub fn restore_task(&self, task_code: &str) -> Result<TaskLifecycleResult, TaskError> {
         let mut task = self.get_task_record(task_code)?;
-        if task.status == TaskStatus::Archived {
-            let task_role = infer_task_role(task.task_type, task.parent_task_code.as_deref());
+        if task.archived_at.is_some() {
+            let flow = self.get_task_flow(&task.flow_code)?;
             task.status = task
                 .previous_status
-                .filter(|status| task_status_allowed_for_role(task_role, *status))
-                .unwrap_or_else(|| task_default_status_for_role(task_role));
+                .filter(|status| Self::flow_contains_status(&flow, status))
+                .unwrap_or_else(|| crate::domain::task::NOT_STARTED_STATUS_CODE.to_string());
             task.previous_status = None;
             task.archived_at = None;
             task.updated_at = current_timestamp();
@@ -343,7 +344,8 @@ mod tests {
             workspace_code: "TRON_CORE".into(),
             parent_task_code: None,
             title: task_code.into(),
-            status: TaskStatus::Open,
+            flow_code: crate::domain::task::DEFAULT_TASK_FLOW_CODE.into(),
+            status: crate::domain::task::NOT_STARTED_STATUS_CODE.into(),
             priority,
             progress: 0,
             task_type: TaskType::Feature,

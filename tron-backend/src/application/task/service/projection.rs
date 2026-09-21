@@ -40,7 +40,7 @@ pub(super) fn summary_from_task(task: &Task, all_tasks: &[Task]) -> TaskSummary 
     TaskSummary {
         task_code: task.task_code.clone(),
         title: task.title.clone(),
-        status: task.status,
+        status: task.status.clone(),
         priority: task.priority,
         progress: effective_progress(task, all_tasks),
         task_type: task.task_type,
@@ -50,7 +50,7 @@ pub(super) fn effective_progress(task: &Task, all_tasks: &[Task]) -> u8 {
     let active_subtasks = all_tasks
         .iter()
         .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
-        .filter(|candidate| candidate.status != TaskStatus::Archived)
+        .filter(|candidate| candidate.archived_at.is_none())
         .collect::<Vec<_>>();
     if active_subtasks.is_empty() {
         return task.progress;
@@ -77,20 +77,6 @@ pub(super) fn matches_search(task: &Task, search: Option<&str>) -> bool {
     .join(" ")
     .to_lowercase()
     .contains(&search)
-}
-pub(super) fn status_title(status: TaskStatus) -> &'static str {
-    match status {
-        TaskStatus::Open => "Open",
-        TaskStatus::Designing => "Designing",
-        TaskStatus::Red => "Red",
-        TaskStatus::Green => "Green",
-        TaskStatus::Regressioning => "Regressioning",
-        TaskStatus::Review => "Review",
-        TaskStatus::InProgress => "In Progress",
-        TaskStatus::Reopen => "Reopen",
-        TaskStatus::Completed => "Completed",
-        TaskStatus::Archived => "Archived",
-    }
 }
 pub(super) fn map_workspace_error(error: WorkspaceError) -> TaskError {
     match error {

@@ -116,6 +116,21 @@ function navigationHrefMatches(itemHref: string, activeHref?: string) {
   return Boolean(itemHref && activeHref && (activeHref === itemHref || activeHref.startsWith(`${itemHref}/`)));
 }
 
+function personAiPlanKey(level: number) {
+  switch (level) {
+    case 0:
+      return "free";
+    case 1:
+      return "vip";
+    case 2:
+      return "pro";
+    case 3:
+      return "max";
+    default:
+      return "level";
+  }
+}
+
 function navigationItemHasActiveItem(item: TronNavItem, activeItem: string, activeHref?: string): boolean {
   return item.label === activeItem
     || navigationHrefMatches(item.href, activeHref)
@@ -151,6 +166,14 @@ function compactWorkspacePath(label: string) {
   return label.replace(/\s*\/\s*/g, "/");
 }
 
+function formatRemainingPoints(value: number, locale: string) {
+  return new Intl.NumberFormat(locale, {
+    compactDisplay: "short",
+    maximumFractionDigits: 2,
+    notation: "compact",
+  }).format(value);
+}
+
 export function TronShell({
   activeItem = "Apps",
   children,
@@ -163,6 +186,14 @@ export function TronShell({
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
   const { setTheme, theme, themes } = useTheme();
   const { session: authSession } = useAuthSession();
+  const personAiPlan = authSession?.user.vipLevel === null || authSession?.user.vipLevel === undefined
+    ? null
+    : t(`shell:userMenu.plans.${personAiPlanKey(authSession.user.vipLevel)}`, {
+      level: authSession.user.vipLevel,
+    });
+  const remainingPoints = authSession?.user.remainingPoints === null || authSession?.user.remainingPoints === undefined
+    ? null
+    : formatRemainingPoints(authSession.user.remainingPoints, currentLocale);
   const ensureSessionFresh = useAuthStore((state) => state.ensureSessionFresh);
   const { src: avatarSrc } = useManagedAvatar(authSession?.user.avatarUrl);
   const handleAvatarLoadError = useCallback(() => {
@@ -718,6 +749,9 @@ export function TronShell({
   function handleUtilityPanelClick(panel: string) {
     setAgentOpen(false);
     setTopbarToolsMenuOpen(false);
+    if (panel === "user" && utilityPanel !== "user") {
+      void ensureSessionFresh();
+    }
     toggleUtilityPanel(panel);
   }
 
@@ -938,6 +972,7 @@ export function TronShell({
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
                 {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
+                {!email && personAiPlan ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{personAiPlan}</span> : null}
               </span>
               <ChevronsUpDown className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
             </>
@@ -971,6 +1006,22 @@ export function TronShell({
               </a>
               {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
             </div>
+            {personAiPlan || remainingPoints ? (
+              <dl className="grid grid-cols-2 gap-x-4 border-t border-[var(--color-card-border)] px-3 py-2 text-xs">
+                {personAiPlan ? (
+                  <div className="min-w-0">
+                    <dt className="text-[var(--color-on-surface-variant)]">{t("shell:userMenu.plan")}</dt>
+                    <dd className="mt-0.5 truncate font-medium text-[var(--color-on-surface)]">{personAiPlan}</dd>
+                  </div>
+                ) : null}
+                {remainingPoints ? (
+                  <div className="min-w-0">
+                    <dt className="text-[var(--color-on-surface-variant)]">{t("shell:userMenu.remainingPoints")}</dt>
+                    <dd className="mt-0.5 truncate font-medium tabular-nums text-[var(--color-on-surface)]">{remainingPoints}</dd>
+                  </div>
+                ) : null}
+              </dl>
+            ) : null}
             <div className="border-t border-[var(--color-card-border)]">{renderUserPanelContent()}</div>
           </div>
         ) : null}

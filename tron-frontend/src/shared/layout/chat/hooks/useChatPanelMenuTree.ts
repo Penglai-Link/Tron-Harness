@@ -1,8 +1,7 @@
 import { useEffect, useState } from "react";
-import { fetchNavigationMenuTree } from "@/domain/navigation/api";
+import { fetchChatPanelMenuTree } from "@/domain/navigation/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import {
-  CHAT_PANEL_DOMAIN_CODE,
   CHAT_PANEL_ROOT_MENU_CODE,
   DEFAULT_CHAT_PANEL_MENU_TREE,
 } from "@/shared/constants/chatPanelMenu";
@@ -19,7 +18,7 @@ export function useChatPanelMenuTree() {
     if (getServiceDataSource("admin") !== "api") return;
 
     const controller = new AbortController();
-    void fetchNavigationMenuTree(CHAT_PANEL_DOMAIN_CODE, controller.signal)
+    void fetchChatPanelMenuTree(controller.signal)
       .then((tree) => {
         if (!controller.signal.aborted && tree?.menus?.length) {
           setMenuTree(tree);

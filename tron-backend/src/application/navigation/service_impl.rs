@@ -24,10 +24,7 @@ impl NavigationService {
         let _ = locale;
         Ok(domains
             .into_iter()
-            .filter(|domain| {
-                domain.enabled
-                    && !PANEL_DOMAIN_CODES.contains(&domain.domain_code.as_str())
-            })
+            .filter(|domain| domain.enabled)
             .collect())
     }
 
@@ -41,11 +38,19 @@ impl NavigationService {
         repository.get_domain(domain_code)
     }
 
+    pub fn list_menu_trees(&self) -> Result<Vec<NavigationMenuTree>, NavigationError> {
+        let mut repository = self.lock_repository();
+        repository.list_menu_trees()
+    }
+
     pub fn create_domain(
         &self,
         command: CreateDomainCommand,
     ) -> Result<NavigationDomain, NavigationError> {
         let domain_code = validate_domain_code(&command.domain_code)?;
+        if domain_code == CHAT_PANEL_MENU_TREE_CODE {
+            return Err(NavigationError::InvalidDomainCode);
+        }
         validate_translations(&command.name)?;
         validate_translations(&command.description)?;
         if command.position < 0 {
@@ -249,7 +254,7 @@ impl NavigationService {
         domain_code: &str,
     ) -> Result<Vec<NavigationTreeItem>, NavigationError> {
         let mut repository = self.lock_repository();
-        repository.get_domain(domain_code)?;
+        repository.get_menu_tree(domain_code)?;
         let items = repository.list_items(domain_code)?;
         validate_flat_tree(&items, self.max_depth)?;
         Ok(build_tree(items))
@@ -279,6 +284,29 @@ impl NavigationService {
         })
     }
 
+    pub fn chat_panel_runtime_tree(
+        &self,
+        locale: &str,
+    ) -> Result<RuntimeNavigationTree, NavigationError> {
+        let mut repository = self.lock_repository();
+        let tree = repository.get_menu_tree(CHAT_PANEL_MENU_TREE_CODE)?;
+        if !tree.enabled {
+            return Err(NavigationError::DomainAccessDenied);
+        }
+        let items = repository.list_items(CHAT_PANEL_MENU_TREE_CODE)?;
+        validate_flat_tree(&items, self.max_depth)?;
+        let visible = build_tree(items)
+            .into_iter()
+            .filter_map(|item| visible_item(item, locale))
+            .collect();
+        Ok(RuntimeNavigationTree {
+            domain_code: tree.tree_code,
+            locale: locale.to_string(),
+            max_depth: self.max_depth,
+            menus: visible,
+        })
+    }
+
     pub fn add_item(
         &self,
         domain_code: &str,
@@ -289,7 +317,7 @@ impl NavigationService {
             return Err(NavigationError::InvalidHierarchy);
         }
         let mut repository = self.lock_repository();
-        repository.get_domain(domain_code)?;
+        repository.get_menu_tree(domain_code)?;
         let menu = repository.get_menu(&command.menu_code)?;
         let items = repository.list_items(domain_code)?;
         validate_flat_tree(&items, self.max_depth)?;
@@ -309,6 +337,7 @@ impl NavigationService {
             menu,
             parent_menu_code: command.parent_menu_code,
             position: command.position,
+            child_display: NavigationMenuChildDisplay::Inline,
             children: Vec::new(),
         };
         repository.add_item(domain_code, &item)?;
@@ -327,12 +356,17 @@ impl NavigationService {
             return Err(NavigationError::InvalidHierarchy);
         }
         let mut repository = self.lock_repository();
-        repository.get_domain(domain_code)?;
+        repository.get_menu_tree(domain_code)?;
         let items = repository.list_items(domain_code)?;
         let item = items
             .iter()
             .find(|item| item.menu.menu_code == menu_code)
             .ok_or(NavigationError::ItemNotFound)?;
+        if command.child_display == Some(NavigationMenuChildDisplay::Flyout)
+            && item.menu.menu_type != MenuType::Group
+        {
+            return Err(NavigationError::InvalidHierarchy);
+        }
         validate_parent(
             &items,
             command.parent_menu_code.as_deref(),
@@ -357,7 +391,7 @@ impl NavigationService {
         menu_code: &str,
     ) -> Result<Vec<NavigationTreeItem>, NavigationError> {
         let mut repository = self.lock_repository();
-        repository.get_domain(domain_code)?;
+        repository.get_menu_tree(domain_code)?;
         let items = repository.list_items(domain_code)?;
         items
             .iter()
@@ -382,8 +416,8 @@ impl NavigationService {
             return Err(NavigationError::InvalidHierarchy);
         }
         let mut repository = self.lock_repository();
-        repository.get_domain(target_domain_code)?;
-        repository.get_domain(&command.source_domain_code)?;
+        repository.get_menu_tree(target_domain_code)?;
+        repository.get_menu_tree(&command.source_domain_code)?;
         let source = repository.list_items(&command.source_domain_code)?;
         let target = repository.list_items(target_domain_code)?;
         validate_flat_tree(&source, self.max_depth)?;
@@ -424,19 +458,19 @@ impl NavigationService {
         &self,
     ) -> Result<RestoreDefaultMenuTreesResult, NavigationError> {
         let mut repository = self.lock_repository();
-        for domain_code in DEFAULT_NAVIGATION_MENU_TREE_DOMAINS {
-            repository.get_domain(domain_code)?;
+        for domain_code in DEFAULT_NAVIGATION_MENU_TREE_CODES {
+            repository.get_menu_tree(domain_code)?;
         }
         for item in DEFAULT_NAVIGATION_MENU_TREE_ITEMS {
             repository.get_menu(item.menu_code)?;
         }
         let restored_item_count =
             repository.restore_default_menu_trees(DEFAULT_NAVIGATION_MENU_TREE_ITEMS)?;
-        for domain_code in DEFAULT_NAVIGATION_MENU_TREE_DOMAINS {
+        for domain_code in DEFAULT_NAVIGATION_MENU_TREE_CODES {
             validate_flat_tree(&repository.list_items(domain_code)?, self.max_depth)?;
         }
         Ok(RestoreDefaultMenuTreesResult {
-            restored_domain_codes: DEFAULT_NAVIGATION_MENU_TREE_DOMAINS
+            restored_domain_codes: DEFAULT_NAVIGATION_MENU_TREE_CODES
                 .iter()
                 .map(|domain_code| (*domain_code).to_string())
                 .collect(),

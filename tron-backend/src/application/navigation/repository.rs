@@ -1,6 +1,6 @@
 use crate::domain::navigation::{
-    MenuQuery, NavigationDomain, NavigationError, NavigationMenu, NavigationPage,
-    NavigationTreeItem,
+    MenuQuery, NavigationDomain, NavigationError, NavigationMenu, NavigationMenuTree,
+    NavigationPage, NavigationTreeItem,
 };
 
 use super::{CopyMenuTreeCommand, DefaultNavigationMenuTreeItem, UpdateMenuItemCommand};
@@ -11,6 +11,8 @@ pub trait NavigationRepository: Send {
     fn get_domain(&mut self, domain_code: &str) -> Result<NavigationDomain, NavigationError>;
     fn save_domain(&mut self, domain: &NavigationDomain) -> Result<(), NavigationError>;
     fn delete_domain(&mut self, domain_code: &str) -> Result<(), NavigationError>;
+    fn list_menu_trees(&mut self) -> Result<Vec<NavigationMenuTree>, NavigationError>;
+    fn get_menu_tree(&mut self, tree_code: &str) -> Result<NavigationMenuTree, NavigationError>;
     fn list_menus(
         &mut self,
         query: &MenuQuery,
