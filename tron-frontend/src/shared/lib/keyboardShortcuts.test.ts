@@ -46,6 +46,14 @@ describe("keyboard shortcuts", () => {
   it("ships the requested panel toggles with distinct defaults", () => {
     const bindings = createDefaultShellShortcutBindings();
 
+    expect(bindings.newSession).toEqual({
+      altKey: false,
+      key: "N",
+      modKey: true,
+      shiftKey: false,
+    });
+    expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ metaKey: true, key: "n" }))).toBe("newSession");
+    expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ ctrlKey: true, key: "n" }))).toBe("newSession");
     expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, ctrlKey: true, key: "[" }))).toBe("toggleLeftSidebar");
     expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, ctrlKey: true, key: "]" }))).toBe("toggleRightSidebar");
     expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, ctrlKey: true, key: "j" }))).toBe("toggleBottomPanel");

@@ -9,6 +9,7 @@ import { useNavigate } from "react-router";
 import {
   Plus,
   RefreshCcw,
+  Settings2,
 } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -438,24 +439,31 @@ export function TasksKanbanPage() {
           </>
         }
       />
-      <SurfaceCard className="mb-4 grid gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px]">
-        <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.search", "Search")}</span>
+      <SurfaceCard className="mb-4 grid items-center gap-3 p-4 md:grid-cols-[minmax(0,1fr)_180px_220px_auto]">
+        <div>
           <SearchField placeholder={t("pages:tasks.kanban.searchPlaceholder", "Filter task code, title, or description...")} value={searchInput} onChange={setSearchInput} />
         </div>
-        <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.taskType", "Task Type")}</span>
+        <div>
           <SelectInput aria-label={t("pages:tasks.kanban.taskTypeFilter", "Task type filter")} value={taskType} onValueChange={(event) => setTaskType(event as TaskType)}>
             {options.taskTypes.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
           </SelectInput>
         </div>
-        <div className="grid gap-1.5">
-          <span className="text-[11px] font-semibold uppercase tracking-[0.08em] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.priority", "Priority")}</span>
+        <div>
           <SelectInput aria-label={t("pages:tasks.kanban.priorityFilter", "Task priority filter")} value={priority} onValueChange={(event) => setPriority(event!)}>
             <SelectItem value="">{t("pages:tasks.kanban.allPriorities", "All priorities")}</SelectItem>
             {options.priorities.map((item) => <SelectItem key={item} value={item}>{item}</SelectItem>)}
           </SelectInput>
         </div>
+        <Button
+          aria-label={t("pages:tasks.kanban.workflowSettings", "Configure workspace workflow")}
+          className="shrink-0"
+          size="icon"
+          title={t("pages:tasks.kanban.workflowSettings", "Configure workspace workflow")}
+          variant="outline"
+          onClick={() => window.dispatchEvent(new Event("tron:task-workflow-settings"))}
+        >
+          <Settings2 aria-hidden="true" size={16} />
+        </Button>
       </SurfaceCard>
       <div className="flex min-h-0 flex-1 overflow-x-auto pb-4" ref={boardViewportRef} style={{ gap: `${boardLayout.columnGap}px` }}>
         {rootTaskColumns.map((column) => (

@@ -3,13 +3,13 @@ use reqwest::Method;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 #[tokio::test]
-async fn sdk_plain_authorized_and_gateway_requests_send_tron_product_code() {
+async fn sdk_authorized_and_gateway_requests_send_tron_product_metadata() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0")
         .await
         .expect("bind mock Person-AI server");
     let address = listener.local_addr().expect("read mock server address");
     let server = tokio::spawn(async move {
-        for _ in 0..3 {
+        for _ in 0..2 {
             let (mut stream, _) = listener.accept().await.expect("accept SDK request");
             let mut request = Vec::new();
             let mut chunk = [0_u8; 1024];
@@ -22,6 +22,10 @@ async fn sdk_plain_authorized_and_gateway_requests_send_tron_product_code() {
             }
             let request = String::from_utf8_lossy(&request).to_ascii_lowercase();
             assert!(request.contains("x-product-code: tron"), "{request}");
+            assert!(
+                request.contains("x-product-version: 0.1.0-snapshot"),
+                "{request}"
+            );
             stream
                 .write_all(
                     b"HTTP/1.1 204 No Content\r\nContent-Length: 0\r\nConnection: close\r\n\r\n",
@@ -35,9 +39,10 @@ async fn sdk_plain_authorized_and_gateway_requests_send_tron_product_code() {
     let context = AuthorizedClientContext::new()
         .with_token("token")
         .with_client_id("client")
-        .with_public_key("public-key");
+        .with_public_key("public-key")
+        .with_product_code("tron")
+        .with_product_version("0.1.0-SNAPSHOT");
     let requests = [
-        api.new_api_request(Method::GET, "/plain"),
         api.new_authorized_request(Method::GET, "/authorized", &context)
             .expect("build authorized request"),
         api.new_gateway_request(Method::GET, "/gateway", &context)

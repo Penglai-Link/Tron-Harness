@@ -48,6 +48,8 @@ const MODEL_PROVIDER_MIGRATION: &str =
     include_str!("../../migrations/20260915_0001_create_model_provider_management.sql");
 const PERSON_AI_DEFAULT_SERVER_BASE_URL: &str = "https://personai.chat/person-ai-index";
 const PERSON_AI_CLIENT_NAME: &str = "Tron";
+const PERSON_AI_PRODUCT_CODE: &str = "tron";
+const PERSON_AI_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROVIDER_RUNTIME_PREFIX: &str = "PERSON_AI:";
 const TOKEN_REFRESH_LEAD_MILLIS: i64 = 7 * 24 * 60 * 60 * 1000;
 const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
@@ -310,6 +312,8 @@ impl ProviderCredentials {
             .with_refresh_token(self.refresh_token.clone())
             .with_client_id(self.client_id.clone())
             .with_public_key(self.public_key.clone())
+            .with_product_code(PERSON_AI_PRODUCT_CODE)
+            .with_product_version(PERSON_AI_PRODUCT_VERSION)
     }
 }
 
