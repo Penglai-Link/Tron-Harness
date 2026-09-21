@@ -88,7 +88,7 @@ const MessageItem = ({
       left={
         <Link
           to={`/chats?sessionCode=${encodeURIComponent(session.sessionCode)}`}
-          className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-[14px]"
+          className="flex min-w-0 flex-1 items-center gap-1.5 truncate text-sm"
           onClick={(event) => {
             if (
               event.defaultPrevented ||
@@ -112,7 +112,7 @@ const MessageItem = ({
         >
           <span
             className={cn(
-              "inline-flex h-4 shrink-0 items-center rounded border px-1 font-mono text-[10px] leading-none",
+              "inline-flex h-4 shrink-0 items-center rounded border px-1 font-mono text-[0.625rem] leading-none",
               sessionAgentTagTone(session.agentCode),
             )}
           >

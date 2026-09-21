@@ -28,7 +28,6 @@ const IconButton = ({
       disabled={disabled}
       onClick={onClick}
       className={cn(`flex gap-1 items-center p-0 ${needHover ? 'opacity-60 hover:opacity-100' : ''}`, className)}
-      style={{ fontSize: size }}
       {...rest}
     >
       {Icon && <Icon size={size} />}

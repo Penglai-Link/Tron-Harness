@@ -241,7 +241,7 @@ export function TronSidebar({
                 {compact ? null : (
                   <SidebarGroupLabel
                     aria-expanded={open}
-                    className="h-8 w-full justify-between px-2 text-[15px] font-semibold text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
+                    className="h-8 w-full justify-between px-2 text-sm font-semibold text-sidebar-foreground/70 hover:bg-sidebar-accent hover:text-sidebar-accent-foreground"
                     render={<button type="button" />}
                     onClick={() => onToggleSection(sectionKey)}
                   >

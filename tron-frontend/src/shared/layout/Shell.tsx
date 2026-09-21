@@ -817,13 +817,13 @@ export function TronShell({
     return (
       <>
         <div>
-          {workspaceSwitcherLoading ? <p className="mb-2 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.refreshing")}</p> : null}
+          {workspaceSwitcherLoading ? <p className="mb-2 text-xs text-[var(--color-on-surface-variant)]">{t("shell:workspace.refreshing")}</p> : null}
           {workspaceTree.length ? (
             <div className="max-h-[min(60vh,24rem)] space-y-1 overflow-y-auto pr-1" role="tree" aria-label={t("shell:workspace.selectorTitle")}>
               {workspaceTree.map((root) => renderWorkspaceTreeNode(root))}
             </div>
           ) : (
-            <p className="text-[13px] text-[var(--color-on-surface-variant)]">{t("shell:workspace.noPrimarySpaces")}</p>
+            <p className="text-[0.8125rem] text-[var(--color-on-surface-variant)]">{t("shell:workspace.noPrimarySpaces")}</p>
           )}
         </div>
       </>
@@ -833,7 +833,7 @@ export function TronShell({
   function renderNavigationDomainSwitcherContent() {
     return (
       <div className="space-y-1" role="listbox" aria-label={t("shell:navigation.selectorTitle")}>
-        {navigationLoading ? <p className="px-2 py-1 text-[12px] text-[var(--color-on-surface-variant)]">{t("shell:navigation.refreshing")}</p> : null}
+        {navigationLoading ? <p className="px-2 py-1 text-xs text-[var(--color-on-surface-variant)]">{t("shell:navigation.refreshing")}</p> : null}
         {navigationDomains.length ? navigationDomains.map((domain) => {
           const selected = domain.domainCode === selectedDomainCode;
           return (
@@ -855,12 +855,12 @@ export function TronShell({
             >
               <span className="min-w-0">
                 <span className="block truncate text-sm font-medium">{domain.name}</span>
-                {domain.description ? <span className="mt-0.5 block truncate text-[12px] text-[var(--color-on-surface-variant)]">{domain.description}</span> : null}
+                {domain.description ? <span className="mt-0.5 block truncate text-xs text-[var(--color-on-surface-variant)]">{domain.description}</span> : null}
               </span>
             </button>
           );
         }) : (
-          <p className="px-2 py-1 text-[13px] text-[var(--color-on-surface-variant)]">{t("shell:navigation.noDomains")}</p>
+          <p className="px-2 py-1 text-[0.8125rem] text-[var(--color-on-surface-variant)]">{t("shell:navigation.noDomains")}</p>
         )}
       </div>
     );
@@ -871,7 +871,7 @@ export function TronShell({
       <>
         <div className="space-y-3 p-3">
           <div className="min-w-0">
-            <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
+            <label className="mb-1 block text-xs font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
               {t("shell:theme.label")}
             </label>
             <SelectInput
@@ -890,7 +890,7 @@ export function TronShell({
             </SelectInput>
           </div>
           <div className="min-w-0">
-            <label className="mb-1 block text-[12px] font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
+            <label className="mb-1 block text-xs font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
               {t("common:locale.label")}
             </label>
             <SelectInput
@@ -937,7 +937,7 @@ export function TronShell({
             <>
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
-                {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
+                {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
               </span>
               <ChevronsUpDown className="shrink-0 text-[var(--color-on-surface-variant)]" size={16} aria-hidden="true" />
             </>
@@ -966,7 +966,7 @@ export function TronShell({
                 </span>
                 <span className="min-w-0">
                   <span className="block truncate text-sm font-medium text-[var(--color-on-surface)]">{displayName}</span>
-                  {email ? <span className="block truncate text-[12px] text-[var(--color-on-surface-variant)]">{email}</span> : null}
+                  {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
                 </span>
               </a>
               {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
