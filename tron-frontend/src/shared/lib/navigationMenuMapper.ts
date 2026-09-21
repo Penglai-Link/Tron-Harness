@@ -69,6 +69,7 @@ function mapMenu(menu: NavigationRuntimeMenu): TronNavItem {
     href,
     icon: getNavigationIcon(menu.icon) ?? Folder,
     label: menu.label,
+    childDisplay: menu.childDisplay,
     translationKey: "",
   };
 }
@@ -76,6 +77,8 @@ function mapMenu(menu: NavigationRuntimeMenu): TronNavItem {
 export function mapNavigationTree(tree: NavigationRuntimeTree): TronNavSection[] {
   return tree.menus.map((menu) => ({
     id: menu.menuCode,
+    flyout: menu.childDisplay === "Flyout" && menu.children.length > 0,
+    icon: getNavigationIcon(menu.icon) ?? Folder,
     items: menu.children.length ? menu.children.map(mapMenu) : [mapMenu(menu)],
     label: menu.label,
     translationKey: "",

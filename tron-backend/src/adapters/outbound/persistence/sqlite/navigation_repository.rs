@@ -13,13 +13,16 @@ use crate::{
     },
     domain::navigation::{
         LocalizedText, MenuQuery, MenuSource, MenuType, NavigationDomain, NavigationError,
-        NavigationMenu, NavigationPage, NavigationTreeItem,
+        NavigationMenu, NavigationMenuChildDisplay, NavigationMenuTree, NavigationMenuTreeKind,
+        NavigationPage, NavigationTreeItem,
     },
     shared::id::SnowflakeId,
+    shared::time::current_timestamp,
 };
 
 use super::migrations::{
-    CHAT_PANEL_NAVIGATION_MIGRATION, NAVIGATION_AGENTS_SPLIT_MIGRATION, NAVIGATION_MIGRATION,
+    CHAT_PANEL_NAVIGATION_MIGRATION, NAVIGATION_AGENTS_SPLIT_MIGRATION,
+    NAVIGATION_MENU_TREES_MIGRATION, NAVIGATION_MIGRATION,
 };
 
 const POSITION_WORK_OFFSET: i64 = 1_000_000_000;

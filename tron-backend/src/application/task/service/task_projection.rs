@@ -29,8 +29,13 @@ impl TaskService {
         let mut records = all_tasks
             .iter()
             .filter(|task| task.workspace_code == workspace_code)
-            .filter(|task| include_archived || task.status != TaskStatus::Archived)
-            .filter(|task| query.status.map_or(true, |status| task.status == status))
+            .filter(|task| include_archived || task.archived_at.is_none())
+            .filter(|task| {
+                query
+                    .status
+                    .as_ref()
+                    .map_or(true, |status| task.status == *status)
+            })
             .filter(|task| {
                 query
                     .priority
@@ -75,7 +80,7 @@ impl TaskService {
         let mut subtasks = all_tasks
             .iter()
             .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
-            .filter(|candidate| candidate.status != TaskStatus::Archived)
+            .filter(|candidate| candidate.archived_at.is_none())
             .map(|candidate| summary_from_task(candidate, &all_tasks))
             .collect::<Vec<_>>();
         subtasks.sort_by(|left, right| left.task_code.cmp(&right.task_code));
@@ -103,6 +108,7 @@ impl TaskService {
             title: task.title,
             description: task.description,
             execution_result: task.execution_result,
+            flow_code: task.flow_code,
             status: task.status,
             previous_status: task.previous_status,
             priority: task.priority,
@@ -133,7 +139,8 @@ impl TaskService {
             workspace_code: task.workspace_code.clone(),
             parent_task_code: task.parent_task_code.clone(),
             title: task.title.clone(),
-            status: task.status,
+            flow_code: task.flow_code.clone(),
+            status: task.status.clone(),
             priority: task.priority,
             progress: effective_progress(task, all_tasks),
             task_type: task.task_type,
@@ -159,7 +166,7 @@ impl TaskService {
             subtask_count: all_tasks
                 .iter()
                 .filter(|candidate| candidate.parent_task_code.as_deref() == Some(&task.task_code))
-                .filter(|candidate| candidate.status != TaskStatus::Archived)
+                .filter(|candidate| candidate.archived_at.is_none())
                 .count(),
             updated_at: task.updated_at.clone(),
             archived_at: task.archived_at.clone(),

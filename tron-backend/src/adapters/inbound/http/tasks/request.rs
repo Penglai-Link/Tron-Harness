@@ -2,7 +2,7 @@ use serde::Deserialize;
 
 use crate::{
     application::task::{CreateTaskCommand, UpdateTaskCommand, UpdateTaskStatusCommand},
-    domain::task::{TaskPriority, TaskSourceType, TaskStatus, TaskType},
+    domain::task::{TaskFlowDraft, TaskFlowStatus, TaskPriority, TaskSourceType, TaskType},
 };
 
 #[derive(Debug, Deserialize)]
@@ -83,8 +83,56 @@ impl From<UpdateTaskRequest> for UpdateTaskCommand {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct UpdateTaskStatusRequest {
-    pub status: TaskStatus,
+    pub status: String,
     pub progress: Option<u8>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskFlowStatusRequest {
+    pub status_code: String,
+    pub name: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct TaskFlowRequest {
+    pub flow_code: String,
+    pub name: String,
+    #[serde(default)]
+    pub statuses: Vec<TaskFlowStatusRequest>,
+}
+
+impl From<TaskFlowRequest> for TaskFlowDraft {
+    fn from(request: TaskFlowRequest) -> Self {
+        Self {
+            flow_code: request.flow_code,
+            name: request.name,
+            statuses: request
+                .statuses
+                .into_iter()
+                .enumerate()
+                .map(|(position, status)| TaskFlowStatus {
+                    status_code: status.status_code,
+                    name: status.name,
+                    position,
+                    required: false,
+                })
+                .collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+pub struct WorkspaceTaskFlowRequest {
+    pub flow_code: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TaskFlowWorkspaceQuery {
+    pub workspace_code: String,
 }
 
 impl From<UpdateTaskStatusRequest> for UpdateTaskStatusCommand {

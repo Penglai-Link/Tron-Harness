@@ -26,7 +26,10 @@ let initializePromise: Promise<void> | null = null;
 function sessionFromProfile(profile: {
   personAiUserId: string;
   personAiUsername: string;
-}, avatarUrl: string | null): AuthSession {
+}, avatarUrl: string | null, account: {
+  vipLevel: number | null;
+  remainingPoints: number | null;
+} | null): AuthSession {
   return {
     authMethod: "internal",
     authenticated: true,
@@ -38,6 +41,8 @@ function sessionFromProfile(profile: {
       status: "active",
       userCode: profile.personAiUserId,
       username: profile.personAiUsername,
+      vipLevel: account?.vipLevel ?? null,
+      remainingPoints: account?.remainingPoints ?? null,
     },
   };
 }
@@ -58,7 +63,7 @@ async function loadActiveProfile(
       return false;
     }
     set({
-      session: sessionFromProfile(activeProfile, bootstrap.avatarUrl),
+      session: sessionFromProfile(activeProfile, bootstrap.avatarUrl, bootstrap.account),
       status: "authenticated",
     });
     return true;

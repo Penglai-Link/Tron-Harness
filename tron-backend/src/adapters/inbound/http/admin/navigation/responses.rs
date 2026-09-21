@@ -14,6 +14,19 @@ struct DomainVo {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+struct MenuTreeVo {
+    tree_code: String,
+    tree_kind: String,
+    name: LocalizedTextVo,
+    description: LocalizedTextVo,
+    built_in: bool,
+    enabled: bool,
+    created_at: i64,
+    updated_at: i64,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct LocalizedTextVo {
     #[serde(rename = "zh-CN")]
     zh_cn: String,
@@ -47,7 +60,9 @@ struct MenuTreeItemVo {
     url: Option<String>,
     icon: Option<String>,
     enabled: bool,
+    parent_menu_code: Option<String>,
     position: i64,
+    child_display: String,
     children: Vec<MenuTreeItemVo>,
 }
 

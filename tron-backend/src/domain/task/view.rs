@@ -1,32 +1,15 @@
 use serde::Serialize;
 
-use super::{TaskPriority, TaskSourceType, TaskStatus, TaskType};
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskStatusRules {
-    pub feature_root: Vec<TaskStatus>,
-    pub feature_child: Vec<TaskStatus>,
-    pub bug: Vec<TaskStatus>,
-}
-
-#[derive(Debug, Clone, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct TaskDefaultStatuses {
-    pub feature_root: TaskStatus,
-    pub feature_child: TaskStatus,
-    pub bug: TaskStatus,
-}
+use super::{TaskFlow, TaskFlowStatus, TaskPriority, TaskSourceType, TaskType};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskOptions {
-    pub statuses: Vec<TaskStatus>,
+    pub flow: TaskFlow,
+    pub statuses: Vec<TaskFlowStatus>,
     pub priorities: Vec<TaskPriority>,
     pub task_types: Vec<TaskType>,
     pub source_types: Vec<TaskSourceType>,
-    pub status_rules: TaskStatusRules,
-    pub default_statuses: TaskDefaultStatuses,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -34,7 +17,7 @@ pub struct TaskOptions {
 pub struct TaskSummary {
     pub task_code: String,
     pub title: String,
-    pub status: TaskStatus,
+    pub status: String,
     pub priority: TaskPriority,
     pub progress: u8,
     pub task_type: TaskType,
@@ -50,8 +33,9 @@ pub struct TaskDetail {
     pub title: String,
     pub description: Option<String>,
     pub execution_result: Option<String>,
-    pub status: TaskStatus,
-    pub previous_status: Option<TaskStatus>,
+    pub flow_code: String,
+    pub status: String,
+    pub previous_status: Option<String>,
     pub priority: TaskPriority,
     pub task_type: TaskType,
     pub source_type: TaskSourceType,
@@ -76,7 +60,8 @@ pub struct TaskListItem {
     pub workspace_code: String,
     pub parent_task_code: Option<String>,
     pub title: String,
-    pub status: TaskStatus,
+    pub flow_code: String,
+    pub status: String,
     pub priority: TaskPriority,
     pub progress: u8,
     pub task_type: TaskType,
@@ -95,7 +80,7 @@ pub struct TaskListItem {
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct TaskKanbanColumn {
-    pub status: TaskStatus,
+    pub status: String,
     pub title: String,
     pub tasks: Vec<TaskListItem>,
 }
@@ -104,8 +89,8 @@ pub struct TaskKanbanColumn {
 #[serde(rename_all = "camelCase")]
 pub struct TaskLifecycleResult {
     pub task_code: String,
-    pub status: TaskStatus,
-    pub previous_status: Option<TaskStatus>,
+    pub status: String,
+    pub previous_status: Option<String>,
     pub archived_at: Option<String>,
 }
 

@@ -14,13 +14,11 @@ pub struct RuntimeMenu {
     pub icon: Option<String>,
     pub page_code: Option<String>,
     pub url: Option<String>,
+    pub child_display: NavigationMenuChildDisplay,
     pub children: Vec<RuntimeMenu>,
 }
 
-fn visible_item(
-    item: NavigationTreeItem,
-    locale: &str,
-) -> Option<RuntimeMenu> {
+fn visible_item(item: NavigationTreeItem, locale: &str) -> Option<RuntimeMenu> {
     if !item.menu.enabled {
         return None;
     }
@@ -39,6 +37,7 @@ fn visible_item(
         icon: item.menu.icon,
         page_code: item.menu.page_code,
         url: item.menu.url,
+        child_display: item.child_display,
         children,
     })
 }

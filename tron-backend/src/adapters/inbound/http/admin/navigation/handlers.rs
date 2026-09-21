@@ -31,10 +31,40 @@ pub fn routes() -> Router<AppState> {
             "/api/v1/admin/navigation/domains/{target_domain_code}/menu-tree/copy",
             post(copy_tree),
         )
+        .route("/api/v1/admin/navigation/menu-trees", get(list_menu_trees))
+        .route(
+            "/api/v1/admin/navigation/menu-trees/{domain_code}",
+            get(admin_tree),
+        )
+        .route(
+            "/api/v1/admin/navigation/menu-trees/{domain_code}/menu-items",
+            post(add_item),
+        )
+        .route(
+            "/api/v1/admin/navigation/menu-trees/{domain_code}/menu-items/{menu_code}",
+            put(update_item).delete(remove_item),
+        )
+        .route(
+            "/api/v1/admin/navigation/menu-trees/{target_domain_code}/copy",
+            post(copy_tree),
+        )
         .route(
             "/api/v1/admin/navigation/menu-trees/default",
             post(restore_default_menu_trees),
         )
+}
+
+async fn list_menu_trees(State(state): State<AppState>, auth: RequestAuthContext) -> Response {
+    if let Err(response) = ensure_permission(&state, &auth, "R") {
+        return response;
+    }
+    match state.navigation.list_menu_trees() {
+        Ok(trees) => Json(ApiResponse::protocol_success(
+            trees.into_iter().map(menu_tree_vo).collect::<Vec<_>>(),
+        ))
+        .into_response(),
+        Err(error) => navigation_error_response(error, &auth.locale),
+    }
 }
 
 async fn query_domains(
@@ -294,6 +324,7 @@ async fn update_item(
     let command = UpdateMenuItemCommand {
         parent_menu_code: request.parent_menu_code,
         position: request.position,
+        child_display: request.child_display.map(Into::into),
     };
     match state
         .navigation
@@ -334,7 +365,7 @@ async fn copy_tree(
         return response;
     }
     let command = CopyMenuTreeCommand {
-        source_domain_code: request.source_domain_code,
+        source_domain_code: request.source_tree_code,
         source_menu_code: request.source_menu_code,
         target_parent_menu_code: request.target_parent_menu_code,
         position: request.position,
@@ -395,6 +426,19 @@ fn domain_vo(domain: NavigationDomain) -> DomainVo {
     }
 }
 
+fn menu_tree_vo(tree: NavigationMenuTree) -> MenuTreeVo {
+    MenuTreeVo {
+        tree_code: tree.tree_code,
+        tree_kind: menu_tree_kind_name(tree.tree_kind).into(),
+        name: localized_vo(tree.name),
+        description: localized_vo(tree.description),
+        built_in: tree.built_in,
+        enabled: tree.enabled,
+        created_at: timestamp_to_millis(&tree.created_at),
+        updated_at: timestamp_to_millis(&tree.updated_at),
+    }
+}
+
 fn menu_vo(menu: NavigationMenu) -> MenuVo {
     MenuVo {
         menu_code: menu.menu_code,
@@ -420,7 +464,9 @@ fn tree_item_vo(item: NavigationTreeItem) -> MenuTreeItemVo {
         url: item.menu.url,
         icon: item.menu.icon,
         enabled: item.menu.enabled,
+        parent_menu_code: item.parent_menu_code,
         position: item.position,
+        child_display: child_display_name(item.child_display).into(),
         children: item.children.into_iter().map(tree_item_vo).collect(),
     }
 }
@@ -436,5 +482,19 @@ fn source_name(source: MenuSource) -> &'static str {
     match source {
         MenuSource::BuiltIn => "BuiltIn",
         MenuSource::Custom => "Custom",
+    }
+}
+
+fn menu_tree_kind_name(kind: NavigationMenuTreeKind) -> &'static str {
+    match kind {
+        NavigationMenuTreeKind::Domain => "Domain",
+        NavigationMenuTreeKind::Panel => "Panel",
+    }
+}
+
+fn child_display_name(display: NavigationMenuChildDisplay) -> &'static str {
+    match display {
+        NavigationMenuChildDisplay::Inline => "Inline",
+        NavigationMenuChildDisplay::Flyout => "Flyout",
     }
 }

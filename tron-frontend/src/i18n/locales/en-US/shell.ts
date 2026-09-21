@@ -108,6 +108,17 @@ export const shell = {
   placeholders: {
     search: "Search Tron...",
   },
+  userMenu: {
+    plan: "Plan",
+    remainingPoints: "Remaining points",
+    plans: {
+      free: "Free",
+      vip: "VIP",
+      pro: "Pro",
+      max: "Max",
+      level: "VIP {{level}}",
+    },
+  },
   settings: {
     back: "Back",
     groups: {
@@ -124,7 +135,7 @@ export const shell = {
       general: "General",
       mcpServers: "MCP Servers",
       menuArrangement: "Menu Arrangement",
-      menuPool: "Menu Pool",
+      menuPool: "Menu Definitions",
       memoryDomains: "Memory Domains",
       modelProviders: "Model Providers",
       models: "Models",
@@ -134,6 +145,7 @@ export const shell = {
       resources: "Resources",
       roles: "Roles",
       shortcuts: "Shortcuts",
+      taskFlows: "Task Flows",
       tools: "Tools",
       skillCenter: "Skill Center",
       users: "Users",

@@ -46,8 +46,12 @@ use crate::{
 
 const MODEL_PROVIDER_MIGRATION: &str =
     include_str!("../../migrations/20260915_0001_create_model_provider_management.sql");
+const PERSON_AI_PROFILE_CREDENTIALS_MIGRATION: &str =
+    include_str!("../../migrations/20260921_0003_create_person_ai_profile_credentials.sql");
 const PERSON_AI_DEFAULT_SERVER_BASE_URL: &str = "https://personai.chat/person-ai-index";
 const PERSON_AI_CLIENT_NAME: &str = "Tron";
+const PERSON_AI_PRODUCT_CODE: &str = "tron";
+const PERSON_AI_PRODUCT_VERSION: &str = env!("CARGO_PKG_VERSION");
 const PROVIDER_RUNTIME_PREFIX: &str = "PERSON_AI:";
 const TOKEN_REFRESH_LEAD_MILLIS: i64 = 7 * 24 * 60 * 60 * 1000;
 const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
@@ -310,6 +314,8 @@ impl ProviderCredentials {
             .with_refresh_token(self.refresh_token.clone())
             .with_client_id(self.client_id.clone())
             .with_public_key(self.public_key.clone())
+            .with_product_code(PERSON_AI_PRODUCT_CODE)
+            .with_product_version(PERSON_AI_PRODUCT_VERSION)
     }
 }
 
@@ -700,6 +706,9 @@ impl ModelProviderService {
             .execute_batch(MODEL_PROVIDER_MIGRATION)
             .map_err(|_| ModelProviderError::Storage)?;
         connection
+            .execute_batch(PERSON_AI_PROFILE_CREDENTIALS_MIGRATION)
+            .map_err(|_| ModelProviderError::Storage)?;
+        connection
             .execute_batch(include_str!(
                 "../../migrations/20260917_0001_create_chat_auto_model_routes.sql"
             ))
@@ -709,6 +718,7 @@ impl ModelProviderService {
         remove_legacy_person_ai_embedding_catalog_models(&connection)?;
         trim_provider_sync_runs(&connection, ModelProviderCode::PersonAi)?;
         migrate_legacy_default_model_selections(&connection)?;
+        migrate_legacy_person_ai_profile_credentials(&connection)?;
         if sqlite_table_exists(&connection, "default_model_selections")? {
             connection
                 .execute(
@@ -767,6 +777,100 @@ impl ModelProviderService {
             .get_info(&credentials.context())
             .await
             .map_err(remote_error)
+    }
+
+    /// Makes a selected local profile the active Person-AI runtime identity.
+    ///
+    /// The shared provider row remains the runtime entry point for model calls,
+    /// while encrypted credentials are owned by the Person-AI user id. A profile
+    /// without stored credentials must never inherit the previously active
+    /// account's token.
+    pub fn activate_person_ai_profile(
+        &self,
+        person_ai_user_id: &str,
+        person_ai_username: &str,
+    ) -> Result<(), ModelProviderError> {
+        let person_ai_user_id = person_ai_user_id.trim();
+        let person_ai_username = person_ai_username.trim();
+        if person_ai_user_id.is_empty() || person_ai_username.is_empty() {
+            return Err(ModelProviderError::AuthenticationRequired);
+        }
+
+        let now = now_millis();
+        let mut connection = self
+            .connection
+            .lock()
+            .map_err(|_| ModelProviderError::Storage)?;
+        let transaction = connection
+            .transaction()
+            .map_err(|_| ModelProviderError::Storage)?;
+
+        if let Some(credentials) =
+            read_person_ai_profile_credentials(&transaction, person_ai_user_id)?
+        {
+            transaction
+                .execute(
+                    "INSERT INTO provider_connections (
+                        provider_code, person_ai_user_id, person_ai_username, server_base_url,
+                        status, credentials_encrypted, authorized_at, authorization_expires_at,
+                        last_sync_at, last_error, created_at, updated_at
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, NULL, ?9, ?7, ?7)
+                     ON CONFLICT(provider_code) DO UPDATE SET
+                        person_ai_user_id = excluded.person_ai_user_id,
+                        person_ai_username = excluded.person_ai_username,
+                        server_base_url = excluded.server_base_url,
+                        status = excluded.status,
+                        credentials_encrypted = excluded.credentials_encrypted,
+                        authorized_at = excluded.authorized_at,
+                        authorization_expires_at = excluded.authorization_expires_at,
+                        last_error = excluded.last_error,
+                        updated_at = excluded.updated_at",
+                    params![
+                        ModelProviderCode::PersonAi.storage_value(),
+                        person_ai_user_id,
+                        person_ai_username,
+                        credentials.server_base_url,
+                        credentials.status.storage_value(),
+                        credentials.credentials_encrypted,
+                        credentials.authorized_at,
+                        credentials.authorization_expires_at,
+                        credentials.last_error,
+                    ],
+                )
+                .map_err(|_| ModelProviderError::Storage)?;
+        } else {
+            transaction
+                .execute(
+                    "INSERT INTO provider_connections (
+                        provider_code, person_ai_user_id, person_ai_username, server_base_url,
+                        status, credentials_encrypted, authorized_at, authorization_expires_at,
+                        last_sync_at, last_error, created_at, updated_at
+                     ) VALUES (?1, ?2, ?3, ?4, ?5, NULL, NULL, NULL, NULL, ?6, ?7, ?7)
+                     ON CONFLICT(provider_code) DO UPDATE SET
+                        person_ai_user_id = excluded.person_ai_user_id,
+                        person_ai_username = excluded.person_ai_username,
+                        server_base_url = excluded.server_base_url,
+                        status = excluded.status,
+                        credentials_encrypted = NULL,
+                        authorized_at = NULL,
+                        authorization_expires_at = NULL,
+                        last_error = excluded.last_error,
+                        updated_at = excluded.updated_at",
+                    params![
+                        ModelProviderCode::PersonAi.storage_value(),
+                        person_ai_user_id,
+                        person_ai_username,
+                        PERSON_AI_DEFAULT_SERVER_BASE_URL,
+                        ProviderConnectionStatus::AuthRequired.storage_value(),
+                        "credentials are not available for the active Person-AI profile",
+                        now,
+                    ],
+                )
+                .map_err(|_| ModelProviderError::Storage)?;
+        }
+        transaction
+            .commit()
+            .map_err(|_| ModelProviderError::Storage)
     }
 
     pub fn set_person_ai_identity(
@@ -2031,6 +2135,8 @@ impl ModelProviderService {
             .connection
             .lock()
             .map_err(|_| ModelProviderError::Storage)?;
+        let active = read_connection(&connection, provider_code)?
+            .ok_or(ModelProviderError::ConnectionNotReady)?;
         connection
             .execute(
                 "UPDATE provider_connections SET credentials_encrypted = ?2, authorization_expires_at = ?3,
@@ -2044,6 +2150,30 @@ impl ModelProviderService {
                 ],
             )
             .map_err(|_| ModelProviderError::Storage)?;
+        if provider_code == ModelProviderCode::PersonAi {
+            if let Some(person_ai_user_id) = active
+                .person_ai_user_id
+                .as_deref()
+                .map(str::trim)
+                .filter(|value| !value.is_empty())
+            {
+                connection
+                    .execute(
+                        "UPDATE person_ai_profile_credentials
+                         SET credentials_encrypted = ?2, authorization_expires_at = ?3,
+                             status = ?4, last_error = NULL, updated_at = ?5
+                         WHERE person_ai_user_id = ?1",
+                        params![
+                            person_ai_user_id,
+                            encrypted,
+                            credentials.authorization_expires_at,
+                            ProviderConnectionStatus::Connected.storage_value(),
+                            now,
+                        ],
+                    )
+                    .map_err(|_| ModelProviderError::Storage)?;
+            }
+        }
         Ok(())
     }
 
@@ -2113,6 +2243,27 @@ impl ModelProviderService {
                 ],
             )
             .map_err(|_| ModelProviderError::Storage)?;
+        if provider_code == ModelProviderCode::PersonAi {
+            if let Some(person_ai_user_id) = read_connection(&connection, provider_code)?
+                .and_then(|row| row.person_ai_user_id)
+                .map(|value| value.trim().to_owned())
+                .filter(|value| !value.is_empty())
+            {
+                connection
+                    .execute(
+                        "UPDATE person_ai_profile_credentials
+                         SET status = ?2, last_error = ?3, updated_at = ?4
+                         WHERE person_ai_user_id = ?1",
+                        params![
+                            person_ai_user_id,
+                            ProviderConnectionStatus::AuthRequired.storage_value(),
+                            message,
+                            now,
+                        ],
+                    )
+                    .map_err(|_| ModelProviderError::Storage)?;
+            }
+        }
         Ok(())
     }
 
@@ -2461,6 +2612,16 @@ struct ProviderConnectionRow {
 }
 
 #[derive(Debug, Clone)]
+struct PersonAiProfileCredentialsRow {
+    server_base_url: String,
+    credentials_encrypted: String,
+    status: ProviderConnectionStatus,
+    authorized_at: i64,
+    authorization_expires_at: Option<i64>,
+    last_error: Option<String>,
+}
+
+#[derive(Debug, Clone)]
 struct ProviderAuthorizationSessionRow {
     session_id: String,
     provider_code: ModelProviderCode,
@@ -2606,6 +2767,56 @@ fn read_connection(
         )
         .optional()
         .map_err(|_| ModelProviderError::Storage)
+}
+
+fn read_person_ai_profile_credentials(
+    connection: &Connection,
+    person_ai_user_id: &str,
+) -> Result<Option<PersonAiProfileCredentialsRow>, ModelProviderError> {
+    connection
+        .query_row(
+            "SELECT person_ai_user_id, person_ai_username, server_base_url, credentials_encrypted,
+                    status, authorized_at, authorization_expires_at, last_error, updated_at
+             FROM person_ai_profile_credentials WHERE person_ai_user_id = ?1",
+            params![person_ai_user_id],
+            |row| {
+                let status = row.get::<_, String>(4)?;
+                Ok(PersonAiProfileCredentialsRow {
+                    server_base_url: row.get(2)?,
+                    credentials_encrypted: row.get(3)?,
+                    status: ProviderConnectionStatus::from_storage(&status)
+                        .ok_or(rusqlite::Error::InvalidQuery)?,
+                    authorized_at: row.get(5)?,
+                    authorization_expires_at: row.get(6)?,
+                    last_error: row.get(7)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|_| ModelProviderError::Storage)
+}
+
+fn migrate_legacy_person_ai_profile_credentials(
+    connection: &Connection,
+) -> Result<(), ModelProviderError> {
+    connection
+        .execute(
+            "INSERT OR IGNORE INTO person_ai_profile_credentials (
+                person_ai_user_id, person_ai_username, server_base_url, credentials_encrypted,
+                status, authorized_at, authorization_expires_at, last_error, updated_at
+             )
+             SELECT person_ai_user_id, COALESCE(person_ai_username, ''), server_base_url,
+                    credentials_encrypted, status, COALESCE(authorized_at, updated_at),
+                    authorization_expires_at, last_error, updated_at
+             FROM provider_connections
+             WHERE provider_code = 'PersonAi'
+               AND person_ai_user_id IS NOT NULL
+               AND TRIM(person_ai_user_id) <> ''
+               AND credentials_encrypted IS NOT NULL",
+            [],
+        )
+        .map_err(|_| ModelProviderError::Storage)?;
+    Ok(())
 }
 
 fn read_authorization_session(
@@ -3110,6 +3321,34 @@ fn replace_authorized_connection(
             ],
         )
         .map_err(|_| ModelProviderError::Storage)?;
+    if provider_code == ModelProviderCode::PersonAi {
+        transaction
+            .execute(
+                "INSERT INTO person_ai_profile_credentials (
+                    person_ai_user_id, person_ai_username, server_base_url, credentials_encrypted,
+                    status, authorized_at, authorization_expires_at, last_error, updated_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, NULL, ?6)
+                 ON CONFLICT(person_ai_user_id) DO UPDATE SET
+                    person_ai_username = excluded.person_ai_username,
+                    server_base_url = excluded.server_base_url,
+                    credentials_encrypted = excluded.credentials_encrypted,
+                    status = excluded.status,
+                    authorized_at = excluded.authorized_at,
+                    authorization_expires_at = excluded.authorization_expires_at,
+                    last_error = NULL,
+                    updated_at = excluded.updated_at",
+                params![
+                    person_ai_user_id,
+                    person_ai_username,
+                    credentials.server_base_url,
+                    encrypted,
+                    ProviderConnectionStatus::Connected.storage_value(),
+                    now,
+                    credentials.authorization_expires_at,
+                ],
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+    }
     apply_catalog_snapshot(transaction, provider_code, catalog, now)?;
     apply_multimedia_catalog_snapshot(transaction, provider_code, multimedia_catalog, now)?;
     transaction
@@ -3682,6 +3921,140 @@ mod tests {
         assert_eq!(stored_credentials.refresh_token, "refresh-2");
         assert_eq!(stored_credentials.client_id, "client-id");
         assert_eq!(stored_credentials.public_key, "public-key");
+    }
+
+    #[test]
+    fn activating_a_profile_restores_its_own_person_ai_credentials() {
+        let cipher: Arc<dyn VariableCipher> = Arc::new(
+            Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+                key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+            })
+            .expect("create test cipher"),
+        );
+        let service =
+            ModelProviderService::connect(":memory:", cipher).expect("create provider service");
+        let alice = ProviderCredentials {
+            token: "alice-access".into(),
+            refresh_token: "alice-refresh".into(),
+            client_id: "desktop-client".into(),
+            public_key: "alice-public-key".into(),
+            server_base_url: "https://person-ai.invalid".into(),
+            authorization_expires_at: Some(now_millis() + 60_000),
+        };
+        let bob = ProviderCredentials {
+            token: "bob-access".into(),
+            refresh_token: "bob-refresh".into(),
+            client_id: "desktop-client".into(),
+            public_key: "bob-public-key".into(),
+            server_base_url: "https://person-ai.invalid".into(),
+            authorization_expires_at: Some(now_millis() + 60_000),
+        };
+
+        for (user_id, username, credentials) in [
+            ("person-alice", "alice", &alice),
+            ("person-bob", "bob", &bob),
+        ] {
+            let encrypted = service
+                .encrypt_credentials(credentials)
+                .expect("encrypt profile credentials");
+            let mut connection = service.connection.lock().expect("lock provider database");
+            let transaction = connection
+                .transaction()
+                .expect("start authorization transaction");
+            replace_authorized_connection(
+                &transaction,
+                ModelProviderCode::PersonAi,
+                credentials,
+                user_id,
+                username,
+                &encrypted,
+                "test-session",
+                &[],
+                &[],
+                &format!("test-sync-{username}"),
+                now_millis(),
+            )
+            .expect("store profile credentials");
+            transaction
+                .commit()
+                .expect("commit authorization transaction");
+        }
+
+        for (user_id, username, expected_token) in [
+            ("person-alice", "alice", "alice-access"),
+            ("person-bob", "bob", "bob-access"),
+            ("person-alice", "alice", "alice-access"),
+        ] {
+            service
+                .activate_person_ai_profile(user_id, username)
+                .expect("activate profile credentials");
+            let active = {
+                let connection = service.connection.lock().expect("lock provider database");
+                read_connection(&connection, ModelProviderCode::PersonAi)
+                    .expect("read provider connection")
+                    .expect("active provider connection")
+            };
+            assert_eq!(active.person_ai_user_id.as_deref(), Some(user_id));
+            assert_eq!(active.person_ai_username.as_deref(), Some(username));
+            assert_eq!(
+                service
+                    .decrypt_credentials(
+                        active
+                            .credentials_encrypted
+                            .as_deref()
+                            .expect("active encrypted credentials"),
+                    )
+                    .expect("decrypt active credentials")
+                    .token,
+                expected_token
+            );
+        }
+
+        service
+            .activate_person_ai_profile("person-charlie", "charlie")
+            .expect("activate profile without stored credentials");
+        let active = {
+            let connection = service.connection.lock().expect("lock provider database");
+            read_connection(&connection, ModelProviderCode::PersonAi)
+                .expect("read provider connection")
+                .expect("active provider connection")
+        };
+        assert_eq!(active.person_ai_user_id.as_deref(), Some("person-charlie"));
+        assert_eq!(active.status, ProviderConnectionStatus::AuthRequired);
+        assert!(active.credentials_encrypted.is_none());
+    }
+
+    #[test]
+    fn legacy_person_ai_connection_is_copied_to_its_profile_credentials() {
+        let connection = Connection::open_in_memory().expect("open provider database");
+        connection
+            .execute_batch(MODEL_PROVIDER_MIGRATION)
+            .expect("create provider schema");
+        connection
+            .execute_batch(PERSON_AI_PROFILE_CREDENTIALS_MIGRATION)
+            .expect("create profile credentials schema");
+        connection
+            .execute(
+                "INSERT INTO provider_connections (
+                    provider_code, person_ai_user_id, person_ai_username, server_base_url,
+                    status, credentials_encrypted, authorized_at, authorization_expires_at,
+                    last_sync_at, last_error, created_at, updated_at
+                 ) VALUES ('PersonAi', 'person-alice', 'alice', 'https://person-ai.invalid',
+                    'Connected', 'enc:v1:legacy', 100, 200, NULL, NULL, 100, 100)",
+                [],
+            )
+            .expect("seed legacy connection");
+
+        migrate_legacy_person_ai_profile_credentials(&connection)
+            .expect("migrate legacy credentials");
+
+        let migrated = read_person_ai_profile_credentials(&connection, "person-alice")
+            .expect("read profile credentials")
+            .expect("migrated profile credentials");
+        assert_eq!(migrated.server_base_url, "https://person-ai.invalid");
+        assert_eq!(migrated.credentials_encrypted, "enc:v1:legacy");
+        assert_eq!(migrated.status, ProviderConnectionStatus::Connected);
+        assert_eq!(migrated.authorization_expires_at, Some(200));
     }
 
     #[test]

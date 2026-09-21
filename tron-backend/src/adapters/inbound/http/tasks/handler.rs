@@ -26,18 +26,101 @@ use crate::{
     domain::{
         chat::ChatSessionSourceType,
         prompt::PromptRuntimeProvider,
-        task::{TaskError, TaskExecutionResult, TaskListQuery},
+        task::{TaskError, TaskExecutionResult, TaskFlowDraft, TaskListQuery},
     },
     response::ApiResponse,
 };
 
 use super::{
     error_mapper::{task_error_response, task_prompt_render_error_response},
-    request::{CreateTaskRequest, UpdateTaskRequest, UpdateTaskStatusRequest},
+    request::{
+        CreateTaskRequest, TaskFlowRequest, TaskFlowWorkspaceQuery, UpdateTaskRequest,
+        UpdateTaskStatusRequest, WorkspaceTaskFlowRequest,
+    },
 };
 
-pub async fn options(State(tasks): State<TaskService>) -> Response {
-    Json(ApiResponse::success(tasks.options())).into_response()
+pub async fn options(
+    State(tasks): State<TaskService>,
+    Query(query): Query<TaskFlowWorkspaceQuery>,
+) -> Response {
+    match tasks.options(&query.workspace_code) {
+        Ok(options) => Json(ApiResponse::success(options)).into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
+pub async fn list_task_flows(State(tasks): State<TaskService>) -> Response {
+    match tasks.list_task_flows() {
+        Ok(flows) => Json(ApiResponse::success(flows)).into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
+pub async fn create_task_flow(
+    State(tasks): State<TaskService>,
+    Json(request): Json<TaskFlowRequest>,
+) -> Response {
+    match tasks.create_task_flow(request.into()) {
+        Ok(flow) => (StatusCode::CREATED, Json(ApiResponse::success(flow))).into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
+pub async fn get_task_flow(
+    State(tasks): State<TaskService>,
+    Path(flow_code): Path<String>,
+) -> Response {
+    match tasks.get_task_flow(&flow_code) {
+        Ok(flow) => Json(ApiResponse::success(flow)).into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
+pub async fn update_task_flow(
+    State(tasks): State<TaskService>,
+    Path(flow_code): Path<String>,
+    Json(request): Json<TaskFlowRequest>,
+) -> Response {
+    let mut draft: TaskFlowDraft = request.into();
+    draft.flow_code = flow_code.clone();
+    match tasks.update_task_flow(&flow_code, draft) {
+        Ok(flow) => Json(ApiResponse::success(flow)).into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
+pub async fn delete_task_flow(
+    State(tasks): State<TaskService>,
+    Path(flow_code): Path<String>,
+) -> Response {
+    match tasks.delete_task_flow(&flow_code) {
+        Ok(()) => Json(ApiResponse::success(
+            serde_json::json!({ "flowCode": flow_code }),
+        ))
+        .into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
+pub async fn get_workspace_task_flow(
+    State(tasks): State<TaskService>,
+    Path(workspace_code): Path<String>,
+) -> Response {
+    match tasks.workspace_task_flow(&workspace_code) {
+        Ok(flow) => Json(ApiResponse::success(flow)).into_response(),
+        Err(error) => task_error_response(error),
+    }
+}
+
+pub async fn switch_workspace_task_flow(
+    State(tasks): State<TaskService>,
+    Path(workspace_code): Path<String>,
+    Json(request): Json<WorkspaceTaskFlowRequest>,
+) -> Response {
+    match tasks.assign_workspace_task_flow(&workspace_code, &request.flow_code) {
+        Ok(flow) => Json(ApiResponse::success(flow)).into_response(),
+        Err(error) => task_error_response(error),
+    }
 }
 
 pub async fn kanban(
@@ -108,7 +191,7 @@ pub async fn execute_task(
         Ok(task) => task,
         Err(error) => return task_error_response(error),
     };
-    if task.archived_at.is_some() || task.status == crate::domain::task::TaskStatus::Archived {
+    if task.archived_at.is_some() {
         return task_error_response(TaskError::ArchivedMutationDenied);
     }
     let prompt = match state.prompts.runtime_prompt_text(

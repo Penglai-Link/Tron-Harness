@@ -36,18 +36,14 @@ import { InspectorPanel } from "@/components/inspector";
 import { useToast } from "@/components/ui/toast";
 
 import {
-  archiveTask,
   createTask,
   executeTask,
-  restoreTask,
   updateTask,
   updateTaskStatus,
 } from "@/domain/task/api";
 import {
-  archiveMockTask,
   createMockTask,
   executeMockTask,
-  restoreMockTask,
   updateMockTask,
   updateMockTaskStatus,
 } from "@/domain/task/mock/data";
@@ -57,16 +53,13 @@ import {
   useTaskWorkspaceOptions,
 } from "@/domain/task/hooks";
 import { TaskAppSelectionField } from "@/domain/task/components";
-import type {
-  TaskPriority,
-  TaskSourceType,
-  TaskStatus,
-  TaskType,
-  UpdateTaskPayload,
-} from "@/domain/task/model";
 import {
-  inferTaskRole,
-  statusLabel,
+  taskFlowStatusDisplayName,
+  type TaskPriority,
+  type TaskSourceType,
+  type TaskStatus,
+  type TaskType,
+  type UpdateTaskPayload,
 } from "@/domain/task/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { fetchWorkspaceSystemAgents } from "@/domain/agent/api";
@@ -129,11 +122,15 @@ export function TaskDetailsPage() {
   const pageT = useCallback((key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`tasks.${key}`, { defaultValue, ...options })
   ), [t]);
+  const flowT = useCallback(
+    (key: string, defaultValue: string) => pageT(`taskFlows.${key}`, defaultValue),
+    [pageT],
+  );
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const taskCode = searchParams.get("taskCode") || "TSK-SEED-FEATURE";
   const { task, setTask, refresh, loading } = useTaskDetail(taskCode);
-  const options = useTaskOptions();
+  const options = useTaskOptions(task.workspaceCode);
   const toast = useToast();
   const dataSource = getServiceDataSource("task");
   const { appOptions, effectiveUsers, loading: workspaceOptionsLoading, onUserPageChange, userPage, userPageCount } = useTaskWorkspaceOptions(task.workspaceCode);
@@ -165,9 +162,14 @@ export function TaskDetailsPage() {
   taskRef.current = task;
   statusRef.current = status;
   progressRef.current = progress;
-  const archived = status === "Archived" || task.status === "Archived" || Boolean(task.archivedAt);
-  const taskRole = inferTaskRole(task.taskType, task.parentTaskCode);
-  const availableStatuses = options.statusRules[taskRole];
+  const archived = Boolean(task.archivedAt);
+  const availableStatuses = options.statuses;
+  const taskStatusLabel = useCallback((statusCode: TaskStatus) => {
+    const statusOption = availableStatuses.find((item) => item.statusCode === statusCode);
+    return statusOption
+      ? taskFlowStatusDisplayName(statusOption, flowT, options.flow.flowCode)
+      : statusCode;
+  }, [availableStatuses, flowT, options.flow.flowCode]);
   const availableAppCodeSet = useMemo(() => new Set(appOptions.map((app) => app.appCode)), [appOptions]);
   const legacyAppCodes = selectedAppCodes.filter((code) => !availableAppCodeSet.has(code));
   const configuredAgentOption = useMemo<AutomationAgentOption>(() => {
@@ -370,7 +372,7 @@ export function TaskDetailsPage() {
                 <div className="font-mono text-[11px] text-[var(--color-on-surface-variant)]">{item.taskCode}</div>
                 <div className="mt-1 text-sm font-medium">{item.title}</div>
                 <div className="mt-2 flex items-center justify-between gap-3">
-                  <span className="text-xs text-[var(--color-on-surface-variant)]">{pageT(`statuses.${item.status}`, statusLabel(item.status))}</span>
+                  <span className="text-xs text-[var(--color-on-surface-variant)]">{taskStatusLabel(item.status)}</span>
                   <span className="text-xs text-[var(--color-on-surface-variant)]">{item.progress}%</span>
                 </div>
                 <div className="mt-2"><ProgressBar value={item.progress} /></div>
@@ -511,41 +513,13 @@ export function TaskDetailsPage() {
     const currentTask = taskRef.current;
     const currentProgress = progressRef.current;
     const previousStatus = statusRef.current;
-    const archivedNow = previousStatus === "Archived" || currentTask.status === "Archived" || Boolean(currentTask.archivedAt);
+    const archivedNow = Boolean(currentTask.archivedAt);
     setStatus(nextStatus);
     statusRef.current = nextStatus;
     if (nextStatus === previousStatus) return;
 
     try {
-      if (nextStatus === "Archived" && !archivedNow) {
-        const lifecycle = dataSource === "api" ? await archiveTask(currentTask.taskCode) : archiveMockTask(currentTask.taskCode);
-        skipNextTaskSync.current = true;
-        setTask({
-          ...currentTask,
-          archivedAt: lifecycle.archivedAt,
-          previousStatus: lifecycle.previousStatus,
-          status: lifecycle.status,
-        });
-        setStatus(lifecycle.status);
-        statusRef.current = lifecycle.status;
-        toast.success(pageT("messages.archived", "Task {{code}} archived", { code: currentTask.taskCode }));
-        return;
-      }
-
-      if (archivedNow && nextStatus !== "Archived") {
-        await (dataSource === "api" ? restoreTask(currentTask.taskCode) : restoreMockTask(currentTask.taskCode));
-        const updated = dataSource === "api"
-          ? await updateTaskStatus(currentTask.taskCode, { progress: progressValue(currentProgress), status: nextStatus })
-          : updateMockTaskStatus(currentTask.taskCode, { progress: progressValue(currentProgress), status: nextStatus });
-        skipNextTaskSync.current = true;
-        setTask(updated);
-        setStatus(updated.status);
-        statusRef.current = updated.status;
-        setProgress(String(updated.progress));
-        progressRef.current = String(updated.progress);
-        toast.success(pageT("messages.restored", "Task {{code}} restored", { code: currentTask.taskCode }));
-        return;
-      }
+      if (archivedNow) throw new Error(pageT("errors.archived", "Restore the archived task before updating it"));
 
       const updated = dataSource === "api"
         ? await updateTaskStatus(currentTask.taskCode, { progress: progressValue(currentProgress), status: nextStatus })
@@ -672,10 +646,10 @@ export function TaskDetailsPage() {
           </div>
           <div className="grid gap-4 md:grid-cols-2">
             <Field label={t("pages:tasks.detail.status", "Task Status")}>
-              <SelectInput aria-label={t("pages:tasks.detail.statusAria", "Task detail status")} value={status} onValueChange={(event) => {
+              <SelectInput aria-label={t("pages:tasks.detail.statusAria", "Task detail status")} disabled={archived} value={status} onValueChange={(event) => {
                 void handleStatusChange(event as TaskStatus);
               }}>
-                {availableStatuses.map((item) => <SelectItem key={item} value={item}>{pageT(`statuses.${item}`, statusLabel(item))}</SelectItem>)}
+                {availableStatuses.map((item) => <SelectItem key={item.statusCode} value={item.statusCode}>{taskFlowStatusDisplayName(item, flowT, options.flow.flowCode)}</SelectItem>)}
               </SelectInput>
             </Field>
             <Field label={t("pages:tasks.fields.priority", "Priority")}>

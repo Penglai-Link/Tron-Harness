@@ -2,10 +2,12 @@ import { requestApi } from "@/shared/api/httpClient";
 import type {
   NavigationAdminDomain,
   NavigationAdminMenu,
+  NavigationAdminMenuTree,
   NavigationAdminPage,
   NavigationAdminTreeItem,
   NavigationLocalizedText,
   NavigationMenuSource,
+  NavigationMenuChildDisplay,
   NavigationMenuType,
 } from "@/shared/types/Navigation";
 
@@ -20,11 +22,12 @@ const navigationAdminApiEndpoints = {
   getMenu: "GET /api/v1/admin/navigation/menus/{menuCode}",
   updateMenu: "PUT /api/v1/admin/navigation/menus/{menuCode}",
   deleteMenu: "DELETE /api/v1/admin/navigation/menus/{menuCode}",
-  getMenuTree: "GET /api/v1/admin/navigation/domains/{domainCode}/menu-tree",
-  addMenuItem: "POST /api/v1/admin/navigation/domains/{domainCode}/menu-items",
-  updateMenuItem: "PUT /api/v1/admin/navigation/domains/{domainCode}/menu-items/{menuCode}",
-  deleteMenuItem: "DELETE /api/v1/admin/navigation/domains/{domainCode}/menu-items/{menuCode}",
-  copyMenuTree: "POST /api/v1/admin/navigation/domains/{targetDomainCode}/menu-tree/copy",
+  listMenuTrees: "GET /api/v1/admin/navigation/menu-trees",
+  getMenuTree: "GET /api/v1/admin/navigation/menu-trees/{treeCode}",
+  addMenuItem: "POST /api/v1/admin/navigation/menu-trees/{treeCode}/menu-items",
+  updateMenuItem: "PUT /api/v1/admin/navigation/menu-trees/{treeCode}/menu-items/{menuCode}",
+  deleteMenuItem: "DELETE /api/v1/admin/navigation/menu-trees/{treeCode}/menu-items/{menuCode}",
+  copyMenuTree: "POST /api/v1/admin/navigation/menu-trees/{targetTreeCode}/copy",
   restoreDefaultMenuTrees: "POST /api/v1/admin/navigation/menu-trees/default",
 } as const;
 
@@ -69,8 +72,14 @@ export interface NavigationMenuItemPayload {
   position: number;
 }
 
+export interface NavigationMenuItemUpdatePayload {
+  parentMenuCode: string | null;
+  position: number;
+  childDisplay?: NavigationMenuChildDisplay;
+}
+
 export interface NavigationCopyMenuTreePayload {
-  sourceDomainCode: string;
+  sourceTreeCode: string;
   sourceMenuCode: string | null;
   targetParentMenuCode: string | null;
   position: number;
@@ -99,6 +108,10 @@ function normalizePage<T>(payload: unknown, fallback: Pick<NavigationAdminPage<T
 export async function fetchNavigationAdminDomains(query: NavigationDomainQuery, signal?: AbortSignal) {
   const payload = await requestApi<unknown>(navigationAdminApiEndpoints.queryDomains, { body: query, signal });
   return normalizePage<NavigationAdminDomain>(payload, query);
+}
+
+export function fetchNavigationAdminMenuTrees(signal?: AbortSignal) {
+  return requestApi<NavigationAdminMenuTree[]>(navigationAdminApiEndpoints.listMenuTrees, { signal });
 }
 
 export function createNavigationDomain(payload: Required<NavigationDomainPayload>) {
@@ -136,37 +149,37 @@ export function deleteNavigationMenu(menuCode: string) {
   return requestApi<Record<string, never>>(navigationAdminApiEndpoints.deleteMenu, { pathParams: { menuCode } });
 }
 
-export function fetchNavigationAdminMenuTree(domainCode: string, signal?: AbortSignal) {
+export function fetchNavigationAdminMenuTree(treeCode: string, signal?: AbortSignal) {
   return requestApi<NavigationAdminTreeItem[]>(navigationAdminApiEndpoints.getMenuTree, {
-    pathParams: { domainCode },
+    pathParams: { treeCode },
     signal,
   });
 }
 
-export function addNavigationMenuItem(domainCode: string, payload: Required<NavigationMenuItemPayload>) {
+export function addNavigationMenuItem(treeCode: string, payload: Required<NavigationMenuItemPayload>) {
   return requestApi<NavigationAdminTreeItem[]>(navigationAdminApiEndpoints.addMenuItem, {
     body: payload,
-    pathParams: { domainCode },
+    pathParams: { treeCode },
   });
 }
 
-export function updateNavigationMenuItem(domainCode: string, menuCode: string, payload: Omit<Required<NavigationMenuItemPayload>, "menuCode">) {
+export function updateNavigationMenuItem(treeCode: string, menuCode: string, payload: NavigationMenuItemUpdatePayload) {
   return requestApi<NavigationAdminTreeItem[]>(navigationAdminApiEndpoints.updateMenuItem, {
     body: payload,
-    pathParams: { domainCode, menuCode },
+    pathParams: { treeCode, menuCode },
   });
 }
 
-export function deleteNavigationMenuItem(domainCode: string, menuCode: string) {
+export function deleteNavigationMenuItem(treeCode: string, menuCode: string) {
   return requestApi<NavigationAdminTreeItem[]>(navigationAdminApiEndpoints.deleteMenuItem, {
-    pathParams: { domainCode, menuCode },
+    pathParams: { treeCode, menuCode },
   });
 }
 
-export function copyNavigationMenuTree(targetDomainCode: string, payload: NavigationCopyMenuTreePayload) {
+export function copyNavigationMenuTree(targetTreeCode: string, payload: NavigationCopyMenuTreePayload) {
   return requestApi<NavigationAdminTreeItem[]>(navigationAdminApiEndpoints.copyMenuTree, {
     body: payload,
-    pathParams: { targetDomainCode },
+    pathParams: { targetTreeCode },
   });
 }
 

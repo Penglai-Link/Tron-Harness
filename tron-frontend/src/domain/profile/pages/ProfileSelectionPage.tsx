@@ -20,11 +20,37 @@ import {
 } from "@/domain/profile/api";
 import { useLocale } from "@/i18n";
 import { isApiError } from "@/shared/api/httpClient";
+import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 
 function firstAvailableProfileId(profiles: PersonAiProfile[], activeProfileId: string | null) {
   return profiles.find((profile) => profile.profileId === activeProfileId && profile.status !== "PENDING")?.profileId
     ?? profiles.find((profile) => profile.status !== "PENDING")?.profileId
     ?? null;
+}
+
+function profileInitials(username: string) {
+  const value = username.trim();
+  return value ? value.slice(0, 2).toUpperCase() : "PA";
+}
+
+function ProfileAvatar({ profile }: { profile: PersonAiProfile }) {
+  const { src } = useManagedAvatar(profile.avatarUrl);
+  const [imageFailed, setImageFailed] = useState(false);
+
+  useEffect(() => setImageFailed(false), [profile.avatarUrl]);
+
+  return (
+    <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-white">
+      {src && !imageFailed ? (
+        <img
+          alt=""
+          className="size-full object-cover"
+          src={src}
+          onError={() => setImageFailed(true)}
+        />
+      ) : profileInitials(profile.personAiUsername)}
+    </span>
+  );
 }
 
 export function ProfileSelectionPage() {
@@ -51,7 +77,7 @@ export function ProfileSelectionPage() {
 
   useEffect(() => {
     const controller = new AbortController();
-    Promise.all([fetchProfiles(controller.signal), fetchBootstrapProfileStatus(controller.signal)])
+    Promise.all([fetchProfiles(controller.signal), fetchBootstrapProfileStatus(controller.signal, false)])
       .then(([nextProfiles, nextBootstrap]) => {
         setProfiles(nextProfiles);
         setBootstrap(nextBootstrap);
@@ -98,7 +124,7 @@ export function ProfileSelectionPage() {
         }
         const [nextProfiles, nextBootstrap] = await Promise.all([
           fetchProfiles(),
-          fetchBootstrapProfileStatus(),
+          fetchBootstrapProfileStatus(undefined, false),
         ]);
         if (!active) return;
         setProfiles(nextProfiles);
@@ -151,6 +177,7 @@ export function ProfileSelectionPage() {
         activeProfileId: profile.profileId,
         activeProfile: profile,
         avatarUrl: null,
+        account: null,
       });
       await beginPersonAiAuthorization();
     } catch (reason: unknown) {
@@ -192,7 +219,7 @@ export function ProfileSelectionPage() {
     setError(null);
     try {
       await removeProfile(profileToRemove.profileId);
-      const [nextProfiles, nextBootstrap] = await Promise.all([fetchProfiles(), fetchBootstrapProfileStatus()]);
+      const [nextProfiles, nextBootstrap] = await Promise.all([fetchProfiles(), fetchBootstrapProfileStatus(undefined, false)]);
       setProfiles(nextProfiles);
       setBootstrap(nextBootstrap);
       setSelectedProfileId(firstAvailableProfileId(nextProfiles, nextBootstrap.activeProfileId));
@@ -202,11 +229,6 @@ export function ProfileSelectionPage() {
     } finally {
       setRemovingProfile(false);
     }
-  }
-
-  function profileInitials(username: string) {
-    const value = username.trim();
-    return value ? value.slice(0, 2).toUpperCase() : "PA";
   }
 
   const agreementRules = [1, 2, 3, 4, 5].map((index) => t(`personAiProfiles.agreement.rules.rule${index}`));
@@ -289,9 +311,7 @@ export function ProfileSelectionPage() {
                   : "border-[var(--color-outline-variant)]"
               }`}
             >
-              <span className="flex size-11 shrink-0 items-center justify-center rounded-full bg-[var(--color-primary)] text-sm font-semibold text-white">
-                {profileInitials(profile.personAiUsername)}
-              </span>
+              <ProfileAvatar profile={profile} />
               <span className="min-w-0">
                 <p className="truncate font-medium">{profile.personAiUsername}</p>
               </span>

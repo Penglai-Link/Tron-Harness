@@ -7,7 +7,9 @@ impl NavigationRepository for SqliteNavigationRepository {
                  UNION ALL SELECT id FROM navigation_domain_translations
                  UNION ALL SELECT id FROM navigation_menus
                  UNION ALL SELECT id FROM navigation_menu_translations
-                 UNION ALL SELECT id FROM navigation_domain_menu_items
+                 UNION ALL SELECT id FROM navigation_menu_trees
+                 UNION ALL SELECT id FROM navigation_menu_tree_translations
+                 UNION ALL SELECT id FROM navigation_menu_tree_items
              )",
                 [],
                 |row| row.get::<_, i64>(0),
@@ -51,6 +53,21 @@ impl NavigationRepository for SqliteNavigationRepository {
             )
             .map_err(storage_error)?;
         tx.execute(
+            "INSERT INTO navigation_menu_trees (id, tree_code, tree_type, domain_id, built_in, enabled, created_at, updated_at)
+             VALUES (?1, ?2, 'Domain', ?1, ?3, ?4, ?5, ?6)
+             ON CONFLICT(domain_id) DO UPDATE SET tree_code = excluded.tree_code,
+                 built_in = excluded.built_in, enabled = excluded.enabled, updated_at = excluded.updated_at",
+            params![
+                domain_id,
+                domain.domain_code,
+                i64::from(domain.built_in),
+                i64::from(domain.enabled),
+                domain.created_at,
+                domain.updated_at,
+            ],
+        )
+        .map_err(storage_error)?;
+        tx.execute(
             "DELETE FROM navigation_domain_translations WHERE domain_id = ?1",
             [domain_id],
         )
@@ -79,6 +96,17 @@ impl NavigationRepository for SqliteNavigationRepository {
         } else {
             Ok(())
         }
+    }
+
+    fn list_menu_trees(&mut self) -> Result<Vec<NavigationMenuTree>, NavigationError> {
+        self.all_menu_trees()
+    }
+
+    fn get_menu_tree(&mut self, tree_code: &str) -> Result<NavigationMenuTree, NavigationError> {
+        self.all_menu_trees()?
+            .into_iter()
+            .find(|tree| tree.tree_code == tree_code)
+            .ok_or(NavigationError::ItemNotFound)
     }
 
     fn list_menus(
@@ -179,18 +207,18 @@ impl NavigationRepository for SqliteNavigationRepository {
     }
 
     fn menu_usage_count(&mut self, menu_code: &str) -> Result<i64, NavigationError> {
-        self.connection.query_row("SELECT COUNT(*) FROM navigation_domain_menu_items i JOIN navigation_menus m ON m.id = i.menu_id WHERE m.menu_code = ?1", [menu_code], |row| row.get(0)).map_err(storage_error)
+        self.connection.query_row("SELECT COUNT(*) FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id = i.menu_id WHERE m.menu_code = ?1", [menu_code], |row| row.get(0)).map_err(storage_error)
     }
 
     fn menu_has_children(&mut self, menu_code: &str) -> Result<bool, NavigationError> {
-        self.connection.query_row("SELECT EXISTS(SELECT 1 FROM navigation_domain_menu_items child JOIN navigation_domain_menu_items parent ON parent.id = child.parent_item_id JOIN navigation_menus m ON m.id = parent.menu_id WHERE m.menu_code = ?1)", [menu_code], |row| row.get::<_, i64>(0)).map(|value| value == 1).map_err(storage_error)
+        self.connection.query_row("SELECT EXISTS(SELECT 1 FROM navigation_menu_tree_items child JOIN navigation_menu_tree_items parent ON parent.id = child.parent_item_id JOIN navigation_menus m ON m.id = parent.menu_id WHERE m.menu_code = ?1)", [menu_code], |row| row.get::<_, i64>(0)).map(|value| value == 1).map_err(storage_error)
     }
 
     fn list_items(
         &mut self,
         domain_code: &str,
     ) -> Result<Vec<NavigationTreeItem>, NavigationError> {
-        self.domain_id(domain_code)?;
+        self.tree_id(domain_code)?;
         self.load_items(domain_code)
     }
 
@@ -199,8 +227,8 @@ impl NavigationRepository for SqliteNavigationRepository {
         domain_code: &str,
         item: &NavigationTreeItem,
     ) -> Result<(), NavigationError> {
-        let domain_id = self.domain_id(domain_code)?;
-        let parent_id = self.parent_item_id(domain_id, item.parent_menu_code.as_deref())?;
+        let tree_id = self.tree_id(domain_code)?;
+        let parent_id = self.parent_item_id(tree_id, item.parent_menu_code.as_deref())?;
         let existing = self.load_items(domain_code)?;
         let mut assignments = ordered_assignments_for_insert(
             &existing,
@@ -210,9 +238,9 @@ impl NavigationRepository for SqliteNavigationRepository {
             parent_id,
         );
         let tx = self.connection.transaction().map_err(storage_error)?;
-        move_positions_out_of_way(&tx, domain_id)?;
-        tx.execute("INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position) SELECT ?1, ?2, id, ?3, ?4 FROM navigation_menus WHERE menu_code = ?5", params![item.id.value(), domain_id, parent_id, 2 * POSITION_WORK_OFFSET, item.menu.menu_code]).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateDomainItem } else { NavigationError::StorageFailure })?;
-        apply_position_assignments(&tx, domain_id, &mut assignments)?;
+        move_positions_out_of_way(&tx, tree_id)?;
+        tx.execute("INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) SELECT ?1, ?2, id, ?3, ?4, ?5 FROM navigation_menus WHERE menu_code = ?6", params![item.id.value(), tree_id, parent_id, 2 * POSITION_WORK_OFFSET, item.child_display.as_storage(), item.menu.menu_code]).map_err(|error| if error.sqlite_error_code() == Some(ErrorCode::ConstraintViolation) { NavigationError::DuplicateDomainItem } else { NavigationError::StorageFailure })?;
+        apply_position_assignments(&tx, tree_id, &mut assignments)?;
         tx.commit().map_err(storage_error)
     }
 
@@ -222,8 +250,8 @@ impl NavigationRepository for SqliteNavigationRepository {
         menu_code: &str,
         command: &UpdateMenuItemCommand,
     ) -> Result<(), NavigationError> {
-        let domain_id = self.domain_id(domain_code)?;
-        let parent_id = self.parent_item_id(domain_id, command.parent_menu_code.as_deref())?;
+        let tree_id = self.tree_id(domain_code)?;
+        let parent_id = self.parent_item_id(tree_id, command.parent_menu_code.as_deref())?;
         let items = self.load_items(domain_code)?;
         let item = items
             .iter()
@@ -238,22 +266,23 @@ impl NavigationRepository for SqliteNavigationRepository {
             parent_id,
         );
         let tx = self.connection.transaction().map_err(storage_error)?;
-        move_positions_out_of_way(&tx, domain_id)?;
-        tx.execute("UPDATE navigation_domain_menu_items SET parent_item_id = ?2, position = ?3 WHERE id = ?1", params![item_id, parent_id, 2 * POSITION_WORK_OFFSET]).map_err(storage_error)?;
-        apply_position_assignments(&tx, domain_id, &mut assignments)?;
+        move_positions_out_of_way(&tx, tree_id)?;
+        let child_display = command.child_display.unwrap_or(item.child_display);
+        tx.execute("UPDATE navigation_menu_tree_items SET parent_item_id = ?2, position = ?3, child_display = ?4 WHERE id = ?1", params![item_id, parent_id, 2 * POSITION_WORK_OFFSET, child_display.as_storage()]).map_err(storage_error)?;
+        apply_position_assignments(&tx, tree_id, &mut assignments)?;
         tx.commit().map_err(storage_error)
     }
 
     fn remove_item(&mut self, domain_code: &str, menu_code: &str) -> Result<(), NavigationError> {
-        let domain_id = self.domain_id(domain_code)?;
-        let item_id: i64 = self.connection.query_row("SELECT i.id FROM navigation_domain_menu_items i JOIN navigation_menus m ON m.id = i.menu_id WHERE i.domain_id = ?1 AND m.menu_code = ?2", params![domain_id, menu_code], |row| row.get(0)).optional().map_err(storage_error)?.ok_or(NavigationError::ItemNotFound)?;
+        let tree_id = self.tree_id(domain_code)?;
+        let item_id: i64 = self.connection.query_row("SELECT i.id FROM navigation_menu_tree_items i JOIN navigation_menus m ON m.id = i.menu_id WHERE i.tree_id = ?1 AND m.menu_code = ?2", params![tree_id, menu_code], |row| row.get(0)).optional().map_err(storage_error)?.ok_or(NavigationError::ItemNotFound)?;
         let tx = self.connection.transaction().map_err(storage_error)?;
         tx.execute(
-            "DELETE FROM navigation_domain_menu_items WHERE id = ?1",
+            "DELETE FROM navigation_menu_tree_items WHERE id = ?1",
             [item_id],
         )
         .map_err(storage_error)?;
-        Self::normalize_domain_positions(&tx, domain_id)?;
+        Self::normalize_tree_positions(&tx, tree_id)?;
         tx.commit().map_err(storage_error)
     }
 
@@ -263,7 +292,7 @@ impl NavigationRepository for SqliteNavigationRepository {
         command: &CopyMenuTreeCommand,
     ) -> Result<(), NavigationError> {
         let source = self.load_items(&command.source_domain_code)?;
-        let target_domain_id = self.domain_id(target_domain_code)?;
+        let target_domain_id = self.tree_id(target_domain_code)?;
         let target = self.load_items(target_domain_code)?;
         let target_parent_id =
             self.parent_item_id(target_domain_id, command.target_parent_menu_code.as_deref())?;
@@ -311,7 +340,7 @@ impl NavigationRepository for SqliteNavigationRepository {
             };
             let id = *next_id;
             *next_id += 1;
-            tx.execute("INSERT INTO navigation_domain_menu_items (id, domain_id, menu_id, parent_item_id, position) SELECT ?1, (SELECT id FROM navigation_domains WHERE domain_code = ?2), m.id, ?3, ?4 FROM navigation_menus m WHERE m.menu_code = ?5", params![id, target_domain_code, parent_id, position, item.menu.menu_code]).map_err(storage_error)?;
+            tx.execute("INSERT INTO navigation_menu_tree_items (id, tree_id, menu_id, parent_item_id, position, child_display) SELECT ?1, (SELECT id FROM navigation_menu_trees WHERE tree_code = ?2), m.id, ?3, ?4, ?5 FROM navigation_menus m WHERE m.menu_code = ?6", params![id, target_domain_code, parent_id, position, item.child_display.as_storage(), item.menu.menu_code]).map_err(storage_error)?;
             mapped.insert(item.menu.menu_code.clone(), id);
             let mut children = source
                 .iter()
@@ -366,32 +395,32 @@ impl NavigationRepository for SqliteNavigationRepository {
         &mut self,
         items: &[DefaultNavigationMenuTreeItem],
     ) -> Result<i64, NavigationError> {
-        let domain_codes = items
+        let tree_codes = items
             .iter()
             .map(|item| item.domain_code)
             .collect::<BTreeSet<_>>();
         let tx = self.connection.transaction().map_err(storage_error)?;
-        let mut domain_ids = BTreeMap::new();
-        for domain_code in domain_codes {
+        let mut tree_ids = BTreeMap::new();
+        for domain_code in tree_codes {
             let domain_id = tx
                 .query_row(
-                    "SELECT id FROM navigation_domains WHERE domain_code = ?1",
+                    "SELECT id FROM navigation_menu_trees WHERE tree_code = ?1",
                     [domain_code],
                     |row| row.get::<_, i64>(0),
                 )
                 .optional()
                 .map_err(storage_error)?
-                .ok_or(NavigationError::DomainNotFound)?;
-            domain_ids.insert(domain_code, domain_id);
+                .ok_or(NavigationError::ItemNotFound)?;
+            tree_ids.insert(domain_code, domain_id);
         }
-        for domain_id in domain_ids.values() {
+        for domain_id in tree_ids.values() {
             move_positions_out_of_way(&tx, *domain_id)?;
         }
 
         let mut next_id = Self::next_id_tx(&tx)?;
         let mut restored_item_count = 0;
         for item in items {
-            let domain_id = domain_ids
+            let domain_id = tree_ids
                 .get(item.domain_code)
                 .copied()
                 .ok_or(NavigationError::DomainNotFound)?;
@@ -399,9 +428,9 @@ impl NavigationRepository for SqliteNavigationRepository {
                 .query_row(
                     "SELECT EXISTS(
                         SELECT 1
-                        FROM navigation_domain_menu_items i
+                        FROM navigation_menu_tree_items i
                         JOIN navigation_menus m ON m.id = i.menu_id
-                        WHERE i.domain_id = ?1 AND m.menu_code = ?2
+                        WHERE i.tree_id = ?1 AND m.menu_code = ?2
                     )",
                     params![domain_id, item.menu_code],
                     |row| row.get::<_, i64>(0),
@@ -416,9 +445,9 @@ impl NavigationRepository for SqliteNavigationRepository {
                 .map(|parent_menu_code| {
                     tx.query_row(
                         "SELECT i.id
-                         FROM navigation_domain_menu_items i
+                         FROM navigation_menu_tree_items i
                          JOIN navigation_menus m ON m.id = i.menu_id
-                         WHERE i.domain_id = ?1 AND m.menu_code = ?2",
+                         WHERE i.tree_id = ?1 AND m.menu_code = ?2",
                         params![domain_id, parent_menu_code],
                         |row| row.get::<_, i64>(0),
                     )
@@ -437,26 +466,34 @@ impl NavigationRepository for SqliteNavigationRepository {
                 .map_err(storage_error)?
                 .ok_or(NavigationError::MenuNotFound)?;
             tx.execute(
-                "INSERT INTO navigation_domain_menu_items
-                    (id, domain_id, menu_id, parent_item_id, position)
-                 VALUES (?1, ?2, ?3, ?4, ?5)",
+                "INSERT INTO navigation_menu_tree_items
+                    (id, tree_id, menu_id, parent_item_id, position, child_display)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)",
                 params![
                     next_id,
                     domain_id,
                     menu_id,
                     parent_item_id,
                     item.position,
+                    default_child_display(item.menu_code).as_storage(),
                 ],
             )
             .map_err(storage_error)?;
             next_id += 1;
             restored_item_count += 1;
         }
-        for domain_id in domain_ids.values() {
-            Self::normalize_domain_positions(&tx, *domain_id)?;
+        for domain_id in tree_ids.values() {
+            Self::normalize_tree_positions(&tx, *domain_id)?;
         }
         tx.commit().map_err(storage_error)?;
         Ok(restored_item_count)
+    }
+}
+
+fn default_child_display(menu_code: &str) -> NavigationMenuChildDisplay {
+    match menu_code {
+        "CORE" | "AGENT_OPERATIONS" | "DATA" => NavigationMenuChildDisplay::Flyout,
+        _ => NavigationMenuChildDisplay::Inline,
     }
 }
 

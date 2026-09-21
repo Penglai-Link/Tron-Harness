@@ -6,9 +6,8 @@ pub const ADVANCED_DOMAIN_CODE: &str = "ADVANCED";
 pub const ZH_CN: &str = "zh-CN";
 pub const EN_US: &str = "en-US";
 
-/// Domain rendered by a dedicated shell panel instead of the primary navigation tree.
-pub const CHAT_PANEL_DOMAIN_CODE: &str = "CHAT";
-pub const PANEL_DOMAIN_CODES: &[&str] = &[CHAT_PANEL_DOMAIN_CODE];
+/// A built-in menu tree rendered by the chat sidebar rather than the primary navigation.
+pub const CHAT_PANEL_MENU_TREE_CODE: &str = "CHAT_PANEL";
 
 /// Widget menu codes are stored in the `page_code` column of a `Widget` menu.
 pub const WIDGET_CHAT_NEW_SESSION: &str = "chat.newSession";
@@ -68,6 +67,30 @@ impl MenuType {
     }
 }
 
+/// Controls how a group item reveals its children in a menu tree.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavigationMenuChildDisplay {
+    Inline,
+    Flyout,
+}
+
+impl NavigationMenuChildDisplay {
+    pub fn as_storage(self) -> &'static str {
+        match self {
+            Self::Inline => "Inline",
+            Self::Flyout => "Flyout",
+        }
+    }
+
+    pub fn from_storage(value: &str) -> Result<Self, NavigationError> {
+        match value {
+            "Inline" => Ok(Self::Inline),
+            "Flyout" => Ok(Self::Flyout),
+            _ => Err(NavigationError::StorageFailure),
+        }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LocalizedText {
     pub zh_cn: String,
@@ -98,6 +121,42 @@ pub struct NavigationDomain {
     pub updated_at: String,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum NavigationMenuTreeKind {
+    Domain,
+    Panel,
+}
+
+impl NavigationMenuTreeKind {
+    pub fn as_storage(self) -> &'static str {
+        match self {
+            Self::Domain => "Domain",
+            Self::Panel => "Panel",
+        }
+    }
+
+    pub fn from_storage(value: &str) -> Result<Self, NavigationError> {
+        match value {
+            "Domain" => Ok(Self::Domain),
+            "Panel" => Ok(Self::Panel),
+            _ => Err(NavigationError::StorageFailure),
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NavigationMenuTree {
+    pub id: SnowflakeId,
+    pub tree_code: String,
+    pub tree_kind: NavigationMenuTreeKind,
+    pub name: LocalizedText,
+    pub description: LocalizedText,
+    pub built_in: bool,
+    pub enabled: bool,
+    pub created_at: String,
+    pub updated_at: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NavigationMenu {
     pub id: SnowflakeId,
@@ -119,6 +178,7 @@ pub struct NavigationTreeItem {
     pub menu: NavigationMenu,
     pub parent_menu_code: Option<String>,
     pub position: i64,
+    pub child_display: NavigationMenuChildDisplay,
     pub children: Vec<Self>,
 }
 

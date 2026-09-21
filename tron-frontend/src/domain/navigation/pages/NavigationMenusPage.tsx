@@ -137,7 +137,7 @@ export function NavigationMenusPage() {
       setRecords(page.records);
       setTotal(page.total);
     }).catch((error: unknown) => {
-      if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : text("errors.loadMenus", "菜单池加载失败", "Menu pool could not be loaded"));
+      if (!controller.signal.aborted) toast.error(error instanceof Error ? error.message : text("errors.loadMenus", "菜单定义加载失败", "Menu definitions could not be loaded"));
     }).finally(() => {
       if (!controller.signal.aborted) setLoading(false);
     });
@@ -241,7 +241,7 @@ export function NavigationMenusPage() {
 
   return (
     <>
-      <PageHeader title={text("menus.title", "菜单池", "Menu pool")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button><Button onClick={openCreate}><Plus size={16} aria-hidden="true" />{text("actions.newMenu", "新建菜单", "New menu")}</Button></>} />
+      <PageHeader title={text("menus.title", "菜单定义", "Menu Definitions")} actions={<><Button variant="secondary" disabled={loading} onClick={() => setRefreshKey((value) => value + 1)}><RefreshCcw size={16} aria-hidden="true" />{text("actions.refresh", "刷新", "Refresh")}</Button><Button onClick={openCreate}><Plus size={16} aria-hidden="true" />{text("actions.newMenu", "新建菜单", "New menu")}</Button></>} />
 
       <ModalDialog open={Boolean(editor)} title={editor ? (editingCode ? text("menus.edit", "编辑菜单", "Edit menu") : text("menus.create", "新建菜单", "New menu")) : ""} className="max-h-[88vh] max-w-2xl overflow-y-auto">
         {editor ? (

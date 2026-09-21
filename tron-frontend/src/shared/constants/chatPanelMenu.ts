@@ -1,6 +1,6 @@
 import type { NavigationRuntimeTree } from "@/shared/types/Navigation";
 
-export const CHAT_PANEL_DOMAIN_CODE = "CHAT";
+export const CHAT_PANEL_MENU_TREE_CODE = "CHAT_PANEL";
 
 export const CHAT_PANEL_ROOT_MENU_CODE = "CHAT_SESSIONS";
 
@@ -11,7 +11,7 @@ export const CHAT_PANEL_WIDGET_KEYS = {
 } as const;
 
 export const DEFAULT_CHAT_PANEL_MENU_TREE: NavigationRuntimeTree = {
-  domainCode: CHAT_PANEL_DOMAIN_CODE,
+  domainCode: CHAT_PANEL_MENU_TREE_CODE,
   locale: "zh-CN",
   maxDepth: 3,
   menus: [
@@ -22,6 +22,7 @@ export const DEFAULT_CHAT_PANEL_MENU_TREE: NavigationRuntimeTree = {
       icon: null,
       pageCode: null,
       url: null,
+      childDisplay: "Inline",
       children: [
         {
           menuCode: "CHAT_NEW_SESSION",
@@ -30,6 +31,7 @@ export const DEFAULT_CHAT_PANEL_MENU_TREE: NavigationRuntimeTree = {
           icon: null,
           pageCode: CHAT_PANEL_WIDGET_KEYS.newSession,
           url: null,
+          childDisplay: "Inline",
           children: [],
         },
         {
@@ -39,6 +41,7 @@ export const DEFAULT_CHAT_PANEL_MENU_TREE: NavigationRuntimeTree = {
           icon: null,
           pageCode: CHAT_PANEL_WIDGET_KEYS.projects,
           url: null,
+          childDisplay: "Inline",
           children: [],
         },
         {
@@ -48,6 +51,7 @@ export const DEFAULT_CHAT_PANEL_MENU_TREE: NavigationRuntimeTree = {
           icon: null,
           pageCode: CHAT_PANEL_WIDGET_KEYS.recents,
           url: null,
+          childDisplay: "Inline",
           children: [],
         },
       ],

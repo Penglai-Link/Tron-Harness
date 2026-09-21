@@ -5,6 +5,7 @@ import {
   Boxes,
   KeyRound,
   ListTree,
+  ListTodo,
   Keyboard,
   Network,
   PanelTop,
@@ -65,6 +66,12 @@ export const settingsNavigation = [
         translationKey: "shell:settings.items.prompts",
       },
       {
+        label: "Task Flows",
+        href: "/settings/task-flows",
+        icon: ListTodo,
+        translationKey: "shell:settings.items.taskFlows",
+      },
+      {
         label: "Resources",
         href: "/settings/resources",
         icon: Archive,
@@ -96,12 +103,6 @@ export const settingsNavigation = [
     translationKey: "shell:settings.groups.registry",
     items: [
       {
-        label: "Memory Domains",
-        href: "/settings/memory-domains",
-        icon: Boxes,
-        translationKey: "shell:settings.items.memoryDomains",
-      },
-      {
         label: "Skill Center",
         href: "/settings/skills",
         icon: Package,
@@ -132,6 +133,12 @@ export const settingsNavigation = [
         href: "/admin/workspace",
         icon: Settings2,
         translationKey: "shell:settings.items.workspaceAdmin",
+      },
+      {
+        label: "Memory Domains",
+        href: "/settings/memory-domains",
+        icon: Boxes,
+        translationKey: "shell:settings.items.memoryDomains",
       },
       {
         label: "Navigation Domains",

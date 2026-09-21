@@ -10,37 +10,33 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
 function emptyTaskOptions(): TaskOptions {
   return {
-    defaultStatuses: {
-      bug: "Open",
-      featureChild: "Open",
-      featureRoot: "Open",
-    },
+    flow: { flowCode: "", name: "", statuses: [] },
     priorities: [],
     sourceTypes: [],
-    statusRules: {
-      bug: [],
-      featureChild: [],
-      featureRoot: [],
-    },
     statuses: [],
     taskTypes: [],
   };
 }
 
-export function useTaskOptions(): TaskOptions {
+export function useTaskOptions(workspaceCode = ""): TaskOptions {
   const dataSource = getServiceDataSource("task");
   const [options, setOptions] = useState(() => (
-    dataSource === "api" ? emptyTaskOptions() : getTaskOptions()
+    dataSource === "api" ? emptyTaskOptions() : getTaskOptions(workspaceCode)
   ));
 
   useEffect(() => {
     if (dataSource !== "api") {
-      setOptions(getTaskOptions());
+      setOptions(getTaskOptions(workspaceCode));
+      return;
+    }
+
+    if (!workspaceCode) {
+      setOptions(emptyTaskOptions());
       return;
     }
 
     const controller = new AbortController();
-    fetchTaskOptions(controller.signal)
+    fetchTaskOptions(workspaceCode, controller.signal)
       .then(setOptions)
       .catch((error: unknown) => {
         if (controller.signal.aborted) return;
@@ -49,7 +45,7 @@ export function useTaskOptions(): TaskOptions {
       });
 
     return () => controller.abort();
-  }, [dataSource]);
+  }, [dataSource, workspaceCode]);
 
   return options;
 }

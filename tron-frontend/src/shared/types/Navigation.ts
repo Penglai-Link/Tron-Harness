@@ -1,5 +1,6 @@
 export type NavigationMenuType = "Group" | "Internal" | "ExternalLink" | "Widget";
 export type NavigationMenuSource = "BuiltIn" | "Custom";
+export type NavigationMenuChildDisplay = "Inline" | "Flyout";
 
 export interface NavigationLocalizedText {
   "zh-CN": string;
@@ -22,6 +23,7 @@ export interface NavigationRuntimeMenu {
   icon: string | null;
   pageCode: string | null;
   url: string | null;
+  childDisplay: NavigationMenuChildDisplay;
   children: NavigationRuntimeMenu[];
 }
 
@@ -44,6 +46,19 @@ export interface NavigationAdminDomain {
   updatedAt: number;
 }
 
+export type NavigationMenuTreeKind = "Domain" | "Panel";
+
+export interface NavigationAdminMenuTree {
+  treeCode: string;
+  treeKind: NavigationMenuTreeKind;
+  name: NavigationLocalizedText;
+  description: NavigationLocalizedText;
+  builtIn: boolean;
+  enabled: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface NavigationAdminMenu {
   menuCode: string;
   source: NavigationMenuSource;
@@ -58,7 +73,9 @@ export interface NavigationAdminMenu {
 }
 
 export interface NavigationAdminTreeItem extends NavigationAdminMenu {
+  parentMenuCode: string | null;
   position: number;
+  childDisplay: NavigationMenuChildDisplay;
   children: NavigationAdminTreeItem[];
 }
 

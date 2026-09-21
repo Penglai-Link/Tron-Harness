@@ -1,12 +1,11 @@
-pub(super) const NAVIGATION_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260829_0002_create_navigation_management.sql"
-);
-pub(super) const NAVIGATION_AGENTS_SPLIT_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260902_0001_split_workspace_agents_navigation.sql"
-);
-pub(super) const CHAT_PANEL_NAVIGATION_MIGRATION: &str = include_str!(
-    "../../../../../migrations/20260915_0001_chat_panel_navigation.sql"
-);
+pub(super) const NAVIGATION_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260829_0002_create_navigation_management.sql");
+pub(super) const NAVIGATION_AGENTS_SPLIT_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260902_0001_split_workspace_agents_navigation.sql");
+pub(super) const CHAT_PANEL_NAVIGATION_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260915_0001_chat_panel_navigation.sql");
+pub(super) const NAVIGATION_MENU_TREES_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260922_0001_create_navigation_menu_trees.sql");
 pub(super) const RESOURCE_MANAGEMENT_SIMPLIFY_MIGRATION: &str =
     include_str!("../../../../../migrations/20260818_0001_simplify_resource_management.sql");
 pub(super) const CHAT_SESSION_ATTACHMENTS_RESOURCE_MIGRATION: &str =
@@ -18,6 +17,8 @@ pub(super) const TASKS_MIGRATION: &str =
     include_str!("../../../../../migrations/20260516_0008_create_task_management_tasks.sql");
 pub(super) const TASKS_SUPERPOWER_RESET_MIGRATION: &str =
     include_str!("../../../../../migrations/20260519_0010_reset_task_management_superpower.sql");
+pub(super) const TASK_FLOWS_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260921_0002_create_task_flows.sql");
 pub(super) const AUTOMATIONS_MIGRATION: &str = include_str!(
     "../../../../../migrations/20260519_0011_create_automation_management_automations.sql"
 );

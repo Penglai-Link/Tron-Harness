@@ -1,6 +1,6 @@
 use crate::shared::id::SnowflakeId;
 
-use super::{TaskPriority, TaskSourceType, TaskStatus, TaskType};
+use super::{TaskPriority, TaskSourceType, TaskType};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Task {
@@ -11,8 +11,9 @@ pub struct Task {
     pub title: String,
     pub description: Option<String>,
     pub execution_result: Option<String>,
-    pub status: TaskStatus,
-    pub previous_status: Option<TaskStatus>,
+    pub flow_code: String,
+    pub status: String,
+    pub previous_status: Option<String>,
     pub priority: TaskPriority,
     pub task_type: TaskType,
     pub source_type: TaskSourceType,

@@ -8,11 +8,10 @@ use crate::{
     domain::{
         app::AppError,
         task::{
-            PagedTaskRecords, TASK_STATUSES, Task, TaskCodeLink, TaskDetail, TaskError,
+            PagedTaskRecords, Task, TaskCodeLink, TaskDetail, TaskError, TaskFlow, TaskFlowDraft,
             TaskKanbanColumn, TaskLifecycleResult, TaskListItem, TaskListQuery, TaskOptions,
-            TaskPriority, TaskSourceType, TaskStatus, TaskSummary, TaskType, TaskUserAssignment,
-            infer_task_role, task_default_status_for_role, task_options,
-            task_status_allowed_for_role, task_statuses_for_role,
+            TaskPriority, TaskSourceType, TaskSummary, TaskType, TaskUserAssignment,
+            WorkspaceTaskFlow,
         },
         workspace::{WorkspaceError, WorkspaceStatus},
     },
@@ -24,6 +23,7 @@ use crate::{
 };
 
 mod events;
+mod flows;
 mod projection;
 mod repository_access;
 mod task_projection;
@@ -66,12 +66,31 @@ pub struct UpdateTaskCommand {
 
 #[derive(Debug, Clone)]
 pub struct UpdateTaskStatusCommand {
-    pub status: TaskStatus,
+    pub status: String,
     pub progress: Option<u8>,
 }
 
 pub trait TaskRepository: Send {
     fn list_tasks(&mut self) -> Result<Vec<Task>, TaskError>;
+    fn list_task_flows(&mut self) -> Result<Vec<TaskFlow>, TaskError>;
+    fn get_task_flow(&mut self, flow_code: &str) -> Result<Option<TaskFlow>, TaskError>;
+    fn create_task_flow(&mut self, flow: &TaskFlow) -> Result<(), TaskError>;
+    fn update_task_flow(&mut self, flow: &TaskFlow) -> Result<(), TaskError>;
+    fn delete_task_flow(&mut self, flow_code: &str) -> Result<(), TaskError>;
+    fn workspace_task_flow_code(
+        &mut self,
+        workspace_code: &str,
+    ) -> Result<Option<String>, TaskError>;
+    fn assign_workspace_task_flow(
+        &mut self,
+        workspace_code: &str,
+        flow_code: &str,
+    ) -> Result<(), TaskError>;
+    fn update_workspace_task_flow(
+        &mut self,
+        workspace_code: &str,
+        flow_code: &str,
+    ) -> Result<(), TaskError>;
     fn next_id(&mut self) -> Result<i64, TaskError>;
     fn create_task(&mut self, task: &Task) -> Result<(), TaskError>;
     fn update_task(&mut self, task: &Task) -> Result<(), TaskError>;

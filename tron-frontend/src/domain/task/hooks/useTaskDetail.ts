@@ -19,6 +19,7 @@ function emptyTaskDetail(taskCode: string): TaskDetailData {
     createdAt: "",
     description: null,
     executionResult: null,
+    flowCode: "",
     id: "",
     modelCode: null,
     parent: null,
