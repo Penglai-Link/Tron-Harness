@@ -779,6 +779,15 @@ impl ModelProviderService {
             .map_err(remote_error)
     }
 
+    /// Returns the refreshed token belonging to the currently active profile.
+    /// The caller is the local desktop frontend; credentials remain encrypted at rest.
+    pub async fn get_person_ai_access_token(&self) -> Result<String, ModelProviderError> {
+        Ok(self
+            .active_credentials(ModelProviderCode::PersonAi)
+            .await?
+            .token)
+    }
+
     /// Makes a selected local profile the active Person-AI runtime identity.
     ///
     /// The shared provider row remains the runtime entry point for model calls,

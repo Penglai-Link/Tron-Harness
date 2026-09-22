@@ -24,6 +24,7 @@ struct BootstrapStatusQuery {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/bootstrap/status", get(bootstrap_status))
+        .route("/api/v1/profiles/active/token", get(active_profile_token))
         .route("/api/v1/profiles", get(list_profiles))
         .route("/api/v1/profiles/{profile_id}/avatar", get(profile_avatar))
         .route(
@@ -32,6 +33,17 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/profiles/{profile_id}", delete(remove_profile))
         .route("/api/v1/profiles/pending", post(create_pending_profile))
+}
+
+async fn active_profile_token(State(state): State<AppState>) -> Response {
+    match state.model_providers.get_person_ai_access_token().await {
+        Ok(token) => Json(ApiResponse::success(serde_json::json!({ "token": token }))).into_response(),
+        Err(_) => generic_profile_error(
+            StatusCode::UNAUTHORIZED,
+            "PERSONAI_PROFILE_AUTH_REQUIRED",
+            "The active PersonAI profile is not authorized",
+        ),
+    }
 }
 
 async fn remove_profile(State(state): State<AppState>, Path(profile_id): Path<String>) -> Response {

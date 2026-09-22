@@ -4,9 +4,9 @@ import type {
   AuthSession,
   AuthenticatedUser,
 } from "@/domain/auth/model";
-import { fetchBootstrapProfileStatus } from "@/domain/profile/api";
+import { fetchActiveProfileToken, fetchBootstrapProfileStatus } from "@/domain/profile/api";
 import { useTabStore } from "@/store/tabStore";
-import { setApiUnauthorizedHandler } from "@/shared/api/httpClient";
+import { setApiAccessToken, setApiUnauthorizedHandler } from "@/shared/api/httpClient";
 
 export type AuthStatus = "checking" | "authenticated" | "unauthenticated";
 
@@ -62,6 +62,8 @@ async function loadActiveProfile(
       transitionToUnauthenticated(set);
       return false;
     }
+    const token = await fetchActiveProfileToken();
+    setApiAccessToken(token.token);
     set({
       session: sessionFromProfile(activeProfile, bootstrap.avatarUrl, bootstrap.account),
       status: "authenticated",

@@ -64,6 +64,12 @@ export function fetchBootstrapProfileStatus(signal?: AbortSignal, refreshAccount
   });
 }
 
+export function fetchActiveProfileToken() {
+  return requestApi<{ token: string }>("GET /api/v1/profiles/active/token", {
+    retryOnUnauthorized: false,
+  });
+}
+
 export function fetchProfiles(signal?: AbortSignal) {
   return requestApi<PersonAiProfile[]>(profileApiEndpoints.list, {
     retryOnUnauthorized: false,
