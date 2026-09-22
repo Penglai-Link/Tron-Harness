@@ -250,7 +250,7 @@ const workspaceInternalAgentSeed: WorkspaceInternalAgentSeed[] = [
     selectedServerCodes: [],
     selectedToolCodes: [],
     toolAssignmentMode: "all_platform_tools",
-    toolExposureMode: "direct_list",
+    toolExposureMode: "domain_discovery",
   },
 ];
 

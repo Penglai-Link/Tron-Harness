@@ -17,7 +17,9 @@ fn build_project_service(
 ) -> ProjectService {
     let repository = SqliteProjectRepository::connect(database_url)
         .expect("project SQLite repository should initialize");
-    ProjectService::new(repository, workspaces, apps)
+    ProjectService::new(repository, workspaces, apps).with_directory_inspector(Arc::new(
+        crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
+    ))
 }
 
 fn build_task_service(

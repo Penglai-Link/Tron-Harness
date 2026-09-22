@@ -1,3 +1,4 @@
+mod productivity_tools;
 mod ask_user;
 mod coding_tools;
 mod discovery;
@@ -60,6 +61,8 @@ pub fn register_default_agent_tools<R, S, E>(
     mcp: McpService,
     memory: MemoryService<R, S, E>,
     short_term_memory: ShortTermMemoryService,
+    code_editor: std::sync::Arc<dyn crate::application::agent::CodeFileEditor>,
+    terminal: std::sync::Arc<dyn crate::application::agent::AgentTerminal>,
 ) -> Result<(), ToolError>
 where
     R: RagIngestRepository
@@ -85,7 +88,8 @@ where
         prompts,
         mcp,
     );
-    tools.extend(coding_tools::coding_domain_tools(resources.clone()));
+    tools.extend(coding_tools::coding_domain_tools(resources.clone(), code_editor, terminal));
+    tools.extend(productivity_tools::tools());
     tools.extend(memory_tools::memory_business_tools(memory));
     tools.extend(short_term_memory_tools::short_term_memory_tools(
         short_term_memory,

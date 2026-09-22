@@ -91,6 +91,13 @@ impl ShortTermMemoryService {
                     "hiddenTools": hidden_tools_snapshot,
                 },
                 "executionScope": context.execution_scope,
+                "applicationContext": {
+                    "executionScope": context.execution_scope,
+                    "messages": memory.prompt_prefix.iter()
+                        .filter(|message| super::assembler::is_application_context(message))
+                        .map(|message| json!({ "role": message.role, "content": message.text_content() }))
+                        .collect::<Vec<_>>(),
+                },
                 "memory": {
                     "policyHash": memory_hash,
                     "todoEnabled": memory.todo_enabled,
@@ -206,6 +213,9 @@ fn prompt_prefix_messages(
                 "role": message.role,
                 "content": message.text_content(),
             });
+            if super::assembler::is_application_context(message) {
+                snapshot["contextKind"] = json!("application_execution_context");
+            }
             if let Some(Some(source)) = sources.get(index) {
                 snapshot["catalogKey"] = json!(source.catalog_key);
                 snapshot["promptCode"] = json!(source.prompt_code);

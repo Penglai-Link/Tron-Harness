@@ -6,12 +6,35 @@ impl ShortTermMemoryService {
     ) -> Result<Option<serde_json::Value>, ShortTermMemoryError> {
         let snapshot = self.repository().latest_context_epoch_snapshot(session_code)?;
         let detail = match (block_code, snapshot.as_ref()) {
-            ("systemPrompt", Some(snapshot)) => snapshot.get("promptPrefix").cloned(),
+            ("systemPrompt", Some(snapshot)) => {
+                snapshot.get("promptPrefix").cloned().map(|mut prefix| {
+                    if let Some(messages) = prefix
+                        .get_mut("messages")
+                        .and_then(serde_json::Value::as_array_mut)
+                    {
+                        messages.retain(|message| {
+                            message
+                                .get("contextKind")
+                                .and_then(serde_json::Value::as_str)
+                                != Some("application_execution_context")
+                        });
+                        prefix["messageCount"] = json!(messages.len());
+                    }
+                    prefix
+                })
+            }
+            ("applicationContext", Some(snapshot)) => Some(
+                snapshot
+                    .get("applicationContext")
+                    .cloned()
+                    .unwrap_or_else(|| json!({"executionScope": null, "messages": []})),
+            ),
             ("toolSchema", Some(snapshot)) => snapshot
                 .get("exposedTools")
                 .or_else(|| snapshot.get("tools"))
                 .cloned(),
             ("familyContext", Some(snapshot)) => snapshot.get("familyContext").cloned(),
+            ("applicationContext", None) => Some(json!({"executionScope": null, "messages": []})),
             (_, None) => None,
             _ => None,
         };

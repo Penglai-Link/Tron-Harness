@@ -113,6 +113,7 @@ pub(crate) struct AgentRunContextBuilder {
     short_term_memory: Option<ShortTermMemoryService>,
     prompt_service: Option<PromptService>,
     auto_model_route: Option<AutoModelRouteContext>,
+    directory_inspector: Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
 }
 
 impl AgentRunContextBuilder {
@@ -128,6 +129,7 @@ impl AgentRunContextBuilder {
         short_term_memory: Option<ShortTermMemoryService>,
         prompt_service: Option<PromptService>,
         auto_model_route: Option<AutoModelRouteContext>,
+        directory_inspector: Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     ) -> Self {
         Self {
             workspaces,
@@ -141,6 +143,7 @@ impl AgentRunContextBuilder {
             short_term_memory,
             prompt_service,
             auto_model_route,
+            directory_inspector,
         }
     }
 
@@ -424,7 +427,7 @@ impl AgentRunContextBuilder {
                 &locale,
             )));
         }
-        let prompt_prefix_messages = messages.clone();
+        let mut prompt_prefix_messages = messages.clone();
         let user_prompt_message = user_prompt_message(prompt.clone(), &requested_attachments);
         messages.push(user_prompt_message.clone());
 
@@ -434,8 +437,7 @@ impl AgentRunContextBuilder {
             .or_else(|| app.as_ref().map(|app| app.local_directory.clone()));
         let branch_name = execution_scope_override
             .as_ref()
-            .and_then(|scope| scope.branch_name.clone())
-            .or_else(|| app.as_ref().and_then(|app| app.default_branch.clone()));
+            .and_then(|scope| scope.branch_name.clone());
         let repository_url = execution_scope_override
             .as_ref()
             .and_then(|scope| scope.repository_url.clone())
@@ -469,6 +471,7 @@ impl AgentRunContextBuilder {
             effective_tools,
             tool_exposure,
             execution_scope: execution_scope_override.unwrap_or(AgentExecutionScope {
+                applications: Vec::new(),
                 project_code: None,
                 app_code: app_code.clone(),
                 repository_url,
@@ -483,6 +486,25 @@ impl AgentRunContextBuilder {
             short_term_memory: None,
             started_at: chrono::Utc::now().to_rfc3339(),
         };
+        if let Some(message) =
+            crate::application::agent::execution_context_message(&context.execution_scope)
+        {
+            prompt_prefix_messages.push(message.clone());
+            prompt_prefix_sources.push(None);
+            context
+                .messages
+                .insert(context.messages.len().saturating_sub(1), message);
+        }
+        if context.agent_kind == crate::domain::agent::AgentKind::React {
+            if let Some(inspector) = &self.directory_inspector {
+                if let Some(message) = crate::application::agent::project_instructions_message(&context.execution_scope, inspector.as_ref())
+                    .map_err(AgentInvocationError::RuntimeFailed)? {
+                    prompt_prefix_messages.push(message.clone());
+                    prompt_prefix_sources.push(None);
+                    context.messages.insert(context.messages.len().saturating_sub(1), message);
+                }
+            }
+        }
         activate_short_term_memory(
             self.short_term_memory.as_ref(),
             &mut context,

@@ -53,6 +53,9 @@ pub async fn create_agent_run(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
+    .with_directory_inspector(Some(std::sync::Arc::new(
+        crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
+    )))
     .with_active_runs(state.active_runs.clone())
     .with_prompt_service(state.prompts.clone());
     match service

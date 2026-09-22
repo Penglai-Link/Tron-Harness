@@ -49,6 +49,8 @@ pub struct AgentInvocationService {
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     runtime_http_client: reqwest::Client,
+    directory_inspector:
+        Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     short_term_memory: Option<ShortTermMemoryService>,
     prompt_service: Option<PromptService>,
     auto_model_route: Option<AutoModelRouteContext>,
@@ -82,12 +84,21 @@ impl AgentInvocationService {
             model_client,
             tool_registry,
             runtime_http_client,
+            directory_inspector: None,
             short_term_memory: None,
             prompt_service: None,
             auto_model_route: None,
             auto_model_router: None,
             active_runs: ActiveRunRegistry::new(),
         }
+    }
+
+    pub fn with_directory_inspector(
+        mut self,
+        inspector: Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
+    ) -> Self {
+        self.directory_inspector = inspector;
+        self
     }
 
     pub fn with_short_term_memory(mut self, service: ShortTermMemoryService) -> Self {
@@ -132,6 +143,7 @@ impl AgentInvocationService {
             self.short_term_memory.clone(),
             self.prompt_service.clone(),
             self.auto_model_route.clone(),
+            self.directory_inspector.clone(),
         )
     }
 
@@ -204,6 +216,7 @@ impl AgentInvocationService {
             self.event_bus.clone(),
             self.runtime_http_client.clone(),
         )
+        .with_directory_inspector(self.directory_inspector.clone())
         .with_short_term_memory(self.short_term_memory.clone())
         .with_active_runs(self.active_runs.clone())
         .with_auto_model_router(self.auto_model_router.clone());

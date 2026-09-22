@@ -20,6 +20,8 @@ pub(super) struct ReactRuntime {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     short_term_memory: Option<ShortTermMemoryService>,
+    directory_inspector:
+        Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     active_runs: ActiveRunRegistry,
     auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
 }
@@ -34,6 +36,9 @@ impl ReactRuntime {
         short_term_memory: Option<ShortTermMemoryService>,
         active_runs: ActiveRunRegistry,
         auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
+        directory_inspector: Option<
+            Arc<dyn crate::application::project::ApplicationDirectoryInspector>,
+        >,
     ) -> Self {
         Self {
             key,
@@ -44,6 +49,7 @@ impl ReactRuntime {
             short_term_memory,
             active_runs,
             auto_model_router,
+            directory_inspector,
         }
     }
 
@@ -67,6 +73,7 @@ impl ReactRuntime {
                 self.tool_registry.clone(),
                 self.event_bus.clone(),
             )
+            .with_directory_inspector(self.directory_inspector.clone())
             .with_short_term_memory(self.short_term_memory.clone())
             .with_auto_model_router(self.auto_model_router.clone())
             .build()

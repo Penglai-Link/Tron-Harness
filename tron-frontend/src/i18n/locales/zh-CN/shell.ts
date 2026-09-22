@@ -47,6 +47,9 @@ export const shell = {
       unpin: "取消置顶",
     },
     projectDialog: {
+      loadingApps: "正在查询应用…",
+      retryApps: "应用查询失败，点击重试",
+      noApps: "当前工作区暂无可关联的应用",
       addApp: "添加应用",
       createTitle: "创建项目",
       editTitle: "编辑项目",

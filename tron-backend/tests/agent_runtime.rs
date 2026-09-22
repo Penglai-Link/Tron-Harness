@@ -631,6 +631,7 @@ fn base_context(run_code: &str) -> AgentRunContext {
         effective_tools: Vec::new(),
         tool_exposure: Default::default(),
         execution_scope: AgentExecutionScope {
+            applications: Vec::new(),
             project_code: None,
             app_code: Some("APP-1".into()),
             repository_url: Some("https://example.test/repo.git".into()),

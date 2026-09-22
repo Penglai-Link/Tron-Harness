@@ -103,6 +103,8 @@ export interface ChatTokenEstimateSnapshot {
 }
 
 export interface ChatContextBudgetBreakdown {
+  applicationContextTokens?: number;
+  applicationContextMessageCount?: number;
   promptPrefixMessageCount?: number | null;
   promptPrefixTokens: number;
   checkpointTokens: number;

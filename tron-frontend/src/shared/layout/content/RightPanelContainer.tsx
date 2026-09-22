@@ -111,12 +111,12 @@ const RightPanelTabs = memo(function RightPanelTabs({
     return panelConfig?.rightPanel
       ? {
           key: pageAttributesKey,
-          label: t('content.attributes'),
+          label: panelConfig.rightPanelLabel ?? t('content.attributes'),
           closable: false,
           children: panelConfig?.rightPanel,
         }
       : null;
-  }, [pageAttributesKey, panelConfig?.rightPanel, tab.tabId]);
+  }, [pageAttributesKey, panelConfig?.rightPanel, panelConfig?.rightPanelLabel, tab.tabId]);
 
   const fileTabKeys = useFileTabsStore((state) => state.fileTabKeys);
   const fileTabLabels = useFileTabsStore((state) => state.fileTabLabels);
@@ -267,7 +267,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
             }
           />
           <DropdownMenuContent align="end" side="bottom" sideOffset={4} className="w-44">
-            {isDesktop ? (
+            {isDesktop && !panelConfig?.rightPanelBrowserOnly ? (
               <DropdownMenuItem onClick={handleOpenFileTab}>
                 <FolderOpen size={14} aria-hidden="true" />
                 <span>{t("content.newFileTab")}</span>

@@ -59,6 +59,8 @@ pub struct AgentToolExposureState {
 #[serde(rename_all = "camelCase")]
 pub struct AgentExecutionScope {
     #[serde(default)]
+    pub applications: Vec<super::ApplicationDirectoryContext>,
+    #[serde(default)]
     pub project_code: Option<String>,
     pub app_code: Option<String>,
     pub repository_url: Option<String>,

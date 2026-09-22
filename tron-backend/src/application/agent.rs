@@ -1,3 +1,7 @@
+mod terminal_execution;
+pub use terminal_execution::{AgentTerminal, TerminalStart, TerminalSnapshot, terminal_owner};
+mod code_editing;
+pub use code_editing::{CodeFileEditor, CodeFileChange};
 mod active_run;
 mod agui_stream;
 pub(crate) mod agui_translate;
@@ -5,6 +9,8 @@ mod business_tools;
 mod canonical_event;
 mod dto;
 mod error;
+mod execution_context;
+pub use execution_context::{execution_context_message, refresh_execution_context, project_instructions_message};
 mod history;
 mod invocation;
 mod management;

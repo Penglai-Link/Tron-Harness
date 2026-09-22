@@ -12,7 +12,9 @@ use super::{
 
 pub(super) struct FsReadTextTool;
 pub(super) struct FsWriteTextTool;
-pub(super) struct FsApplyPatchTool;
+pub(super) struct FsApplyPatchTool(
+    pub std::sync::Arc<dyn crate::application::agent::CodeFileEditor>,
+);
 pub(super) struct FsListTool;
 pub(super) struct FsStatTool;
 
@@ -44,12 +46,14 @@ enum WriteMode {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
+#[serde(deny_unknown_fields)]
 struct FsApplyPatchInput {
     path: String,
     action: PatchAction,
     target: String,
     content: Option<String>,
     replace_all: Option<bool>,
+    expected_count: Option<usize>,
 }
 
 #[derive(Debug, Clone, Copy, Deserialize)]
@@ -145,6 +149,9 @@ impl Tool for FsWriteTextTool {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<crate::domain::agent::ToolExecutionResult, ToolError> {
+        let _edit_guard = super::patch::EDIT_LOCK
+            .lock()
+            .map_err(|_| ToolError::ExecutionFailed("file editing lock unavailable".into()))?;
         let input: FsWriteTextInput = parse_tool_input(request.input)?;
         let path = resolve_path(context, &input.path)?;
         if input.ensure_parent_dirs.unwrap_or(true) {
@@ -189,6 +196,12 @@ impl Tool for FsApplyPatchTool {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<crate::domain::agent::ToolExecutionResult, ToolError> {
+        if request.input.get("patch").is_some() {
+            return super::patch::execute(request.input, context, self.0.as_ref());
+        }
+        let _edit_guard = super::patch::EDIT_LOCK
+            .lock()
+            .map_err(|_| ToolError::ExecutionFailed("file editing lock unavailable".into()))?;
         let input: FsApplyPatchInput = parse_tool_input(request.input)?;
         if input.target.is_empty() {
             return Err(ToolError::ExecutionFailed("target is required".into()));
@@ -196,7 +209,17 @@ impl Tool for FsApplyPatchTool {
         let path = resolve_path(context, &input.path)?;
         let mut source = fs::read_to_string(&path)
             .map_err(|error| ToolError::ExecutionFailed(format!("read failed: {error}")))?;
+        let occurrences = source.matches(&input.target).count();
         let replace_all = input.replace_all.unwrap_or(false);
+        if input
+            .expected_count
+            .is_some_and(|expected| expected != occurrences)
+            || (!replace_all && occurrences > 1)
+        {
+            return Err(ToolError::ExecutionFailed(format!(
+                "target has {occurrences} matches; provide unique context or explicitly use replaceAll with expectedCount"
+            )));
+        }
         let replacement_content = input.content.unwrap_or_default();
         let replacements = match input.action {
             PatchAction::Replace => apply_replace(

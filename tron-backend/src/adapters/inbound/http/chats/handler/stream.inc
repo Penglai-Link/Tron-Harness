@@ -55,6 +55,9 @@ pub async fn send_message(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
+    .with_directory_inspector(Some(std::sync::Arc::new(
+        crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
+    )))
     .with_short_term_memory(state.short_term_memory.clone())
     .with_active_runs(state.active_runs.clone())
     .with_prompt_service(state.prompts.clone())
@@ -200,6 +203,9 @@ pub(crate) async fn stream_message_command(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
+    .with_directory_inspector(Some(std::sync::Arc::new(
+        crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
+    )))
     .with_short_term_memory(state.short_term_memory.clone())
     .with_active_runs(state.active_runs.clone())
     .with_prompt_service(state.prompts.clone())

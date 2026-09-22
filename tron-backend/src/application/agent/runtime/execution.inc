@@ -55,6 +55,15 @@ impl ReactAgent {
                 return Err(AgentError::MaxStepsExceeded);
             }
             steering.inject_at_loop_boundary(context, self.short_term_memory.as_ref())?;
+            if let Some(inspector) = self.directory_inspector.clone() {
+                if crate::application::agent::refresh_execution_context(context, inspector).await? {
+                    // Stateful providers must replay the updated prefix, not retain stale cwd facts.
+                    turn_state = TurnStateAdapter::new(
+                        context.model.protocol,
+                        context.model.responses_stateful_enabled,
+                    );
+                }
+            }
             step_count += 1;
             let tool_schema = match turn_state.prepare_tool_schema(
                 context.model.protocol,

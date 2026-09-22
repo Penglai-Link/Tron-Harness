@@ -1,4 +1,5 @@
 export const chatApiEndpoints = {
+  getSessionApplications: "GET /api/v1/chats/sessions/applications?sessionCode={sessionCode}",
   listChatSessionGroups: "GET /api/v1/chats/session-groups?workspaceCode={workspaceCode}",
   archiveChatSession: "POST /api/v1/chats/sessions/{sessionCode}/archive",
   createChatSession: "POST /api/v1/chats/sessions",

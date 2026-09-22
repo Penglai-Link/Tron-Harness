@@ -1416,7 +1416,7 @@ export function TronChatPanel({
   useEffect(() => {
     if (autoStickToBottomRef.current) scrollToBottom("auto");
     else handleScroll();
-  }, [messages, presentation]);
+  }, [messages, presentation, userInputRequest]);
 
   useEffect(() => {
     autoStickToBottomRef.current = true;
@@ -1588,13 +1588,6 @@ export function TronChatPanel({
                     className="tron-chat__transcript__bot"
                   />
                 )}
-              </div>
-            </section>
-            {sidebarContent ? (
-              <aside className="tron-chat__sidebar">{sidebarContent}</aside>
-            ) : null}
-          </div>
-          <footer className="tron-chat__footer">
             {userInputRequest?.status === "Pending" && onAnswerUserInput ? (
               <ChatUserInputCard
                 disabled={userInputAnswerPending}
@@ -1603,6 +1596,14 @@ export function TronChatPanel({
                 request={userInputRequest}
               />
             ) : null}
+              </div>
+            </section>
+            {sidebarContent ? (
+              <aside className="tron-chat__sidebar">{sidebarContent}</aside>
+            ) : null}
+          </div>
+          <footer className="tron-chat__footer">
+
             {showJumpButton ? (
               <button
                 className="tron-chat__button tron-chat__jump"

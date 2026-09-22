@@ -143,35 +143,13 @@ impl ChatService {
                     .await;
             });
         }
-        let project_scope = if let Some(project_code) = session.project_code.as_deref() {
-            let projects = self
-                .projects
-                .as_ref()
-                .ok_or(ChatSendError::Chat(ChatError::ProjectInvalid))?;
-            let project = projects
-                .resolve_execution_context(&workspace_code, project_code)
-                .map_err(|_| ChatSendError::Chat(ChatError::ProjectInvalid))?;
-            Some(AgentExecutionScope {
-                project_code: Some(project.project_code),
-                app_code: project.primary_app.as_ref().map(|app| app.app_code.clone()),
-                repository_url: project.primary_app.as_ref().and_then(|app| app.repository_url.clone()),
-                local_directory: project.primary_app.as_ref().map(|app| app.local_directory.clone()),
-                branch_name: project.primary_app.as_ref().and_then(|app| app.default_branch.clone()),
-                task_code: session.task_code.clone(),
-                allowed_local_directories: project
-                    .linked_apps
-                    .into_iter()
-                    .map(|app| app.local_directory)
-                    .collect(),
-            })
-        } else {
-            None
+        let project_scope = self
+            .project_execution_scope(&session)
+            .map_err(ChatSendError::Chat)?;
+        let app_code_for_invocation = match project_scope.as_ref() {
+            Some(scope) => scope.app_code.clone(),
+            None => command.app_code.or(session.app_code.clone()),
         };
-        let app_code_for_invocation = project_scope
-            .as_ref()
-            .and_then(|scope| scope.app_code.clone())
-            .or(command.app_code)
-            .or(session.app_code.clone());
         let task_code_for_invocation = command.task_code.or(session.task_code.clone());
         let supports_user_input_requests = command
             .client_capabilities

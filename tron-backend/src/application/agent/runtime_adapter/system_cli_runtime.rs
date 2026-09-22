@@ -100,9 +100,13 @@ impl SystemCliRuntime {
 
         let mut command = Command::new(&self.command_name);
         command.env("NO_COLOR", "1");
-        if let Some(working_directory) = self.working_directory.as_deref()
-            && Path::new(working_directory).exists()
-        {
+        if let Some(working_directory) = self.working_directory.as_deref() {
+            if !Path::new(working_directory).is_absolute() || !Path::new(working_directory).is_dir()
+            {
+                return Err(AgentInvocationError::RuntimeFailed(format!(
+                    "configured working directory `{working_directory}` is unavailable"
+                )));
+            }
             command.current_dir(working_directory);
         }
 
@@ -405,7 +409,7 @@ fn split_stream_chunks(value: &str, max_chars: usize) -> Vec<String> {
 }
 
 fn prompt_from_context(context: &AgentRunContext) -> String {
-    context
+    let prompt = context
         .messages
         .iter()
         .rev()
@@ -420,7 +424,14 @@ fn prompt_from_context(context: &AgentRunContext) -> String {
                 .last()
                 .map(|message| message.text_content().trim().to_string())
                 .unwrap_or_default()
-        })
+        });
+    if prompt.is_empty() {
+        return prompt;
+    }
+    match crate::application::agent::execution_context_message(&context.execution_scope) {
+        Some(scope) => format!("{}\n\n{prompt}", scope.text_content()),
+        None => prompt,
+    }
 }
 
 fn system_agent_name(kind: SystemAgentCliKind) -> &'static str {

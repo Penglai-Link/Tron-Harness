@@ -644,6 +644,8 @@ fn resource_state(test_name: &str) -> AppState {
         state.open_apps.clone(),
         state.memory.clone(),
         state.short_term_memory.clone(),
+        Arc::new(tron_backend::adapters::outbound::code_file_editor::LocalCodeFileEditor),
+            Arc::new(tron_backend::adapters::outbound::agent_terminal::LocalAgentTerminal::default()),
     )
     .expect("resource test tools should register");
     state.agent_tool_registry = agent_tool_registry;

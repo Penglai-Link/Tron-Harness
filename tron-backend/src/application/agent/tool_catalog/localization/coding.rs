@@ -1,5 +1,17 @@
 pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
     match key {
+        "agent.toolCatalog.tools.fs.apply_patch.params.patch" => Some(
+            "Codex-style syntax: *** Begin Patch, then *** Add File: path with +lines; *** Delete File: path; or *** Update File: path, optional *** Move to: path, then @@ hunks. Hunk lines start with a space for context, - for removal, + for addition. @@ anchor skips past a unique exact line; *** End of File anchors the last hunk at EOF. Finish with *** End Patch. Use unique exact context; paths cannot contain ..; up to 100 files.",
+        ),
+        "agent.toolCatalog.tools.fs.apply_patch.params.cwd" => {
+            Some("Patch base directory; defaults to the current selected application/worktree.")
+        }
+        "agent.toolCatalog.tools.fs.apply_patch.params.dryRun" => {
+            Some("Validate and return a diff without modifying files.")
+        }
+        "agent.toolCatalog.tools.fs.apply_patch.params.expectedCount" => Some(
+            "Legacy edit: expected total occurrence count. Without replaceAll, the target must be unique.",
+        ),
         "agent.toolCatalog.domains.bash.name" => Some("Bash Tools"),
         "agent.toolCatalog.domains.bash.description" => {
             Some("Run shell fallback commands with structured arguments.")
@@ -110,13 +122,13 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.write_text.params.ensureParentDirs" => {
             Some("Whether missing parent directories should be created before writing.")
         }
-        "agent.toolCatalog.tools.fs.apply_patch.name" => Some("Patch text file"),
-        "agent.toolCatalog.tools.fs.apply_patch.description" => {
-            Some("Apply a bounded text patch operation to one local file.")
-        }
-        "agent.toolCatalog.tools.fs.apply_patch.sampleResultSummary" => {
-            Some("Returns the target file, action, and replacement count.")
-        }
+        "agent.toolCatalog.tools.fs.apply_patch.name" => Some("Apply code patch"),
+        "agent.toolCatalog.tools.fs.apply_patch.description" => Some(
+            "Edit code with a context-based multi-file patch: add, update, delete, or move files. All operations are validated before writing; dryRun previews changes. Legacy path/action/target text edits remain supported; ambiguous targets are rejected.",
+        ),
+        "agent.toolCatalog.tools.fs.apply_patch.sampleResultSummary" => Some(
+            "Returns changed paths and a bounded diff; dryRun does not write files.",
+        ),
         "agent.toolCatalog.tools.fs.apply_patch.params.path" => Some(
             "Target file path, absolute, relative to the workspace root, or a ~ home-directory path.",
         ),
@@ -129,9 +141,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.apply_patch.params.content" => {
             Some("Replacement or inserted text, depending on the patch action.")
         }
-        "agent.toolCatalog.tools.fs.apply_patch.params.replaceAll" => {
-            Some("Whether the patch should affect every matching target.")
-        }
+        "agent.toolCatalog.tools.fs.apply_patch.params.replaceAll" => Some(
+            "Legacy edit: replace every occurrence explicitly; use expectedCount to guard the match count.",
+        ),
         "agent.toolCatalog.tools.fs.list.name" => Some("List files"),
         "agent.toolCatalog.tools.fs.list.description" => {
             Some("List files and directories under a local path.")
@@ -248,6 +260,18 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
 
 pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
     match key {
+        "agent.toolCatalog.tools.fs.apply_patch.params.patch" => Some(
+            "Codex 风格语法：以 *** Begin Patch 开始，使用 *** Add File: 路径 和 +内容新增；*** Delete File: 路径 删除；*** Update File: 路径 修改，可跟 *** Move to: 新路径 移动，再写 @@ 补丁块。块内空格开头表示上下文，- 删除，+ 新增。@@ 锚点跳过唯一匹配行，*** End of File 将末块限定在文件尾。以 *** End Patch 结束。上下文须精确唯一，路径不含 ..，最多 100 个文件。",
+        ),
+        "agent.toolCatalog.tools.fs.apply_patch.params.cwd" => {
+            Some("补丁基准目录，默认当前选中的应用或 worktree。")
+        }
+        "agent.toolCatalog.tools.fs.apply_patch.params.dryRun" => {
+            Some("校验并返回差异，不修改文件。")
+        }
+        "agent.toolCatalog.tools.fs.apply_patch.params.expectedCount" => {
+            Some("单文件编辑：预期总匹配次数；未指定 replaceAll 时目标必须唯一。")
+        }
         "agent.toolCatalog.domains.bash.name" => Some("命令行工具"),
         "agent.toolCatalog.domains.bash.description" => Some("以结构化参数执行 shell 兜底命令。"),
         "agent.toolCatalog.domains.chat_attachment.name" => Some("会话附件工具"),
@@ -350,12 +374,12 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.write_text.params.ensureParentDirs" => {
             Some("写入前是否自动创建缺失的父目录。")
         }
-        "agent.toolCatalog.tools.fs.apply_patch.name" => Some("修补文本文件"),
-        "agent.toolCatalog.tools.fs.apply_patch.description" => {
-            Some("对单个本地文件执行受限文本修补操作。")
-        }
+        "agent.toolCatalog.tools.fs.apply_patch.name" => Some("应用代码补丁"),
+        "agent.toolCatalog.tools.fs.apply_patch.description" => Some(
+            "使用上下文补丁一次新增、修改、删除或移动多个代码文件；全部校验后再写入，dryRun 可预览。兼容 path/action/target 单文件文本编辑，拒绝歧义匹配。",
+        ),
         "agent.toolCatalog.tools.fs.apply_patch.sampleResultSummary" => {
-            Some("返回目标文件、修补动作和替换次数。")
+            Some("返回变更路径和限定长度的差异；dryRun 不写文件。")
         }
         "agent.toolCatalog.tools.fs.apply_patch.params.path" => {
             Some("目标文件路径，可为绝对路径、相对工作区根目录路径，或 `~` 家目录路径。")
@@ -370,7 +394,7 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
             Some("根据修补动作作为替换文本或插入文本。")
         }
         "agent.toolCatalog.tools.fs.apply_patch.params.replaceAll" => {
-            Some("是否对所有命中的锚点都执行修补。")
+            Some("单文件编辑：显式处理所有匹配项；建议用 expectedCount 校验次数。")
         }
         "agent.toolCatalog.tools.fs.list.name" => Some("列出文件"),
         "agent.toolCatalog.tools.fs.list.description" => Some("列出本地路径下的文件和目录。"),

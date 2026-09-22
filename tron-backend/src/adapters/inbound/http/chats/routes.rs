@@ -18,6 +18,10 @@ use super::short_term_memory::{
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/chats/sessions/{session_code}/terminals", get(super::terminals::list))
+        .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}", get(super::terminals::read))
+        .route("/api/v1/chats/sessions/{session_code}/terminals/{terminal_id}/stop", post(super::terminals::stop))
+        .route("/api/v1/chats/sessions/applications", get(super::application_context::get_session_applications))
         .route("/api/v1/chats/session-groups", get(list_session_groups))
         .route("/api/v1/chats/sessions", post(create_session))
         .route("/api/v1/chats/sessions/get-active-run", get(get_active_run))

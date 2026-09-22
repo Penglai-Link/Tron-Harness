@@ -123,6 +123,7 @@ pub struct AppState {
     pub agent_management: AgentManagementService,
     pub agent_runs: AgentRunHistoryService,
     pub agent_tool_registry: Arc<ToolRegistry>,
+    pub agent_terminal: Arc<dyn crate::application::agent::AgentTerminal>,
     pub active_runs: ActiveRunRegistry,
     pub apps: AppService,
     pub projects: ProjectService,
@@ -393,6 +394,7 @@ impl AppState {
         };
         let short_term_memory = short_term_memory.with_event_bus(event_bus.clone());
         let agent_tool_registry = Arc::new(ToolRegistry::default());
+        let agent_terminal: Arc<dyn crate::application::agent::AgentTerminal> = Arc::new(crate::adapters::outbound::agent_terminal::LocalAgentTerminal::default());
         register_default_agent_tools(
             agent_tool_registry.as_ref(),
             workspaces.clone(),
@@ -407,6 +409,8 @@ impl AppState {
             mcp.clone(),
             memory.clone(),
             short_term_memory.clone(),
+            Arc::new(crate::adapters::outbound::code_file_editor::LocalCodeFileEditor),
+            agent_terminal.clone(),
         )
         .expect("default agent tools should register");
         let (graphs, ontologies, graph_explorer) = if config.graph_storage_path == ":memory:" {
@@ -437,6 +441,7 @@ impl AppState {
         }
         .with_active_runs(active_runs.clone())
         .with_projects(projects.clone())
+        .with_execution_memory(short_term_memory.clone())
         .with_resources(resources.clone())
         .with_prompt_service(prompts.clone())
         .with_llm_router(llm_router.clone())
@@ -459,6 +464,9 @@ impl AppState {
                 agent_tool_registry.clone(),
                 runtime_http_client.clone(),
             )
+            .with_directory_inspector(Some(std::sync::Arc::new(
+                crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
+            )))
             .with_active_runs(active_runs.clone())
             .with_prompt_service(prompts.clone()),
         )));
@@ -479,6 +487,7 @@ impl AppState {
             agent_management,
             agent_runs,
             agent_tool_registry,
+            agent_terminal,
             active_runs,
             apps,
             projects,

@@ -93,6 +93,15 @@ pub(super) fn assemble_context(
         message_token_estimate: estimated_tokens,
         tool_schema_token_estimate: 0,
         budget_breakdown: Some(ContextBudgetBreakdown {
+            application_context_tokens: prompt_prefix
+                .iter()
+                .filter(|message| is_application_context(message))
+                .map(|message| estimate_messages_tokens(std::slice::from_ref(message)))
+                .sum(),
+            application_context_message_count: prompt_prefix
+                .iter()
+                .filter(|message| is_application_context(message))
+                .count(),
             prompt_prefix_message_count: prompt_prefix.len(),
             prompt_prefix_tokens,
             checkpoint_tokens,
@@ -158,6 +167,10 @@ pub(super) fn assemble_context(
 
 pub(super) fn session_family_context_message(text: String) -> AgentMessage {
     AgentMessage::context_block("session_family_context", text)
+}
+
+pub(super) fn is_application_context(message: &AgentMessage) -> bool {
+    message.parts.iter().any(|part| matches!(part, AgentMessagePart::Context { kind, .. } if kind == "application_execution_context"))
 }
 
 fn working_state_message(

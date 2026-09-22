@@ -1,3 +1,6 @@
+pub mod agent_terminal;
+pub mod code_file_editor;
+pub mod application_directory;
 pub mod config;
 pub mod crypto;
 pub mod model;

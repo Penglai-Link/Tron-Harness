@@ -1,3 +1,5 @@
+mod terminals;
+mod application_context;
 pub mod error_mapper;
 pub mod handler;
 pub(crate) mod protocol_replay;

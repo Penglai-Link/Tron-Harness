@@ -1690,25 +1690,20 @@
   }
 }
 .tron-chat__user-input-card {
-  position: absolute;
-  left: 50%;
-  right: auto;
-  bottom: calc(100% + 10px);
-  transform: translateX(-50%);
-  z-index: 20;
+  position: relative;
   display: grid;
   grid-template-rows: minmax(0, 1fr) auto;
   gap: 0.5rem;
-  width: min(720px, calc(100% - 32px), calc(100vw - 32px));
-  max-height: min(72svh, 560px);
+  width: 100%;
+  max-height: none;
+  min-height: 0;
   overflow: hidden;
-  margin: 0;
+  margin: 16px 0 0;
   padding: 0.75rem;
-  border: 1px solid color-mix(in srgb, var(--tron-chat-border) 82%, white 18%);
+  border: 1px solid var(--tron-chat-border);
   border-radius: 0.875rem;
-  background: color-mix(in srgb, var(--tron-chat-surface-strong) 94%, transparent);
-  box-shadow: 0 20px 54px rgba(15, 23, 42, 0.2), 0 4px 16px rgba(15, 23, 42, 0.08);
-  backdrop-filter: blur(16px);
+  background: var(--tron-chat-surface-strong);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.06);
   animation: tron-chat-user-input-pop 180ms ease-out both;
   overscroll-behavior: contain;
 }
@@ -1744,13 +1739,9 @@
 
 @media (max-width: 640px) {
   .tron-chat__user-input-card {
-    left: 50%;
-    right: auto;
-    bottom: calc(100% + 8px);
-    width: min(calc(100% - 16px), calc(100vw - 16px));
-    max-height: min(72svh, 520px);
+    width: 100%;
+    max-height: none;
     padding: 0.625rem;
-    border-radius: 0.875rem;
   }
 
   .tron-chat__user-input-option { padding: 0.4375rem 0.5rem; }
@@ -1759,8 +1750,8 @@
 }
 
 @keyframes tron-chat-user-input-pop {
-  from { opacity: 0; transform: translate(-50%, 8px) scale(0.985); }
-  to { opacity: 1; transform: translate(-50%, 0) scale(1); }
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 @keyframes tron-chat-user-input-question-in {

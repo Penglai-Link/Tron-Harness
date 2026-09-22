@@ -283,6 +283,14 @@ export function TronShell({
   const topbarToolsMenuContainerRef = useRef<HTMLDivElement | null>(null);
   const [expandedWorkspaceCodes, setExpandedWorkspaceCodes] = useState<string[]>([]);
   const [showBottomPanel, setBottomPanel] = useState(false)
+  const terminalSessionCode = new URLSearchParams(search).get("sessionCode") ?? "";
+  useEffect(() => {
+    const open = (event: Event) => {
+      if ((event as CustomEvent<{sessionCode:string}>).detail?.sessionCode === terminalSessionCode) setBottomPanel(true);
+    };
+    window.addEventListener("tron:open-agent-terminal", open);
+    return () => window.removeEventListener("tron:open-agent-terminal", open);
+  }, [terminalSessionCode]);
   const [userPanelStyle, setUserPanelStyle] = useState<CSSProperties | undefined>();
 
   const updateUserPanelPosition = useCallback(() => {
@@ -1260,6 +1268,7 @@ export function TronShell({
 
           <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14">
             <Content
+              sessionCode={terminalSessionCode}
               contentClassName={renderedContentClassName}
               showBottomPanel={showBottomPanel}
 

@@ -300,7 +300,7 @@ be-check:
 
 .PHONY: be-test
 be-test:
-	$(CARGO) test --manifest-path "$(BACKEND_MANIFEST)"
+	$(CARGO) test --manifest-path "$(BACKEND_MANIFEST)" $(TEST)
 
 .PHONY: be-clean
 ifeq ($(HOST_OS),windows)

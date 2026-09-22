@@ -17,6 +17,7 @@ import {
   DropdownMenu,
   DropdownMenuCheckboxItem,
   DropdownMenuContent,
+  DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Field, FieldDescription, FieldLabel } from "@/components/ui/field";
@@ -36,7 +37,7 @@ export function ProjectCreateDialog({
   project?: ProjectRecord;
   workspaceCode: string;
 }) {
-  const { options } = useAppOptions({ workspaceCode });
+  const { options, loading, error, refresh } = useAppOptions({ workspaceCode });
   const { t } = useTranslation("shell");
   const toast = useToast();
   const [name, setName] = useState("");
@@ -45,10 +46,11 @@ export function ProjectCreateDialog({
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (!open) return;
+    refresh();
     setName(project?.name ?? "");
     setAppCodes(project?.appCodes ?? []);
     setPrimaryAppCode(project?.primaryAppCode ?? undefined);
-  }, [open, project]);
+  }, [open, project, refresh]);
   function toggleApp(appCode: string) {
     setAppCodes((current) => {
       const next = current.includes(appCode)
@@ -143,7 +145,7 @@ export function ProjectCreateDialog({
                   </Button>
                 </div>
               ))}
-              <DropdownMenu>
+              <DropdownMenu onOpenChange={(menuOpen) => { if (menuOpen) refresh(); }}>
                 <DropdownMenuTrigger
                   render={
                     <Button
@@ -167,11 +169,17 @@ export function ProjectCreateDialog({
                   align="start"
                   className="min-w-64 duration-10"
                 >
-                  {options.map((app) => (
+                  {loading ? (
+                    <DropdownMenuItem disabled>{t("shell:chatSidebar.projectDialog.loadingApps")}</DropdownMenuItem>
+                  ) : error ? (
+                    <DropdownMenuItem onClick={refresh}>{t("shell:chatSidebar.projectDialog.retryApps")}</DropdownMenuItem>
+                  ) : options.length === 0 ? (
+                    <DropdownMenuItem disabled>{t("shell:chatSidebar.projectDialog.noApps")}</DropdownMenuItem>
+                  ) : options.map((app) => (
                     <DropdownMenuCheckboxItem
                       checked={appCodes.includes(app.appCode)}
                       key={app.appCode}
-                      onSelect={(event) => event.preventDefault()}
+                      closeOnClick={false}
                       onCheckedChange={() => toggleApp(app.appCode)}
                     >
                       {app.name}

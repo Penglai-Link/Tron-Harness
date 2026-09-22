@@ -1,4 +1,7 @@
+mod text_patch;
+pub use text_patch::{FilePatch, apply_text_hunks, parse_text_patch};
 mod agui;
+mod application_context;
 mod collaboration;
 mod context;
 mod error;
@@ -14,6 +17,9 @@ mod tool_schema;
 
 pub use agui::{
     AgentAguiEvent, AgentAguiEventSnapshot, AgentAguiProtocolEvent, AgentAguiStreamState,
+};
+pub use application_context::{
+    ApplicationDirectoryContext, ApplicationDirectoryStatus, GitWorktreeContext,
 };
 pub use collaboration::{
     AgentAssignment, AgentExecutionMode, AgentRunPlanStep, CollaborationArtifact,

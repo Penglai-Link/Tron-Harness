@@ -141,6 +141,13 @@ impl ChatService {
             {
                 break;
             }
+            let project_scope = self
+                .project_execution_scope(session)
+                .map_err(ChatSendError::Chat)?;
+            let invocation_app_code = match project_scope.as_ref() {
+                Some(scope) => scope.app_code.clone(),
+                None => app_code.clone(),
+            };
             let invocation = AgentInvocationCommand {
                 run_code: None,
                 prompt: Some(prompt),
@@ -150,8 +157,8 @@ impl ChatService {
                 system_agent_session_id: runtime_session_id
                     .clone()
                     .or(session.system_agent_session_id.clone()),
-                app_code: app_code.clone(),
-                execution_scope_override: None,
+                app_code: invocation_app_code,
+                execution_scope_override: project_scope,
                 task_code: task_code.clone(),
                 model: Some(resolved_model.clone()),
                 system_model_id: system_model_id.clone(),

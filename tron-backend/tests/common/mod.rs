@@ -89,7 +89,7 @@ fn seed_workspaces(database_url: &str) {
 
 fn seed_apps(database_url: &str) {
     let mut repository = SqliteAppRepository::connect(database_url).expect("app repository");
-    if repository.list_apps().expect("app list").expect("app records").is_empty() {
+    if repository.list_apps().expect("app list").is_empty() {
         let app = App {
             id: SnowflakeId::new(next_test_id_seed()),
             app_code: "APP-TRON-CONSOLE".into(),
@@ -179,7 +179,7 @@ pub fn header_values(headers: &HeaderMap, name: header::HeaderName) -> Vec<Strin
 pub fn header_value_to_string(value: &HeaderValue) -> String { value.to_str().unwrap_or_default().to_owned() }
 
 pub fn cookie_header_from_set_cookie(set_cookie_headers: &[String], cookie_names: &[&str]) -> String {
-    set_cookie_headers.iter().filter_map(|header| header.split(';').next()).filter(|cookie| cookie_names.iter().any(|name| cookie.starts_with(&format!("{name}=")))).cloned().collect::<Vec<_>>().join("; ")
+    set_cookie_headers.iter().filter_map(|header| header.split(';').next()).filter(|cookie| cookie_names.iter().any(|name| cookie.starts_with(&format!("{name}=")))).collect::<Vec<_>>().join("; ")
 }
 
 pub fn cookie_value_from_set_cookie(set_cookie_headers: &[String], cookie_name: &str) -> String {

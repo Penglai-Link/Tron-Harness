@@ -57,7 +57,10 @@ pub async fn get_context_detail(
         Err(error) => return invalid_request_response(error.to_string()),
     };
     if query.session_code.trim().is_empty()
-        || !matches!(query.block_code.as_str(), "systemPrompt" | "toolSchema" | "familyContext")
+        || !matches!(
+            query.block_code.as_str(),
+            "systemPrompt" | "toolSchema" | "familyContext" | "applicationContext"
+        )
     {
         return invalid_request_response("sessionCode and a supported blockCode are required");
     }

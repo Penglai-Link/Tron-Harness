@@ -1,5 +1,7 @@
 mod business;
 mod coding;
+mod terminal;
+mod productivity;
 
 use serde_json::Value;
 
@@ -393,6 +395,8 @@ fn translate_en_us(key: &str) -> &'static str {
         }
         _ => business::translate_en_us(key)
             .or_else(|| coding::translate_en_us(key))
+            .or_else(|| terminal::translate_en_us(key))
+            .or_else(|| productivity::translate_en_us(key))
             .unwrap_or_else(key_leak_fallback),
     }
 }
@@ -602,6 +606,8 @@ fn translate_zh_cn(key: &str) -> &'static str {
         }
         _ => business::translate_zh_cn(key)
             .or_else(|| coding::translate_zh_cn(key))
+            .or_else(|| terminal::translate_zh_cn(key))
+            .or_else(|| productivity::translate_zh_cn(key))
             .unwrap_or_else(key_leak_fallback),
     }
 }

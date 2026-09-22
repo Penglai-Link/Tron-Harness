@@ -47,6 +47,9 @@ export const shell = {
       unpin: "Unpin",
     },
     projectDialog: {
+      loadingApps: "Loading apps…",
+      retryApps: "Could not load apps. Click to retry",
+      noApps: "No apps available in this workspace",
       addApp: "Add app",
       createTitle: "Create project",
       editTitle: "Edit project",

@@ -7,6 +7,7 @@ import BottomPanel from "./BottomPanel";
 
 interface ContentProps {
   children: ReactNode;
+  sessionCode?: string;
   contentClassName?: string;
   showBottomPanel?: boolean;
   changeBottomPanel?: Dispatch<SetStateAction<boolean>>;
@@ -14,6 +15,7 @@ interface ContentProps {
 
 export const Content = memo(function Content({
   children,
+  sessionCode,
   contentClassName,
   showBottomPanel,
   changeBottomPanel
@@ -28,6 +30,7 @@ export const Content = memo(function Content({
         </Panel>
       </ResizablePanel>
       <BottomPanel
+        sessionCode={sessionCode}
         changeBottomPanel={changeBottomPanel}
         visible={showBottomPanel ?? false}
       />

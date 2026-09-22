@@ -230,6 +230,8 @@ pub struct AgentRuntimeRegistry {
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
     runtime_http_client: reqwest::Client,
+    directory_inspector:
+        Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     short_term_memory: Option<ShortTermMemoryService>,
     active_runs: ActiveRunRegistry,
     auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
@@ -247,10 +249,19 @@ impl AgentRuntimeRegistry {
             tool_registry,
             event_bus,
             runtime_http_client,
+            directory_inspector: None,
             short_term_memory: None,
             active_runs: ActiveRunRegistry::new(),
             auto_model_router: None,
         }
+    }
+
+    pub fn with_directory_inspector(
+        mut self,
+        inspector: Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
+    ) -> Self {
+        self.directory_inspector = inspector;
+        self
     }
 
     pub fn with_short_term_memory(mut self, service: Option<ShortTermMemoryService>) -> Self {
@@ -286,6 +297,7 @@ impl AgentRuntimeRegistry {
                 self.short_term_memory.clone(),
                 self.active_runs.clone(),
                 self.auto_model_router.clone(),
+                self.directory_inspector.clone(),
             )),
             RuntimeAdapterSelection::CodexExec {
                 command_name,

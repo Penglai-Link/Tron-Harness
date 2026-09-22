@@ -1,6 +1,8 @@
 mod business;
 mod coding;
+mod terminal;
 mod memory;
+mod productivity;
 
 use serde_json::Value;
 
@@ -29,6 +31,27 @@ pub(super) struct ToolCatalogDefinition {
 
 pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
     vec![
+        ToolDomainDefinition { domain_code: "terminal", name_i18n_key: "agent.toolCatalog.terminal.name", description_i18n_key: "agent.toolCatalog.terminal.description" },
+        ToolDomainDefinition {
+            domain_code: "worktree",
+            name_i18n_key: "agent.toolCatalog.domains.worktree.name",
+            description_i18n_key: "agent.toolCatalog.domains.worktree.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "git",
+            name_i18n_key: "agent.toolCatalog.domains.git.name",
+            description_i18n_key: "agent.toolCatalog.domains.git.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "word",
+            name_i18n_key: "agent.toolCatalog.domains.word.name",
+            description_i18n_key: "agent.toolCatalog.domains.word.description",
+        },
+        ToolDomainDefinition {
+            domain_code: "excel",
+            name_i18n_key: "agent.toolCatalog.domains.excel.name",
+            description_i18n_key: "agent.toolCatalog.domains.excel.description",
+        },
         ToolDomainDefinition {
             domain_code: "automation",
             name_i18n_key: "agent.toolCatalog.domains.automation.name",
@@ -100,7 +123,9 @@ pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
 pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     let mut definitions = business::tool_definitions();
     definitions.extend(coding::tool_definitions());
+    definitions.extend(terminal::tool_definitions());
     definitions.extend(memory::tool_definitions());
+    definitions.extend(productivity::tool_definitions());
     definitions
 }
 

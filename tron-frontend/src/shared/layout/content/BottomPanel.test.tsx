@@ -5,6 +5,8 @@ import type { ReactNode } from "react";
 
 import BottomPanel from "./BottomPanel";
 
+vi.mock("@/domain/chat/terminal/AgentTerminalPanel", () => ({AgentTerminalPanel: () => null}));
+
 const terminalLifecycle = vi.hoisted(() => ({ mounts: 0, unmounts: 0 }));
 const panelControls = vi.hoisted(() => ({
   collapse: vi.fn(),

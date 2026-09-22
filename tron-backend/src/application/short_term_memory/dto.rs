@@ -307,6 +307,9 @@ pub struct PreparedModelContext {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ContextBudgetBreakdown {
+    /// Subset of prompt_prefix_tokens; kept separate for the context inspector.
+    pub application_context_tokens: u32,
+    pub application_context_message_count: usize,
     pub prompt_prefix_message_count: usize,
     pub prompt_prefix_tokens: u32,
     pub checkpoint_tokens: u32,

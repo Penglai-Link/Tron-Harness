@@ -9,6 +9,8 @@ vi.hoisted(() => {
   Object.defineProperty(globalThis, "window", {
     configurable: true,
     value: {
+      addEventListener: () => undefined,
+      removeEventListener: () => undefined,
       localStorage: {
         getItem: () => null,
         setItem: () => undefined,
@@ -73,6 +75,7 @@ describe("tool schema context budget", () => {
       requestEstimate: null,
       translate: (key) => ({
         "chat.shortTermMemory.contextPanel.systemPromptName": "系统提示词",
+        "chat.applications.contextName": "应用执行上下文",
         "chat.shortTermMemory.contextPanel.toolSchemaName": "工具定义",
         "chat.shortTermMemory.contextPanel.checkpointName": "当前会话检查点",
         "chat.shortTermMemory.contextPanel.workingStateName": "当前会话工作状态",
@@ -83,6 +86,7 @@ describe("tool schema context budget", () => {
 
     expect(blocks.map((block) => block.name)).toEqual([
       "系统提示词",
+      "应用执行上下文",
       "工具定义",
       "当前会话检查点",
       "当前会话工作状态",
@@ -90,6 +94,20 @@ describe("tool schema context budget", () => {
       "当前会话历史",
     ]);
     expect(blocks.every((block) => !("meta" in block))).toBe(true);
+  });
+
+  it("splits application context out of the prefix without double-counting tokens", () => {
+    const breakdown = normalizeContextBudgetBreakdown({
+      promptPrefixTokens: 1000,
+      estimatedInputTokens: 1000,
+      promptPrefixMessageCount: 3,
+      applicationContextTokens: 300,
+      applicationContextMessageCount: 1,
+    });
+    const blocks = buildContextMemoryBlocks({ breakdown, requestEstimate: null, translate: (key) => key });
+    expect(blocks.find((block) => block.detailCode === "systemPrompt")?.tokens).toBe(700);
+    expect(blocks.find((block) => block.detailCode === "applicationContext")?.tokens).toBe(300);
+    expect(blocks.filter((block) => block.color === "seed").reduce((sum, block) => sum + block.tokens, 0)).toBe(1000);
   });
 
   it.each([6_000, 0])("uses the independent schema limit %s", (limit) => {

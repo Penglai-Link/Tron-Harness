@@ -1,3 +1,5 @@
+import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
+import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
 import {
   Fragment,
   useCallback,
@@ -648,6 +650,8 @@ export function normalizeContextBudgetBreakdown(parsed: Partial<ChatContextBudge
     historySourceMessageCount: tokenField(parsed.historySourceMessageCount),
     inputBudgetExceeded: Boolean(parsed.inputBudgetExceeded),
     outputTokenReserve: tokenField(parsed.outputTokenReserve),
+    applicationContextTokens: tokenField(parsed.applicationContextTokens) ?? 0,
+    applicationContextMessageCount: tokenField(parsed.applicationContextMessageCount) ?? 0,
     promptPrefixMessageCount: tokenField(parsed.promptPrefixMessageCount),
     promptPrefixBudgetTokens: tokenField(parsed.promptPrefixBudgetTokens),
     promptPrefixTokens: tokenField(parsed.promptPrefixTokens) ?? 0,
@@ -2467,7 +2471,7 @@ type ContextBlockColor = "seed" | "tool" | "checkpoint" | "state" | "family" | "
 interface ContextMemoryBlockItem {
   code: string;
   color: ContextBlockColor;
-  detailCode?: "systemPrompt" | "toolSchema" | "familyContext";
+  detailCode?: "systemPrompt" | "toolSchema" | "familyContext" | "applicationContext";
   limitTokens: number | null;
   name: string;
   stat: string;
@@ -2527,9 +2531,18 @@ export function buildContextMemoryBlocks({
       limitTokens: breakdown?.promptPrefixBudgetTokens ?? null,
       name: translate("chat.shortTermMemory.contextPanel.systemPromptName"),
       stat: translate("chat.shortTermMemory.contextPanel.messageCount", {
-        count: breakdown?.promptPrefixMessageCount ?? 0,
+        count: Math.max(0, (breakdown?.promptPrefixMessageCount ?? 0) - (breakdown?.applicationContextMessageCount ?? 0)),
       }),
-      tokens: breakdown?.promptPrefixTokens ?? 0,
+      tokens: Math.max(0, (breakdown?.promptPrefixTokens ?? 0) - (breakdown?.applicationContextTokens ?? 0)),
+    },
+    {
+      code: "applicationContext",
+      color: "seed",
+      detailCode: "applicationContext",
+      limitTokens: null,
+      name: translate("chat.applications.contextName"),
+      stat: breakdown?.applicationContextTokens ? translate("chat.applications.required") : translate("chat.shortTermMemory.contextPanel.none"),
+      tokens: breakdown?.applicationContextTokens ?? 0,
     },
     {
       code: "02",
@@ -2830,7 +2843,7 @@ function contextPromptContentParts(content: string): ContextPromptContentPart[] 
       return [
         ...(trimmed.slice(0, start).trim() ? [{ kind: "text" as const, value: trimmed.slice(0, start).trim() }] : []),
         { kind: "json", value: json },
-        ...(trimmed.slice(end).trim() ? [{ kind: "text" as const, value: trimmed.slice(end).trim() }] : []),
+        ...contextPromptContentParts(trimmed.slice(end)),
       ];
     } catch {
       // Continue scanning in case this brace belongs to ordinary prompt text.
@@ -2840,7 +2853,6 @@ function contextPromptContentParts(content: string): ContextPromptContentPart[] 
 }
 
 function ContextPromptMessageContent({ content }: { content: string }) {
-  const { t } = useTranslation("pages");
   const parts = contextPromptContentParts(content);
   return (
     <div className="space-y-3 text-xs leading-6 text-[var(--color-on-surface)]">
@@ -2849,20 +2861,14 @@ function ContextPromptMessageContent({ content }: { content: string }) {
           {part.value}
         </pre>
       ) : (
-        <details className="rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)]" key={`json-${index}`}>
-          <summary className="cursor-pointer px-3 py-2 text-xs font-medium text-[var(--color-on-surface-variant)] marker:text-[var(--color-on-surface-variant)]">
-            {t("chat.shortTermMemory.contextPanel.detailPromptStructuredContent")}
-          </summary>
-          <pre className="max-h-80 overflow-auto border-t border-[var(--color-outline-variant)] px-3 py-3 font-mono text-[11px] leading-5 text-[var(--color-on-surface)]">
-            {JSON.stringify(part.value, null, 2)}
-          </pre>
-        </details>
+        <ContextDetailCards key={`json-${index}`} value={part.value} />
       ))}
     </div>
   );
 }
 
 function ToolSchemaPreview({ value }: { value: unknown }) {
+  const { t } = useTranslation("pages");
   if (!Array.isArray(value)) return null;
   const tools = value.filter((item): item is Record<string, unknown> => (
     item !== null && typeof item === "object" && !Array.isArray(item)
@@ -2871,7 +2877,7 @@ function ToolSchemaPreview({ value }: { value: unknown }) {
   return (
     <div className="space-y-3">
       {tools.map((tool, index) => {
-        const name = typeof tool.name === "string" ? tool.name : `Tool ${index + 1}`;
+        const name = typeof tool.name === "string" ? tool.name : t("chat.applications.preview.tool", { index: index + 1 });
         const domainCode = typeof tool.domainCode === "string" ? tool.domainCode : null;
         const description = typeof tool.description === "string" ? tool.description : null;
         return (
@@ -2890,91 +2896,169 @@ function ToolSchemaPreview({ value }: { value: unknown }) {
   );
 }
 
-type ContextDetailTreeLabels = {
-  arrayItem: (index: number) => string;
-  arraySummary: (count: number) => string;
-  emptyArray: string;
-  emptyObject: string;
-};
-
-function ContextDetailTreeNode({
-  value,
-  label,
-  labelKind = "key",
-  depth = 0,
-  labels,
-}: {
-  value: unknown;
-  label?: string;
-  labelKind?: "key" | "index";
-  depth?: number;
-  labels: ContextDetailTreeLabels;
-}) {
-  const isArray = Array.isArray(value);
-  const isObject = value !== null && typeof value === "object" && !isArray;
-  const entries: [string, unknown][] = isArray
-    ? value.map((item, index) => [String(index), item])
-    : isObject
-      ? Object.entries(value as Record<string, unknown>)
-      : [];
-  const isContainer = isArray || isObject;
-  const [expanded, setExpanded] = useState(depth < 2);
-  const visibleLabel = labelKind === "index" && label != null
-    ? labels.arrayItem(Number(label) + 1)
-    : label;
-  const labelContent = visibleLabel == null ? null : (
-    <span className="break-all text-[var(--color-primary)]">
-      {visibleLabel}{labelKind === "key" ? ":" : ""}
-    </span>
-  );
-
-  if (!isContainer || entries.length === 0) {
-    const renderedValue = isContainer
-      ? (isArray ? labels.emptyArray : labels.emptyObject)
-      : JSON.stringify(value) ?? String(value);
+function ContextDetailCards({ value }: { value: unknown }) {
+  const { t } = useTranslation("pages");
+  if (value == null || (Array.isArray(value) && value.length === 0)) {
     return (
-      <div className="flex min-w-0 items-start gap-1.5 py-0.5">
-        <span className="mt-1.5 size-1.5 shrink-0 rounded-full bg-[var(--color-outline-variant)]" aria-hidden="true" />
-        <div className="min-w-0 break-all">
-          {labelContent ? <>{labelContent} </> : null}
-          <span className={cn(
-            value === null ? "text-[var(--color-on-surface-variant)]" : "text-[var(--color-on-surface)]",
-            typeof value === "string" && "text-[var(--color-primary)]",
-          )}>
-            {renderedValue}
-          </span>
-        </div>
-      </div>
+      <p className="text-xs text-[var(--color-on-surface-variant)]">
+        {t("chat.applications.preview.empty")}
+      </p>
     );
   }
-
+  if (Array.isArray(value))
+    return (
+      <div className="space-y-3">
+        {value.map((item, index) => (
+          <ContextDetailCards key={index} value={item} />
+        ))}
+      </div>
+    );
+  if (typeof value === "string")
+    return <ContextPromptMessageContent content={value} />;
+  if (!isContextDetailRecord(value))
+    return (
+      <p className="whitespace-pre-wrap break-words text-xs leading-6">
+        {typeof value === "boolean"
+          ? t(`chat.applications.preview.${value ? "yes" : "no"}`)
+          : String(value)}
+      </p>
+    );
+  const title = [value.appName, value.title, value.name].find(
+    (item) => typeof item === "string"
+  ) as string | undefined;
+  const entries = Object.entries(value).filter(
+    ([key, item]) =>
+      item != null &&
+      ![
+        "appName",
+        "title",
+        "name",
+        "hash",
+        "contextKind",
+        "messageCount",
+        "schemaVersion",
+      ].includes(key)
+  );
   return (
-    <div className="min-w-0">
-      <button
-        aria-expanded={expanded}
-        className="group flex min-w-0 items-center gap-1.5 rounded px-1 py-0.5 text-left outline-none transition-colors hover:text-[var(--color-primary)] focus-visible:ring-2 focus-visible:ring-[var(--color-focus-ring)]"
-        type="button"
-        onClick={() => setExpanded((current) => !current)}
-      >
-        {expanded ? <ChevronDown className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" /> : <ChevronRight className="size-3.5 shrink-0 text-[var(--color-on-surface-variant)]" />}
-        {labelContent}
-        {isArray ? <span className="text-[var(--color-on-surface-variant)]">{labels.arraySummary(entries.length)}</span> : null}
-      </button>
-      {expanded ? (
-        <div className="ml-2 border-l border-[var(--color-outline-variant)] py-0.5 pl-3">
-          {entries.map(([entryKey, entryValue]) => (
-            <ContextDetailTreeNode
-              depth={depth + 1}
-              key={entryKey}
-              label={entryKey}
-              labelKind={isArray ? "index" : "key"}
-              labels={labels}
-              value={entryValue}
-            />
-          ))}
-        </div>
+    <article className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]">
+      {title ? (
+        <h3 className="break-words bg-[var(--color-surface-container-low)] px-3 py-2 text-xs font-semibold">
+          {title}
+        </h3>
       ) : null}
-    </div>
+      <dl className="space-y-3 px-3 py-3">
+        {entries.map(([key, item]) => (
+          <div key={key} className="min-w-0">
+            <dt className="mb-1 text-xs font-medium text-[var(--color-on-surface-variant)]">
+              {t(`chat.applications.preview.fields.${key}`, {
+                defaultValue: t("chat.applications.preview.content"),
+              })}
+            </dt>
+            <dd className="min-w-0 break-all">
+              {key === "status" &&
+              typeof item === "string" &&
+              ["Ready", "NotGit", "MissingDirectory", "Unavailable"].includes(
+                item
+              ) ? (
+                <p className="text-xs">
+                  {item === "Ready"
+                    ? t("chat.applications.preview.ready")
+                    : t(`chat.applications.status.${item}`)}
+                </p>
+              ) : (
+                <ContextDetailCards value={item} />
+              )}
+            </dd>
+          </div>
+        ))}
+      </dl>
+    </article>
+  );
+}
+
+function ApplicationContextPreview({ value }: { value: unknown }) {
+  const { t } = useTranslation("pages");
+  const scope =
+    isContextDetailRecord(value) && isContextDetailRecord(value.executionScope)
+      ? value.executionScope
+      : null;
+  const apps =
+    scope && Array.isArray(scope.applications) ? scope.applications : [];
+  if (apps.length > 0)
+    return (
+      <ContextDetailCards
+        value={apps.filter(isContextDetailRecord).map((app) => ({
+          appName: app.appName,
+          appCode: app.appCode,
+          ...(app.isPrimary ? { usage: t("chat.applications.primary") } : {}),
+          environment:
+            app.status === "MissingDirectory" || app.status === "Unavailable"
+              ? t("chat.applications.unknown")
+              : t(
+                  app.isWorktree
+                    ? "chat.applications.worktree"
+                    : "chat.applications.local"
+                ),
+          branchName:
+            app.branchName ??
+            (app.status === "Ready" && typeof app.headCommit === "string"
+              ? t("chat.applications.detached", {
+                  commit: app.headCommit.slice(0, 8),
+                })
+              : t("chat.applications.unknown")),
+          workingDirectory: app.workingDirectory ?? app.configuredDirectory,
+          ...(app.configuredDirectory &&
+          app.workingDirectory &&
+          app.configuredDirectory !== app.workingDirectory
+            ? { configuredDirectory: app.configuredDirectory }
+            : {}),
+          ...(app.worktreePath && app.worktreePath !== app.workingDirectory
+            ? { worktreePath: app.worktreePath }
+            : {}),
+          ...(app.status !== "Ready" ? { status: app.status } : {}),
+        }))}
+      />
+    );
+  if (scope?.localDirectory)
+    return (
+      <ContextDetailCards value={{ workingDirectory: scope.localDirectory }} />
+    );
+  return (
+    <p className="text-xs text-[var(--color-on-surface-variant)]">
+      {t("chat.applications.noSnapshot")}
+    </p>
+  );
+}
+
+function FamilyContextPreview({ value }: { value: unknown }) {
+  if (Array.isArray(value) && value.length > 0)
+    return (
+      <div className="space-y-3">
+        {value.map((item, index) => (
+          <FamilyContextPreview key={index} value={item} />
+        ))}
+      </div>
+    );
+  const text =
+    typeof value === "string"
+      ? value
+      : isContextDetailRecord(value) && typeof value.content === "string"
+      ? value.content
+      : null;
+  if (!text?.includes("<session-family-context>"))
+    return <ContextDetailCards value={value} />;
+  const entries = Array.from(
+    text.matchAll(
+      /<(source|active-state) session="([^"]*)"[^>]*>([\s\S]*?)<\/\1>/g
+    )
+  );
+  return (
+    <ContextDetailCards
+      value={entries.map((match) => ({
+        sessionCode: match[2],
+        content: match[3].trim(),
+      }))}
+    />
   );
 }
 
@@ -2983,7 +3067,7 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   const navigate = useNavigate();
   const [dialogOpen, setDialogOpen] = useState(false);
   const [detail, setDetail] = useState<unknown>(null);
-  const [detailViewMode, setDetailViewMode] = useState<"tree" | "raw">("tree");
+  const [detailViewMode, setDetailViewMode] = useState<"preview" | "raw">("preview");
   const [loading, setLoading] = useState(false);
   const [loadError, setLoadError] = useState(false);
   const colors = contextBlockColorClasses[block.color];
@@ -2995,15 +3079,26 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
     setLoading(true);
     setLoadError(false);
     setDetail(null);
+    let refreshing = true;
     void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
       queryParams: { sessionCode, blockCode: block.detailCode },
       signal: controller.signal,
-    }).then(setDetail).catch(() => {
+    }).then((value) => { if (!controller.signal.aborted) setDetail(value); }).catch(() => {
       if (!controller.signal.aborted) setLoadError(true);
     }).finally(() => {
+      refreshing = false;
       if (!controller.signal.aborted) setLoading(false);
     });
-    return () => controller.abort();
+    const timer = block.detailCode === "applicationContext" ? window.setInterval(() => {
+      if (refreshing) return;
+      refreshing = true;
+      void requestApi<unknown>(chatApiEndpoints.getChatContextDetail, {
+        queryParams: { sessionCode, blockCode: block.detailCode }, signal: controller.signal,
+      }).then((value) => { if (!controller.signal.aborted) { setDetail(value); setLoadError(false); } }).catch(() => {
+        if (!controller.signal.aborted) setLoadError(true);
+      }).finally(() => { refreshing = false; });
+    }, 3000) : undefined;
+    return () => { controller.abort(); if (timer !== undefined) window.clearInterval(timer); };
   }, [block.detailCode, dialogOpen, sessionCode]);
   let parsedDetail = detail;
   let isStructuredDetail = detail !== null && typeof detail === "object";
@@ -3023,12 +3118,6 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
   const promptMessages = block.detailCode === "systemPrompt"
     ? contextPromptPrefixMessages(parsedDetail)
     : null;
-  const detailTreeLabels: ContextDetailTreeLabels = {
-    arrayItem: (index) => t("chat.shortTermMemory.contextPanel.detailArrayItem", { index }),
-    arraySummary: (count) => t("chat.shortTermMemory.contextPanel.detailArraySummary", { total: count }),
-    emptyArray: t("chat.shortTermMemory.contextPanel.detailEmptyArray"),
-    emptyObject: t("chat.shortTermMemory.contextPanel.detailEmptyObject"),
-  };
   const contents = (
     <>
       <div className="flex min-w-0 items-baseline justify-between gap-[12px]">
@@ -3056,12 +3145,12 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
       ) : contents}
       <Dialog open={dialogOpen} onOpenChange={(open) => {
         setDialogOpen(open);
-        if (open) setDetailViewMode("tree");
+        if (open) setDetailViewMode("preview");
       }}>
-        <DialogContent className="grid max-h-[80vh] max-w-2xl grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
+        <DialogContent closeLabel={t("chat.applications.closePreview")} className="grid max-h-[80vh] sm:max-w-2xl grid-rows-[auto_minmax(0,1fr)] gap-3 overflow-hidden">
           <div className="flex min-w-0 items-center justify-between gap-3 pr-8">
             <h2 className="truncate text-sm font-semibold text-[var(--color-on-surface)]">{block.name}</h2>
-            {isStructuredDetail ? (
+            {detail != null ? (
               <div className="flex shrink-0 items-center gap-1">
                 <CopyValueButton
                   ariaLabel={t("chat.shortTermMemory.contextPanel.copyRawJson")}
@@ -3070,10 +3159,10 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
                 />
                 <div className="flex items-center rounded-md bg-[var(--color-surface-container-low)] p-0.5">
                 <button
-                  aria-pressed={detailViewMode === "tree"}
-                  className={cn("rounded px-2 py-1 text-xs transition-colors", detailViewMode === "tree" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]")}
+                  aria-pressed={detailViewMode === "preview"}
+                  className={cn("rounded px-2 py-1 text-xs transition-colors", detailViewMode === "preview" ? "bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] shadow-sm" : "text-[var(--color-on-surface-variant)] hover:text-[var(--color-on-surface)]")}
                   type="button"
-                  onClick={() => setDetailViewMode("tree")}
+                  onClick={() => setDetailViewMode("preview")}
                 >
                   {t("chat.shortTermMemory.contextPanel.detailViewTree")}
                 </button>
@@ -3090,13 +3179,18 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
             ) : null}
           </div>
           <div className="min-h-0 overflow-auto rounded-md bg-[var(--color-surface-container-lowest)] p-3">
+            {block.detailCode === "applicationContext" ? <p className="mb-3 text-xs text-[var(--color-on-surface-variant)]">{t("chat.applications.snapshotNote")}</p> : null}
             {loading ? <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailLoading")}</p>
               : loadError ? <p className="text-sm text-[var(--color-error)]">{t("chat.shortTermMemory.contextPanel.detailFailed")}</p>
-                : block.detailCode === "toolSchema" && isStructuredDetail && detailViewMode === "tree"
+                : block.detailCode === "applicationContext" && detailViewMode === "preview"
+                  ? <ApplicationContextPreview value={parsedDetail} />
+                : block.detailCode === "familyContext" && detailViewMode === "preview"
+                  ? <FamilyContextPreview value={parsedDetail} />
+                : block.detailCode === "toolSchema" && isStructuredDetail && detailViewMode === "preview"
                   ? <ToolSchemaPreview value={parsedDetail} />
-                  : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "tree"
-                  ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
-                  : block.detailCode === "systemPrompt" && promptMessages && detailViewMode === "tree"
+                  : block.detailCode === "systemPrompt" && isStructuredDetail && !promptMessages && detailViewMode === "preview"
+                  ? <ContextDetailCards value={parsedDetail} />
+                  : block.detailCode === "systemPrompt" && promptMessages && detailViewMode === "preview"
                     ? promptMessages.length > 0
                       ? <div className="space-y-3">
                           {promptMessages.map((message, index) => (
@@ -3137,8 +3231,8 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
                           ))}
                         </div>
                       : <p className="text-sm text-[var(--color-on-surface-variant)]">{t("chat.shortTermMemory.contextPanel.detailPromptEmpty")}</p>
-                  : isStructuredDetail && (detailViewMode === "tree" || detailViewMode === "raw")
-                    ? <div className="min-w-0 font-mono text-xs leading-5"><ContextDetailTreeNode labels={detailTreeLabels} value={parsedDetail} /></div>
+                  : detailViewMode === "preview"
+                    ? <ContextDetailCards value={parsedDetail} />
                   : <pre className="whitespace-pre-wrap break-all font-mono text-xs leading-5 text-[var(--color-on-surface)]">{rawDetail}</pre>}
           </div>
         </DialogContent>
@@ -3697,13 +3791,14 @@ function ChatSessionRightPanel({
       label: (
         <>
           <WorkspaceTabState goal={snapshot.goal} running={snapshot.workspaceGoalRunning} />
-          <span>{t("chat.shortTermMemory.workspace")}</span>
+          <span>{t("chat.shortTermMemory.workspaceTab")}</span>
         </>
       ),
       closable: false,
       children: (
-        <div className="min-h-0 overflow-y-auto">
+        <div className="absolute inset-0 min-h-0 overflow-y-auto overscroll-y-contain">
           <div className="m-4">
+            <SessionApplicationsPanel key={sessionCode} session={snapshot.session} active={active} />
             <RightWorkspaceSidebar
               goal={snapshot.goal}
               goalBusy={snapshot.goalBusy}
@@ -3724,7 +3819,7 @@ function ChatSessionRightPanel({
     },
     {
       key: "context",
-      label: t("chat.shortTermMemory.context"),
+      label: t("chat.shortTermMemory.shortTermMemoryTab"),
       closable: false,
       children: (
         <div className="absolute inset-0 min-h-0 overflow-y-auto overscroll-y-contain">
@@ -3749,6 +3844,7 @@ function ChatSessionRightPanel({
       ),
     },
   ], [
+    active,
     onCancelGoal,
     onClearGoal,
     onCreateCompaction,
@@ -4794,6 +4890,7 @@ function ToolUserCard({
   nested?: boolean;
   stepNumber?: number;
 }) {
+  if (["terminal_start", "terminal_read", "terminal_write", "terminal_stop", "terminal_list"].includes(card.toolName)) return <AgentTerminalToolCard card={card} />;
   return <CompactToolRow card={card} nested={nested} stepNumber={stepNumber} />;
 }
 
@@ -6165,6 +6262,8 @@ export function ChatManagementPage() {
   useTabPanelConfig({
     onPageInspectionConfirm: handleInspectionConfirmForRightPanel,
     rightPanel,
+    rightPanelBrowserOnly: true,
+    rightPanelLabel: t("chat.shortTermMemory.workspaceTab"),
   });
 
   useEffect(() => {
@@ -7458,6 +7557,7 @@ export function ChatManagementPage() {
   }, []);
 
   return (
+    <AgentTerminalSessionContext.Provider value={activeSession?.sessionCode ?? activeSessionCode}>
     <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white" ref={mainRef}>
       <div className="hidden">
         <SessionSidebar
@@ -7543,5 +7643,6 @@ export function ChatManagementPage() {
         onConfirm={() => void confirmDeleteSession()}
       />
     </div>
+    </AgentTerminalSessionContext.Provider>
   );
 }

@@ -144,11 +144,18 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             operation_kind: ToolOperationKind::Command,
             input_schema: schema(
                 "agent.toolCatalog.tools.fs.apply_patch.description",
-                json!([{ "path": "notes/todo.txt", "action": "replace", "target": "todo", "content": "done", "replaceAll": false }]),
+                json!([{ "patch": "*** Begin Patch\n*** Update File: src/main.rs\n@@\n-fn old() {}\n+fn new() {}\n*** Add File: notes.txt\n+Updated entry point.\n*** End Patch", "dryRun": true }]),
                 json!({
                     "type": "object",
-                    "required": ["path", "action", "target"],
+                    "oneOf": [
+                        {"required":["patch"], "not":{"anyOf":[{"required":["path"]},{"required":["action"]},{"required":["target"]},{"required":["content"]},{"required":["replaceAll"]},{"required":["expectedCount"]}]}},
+                        {"required":["path","action","target"], "not":{"anyOf":[{"required":["patch"]},{"required":["cwd"]},{"required":["dryRun"]}]}}
+                    ],
                     "properties": {
+                        "patch": {"type":"string","minLength":1,"maxLength":4194304,"x-i18n-description-key":"agent.toolCatalog.tools.fs.apply_patch.params.patch"},
+                        "cwd": {"type":"string","x-i18n-description-key":"agent.toolCatalog.tools.fs.apply_patch.params.cwd"},
+                        "dryRun": {"type":"boolean","default":false,"x-i18n-description-key":"agent.toolCatalog.tools.fs.apply_patch.params.dryRun"},
+                        "expectedCount": {"type":"integer","minimum":1,"x-i18n-description-key":"agent.toolCatalog.tools.fs.apply_patch.params.expectedCount"},
                         "path": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.fs.apply_patch.params.path" },
                         "action": { "type": "string", "enum": ["replace", "delete", "insert_before", "insert_after"], "x-i18n-description-key": "agent.toolCatalog.tools.fs.apply_patch.params.action" },
                         "target": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.fs.apply_patch.params.target" },

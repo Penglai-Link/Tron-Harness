@@ -74,6 +74,8 @@ pub struct ReactAgentBuilder {
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
+    directory_inspector:
+        Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     short_term_memory: Option<ShortTermMemoryService>,
     auto_model_router: Option<AgentModelRouter>,
 }
@@ -88,9 +90,18 @@ impl ReactAgentBuilder {
             model_client,
             tool_registry,
             event_bus,
+            directory_inspector: None,
             short_term_memory: None,
             auto_model_router: None,
         }
+    }
+
+    pub fn with_directory_inspector(
+        mut self,
+        inspector: Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
+    ) -> Self {
+        self.directory_inspector = inspector;
+        self
     }
 
     pub fn with_short_term_memory(mut self, service: Option<ShortTermMemoryService>) -> Self {
@@ -108,6 +119,7 @@ impl ReactAgentBuilder {
             model_client: self.model_client,
             tool_registry: self.tool_registry,
             event_bus: self.event_bus,
+            directory_inspector: self.directory_inspector,
             short_term_memory: self.short_term_memory,
             auto_model_router: self.auto_model_router,
         })
@@ -119,6 +131,8 @@ pub struct ReactAgent {
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
+    directory_inspector:
+        Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     short_term_memory: Option<ShortTermMemoryService>,
     auto_model_router: Option<AgentModelRouter>,
 }

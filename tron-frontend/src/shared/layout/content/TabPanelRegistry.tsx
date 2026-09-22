@@ -19,6 +19,8 @@ export interface TabPanelConfig {
     result: import("@/components/page-view").TargetPageFrameInspectionResult
   ) => void;
   rightPanel?: ReactNode;
+  rightPanelLabel?: ReactNode;
+  rightPanelBrowserOnly?: boolean;
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
 }

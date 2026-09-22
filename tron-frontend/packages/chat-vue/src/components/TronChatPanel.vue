@@ -370,13 +370,6 @@ onMounted(() => {
             class="tron-chat__transcript__bot"
             v-else
           />
-        </section>
-        <aside v-if="$slots.sidebar" class="tron-chat__sidebar">
-          <slot name="sidebar" />
-        </aside>
-      </div>
-
-      <footer class="tron-chat__footer">
         <ChatUserInputCard
           v-if="props.userInputRequest?.status === 'Pending' && props.onAnswerUserInput"
           :disabled="props.userInputAnswerPending"
@@ -384,6 +377,14 @@ onMounted(() => {
           :request="props.userInputRequest"
           @submit="props.onAnswerUserInput"
         />
+        </section>
+        <aside v-if="$slots.sidebar" class="tron-chat__sidebar">
+          <slot name="sidebar" />
+        </aside>
+      </div>
+
+      <footer class="tron-chat__footer">
+
         <button
           v-if="showJumpButton"
           aria-label="Jump to latest message"
@@ -526,6 +527,13 @@ onMounted(() => {
               </div>
             </div>
           </div>
+        <ChatUserInputCard
+          v-if="props.userInputRequest?.status === 'Pending' && props.onAnswerUserInput"
+          :disabled="props.userInputAnswerPending"
+          :labels="props.userInputLabels"
+          :request="props.userInputRequest"
+          @submit="props.onAnswerUserInput"
+        />
         </section>
         <aside v-if="$slots.sidebar" class="tron-chat__sidebar">
           <slot name="sidebar" />

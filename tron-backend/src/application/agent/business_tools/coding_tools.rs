@@ -1,6 +1,8 @@
+mod terminal;
 mod bash;
 mod chat_attachments;
 mod filesystem;
+mod patch;
 mod search;
 
 use std::{
@@ -17,18 +19,19 @@ use crate::{
     domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolObservation},
 };
 
-pub(super) fn coding_domain_tools(resources: ResourceService) -> Vec<Arc<dyn Tool>> {
+pub(super) fn coding_domain_tools(resources: ResourceService, editor: Arc<dyn crate::application::agent::CodeFileEditor>, terminal: Arc<dyn crate::application::agent::AgentTerminal>) -> Vec<Arc<dyn Tool>> {
     let mut tools: Vec<Arc<dyn Tool>> = vec![
         Arc::new(bash::BashExecTool),
         Arc::new(filesystem::FsReadTextTool),
         Arc::new(filesystem::FsWriteTextTool),
-        Arc::new(filesystem::FsApplyPatchTool),
+        Arc::new(filesystem::FsApplyPatchTool(editor)),
         Arc::new(filesystem::FsListTool),
         Arc::new(filesystem::FsStatTool),
         Arc::new(search::SearchGrepTool),
         Arc::new(search::SearchGlobTool),
         Arc::new(search::SearchPathTool),
     ];
+    tools.extend(terminal::tools(terminal));
     tools.extend(chat_attachments::tools(resources));
     tools
 }
@@ -167,7 +170,17 @@ pub(super) fn resolve_path(
     let resolved = if path.is_absolute() {
         path
     } else {
-        default_cwd_for_context(context).join(path)
+        validate_current_directory(context)?;
+        let cwd = default_cwd_for_context(context);
+        if context.execution_scope.local_directory.is_some()
+            && (!cwd.is_absolute() || !cwd.is_dir())
+        {
+            return Err(ToolError::ExecutionFailed(format!(
+                "configured working directory `{}` is unavailable",
+                cwd.display()
+            )));
+        }
+        cwd.join(path)
     };
     ensure_allowed_path(context, resolved)
 }
@@ -181,7 +194,15 @@ fn ensure_allowed_path(context: &AgentRunContext, path: PathBuf) -> Result<PathB
         .execution_scope
         .allowed_local_directories
         .iter()
-        .map(|root| canonicalize_existing_path(&expand_tilde(root)))
+        .map(|root| {
+            let root = expand_tilde(root);
+            if !root.is_absolute() {
+                return Err(ToolError::ExecutionFailed(
+                    "linked project directories must be absolute".into(),
+                ));
+            }
+            canonicalize_existing_path(&root)
+        })
         .collect::<Result<Vec<_>, _>>()?;
     if allowed.iter().any(|root| candidate.starts_with(root)) {
         Ok(path)
@@ -231,14 +252,41 @@ pub(super) fn resolve_optional_directory(
             Ok(Some(path))
         }
         None => {
+            validate_current_directory(context)?;
             let default = default_cwd_for_context(context);
-            if default.is_dir() {
+            if context.execution_scope.local_directory.is_some() {
+                if !default.is_absolute() || !default.is_dir() {
+                    return Err(ToolError::ExecutionFailed(format!(
+                        "configured working directory `{}` is unavailable",
+                        default.display()
+                    )));
+                }
+                Ok(Some(ensure_allowed_path(context, default)?))
+            } else if default.is_dir() {
                 Ok(Some(default))
             } else {
                 Ok(None)
             }
         }
     }
+}
+
+fn validate_current_directory(context: &AgentRunContext) -> Result<(), ToolError> {
+    use crate::domain::agent::ApplicationDirectoryStatus;
+    if context.execution_scope.applications.iter().any(|app| {
+        app.working_directory == context.execution_scope.local_directory
+            && matches!(
+                app.status,
+                ApplicationDirectoryStatus::MissingDirectory
+                    | ApplicationDirectoryStatus::Unavailable
+            )
+    }) {
+        return Err(ToolError::ExecutionFailed(
+            "current application directory is unavailable; explicitly select a valid worktree"
+                .into(),
+        ));
+    }
+    Ok(())
 }
 
 pub(super) fn default_cwd_for_context(context: &AgentRunContext) -> PathBuf {
@@ -394,6 +442,7 @@ mod tests {
             effective_tools: Vec::new(),
             tool_exposure: Default::default(),
             execution_scope: AgentExecutionScope {
+                applications: Vec::new(),
                 project_code: None,
                 app_code: Some("APP-1".into()),
                 repository_url: Some("https://example.test/repo.git".into()),

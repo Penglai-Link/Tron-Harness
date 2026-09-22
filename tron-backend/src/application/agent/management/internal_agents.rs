@@ -23,8 +23,8 @@ fn internal_agents() -> Vec<InternalAgentDefinition> {
         description: "Primary workspace internal agent with access to platform business tools."
             .to_string(),
         tool_assignment_mode: ToolAssignmentMode::AllPlatformTools,
-        mcp_access_mode: McpAccessMode::Disabled,
-        tool_exposure_mode: ToolExposureMode::DirectList,
+        mcp_access_mode: McpAccessMode::AllEnabledServers,
+        tool_exposure_mode: ToolExposureMode::DomainDiscovery,
         expanded_domain_persistence_mode: ExpandedDomainPersistenceMode::StickyExpanded,
         max_steps: 100,
         max_tool_calls: 100,

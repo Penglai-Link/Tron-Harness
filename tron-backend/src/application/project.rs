@@ -1,5 +1,8 @@
 use std::sync::{Arc, Mutex};
 
+mod directory;
+pub use directory::{ProjectInstructionFile, ApplicationDirectoryInspector, inspect_current_application};
+
 use crate::{
     application::{app::AppService, workspace::WorkspaceService},
     domain::{
@@ -51,6 +54,7 @@ pub trait ProjectRepository: Send {
 
 #[derive(Clone)]
 pub struct ProjectService {
+    directory_inspector: Option<Arc<dyn ApplicationDirectoryInspector>>,
     apps: AppService,
     id_generator: Arc<dyn IdGenerator>,
     repository: Arc<Mutex<Box<dyn ProjectRepository>>>,
@@ -64,6 +68,7 @@ impl ProjectService {
         apps: AppService,
     ) -> Self {
         Self {
+            directory_inspector: None,
             apps,
             workspaces,
             id_generator: Arc::new(SnowflakedSnowflakeIdProvider::default()),
