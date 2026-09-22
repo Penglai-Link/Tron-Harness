@@ -20,6 +20,7 @@ export interface TabPanelConfig {
   ) => void;
   rightPanel?: ReactNode;
   rightPanelLabel?: ReactNode;
+  rightPanelTabs?: readonly EditableTab[];
   rightPanelBrowserOnly?: boolean;
   searchPlaceholder?: string;
   topbarActions?: ReactNode;
@@ -199,6 +200,9 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
         previous.onPageInspectionConfirm ===
           nextConfig.onPageInspectionConfirm &&
         previous.rightPanel === nextConfig.rightPanel &&
+        previous.rightPanelLabel === nextConfig.rightPanelLabel &&
+        previous.rightPanelTabs === nextConfig.rightPanelTabs &&
+        previous.rightPanelBrowserOnly === nextConfig.rightPanelBrowserOnly &&
         previous.searchPlaceholder === nextConfig.searchPlaceholder &&
         previous.topbarActions === nextConfig.topbarActions
       ) {
@@ -348,6 +352,9 @@ export function useTabPanelConfig(config: TabPanelConfig) {
     config.contentClassName,
     config.onPageInspectionConfirm,
     config.rightPanel,
+    config.rightPanelLabel,
+    config.rightPanelTabs,
+    config.rightPanelBrowserOnly,
     config.searchPlaceholder,
     config.topbarActions,
     register,

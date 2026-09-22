@@ -117,6 +117,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
         }
       : null;
   }, [pageAttributesKey, panelConfig?.rightPanel, panelConfig?.rightPanelLabel, tab.tabId]);
+  const configuredTabs = panelConfig?.rightPanelTabs ?? [];
 
   const fileTabKeys = useFileTabsStore((state) => state.fileTabKeys);
   const fileTabLabels = useFileTabsStore((state) => state.fileTabLabels);
@@ -187,14 +188,14 @@ const RightPanelTabs = memo(function RightPanelTabs({
   );
 
   const items = useMemo(
-    () => [pageAttributesTab, ...dynamicItems, ...filesTabs].filter(
+    () => [...configuredTabs, pageAttributesTab, ...dynamicItems, ...filesTabs].filter(
       (item): item is EditableTab => item !== null,
     ),
-    [filesTabs, dynamicItems, pageAttributesTab],
+    [configuredTabs, filesTabs, dynamicItems, pageAttributesTab],
   );
 
   const defaultActiveKey =
-    pageAttributesTab?.key ?? dynamicItems[0]?.key ?? filesTabs[0]?.key ?? "";
+    configuredTabs[0]?.key ?? pageAttributesTab?.key ?? dynamicItems[0]?.key ?? filesTabs[0]?.key ?? "";
   const routeActiveKey = getRightPanelActiveKey(tab.tabId);
   const activeKey = activeFileTabKey ?? routeActiveKey ?? defaultActiveKey;
 
