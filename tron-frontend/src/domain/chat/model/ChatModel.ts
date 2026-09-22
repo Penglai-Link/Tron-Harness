@@ -190,7 +190,6 @@ export interface SendChatMessageInput {
   agentCode?: string | null;
   /** First-party clients send this; modelCode remains a legacy compatibility field. */
   modelSelection?: ModelSelection | null;
-  modelCode?: string | null;
   systemModelId?: string | null;
   reasoningEffort?: ReasoningEffort | null;
   attachments?: ChatMessageAttachment[];
@@ -265,6 +264,8 @@ export interface ChatSessionCompaction {
 
 export interface CreateChatCompactionInput {
   sessionCode: string;
+  modelCode?: string | null;
+  modelCode?: string | null;
   reason?: string | null;
   note?: string | null;
 }

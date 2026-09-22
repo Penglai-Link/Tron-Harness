@@ -14,7 +14,7 @@ use crate::{
         UpdateGoalCommand,
     },
     domain::short_term_memory::ShortTermMemoryError,
-    response::ApiResponse,
+    response::{ApiResponse, EmptyData},
 };
 
 use super::super::auth::RequestAuthContext;
@@ -23,6 +23,16 @@ use super::super::auth::RequestAuthContext;
 #[serde(rename_all = "camelCase")]
 pub(crate) struct SessionCodeQuery {
     session_code: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct CreateCompactionRequest {
+    session_code: String,
+    model_code: Option<String>,
+    reason: Option<String>,
+    note: Option<String>,
+    todo_enabled: Option<bool>,
 }
 
 pub async fn get_todos(
@@ -92,12 +102,13 @@ pub async fn get_latest_compaction(
 pub async fn create_compaction(
     State(state): State<AppState>,
     auth: RequestAuthContext,
-    command: Result<Json<CreateCompactionCommand>, JsonRejection>,
+    command: Result<Json<CreateCompactionRequest>, JsonRejection>,
 ) -> Response {
     let command = match parse_json_command(command) {
         Ok(command) => command,
         Err(response) => return response,
     };
+    let model_code = command.model_code.clone();
     let workspace_code = match state
         .short_term_memory
         .session_workspace_for_compaction(&command.session_code)
@@ -107,15 +118,24 @@ pub async fn create_compaction(
     };
     let base_model = match state
         .models
-        .default_text_agent_model_config(&workspace_code)
+        .text_agent_model_config(&workspace_code, model_code.as_deref())
     {
         Ok(Some(model)) => model,
         Ok(None) => {
-            return short_term_memory_error_response(ShortTermMemoryError::CompactionModelFailed);
+            return compaction_model_error_response(
+                "COMPACTION_MODEL_NOT_CONFIGURED",
+                "no default text model is configured for this workspace",
+            );
         }
         Err(_) => return short_term_memory_error_response(ShortTermMemoryError::StorageFailure),
     };
     let model = state.short_term_memory.compaction_model_config(&base_model);
+    let command = CreateCompactionCommand {
+        session_code: command.session_code,
+        reason: command.reason,
+        note: command.note,
+        todo_enabled: command.todo_enabled,
+    };
     let input = match state
         .short_term_memory
         .prepare_manual_model_compaction_input(
@@ -134,12 +154,12 @@ pub async fn create_compaction(
         Err(message) => {
             let failure = ModelCompactionFailure {
                 error_code: "COMPACTION_MODEL_REQUEST_FAILED".into(),
-                message,
+                message: message.clone(),
             };
             let _ = state
                 .short_term_memory
                 .record_compaction_failed(&input, &failure);
-            return short_term_memory_error_response(ShortTermMemoryError::CompactionModelFailed);
+            return compaction_model_error_response("COMPACTION_MODEL_REQUEST_FAILED", message);
         }
     };
     let output = match state.short_term_memory.model_compaction_output(&response) {
@@ -148,7 +168,10 @@ pub async fn create_compaction(
             let _ = state
                 .short_term_memory
                 .record_compaction_failed(&input, &failure);
-            return short_term_memory_error_response(ShortTermMemoryError::CompactionModelFailed);
+            return compaction_model_error_response(
+                "COMPACTION_MODEL_RESPONSE_INVALID",
+                failure.message,
+            );
         }
     };
     match state
@@ -158,6 +181,14 @@ pub async fn create_compaction(
         Ok(compaction) => Json(ApiResponse::success(compaction)).into_response(),
         Err(error) => short_term_memory_error_response(error),
     }
+}
+
+fn compaction_model_error_response(code: &'static str, message: impl Into<String>) -> Response {
+    (
+        StatusCode::BAD_GATEWAY,
+        Json(ApiResponse::<EmptyData>::error(code, message.into())),
+    )
+        .into_response()
 }
 
 pub async fn get_goal(

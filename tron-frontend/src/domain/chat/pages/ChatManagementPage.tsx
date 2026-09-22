@@ -7155,6 +7155,7 @@ export function ChatManagementPage() {
     setCompactingSessionCode(sessionCode);
     try {
       await createChatCompaction({
+        modelCode: selectedModel?.modelCode ?? selectedMainAgentModel?.modelCode ?? null,
         sessionCode,
         reason: "manual",
       });
