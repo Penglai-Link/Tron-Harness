@@ -159,11 +159,7 @@ impl ToolRegistry {
         context: &AgentRunContext,
         progress: &mut dyn FnMut(String),
     ) -> Result<ToolExecutionResult, ToolError> {
-        if !context
-            .authorized_tools()
-            .iter()
-            .any(|tool| tool.tool_name == request.tool_name)
-        {
+        if !context.is_tool_authorized(&request.tool_name) {
             return Err(ToolError::UnauthorizedTool(request.tool_name));
         }
         let tool = self

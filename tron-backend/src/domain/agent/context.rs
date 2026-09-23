@@ -177,4 +177,88 @@ impl AgentRunContext {
             &self.effective_tools
         }
     }
+
+    pub fn is_tool_authorized(&self, tool_name: &str) -> bool {
+        let explicitly_authorized = self
+            .authorized_tools()
+            .iter()
+            .any(|tool| tool.tool_name == tool_name);
+        let hidden_but_policy_authorized = self.tool_exposure.tool_exposure_mode
+            == Some(ToolExposureMode::DomainDiscovery)
+            && self
+                .tool_exposure
+                .hidden_tools
+                .iter()
+                .any(|tool| tool.tool_name == tool_name);
+
+        explicitly_authorized || hidden_but_policy_authorized
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    fn tool(name: &str, domain: &str) -> EffectiveTool {
+        EffectiveTool {
+            tool_name: name.to_string(),
+            domain_code: Some(domain.to_string()),
+            description: String::new(),
+            input_schema: json!({"type": "object"}),
+            skill_name: None,
+            required_variable_keys: Vec::new(),
+        }
+    }
+
+    #[test]
+    fn domain_discovery_hidden_tools_remain_policy_authorized_without_effective_snapshot() {
+        let context = AgentRunContext {
+            conversation_code: None,
+            run_code: "run".into(),
+            workspace_code: "workspace".into(),
+            user_code: None,
+            locale: "en-US".into(),
+            request_id: None,
+            stream_key: None,
+            agent_kind: super::super::AgentKind::React,
+            system_agent_session_id: None,
+            model: AgentModelConfig {
+                model_code: "test".into(),
+                protocol: super::super::AgentModelProtocol::ChatCompletions,
+                base_url: String::new(),
+                api_path: None,
+                api_key: String::new(),
+                model_name: "test".into(),
+                thinking_enabled: false,
+                reasoning_effort: None,
+                responses_stateful_enabled: false,
+                temperature: None,
+                max_tokens: None,
+                context_window_tokens: None,
+                top_p: None,
+                max_retries: None,
+            },
+            auto_model_route: None,
+            variables: Vec::new(),
+            skills: Vec::new(),
+            tools: vec![tool("discovery_expand_tool_domain", "discovery")],
+            effective_tools: Vec::new(),
+            tool_exposure: AgentToolExposureState {
+                tool_exposure_mode: Some(ToolExposureMode::DomainDiscovery),
+                hidden_tools: vec![tool("bash_exec", "bash")],
+                ..AgentToolExposureState::default()
+            },
+            execution_scope: AgentExecutionScope::default(),
+            limits: AgentRunLimits::default(),
+            messages: Vec::new(),
+            observations: Vec::new(),
+            short_term_memory: None,
+            started_at: String::new(),
+        };
+
+        assert!(context.is_tool_authorized("bash_exec"));
+        assert!(context.is_tool_authorized("discovery_expand_tool_domain"));
+        assert!(!context.is_tool_authorized("workspace_delete"));
+    }
 }

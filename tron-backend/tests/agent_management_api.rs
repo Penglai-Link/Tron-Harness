@@ -895,9 +895,12 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         .expect("first request messages should be an array");
     assert!(first_messages.iter().any(|message| {
         message["role"] == json!("system")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("domain_discovery"))
+            && message["content"].as_str().is_some_and(|content| {
+                content.contains("domain_discovery")
+                    && content.contains("discovery_expand_tool_domain")
+                    && (content.contains("Never guess or call a hidden tool")
+                        || content.contains("绝不要猜测工具名"))
+            })
     }));
     assert!(first_messages.iter().any(|message| {
         message["role"] == json!("system")

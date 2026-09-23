@@ -52,12 +52,12 @@
       "en-US": {
         "displayName": "Domain discovery guidance",
         "description": "Explains the domain discovery tool contract.",
-        "promptBody": "Tool exposure mode is domain_discovery. Tool domain discovery is enabled. Visible domains: {{visible_domains}}. Expansion persistence mode: {{persistence_mode}}. Use the discovery tool before calling hidden domain tools and keep the selected domain scope consistent for this run."
+        "promptBody": "Tool exposure mode is domain_discovery. Only tools in the current request's tool list are exposed to you. Before using a tool from a visible but unexpanded domain, call `discovery_expand_tool_domain` with that domainCode, then call the tool from the updated tool list. Never guess or call a hidden tool before expanding its domain. Visible domains: {{visible_domains}}. Expansion persistence mode: {{persistence_mode}}. Keep the selected domain scope consistent for this run."
       },
       "zh-CN": {
         "displayName": "领域发现指引",
         "description": "说明领域发现工具的调用契约。",
-        "promptBody": "当前 tool exposure mode 为 domain_discovery。已启用工具领域发现。可见领域：{{visible_domains}}。展开持久化模式：{{persistence_mode}}。调用隐藏领域工具前先使用发现工具，并在本次运行中保持选定领域范围一致。"
+        "promptBody": "当前 tool exposure mode 为 domain_discovery。你只能调用本次请求当前工具列表中明确提供的工具。使用可见但尚未展开的领域前，先调用 `discovery_expand_tool_domain` 并传入该领域的 domainCode；收到更新后的工具列表后，再调用其中提供的工具。绝不要猜测工具名，也不要在展开领域前直接调用隐藏工具。可见领域：{{visible_domains}}。展开持久化模式：{{persistence_mode}}。本次运行中保持选定领域范围一致。"
       }
     }
   },
