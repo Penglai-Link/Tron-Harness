@@ -238,7 +238,7 @@ export function RagProfilesTab({
 
                           {pageT("actions.testRetrievalProfile", "Retrieval test")}
                         </DropdownMenuItem>
-                        <DropdownMenuItem className='text-red-500' onClick={() => {
+                        <DropdownMenuItem className='text-destructive-foreground' onClick={() => {
                           void deleteProfile(profile!);
                         }} disabled={rowBusyId === profile?.id}>
                           {pageT("actions.deleteRetrievalProfile", "Delete retrieval profile")}

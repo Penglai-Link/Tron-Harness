@@ -85,14 +85,8 @@ function inputNumber(value: string) {
   return value === "" ? undefined : Number(value);
 }
 
-function typeTone(type: JsonSchemaDraft7EditorType) {
-  if (type === "object") return "border-orange-100 bg-orange-50 text-orange-700";
-  if (type === "array") return "border-pink-100 bg-pink-50 text-pink-700";
-  if (type === "string") return "border-blue-100 bg-blue-50 text-blue-700";
-  if (type === "number" || type === "integer") return "border-violet-100 bg-violet-50 text-violet-700";
-  if (type === "boolean") return "border-emerald-100 bg-emerald-50 text-emerald-700";
-  if (type === "null") return "border-slate-200 bg-slate-50 text-slate-600";
-  return "border-amber-100 bg-amber-50 text-amber-700";
+function typeTone(_type: JsonSchemaDraft7EditorType) {
+  return "border-border bg-muted text-foreground";
 }
 
 function SchemaTypeSelect({
@@ -304,11 +298,11 @@ function SchemaPropertyRow({
         <div className="ml-6 flex w-[calc(100%-24px)] shrink-0 items-center justify-end gap-[12px] sm:ml-0 sm:w-auto">
           <SchemaTypeSelect compact readOnly={readOnly} schema={value} onChange={(type) => onSchemaChange(replaceSchemaType(value, type))} />
           {pattern ? (
-            <span className="inline-flex h-8 min-w-[84px] items-center justify-center gap-1 rounded-xl bg-amber-50 px-3 text-[12px] font-medium text-amber-700"><Regex aria-hidden="true" size={12} />regex</span>
+            <span className="inline-flex h-8 min-w-[84px] items-center justify-center gap-1 rounded-xl border border-border bg-muted px-3 text-[12px] font-medium text-muted-foreground"><Regex aria-hidden="true" size={12} />regex</span>
           ) : (
             <button
               aria-pressed={required}
-              className={cn("h-8 min-w-[84px] rounded-xl px-3 text-[12px] font-medium", required ? "bg-red-50 text-red-600" : "bg-slate-100 text-slate-500")}
+              className={cn("h-8 min-w-[84px] rounded-xl px-3 text-[12px] font-medium", required ? "bg-destructive/10 text-destructive-foreground" : "bg-muted text-muted-foreground")}
               disabled={readOnly}
               type="button"
               onClick={() => onRequiredChange(!required)}
@@ -421,7 +415,7 @@ function ObjectPropertiesEditor({ depth, formatOptions, onChange, readOnly, root
       <Button disabled={readOnly} size="sm" variant="ghost" onClick={() => addProperty(true)}><Regex aria-hidden="true" size={14} />{tr("actions.addPattern", "Add pattern")}</Button>
       <button
         aria-pressed={additionalProperties}
-        className={cn("h-8 rounded-xl px-3 text-[12px] font-medium", additionalProperties ? "bg-lime-50 text-lime-700" : "bg-amber-50 text-amber-700")}
+        className={cn("h-8 rounded-xl px-3 text-[12px] font-medium", additionalProperties ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")}
         disabled={readOnly}
         type="button"
         onClick={() => onChange({ ...schema, additionalProperties: !additionalProperties })}
@@ -436,7 +430,7 @@ function ObjectPropertiesEditor({ depth, formatOptions, onChange, readOnly, root
     <div className="space-y-2">
       {root ? objectFooter : null}
       {propertyError ? (
-        <div className="flex items-start gap-[12px] rounded-lg bg-red-50 px-3 py-2 text-[12px] text-red-700"><AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={14} />{propertyError}</div>
+        <div className="flex items-start gap-[12px] rounded-lg bg-destructive/10 px-3 py-2 text-[12px] text-destructive-foreground"><AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={14} />{propertyError}</div>
       ) : null}
       {entries.length ? entries.map(({ name, pattern, value }) => {
         const sameKindEntries = pattern ? Object.keys(patternProperties) : Object.keys(properties);
@@ -487,7 +481,7 @@ function ArrayConstraints(props: SchemaNodeEditorProps) {
         <Field label={tr("fields.minItems", "Minimum items")}><DenseTextInput min={0} type="number" disabled={props.readOnly} placeholder={tr("placeholders.noMinimum", "No minimum")} value={schema.minItems ?? ""} onChange={(event) => props.onChange(removeUndefinedKeyword(schema, "minItems", inputNumber(event.target.value)))} /></Field>
         <Field label={tr("fields.maxItems", "Maximum items")}><DenseTextInput min={0} type="number" disabled={props.readOnly} placeholder={tr("placeholders.noMaximum", "No maximum")} value={schema.maxItems ?? ""} onChange={(event) => props.onChange(removeUndefinedKeyword(schema, "maxItems", inputNumber(event.target.value)))} /></Field>
       </div>
-      <button aria-pressed={Boolean(schema.uniqueItems)} className={cn("h-8 rounded-xl px-3 text-[12px] font-medium", schema.uniqueItems ? "bg-lime-50 text-lime-700" : "bg-slate-100 text-slate-500")} disabled={props.readOnly} type="button" onClick={() => props.onChange(removeUndefinedKeyword(schema, "uniqueItems", schema.uniqueItems ? undefined : true))}>{schema.uniqueItems ? tr("array.unique", "Unique items") : tr("array.duplicates", "Duplicates allowed")}</button>
+      <button aria-pressed={Boolean(schema.uniqueItems)} className={cn("h-8 rounded-xl px-3 text-[12px] font-medium", schema.uniqueItems ? "bg-primary/10 text-primary" : "bg-muted text-muted-foreground")} disabled={props.readOnly} type="button" onClick={() => props.onChange(removeUndefinedKeyword(schema, "uniqueItems", schema.uniqueItems ? undefined : true))}>{schema.uniqueItems ? tr("array.unique", "Unique items") : tr("array.duplicates", "Duplicates allowed")}</button>
       <div className="rounded-xl border border-[var(--color-outline-variant)] px-3 py-2.5">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0">
@@ -496,7 +490,7 @@ function ArrayConstraints(props: SchemaNodeEditorProps) {
           </div>
           {items ? <SchemaTypeSelect compact readOnly={props.readOnly} schema={items} onChange={(type) => props.onChange({ ...schema, items: replaceSchemaType(items, type) })} /> : null}
         </div>
-        {tupleItems ? <div className="mt-2 rounded-lg bg-amber-50 px-3 py-2 text-[12px] text-amber-800">{tr("array.tupleJsonOnly", "Tuple item schemas are preserved in JSON mode.")}</div> : items ? <div className="mt-3 border-t border-[var(--color-outline-variant)] pt-3"><SchemaNodeEditor depth={props.depth + 1} formatOptions={props.formatOptions} readOnly={props.readOnly} schema={items} onChange={(next) => props.onChange({ ...schema, items: next })} /></div> : null}
+        {tupleItems ? <div className="mt-2 rounded-lg border border-border bg-muted px-3 py-2 text-[12px] text-muted-foreground">{tr("array.tupleJsonOnly", "Tuple item schemas are preserved in JSON mode.")}</div> : items ? <div className="mt-3 border-t border-[var(--color-outline-variant)] pt-3"><SchemaNodeEditor depth={props.depth + 1} formatOptions={props.formatOptions} readOnly={props.readOnly} schema={items} onChange={(next) => props.onChange({ ...schema, items: next })} /></div> : null}
       </div>
     </div>
   );

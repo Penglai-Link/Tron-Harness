@@ -98,7 +98,7 @@ export function AppTagList({ tags }: { tags: string[] }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {tags.map((tag) => (
-        <Badge key={tag} variant="info">
+        <Badge key={tag} className="border-border bg-muted text-foreground">
           {tag}
         </Badge>
       ))}

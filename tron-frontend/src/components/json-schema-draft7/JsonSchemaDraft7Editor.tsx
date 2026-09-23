@@ -160,7 +160,7 @@ export function JsonSchemaDraft7Editor({
       />
       <div className={cn(
         "min-h-10 whitespace-pre-line border-t border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] px-4 py-2 text-[11px]",
-        jsonError ? "bg-red-50 text-red-700" : "text-[var(--color-on-surface-variant)]",
+        jsonError ? "bg-destructive/10 text-destructive-foreground" : "text-[var(--color-on-surface-variant)]",
       )}
       >
         {jsonError || tr("json.help", "Draft 7 keywords without visual controls are preserved here.")}
@@ -233,7 +233,7 @@ export function JsonSchemaDraft7Editor({
                 <TextArea className="min-h-64 font-mono text-[12px] leading-6" spellCheck={false} value={testData} onChange={(event) => { setTestData(event.target.value); setTestResult(null); }} />
               </Field>
               {testResult ? (
-                <div className={cn("flex items-start gap-[12px] whitespace-pre-line rounded-xl px-3 py-2.5 text-sm", testResult.tone === "success" ? "bg-emerald-50 text-emerald-800" : "bg-red-50 text-red-700")}>
+                <div className={cn("flex items-start gap-[12px] whitespace-pre-line rounded-xl px-3 py-2.5 text-sm", testResult.tone === "success" ? "bg-primary/10 text-primary" : "bg-destructive/10 text-destructive-foreground")}>
                   {testResult.tone === "success" ? <CheckCircle2 aria-hidden="true" className="mt-0.5 shrink-0" size={16} /> : <AlertCircle aria-hidden="true" className="mt-0.5 shrink-0" size={16} />}
                   {testResult.text}
                 </div>

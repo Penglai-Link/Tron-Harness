@@ -266,3 +266,21 @@
   --warning: var(--color-amber-500);
   --warning-foreground: var(--color-amber-400);
 }
+
+[data-theme="matrix-dark"] {
+  --destructive: #743838;
+  --destructive-foreground: #f19a9a;
+  --info: #214a30;
+  --info-foreground: #a4ddb0;
+  --success: #24683a;
+  --success-foreground: #8de6a2;
+  --warning: #554c2d;
+  --warning-foreground: #d6c783;
+  --chart-1: #5cff85;
+  --chart-2: #3caa5b;
+  --chart-3: #287443;
+  --chart-4: #1d5131;
+  --chart-5: #163a25;
+  --sidebar-primary: #5cff85;
+  --sidebar-ring: #5cff85;
+}

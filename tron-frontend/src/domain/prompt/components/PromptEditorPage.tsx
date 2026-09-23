@@ -870,7 +870,7 @@ export function PromptEditorPage({
                               <code className="break-all font-mono text-sm text-[var(--color-on-surface-variant)]">{variable.managedVariableKey}</code>
                             </div>
                           ) : variable.sourceKind === "RUNTIME" ? (
-                            <span className="flex min-h-10 flex-col justify-center gap-0.5 text-sm text-violet-700 dark:text-violet-300">
+                            <span className="flex min-h-10 flex-col justify-center gap-0.5 text-sm text-primary">
                               <span>{pt("status.runtimeVariable", "System runtime variable")}</span>
                               {variable.runtimeProvider ? (
                                 <span className="break-all font-mono text-xs">{variable.runtimeProvider}</span>

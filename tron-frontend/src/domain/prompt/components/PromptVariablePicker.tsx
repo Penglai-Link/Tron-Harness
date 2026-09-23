@@ -311,8 +311,8 @@ export function PromptVariablePicker({
               <span className="flex items-center gap-[12px]">
                 <span className="font-mono text-sm font-medium text-[var(--color-on-surface)]">{option.key}</span>
                 <span className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${isRuntime
-                  ? "bg-violet-100 text-violet-800 dark:bg-violet-950 dark:text-violet-200"
-                  : "bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-200"}`}
+                  ? "border border-border bg-muted text-muted-foreground"
+                  : "border border-primary/30 bg-primary/10 text-primary"}`}
                 >
                   {isRuntime ? labels.runtime : labels.managed}
                 </span>
