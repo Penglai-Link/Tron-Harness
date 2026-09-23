@@ -3,7 +3,11 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.productivity.params.cwd" => {
             Some("Working directory; defaults to the current application directory.")
         }
-        "agent.toolCatalog.productivity.params.path" => Some("File or registered worktree path."),
+        "agent.toolCatalog.productivity.params.path" => Some("Legacy project file path; use fileRef for session attachments."),
+        "agent.toolCatalog.productivity.params.fileRef" => Some("Input file from a linked project directory or this chat session."),
+        "agent.toolCatalog.productivity.params.fileRef.kind" => Some("File source: workspace_path or session_attachment."),
+        "agent.toolCatalog.productivity.params.fileRef.path" => Some("Path inside a linked project directory."),
+        "agent.toolCatalog.productivity.params.fileRef.attachmentCode" => Some("Attachment code shown in this chat's attachment context."),
         "agent.toolCatalog.productivity.params.outputPath" => {
             Some("New output file; must not exist. Source files are never overwritten.")
         }
@@ -82,7 +86,7 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         }
         "agent.toolCatalog.productivity.word.read.name" => Some("Read Word document"),
         "agent.toolCatalog.productivity.word.read.description" => Some(
-            "Read DOCX body paragraphs and table text with pagination. Does not render pages or read legacy DOC.",
+            "Read DOCX body paragraphs and table text with pagination from a linked project file or session attachment fileRef. Legacy path is still accepted. Does not render pages or read legacy DOC.",
         ),
         "agent.toolCatalog.productivity.word.read.result" => {
             Some("Returns bounded execution results or the new artifact path.")
@@ -107,7 +111,7 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         }
         "agent.toolCatalog.productivity.word.replace_text.name" => Some("Replace Word text"),
         "agent.toolCatalog.productivity.word.replace_text.description" => Some(
-            "Replace exact text across body paragraph runs; preserve other package parts and write a new DOCX. Expected match count must agree.",
+            "Replace exact text across body paragraph runs from a linked project file or session attachment fileRef; preserve other package parts and write a new DOCX to outputPath. Expected match count must agree.",
         ),
         "agent.toolCatalog.productivity.word.replace_text.result" => {
             Some("Returns bounded execution results or the new artifact path.")
@@ -121,14 +125,14 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.productivity.params.columns" => Some("Number of columns, up to 100."),
         "agent.toolCatalog.productivity.excel.read.name" => Some("Read Excel workbook"),
         "agent.toolCatalog.productivity.excel.read.description" => Some(
-            "List sheets or read a bounded XLSX range with cached values and formulas. Does not recalculate formulas.",
+            "List sheets or read a bounded XLSX range with cached values and formulas from a linked project file or session attachment fileRef. Legacy path is still accepted. Does not recalculate formulas.",
         ),
         "agent.toolCatalog.productivity.excel.read.result" => {
             Some("Returns bounded execution results or the new artifact path.")
         }
         "agent.toolCatalog.productivity.excel.write.name" => Some("Write Excel workbook"),
         "agent.toolCatalog.productivity.excel.write.description" => Some(
-            "Create XLSX or edit an existing workbook into a new outputPath. Set typed cells and formulas; no formula calculation. Advanced workbook features may not round-trip; retain the source.",
+            "Create XLSX at path, or edit an existing project workbook or session attachment fileRef into a new outputPath. Set typed cells and formulas; no formula calculation. Advanced workbook features may not round-trip; retain the source.",
         ),
         "agent.toolCatalog.productivity.excel.write.result" => {
             Some("Returns bounded execution results or the new artifact path.")
@@ -153,7 +157,11 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
 pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
     match key {
         "agent.toolCatalog.productivity.params.cwd" => Some("工作目录；缺省使用当前应用目录。"),
-        "agent.toolCatalog.productivity.params.path" => Some("文件或已登记的 worktree 路径。"),
+        "agent.toolCatalog.productivity.params.path" => Some("旧版项目文件路径；读取会话附件请使用 fileRef。"),
+        "agent.toolCatalog.productivity.params.fileRef" => Some("输入文件：已关联项目目录中的文件，或当前会话附件。"),
+        "agent.toolCatalog.productivity.params.fileRef.kind" => Some("文件来源：workspace_path 或 session_attachment。"),
+        "agent.toolCatalog.productivity.params.fileRef.path" => Some("已关联项目目录中的文件路径。"),
+        "agent.toolCatalog.productivity.params.fileRef.attachmentCode" => Some("当前会话附件上下文中的附件编号。"),
         "agent.toolCatalog.productivity.params.outputPath" => {
             Some("新的输出文件，必须不存在；不覆盖源文件。")
         }
@@ -222,7 +230,7 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.productivity.params.startParagraph" => Some("段落起点，从 0 开始。"),
         "agent.toolCatalog.productivity.word.read.name" => Some("读取 Word 文档"),
         "agent.toolCatalog.productivity.word.read.description" => {
-            Some("分页读取 DOCX 正文段落和表格文字；不渲染页面，不支持旧版 DOC。")
+            Some("可从已关联项目文件或会话附件 fileRef 分页读取 DOCX 正文段落和表格文字；兼容旧版 path 参数。不渲染页面，不支持旧版 DOC。")
         }
         "agent.toolCatalog.productivity.word.read.result" => {
             Some("返回受限长度的执行结果或新文件路径。")
@@ -241,7 +249,7 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.productivity.params.expectedCount" => Some("预期匹配次数，默认 1。"),
         "agent.toolCatalog.productivity.word.replace_text.name" => Some("替换 Word 文本"),
         "agent.toolCatalog.productivity.word.replace_text.description" => {
-            Some("跨正文段落文本片段精确替换，保留其他包内容并输出新 DOCX；匹配次数必须一致。")
+            Some("从已关联项目文件或会话附件 fileRef 替换正文段落中的精确文本，保留其他包内容并写入 outputPath 指定的新 DOCX；匹配次数必须一致。")
         }
         "agent.toolCatalog.productivity.word.replace_text.result" => {
             Some("返回受限长度的执行结果或新文件路径。")
@@ -253,14 +261,14 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.productivity.params.columns" => Some("读取列数，最多 100。"),
         "agent.toolCatalog.productivity.excel.read.name" => Some("读取 Excel 工作簿"),
         "agent.toolCatalog.productivity.excel.read.description" => {
-            Some("查询工作表或读取 XLSX 区域的缓存值与公式；不重新计算公式。")
+            Some("可从已关联项目文件或会话附件 fileRef 查询工作表或读取 XLSX 区域的缓存值与公式；兼容旧版 path 参数，不重新计算公式。")
         }
         "agent.toolCatalog.productivity.excel.read.result" => {
             Some("返回受限长度的执行结果或新文件路径。")
         }
         "agent.toolCatalog.productivity.excel.write.name" => Some("写入 Excel 工作簿"),
         "agent.toolCatalog.productivity.excel.write.description" => Some(
-            "创建 XLSX，或编辑已有工作簿并保存到新的 outputPath。支持类型化单元格与公式，不计算公式；高级工作簿特性可能无法完整保留，源文件保持不变。",
+            "可在 path 创建 XLSX，或从项目工作簿/会话附件 fileRef 读取并写入新的 outputPath。支持类型化单元格与公式，不计算公式；高级工作簿特性可能无法完整保留，源文件保持不变。",
         ),
         "agent.toolCatalog.productivity.excel.write.result" => {
             Some("返回受限长度的执行结果或新文件路径。")

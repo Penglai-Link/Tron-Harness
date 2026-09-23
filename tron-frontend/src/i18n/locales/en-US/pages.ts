@@ -1,8 +1,9 @@
 export const pages = {
   agentTerminal: {
     output: "Terminal output (read only)",
-    manual: "Interactive terminal",
-    backToAgent: "Back to conversation terminals",
+    newTab: "New terminal tab",
+    maximizePanel: "Maximize terminal",
+    restorePanel: "Restore terminal",
   "title": "Agent terminal",
   "open": "Open terminal",
   "close": "Hide tab",
@@ -995,6 +996,9 @@ export const pages = {
         detailPromptManagement: "Prompt management",
         detailPromptStructuredContent: "Structured content",
         detailPromptEmpty: "There are no system prompt messages.",
+        toolDomainToolCount: "{{count}} tools",
+        toolDomainExamples: "Example tools",
+        toolDomainMutationTools: "Includes mutating operations",
         checkpointName: "Current Session Checkpoint",
         workingStateName: "Current Session Working State",
         familyContextName: "Related Sessions",

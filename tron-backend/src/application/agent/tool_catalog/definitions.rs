@@ -5,8 +5,44 @@ mod memory;
 mod productivity;
 
 use serde_json::Value;
+use serde_json::json;
 
 use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
+
+pub(super) fn file_reference_schema() -> Value {
+    json!({
+        "oneOf": [
+            {
+                "type": "object",
+                "required": ["kind", "path"],
+                "properties": {
+                    "kind": {"type": "string", "enum": ["workspace_path"], "x-i18n-description-key": "agent.toolCatalog.productivity.params.fileRef.kind"},
+                    "path": {"type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.productivity.params.fileRef.path"}
+                },
+                "additionalProperties": false
+            },
+            {
+                "type": "object",
+                "required": ["kind", "attachmentCode"],
+                "properties": {
+                    "kind": {"type": "string", "enum": ["session_attachment"], "x-i18n-description-key": "agent.toolCatalog.productivity.params.fileRef.kind"},
+                    "attachmentCode": {"type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.productivity.params.fileRef.attachmentCode"}
+                },
+                "additionalProperties": false
+            }
+        ],
+        "x-i18n-description-key": "agent.toolCatalog.productivity.params.fileRef"
+    })
+}
+
+pub(super) fn file_source_selector_schema(path_alias: &str) -> Value {
+    json!({
+        "oneOf": [
+            {"required": ["fileRef"], "not": {"required": [path_alias]}},
+            {"required": [path_alias], "not": {"required": ["fileRef"]}}
+        ]
+    })
+}
 
 #[derive(Debug, Clone)]
 pub(super) struct ToolDomainDefinition {

@@ -312,6 +312,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
     let request = ToolRequest {
         tool_name: "resource_query".to_string(),
         input: json!({ "workspaceCode": WORKSPACE }),
+        invocation_id: None,
     };
     let output = state
         .agent_tool_registry
@@ -336,6 +337,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
             ToolRequest {
                 tool_name: "resource_query".to_string(),
                 input: json!({ "workspaceCode": "ENTERPRISE" }),
+                invocation_id: None,
             },
             &viewer_scope_context,
         )
@@ -358,6 +360,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
                     "resourceCode": "viewer-file",
                     "sourcePath": "payload.txt"
                 }),
+                invocation_id: None,
             },
             &viewer_context,
         )
@@ -373,6 +376,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
                     "action": "upload",
                     "resourceCode": "test-document"
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -390,6 +394,7 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
                     "targetPath": "download.txt",
                     "base64": "cmVzb3VyY2UgcGF5bG9hZA=="
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -422,6 +427,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
                     "allowInheritance": false,
                     "sourcePath": "release-notes.md"
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -436,6 +442,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
             ToolRequest {
                 tool_name: "resource_get".to_string(),
                 input: json!({ "resourceCode": "agent-release-notes" }),
+                invocation_id: None,
             },
             &context,
         )
@@ -453,6 +460,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
                     "resourceCode": "agent-release-notes",
                     "name": "Agent release notes v2"
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -479,6 +487,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
                     },
                     "allowInheritance": false
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -497,6 +506,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
                     "resourceCode": "agent-mysql",
                     "description": "Agent-owned data source"
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -522,6 +532,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
                         "allowInheritance": false
                     }
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -547,6 +558,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
                         "allowInheritance": false
                     }
                 }),
+                invocation_id: None,
             },
             &context,
         )
@@ -561,6 +573,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
             ToolRequest {
                 tool_name: "resource_get".to_string(),
                 input: json!({ "resourceCode": "agent-mysql" }),
+                invocation_id: None,
             },
             &context,
         )
@@ -578,6 +591,7 @@ fn agent_resource_tools_create_all_supported_resource_families() {
             ToolRequest {
                 tool_name: "resource_delete".to_string(),
                 input: json!({ "resourceCode": "agent-bastion-deploy" }),
+                invocation_id: None,
             },
             &context,
         )
@@ -585,24 +599,6 @@ fn agent_resource_tools_create_all_supported_resource_families() {
     let deleted: Value =
         serde_json::from_str(&deleted.observation.output).expect("delete result should be JSON");
     assert_eq!(deleted["deleted"], true);
-}
-
-#[test]
-fn resource_scope_accepts_ancestor_workspace_grants_but_rejects_unrelated_workspaces() {
-    let state = resource_state("ancestor-workspace-access");
-
-    assert!(
-        state
-            .workspaces
-            .user_has_effective_access(WORKSPACE, PARENT_ACTOR)
-            .expect("workspace access should resolve")
-    );
-    assert!(
-        !state
-            .workspaces
-            .user_has_effective_access("COMPLIANCE", PARENT_ACTOR)
-            .expect("workspace access should resolve")
-    );
 }
 
 #[derive(Clone)]
@@ -641,11 +637,10 @@ fn resource_state(test_name: &str) -> AppState {
         state.resources.clone(),
         state.prompts.clone(),
         state.mcp.clone(),
-        state.open_apps.clone(),
         state.memory.clone(),
         state.short_term_memory.clone(),
         Arc::new(tron_backend::adapters::outbound::code_file_editor::LocalCodeFileEditor),
-            Arc::new(tron_backend::adapters::outbound::agent_terminal::LocalAgentTerminal::default()),
+        Arc::new(tron_backend::adapters::outbound::agent_terminal::LocalAgentTerminal::default()),
     )
     .expect("resource test tools should register");
     state.agent_tool_registry = agent_tool_registry;

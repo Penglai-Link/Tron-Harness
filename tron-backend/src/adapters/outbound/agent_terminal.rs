@@ -5,7 +5,9 @@ use crate::{
 };
 use portable_pty::{Child, CommandBuilder, MasterPty, PtySize, native_pty_system};
 use std::{
+    collections::hash_map::DefaultHasher,
     collections::{HashMap, VecDeque},
+    hash::{Hash, Hasher},
     io::{Read, Write},
     sync::{Arc, Mutex},
 };
@@ -71,13 +73,23 @@ impl Drop for Session {
 }
 #[derive(Default)]
 pub struct LocalAgentTerminal {
-    sessions: Mutex<HashMap<String, Arc<Session>>>,
+    registry: Mutex<SessionRegistry>,
+}
+#[derive(Default)]
+struct SessionRegistry {
+    sessions: HashMap<String, Arc<Session>>,
+    invocations: HashMap<(String, String), InvocationRecord>,
+}
+struct InvocationRecord {
+    terminal_id: String,
+    fingerprint: u64,
 }
 impl LocalAgentTerminal {
     fn session(&self, owner: &str, id: &str) -> Result<Arc<Session>, ToolError> {
-        self.sessions
+        self.registry
             .lock()
             .map_err(fail)?
+            .sessions
             .get(id)
             .filter(|session| session.owner == owner)
             .cloned()
@@ -127,16 +139,32 @@ impl LocalAgentTerminal {
 }
 impl AgentTerminal for LocalAgentTerminal {
     fn start(&self, request: TerminalStart) -> Result<TerminalSnapshot, ToolError> {
-        let mut sessions = self.sessions.lock().map_err(fail)?;
+        let mut registry = self.registry.lock().map_err(fail)?;
+        let invocation_key = request
+            .invocation_id
+            .as_ref()
+            .map(|id| (request.owner.clone(), id.clone()));
+        let fingerprint = terminal_start_fingerprint(&request);
+        if let Some(key) = invocation_key.as_ref()
+            && let Some(record) = registry.invocations.get(key)
+        {
+            if record.fingerprint != fingerprint {
+                return Err(fail("terminal_start invocation was retried with different input"));
+            }
+            let session = registry.sessions.get(&record.terminal_id).ok_or_else(|| {
+                fail("terminal session for this invocation has expired; it was not restarted")
+            })?;
+            return Self::snapshot(&record.terminal_id, session, 0);
+        }
         // Completed sessions are reclaimed only when capacity is needed.
-        if sessions.len() >= 64
-            || sessions
+        if registry.sessions.len() >= 64
+            || registry.sessions
                 .values()
                 .filter(|session| session.owner == request.owner)
                 .count()
                 >= 8
         {
-            sessions.retain(|_, session| {
+            registry.sessions.retain(|_, session| {
                 session
                     .child
                     .lock()
@@ -146,8 +174,8 @@ impl AgentTerminal for LocalAgentTerminal {
                     .is_none()
             });
         }
-        if sessions.len() >= 64
-            || sessions
+        if registry.sessions.len() >= 64
+            || registry.sessions
                 .values()
                 .filter(|session| session.owner == request.owner)
                 .count()
@@ -165,8 +193,8 @@ impl AgentTerminal for LocalAgentTerminal {
                 pixel_height: 0,
             })
             .map_err(fail)?;
-        let mut command = CommandBuilder::new(&request.command);
-        command.args(&request.args);
+        let mut command = CommandBuilder::new(&request.program);
+        command.args(&request.program_args);
         command.cwd(&request.cwd);
         command.env("TERM", "xterm-256color");
         for (key, value) in &request.env {
@@ -234,7 +262,16 @@ impl AgentTerminal for LocalAgentTerminal {
             NEXT_ID.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
         );
         let snapshot = Self::snapshot(&id, &session, 0)?;
-        sessions.insert(id, session);
+        registry.sessions.insert(id.clone(), session);
+        if let Some(key) = invocation_key {
+            registry.invocations.insert(
+                key,
+                InvocationRecord {
+                    terminal_id: id,
+                    fingerprint,
+                },
+            );
+        }
         Ok(snapshot)
     }
     fn read(&self, owner: &str, id: &str, cursor: u64) -> Result<TerminalSnapshot, ToolError> {
@@ -264,8 +301,9 @@ impl AgentTerminal for LocalAgentTerminal {
     }
 
     fn list(&self, owner: &str) -> Result<Vec<TerminalSnapshot>, ToolError> {
-        let sessions = self.sessions.lock().map_err(fail)?;
-        sessions
+        let registry = self.registry.lock().map_err(fail)?;
+        registry
+            .sessions
             .iter()
             .filter(|(_, session)| session.owner == owner)
             .map(|(id, session)| {
@@ -278,5 +316,78 @@ impl AgentTerminal for LocalAgentTerminal {
                 Ok(snapshot)
             })
             .collect()
+    }
+}
+
+fn terminal_start_fingerprint(request: &TerminalStart) -> u64 {
+    let mut hasher = DefaultHasher::new();
+    request.owner.hash(&mut hasher);
+    request.command.hash(&mut hasher);
+    request.args.hash(&mut hasher);
+    request.program.hash(&mut hasher);
+    request.program_args.hash(&mut hasher);
+    request.cwd.hash(&mut hasher);
+    request.env.hash(&mut hasher);
+    hasher.finish()
+}
+
+#[cfg(all(test, unix))]
+mod tests {
+    use super::*;
+    use std::{collections::BTreeMap, path::PathBuf};
+
+    fn request(invocation_id: &str, command: &str) -> TerminalStart {
+        TerminalStart {
+            owner: "owner-a".into(),
+            invocation_id: Some(invocation_id.into()),
+            command: command.into(),
+            args: Vec::new(),
+            program: "/bin/sh".into(),
+            program_args: vec!["-c".into(), "sleep 30".into()],
+            cwd: PathBuf::from("/tmp"),
+            env: BTreeMap::new(),
+        }
+    }
+
+    #[test]
+    fn starting_the_same_call_is_idempotent_and_eviction_never_restarts_it() {
+        let terminal = LocalAgentTerminal::default();
+        let first = terminal
+            .start(request("run-a:call-a", "service"))
+            .expect("first start should succeed");
+        let retry = terminal
+            .start(request("run-a:call-a", "service"))
+            .expect("retry should return the existing terminal");
+        assert_eq!(first.terminal_id, retry.terminal_id);
+
+        let separate = terminal
+            .start(request("run-a:call-b", "service"))
+            .expect("a distinct tool call may start the same command");
+        assert_ne!(first.terminal_id, separate.terminal_id);
+
+        terminal
+            .registry
+            .lock()
+            .unwrap()
+            .sessions
+            .remove(&first.terminal_id);
+        let expired = terminal
+            .start(request("run-a:call-a", "service"))
+            .err()
+            .expect("an evicted invocation must not launch a replacement");
+        assert!(expired.to_string().contains("was not restarted"));
+        terminal.stop("owner-a", &separate.terminal_id).unwrap();
+    }
+
+    #[test]
+    fn a_retry_with_different_command_is_rejected() {
+        let terminal = LocalAgentTerminal::default();
+        let first = terminal.start(request("run-a:call-a", "service"));
+        assert!(first.is_ok());
+        let error = terminal
+            .start(request("run-a:call-a", "different"))
+            .err()
+            .expect("call identity cannot be reused for different input");
+        assert!(error.to_string().contains("different input"));
     }
 }

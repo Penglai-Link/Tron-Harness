@@ -16,17 +16,7 @@ function sessionAgentTagLabel(agentCode: string | null | undefined) {
   return normalized.toUpperCase();
 }
 
-function sessionAgentTagTone(agentCode: string | null | undefined) {
-  const normalized = agentCode?.trim().toLowerCase();
-  if (!normalized || normalized === "main-agent") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (normalized === "opencode") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-  if (normalized === "codex") {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
+function sessionAgentTagTone(_agentCode: string | null | undefined) {
   return "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
 }
 

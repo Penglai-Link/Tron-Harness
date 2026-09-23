@@ -3,10 +3,14 @@ mod common;
 use axum::http::{Method, StatusCode};
 use common::{app_with_config, authenticated_request, response_json};
 use serde_json::json;
-use std::{path::Path, process::Command};
+use std::{io::Cursor, path::Path, process::Command};
 use tron_backend::{
     adapters::outbound::application_directory::GitApplicationDirectoryInspector,
-    application::{agent::execution_context_message, project::ApplicationDirectoryInspector},
+    application::{
+        agent::execution_context_message,
+        project::ApplicationDirectoryInspector,
+        resource::ChatSessionAttachmentCreateCommand,
+    },
     config::AppConfig,
     domain::agent::{AgentExecutionScope, ApplicationDirectoryStatus},
 };
@@ -523,6 +527,7 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
         ToolRequest {
             tool_name: "bash_exec".into(),
             input: json!({"command": "pwd"}),
+            invocation_id: None,
         },
         &context,
     );
@@ -564,6 +569,7 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
                 ToolRequest {
                     tool_name: "fs_read_text".into(),
                     input: json!({"path": "Cargo.toml"}),
+                    invocation_id: None,
                 },
                 &context,
             )
@@ -611,12 +617,22 @@ fn call_tool(
     name: &str,
     input: serde_json::Value,
 ) -> serde_json::Value {
+    call_tool_with_invocation(state, context, name, input, None)
+}
+fn call_tool_with_invocation(
+    state: &tron_backend::app::AppState,
+    context: &tron_backend::domain::agent::AgentRunContext,
+    name: &str,
+    input: serde_json::Value,
+    invocation_id: Option<String>,
+) -> serde_json::Value {
     let result = state
         .agent_tool_registry
         .execute_allowed(
             tron_backend::domain::agent::ToolRequest {
                 tool_name: name.into(),
                 input,
+                invocation_id,
             },
             context,
         )
@@ -657,7 +673,7 @@ fn office_tools_round_trip_without_overwriting_sources() {
         call_tool(&state, &context, "word_read", json!({"path":"final.docx"}))["paragraphs"][1]["text"],
         "状态：正式 & 待检查"
     );
-    let error=state.agent_tool_registry.execute_allowed(tron_backend::domain::agent::ToolRequest{tool_name:"word_replace_text".into(),input:json!({"path":"report.docx","outputPath":"bad.docx","find":"草稿","replace":"正式","expectedCount":2})},&context).unwrap_err();
+    let error=state.agent_tool_registry.execute_allowed(tron_backend::domain::agent::ToolRequest{tool_name:"word_replace_text".into(),input:json!({"path":"report.docx","outputPath":"bad.docx","find":"草稿","replace":"正式","expectedCount":2}),invocation_id:None},&context).unwrap_err();
     assert!(error.to_string().contains("found 1"));
     assert!(!root.join("bad.docx").exists());
     call_tool(
@@ -709,13 +725,200 @@ fn office_tools_round_trip_without_overwriting_sources() {
                 .execute_allowed(
                     tron_backend::domain::agent::ToolRequest {
                         tool_name: name.into(),
-                        input
+                        input,
+                        invocation_id: None,
                     },
                     &context
                 )
                 .is_err()
         );
     }
+}
+
+#[test]
+fn office_tools_read_session_attachments_through_file_refs() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().canonicalize().unwrap();
+    let state = productivity_state(&root);
+    let context = productivity_context(&root);
+
+    let text_code = "CHAT-ATTACH-TEXT-1";
+    state
+        .resources
+        .store_chat_session_attachment(
+            ChatSessionAttachmentCreateCommand {
+                workspace_code: context.workspace_code.clone(),
+                session_code: context.conversation_code.clone().unwrap(),
+                attachment_code: text_code.into(),
+                file_name: "notes.txt".into(),
+                content_type: "text/plain".into(),
+            },
+            &mut Cursor::new("第一行\nsecond line\n".as_bytes()),
+        )
+        .unwrap();
+    let text = call_tool(
+        &state,
+        &context,
+        "fs_read_text",
+        json!({
+            "fileRef":{"kind":"session_attachment","attachmentCode":text_code},
+            "startLine":1,
+            "endLine":2,
+        }),
+    );
+    assert_eq!(text["content"], "第一行\nsecond line");
+    assert_eq!(text["fileName"], "notes.txt");
+    assert_eq!(text["fileRef"]["kind"], "session_attachment");
+
+    std::fs::write(root.join("payload.json"), r#"{"topics":["alpha","beta"]}"#).unwrap();
+    let json_from_workspace = call_tool(
+        &state,
+        &context,
+        "chat_attachment_parse_json",
+        json!({
+            "fileRef":{"kind":"workspace_path","path":"payload.json"},
+            "jsonPath":"/topics/1",
+        }),
+    );
+    assert_eq!(json_from_workspace["selection"]["value"], "beta");
+    assert_eq!(json_from_workspace["fileRef"]["kind"], "workspace_path");
+
+    let json_code = "CHAT-ATTACH-JSON-1";
+    state
+        .resources
+        .store_chat_session_attachment(
+            ChatSessionAttachmentCreateCommand {
+                workspace_code: context.workspace_code.clone(),
+                session_code: context.conversation_code.clone().unwrap(),
+                attachment_code: json_code.into(),
+                file_name: "payload.json".into(),
+                content_type: "application/json".into(),
+            },
+            &mut Cursor::new(br#"{"topics":["alpha","beta"]}"#),
+        )
+        .unwrap();
+    let json_from_session = call_tool(
+        &state,
+        &context,
+        "chat_attachment_parse_json",
+        json!({
+            "fileRef":{"kind":"session_attachment","attachmentCode":json_code},
+            "jsonPath":"/topics/0",
+        }),
+    );
+    assert_eq!(json_from_session["selection"]["value"], "alpha");
+    assert_eq!(json_from_session["attachment"]["attachmentCode"], json_code);
+    let legacy_json = call_tool(
+        &state,
+        &context,
+        "chat_attachment_parse_json",
+        json!({"attachmentCode":json_code,"jsonPath":"/topics/1"}),
+    );
+    assert_eq!(legacy_json["selection"]["value"], "beta");
+
+    call_tool(
+        &state,
+        &context,
+        "word_create",
+        json!({"path":"attachment-source.docx","paragraphs":[{"text":"附件正文：待处理"}]}),
+    );
+    let word_bytes = std::fs::read(root.join("attachment-source.docx")).unwrap();
+    let attachment_code = "CHAT-ATTACH-WORD-1";
+    state
+        .resources
+        .store_chat_session_attachment(
+            ChatSessionAttachmentCreateCommand {
+                workspace_code: context.workspace_code.clone(),
+                session_code: context.conversation_code.clone().unwrap(),
+                attachment_code: attachment_code.into(),
+                file_name: "upload.docx".into(),
+                content_type:
+                    "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        .into(),
+            },
+            &mut Cursor::new(word_bytes.clone()),
+        )
+        .unwrap();
+
+    let attachment_ref = json!({
+        "kind":"session_attachment",
+        "attachmentCode":attachment_code,
+    });
+    let read = call_tool(
+        &state,
+        &context,
+        "word_read",
+        json!({"fileRef":attachment_ref,"limit":100}),
+    );
+    assert_eq!(read["fileName"], "upload.docx");
+    assert_eq!(read["paragraphs"][0]["text"], "附件正文：待处理");
+    assert_eq!(read["fileRef"]["kind"], "session_attachment");
+
+    call_tool(
+        &state,
+        &context,
+        "word_replace_text",
+        json!({
+            "fileRef":attachment_ref,
+            "outputPath":"attachment-export.docx",
+            "find":"待处理",
+            "replace":"已完成",
+            "expectedCount":1,
+        }),
+    );
+    let exported = call_tool(
+        &state,
+        &context,
+        "word_read",
+        json!({"path":"attachment-export.docx"}),
+    );
+    assert_eq!(exported["paragraphs"][0]["text"], "附件正文：已完成");
+    let (record, stored_word_bytes) = state
+        .resources
+        .read_chat_session_attachment(
+            &context.workspace_code,
+            context.conversation_code.as_deref().unwrap(),
+            attachment_code,
+        )
+        .unwrap();
+    assert_eq!(record.file_name, "upload.docx");
+    assert_eq!(stored_word_bytes, word_bytes);
+
+    call_tool(
+        &state,
+        &context,
+        "excel_write",
+        json!({"path":"attachment-source.xlsx","sheets":[{"name":"Sheet1","cells":[{"row":1,"column":1,"value":"主机名"},{"row":2,"column":1,"value":"db-01"}]}]}),
+    );
+    let excel_bytes = std::fs::read(root.join("attachment-source.xlsx")).unwrap();
+    let excel_code = "CHAT-ATTACH-XLSX-1";
+    state
+        .resources
+        .store_chat_session_attachment(
+            ChatSessionAttachmentCreateCommand {
+                workspace_code: context.workspace_code.clone(),
+                session_code: context.conversation_code.clone().unwrap(),
+                attachment_code: excel_code.into(),
+                file_name: "servers.xlsx".into(),
+                content_type:
+                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".into(),
+            },
+            &mut Cursor::new(excel_bytes),
+        )
+        .unwrap();
+    let excel = call_tool(
+        &state,
+        &context,
+        "excel_read",
+        json!({
+            "fileRef":{"kind":"session_attachment","attachmentCode":excel_code},
+            "sheet":"Sheet1",
+            "rows":2,
+            "columns":1,
+        }),
+    );
+    assert_eq!(excel["fileName"], "servers.xlsx");
+    assert_eq!(excel["cells"][1]["value"], "db-01");
 }
 
 #[test]
@@ -748,6 +951,7 @@ fn productivity_domains_are_localized_and_discoverable() {
                     tron_backend::domain::agent::ToolRequest {
                         tool_name: "discovery_expand_tool_domain".into(),
                         input: json!({"domainCode":domain}),
+                        invocation_id: None,
                     },
                     &context,
                 )
@@ -964,7 +1168,8 @@ async fn deleting_selected_worktree_never_reverts_to_old_tool_observations() {
             .execute_allowed(
                 ToolRequest {
                     tool_name: "bash_exec".into(),
-                    input: json!({"command":"pwd"})
+                    input: json!({"command":"pwd"}),
+                    invocation_id: None,
                 },
                 &context
             )
@@ -1038,7 +1243,8 @@ fn word_replacement_preserves_split_run_formatting_and_other_package_parts() {
                 .execute_allowed(
                     tron_backend::domain::agent::ToolRequest {
                         tool_name: name.into(),
-                        input
+                        input,
+                        invocation_id: None,
                     },
                     &context
                 )
@@ -1115,7 +1321,8 @@ fn code_patch_rejects_invalid_edits_and_preserves_unrelated_changes() {
                 .execute_allowed(
                     ToolRequest {
                         tool_name: "fs_apply_patch".into(),
-                        input: json!({"patch":patch})
+                        input: json!({"patch":patch}),
+                        invocation_id: None,
                     },
                     &context
                 )
@@ -1132,7 +1339,7 @@ fn code_patch_rejects_invalid_edits_and_preserves_unrelated_changes() {
     std::fs::write(root.join("a.txt"), "first\n").unwrap();
     call_tool(&state, &context, "fs_read_text", json!({"path":"a.txt"}));
     std::fs::write(root.join("a.txt"), "first\nconcurrent change\n").unwrap();
-    assert!(state.agent_tool_registry.execute_allowed(ToolRequest{tool_name:"fs_apply_patch".into(),input:json!({"patch":"*** Begin Patch\n*** Update File: a.txt\n@@\n-first\n+updated\n*** End Patch"})},&context).is_ok());
+    assert!(state.agent_tool_registry.execute_allowed(ToolRequest{tool_name:"fs_apply_patch".into(),input:json!({"patch":"*** Begin Patch\n*** Update File: a.txt\n@@\n-first\n+updated\n*** End Patch"}),invocation_id:None},&context).is_ok());
     assert_eq!(
         std::fs::read_to_string(root.join("a.txt")).unwrap(),
         "updated\nconcurrent change\n"
@@ -1192,6 +1399,7 @@ fn legacy_patch_guards_ambiguity_and_catalog_removes_code_check() {
             ToolRequest {
                 tool_name: "fs_apply_patch".into(),
                 input,
+                invocation_id: None,
             },
             &context,
         )
@@ -1261,8 +1469,100 @@ fn code_patch_preserves_executable_permissions_and_rejects_symlinks() {
         0o755
     );
     symlink(root.join("bin/run.sh"), root.join("link.sh")).unwrap();
-    assert!(state.agent_tool_registry.execute_allowed(ToolRequest{tool_name:"fs_apply_patch".into(),input:json!({"patch":"*** Begin Patch\n*** Delete File: link.sh\n*** End Patch"})},&context).is_err());
+    assert!(state.agent_tool_registry.execute_allowed(ToolRequest{tool_name:"fs_apply_patch".into(),input:json!({"patch":"*** Begin Patch\n*** Delete File: link.sh\n*** End Patch"}),invocation_id:None},&context).is_err());
     assert!(root.join("bin/run.sh").exists());
+}
+
+#[cfg(unix)]
+#[test]
+fn agent_terminal_accepts_a_complete_command_line_without_args() {
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().canonicalize().unwrap();
+    let state = productivity_state(&root);
+    let context = productivity_context(&root);
+    let started = call_tool(
+        &state,
+        &context,
+        "terminal_start",
+        json!({"command":"printf ready && sleep 30"}),
+    );
+    let id = started["terminalId"].as_str().unwrap();
+    let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+    let mut output = started["output"].as_str().unwrap().to_string();
+    let mut cursor = started["nextCursor"].as_u64().unwrap();
+    while !output.contains("ready") {
+        assert!(std::time::Instant::now() < deadline);
+        std::thread::sleep(std::time::Duration::from_millis(20));
+        let snapshot = call_tool(
+            &state,
+            &context,
+            "terminal_read",
+            json!({"terminalId":id,"cursor":cursor}),
+        );
+        output.push_str(snapshot["output"].as_str().unwrap());
+        cursor = snapshot["nextCursor"].as_u64().unwrap();
+    }
+    assert_eq!(
+        call_tool(&state, &context, "terminal_read", json!({"terminalId":id}))["running"],
+        true
+    );
+    call_tool(&state, &context, "terminal_stop", json!({"terminalId":id}));
+}
+
+#[cfg(unix)]
+#[test]
+fn agent_terminal_retries_are_idempotent_and_bare_shells_are_rejected() {
+    use tron_backend::domain::agent::ToolRequest;
+
+    let temporary = tempfile::tempdir().unwrap();
+    let root = temporary.path().canonicalize().unwrap();
+    let state = productivity_state(&root);
+    let context = productivity_context(&root);
+    let input = json!({"command":"sleep 30"});
+    let first = call_tool_with_invocation(
+        &state,
+        &context,
+        "terminal_start",
+        input.clone(),
+        Some("run-id:call-1".into()),
+    );
+    let retried = call_tool_with_invocation(
+        &state,
+        &context,
+        "terminal_start",
+        input.clone(),
+        Some("run-id:call-1".into()),
+    );
+    assert_eq!(first["terminalId"], retried["terminalId"]);
+
+    let second = call_tool_with_invocation(
+        &state,
+        &context,
+        "terminal_start",
+        input,
+        Some("run-id:call-2".into()),
+    );
+    assert_ne!(first["terminalId"], second["terminalId"]);
+    assert_eq!(call_tool(&state, &context, "terminal_list", json!({})).as_array().unwrap().len(), 2);
+
+    let bare_shell = state.agent_tool_registry.execute_allowed(
+        ToolRequest {
+            tool_name: "terminal_start".into(),
+            input: json!({"command":"bash"}),
+            invocation_id: None,
+        },
+        &context,
+    );
+    assert!(bare_shell.unwrap_err().to_string().contains("interactive: true"));
+
+    for terminal in [first, second] {
+        call_tool(
+            &state,
+            &context,
+            "terminal_stop",
+            json!({"terminalId":terminal["terminalId"]}),
+        );
+    }
 }
 
 #[cfg(unix)]
@@ -1290,7 +1590,8 @@ fn agent_terminal_survives_turns_accepts_input_and_isolates_conversations() {
             .execute_allowed(
                 ToolRequest {
                     tool_name: "terminal_read".into(),
-                    input: json!({"terminalId":id})
+                    input: json!({"terminalId":id}),
+                    invocation_id: None,
                 },
                 &outsider
             )

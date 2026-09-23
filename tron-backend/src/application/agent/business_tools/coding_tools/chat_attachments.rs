@@ -134,7 +134,8 @@ struct ChatAttachmentParseJsonTool {
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct ChatAttachmentParseJsonInput {
-    attachment_code: String,
+    attachment_code: Option<String>,
+    file_ref: Option<Value>,
     json_path: Option<String>,
     max_value_bytes: Option<usize>,
 }
@@ -170,7 +171,9 @@ struct JsonSelection {
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 struct ChatAttachmentJsonOutput {
-    attachment: ChatAttachmentDescriptor,
+    attachment: Option<ChatAttachmentDescriptor>,
+    file_name: String,
+    file_ref: Value,
     valid_json: bool,
     root_type: &'static str,
     document: JsonDocumentStats,
@@ -193,11 +196,32 @@ impl Tool for ChatAttachmentParseJsonTool {
             DEFAULT_JSON_VALUE_BYTES,
             MAX_JSON_VALUE_BYTES,
         )?;
-        let (record, bytes) = read_attachment(&self.resources, context, &input.attachment_code)?;
-        let document = serde_json::from_slice::<Value>(&bytes).map_err(|error| {
+        let source_input = match (input.file_ref, input.attachment_code) {
+            (Some(file_ref), None) => serde_json::json!({"fileRef": file_ref}),
+            (None, Some(attachment_code)) => serde_json::json!({
+                "fileRef": {
+                    "kind": "session_attachment",
+                    "attachmentCode": attachment_code
+                }
+            }),
+            (Some(_), Some(_)) => {
+                return Err(ToolError::ExecutionFailed(
+                    "provide fileRef or legacy attachmentCode, not both".into(),
+                ));
+            }
+            (None, None) => {
+                return Err(ToolError::ExecutionFailed(
+                    "fileRef is required (legacy attachmentCode is also accepted)".into(),
+                ));
+            }
+        };
+        let source =
+            super::super::file_access::resolve_input_file(&source_input, context, &self.resources)?;
+        let record = source.attachment_record.as_ref();
+        let document = serde_json::from_slice::<Value>(&source.bytes).map_err(|error| {
             ToolError::ExecutionFailed(format!(
-                "attachment `{}` is not valid JSON: {error}",
-                input.attachment_code
+                "file `{}` is not valid JSON: {error}",
+                source.file_name
             ))
         })?;
         let mut stats = JsonDocumentStats::default();
@@ -215,7 +239,9 @@ impl Tool for ChatAttachmentParseJsonTool {
         json_observation(
             self.name(),
             &ChatAttachmentJsonOutput {
-                attachment: descriptor(&record),
+                attachment: record.map(descriptor),
+                file_name: source.file_name,
+                file_ref: source.reference,
                 valid_json: true,
                 root_type: json_type(&document),
                 document: stats,
@@ -223,33 +249,6 @@ impl Tool for ChatAttachmentParseJsonTool {
             },
         )
     }
-}
-
-fn read_attachment(
-    resources: &ResourceService,
-    context: &AgentRunContext,
-    attachment_code: &str,
-) -> Result<
-    (
-        crate::domain::resource::ChatSessionAttachmentRecord,
-        Vec<u8>,
-    ),
-    ToolError,
-> {
-    let attachment_code = attachment_code.trim();
-    if attachment_code.is_empty() {
-        return Err(ToolError::ExecutionFailed(
-            "attachmentCode is required".into(),
-        ));
-    }
-    let session_code = conversation_code(context)?;
-    resources
-        .read_chat_session_attachment(&context.workspace_code, session_code, attachment_code)
-        .map_err(|error| {
-            ToolError::ExecutionFailed(format!(
-                "read chat attachment `{attachment_code}` failed: {error}"
-            ))
-        })
 }
 
 fn conversation_code(context: &AgentRunContext) -> Result<&str, ToolError> {

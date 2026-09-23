@@ -65,6 +65,14 @@ impl ReactAgent {
         let tool_call_id = format!("{}-tool-{}", context.run_code, *tool_calls);
         let sequence = *tool_calls;
         let model_call_id = call.call_id.clone();
+        let invocation_id = format!(
+            "{}:{}",
+            context.run_code,
+            model_call_id
+                .as_deref()
+                .filter(|id| !id.is_empty())
+                .unwrap_or(&tool_call_id)
+        );
         let tool_name = call.tool_name.clone();
         let tool_input = call.input.clone();
         let input_error = call.input_error.clone();
@@ -133,6 +141,7 @@ impl ReactAgent {
                 ToolRequest {
                     tool_name: call_tool_name,
                     input: call_tool_input,
+                    invocation_id: Some(invocation_id),
                 },
                 &context_snapshot,
                 &mut publish_activity,
@@ -267,6 +276,14 @@ impl ReactAgent {
             let tool_call_id = format!("{}-tool-{}", context.run_code, *tool_calls);
             let sequence = *tool_calls;
             let model_call_id = call.call_id.clone();
+            let invocation_id = format!(
+                "{}:{}",
+                context.run_code,
+                model_call_id
+                    .as_deref()
+                    .filter(|id| !id.is_empty())
+                    .unwrap_or(&tool_call_id)
+            );
             let tool_name = call.tool_name.clone();
             let tool_input = call.input.clone();
             let input_error = call.input_error.clone();
@@ -337,6 +354,7 @@ impl ReactAgent {
                     ToolRequest {
                         tool_name: call_tool_name,
                         input: call_tool_input,
+                        invocation_id: Some(invocation_id),
                     },
                     &context_snapshot,
                     &mut publish_activity,

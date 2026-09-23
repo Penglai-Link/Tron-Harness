@@ -1,4 +1,5 @@
 mod productivity_tools;
+mod file_access;
 mod ask_user;
 mod coding_tools;
 mod discovery;
@@ -89,7 +90,7 @@ where
         mcp,
     );
     tools.extend(coding_tools::coding_domain_tools(resources.clone(), code_editor, terminal));
-    tools.extend(productivity_tools::tools());
+    tools.extend(productivity_tools::tools(resources.clone()));
     tools.extend(memory_tools::memory_business_tools(memory));
     tools.extend(short_term_memory_tools::short_term_memory_tools(
         short_term_memory,

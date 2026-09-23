@@ -62,8 +62,27 @@ fn attachment_context_text(attachment: &ChatMessageAttachment) -> String {
     let attachment_guidance = attachment
         .resource_code
         .as_deref()
-        .map(|_| {
-            "\nThis is a session attachment, not a workspace path. For complete access use chat_attachment_read_text with attachmentCode for byte chunks, or chat_attachment_parse_json for full JSON parsing."
+        .map(|attachment_code| {
+            let file_name = attachment.file_name.as_deref().unwrap_or_default();
+            let extension = std::path::Path::new(file_name)
+                .extension()
+                .and_then(|value| value.to_str())
+                .unwrap_or_default()
+                .to_ascii_lowercase();
+            match extension.as_str() {
+                "docx" => format!(
+                    "\nThis is a session attachment, not a workspace path. Read it with word_read using fileRef={{\"kind\":\"session_attachment\",\"attachmentCode\":\"{attachment_code}\"}}; do not pass the attachment code as path."
+                ),
+                "xlsx" => format!(
+                    "\nThis is a session attachment, not a workspace path. Read it with excel_read using fileRef={{\"kind\":\"session_attachment\",\"attachmentCode\":\"{attachment_code}\"}}; do not pass the attachment code as path."
+                ),
+                "json" => format!(
+                    "\nThis is a session attachment, not a workspace path. Use chat_attachment_parse_json with fileRef={{\"kind\":\"session_attachment\",\"attachmentCode\":\"{attachment_code}\"}} for complete JSON parsing."
+                ),
+                _ => format!(
+                    "\nThis is a session attachment, not a workspace path. For UTF-8 text use fs_read_text with fileRef={{\"kind\":\"session_attachment\",\"attachmentCode\":\"{attachment_code}\"}}; for JSON use chat_attachment_parse_json with the same fileRef shape. Do not pass the attachment code as path."
+                ),
+            }
         })
         .unwrap_or_default();
     format!(

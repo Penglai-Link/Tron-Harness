@@ -14,11 +14,8 @@ const SSH_HELPER_SCRIPT: &str = include_str!("ssh_helper.sh");
 const SSH_BOOTSTRAP_SCRIPT: &str = include_str!("ssh_bootstrap.sh");
 const CONTAINER_HELPER_SCRIPT: &str = include_str!("container_helper.sh");
 
-const ZSH_CANDIDATES: [&str; 2] = ["/bin/zsh", "/usr/bin/zsh"];
-const BASH_CANDIDATES: [&str; 3] = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"];
 const SSH_CANDIDATES: [&str; 3] = ["/usr/bin/ssh", "/bin/ssh", "/usr/local/bin/ssh"];
 const BASH_EXECUTABLE_CANDIDATES: [&str; 3] = ["/bin/bash", "/usr/bin/bash", "/usr/local/bin/bash"];
-const POSIX_FALLBACK: &str = "/bin/sh";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum ShellKind {
@@ -174,20 +171,7 @@ fn minified_integration_script() -> String {
 }
 
 fn resolve_shell_program() -> PathBuf {
-    let configured = std::env::var_os("SHELL").map(PathBuf::from);
-    if let Some(configured) = configured
-        && ShellKind::from_program(&configured).reports_blocks()
-        && configured.is_file()
-    {
-        return configured;
-    }
-
-    ZSH_CANDIDATES
-        .iter()
-        .chain(BASH_CANDIDATES.iter())
-        .map(PathBuf::from)
-        .find(|candidate| candidate.is_file())
-        .unwrap_or_else(|| PathBuf::from(POSIX_FALLBACK))
+    crate::application::shell_program::resolve_user_shell()
 }
 
 fn resolve_ssh_program() -> Option<PathBuf> {

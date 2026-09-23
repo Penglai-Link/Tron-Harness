@@ -8,6 +8,7 @@ import { getApiAccessToken, getApiBaseUrl } from "@/shared/api/httpClient";
 import { useTheme, useWorkspaceSpaces } from "@/shared";
 
 import { explainResultMessage, generateAiChatMessage, generateCommandMessage } from "./prompt";
+import { createTerminalChatInput } from "./terminalChatInput";
 import { getTerminalAnsiTheme } from "./terminalTheme";
 
 import "@tron/chat-terminal/styles.css";
@@ -163,10 +164,12 @@ const Terminal = ({ onExit }: TerminalProps) => {
                 controller.signal,
               );
             } else {
-              await chatAdapter.streamMessage(session, {
-                content,
-                workspaceCode,
-              }, handlers, controller.signal);
+              await chatAdapter.streamMessage(
+                session,
+                createTerminalChatInput(content, workspaceCode),
+                handlers,
+                controller.signal,
+              );
             }
             return { requestId };
           } finally {

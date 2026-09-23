@@ -6,7 +6,7 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         ),
         "agent.toolCatalog.terminal.start.name" => Some("Start terminal process"),
         "agent.toolCatalog.terminal.start.description" => Some(
-            "Start an executable and return immediately with terminalId. Uses a PTY without platform AI shell integration. cwd defaults to the current application/worktree and remains fixed for this process. To run shell syntax explicitly launch a shell; prefer bash --noprofile --norc or zsh -f. Read output later with terminal_read. Sessions survive agent turns, not backend restart.",
+            "Start a long-running service with command, or open the user's preferred interactive shell with interactive:true and no command or args. A bare shell command is rejected to prevent accidental empty terminals. Complete command strings run through the user's preferred shell in non-interactive mode; explicit args run as literal argv. Uses a PTY without platform AI shell integration. cwd defaults to the current application/worktree. Read output later with terminal_read. Sessions survive agent turns, not backend restart.",
         ),
         "agent.toolCatalog.terminal.read.name" => Some("Read terminal output"),
         "agent.toolCatalog.terminal.read.description" => Some(
@@ -28,10 +28,13 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
             Some("Terminal identity, working directory, state and bounded output.")
         }
         "agent.toolCatalog.terminal.params.command" => {
-            Some("Executable name or path; shell syntax is not interpreted.")
+            Some("Complete command line, e.g. npm run dev. When args is supplied, use only the executable name or path.")
         }
         "agent.toolCatalog.terminal.params.args" => {
-            Some("Arguments passed directly to the executable.")
+            Some("Optional literal argv. Omit when command already contains the full command line.")
+        }
+        "agent.toolCatalog.terminal.params.interactive" => {
+            Some("Set true to open the user's preferred shell. Do not provide command or args.")
         }
         "agent.toolCatalog.terminal.params.cwd" => {
             Some("Allowed working directory; defaults to the selected application/worktree.")
@@ -59,7 +62,7 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         ),
         "agent.toolCatalog.terminal.start.name" => Some("启动终端进程"),
         "agent.toolCatalog.terminal.start.description" => Some(
-            "启动可执行程序并立即返回 terminalId。使用伪终端，不注入平台 AI shell 功能。cwd 默认当前应用/worktree，已有进程不随会话切换目录。执行 shell 语法时显式启动 shell，建议 bash --noprofile --norc 或 zsh -f。后续使用 terminal_read 读取输出。支持跨轮次使用，后端重启后不保留。",
+            "command 用于启动长期运行的服务；只有明确需要空交互 Shell 时才传 interactive:true，且不能传 command 或 args。避免直接启动裸 bash/zsh 等空 Shell，它会被拒绝。完整命令字符串由用户默认 Shell 以非交互方式执行；显式 args 按原样作为参数传入。使用伪终端，不注入平台 AI shell 功能。cwd 默认当前应用/worktree；后续用 terminal_read 读取输出。支持跨轮次，后端重启后不保留。",
         ),
         "agent.toolCatalog.terminal.read.name" => Some("读取终端输出"),
         "agent.toolCatalog.terminal.read.description" => Some(
@@ -79,9 +82,12 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         }
         "agent.toolCatalog.terminal.result" => Some("终端标识、工作目录、运行状态和限量输出。"),
         "agent.toolCatalog.terminal.params.command" => {
-            Some("可执行程序名称或路径，不自动解析 shell 语法。")
+            Some("完整命令行，如 npm run dev；提供 args 时这里只填写程序名或路径。")
         }
-        "agent.toolCatalog.terminal.params.args" => Some("直接传给程序的参数。"),
+        "agent.toolCatalog.terminal.params.args" => Some("可选的逐项参数；command 已含完整命令行时省略。"),
+        "agent.toolCatalog.terminal.params.interactive" => {
+            Some("设为 true 可打开用户默认 Shell；此时不能传 command 或 args。")
+        }
         "agent.toolCatalog.terminal.params.cwd" => {
             Some("允许访问的工作目录，默认当前应用/worktree。")
         }

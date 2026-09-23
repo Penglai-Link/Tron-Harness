@@ -98,6 +98,45 @@ export function openAgentTerminal(session: string, id: string) {
     }),
   );
 }
+export function openAgentTerminalFromLiveResult(
+  session: string,
+  event: {
+    type?: string;
+    toolCallName?: string;
+    toolCallId?: string;
+    runId?: string;
+    content?: unknown;
+  },
+  seenCalls: Set<string>,
+) {
+  if (
+    event.type !== "TOOL_CALL_RESULT" ||
+    event.toolCallName !== "terminal_start" ||
+    !event.runId ||
+    !event.toolCallId
+  )
+    return false;
+  let result: unknown = event.content;
+  if (typeof result === "string") {
+    try {
+      result = JSON.parse(result);
+    } catch {
+      return false;
+    }
+  }
+  if (!result || typeof result !== "object" || Array.isArray(result)) return false;
+  const terminalId = (result as Record<string, unknown>).terminalId;
+  if (typeof terminalId !== "string" || !terminalId) return false;
+  const callKey = `${event.runId}:${event.toolCallId}`;
+  if (seenCalls.has(callKey)) return false;
+  seenCalls.add(callKey);
+  if (seenCalls.size > 512) {
+    const oldest = seenCalls.values().next().value;
+    if (oldest) seenCalls.delete(oldest);
+  }
+  openAgentTerminal(session, terminalId);
+  return true;
+}
 export function closeAgentTerminal(session: string, id: string) {
   useAgentTerminals.getState().update(session, (value) => {
     const tabs = value.tabs.filter((key) => key !== id);

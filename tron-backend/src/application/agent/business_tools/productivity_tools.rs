@@ -2,7 +2,10 @@ mod git;
 mod office;
 
 use super::coding_tools::{json_observation, resolve_optional_directory, resolve_path};
-use crate::domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest};
+use crate::{
+    application::resource::ResourceService,
+    domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest},
+};
 use serde_json::{Value, json};
 use std::{
     io::Read,
@@ -15,7 +18,7 @@ use std::{
 const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
 const MAX_OUTPUT_BYTES: usize = 65536;
 
-pub(super) fn tools() -> Vec<Arc<dyn Tool>> {
+pub(super) fn tools(resources: ResourceService) -> Vec<Arc<dyn Tool>> {
     [
         "worktree_list",
         "worktree_create",
@@ -31,13 +34,21 @@ pub(super) fn tools() -> Vec<Arc<dyn Tool>> {
         "excel_write",
     ]
     .into_iter()
-    .map(|name| Arc::new(ProductivityTool(name)) as Arc<dyn Tool>)
+    .map(|name| {
+        Arc::new(ProductivityTool {
+            name,
+            resources: resources.clone(),
+        }) as Arc<dyn Tool>
+    })
     .collect()
 }
-struct ProductivityTool(&'static str);
+struct ProductivityTool {
+    name: &'static str,
+    resources: ResourceService,
+}
 impl Tool for ProductivityTool {
     fn name(&self) -> &str {
-        self.0
+        self.name
     }
     fn exec(
         &self,
@@ -48,7 +59,7 @@ impl Tool for ProductivityTool {
             return Err(error("tool input exceeds 4 MiB"));
         }
         let definition = crate::application::agent::BusinessToolCatalog::tool(
-            &self.0.replacen('_', ".", 1),
+            &self.name.replacen('_', ".", 1),
             &context.locale,
         )
         .ok_or_else(|| error("tool definition unavailable"))?;
@@ -56,26 +67,26 @@ impl Tool for ProductivityTool {
         if let Err(failure) = validator.validate(&request.input) {
             return Err(error(format!("invalid tool input: {failure}")));
         }
-        if ["worktree_create", "worktree_select"].contains(&self.0)
+        if ["worktree_create", "worktree_select"].contains(&self.name)
             && context.execution_scope.applications.is_empty()
         {
             return Err(error(
                 "worktree selection requires a project-linked application",
             ));
         }
-        let result = if self.0.starts_with("word_") || self.0.starts_with("excel_") {
-            office::execute(self.0, &request.input, context)?
+        let result = if self.name.starts_with("word_") || self.name.starts_with("excel_") {
+            office::execute(self.name, &request.input, context, &self.resources)?
         } else {
-            git::execute(self.0, &request.input, context)?
+            git::execute(self.name, &request.input, context)?
         };
-        if (self.0.starts_with("word_")
-            || self.0.starts_with("excel_")
-            || self.0 == "worktree_list")
+        if (self.name.starts_with("word_")
+            || self.name.starts_with("excel_")
+            || self.name == "worktree_list")
             && result.to_string().len() > MAX_OUTPUT_BYTES
         {
             return Err(error("result exceeds 64 KiB; request a smaller range"));
         }
-        json_observation(self.0, &result)
+        json_observation(self.name, &result)
     }
 }
 fn error(message: impl ToString) -> ToolError {

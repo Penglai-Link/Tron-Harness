@@ -1,4 +1,5 @@
 import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
+import { openAgentTerminalFromLiveResult } from "../terminal/store";
 import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
 import {
   Fragment,
@@ -259,25 +260,11 @@ function sessionAgentTagLabel(agentCode: string | null | undefined) {
   return normalized.toUpperCase();
 }
 
-function sessionAgentTagTone(agentCode: string | null | undefined) {
-  const normalized = agentCode?.trim().toLowerCase();
-  if (!normalized || normalized === "main-agent") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
-  if (normalized === "opencode") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-  if (normalized === "codex") {
-    return "border-sky-200 bg-sky-50 text-sky-700";
-  }
+function sessionAgentTagTone(_agentCode: string | null | undefined) {
   return "border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] text-[var(--color-on-surface-variant)]";
 }
 
-function sessionAgentIconTone(agentCode: string | null | undefined) {
-  const normalized = agentCode?.trim().toLowerCase();
-  if (!normalized || normalized === "main-agent") return "text-emerald-600";
-  if (normalized === "opencode") return "text-amber-600";
-  if (normalized === "codex") return "text-sky-600";
+function sessionAgentIconTone(_agentCode: string | null | undefined) {
   return "text-[var(--color-on-surface-variant)]";
 }
 
@@ -2777,6 +2764,11 @@ function isContextPromptPrefixMessage(value: unknown): value is ContextPromptPre
     && (value.promptCode === undefined || typeof value.promptCode === "string");
 }
 
+function isToolDomainDiscoveryPrompt(message: ContextPromptPrefixMessage) {
+  return message.catalogKey === "agent.domain-discovery"
+    || message.promptCode === "SYS_AGENT_DOMAIN_DISCOVERY";
+}
+
 function contextPromptPrefixMessages(detail: unknown): ContextPromptPrefixMessage[] | null {
   if (!isContextDetailRecord(detail)) return null;
   const candidates = [detail.promptPrefix, detail];
@@ -2852,7 +2844,14 @@ function contextPromptContentParts(content: string): ContextPromptContentPart[] 
   return [{ kind: "text", value: content }];
 }
 
-function ContextPromptMessageContent({ content }: { content: string }) {
+function ContextPromptMessageContent({
+  content,
+  domainDiscovery = false,
+}: {
+  content: string;
+  domainDiscovery?: boolean;
+}) {
+  const { t } = useTranslation("pages");
   const parts = contextPromptContentParts(content);
   return (
     <div className="space-y-3 text-xs leading-6 text-[var(--color-on-surface)]">
@@ -2860,6 +2859,76 @@ function ContextPromptMessageContent({ content }: { content: string }) {
         <pre className="whitespace-pre-wrap break-words font-sans" key={`text-${index}`}>
           {part.value}
         </pre>
+      ) : domainDiscovery && Array.isArray(part.value) ? (
+        <div className="space-y-2" key={`json-${index}`}>
+          {part.value.map((item, itemIndex) => {
+            if (!isContextDetailRecord(item)) return null;
+            const name = typeof item.name === "string" ? item.name : null;
+            const code = typeof item.domainCode === "string" ? item.domainCode : null;
+            const description = typeof item.description === "string" ? item.description : null;
+            const toolCount = typeof item.toolCount === "number" ? item.toolCount : null;
+            const sampleTools = Array.isArray(item.sampleTools)
+              ? item.sampleTools.filter((tool): tool is string => typeof tool === "string")
+              : [];
+            const hasMutationTools =
+              typeof item.hasMutationTools === "boolean"
+                ? item.hasMutationTools
+                : null;
+            return (
+              <article
+                className="overflow-hidden rounded-md border border-[var(--color-outline-variant)] bg-[var(--color-surface-container-lowest)]"
+                key={code ?? itemIndex}
+              >
+                <div className="flex flex-wrap items-center gap-2 bg-[var(--color-surface-container-low)] px-3 py-2">
+                  <span className="font-semibold">
+                    {name ??
+                      code ??
+                      t("chat.shortTermMemory.contextPanel.detailArrayItem", {
+                        index: itemIndex + 1,
+                      })}
+                  </span>
+                  {name && code ? (
+                    <span className="rounded bg-[var(--color-surface-container)] px-1.5 font-mono text-[10px] text-[var(--color-on-surface-variant)]">
+                      {code}
+                    </span>
+                  ) : null}
+                  {toolCount !== null ? (
+                    <span className="ml-auto text-[var(--color-on-surface-variant)]">
+                      {t("chat.shortTermMemory.contextPanel.toolDomainToolCount", {
+                        count: toolCount,
+                      })}
+                    </span>
+                  ) : null}
+                </div>
+                {description ? <p className="px-3 pt-2 text-[var(--color-on-surface-variant)]">{description}</p> : null}
+                {sampleTools.length > 0 ? (
+                  <div className="px-3 py-2">
+                    <div className="mb-1 text-[10px] font-medium text-[var(--color-on-surface-variant)]">
+                      {t("chat.shortTermMemory.contextPanel.toolDomainExamples")}
+                    </div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {sampleTools.map((tool) => (
+                        <code
+                          className="rounded bg-[var(--color-surface-container)] px-1.5 py-0.5 font-mono text-[10px] leading-4"
+                          key={tool}
+                        >
+                          {tool}
+                        </code>
+                      ))}
+                    </div>
+                  </div>
+                ) : null}
+                {hasMutationTools !== null ? (
+                  <div className="px-3 pb-2 text-[10px] text-[var(--color-on-surface-variant)]">
+                    {t("chat.shortTermMemory.contextPanel.toolDomainMutationTools")}: {t(
+                      `chat.applications.preview.${hasMutationTools ? "yes" : "no"}`
+                    )}
+                  </div>
+                ) : null}
+              </article>
+            );
+          })}
+        </div>
       ) : (
         <ContextDetailCards key={`json-${index}`} value={part.value} />
       ))}
@@ -3225,7 +3294,10 @@ function ContextMemoryBlockRow({ block, sessionCode }: { block: ContextMemoryBlo
                                 </div>
                               </div>
                               <div className="px-3 py-3">
-                                <ContextPromptMessageContent content={message.content} />
+                                <ContextPromptMessageContent
+                                  content={message.content}
+                                  domainDiscovery={isToolDomainDiscoveryPrompt(message)}
+                                />
                               </div>
                             </article>
                           ))}
@@ -4954,6 +5026,7 @@ export function ChatManagementPage() {
   const aguiProtocolEvents = useChatAguiProtocolEvents(activeSession?.sessionCode ?? "", activeChatReplayRefreshKey);
   const [visibleMessages, setVisibleMessages] = useState<ChatMessage[]>([]);
   const [liveAguiEventsBySessionCode, setLiveAguiEventsBySessionCode] = useState<Record<string, ChatAguiStreamEvent[]>>({});
+  const openedLiveTerminalCallsRef = useRef(new Set<string>());
   const [liveAguiAnchorMessageCodesBySessionCode, setLiveAguiAnchorMessageCodesBySessionCode] = useState<Record<string, Record<string, string>>>({});
 
   function handleTitleGenerationFailureEvent(event: ChatAguiStreamEvent, sessionCode: string) {
@@ -6652,6 +6725,7 @@ export function ChatManagementPage() {
             if (event.threadId && event.threadId !== sendingSessionCode) return;
             const eventMillis = aguiEventMillis(event);
             if (eventMillis !== null && eventMillis < streamAcceptedAfter) return;
+            openAgentTerminalFromLiveResult(sendingSessionCode, event, openedLiveTerminalCallsRef.current);
             handleTitleGenerationFailureEvent(event, sendingSessionCode);
             const runCode = aguiEventRunCode(event);
             if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {
@@ -6931,6 +7005,7 @@ export function ChatManagementPage() {
         {
           onAguiEvent: (event) => {
             if (activeSessionCodeRef.current !== targetSession.sessionCode) return;
+            openAgentTerminalFromLiveResult(targetSession.sessionCode, event, openedLiveTerminalCallsRef.current);
             handleTitleGenerationFailureEvent(event, targetSession.sessionCode);
             const runCode = aguiEventRunCode(event);
             if (String(event.type).toUpperCase() === "RUN_STARTED" && runCode && runCode !== "stream") {

@@ -1032,6 +1032,7 @@ fn execute_tool_json(
             ToolRequest {
                 tool_name: tool_name.to_string(),
                 input,
+                invocation_id: None,
             },
             context,
         )

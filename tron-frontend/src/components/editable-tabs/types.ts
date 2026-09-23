@@ -36,6 +36,7 @@ export interface EditableTabsProps {
   createTab?: () => EditableTab | undefined;
   hideAdd?: boolean;
   renderAddTrigger?: (props: EditableTabAddTriggerProps) => ReactNode;
+  renderTrailingAction?: () => ReactNode;
   onChange?: (activeKey: string | undefined) => void;
   onEdit?: (action: OperateType, info: EditableTabEditInfo) => void;
   className?: string;

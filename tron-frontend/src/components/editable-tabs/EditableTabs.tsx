@@ -25,6 +25,7 @@ export function EditableTabs({
   createTab,
   hideAdd = false,
   renderAddTrigger,
+  renderTrailingAction,
   onChange,
   onEdit,
   className,
@@ -159,6 +160,7 @@ export function EditableTabs({
         onAdd={handleAdd}
         onClose={handleClose}
         renderAddTrigger={renderAddTrigger}
+        renderTrailingAction={renderTrailingAction}
         tabs={tabs}
         className="flex-none"
       />

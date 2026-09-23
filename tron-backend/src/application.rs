@@ -15,6 +15,7 @@ pub mod profile;
 pub mod prompt;
 pub mod project;
 pub mod rag;
+pub(crate) mod shell_program;
 pub mod resource;
 pub mod short_term_memory;
 pub mod skill;

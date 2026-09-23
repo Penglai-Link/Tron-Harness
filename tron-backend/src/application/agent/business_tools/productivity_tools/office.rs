@@ -1,4 +1,6 @@
+use super::super::file_access::resolve_input_file;
 use super::*;
+use crate::application::resource::ResourceService;
 use std::{
     collections::BTreeMap,
     io::{Cursor, Write},
@@ -13,8 +15,7 @@ fn escape(text: &str) -> String {
         .replace('"', "&quot;")
         .replace('\'', "&apos;")
 }
-fn package(path: &Path) -> Result<BTreeMap<String, Vec<u8>>, ToolError> {
-    let bytes = read_file(path)?;
+fn package(bytes: &[u8]) -> Result<BTreeMap<String, Vec<u8>>, ToolError> {
     let mut zip = ZipArchive::new(Cursor::new(bytes)).map_err(error)?;
     if zip.len() > 4096 {
         return Err(error("Office package contains too many entries"));
@@ -221,6 +222,7 @@ pub(super) fn execute(
     name: &str,
     input: &Value,
     context: &AgentRunContext,
+    resources: &ResourceService,
 ) -> Result<Value, ToolError> {
     fn valid_xml(value: &Value) -> bool {
         match value {
@@ -236,18 +238,26 @@ pub(super) fn execute(
         return Err(error("Office text contains invalid XML control characters"));
     }
     if name.starts_with("excel_") {
-        return excel(name, input, context);
-    }
-    let file = path(input, "path", context)?;
-    if file.extension().and_then(|v| v.to_str()) != Some("docx") {
-        return Err(error("Word tools support .docx files"));
+        return excel(name, input, context, resources);
     }
     if name == "word_create" {
+        let file = path(input, "path", context)?;
+        if file.extension().and_then(|v| v.to_str()) != Some("docx") {
+            return Err(error("Word tools support .docx files"));
+        }
         let bytes = word_create(input)?;
         write_new(&file, &bytes)?;
         return Ok(json!({"path":file,"created":true}));
     }
-    let mut entries = package(&file)?;
+    let source = resolve_input_file(input, context, resources)?;
+    if Path::new(&source.file_name)
+        .extension()
+        .and_then(|value| value.to_str())
+        != Some("docx")
+    {
+        return Err(error("Word tools support .docx files"));
+    }
+    let mut entries = package(&source.bytes)?;
     let xml = xml_document(&entries)?;
     if name == "word_read" {
         let doc = roxmltree::Document::parse(xml).map_err(error)?;
@@ -289,7 +299,7 @@ pub(super) fn execute(
             result.push(json!({"index":index,"text":content,"inTable":paragraph.ancestors().any(|node|node.has_tag_name((WORD_NS,"tbl")))}));
         }
         return Ok(
-            json!({"path":file,"paragraphs":result,"totalParagraphs":paragraphs.len(),"nextParagraph":if start+result.len()<paragraphs.len(){Some(start+result.len())}else{None}}),
+            json!({"path":source.workspace_path,"fileName":source.file_name,"fileRef":source.reference,"paragraphs":result,"totalParagraphs":paragraphs.len(),"nextParagraph":if start+result.len()<paragraphs.len(){Some(start+result.len())}else{None}}),
         );
     }
     let output = path(input, "outputPath", context)?;
@@ -308,17 +318,59 @@ pub(super) fn execute(
     )?;
     entries.insert("word/document.xml".into(), updated.into_bytes());
     write_new(&output, &pack(entries)?)?;
-    Ok(json!({"path":output,"replacements":count,"sourcePath":file}))
+    Ok(
+        json!({"path":output,"replacements":count,"sourcePath":source.workspace_path,"sourceFileName":source.file_name,"sourceFileRef":source.reference}),
+    )
 }
 
-fn excel(name: &str, input: &Value, context: &AgentRunContext) -> Result<Value, ToolError> {
-    let file = path(input, "path", context)?;
-    if file.extension().and_then(|v| v.to_str()) != Some("xlsx") {
+fn excel(
+    name: &str,
+    input: &Value,
+    context: &AgentRunContext,
+    resources: &ResourceService,
+) -> Result<Value, ToolError> {
+    let is_read = name == "excel_read";
+    let has_source = is_read || input.get("fileRef").is_some() || input.get("outputPath").is_some();
+    let source = has_source
+        .then(|| resolve_input_file(input, context, resources))
+        .transpose()?;
+    if is_read && source.is_none() {
+        return Err(error("fileRef is required (legacy path is also accepted)"));
+    }
+    if source.as_ref().is_some_and(|source| {
+        Path::new(&source.file_name)
+            .extension()
+            .and_then(|value| value.to_str())
+            != Some("xlsx")
+    }) {
         return Err(error("Excel tools support .xlsx files"));
     }
-    let mut book = if name == "excel_read" || input.get("outputPath").is_some() {
-        let _ = package(&file)?; // Bound compressed and expanded package size before parsing.
-        umya_spreadsheet::reader::xlsx::read(&file).map_err(error)?
+    if name == "excel_write" && input.get("fileRef").is_some() && input.get("outputPath").is_none()
+    {
+        return Err(error(
+            "outputPath is required when editing a referenced workbook",
+        ));
+    }
+    let mut attachment_temp = None;
+    let input_path = if let Some(source) = source.as_ref() {
+        let _ = package(&source.bytes)?; // Bound compressed and expanded package size before parsing.
+        if let Some(path) = source.workspace_path.as_ref() {
+            Some(path.clone())
+        } else {
+            let mut temporary = tempfile::Builder::new()
+                .suffix(".xlsx")
+                .tempfile()
+                .map_err(error)?;
+            std::io::Write::write_all(&mut temporary, &source.bytes).map_err(error)?;
+            let path = temporary.path().to_path_buf();
+            attachment_temp = Some(temporary);
+            Some(path)
+        }
+    } else {
+        None
+    };
+    let mut book = if let Some(path) = input_path.as_ref() {
+        umya_spreadsheet::reader::xlsx::read(path).map_err(error)?
     } else {
         umya_spreadsheet::new_file()
     };
@@ -329,7 +381,10 @@ fn excel(name: &str, input: &Value, context: &AgentRunContext) -> Result<Value, 
             .map(|sheet| sheet.name().to_string())
             .collect::<Vec<_>>();
         let Some(sheet_name) = input.get("sheet").and_then(Value::as_str) else {
-            return Ok(json!({"path":file,"sheets":sheets}));
+            let source = source.as_ref().expect("excel_read source was required");
+            return Ok(
+                json!({"path":source.workspace_path,"fileName":source.file_name,"fileRef":source.reference,"sheets":sheets}),
+            );
         };
         let sheet = book.sheet_by_name(sheet_name).map_err(error)?;
         let row = input["startRow"].as_u64().unwrap_or(1);
@@ -360,8 +415,9 @@ fn excel(name: &str, input: &Value, context: &AgentRunContext) -> Result<Value, 
                 }
             }
         }
+        let source = source.as_ref().expect("excel_read source was required");
         return Ok(
-            json!({"path":file,"sheet":sheet_name,"cells":cells,"formulaValues":"cached; not recalculated by this tool"}),
+            json!({"path":source.workspace_path,"fileName":source.file_name,"fileRef":source.reference,"sheet":sheet_name,"cells":cells,"formulaValues":"cached; not recalculated by this tool"}),
         );
     }
     let sheets = input["sheets"]
@@ -418,7 +474,7 @@ fn excel(name: &str, input: &Value, context: &AgentRunContext) -> Result<Value, 
     let output = if input.get("outputPath").is_some() {
         path(input, "outputPath", context)?
     } else {
-        file.clone()
+        path(input, "path", context)?
     };
     if output.extension().and_then(|v| v.to_str()) != Some("xlsx") {
         return Err(error("outputPath must end in .xlsx"));
@@ -429,7 +485,8 @@ fn excel(name: &str, input: &Value, context: &AgentRunContext) -> Result<Value, 
     let temporary = tempfile::NamedTempFile::new_in(parent).map_err(error)?;
     umya_spreadsheet::writer::xlsx::write(&book, temporary.path()).map_err(error)?;
     // Formula values are not computed here; ask Excel to recalculate on opening.
-    let mut entries = package(temporary.path())?;
+    let output_bytes = read_file(temporary.path())?;
+    let mut entries = package(&output_bytes)?;
     if let Some(data) = entries.get_mut("xl/workbook.xml") {
         let mut xml = String::from_utf8(data.clone()).map_err(error)?;
         let document = roxmltree::Document::parse(&xml).map_err(error)?;
@@ -446,5 +503,6 @@ fn excel(name: &str, input: &Value, context: &AgentRunContext) -> Result<Value, 
         *data = xml.into_bytes();
     }
     write_new(&output, &pack(entries)?)?;
+    drop(attachment_temp);
     Ok(json!({"path":output,"cellsWritten":count,"formulasRecalculated":false}))
 }

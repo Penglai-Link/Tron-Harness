@@ -1,8 +1,9 @@
 export const pages = {
   agentTerminal: {
     output: "终端输出（只读）",
-    manual: "交互终端",
-    backToAgent: "返回会话终端",
+    newTab: "新建终端标签",
+    maximizePanel: "最大化终端",
+    restorePanel: "还原终端",
   "title": "Agent 终端",
   "open": "打开终端",
   "close": "隐藏标签",
@@ -974,6 +975,9 @@ export const pages = {
         detailPromptManagement: "提示词管理",
         detailPromptStructuredContent: "结构化内容",
         detailPromptEmpty: "没有系统提示词消息。",
+        toolDomainToolCount: "{{count}} 个工具",
+        toolDomainExamples: "示例工具",
+        toolDomainMutationTools: "包含修改操作",
         checkpointName: "当前会话检查点",
         workingStateName: "当前会话工作状态",
         familyContextName: "相关会话",

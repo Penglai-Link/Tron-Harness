@@ -2,7 +2,9 @@ use serde_json::json;
 
 use crate::domain::agent::{ToolAvailabilityState, ToolOperationKind};
 
-use super::{ToolCatalogDefinition, schema};
+use super::{
+    ToolCatalogDefinition, file_reference_schema, file_source_selector_schema, schema,
+};
 
 pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
     vec![
@@ -15,7 +17,7 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             operation_kind: ToolOperationKind::Command,
             input_schema: schema(
                 "agent.toolCatalog.tools.bash.exec.description",
-                json!([{ "command": "sed", "args": ["-n", "1,40p", "tron-backend/Cargo.toml"] }]),
+                json!([{ "command": "sed -n '1,40p' tron-backend/Cargo.toml" }]),
                 json!({
                     "type": "object",
                     "required": ["command"],
@@ -34,6 +36,54 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             sample_result_summary_i18n_key: "agent.toolCatalog.tools.bash.exec.sampleResultSummary",
         },
         ToolCatalogDefinition {
+            tool_code: "bash.task_read",
+            tool_name: "bash_task_read".into(),
+            domain_code: "bash",
+            name_i18n_key: "agent.toolCatalog.tools.bash.task_read.name",
+            description_i18n_key: "agent.toolCatalog.tools.bash.task_read.description",
+            operation_kind: ToolOperationKind::Query,
+            input_schema: schema(
+                "agent.toolCatalog.tools.bash.task_read.description",
+                json!([{ "taskId": "command-123-456-1", "stdoutCursor": 0, "stderrCursor": 0 }]),
+                json!({
+                    "type": "object",
+                    "required": ["taskId"],
+                    "properties": {
+                        "taskId": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.bash.task_read.params.taskId" },
+                        "stdoutCursor": { "type": "integer", "minimum": 0, "default": 0, "x-i18n-description-key": "agent.toolCatalog.tools.bash.task_read.params.stdoutCursor" },
+                        "stderrCursor": { "type": "integer", "minimum": 0, "default": 0, "x-i18n-description-key": "agent.toolCatalog.tools.bash.task_read.params.stderrCursor" }
+                    },
+                    "additionalProperties": false
+                }),
+            ),
+            module_owner: "coding",
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary_i18n_key: "agent.toolCatalog.tools.bash.task_read.sampleResultSummary",
+        },
+        ToolCatalogDefinition {
+            tool_code: "bash.task_stop",
+            tool_name: "bash_task_stop".into(),
+            domain_code: "bash",
+            name_i18n_key: "agent.toolCatalog.tools.bash.task_stop.name",
+            description_i18n_key: "agent.toolCatalog.tools.bash.task_stop.description",
+            operation_kind: ToolOperationKind::Command,
+            input_schema: schema(
+                "agent.toolCatalog.tools.bash.task_stop.description",
+                json!([{ "taskId": "command-123-456-1" }]),
+                json!({
+                    "type": "object",
+                    "required": ["taskId"],
+                    "properties": {
+                        "taskId": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.bash.task_stop.params.taskId" }
+                    },
+                    "additionalProperties": false
+                }),
+            ),
+            module_owner: "coding",
+            availability_state: ToolAvailabilityState::Available,
+            sample_result_summary_i18n_key: "agent.toolCatalog.tools.bash.task_stop.sampleResultSummary",
+        },
+        ToolCatalogDefinition {
             tool_code: "fs.read_text",
             tool_name: "fs_read_text".into(),
             domain_code: "fs",
@@ -42,16 +92,17 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             operation_kind: ToolOperationKind::Query,
             input_schema: schema(
                 "agent.toolCatalog.tools.fs.read_text.description",
-                json!([{ "path": "tron-backend/Cargo.toml", "startLine": 1, "endLine": 20 }]),
+                json!([{ "fileRef": {"kind":"workspace_path", "path": "tron-backend/Cargo.toml"}, "startLine": 1, "endLine": 20 }]),
                 json!({
                     "type": "object",
-                    "required": ["path"],
                     "properties": {
+                        "fileRef": file_reference_schema(),
                         "path": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.fs.read_text.params.path" },
                         "startLine": { "type": "integer", "minimum": 1, "x-i18n-description-key": "agent.toolCatalog.tools.fs.read_text.params.startLine" },
                         "endLine": { "type": "integer", "minimum": 1, "x-i18n-description-key": "agent.toolCatalog.tools.fs.read_text.params.endLine" },
                         "maxBytes": { "type": "integer", "minimum": 1, "x-i18n-description-key": "agent.toolCatalog.tools.fs.read_text.params.maxBytes" }
                     },
+                    "allOf": [file_source_selector_schema("path")],
                     "additionalProperties": false
                 }),
             ),
@@ -93,15 +144,16 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             operation_kind: ToolOperationKind::Query,
             input_schema: schema(
                 "agent.toolCatalog.tools.chat_attachment.parse_json.description",
-                json!([{ "attachmentCode": "ATTACHMENT-1", "jsonPath": "/topics" }]),
+                json!([{ "fileRef": {"kind":"session_attachment", "attachmentCode": "ATTACHMENT-1"}, "jsonPath": "/topics" }]),
                 json!({
                     "type": "object",
-                    "required": ["attachmentCode"],
                     "properties": {
+                        "fileRef": file_reference_schema(),
                         "attachmentCode": { "type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.parse_json.params.attachmentCode" },
                         "jsonPath": { "type": "string", "default": "", "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.parse_json.params.jsonPath" },
                         "maxValueBytes": { "type": "integer", "minimum": 1, "maximum": 262144, "default": 65536, "x-i18n-description-key": "agent.toolCatalog.tools.chat_attachment.parse_json.params.maxValueBytes" }
                     },
+                    "allOf": [file_source_selector_schema("attachmentCode")],
                     "additionalProperties": false
                 }),
             ),

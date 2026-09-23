@@ -6,6 +6,7 @@ import {
   writeFloatingState,
   type ChatFloatingState,
   type ChatSession,
+  type SendChatMessageInput,
 } from "@tron/chat-core";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import { TronChatRuntimeWindow } from "@tron/chat-react";
@@ -169,6 +170,20 @@ export function MainAgentChatWindow({
     workRailLabels,
     workspaceCode,
   }), [workRailLabels, workspaceCode]);
+  const createSendInput = useCallback((
+    session: ChatSession,
+    content: string,
+    attachments: NonNullable<SendChatMessageInput["attachments"]>,
+  ): SendChatMessageInput => ({
+    agentCode: "main-agent",
+    appCode: session.appCode,
+    attachments: attachments.length ? attachments : undefined,
+    clientCapabilities: { userInputRequests: true },
+    content,
+    modelSelection: { kind: "Auto" },
+    taskCode: session.taskCode,
+    workspaceCode: session.workspaceCode,
+  }), []);
 
   const handleError = useCallback((message: string, title?: string) => {
     if (persistedSession && isMissingPersistedSessionError(message, title)) {
@@ -243,6 +258,7 @@ export function MainAgentChatWindow({
       <TronChatRuntimeWindow
         adapter={adapter}
         config={windowConfig}
+        createSendInput={createSendInput}
         currentUserDisplayName={currentUserDisplayName}
         floatingSubtitle={floatingSubtitle}
         floatingTitle={floatingTitle}

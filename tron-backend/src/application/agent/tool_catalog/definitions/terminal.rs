@@ -12,8 +12,8 @@ pub(super) fn tool_definitions() -> Vec<ToolCatalogDefinition> {
             operation_kind: ToolOperationKind::Command,
             input_schema: schema(
                 "agent.toolCatalog.terminal.start.description",
-                json!([]),
-                json!({"type": "object", "required": ["command"], "properties": {"command": {"type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.terminal.params.command"}, "args": {"type": "array", "items": {"type": "string"}, "x-i18n-description-key": "agent.toolCatalog.terminal.params.args"}, "cwd": {"type": "string", "x-i18n-description-key": "agent.toolCatalog.terminal.params.cwd"}, "env": {"type": "object", "additionalProperties": {"type": "string"}, "x-i18n-description-key": "agent.toolCatalog.terminal.params.env"}}, "additionalProperties": false}),
+                json!([{"command":"npm run dev","cwd":"front"},{"interactive":true,"cwd":"front"}]),
+                json!({"type": "object", "properties": {"command": {"type": "string", "minLength": 1, "x-i18n-description-key": "agent.toolCatalog.terminal.params.command"}, "args": {"type": "array", "items": {"type": "string"}, "x-i18n-description-key": "agent.toolCatalog.terminal.params.args"}, "interactive": {"type": "boolean", "x-i18n-description-key": "agent.toolCatalog.terminal.params.interactive"}, "cwd": {"type": "string", "x-i18n-description-key": "agent.toolCatalog.terminal.params.cwd"}, "env": {"type": "object", "additionalProperties": {"type": "string"}, "x-i18n-description-key": "agent.toolCatalog.terminal.params.env"}}, "oneOf": [{"required": ["command"], "not": {"properties": {"interactive": {"const": true}}}}, {"required": ["interactive"], "properties": {"interactive": {"const": true}}, "not": {"anyOf": [{"required": ["command"]}, {"required": ["args"]}]}}], "additionalProperties": false}),
             ),
             module_owner: "coding",
             availability_state: ToolAvailabilityState::Available,

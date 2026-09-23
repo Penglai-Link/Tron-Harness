@@ -15,6 +15,8 @@ use super::{AgentRunContext, EffectiveTool};
 pub struct ToolRequest {
     pub tool_name: String,
     pub input: Value,
+    /// Runtime-generated identity for retry-safe side effects. Never supplied by the model.
+    pub invocation_id: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]

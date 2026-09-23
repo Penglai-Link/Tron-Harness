@@ -114,6 +114,37 @@ describe("createInternalChatAdapter", () => {
     });
   });
 
+  it("forwards Auto model selection to the chat runtime", async () => {
+    const fetchMock = vi.fn(async () => new Response(JSON.stringify({
+      code: "CHAT_RUN_ALREADY_ACTIVE",
+      data: { activeRunCode: "RUN-1" },
+      message: "session already has an active agent run",
+    }), {
+      headers: { "Content-Type": "application/json" },
+      status: 409,
+    }));
+    globalThis.fetch = fetchMock as typeof fetch;
+    const adapter = createInternalChatAdapter({
+      baseUrl: "https://internal.example.com",
+    });
+
+    await adapter.streamMessage(
+      sessionFixture(),
+      {
+        agentCode: "main-agent",
+        content: "hello",
+        modelSelection: { kind: "Auto" },
+        workspaceCode: "TRON_CORE",
+      },
+    ).catch(() => undefined);
+
+    const [, request] = fetchMock.mock.calls[0] ?? [];
+    expect(JSON.parse(String(request?.body))).toMatchObject({
+      agentCode: "main-agent",
+      modelSelection: { kind: "Auto" },
+    });
+  });
+
   it("reads and stops the authoritative active run with exact control contracts", async () => {
     const fetchMock = vi
       .fn()

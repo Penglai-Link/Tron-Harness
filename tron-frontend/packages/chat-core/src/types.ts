@@ -14,6 +14,14 @@ export type ReasoningEffort =
   | "Max"
   | "Ultra";
 
+export interface ChatModelSelection {
+  kind: "Fixed" | "ProviderRoute" | "Auto";
+  providerCode?: "PersonAi" | null;
+  modelCode?: string | null;
+  qualityType?: "High" | "Middle" | "Low" | null;
+  routeCode?: "ChatAuto" | "EmbeddingAuto" | "LlmFallback" | null;
+}
+
 export interface ChatSession {
   id: number;
   sessionCode: string;
@@ -238,6 +246,7 @@ export interface SendChatMessageInput {
   appCode?: string | null;
   taskCode?: string | null;
   agentCode?: string | null;
+  modelSelection?: ChatModelSelection | null;
   modelCode?: string | null;
   systemModelId?: string | null;
   reasoningEffort?: ReasoningEffort | null;

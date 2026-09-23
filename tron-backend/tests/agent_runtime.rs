@@ -748,6 +748,7 @@ fn auto_compaction_fixture(
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
@@ -934,6 +935,7 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
@@ -1057,6 +1059,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
@@ -1457,6 +1460,7 @@ async fn react_agent_persists_failed_tool_observation_in_short_term_memory() {
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
@@ -1896,6 +1900,7 @@ async fn react_agent_externalizes_parallel_tool_outputs_with_unique_sequences() 
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
@@ -2406,6 +2411,7 @@ async fn tool_registry_rejects_missing_or_unauthorized_tools() {
             ToolRequest {
                 tool_name: "echo".into(),
                 input: json!({}),
+                invocation_id: None,
             },
             &context,
         )
@@ -2425,6 +2431,7 @@ async fn tool_registry_rejects_missing_or_unauthorized_tools() {
             ToolRequest {
                 tool_name: "hidden".into(),
                 input: json!({}),
+                invocation_id: None,
             },
             &context,
         )
@@ -2469,6 +2476,7 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
             ToolRequest {
                 tool_name: "fs_write_text".into(),
                 input: json!({}),
+                invocation_id: None,
             },
             &context,
         )
@@ -2543,6 +2551,7 @@ async fn react_agent_recovers_after_missing_and_unauthorized_tools() {
             input_kind: "USER_PROMPT".into(),
             input_metadata: None,
             prompt_prefix: vec![AgentMessage::system("system seed")],
+            prompt_prefix_sources: Vec::new(),
             current_input_message: None,
             agent_code: Some("main-agent".into()),
             todo_enabled: false,
@@ -2746,6 +2755,7 @@ async fn react_agent_marks_short_term_memory_run_failed_when_prepare_persistence
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: Vec::new(),
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,
@@ -2956,6 +2966,7 @@ async fn react_agent_preserves_unresolved_requests_when_steering_with_short_term
         input_kind: "USER_PROMPT".into(),
         input_metadata: None,
         prompt_prefix: vec![AgentMessage::system("system seed")],
+        prompt_prefix_sources: Vec::new(),
         current_input_message: None,
         agent_code: Some("main-agent".into()),
         todo_enabled: false,

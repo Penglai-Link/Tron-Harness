@@ -1,8 +1,12 @@
 use std::{fs, path::Path};
 
 use serde::Deserialize;
+use serde_json::Value;
 
-use crate::domain::agent::{AgentRunContext, Tool, ToolError, ToolRequest};
+use crate::{
+    application::resource::ResourceService,
+    domain::agent::{AgentRunContext, Tool, ToolError, ToolRequest},
+};
 
 use super::{
     FsApplyPatchOutput, FsListEntry, FsListOutput, FsReadTextOutput, FsStatOutput,
@@ -10,7 +14,9 @@ use super::{
     parse_tool_input, resolve_path,
 };
 
-pub(super) struct FsReadTextTool;
+pub(super) struct FsReadTextTool {
+    pub resources: ResourceService,
+}
 pub(super) struct FsWriteTextTool;
 pub(super) struct FsApplyPatchTool(
     pub std::sync::Arc<dyn crate::application::agent::CodeFileEditor>,
@@ -21,7 +27,8 @@ pub(super) struct FsStatTool;
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct FsReadTextInput {
-    path: String,
+    path: Option<String>,
+    file_ref: Option<Value>,
     start_line: Option<usize>,
     end_line: Option<usize>,
     max_bytes: Option<usize>,
@@ -94,9 +101,28 @@ impl Tool for FsReadTextTool {
         context: &AgentRunContext,
     ) -> Result<crate::domain::agent::ToolExecutionResult, ToolError> {
         let input: FsReadTextInput = parse_tool_input(request.input)?;
-        let path = resolve_path(context, &input.path)?;
-        let content = fs::read_to_string(&path)
-            .map_err(|error| ToolError::ExecutionFailed(format!("read failed: {error}")))?;
+        let source_input = match (input.file_ref, input.path) {
+            (Some(file_ref), None) => serde_json::json!({"fileRef": file_ref}),
+            (None, Some(path)) => serde_json::json!({"path": path}),
+            (Some(_), Some(_)) => {
+                return Err(ToolError::ExecutionFailed(
+                    "provide fileRef or path, not both".into(),
+                ));
+            }
+            (None, None) => {
+                return Err(ToolError::ExecutionFailed(
+                    "fileRef or path is required".into(),
+                ));
+            }
+        };
+        let source =
+            super::super::file_access::resolve_input_file(&source_input, context, &self.resources)?;
+        let content = String::from_utf8(source.bytes).map_err(|_| {
+            ToolError::ExecutionFailed(format!(
+                "file `{}` is not valid UTF-8 text",
+                source.file_name
+            ))
+        })?;
         let all_lines = content
             .lines()
             .map(|line| line.to_string())
@@ -122,14 +148,20 @@ impl Tool for FsReadTextTool {
         let bytes = selected.as_bytes();
         let truncated = bytes.len() > max_bytes;
         let rendered = if truncated {
-            String::from_utf8_lossy(&bytes[..max_bytes]).to_string()
+            let mut end = max_bytes;
+            while !selected.is_char_boundary(end) {
+                end -= 1;
+            }
+            selected[..end].to_string()
         } else {
             selected
         };
         json_observation(
             self.name(),
             &FsReadTextOutput {
-                path: path.display().to_string(),
+                path: source.workspace_path.map(|path| path.display().to_string()),
+                file_name: source.file_name,
+                file_ref: source.reference,
                 content: rendered,
                 start_line,
                 end_line,

@@ -122,7 +122,7 @@ export function AgentTerminalToolCard({
         </div>
       ) : null}
       {error ? (
-        <p role="alert" className="mt-2 text-red-600">
+        <p role="alert" className="mt-2 text-destructive-foreground">
           {error}
         </p>
       ) : null}

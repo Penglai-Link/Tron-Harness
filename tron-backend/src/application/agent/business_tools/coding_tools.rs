@@ -21,8 +21,9 @@ use crate::{
 
 pub(super) fn coding_domain_tools(resources: ResourceService, editor: Arc<dyn crate::application::agent::CodeFileEditor>, terminal: Arc<dyn crate::application::agent::AgentTerminal>) -> Vec<Arc<dyn Tool>> {
     let mut tools: Vec<Arc<dyn Tool>> = vec![
-        Arc::new(bash::BashExecTool),
-        Arc::new(filesystem::FsReadTextTool),
+        Arc::new(filesystem::FsReadTextTool {
+            resources: resources.clone(),
+        }),
         Arc::new(filesystem::FsWriteTextTool),
         Arc::new(filesystem::FsApplyPatchTool(editor)),
         Arc::new(filesystem::FsListTool),
@@ -31,6 +32,7 @@ pub(super) fn coding_domain_tools(resources: ResourceService, editor: Arc<dyn cr
         Arc::new(search::SearchGlobTool),
         Arc::new(search::SearchPathTool),
     ];
+    tools.extend(bash::tools());
     tools.extend(terminal::tools(terminal));
     tools.extend(chat_attachments::tools(resources));
     tools
@@ -38,20 +40,10 @@ pub(super) fn coding_domain_tools(resources: ResourceService, editor: Arc<dyn cr
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
-pub(super) struct BashExecOutput {
-    pub command: String,
-    pub args: Vec<String>,
-    pub cwd: String,
-    pub success: bool,
-    pub exit_code: Option<i32>,
-    pub stdout: String,
-    pub stderr: String,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
 pub(super) struct FsReadTextOutput {
-    pub path: String,
+    pub path: Option<String>,
+    pub file_name: String,
+    pub file_ref: serde_json::Value,
     pub content: String,
     pub start_line: usize,
     pub end_line: usize,
@@ -144,6 +136,36 @@ pub(super) fn parse_tool_input<T: for<'de> Deserialize<'de>>(
 ) -> Result<T, ToolError> {
     serde_json::from_value(input)
         .map_err(|error| ToolError::ExecutionFailed(format!("tool input is invalid: {error}")))
+}
+
+// A command string is shell syntax. Explicit args keep direct argv semantics.
+pub(super) fn resolve_command_invocation(
+    command: &str,
+    args: Option<&[String]>,
+    _cwd: &Path,
+) -> Result<(String, Vec<String>), ToolError> {
+    let command = command.trim();
+    if command.is_empty() {
+        return Err(ToolError::ExecutionFailed("command is required".into()));
+    }
+    if let Some(args) = args {
+        return Ok((command.into(), args.to_vec()));
+    }
+
+    #[cfg(windows)]
+    {
+        Ok(("cmd".into(), vec!["/C".into(), command.into()]))
+    }
+
+    #[cfg(not(windows))]
+    {
+        Ok((
+            crate::application::shell_program::resolve_user_shell()
+                .to_string_lossy()
+                .into_owned(),
+            vec!["-c".into(), command.into()],
+        ))
+    }
 }
 
 pub(super) fn json_observation<T: Serialize>(
@@ -482,12 +504,76 @@ mod tests {
 
     #[test]
     fn resolve_path_keeps_relative_paths_under_workspace_root() {
-        let context = test_context(Some("/workspace/repo"));
+        let temporary = tempfile::tempdir().unwrap();
+        let root = temporary.path().canonicalize().unwrap();
+        let context = test_context(Some(root.to_str().unwrap()));
         let resolved =
             resolve_path(&context, "tron-backend/src").expect("relative path should resolve");
+        assert_eq!(resolved, root.join("tron-backend/src"));
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn complete_command_line_uses_the_users_preferred_noninteractive_shell() {
+        let cwd = Path::new("/tmp");
+        let shell = crate::application::shell_program::resolve_user_shell()
+            .to_string_lossy()
+            .into_owned();
         assert_eq!(
-            resolved,
-            PathBuf::from("/workspace/repo").join("tron-backend/src")
+            resolve_command_invocation("npm run dev", None, cwd).unwrap(),
+            (shell.clone(), vec!["-c".into(), "npm run dev".into()])
+        );
+        assert_eq!(
+            resolve_command_invocation("bash -c \"cd front && npm run dev\"", None, cwd).unwrap(),
+            (
+                shell.clone(),
+                vec!["-c".into(), "bash -c \"cd front && npm run dev\"".into()]
+            )
+        );
+        assert_eq!(
+            resolve_command_invocation("cd front && npm run dev", None, cwd).unwrap(),
+            (shell, vec!["-c".into(), "cd front && npm run dev".into()])
+        );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn full_command_line_uses_cmd_on_windows() {
+        assert_eq!(
+            resolve_command_invocation("npm run dev", None, Path::new(".")).unwrap(),
+            ("cmd".into(), vec!["/C".into(), "npm run dev".into()])
+        );
+    }
+
+    #[test]
+    fn explicit_args_and_existing_executable_paths_stay_literal() {
+        let temporary = tempfile::tempdir().unwrap();
+        let executable = temporary.path().join("program with spaces");
+        fs::write(&executable, "").unwrap();
+        let path = executable.to_string_lossy();
+        assert_eq!(
+            resolve_command_invocation(&path, Some(&[]), temporary.path()).unwrap(),
+            (path.to_string(), vec![])
+        );
+        assert_eq!(
+            resolve_command_invocation("echo", Some(&["a b".into()]), temporary.path()).unwrap(),
+            ("echo".into(), vec!["a b".into()])
+        );
+        assert_eq!(
+            resolve_command_invocation("echo", Some(&[]), temporary.path()).unwrap(),
+            ("echo".into(), Vec::new())
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn command_syntax_is_passed_to_the_selected_shell_for_interpretation() {
+        let shell = crate::application::shell_program::resolve_user_shell()
+            .to_string_lossy()
+            .into_owned();
+        assert_eq!(
+            resolve_command_invocation("bash -c 'unterminated", None, Path::new("/tmp")).unwrap(),
+            (shell, vec!["-c".into(), "bash -c 'unterminated".into()])
         );
     }
 }

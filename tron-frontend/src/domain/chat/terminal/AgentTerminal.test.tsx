@@ -8,7 +8,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { AgentTerminalPanel } from "./AgentTerminalPanel";
+import { AgentTerminalTab } from "./AgentTerminalPanel";
 import {
   AgentTerminalToolCard,
   AgentTerminalSessionContext,
@@ -17,16 +17,29 @@ import {
   appendTerminalOutput,
   closeAgentTerminal,
   openAgentTerminal,
+  openAgentTerminalFromLiveResult,
   useAgentTerminals,
 } from "./store";
 const api = vi.hoisted(() => vi.fn());
+const terminalState = vi.hoisted(() => ({
+  theme: "light",
+  instances: [] as Array<{ options: { theme: Record<string, string> } }>,
+}));
 vi.mock("@/shared/api/httpClient", () => ({ requestApi: api }));
+vi.mock("@/shared/theme/ThemeProvider", () => ({
+  useTheme: () => ({ theme: terminalState.theme }),
+}));
 vi.mock("react-i18next", () => {
   const t = (key: string) => key;
   return { useTranslation: () => ({ t }) };
 });
 vi.mock("@xterm/xterm", () => ({
   Terminal: class {
+    options: { theme: Record<string, string> };
+    constructor(options: { theme: Record<string, string> }) {
+      this.options = options;
+      terminalState.instances.push(this);
+    }
     loadAddon() {}
     open() {}
     write() {}
@@ -49,6 +62,8 @@ const info = (id: string) => ({
 });
 beforeEach(() => {
   sessionStorage.clear();
+  terminalState.theme = "light";
+  terminalState.instances = [];
   useAgentTerminals.setState({ sessions: {} });
   api.mockReset();
   vi.stubGlobal(
@@ -99,20 +114,21 @@ describe("Agent terminal conversation lifecycle", () => {
     expect(useAgentTerminals.getState().sessions["chat-a"].selected).toBe("a");
     expect(api).not.toHaveBeenCalled();
   });
-  it("shows only current chat tabs; switching, hiding and closing never send stop", async () => {
+  it("keeps agent output scoped to its chat; hiding the panel does not stop the process", async () => {
     openAgentTerminal("chat-a", "a");
     openAgentTerminal("chat-b", "b");
-    const view = render(<AgentTerminalPanel sessionCode="chat-a" visible />);
-    await screen.findByRole("tab", { name: "command-a" });
-    view.rerender(<AgentTerminalPanel sessionCode="chat-b" visible />);
-    await screen.findByRole("tab", { name: "command-b" });
-    expect(screen.queryByRole("tab", { name: "command-a" })).toBeNull();
-    view.rerender(<AgentTerminalPanel sessionCode="chat-a" visible={false} />);
-    await screen.findByRole("tab", { name: "command-a" });
-    fireEvent.click(
-      screen.getByRole("button", { name: "agentTerminal.close" }),
-    );
-    expect(screen.queryByRole("tab")).toBeNull();
+    const view = render(<AgentTerminalTab sessionCode="chat-a" terminalId="a" visible />);
+    await waitFor(() => expect(api).toHaveBeenCalledWith(
+      "/api/v1/chats/sessions/chat-a/terminals/a",
+      expect.any(Object),
+    ));
+    view.rerender(<AgentTerminalTab sessionCode="chat-b" terminalId="b" visible />);
+    await waitFor(() => expect(api).toHaveBeenCalledWith(
+      "/api/v1/chats/sessions/chat-b/terminals/b",
+      expect.any(Object),
+    ));
+    view.rerender(<AgentTerminalTab sessionCode="chat-b" terminalId="b" visible={false} />);
+    closeAgentTerminal("chat-b", "b");
     expect(
       api.mock.calls.every(([url]) => !String(url).startsWith("POST")),
     ).toBe(true);
@@ -134,6 +150,8 @@ describe("Agent terminal conversation lifecycle", () => {
     );
     await screen.findByText("agentTerminal.running");
     expect(screen.getByText("agentTerminal.actionDone")).toBeTruthy();
+    expect(useAgentTerminals.getState().sessions["chat-a"].tabs).toEqual([]);
+    expect(listener).toHaveBeenCalledTimes(0);
     fireEvent.click(screen.getByRole("button", { name: "agentTerminal.view" }));
     expect(useAgentTerminals.getState().sessions["chat-a"].tabs).toEqual(["a"]);
     expect(listener).toHaveBeenCalledTimes(1);
@@ -144,6 +162,51 @@ describe("Agent terminal conversation lifecycle", () => {
       ),
     );
     window.removeEventListener("tron:open-agent-terminal", listener);
+  });
+  it("opens a terminal only once for a successful live start result", () => {
+    const seenCalls = new Set<string>();
+    const event = {
+      type: "TOOL_CALL_RESULT",
+      runId: "run-1",
+      toolCallId: "call-1",
+      toolCallName: "terminal_start",
+      content: JSON.stringify({ terminalId: "term-1", running: true }),
+    };
+    expect(openAgentTerminalFromLiveResult("chat-a", event, seenCalls)).toBe(true);
+    expect(openAgentTerminalFromLiveResult("chat-a", event, seenCalls)).toBe(false);
+    expect(useAgentTerminals.getState().sessions["chat-a"].tabs).toEqual([
+      "term-1",
+    ]);
+    expect(
+      openAgentTerminalFromLiveResult(
+        "chat-a",
+        { ...event, toolCallName: "terminal_read", toolCallId: "call-2" },
+        seenCalls,
+      ),
+    ).toBe(false);
+    expect(
+      openAgentTerminalFromLiveResult(
+        "chat-a",
+        { ...event, toolCallId: "call-3", content: "command failed" },
+        seenCalls,
+      ),
+    ).toBe(false);
+  });
+  it("updates the Agent terminal colors when the app theme changes", () => {
+    const view = render(
+      <AgentTerminalTab sessionCode="chat-a" terminalId="a" visible={false} />,
+    );
+    const terminal = terminalState.instances[0];
+    expect(terminal.options.theme.background).toBe("#ffffff");
+    expect(terminal.options.theme.foreground).toBe("#1c1b1b");
+    act(() => {
+      terminalState.theme = "matrix-dark";
+      view.rerender(
+        <AgentTerminalTab sessionCode="chat-a" terminalId="a" visible={false} />,
+      );
+    });
+    expect(terminal.options.theme.background).toBe("#09150d");
+    expect(terminal.options.theme.foreground).toBe("#e4ffe8");
   });
   it("bounds the UI log cache", () => {
     act(() =>

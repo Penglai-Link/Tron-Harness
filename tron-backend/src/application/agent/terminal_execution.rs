@@ -4,8 +4,11 @@ use std::{collections::BTreeMap, path::PathBuf};
 
 pub struct TerminalStart {
     pub owner: String,
+    pub invocation_id: Option<String>,
     pub command: String,
     pub args: Vec<String>,
+    pub program: String,
+    pub program_args: Vec<String>,
     pub cwd: PathBuf,
     pub env: BTreeMap<String, String>,
 }
