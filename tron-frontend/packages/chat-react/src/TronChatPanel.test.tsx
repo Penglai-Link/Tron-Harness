@@ -203,7 +203,7 @@ describe("TronChatPanel submit controls", () => {
     expect(completedButton.getAttribute("aria-expanded")).toBe("true");
   });
 
-  it("renders answered user questions as an expandable AG-UI work item", () => {
+  it("collapses answered user questions into completed work in event order", () => {
     const messages = [
       message("USER", "Choose a direction"),
       {
@@ -230,7 +230,7 @@ describe("TronChatPanel submit controls", () => {
         questionCode: "QUESTION-1",
       }],
       requestCode: "INPUT-1",
-      requestedAt: 1_000,
+      requestedAt: 1_002,
       runCode: "RUN-1",
       sessionCode: "SESSION-1",
       status: "Answered",
@@ -240,14 +240,29 @@ describe("TronChatPanel submit controls", () => {
       messages,
       protocolEvents: [
         { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_000, type: "RUN_STARTED" },
-        { delta: "Thinking", runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_001, type: "REASONING_TEXT_CONTENT" },
-        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_002, type: "RUN_FINISHED" },
+        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_001, type: "REASONING_START" },
+        { delta: "Before question", runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_002, type: "REASONING_MESSAGE_CONTENT" },
+        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_003, type: "REASONING_END" },
+        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_005, type: "REASONING_START" },
+        { delta: "After question", runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_006, type: "REASONING_MESSAGE_CONTENT" },
+        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_007, type: "REASONING_END" },
+        { runId: "RUN-1", threadId: "SESSION-1", timestamp: 1_008, type: "RUN_FINISHED" },
       ],
       userInputRequests: [request],
     });
 
-    const summary = screen.getByRole("button", { name: "Asked 1 questions" });
+    const workSummary = screen.getByRole("button", { name: /Worked for/ });
+    expect(workSummary.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByRole("button", { name: "Asked 1 questions" })).toBeNull();
+    fireEvent.click(workSummary);
+
+    const workItems = screen.getByLabelText("Agent work rail");
+    const summary = within(workItems).getByRole("button", { name: "Asked 1 questions" });
     expect(screen.queryByText("Which direction?")).toBeNull();
+    const itemButtons = within(workItems).getAllByRole("button");
+    expect(itemButtons.map((button) => button.textContent).join(" ")).toMatch(
+      /Before question[\s\S]*Asked 1 questions[\s\S]*After question/,
+    );
     fireEvent.click(summary);
     expect(screen.getByText("Which direction?")).toBeTruthy();
     expect(screen.getByText("First option")).toBeTruthy();

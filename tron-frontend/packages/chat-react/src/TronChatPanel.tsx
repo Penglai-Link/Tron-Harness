@@ -1038,6 +1038,21 @@ function AguiRunWorkRail({
   const answeredUserInputRequests = matchingUserInputRequests.filter(
     (request) => request.status === "Answered",
   );
+  const orderedWorkItems = useMemo(() => [
+    ...userCards.map((card) => ({
+      firstMillis: card.value.firstMillis,
+      kind: "agui" as const,
+      card,
+    })),
+    ...answeredUserInputRequests.map((request) => ({
+      firstMillis: request.requestedAt,
+      kind: "userInput" as const,
+      request,
+    })),
+  ].sort((left, right) => left.firstMillis - right.firstMillis), [
+    answeredUserInputRequests,
+    userCards,
+  ]);
   const pendingUserInputRequest = matchingUserInputRequests.find(
     (request) => request.status === "Pending",
   );
@@ -1087,9 +1102,9 @@ function AguiRunWorkRail({
     if (completed) setExpanded(false);
   }, [completed]);
 
-  if (!displayedTerminalSummary && !events.length && !userCards.length && !debugEvents.length)
+  if (!displayedTerminalSummary && !events.length && !orderedWorkItems.length && !debugEvents.length)
     return null;
-  const hasDetails = userCards.length > 0 || debugEvents.length > 0;
+  const hasDetails = orderedWorkItems.length > 0 || debugEvents.length > 0;
   let summary = labels.workingFor(duration);
   if (completed) {
     summary = displayedTerminalSummary?.failed
@@ -1116,9 +1131,6 @@ function AguiRunWorkRail({
         </button>
       ) : <div className="tron-chat__rail-summary tron-chat__rail-summary--static">{summaryContent}</div>}
       <AguiRunStatus notices={notices} labels={labels} />
-      {answeredUserInputRequests.map((request) => (
-        <UserInputWorkCard labels={labels} request={request} key={request.requestCode} />
-      ))}
       {!completed && !compacting ? (
         <div className="tron-chat__rail-current" aria-live="polite">
           {pendingUserInputRequest ? (
@@ -1144,22 +1156,26 @@ function AguiRunWorkRail({
           className="tron-chat__rail-stack"
           style={{ marginTop: 8 }}
         >
-          {userCards.length ? (
+          {orderedWorkItems.length ? (
             <section
               className="tron-chat__rail"
               aria-label="Agent work rail"
               style={{ maxWidth: "none", paddingLeft: 0 }}
             >
               <div className="tron-chat__rail-card-list">
-                {userCards.map((card) =>
-                  card.kind === "reasoning" ? (
-                    <ReasoningCard card={card.value} key={card.value.id} labels={labels} />
-                  ) : card.kind === "toolGroup" ? (
-                    <ToolGroupCard card={card.value} key={card.value.id} labels={labels} />
-                  ) : (
-                    <ToolCard card={card.value} key={card.value.id} labels={labels} />
-                  ),
-                )}
+                {orderedWorkItems.map((item) => item.kind === "userInput" ? (
+                  <UserInputWorkCard
+                    labels={labels}
+                    request={item.request}
+                    key={`user-input-${item.request.requestCode}`}
+                  />
+                ) : item.card.kind === "reasoning" ? (
+                  <ReasoningCard card={item.card.value} key={item.card.value.id} labels={labels} />
+                ) : item.card.kind === "toolGroup" ? (
+                  <ToolGroupCard card={item.card.value} key={item.card.value.id} labels={labels} />
+                ) : (
+                  <ToolCard card={item.card.value} key={item.card.value.id} labels={labels} />
+                ))}
               </div>
             </section>
           ) : null}
