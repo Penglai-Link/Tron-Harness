@@ -1,6 +1,11 @@
 export const shellShortcutActions = [
   "newSession",
+  "toggleAgentWindow",
   "closeCurrentTab",
+  "previousTab",
+  "nextTab",
+  "closeAllTabs",
+  "closeOtherTabs",
   "toggleLeftSidebar",
   "toggleRightSidebar",
   "toggleBottomPanel",
@@ -102,28 +107,33 @@ function isShortcutBinding(value: unknown): value is ShellShortcutBinding {
 
 export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
   return {
+    closeAllTabs: null,
     closeCurrentTab: null,
+    closeOtherTabs: null,
+    nextTab: null,
     newSession: {
-      altKey: false,
+      altKey: true,
       key: "N",
       modKey: true,
       shiftKey: false,
     },
+    previousTab: null,
+    toggleAgentWindow: null,
     toggleBottomPanel: {
       altKey: true,
-      key: "J",
+      key: "K",
       modKey: true,
       shiftKey: false,
     },
     toggleLeftSidebar: {
       altKey: true,
-      key: "[",
+      key: "U",
       modKey: true,
       shiftKey: false,
     },
     toggleRightSidebar: {
       altKey: true,
-      key: "]",
+      key: "Y",
       modKey: true,
       shiftKey: false,
     },
@@ -145,6 +155,30 @@ export function normalizeShellShortcutBindings(value: unknown): ShellShortcutBin
       : defaults[action];
     return bindings;
   }, defaults);
+}
+
+/**
+ * Replaces built-in shortcuts that collided with browser/Electron accelerators
+ * when migrating persisted shell state. Custom bindings are left untouched.
+ */
+export function migrateDefaultShellShortcutBindings(value: unknown): ShellShortcutBindings {
+  const bindings = normalizeShellShortcutBindings(value);
+  const legacyDefaults: Partial<Record<ShellShortcutAction, ShellShortcutBinding>> = {
+    newSession: { altKey: false, key: "N", modKey: true, shiftKey: false },
+    toggleBottomPanel: { altKey: true, key: "J", modKey: true, shiftKey: false },
+    toggleLeftSidebar: { altKey: true, key: "[", modKey: true, shiftKey: false },
+    toggleRightSidebar: { altKey: true, key: "]", modKey: true, shiftKey: false },
+  };
+  const safeDefaults = createDefaultShellShortcutBindings();
+
+  for (const action of Object.keys(legacyDefaults) as ShellShortcutAction[]) {
+    const legacyBinding = legacyDefaults[action] ?? null;
+    if (shortcutEquals(bindings[action], legacyBinding)) {
+      bindings[action] = safeDefaults[action];
+    }
+  }
+
+  return bindings;
 }
 
 export function shortcutFromKeyboardEvent(

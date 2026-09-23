@@ -9,7 +9,7 @@ import {
 } from "@/shared/constants/workspaceSpaces";
 import {
   createDefaultShellShortcutBindings,
-  normalizeShellShortcutBindings,
+  migrateDefaultShellShortcutBindings,
   type ShellShortcutAction,
   type ShellShortcutBinding,
   type ShellShortcutBindings,
@@ -56,7 +56,7 @@ function migrateAppShellState(persistedState: unknown) {
     rightSidebarCollapsed: true,
     selectedPrimarySpaceId: "",
     selectedSecondarySpaceId: "",
-    shortcutBindings: normalizeShellShortcutBindings(state.shortcutBindings),
+    shortcutBindings: migrateDefaultShellShortcutBindings(state.shortcutBindings),
     workspaceSwitcherSnapshot: defaultWorkspaceSwitcherSnapshot,
   };
 }
@@ -123,7 +123,7 @@ export const useAppShellStore = create<AppShellState>()(
         })),
     }),
     {
-      version: 6,
+      version: 8,
       name: "tron-app-shell",
       migrate: migrateAppShellState,
       partialize: (state) => ({

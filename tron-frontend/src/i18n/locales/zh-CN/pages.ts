@@ -2562,17 +2562,37 @@ export const pages = {
       modifierRequired: "请至少按住一个修饰键（⌘/Ctrl、Alt 或 Shift）。",
     },
     shortcuts: {
+      closeAllTabs: {
+        description: "关闭所有可关闭的工作区标签页。",
+        label: "关闭所有标签页",
+      },
       closeCurrentTab: {
         description: "关闭当前工作区标签页。",
         label: "关闭当前标签页",
+      },
+      closeOtherTabs: {
+        description: "关闭当前标签页之外所有可关闭的标签页。",
+        label: "关闭其他标签页",
+      },
+      nextTab: {
+        description: "切换到下一个工作区标签页。",
+        label: "切换到右侧标签页",
       },
       newSession: {
         description: "新建一个聊天会话。",
         label: "新建会话",
       },
+      previousTab: {
+        description: "切换到上一个工作区标签页。",
+        label: "切换到左侧标签页",
+      },
       toggleBottomPanel: {
         description: "收起或展开下方面板。",
         label: "收起/展开下方面板",
+      },
+      toggleAgentWindow: {
+        description: "打开或关闭右上角的临时 Agent 对话窗。",
+        label: "打开/关闭临时 Agent 对话",
       },
       toggleLeftSidebar: {
         description: "收起或展开左侧导航面板。",

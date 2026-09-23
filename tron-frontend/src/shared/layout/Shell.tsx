@@ -710,17 +710,53 @@ export function TronShell({
     setBottomPanel((open) => !open);
   }
 
+  function activateAdjacentTab(direction: -1 | 1) {
+    const tabState = useTabStore.getState();
+    const visibleTabs = tabState.tabs.filter((tab) => !tab.hide);
+    const activeIndex = visibleTabs.findIndex((tab) => tab.id === tabState.activeTabId);
+    if (activeIndex < 0 || visibleTabs.length < 2) return false;
+
+    const nextIndex = (activeIndex + direction + visibleTabs.length) % visibleTabs.length;
+    const nextTab = visibleTabs[nextIndex];
+    tabState.setActiveTab(nextTab.id);
+    navigate(nextTab.path);
+    return;
+  }
+
+  function closeVisibleTabs(keepActive: boolean) {
+    const tabState = useTabStore.getState();
+    const activeTabId = tabState.activeTabId;
+    const tabIds = tabState.tabs
+      .filter((tab) => !tab.hide && tab.closable)
+      .filter((tab) => !keepActive || tab.id !== activeTabId)
+      .map((tab) => tab.id);
+    if (!tabIds.length) return false;
+
+    tabState.removeTabs(tabIds);
+    const updatedTabState = useTabStore.getState();
+    const nextActiveTab = updatedTabState.tabs.find(
+      (tab) => tab.id === updatedTabState.activeTabId,
+    );
+    if (nextActiveTab) navigate(nextActiveTab.path);
+    return;
+  }
+
   useShellShortcuts({
+    closeAllTabs: () => closeVisibleTabs(false),
     closeCurrentTab: () => {
       if (!activeTabId) return false;
       const redirect = closeTab(activeTabId);
       if (redirect === null) return false;
       navigate(redirect);
     },
+    closeOtherTabs: () => closeVisibleTabs(true),
+    nextTab: () => activateAdjacentTab(1),
     newSession: () => {
       if (pathname !== "/chats" && !pathname.startsWith("/chats/")) return false;
       window.dispatchEvent(new Event(CREATE_CHAT_SESSION_SHORTCUT_EVENT));
     },
+    previousTab: () => activateAdjacentTab(-1),
+    toggleAgentWindow: () => handleAgentLauncherClick(),
     toggleBottomPanel: () => toggleBottomPanel(),
     toggleLeftSidebar: (event) => {
       // SidebarProvider owns its built-in Ctrl/Cmd+B shortcut. Its listener

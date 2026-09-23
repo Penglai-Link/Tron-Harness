@@ -2411,17 +2411,37 @@ export const pages = {
         "Use at least one modifier key (Cmd/Ctrl, Alt, or Shift).",
     },
     shortcuts: {
+      closeAllTabs: {
+        description: "Close all closable workspace tabs.",
+        label: "Close all tabs",
+      },
       closeCurrentTab: {
         description: "Close the active workspace tab.",
         label: "Close current tab",
+      },
+      closeOtherTabs: {
+        description: "Close all closable tabs except the active tab.",
+        label: "Close other tabs",
+      },
+      nextTab: {
+        description: "Switch to the next workspace tab.",
+        label: "Next tab",
       },
       newSession: {
         description: "Create a new chat session.",
         label: "New session",
       },
+      previousTab: {
+        description: "Switch to the previous workspace tab.",
+        label: "Previous tab",
+      },
       toggleBottomPanel: {
         description: "Collapse or expand the bottom panel.",
         label: "Toggle bottom panel",
+      },
+      toggleAgentWindow: {
+        description: "Open or close the temporary Agent chat window.",
+        label: "Toggle temporary Agent chat",
       },
       toggleLeftSidebar: {
         description: "Collapse or expand the left navigation panel.",

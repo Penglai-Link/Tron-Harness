@@ -1,5 +1,5 @@
 import { Fragment, useEffect, useState } from "react";
-import { Keyboard, X } from "lucide-react";
+import { X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 
 import { Button } from "@/components/ui/button";
@@ -148,7 +148,6 @@ export function SettingsShortcutsPage() {
                         variant={isCapturing ? "secondary" : "outline"}
                         onClick={() => beginCapture(action)}
                       >
-                        <Keyboard aria-hidden="true" size={14} />
                         {isCapturing
                           ? pageT("capturing")
                           : binding
