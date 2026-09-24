@@ -243,6 +243,10 @@ export interface ChatWorkRailLabels {
 export interface SendChatMessageInput {
   content: string;
   workspaceCode: string;
+  pageContext?: {
+    title: string;
+    path: string;
+  };
   appCode?: string | null;
   taskCode?: string | null;
   agentCode?: string | null;

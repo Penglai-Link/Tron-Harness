@@ -21,7 +21,8 @@ use crate::{
 };
 
 use crate::application::agent::{
-    AgentInvocationCommand, AgentInvocationError, AgentManagementService, BusinessToolCatalog,
+    AgentInvocationCommand, AgentInvocationError, AgentManagementService, AgentPageContext,
+    BusinessToolCatalog,
     ResolvedAgentRuntime, RuntimeAdapterSelection, discovery_expand_tool_definition,
     domain_discovery_runtime_values, tool_record_to_effective_tool,
 };
@@ -38,6 +39,30 @@ use super::{
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
+
+fn page_context_message(page_context: Option<&AgentPageContext>) -> Option<AgentMessage> {
+    let page_context = page_context?;
+    let title = truncate_chars(page_context.title.trim(), 80);
+    let path = page_context
+        .path
+        .trim()
+        .split(['?', '#'])
+        .next()
+        .unwrap_or_default();
+    let path = truncate_chars(path, 160);
+    if title.is_empty() && path.is_empty() {
+        return None;
+    }
+
+    let metadata = serde_json::json!({ "title": title, "path": path });
+    Some(AgentMessage::system(format!(
+        "Opened from UI page (metadata only): {metadata}"
+    )))
+}
+
+fn truncate_chars(value: &str, limit: usize) -> String {
+    value.chars().take(limit).collect()
+}
 
 fn managed_system_prompt(
     prompt_service: Option<&PromptService>,
@@ -168,6 +193,7 @@ impl AgentRunContextBuilder {
             limits: requested_limits,
             tools: requested_tools,
             attachments: requested_attachments,
+            page_context,
             supports_user_input_requests,
             transcript_input_kind,
             transcript_input_metadata,
@@ -518,6 +544,15 @@ impl AgentRunContextBuilder {
             transcript_input_kind.as_deref(),
             transcript_input_metadata,
         )?;
+        if let Some(message) = page_context_message(page_context.as_ref()) {
+            if context.short_term_memory.is_some() {
+                context.messages.push(message);
+            } else {
+                context
+                    .messages
+                    .insert(context.messages.len().saturating_sub(1), message);
+            }
+        }
 
         Ok(PreparedAgentRun {
             run_code,
@@ -588,5 +623,39 @@ fn runtime_selection_for_agent(
             resolved_agent.agent_code,
             runtime_type_label(resolved_agent.runtime_type)
         ))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::domain::agent::AgentMessagePart;
+
+    #[test]
+    fn page_context_is_compact_json_metadata_and_bounded() {
+        let context = AgentPageContext {
+            title: "Page".repeat(30),
+            path: format!("/{}?secret=query", "route/".repeat(40)),
+        };
+
+        let message = page_context_message(Some(&context)).expect("page context message");
+        let AgentMessagePart::Text { text } = &message.parts[0] else {
+            panic!("page context should be text");
+        };
+        assert!(text.starts_with("Opened from UI page (metadata only): {"));
+        assert!(text.contains("\"title\":"));
+        assert!(text.contains("\"path\":"));
+        assert!(text.len() < 300);
+        assert!(!text.contains("secret=query"));
+    }
+
+    #[test]
+    fn empty_page_context_is_omitted() {
+        let context = AgentPageContext {
+            title: "  ".into(),
+            path: "".into(),
+        };
+        assert!(page_context_message(Some(&context)).is_none());
+        assert!(page_context_message(None).is_none());
     }
 }

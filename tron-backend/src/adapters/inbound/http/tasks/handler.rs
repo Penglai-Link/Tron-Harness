@@ -235,6 +235,7 @@ pub async fn execute_task(
         model_code: task.model_code.clone(),
         system_model_id: task.model_code.clone(),
         reasoning_effort: None,
+        page_context: None,
         limits: None,
         tools: Vec::new(),
         attachments: Vec::new(),

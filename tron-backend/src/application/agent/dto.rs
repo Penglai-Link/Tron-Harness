@@ -10,6 +10,13 @@ use crate::domain::{
     reasoning::ReasoningEffort,
 };
 
+#[derive(Debug, Clone, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct AgentPageContext {
+    pub title: String,
+    pub path: String,
+}
+
 #[derive(Debug, Clone, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentInvocationCommand {
@@ -32,6 +39,8 @@ pub struct AgentInvocationCommand {
     pub tools: Vec<EffectiveTool>,
     #[serde(default)]
     pub attachments: Vec<ChatMessageAttachment>,
+    #[serde(default)]
+    pub(crate) page_context: Option<AgentPageContext>,
     #[serde(skip)]
     pub supports_user_input_requests: bool,
     #[serde(skip)]

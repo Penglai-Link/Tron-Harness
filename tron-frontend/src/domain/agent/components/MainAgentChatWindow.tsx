@@ -33,6 +33,7 @@ interface MainAgentChatWindowProps {
   floatingSubtitle?: string;
   floatingTitle?: string;
   footerAddon?: ReactNode;
+  pageContext?: SendChatMessageInput["pageContext"];
   workspaceCode?: string;
   windowState?: ChatFloatingState;
   onWindowStateChange?: (state: ChatFloatingState) => void;
@@ -83,6 +84,7 @@ export function MainAgentChatWindow({
   floatingSubtitle = "Workspace Coordinator",
   floatingTitle = "Main Agent",
   footerAddon,
+  pageContext,
   workspaceCode = "",
   windowState,
   onWindowStateChange,
@@ -181,9 +183,10 @@ export function MainAgentChatWindow({
     clientCapabilities: { userInputRequests: true },
     content,
     modelSelection: { kind: "Auto" },
+    pageContext,
     taskCode: session.taskCode,
     workspaceCode: session.workspaceCode,
-  }), []);
+  }), [pageContext]);
 
   const handleError = useCallback((message: string, title?: string) => {
     if (persistedSession && isMissingPersistedSessionError(message, title)) {

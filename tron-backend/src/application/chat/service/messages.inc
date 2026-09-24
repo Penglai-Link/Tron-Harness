@@ -174,6 +174,7 @@ impl ChatService {
             limits: limits_for_invocation,
             tools: tools_for_invocation.clone(),
             attachments: invocation_attachments,
+            page_context: command.page_context,
             supports_user_input_requests,
             transcript_input_kind: None,
             transcript_input_metadata: None,

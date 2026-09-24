@@ -40,6 +40,7 @@ pub use business_tools::{
     register_default_agent_tools, tool_record_to_effective_tool,
 };
 pub use canonical_event::CanonicalRuntimeEvent;
+pub(crate) use dto::AgentPageContext;
 pub use dto::{AgentInvocationCommand, AgentInvocationResult};
 pub use error::AgentInvocationError;
 pub use history::AgentRunHistoryService;

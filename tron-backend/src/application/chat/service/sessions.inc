@@ -295,6 +295,7 @@ impl ChatService {
             model_code: answered.model_code,
             system_model_id: None,
             reasoning_effort: answered.reasoning_effort,
+            page_context: None,
             limits: None,
             tools: Vec::new(),
             attachments: Vec::new(),

@@ -165,6 +165,7 @@ impl ChatService {
                 limits: None,
                 tools: tools.clone(),
                 attachments: Vec::new(),
+                page_context: None,
                 supports_user_input_requests,
                 transcript_input_kind: Some("CONTINUATION".into()),
                 transcript_input_metadata: Some(json!({

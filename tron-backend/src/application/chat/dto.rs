@@ -3,6 +3,7 @@ use serde_json::Value;
 
 use crate::{
     application::agent::AgentInvocationResult,
+    application::agent::AgentPageContext,
     domain::{
         agent::{AgentRunLimits, EffectiveTool},
         chat::{
@@ -63,6 +64,8 @@ pub struct SendChatMessageCommand {
     pub model_code: Option<String>,
     pub system_model_id: Option<String>,
     pub reasoning_effort: Option<ReasoningEffort>,
+    #[serde(default)]
+    pub(crate) page_context: Option<AgentPageContext>,
     pub limits: Option<AgentRunLimits>,
     #[serde(default)]
     pub tools: Vec<EffectiveTool>,

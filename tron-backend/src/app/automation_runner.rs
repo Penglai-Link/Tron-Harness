@@ -210,6 +210,7 @@ async fn run_automation_with_main_agent(
                 model_code,
                 system_model_id,
                 reasoning_effort: None,
+                page_context: None,
                 limits: None,
                 tools: Vec::new(),
                 attachments: Vec::new(),

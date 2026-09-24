@@ -269,6 +269,10 @@ export function TronShell({
     ...readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultFloatingState),
     open: false,
   }));
+  const [mainAgentPageContext, setMainAgentPageContext] = useState<{
+    title: string;
+    path: string;
+  } | undefined>();
   const workspaceSwitcherControllerRef = useRef<AbortController | null>(null);
   const workspaceSwitcherRequestSequenceRef = useRef(0);
   const navigationDomainsControllerRef = useRef<AbortController | null>(null);
@@ -801,6 +805,10 @@ export function TronShell({
     setTopbarToolsMenuOpen(false);
     if (!agentOpen) {
       closeFloatingPanels();
+      setMainAgentPageContext({
+        title: activeTab?.title.trim() || pathname,
+        path: pathname,
+      });
     }
 
     setAgentOpen(!agentOpen);
@@ -1233,6 +1241,7 @@ export function TronShell({
           {agentOpen ? (
             <MainAgentChatWindow
               currentUserDisplayName={authSession?.user.displayName ?? ""}
+              pageContext={mainAgentPageContext}
               workspaceCode={activeWorkspaceCode}
               windowState={{ ...mainAgentWindowState, open: true }}
               onWindowStateChange={handleMainAgentWindowStateChange}
