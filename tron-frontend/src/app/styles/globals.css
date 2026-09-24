@@ -168,37 +168,37 @@
 
 .dark,
 [data-theme="matrix-dark"] {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: #09150d;
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: #5cff85;
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: #213b2b;
-  --accent-foreground: oklch(0.985 0 0);
+  --background: var(--color-background);
+  --foreground: var(--color-on-surface);
+  --card: var(--color-elevated-surface);
+  --card-foreground: var(--color-on-surface);
+  --popover: var(--color-elevated-surface);
+  --popover-foreground: var(--color-on-surface);
+  --primary: var(--color-primary);
+  --primary-foreground: var(--color-on-primary);
+  --secondary: var(--color-secondary-container);
+  --secondary-foreground: var(--color-on-secondary-container);
+  --muted: var(--color-surface-container);
+  --muted-foreground: var(--color-on-surface-variant);
+  --accent: var(--color-menu-selected-surface);
+  --accent-foreground: var(--color-on-primary-container);
   --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: #5cff85;
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: #213b2b;
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --border: var(--color-outline-variant);
+  --input: var(--color-outline);
+  --ring: var(--color-focus-ring);
+  --chart-1: #5cff85;
+  --chart-2: #3caa5b;
+  --chart-3: #287443;
+  --chart-4: #1d5131;
+  --chart-5: #163a25;
+  --sidebar: var(--color-surface);
+  --sidebar-foreground: var(--color-on-surface);
+  --sidebar-primary: var(--color-primary);
+  --sidebar-primary-foreground: var(--color-on-primary);
+  --sidebar-accent: var(--color-menu-selected-surface);
+  --sidebar-accent-foreground: var(--color-on-primary-container);
+  --sidebar-border: var(--color-outline-variant);
+  --sidebar-ring: var(--color-focus-ring);
 }
 
 @layer base {

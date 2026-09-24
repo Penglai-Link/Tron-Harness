@@ -15,6 +15,8 @@ flowchart LR
 
 皮肤目录位于后端 `application_config_path` 同级的 `skins/`，默认是 `~/.tron/skins/`。首次访问自动播种内置皮肤；内置文件缺失或损坏时使用编译期 JSON 兜底。无效的激活记录自动恢复浅色。写入 `active.json` 使用同目录临时文件和原子替换；安装通过临时目录校验后整体移入。
 
+Matrix 使用黑绿色表面、绿色正文、较暗的绿色次要文字和亮绿交互强调；按钮、菜单、侧栏、表格、Markdown 和终端文字沿用同一色系，错误和警告保留红黄语义色。升级时，仅与原始内置 Matrix 内容完全相同的落盘清单会自动更新；用户修改过的清单保持原样。`version: 1` 表示包格式版本，不表示配色版本。
+
 ## 文件格式
 
 ZIP 的根目录必须包含 `skin.json`，资源路径相对此目录。也可以单独导入 JSON；此时资源必须为空或使用 HTTPS URL。可直接导入 [Ocean 示例](examples/skins/ocean/skin.json)。

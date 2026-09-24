@@ -12,6 +12,8 @@ use std::{
 
 const MAX_PACKAGE: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
+const ORIGINAL_MATRIX: &str =
+    include_str!("../../../resources/skins/migrations/matrix-dark-original.json");
 const BUILTINS: [&str; 2] = [
     include_str!("../../../resources/skins/light.json"),
     include_str!("../../../resources/skins/matrix-dark.json"),
@@ -38,6 +40,18 @@ impl FileSkinStore {
             if !dir.exists() {
                 fs::create_dir_all(&dir).map_err(|_| SkinError::Storage)?;
                 atomic_write(&dir.join("skin.json"), content.as_bytes())?;
+            } else if skin.id == "matrix-dark" {
+                // Upgrade only the unmodified shipped palette, preserving authored skins.
+                let previous = self
+                    .checked_resource(&skin.id, "skin.json")
+                    .ok()
+                    .and_then(|path| fs::read(path).ok())
+                    .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok());
+                let original: serde_json::Value =
+                    serde_json::from_str(ORIGINAL_MATRIX).map_err(|_| SkinError::Storage)?;
+                if previous.as_ref() == Some(&original) {
+                    atomic_write(&dir.join("skin.json"), content.as_bytes())?;
+                }
             }
         }
         Ok(())
@@ -267,6 +281,29 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), SkinError> {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn upgrades_original_matrix_and_preserves_customized_palette() {
+        let temp = tempfile::tempdir().unwrap();
+        let dir = temp.path().join("matrix-dark");
+        fs::create_dir_all(&dir).unwrap();
+        fs::write(dir.join("skin.json"), ORIGINAL_MATRIX).unwrap();
+        fs::write(temp.path().join("active.json"), br#"{"id":"matrix-dark"}"#).unwrap();
+        let store = FileSkinStore::new(temp.path().into());
+        let current: Skin = serde_json::from_str(BUILTINS[1]).unwrap();
+        assert_eq!(store.active().unwrap().colors, current.colors);
+        let persisted = parse_skin(&fs::read(dir.join("skin.json")).unwrap()).unwrap();
+        assert_eq!(persisted.colors, current.colors);
+
+        let mut customized: Skin = serde_json::from_str(ORIGINAL_MATRIX).unwrap();
+        customized
+            .colors
+            .insert("--foreground".into(), "#abcdef".into());
+        let bytes = serde_json::to_vec(&customized).unwrap();
+        fs::write(dir.join("skin.json"), &bytes).unwrap();
+        assert_eq!(store.active().unwrap().colors, customized.colors);
+        assert_eq!(fs::read(dir.join("skin.json")).unwrap(), bytes);
+    }
+
     #[test]
     fn authoring_skill_templates_install_and_activate() {
         let temp = tempfile::tempdir().unwrap();
