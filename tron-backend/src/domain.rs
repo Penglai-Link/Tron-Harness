@@ -18,3 +18,5 @@ pub mod skill;
 pub mod task;
 pub mod variable;
 pub mod workspace;
+
+pub mod skin;

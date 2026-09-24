@@ -280,7 +280,7 @@ export function GraphPage() {
         <div className="fixed inset-0 z-[1000] bg-[var(--color-surface-container-lowest)]">
           {canvasPanel}
           <Button
-            className="absolute right-4 top-4 z-40 bg-white/90 shadow-[0_10px_28px_rgba(15,23,42,0.10)] backdrop-blur-sm"
+            className="absolute right-4 top-4 z-40 bg-[var(--color-elevated-surface)]/90 shadow-[0_10px_28px_rgba(15,23,42,0.10)] backdrop-blur-sm"
             size="icon"
             variant="ghost"
             type="button"

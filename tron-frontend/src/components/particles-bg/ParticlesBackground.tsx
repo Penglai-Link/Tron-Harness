@@ -1,6 +1,8 @@
+import { useTheme } from "@/shared/theme/ThemeProvider";
 import { useEffect, useRef } from "react";
 
 export function ParticlesBackground() {
+  const { activeSkin } = useTheme();
   const canvasRef = useRef<HTMLCanvasElement>(null);
 
   useEffect(() => {
@@ -9,6 +11,7 @@ export function ParticlesBackground() {
     const context = canvas.getContext("2d");
     if (!context) return;
 
+    const color = getComputedStyle(document.documentElement).getPropertyValue("--color-on-surface").trim();
     const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     const particles = Array.from({ length: 150 }, () => ({
       x: Math.random(),
@@ -55,7 +58,8 @@ export function ParticlesBackground() {
         const y = particle.y * height + particle.translateY;
         context.beginPath();
         context.arc(x, y, particle.radius, 0, Math.PI * 2);
-        context.fillStyle = `rgba(16, 31, 28, ${particle.alpha})`;
+        context.fillStyle = color;
+        context.globalAlpha = particle.alpha;
         context.fill();
       }
       if (!reduceMotion) frame = window.requestAnimationFrame(draw);
@@ -70,7 +74,7 @@ export function ParticlesBackground() {
       window.removeEventListener("resize", resize);
       window.removeEventListener("pointermove", move);
     };
-  }, []);
+  }, [activeSkin]);
 
   return <canvas ref={canvasRef} aria-hidden="true" className="pointer-events-none fixed inset-0 z-0" />;
 }

@@ -356,11 +356,7 @@ export function AutomationExecutionsPage() {
             variant="embedded"
             emptyState="No execution history has been recorded yet."
             onRowClick={handleExecutionRowClick}
-            rowClassName={(row) => cn(
-              selectedExecutionCode === row.executionCode
-                ? "bg-[var(--color-primary-container)]/35 hover:bg-[var(--color-primary-container)]/45"
-                : undefined,
-            )}
+            isRowSelected={(row) => selectedExecutionCode === row.executionCode}
             rowKey={(row) => row.executionCode}
             rows={executionPageRecords}
             tableClassName="min-w-[980px]"

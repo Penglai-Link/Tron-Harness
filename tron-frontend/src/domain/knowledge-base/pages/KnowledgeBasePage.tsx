@@ -279,9 +279,7 @@ export function KnowledgeBasePage() {
             rows={pagination.visibleItems}
             rowKey={(knowledgeBase) => knowledgeBase.id}
             onRowClick={selectKnowledgeBase}
-            rowClassName={(knowledgeBase) => (
-              knowledgeBase.id === selectedKnowledgeBase?.id ? "bg-[var(--color-surface-container-low)]" : undefined
-            )}
+            isRowSelected={(knowledgeBase) => knowledgeBase.id === selectedKnowledgeBase?.id}
             toolbar={(
               <div className="flex w-full flex-col items-end gap-[12px]">
                 <div className="flex items-center gap-[12px]">

@@ -167,8 +167,8 @@ function formatUpdatedAt(value: string) {
 
 function DomainStatusBadge({ status }: { status: MemoryWorkDomainRecord["status"] }) {
   const className = status === "ACTIVE"
-    ? "bg-[rgba(34,197,94,0.14)] text-[rgb(21,128,61)]"
-    : "bg-[rgba(245,158,11,0.16)] text-[rgb(180,83,9)]";
+    ? "bg-[var(--color-success-container)] text-[var(--color-on-success-container)]"
+    : "bg-[var(--color-warning-container)] text-[var(--color-on-warning-container)]";
 
   return (
     <span className={`inline-flex min-h-6 items-center rounded-full px-2.5 text-[12px] font-semibold ${className}`}>
@@ -587,9 +587,9 @@ export function PlatformMemoryDomainsPage() {
             },
             {
               align: "right",
-              cellClassName: "sticky right-0 z-10 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)] group-hover:bg-[var(--color-hover-surface)]",
+              cellClassName: "sticky right-0 z-10 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--_tron-row-bg)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
               header: t("pages:memoryDomains.columns.actions", "Actions"),
-              headerClassName: "sticky right-0 z-20 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
+              headerClassName: "sticky right-0 z-20 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--tron-table-header-bg,var(--color-elevated-surface))] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
               id: "actions",
               width: "100px",
               render: (row) => (

@@ -24,7 +24,7 @@ export function MainAgentPage() {
           <SurfaceCard className="lg:col-span-2"><h2 className="mb-6 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{pageT("sections.throughput", "Throughput Analytics")}</h2><div className="h-48 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)]" /></SurfaceCard>
           <SurfaceCard><h2 className="mb-6 text-[11px] font-semibold uppercase text-[var(--color-on-surface-variant)]">{pageT("sections.activity", "Recent Activity")}</h2><p className="text-sm">{pageT("messages.deployment", "Deployment triggered in us-east-1")}</p></SurfaceCard>
         </div>
-        <div className="absolute inset-0 bg-[rgba(253,248,248,0.45)]" />
+        <div className="absolute inset-0 bg-[var(--color-background)]/45" />
         <MainAgentChatWindow
           currentUserDisplayName={session?.user.displayName ?? ""}
           footerAddon={(

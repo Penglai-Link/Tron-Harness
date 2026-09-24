@@ -106,7 +106,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
   }
 
   return (
-    <div className="min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)] lg:h-screen lg:overflow-hidden">
+    <div className="tron-skin-canvas min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)] lg:h-screen lg:overflow-hidden">
       <header className="fixed inset-x-0 top-0 z-40 h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">

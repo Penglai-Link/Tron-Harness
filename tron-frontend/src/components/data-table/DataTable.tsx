@@ -27,6 +27,7 @@ interface DataTableProps<T> {
   columns: DataTableColumn<T>[];
   emptyState?: ReactNode;
   expandedRowClassName?: string;
+  isRowSelected?: (row: T, index: number) => boolean;
   isRowExpanded?: (row: T, index: number) => boolean;
   onRowClick?: (row: T, index: number) => void;
   pagination: ReactNode;
@@ -46,6 +47,7 @@ export function DataTable<T>({
   emptyState,
   expandedRowClassName,
   isRowExpanded,
+  isRowSelected,
   onRowClick,
   pagination,
   rowKey,
@@ -65,7 +67,7 @@ export function DataTable<T>({
       className={cn(
         "overflow-hidden",
         variant === "default"
-          ? "rounded-[8px] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
+          ? "rounded-[var(--tron-card-radius,8px)] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
           : "rounded-none border-0 bg-transparent",
         className,
       )}
@@ -107,7 +109,7 @@ export function DataTable<T>({
             {columns.map((column) => (
               <TableHead
                 className={cn(
-                  "px-5 py-3",
+                  "px-[var(--tron-table-cell-padding-x,1.25rem)] py-[var(--tron-table-cell-padding-y,0.75rem)]",
                   column.align === "right" ? "text-right" : "text-left",
                   column.headerClassName,
                 )}
@@ -126,6 +128,8 @@ export function DataTable<T>({
                 <Fragment key={rowKey(row, index)}>
                   <TableRow
                     aria-expanded={onRowClick ? expanded : undefined}
+                    aria-selected={isRowSelected?.(row, index)}
+                    data-state={isRowSelected?.(row, index) ? "selected" : undefined}
                     className={cn(
                       onRowClick ? "cursor-pointer" : null,
                       rowClassName?.(row),
@@ -146,7 +150,7 @@ export function DataTable<T>({
                     {columns.map((column) => (
                       <TableCell
                         className={cn(
-                          "px-5 py-3 align-middle",
+                          "px-[var(--tron-table-cell-padding-x,1.25rem)] py-[var(--tron-table-cell-padding-y,0.75rem)] align-middle",
                           column.align === "right" ? "text-right" : "text-left",
                           column.cellClassName,
                         )}
@@ -158,7 +162,7 @@ export function DataTable<T>({
                   </TableRow>
                   {expanded && renderExpandedRow ? (
                     <TableRow className={expandedRowClassName}>
-                      <TableCell className="px-5 py-3" colSpan={columns.length}>
+                      <TableCell className="px-[var(--tron-table-cell-padding-x,1.25rem)] py-[var(--tron-table-cell-padding-y,0.75rem)]" colSpan={columns.length}>
                         {renderExpandedRow(row, index)}
                       </TableCell>
                     </TableRow>

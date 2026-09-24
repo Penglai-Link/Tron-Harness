@@ -14,7 +14,7 @@
     "postinstall": "patch-package && node scripts/patch-xterm-ime.mjs",
     "predev": "npm run packages:build",
     "preview": "vite preview",
-    "test:unit": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run packages src/domain/resource src/shared/lib",
+    "test:unit": "cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run packages src/domain/resource src/shared/lib src/shared/theme",
     "typecheck": "tsc -b --pretty false",
     "version-packages": "changeset version",
     "packages:build": "turbo run build --filter=./packages/*",

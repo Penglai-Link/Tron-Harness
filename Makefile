@@ -230,6 +230,7 @@ help:
 	@echo "                    Validate the memory dreaming skill"
 	@echo "  make skill-memory-spec-test"
 	@echo "                    Validate the memory spec skill"
+	@echo "  make skill-theme-test（主题包脚本测试）"
 
 .PHONY: clean
 clean: be-clean fe-clean web-clean desktop-clean
@@ -280,7 +281,7 @@ fe-test:
 
 .PHONY: fe-unit-test
 fe-unit-test:
-	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(NPM) run test:unit)
+	$(call RUN_IN_DIR,$(FRONTEND_DIR),$(if $(strip $(TEST)),$(NPM) exec -- cross-env NODE_OPTIONS=--no-experimental-webstorage vitest run $(TEST),$(NPM) run test:unit))
 
 .PHONY: fe-clean
 fe-clean:
@@ -425,3 +426,7 @@ skill-memory-dreaming-test:
 .PHONY: skill-memory-spec-test
 skill-memory-spec-test:
 	$(PYTHON) "$(SKILL_VALIDATOR)" tron-skills/eliteforge-memory-spec
+
+.PHONY: skill-theme-test
+skill-theme-test:
+	$(PYTHON) -B tron-skill/tron-theme-authoring/scripts/test_theme_pack.py

@@ -21,7 +21,7 @@ function ContextMenuContent({
         <ContextMenuPrimitive.Popup
           data-slot="context-menu-content"
           className={cn(
-            "min-w-36 rounded-md bg-popover p-1 text-popover-foreground shadow-md ring-1 ring-foreground/10 outline-none",
+            "min-w-36 rounded-md bg-[var(--tron-popover-bg,var(--popover))] p-1 text-[var(--tron-popover-fg,var(--popover-foreground))] shadow-md ring-1 ring-foreground/10 outline-none",
             className,
           )}
           {...props}
@@ -39,7 +39,7 @@ function ContextMenuItem({
     <ContextMenuPrimitive.Item
       data-slot="context-menu-item"
       className={cn(
-        "flex cursor-default items-center rounded-md px-2 py-1.5 text-sm outline-hidden select-none focus:bg-accent focus:text-accent-foreground data-disabled:pointer-events-none data-disabled:opacity-50",
+        "flex cursor-default items-center rounded-md px-2 py-1.5 text-sm outline-hidden select-none focus:bg-[var(--tron-menu-item-hover-bg,var(--accent))] focus:text-[var(--tron-menu-item-hover-fg,var(--accent-foreground))] data-disabled:pointer-events-none data-disabled:opacity-50",
         className,
       )}
       {...props}

@@ -20,3 +20,5 @@ pub mod system_config;
 pub mod tasks;
 pub mod terminals;
 pub mod variables;
+
+pub mod skins;

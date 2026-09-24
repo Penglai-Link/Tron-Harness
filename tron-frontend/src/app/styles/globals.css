@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "../../shared/theme/components.css";
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
@@ -284,3 +285,7 @@
   --sidebar-primary: #5cff85;
   --sidebar-ring: #5cff85;
 }
+
+/* Optional skin assets are removed together with the runtime variable sheet. */
+html, body { accent-color: var(--color-accent); font-family: var(--tron-skin-font, var(--font-sans, "Inter Variable", sans-serif)); }
+body, .tron-skin-canvas { background-image: var(--tron-skin-background, none); background-size: cover; background-position: center; }

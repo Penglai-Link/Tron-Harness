@@ -15,7 +15,7 @@ import {
 import "@xterm/xterm/css/xterm.css";
 function Output({ text }: { text: string }) {
   const { t } = useTranslation("pages");
-  const { theme } = useTheme();
+  const { theme, activeSkin } = useTheme();
   const host = useRef<HTMLDivElement>(null);
   const term = useRef<Terminal | null>(null);
   const previous = useRef("");
@@ -54,7 +54,7 @@ function Output({ text }: { text: string }) {
   useEffect(() => {
     if (!host.current || !term.current) return;
     term.current.options.theme = resolveTheme(host.current, theme);
-  }, [theme]);
+  }, [theme, activeSkin]);
   useEffect(() => {
     if (!term.current) return;
     if (text.startsWith(previous.current)) {

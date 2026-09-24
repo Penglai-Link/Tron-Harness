@@ -41,7 +41,12 @@ export function graphNodeColorGroup(labels: string[]) {
 }
 
 export function graphNodeColorForGroup(label: string): GraphNodeColor {
-  return graphNodeColorPalette[stableHash(label) % graphNodeColorPalette.length];
+  const index = stableHash(label) % graphNodeColorPalette.length;
+  const fallback = graphNodeColorPalette[index];
+  if (typeof document === "undefined") return fallback;
+  const styles = getComputedStyle(document.documentElement);
+  const value = (part: keyof GraphNodeColor) => styles.getPropertyValue(`--tron-graph-group-${index + 1}-${part}`).trim() || fallback[part];
+  return { color: value("color"), border: value("border"), soft: value("soft") };
 }
 
 export function graphNodeLegendItems(nodes: GraphNodeView[]): GraphNodeLegendItem[] {

@@ -41,5 +41,11 @@ const matrixDarkAnsiTheme: Partial<ITheme> = {
 };
 
 export function getTerminalAnsiTheme(theme: TerminalAppTheme): Partial<ITheme> {
-  return theme === "light" ? lightAnsiTheme : matrixDarkAnsiTheme;
+  const base = theme === "light" ? lightAnsiTheme : matrixDarkAnsiTheme;
+  if (typeof document === "undefined") return base;
+  const styles = getComputedStyle(document.documentElement);
+  return Object.fromEntries(Object.entries(base).map(([key, fallback]) => {
+    const suffix = key.replace(/[A-Z]/g, (letter) => `-${letter.toLowerCase()}`);
+    return [key, styles.getPropertyValue(`--tron-terminal-${suffix}`).trim() || fallback];
+  }));
 }

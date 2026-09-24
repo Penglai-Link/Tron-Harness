@@ -37,7 +37,7 @@ interface TerminalProps {
 }
 
 const Terminal = ({ onExit }: TerminalProps) => {
-  const { theme } = useTheme();
+  const { theme, activeSkin } = useTheme();
   const { currentLocale } = useLocale();
   const { selectedPrimarySpaceId, selectedSecondarySpaceId } = useWorkspaceSpaces();
   const terminalRef = useRef<HTMLDivElement>(null);
@@ -265,7 +265,7 @@ const Terminal = ({ onExit }: TerminalProps) => {
     terminalInstanceRef.current?.setThemeTokens({
       ansi: getTerminalAnsiTheme(theme),
     });
-  }, [theme]);
+  }, [theme, activeSkin]);
 
   useEffect(() => {
     currentLocaleRef.current = currentLocale;

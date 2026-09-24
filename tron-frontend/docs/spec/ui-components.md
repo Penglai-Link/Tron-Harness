@@ -80,3 +80,14 @@ When a primitive is added or materially changed:
 - Keyboard and focus behavior remain usable.
 - User-facing text remains translatable.
 - Focused tests cover the changed behavior.
+
+Theme packages inherit public component tokens from `src/shared/theme/components.css` and primitive utility classes:
+
+- Button: six variants (`primary` maps to `default`), independent normal/hover/active foreground and background, border, disabled state, focus outline, radius, dimensions and typography via `--tron-button-*`.
+- Input/Textarea and Forms wrappers: `--tron-input-*` controls normal, hover, focus, disabled and invalid paint, radius and density. Select has `--tron-select-*` paint/radius with input fallbacks.
+- Table and both DataTable wrappers: `--tron-table-*` controls normal/striped/hover/selected rows, header, row height, cell padding, text and dividers. Selection/expansion wins over hover. Sticky cells must use `var(--_tron-row-bg)` for body and `var(--tron-table-header-bg, var(--color-elevated-surface))` for headers.
+- SurfaceCard/MetricCard: `--tron-card-*` colors/radius; SurfaceCard also exposes padding and shadow. Dialog/Sheet, dropdown/select popups and overlays expose their own paint tokens.
+- ClassName/style remain explicit caller overrides. For a single button/row, set the same public CSS variables on that element; do not reset these inherited public variables in a descendant selector.
+- Preserve each control's accessible name, keyboard events and disabled semantics when changing styles. The Appearance component preview supplies localized interactive examples; changing theme must not change business behavior.
+
+The complete author-facing token contract is in `tron-skill/tron-theme-authoring/references/tokens.md` at repository root. New public tokens must update that contract and `tokens.json`. Browser acceptance checks computed button states, input focus, selected/striped rows, pinned backgrounds, portal fonts, and cleanup when returning to a builtin. Runtime regression tests live in `src/shared/theme`.

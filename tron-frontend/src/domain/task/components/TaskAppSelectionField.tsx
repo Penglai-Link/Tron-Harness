@@ -16,7 +16,7 @@ function LegacyChip({
       <span>{code}</span>
       {onRemove ? (
         <button
-          className="rounded-full px-1 text-[12px] font-semibold hover:bg-black/10 disabled:cursor-not-allowed disabled:opacity-60"
+          className="rounded-full px-1 text-[12px] font-semibold hover:bg-[var(--color-hover-overlay)] disabled:cursor-not-allowed disabled:opacity-60"
           disabled={disabled}
           type="button"
           aria-label={`Remove legacy app code ${code}`}

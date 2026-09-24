@@ -332,11 +332,7 @@ export function InstalledSkillsPage() {
             rows={pagination.visibleItems}
             pagination={<TablePagination itemLabel={pageT("pagination.itemLabel", "skills")} {...pagination.paginationProps} />}
             rowKey={(row) => row.skillName}
-            rowClassName={(row) => (
-              row.skillName === selectedSkillName
-                ? "bg-[var(--color-surface-container)]"
-                : undefined
-            )}
+            isRowSelected={(row) => row.skillName === selectedSkillName}
             emptyState={(
               <div className="space-y-2">
                 <p>{pageT("emptyState.title", "No installed skills match the current filters.")}</p>
@@ -512,7 +508,7 @@ export function InstalledSkillsPage() {
         </SurfaceCard>
       </div>
       {uninstallTarget ? (
-        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-black/45 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[85] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
           <div
             className="w-[min(92vw,32rem)] rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"
@@ -586,7 +582,7 @@ export function InstalledSkillsPage() {
         </div>
       ) : null}
       {skillMarkdownFullscreenOpen && selectedSkill ? createPortal(
-        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-black/55 p-4 backdrop-blur-sm">
+        <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
           <div
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] min-w-0 max-w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
             role="dialog"

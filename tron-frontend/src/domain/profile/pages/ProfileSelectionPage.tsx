@@ -40,7 +40,7 @@ function ProfileAvatar({ profile }: { profile: PersonAiProfile }) {
   useEffect(() => setImageFailed(false), [profile.avatarUrl]);
 
   return (
-    <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-white">
+    <span className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-full bg-[var(--color-primary)] text-sm font-semibold text-[var(--color-on-primary)]">
       {src && !imageFailed ? (
         <img
           alt=""

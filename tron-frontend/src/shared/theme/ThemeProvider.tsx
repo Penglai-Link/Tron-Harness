@@ -1,107 +1,129 @@
-import {
-  createContext,
-  useContext,
-  useLayoutEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-
-import {
-  applySystemFontSize,
-  defaultSystemFontSize,
-  isSystemFontSize,
-  readStoredSystemFontSize,
-  systemFontSizeStorageKey,
-} from "@/shared/lib/systemFontSize";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { applySystemFontSize, defaultSystemFontSize, isSystemFontSize, readStoredSystemFontSize, systemFontSizeStorageKey } from "@/shared/lib/systemFontSize";
+import { useAuthStore } from "@/store/authStore";
+import { skinApi } from "./skinApi";
+import { prepareSkin, type PreparedSkin } from "./skinEngine";
+import type { Skin } from "./Skin";
+import light from "./builtin/light.json";
+import matrix from "./builtin/matrix-dark.json";
 
 export type AppTheme = "light" | "matrix-dark";
-
-interface ThemeOption {
-  labelKey: string;
-  value: AppTheme;
-}
-
+const builtins = [light, matrix] as Skin[];
 interface ThemeContextValue {
   fontSize: number;
-  setFontSize: (fontSize: number) => void;
-  setTheme: (theme: AppTheme) => void;
+  setFontSize: (size: number) => void;
   theme: AppTheme;
-  themes: readonly ThemeOption[];
+  activeSkin: Skin;
+  skins: Skin[];
+  loading: boolean;
+  error: string | null;
+  refreshSkins: () => Promise<void>;
+  selectSkin: (id: string) => Promise<void>;
+  importSkin: (file: File) => Promise<void>;
 }
-
-const themeStorageKey = "tron.theme";
-
-const themeOptions = [
-  { value: "light", labelKey: "shell:theme.options.light" },
-  { value: "matrix-dark", labelKey: "shell:theme.options.matrixDark" },
-] as const satisfies readonly ThemeOption[];
-
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
-function isAppTheme(value: string): value is AppTheme {
-  return value === "light" || value === "matrix-dark";
-}
-
-function getStoredTheme(): AppTheme | undefined {
-  if (typeof window === "undefined") return undefined;
-  const storedTheme = window.localStorage.getItem(themeStorageKey);
-  return storedTheme && isAppTheme(storedTheme) ? storedTheme : undefined;
-}
-
-function getStoredFontSize(): number | undefined {
-  if (typeof window === "undefined") return undefined;
-  return readStoredSystemFontSize(window.localStorage);
-}
-
-function applyTheme(theme: AppTheme) {
-  if (typeof document === "undefined") return;
-  const root = document.documentElement;
-  root.dataset.theme = theme;
-  root.style.colorScheme = theme === "light" ? "light" : "dark";
-}
-
 export function ThemeProvider({ children }: { children: ReactNode }) {
-  const [theme, setTheme] = useState<AppTheme>(() => getStoredTheme() ?? "light");
-  const [fontSize, setFontSize] = useState<number>(() => getStoredFontSize() ?? defaultSystemFontSize);
+  const status = useAuthStore((state) => state.status);
+  const [activeSkin, setActiveSkin] = useState<Skin>(() => localStorage.getItem("tron.theme") === "matrix-dark" ? builtins[1] : builtins[0]);
+  const [skins, setSkins] = useState<Skin[]>(builtins);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [fontSize, setFontSize] = useState(() => readStoredSystemFontSize(localStorage) ?? defaultSystemFontSize);
+  const applied = useRef<PreparedSkin | null>(null);
+  const activeSignature = useRef<string | null>(null);
+  const generation = useRef(0);
+  const mutation = useRef(false);
+
+  const commit = useCallback((skin: Skin, prepared: PreparedSkin) => {
+    applied.current?.dispose();
+    prepared.apply();
+    applied.current = prepared;
+    activeSignature.current = JSON.stringify(skin);
+    setActiveSkin(skin);
+    localStorage.setItem("tron.theme", skin.mode === "Dark" ? "matrix-dark" : "light");
+  }, []);
 
   useLayoutEffect(() => {
-    applyTheme(theme);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(themeStorageKey, theme);
-    }
-  }, [theme]);
+    document.documentElement.dataset.theme = activeSkin.mode === "Dark" ? "matrix-dark" : "light";
+  }, [activeSkin.mode]);
 
+  const refreshSkins = useCallback(async () => {
+    if (mutation.current) return;
+    const request = ++generation.current;
+    let prepared: PreparedSkin | undefined;
+    try {
+      const [list, { skin }] = await Promise.all([skinApi.list(), skinApi.active()]);
+      if (request !== generation.current) return;
+      // Keep recovery choices available even when the active skin's assets fail.
+      setSkins(list);
+      if (JSON.stringify(skin) !== activeSignature.current) prepared = await prepareSkin(skin);
+      if (request !== generation.current) { prepared?.dispose(); return; }
+      if (prepared) commit(skin, prepared);
+      setError(null);
+    } catch (reason) {
+      if (request === generation.current) setError(reason instanceof Error ? reason.message : String(reason));
+    } finally {
+      if (request === generation.current) setLoading(false);
+    }
+  }, [commit]);
+
+  useEffect(() => {
+    if (status !== "authenticated") { setLoading(false); return; }
+    setLoading(true);
+    void refreshSkins();
+    const stop = skinApi.watch(() => void refreshSkins());
+    const onFocus = () => void refreshSkins();
+    window.addEventListener("focus", onFocus);
+    return () => { generation.current++; stop(); window.removeEventListener("focus", onFocus); };
+  }, [status, refreshSkins]);
+  useEffect(() => () => { generation.current++; applied.current?.dispose(); }, []);
+
+  async function selectSkin(id: string) {
+    if (mutation.current) return;
+    const skin = skins.find((item) => item.id === id);
+    if (!skin) return;
+    mutation.current = true;
+    const request = ++generation.current;
+    setLoading(true);
+    let prepared: PreparedSkin | undefined;
+    try {
+      prepared = await prepareSkin(skin);
+      if (request !== generation.current) return;
+      await skinApi.activate(id);
+      if (request !== generation.current) return;
+      commit(skin, prepared);
+      prepared = undefined;
+      setError(null);
+    } finally {
+      prepared?.dispose();
+      mutation.current = false;
+      setLoading(false);
+      if (request === generation.current) void refreshSkins();
+    }
+  }
+  async function importSkin(file: File) {
+    if (mutation.current) return;
+    mutation.current = true;
+    generation.current++;
+    setLoading(true);
+    try { await skinApi.install(file); }
+    finally { mutation.current = false; setLoading(false); }
+    await refreshSkins();
+  }
   useLayoutEffect(() => {
     applySystemFontSize(fontSize);
-    if (typeof window !== "undefined") {
-      window.localStorage.setItem(systemFontSizeStorageKey, String(fontSize));
-    }
+    localStorage.setItem(systemFontSizeStorageKey, String(fontSize));
   }, [fontSize]);
 
-  function updateFontSize(nextFontSize: number) {
-    if (isSystemFontSize(nextFontSize)) {
-      setFontSize(nextFontSize);
-    }
-  }
-
-  const contextValue = useMemo<ThemeContextValue>(() => ({
-    fontSize,
-    setFontSize: updateFontSize,
-    setTheme,
-    theme,
-    themes: themeOptions,
-  }), [fontSize, theme]);
-
-  return <ThemeContext.Provider value={contextValue}>{children}</ThemeContext.Provider>;
+  return <ThemeContext.Provider value={{
+    fontSize, setFontSize: (size) => { if (isSystemFontSize(size)) setFontSize(size); },
+    theme: activeSkin.mode === "Dark" ? "matrix-dark" : "light", activeSkin, skins,
+    loading, error, refreshSkins, selectSkin, importSkin,
+  }}>{children}</ThemeContext.Provider>;
 }
-
 export function useTheme() {
   const context = useContext(ThemeContext);
-
-  if (!context) {
-    throw new Error("useTheme must be used within ThemeProvider.");
-  }
-
+  if (!context) throw new Error("useTheme must be used within ThemeProvider.");
   return context;
 }

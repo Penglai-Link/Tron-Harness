@@ -30,7 +30,7 @@ import {
   resolveGraphNodeLabel,
 } from "@/domain/knowledge-graph/model";
 import { cn } from "@/shared/lib/utils";
-import { useTheme, type AppTheme } from "@/shared/theme/ThemeProvider";
+import { useTheme } from "@/shared/theme/ThemeProvider";
 
 interface GraphCanvasProps {
   edges: GraphEdgeView[];
@@ -119,30 +119,21 @@ const fallbackMinimapViewport: MinimapViewport = {
   width: 52,
 };
 
-const graphCanvasThemes: Record<AppTheme, GraphCanvasTheme> = {
-  light: {
-    activeEdgeColor: "#2f5f9f",
-    canvasBackgroundImage: "radial-gradient(circle at 1px 1px, rgba(68,71,72,0.13) 1px, transparent 0), linear-gradient(135deg, rgba(255,255,255,0.76), rgba(243,244,244,0.58))",
-    edgeLabelBackgroundFill: "#ffffff",
-    edgeLabelBackgroundOpacity: 0.86,
-    edgeLabelBackgroundStroke: "#c6d6f1",
-    edgeStroke: "#cfd6d6",
-    highlightedNodeStroke: "#2f5f9f",
-    nodeLabelFill: "#1f2933",
-    selectedNodeStroke: "#111827",
-  },
-  "matrix-dark": {
-    activeEdgeColor: "#3ef4c4",
-    canvasBackgroundImage: "radial-gradient(circle at 1px 1px, rgba(92,255,133,0.16) 1px, transparent 0), linear-gradient(135deg, #06120a 0%, #0b1810 48%, #07120b 100%)",
-    edgeLabelBackgroundFill: "#09150d",
+function readGraphCanvasTheme(): GraphCanvasTheme {
+  const styles = getComputedStyle(document.documentElement);
+  const color = (token: string, semantic: string) => styles.getPropertyValue(token).trim() || styles.getPropertyValue(semantic).trim();
+  return {
+    activeEdgeColor: color("--tron-graph-active-edge", "--color-accent"),
+    canvasBackgroundImage: "radial-gradient(circle at 1px 1px, var(--tron-graph-grid, var(--color-outline-variant)) 1px, transparent 0)",
+    edgeLabelBackgroundFill: color("--tron-graph-label-bg", "--color-elevated-surface"),
     edgeLabelBackgroundOpacity: 0.94,
-    edgeLabelBackgroundStroke: "#21422f",
-    edgeStroke: "rgba(155,197,167,0.42)",
-    highlightedNodeStroke: "#3ef4c4",
-    nodeLabelFill: "#d7ffe2",
-    selectedNodeStroke: "#5cff85",
-  },
-};
+    edgeLabelBackgroundStroke: color("--tron-graph-label-border", "--color-outline-variant"),
+    edgeStroke: color("--tron-graph-edge", "--color-outline-variant"),
+    highlightedNodeStroke: color("--tron-graph-highlight", "--color-accent"),
+    nodeLabelFill: color("--tron-graph-label-fg", "--color-on-surface"),
+    selectedNodeStroke: color("--tron-graph-selected", "--color-primary"),
+  };
+}
 
 const floatingCanvasPanelStyle = {
   backgroundColor: "color-mix(in srgb, var(--color-elevated-surface) 88%, transparent)",
@@ -999,7 +990,7 @@ function buildGraphDataSyncKey(
   highlightedNodeCodes: string[],
   highlightedEdgeCodes: string[],
   nodeLabelProperty: string,
-  theme: AppTheme,
+  theme: string,
 ) {
   return [
     bounds.height,
@@ -1070,12 +1061,13 @@ export function GraphCanvas({
   zoom,
 }: GraphCanvasProps) {
   const { i18n, t } = useTranslation(["pages"]);
-  const { theme } = useTheme();
+  const { activeSkin } = useTheme();
   const pageT = (key: string, defaultValue: string, options?: Record<string, unknown>) => (
     t(`pages:knowledgeGraph.${key}`, { defaultValue, ...options })
   );
   const locale = i18n.resolvedLanguage ?? i18n.language;
-  const graphCanvasTheme = graphCanvasThemes[theme];
+  const graphCanvasTheme = useMemo(() => readGraphCanvasTheme(), [activeSkin]);
+  const theme = JSON.stringify(activeSkin);
   const containerRef = useRef<HTMLDivElement | null>(null);
   const minimapRef = useRef<HTMLButtonElement | null>(null);
   const minimapDragRef = useRef<MinimapDragState | null>(null);
@@ -1115,7 +1107,7 @@ export function GraphCanvas({
   );
   const legendItems = useMemo(
     () => graphNodeLegendItems(positionedNodes),
-    [positionedNodes],
+    [positionedNodes, activeSkin],
   );
   const renderEdges = useMemo(
     () => edges.filter((edge) => visibleNodeCodes.has(edge.sourceNodeCode) && visibleNodeCodes.has(edge.targetNodeCode)),

@@ -26,7 +26,7 @@ interface FieldProps {
 }
 
 const disabledControlClasses =
-  "disabled:cursor-not-allowed disabled:border-[var(--color-outline-variant)] disabled:bg-[var(--color-surface-container)] disabled:text-[var(--color-on-surface-variant)] disabled:opacity-100 disabled:placeholder:text-[var(--color-outline)] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
+  "disabled:cursor-not-allowed disabled:border-[var(--tron-input-disabled-border,var(--color-outline-variant))] disabled:bg-[var(--tron-input-disabled-bg,var(--color-surface-container))] disabled:text-[var(--tron-input-disabled-fg,var(--color-on-surface-variant))] disabled:opacity-[var(--tron-input-disabled-opacity,1)] disabled:placeholder:text-[var(--tron-input-placeholder,var(--color-outline))] disabled:focus:border-[var(--color-outline-variant)] disabled:focus:ring-0";
 
 export function Field({ children, className, error, hint, hintAriaLabel = "打开字段说明", label, required = false }: FieldProps) {
   return (
@@ -55,7 +55,7 @@ export const TextInput = forwardRef(function TextInput(
       size={size}
       ref={ref}
       className={cn(
-        "h-9 sm:h-8.5",
+        "h-[var(--tron-input-height,2.25rem)] sm:h-[var(--tron-input-height,2.125rem)]",
         disabledControlClasses,
         className,
       )}

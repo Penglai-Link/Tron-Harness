@@ -4270,7 +4270,7 @@ function SessionSidebar({
           <input
             autoFocus
             aria-label={t("chat.management.sidebar.renameAria", { title: session.title })}
-            className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-white px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
+            className="h-8 min-w-0 rounded-md border border-[var(--color-focus-ring)] bg-[var(--color-elevated-surface)] px-2 text-sm font-medium text-[var(--color-on-surface)] outline-none"
             disabled={pending}
             value={renameDraft}
             onBlur={() => {
@@ -4501,7 +4501,7 @@ function ChatBubble({
   }
 
   return (
-    <article className={cn("max-w-[920px] rounded-md bg-white px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
+    <article className={cn("max-w-[920px] rounded-md bg-[var(--color-elevated-surface)] px-4 py-3 shadow-[0_8px_22px_rgba(15,23,42,0.06)]", isUser ? "ml-auto bg-[var(--color-surface-container-lowest)]" : "")}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-[12px]">
           {isUser ? <UserRound size={16} /> : <Bot size={16} />}
@@ -7505,7 +7505,7 @@ export function ChatManagementPage() {
 
   return (
     <AgentTerminalSessionContext.Provider value={activeSession?.sessionCode ?? activeSessionCode}>
-    <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-white" ref={mainRef}>
+    <div className="relative z-0 flex h-full min-h-0 min-w-0 overflow-hidden overscroll-none bg-[var(--color-elevated-surface)]" ref={mainRef}>
       <div className="hidden">
         <SessionSidebar
           activeSessionCode={activeSession?.sessionCode ?? activeSessionCode}

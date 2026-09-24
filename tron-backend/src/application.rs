@@ -24,3 +24,5 @@ pub mod task;
 pub mod terminal;
 pub mod variable;
 pub mod workspace;
+
+pub mod skin;

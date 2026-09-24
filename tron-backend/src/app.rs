@@ -141,6 +141,7 @@ pub struct AppState {
     pub workspaces: WorkspaceService,
     pub skills: SkillRegistryService,
     pub system_config: SystemConfigService,
+    pub skins: crate::application::skin::SkinService,
     pub models: ModelService,
     pub model_providers: ModelProviderService,
     pub prompts: PromptService,
@@ -477,6 +478,13 @@ impl AppState {
         let system_config = SystemConfigService::new(Arc::new(YamlSystemConfigStore::new(
             config.application_config_path.clone(),
         )));
+        let skin_root = std::path::Path::new(&config.application_config_path)
+            .parent()
+            .unwrap_or_else(|| std::path::Path::new("."))
+            .join("skins");
+        let skins = crate::application::skin::SkinService::new(Arc::new(
+            crate::adapters::outbound::skin::FileSkinStore::new(skin_root),
+        ));
         Ok(Self {
             config,
             readiness,
@@ -511,6 +519,7 @@ impl AppState {
             rag,
             skills,
             system_config,
+            skins,
             tasks,
             terminal,
             variables,

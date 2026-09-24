@@ -59,7 +59,6 @@ import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcu
 import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { cn } from "@/shared/lib/utils";
 import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
-import { useTheme } from "@/shared/theme/ThemeProvider";
 import { SelectInput } from "@/components/forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
@@ -184,7 +183,6 @@ export function TronShell({
 }: TronShellProps) {
   const { t } = useTranslation(["common", "shell"]);
   const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
-  const { setTheme, theme, themes } = useTheme();
   const { session: authSession } = useAuthSession();
   const personAiPlan = authSession?.user.vipLevel === null || authSession?.user.vipLevel === undefined
     ? null
@@ -949,25 +947,6 @@ export function TronShell({
       <>
         <div className="space-y-3 p-3">
           <div className="min-w-0">
-            <label className="mb-1 block text-xs font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-theme-select">
-              {t("shell:theme.label")}
-            </label>
-            <SelectInput
-              className="w-full"
-              id="tron-theme-select"
-              value={theme}
-              onValueChange={(event) => {
-                setTheme(event! === "matrix-dark" ? "matrix-dark" : "light");
-              }}
-            >
-              {themes.map((themeOption) => (
-                <SelectItem key={themeOption.value} value={themeOption.value}>
-                  {t(themeOption.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectInput>
-          </div>
-          <div className="min-w-0">
             <label className="mb-1 block text-xs font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
               {t("common:locale.label")}
             </label>
@@ -1127,7 +1106,7 @@ export function TronShell({
     <TronShellFrameContext.Provider value={true}>
       <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
         <SidebarProvider
-          className="isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]"
+          className="tron-skin-canvas isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]"
           open={!sidebarCollapsed}
           onOpenChange={(open) => setSidebarCollapsed(!open)}
         >
@@ -1141,7 +1120,7 @@ export function TronShell({
                 />
                 <button
                   ref={workspaceTriggerRef}
-                  className="ml-1 inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 cursor-pointer items-center gap-[12px] rounded-[4px] border border-[#d9d9d9] bg-white px-3 text-sm font-medium text-[var(--color-on-surface)]"
+                  className="ml-1 inline-flex h-9 max-w-[min(60vw,28rem)] shrink-0 cursor-pointer items-center gap-[12px] rounded-[4px] border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] px-3 text-sm font-medium text-[var(--color-on-surface)]"
                   type="button"
                   id="tron-workspace-trigger"
                   aria-busy={workspaceSwitcherLoading}

@@ -485,7 +485,7 @@ export function TasksKanbanPage() {
         title={t("pages:tasks.kanban.title", "Task Management")}
         actions={
           <>
-            <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="w-[128px] bg-white" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
+            <SelectInput aria-label={t("pages:tasks.kanban.scale", "Task board scale")} className="w-[128px] bg-[var(--color-elevated-surface)]" value={boardScalePreset} onValueChange={(event) => setBoardScalePreset(event as BoardScalePreset)}>
               <SelectItem value="fit">{t("pages:tasks.taskFlows.fit", "Fit ({{percent}}%)", { percent: boardScalePercent })}</SelectItem>
               {BOARD_SCALE_PRESETS.map((preset) => <SelectItem key={preset.value} value={preset.value}>{preset.label}</SelectItem>)}
             </SelectInput>

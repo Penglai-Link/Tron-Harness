@@ -1,0 +1,114 @@
+/* Public skin tokens are inherited, so a component can override them locally too.
+   Component layer keeps intentional className utilities available to callers. */
+@layer components {
+  .tron-button {
+    outline: none;
+    border: var(--tron-button-border-width, 1px) solid var(--_button-border);
+    border-radius: var(--tron-button-radius, var(--tron-control-radius, 4px));
+    background: var(--_button-bg);
+    color: var(--_button-fg);
+    font-size: var(--tron-button-font-size, 0.875rem);
+    font-weight: var(--tron-button-font-weight, 500);
+    box-shadow: var(--tron-button-shadow, none);
+  }
+  .tron-button:hover:not(:disabled):not([data-disabled]) { background: var(--_button-hover-bg); color: var(--_button-hover-fg); }
+  .tron-button:active:not(:disabled):not([data-disabled]), .tron-button[aria-expanded="true"] { background: var(--_button-active-bg); color: var(--_button-active-fg); }
+  .tron-button:focus-visible { outline: var(--tron-button-focus-width, 3px) solid var(--tron-button-focus-ring, var(--ring)); outline-offset: 2px; }
+  .tron-button:is(:disabled, [data-disabled]) {
+    background: var(--tron-button-disabled-bg, var(--_button-bg));
+    color: var(--tron-button-disabled-fg, var(--_button-fg));
+    border-color: var(--tron-button-disabled-border, var(--_button-border));
+    opacity: var(--tron-button-disabled-opacity, 0.5);
+  }
+  .tron-button-link { text-underline-offset: 4px; }
+  .tron-button-link:hover { text-decoration: underline; }
+  .tron-button-default {
+    --_button-bg: var(--tron-button-primary-bg, var(--primary));
+    --_button-fg: var(--tron-button-primary-fg, var(--primary-foreground));
+    --_button-border: var(--tron-button-primary-border, transparent);
+    --_button-hover-bg: var(--tron-button-primary-hover-bg, color-mix(in srgb, var(--primary) 80%, transparent));
+    --_button-hover-fg: var(--tron-button-primary-hover-fg, var(--_button-fg));
+    --_button-active-bg: var(--tron-button-primary-active-bg, var(--_button-hover-bg));
+    --_button-active-fg: var(--tron-button-primary-active-fg, var(--_button-hover-fg));
+  }
+  .tron-button-secondary {
+    --_button-bg: var(--tron-button-secondary-bg, var(--secondary));
+    --_button-fg: var(--tron-button-secondary-fg, var(--secondary-foreground));
+    --_button-border: var(--tron-button-secondary-border, transparent);
+    --_button-hover-bg: var(--tron-button-secondary-hover-bg, color-mix(in srgb, var(--secondary) 95%, var(--foreground)));
+    --_button-hover-fg: var(--tron-button-secondary-hover-fg, var(--_button-fg));
+    --_button-active-bg: var(--tron-button-secondary-active-bg, var(--_button-hover-bg));
+    --_button-active-fg: var(--tron-button-secondary-active-fg, var(--_button-hover-fg));
+  }
+  .tron-button-outline {
+    --_button-bg: var(--tron-button-outline-bg, var(--background));
+    --_button-fg: var(--tron-button-outline-fg, var(--foreground));
+    --_button-border: var(--tron-button-outline-border, var(--border));
+    --_button-hover-bg: var(--tron-button-outline-hover-bg, var(--muted));
+    --_button-hover-fg: var(--tron-button-outline-hover-fg, var(--_button-fg));
+    --_button-active-bg: var(--tron-button-outline-active-bg, var(--_button-hover-bg));
+    --_button-active-fg: var(--tron-button-outline-active-fg, var(--_button-hover-fg));
+  }
+  .tron-button-ghost {
+    --_button-bg: var(--tron-button-ghost-bg, transparent);
+    --_button-fg: var(--tron-button-ghost-fg, var(--foreground));
+    --_button-border: var(--tron-button-ghost-border, transparent);
+    --_button-hover-bg: var(--tron-button-ghost-hover-bg, var(--muted));
+    --_button-hover-fg: var(--tron-button-ghost-hover-fg, var(--_button-fg));
+    --_button-active-bg: var(--tron-button-ghost-active-bg, var(--_button-hover-bg));
+    --_button-active-fg: var(--tron-button-ghost-active-fg, var(--_button-hover-fg));
+  }
+  .tron-button-destructive {
+    --_button-bg: var(--tron-button-destructive-bg, color-mix(in srgb, var(--destructive) 10%, transparent));
+    --_button-fg: var(--tron-button-destructive-fg, var(--destructive));
+    --_button-border: var(--tron-button-destructive-border, transparent);
+    --_button-hover-bg: var(--tron-button-destructive-hover-bg, color-mix(in srgb, var(--destructive) 20%, transparent));
+    --_button-hover-fg: var(--tron-button-destructive-hover-fg, var(--_button-fg));
+    --_button-active-bg: var(--tron-button-destructive-active-bg, var(--_button-hover-bg));
+    --_button-active-fg: var(--tron-button-destructive-active-fg, var(--_button-hover-fg));
+  }
+  .tron-button-link {
+    --_button-bg: var(--tron-button-link-bg, transparent);
+    --_button-fg: var(--tron-button-link-fg, var(--primary));
+    --_button-border: var(--tron-button-link-border, transparent);
+    --_button-hover-bg: var(--tron-button-link-hover-bg, transparent);
+    --_button-hover-fg: var(--tron-button-link-hover-fg, var(--_button-fg));
+    --_button-active-bg: var(--tron-button-link-active-bg, var(--_button-hover-bg));
+    --_button-active-fg: var(--tron-button-link-active-fg, var(--_button-hover-fg));
+  }
+
+  .tron-input { background: var(--tron-input-bg, var(--background)); color: var(--tron-input-fg, var(--foreground)); border-color: var(--tron-input-border, var(--input)); outline: none; }
+  .tron-input:hover:not(:disabled) { border-color: var(--tron-input-hover-border, var(--input)); }
+  .tron-input:focus-visible { border-color: var(--tron-input-focus-border, var(--ring)); outline: var(--tron-input-focus-width, 1px) solid var(--tron-input-focus-ring, var(--ring)); }
+  .tron-input:disabled { border-color: var(--tron-input-disabled-border, var(--input)); background: var(--tron-input-disabled-bg, var(--muted)); color: var(--tron-input-disabled-fg, var(--muted-foreground)); opacity: var(--tron-input-disabled-opacity, 0.5); }
+  .tron-input[aria-invalid="true"] { border-color: var(--tron-input-invalid-border, var(--destructive)); outline-color: var(--tron-input-invalid-border, var(--destructive)); }
+
+  .tron-table-row {
+    --_tron-row-bg: var(--tron-table-row-bg, var(--color-elevated-surface));
+    background-color: var(--_tron-row-bg);
+    color: var(--tron-table-row-fg, var(--color-on-surface));
+    height: var(--tron-table-row-height, auto);
+    border-color: var(--tron-table-row-border, var(--border));
+    border-bottom-width: var(--tron-table-row-border-width, 1px);
+    font-size: var(--tron-table-font-size, 0.875rem);
+  }
+  [data-slot="table-body"] > .tron-table-row:nth-child(even) { --_tron-row-bg: var(--tron-table-row-stripe-bg, var(--tron-table-row-bg, var(--color-elevated-surface))); }
+  [data-slot="table-body"] > .tron-table-row:hover {
+    --_tron-row-bg: var(--tron-table-row-hover-bg, var(--color-hover-surface));
+    color: var(--tron-table-row-hover-fg, var(--tron-table-row-fg, var(--color-on-surface)));
+  }
+  [data-slot="table-body"] > .tron-table-row:is([data-state="selected"], [aria-selected="true"], [aria-expanded="true"], :has([aria-expanded="true"])) {
+    --_tron-row-bg: var(--tron-table-row-selected-bg, var(--color-accent-container));
+    color: var(--tron-table-row-selected-fg, var(--color-on-accent-container));
+  }
+  [data-slot="table-body"] > .tron-table-row:focus-visible { outline: 2px solid var(--tron-table-row-focus-ring, var(--ring)); outline-offset: -2px; }
+  [data-slot="table-header"] > .tron-table-row { height: var(--tron-table-header-height, 2.5rem); --_tron-row-bg: var(--tron-table-header-bg, var(--color-elevated-surface)); }
+  [data-slot="table-head"] { font-weight: var(--tron-table-header-font-weight, 500); }
+
+  :is([data-slot="select-trigger"], [data-slot="select-button"]) {
+    background: var(--tron-select-bg, var(--tron-input-bg, var(--background)));
+    color: var(--tron-select-fg, var(--tron-input-fg, var(--foreground)));
+    border-color: var(--tron-select-border, var(--tron-input-border, var(--input)));
+    border-radius: var(--tron-select-radius, var(--tron-input-radius, var(--tron-control-radius, 4px)));
+  }
+}

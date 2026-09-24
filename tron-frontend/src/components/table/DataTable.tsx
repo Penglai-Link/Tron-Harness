@@ -43,7 +43,7 @@ function fixedColumnStyle<T extends RowData>(column: Column<T, unknown>, header 
   if (!fixed) return undefined;
 
   return {
-    backgroundColor: "var(--color-elevated-surface)",
+    backgroundColor: header ? "var(--tron-table-header-bg, var(--color-elevated-surface))" : "var(--_tron-row-bg, var(--color-elevated-surface))",
     boxShadow: fixed === "left" ? "2px 0 4px rgb(0 0 0 / 6%)" : "-2px 0 4px rgb(0 0 0 / 6%)",
     left: fixed === "left" ? `${column.getStart("left")}px` : undefined,
     position: "sticky",
@@ -76,7 +76,7 @@ export function DataTable<T extends RowData>({
       className={cn(
         "overflow-hidden",
         variant === "default"
-          ? "rounded-[8px] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
+          ? "rounded-[var(--tron-card-radius,8px)] border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)]"
           : "rounded-none border-0 bg-transparent",
         className,
       )}
@@ -106,7 +106,7 @@ export function DataTable<T extends RowData>({
                 const meta = columnMeta(table, header.column.id);
                 return (
                   <TableHead
-                    className={cn("px-5 py-3", meta?.align === "right" ? "text-right" : "text-left", meta?.headerClassName)}
+                    className={cn("px-[var(--tron-table-cell-padding-x,1.25rem)] py-[var(--tron-table-cell-padding-y,0.75rem)]", meta?.align === "right" ? "text-right" : "text-left", meta?.headerClassName)}
                     colSpan={header.colSpan}
                     key={header.id}
                     style={fixedColumnStyle(header.column, true)}
@@ -142,7 +142,7 @@ export function DataTable<T extends RowData>({
               >
                 {row.getVisibleCells().map((cell) => {
                   const meta = columnMeta(table, cell.column.id);
-                  return <TableCell className={cn("px-5 py-3 align-middle", meta?.align === "right" ? "text-right" : "text-left", meta?.cellClassName)} key={cell.id} style={fixedColumnStyle(cell.column)}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>;
+                  return <TableCell className={cn("px-[var(--tron-table-cell-padding-x,1.25rem)] py-[var(--tron-table-cell-padding-y,0.75rem)] align-middle", meta?.align === "right" ? "text-right" : "text-left", meta?.cellClassName)} key={cell.id} style={fixedColumnStyle(cell.column)}>{flexRender(cell.column.columnDef.cell, cell.getContext())}</TableCell>;
                 })}
               </TableRow>
             ))

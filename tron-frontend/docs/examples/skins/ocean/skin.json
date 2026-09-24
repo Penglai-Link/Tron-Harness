@@ -1,0 +1,21 @@
+{
+  "id": "ocean",
+  "name": "Ocean",
+  "version": 1,
+  "mode": "Light",
+  "colors": {
+    "--color-background": "#e8f1fb",
+    "--color-primary": "#164b85",
+    "--color-on-primary": "#ffffff",
+    "--color-header-backdrop": "#dce9f8",
+    "--color-elevated-surface": "#f7fbff"
+  },
+  "layout": {
+    "--tron-card-radius": "20px",
+    "--tron-control-radius": "8px"
+  },
+  "resources": {
+    "background": null,
+    "font": null
+  }
+}

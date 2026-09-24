@@ -1,3 +1,4 @@
+import { SkinSettings } from "../components/SkinSettings";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -46,11 +47,12 @@ export function SettingsAppearancePage() {
       min: minimumSystemFontSize,
       max: maximumSystemFontSize,
     });
-  }, []);
+  }, [pageT]);
 
   return (
     <div className="w-full space-y-4">
       <PageHeader title={shellT("settings.items.appearance")} />
+      <SkinSettings />
       <SurfaceCard className="p-0">
         <Item size="xs">
           <ItemContent>
@@ -64,7 +66,7 @@ export function SettingsAppearancePage() {
           </ItemContent>
           <ItemActions>
             <Input
-              className=""
+              aria-label={pageT("settingsAppearance.fontSize")}
               max={maximumSystemFontSize}
               min={minimumSystemFontSize}
               step={1}

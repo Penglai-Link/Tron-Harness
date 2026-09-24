@@ -372,9 +372,9 @@ export function PlatformVariablesPage() {
             },
             {
               align: "right",
-              cellClassName: "sticky right-0 z-10 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)] group-hover:bg-[var(--color-hover-surface)]",
+              cellClassName: "sticky right-0 z-10 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--_tron-row-bg)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
               header: pageT("columns.actions", "Actions"),
-              headerClassName: "sticky right-0 z-20 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--color-surface-container-low)] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
+              headerClassName: "sticky right-0 z-20 w-24 border-l border-[var(--color-outline-variant)] bg-[var(--tron-table-header-bg,var(--color-elevated-surface))] shadow-[-8px_0_12px_rgba(0,0,0,0.04)]",
               id: "actions",
               width: "100px",
               render: (row) => {
