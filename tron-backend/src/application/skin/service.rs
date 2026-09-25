@@ -32,6 +32,11 @@ impl SkinService {
         let _ = self.changes.send(());
         Ok(skin)
     }
+    pub fn uninstall(&self, id: &str) -> Result<(), SkinError> {
+        self.store.uninstall(id)?;
+        let _ = self.changes.send(());
+        Ok(())
+    }
     pub fn resource(&self, id: &str, path: &str) -> Result<Vec<u8>, SkinError> {
         self.store.resource(id, path)
     }

@@ -7,6 +7,7 @@ export const skinApi = {
   active: () => requestApi<{ skin: Skin }>(`${base}/active`),
   activate: (id: string) => requestApi<{ skin: Skin }>(`PUT ${base}/active`, { body: { id } }),
   install: (file: File) => requestApi<{ skin: Skin }>(`POST ${base}`, { body: file }),
+  uninstall: (id: string) => requestApi<void>(`DELETE ${base}/${encodeURIComponent(id)}`),
   resource: async (id: string, path: string) => {
     const result = await requestApiBlob(`${base}/${encodeURIComponent(id)}/resources/${path.split("/").map(encodeURIComponent).join("/")}`, { signal: AbortSignal.timeout(10000) });
     return result.blob;

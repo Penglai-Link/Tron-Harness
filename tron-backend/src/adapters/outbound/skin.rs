@@ -244,6 +244,43 @@ impl SkinStore for FileSkinStore {
         Ok(skin)
     }
 
+    fn uninstall(&self, id: &str) -> Result<(), SkinError> {
+        if id == "light" || id == "matrix-dark" {
+            return Err(SkinError::Protected);
+        }
+        if !valid_skin_id(id) {
+            return Err(SkinError::Invalid);
+        }
+        let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
+        self.initialize()?;
+        self.read_skin(id)?;
+
+        let active_path = self.root.join("active.json");
+        let active_id = fs::read(&active_path)
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+            .and_then(|value| {
+                value
+                    .get("id")
+                    .and_then(|id| id.as_str())
+                    .map(str::to_owned)
+            });
+        let was_active = active_id.as_deref() == Some(id);
+        if was_active {
+            atomic_write(&active_path, br#"{"id":"light"}"#)?;
+        }
+
+        if fs::remove_dir_all(self.root.join(id)).is_err() {
+            if was_active {
+                let active = serde_json::to_vec(&serde_json::json!({"id": id}))
+                    .map_err(|_| SkinError::Storage)?;
+                atomic_write(&active_path, &active)?;
+            }
+            return Err(SkinError::Storage);
+        }
+        Ok(())
+    }
+
     fn resource(&self, id: &str, path: &str) -> Result<Vec<u8>, SkinError> {
         resource_mime(path).ok_or(SkinError::Invalid)?;
         let resource = self.checked_resource(id, path)?;

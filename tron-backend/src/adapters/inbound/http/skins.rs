@@ -13,6 +13,10 @@ pub fn routes() -> Router<AppState> {
             get(handler::list).post(handler::install),
         )
         .route(
+            "/api/v1/system/skins/{id}",
+            axum::routing::delete(handler::uninstall),
+        )
+        .route(
             "/api/v1/system/skins/active",
             get(handler::active).put(handler::activate),
         )

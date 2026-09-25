@@ -3,6 +3,7 @@ pub enum SkinError {
     Invalid,
     NotFound,
     Conflict,
+    Protected,
     Storage,
     TooLarge,
 }
@@ -17,6 +18,7 @@ impl SkinError {
             Self::Invalid => ("101025001", "tron.skin.invalid"),
             Self::NotFound => ("101025002", "tron.skin.not_found"),
             Self::Conflict => ("101025003", "tron.skin.conflict"),
+            Self::Protected => ("101025006", "tron.skin.protected"),
             Self::Storage => ("101025004", "tron.skin.storage_failed"),
             Self::TooLarge => ("101025005", "tron.skin.too_large"),
         };

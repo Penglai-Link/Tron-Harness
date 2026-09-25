@@ -20,6 +20,7 @@ interface ThemeContextValue {
   refreshSkins: () => Promise<void>;
   selectSkin: (id: string) => Promise<void>;
   importSkin: (file: File) => Promise<void>;
+  uninstallSkin: (id: string) => Promise<void>;
 }
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
@@ -111,6 +112,29 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     finally { mutation.current = false; setLoading(false); }
     await refreshSkins();
   }
+  async function uninstallSkin(id: string) {
+    if (mutation.current || id === "light" || id === "matrix-dark") return;
+    mutation.current = true;
+    const request = ++generation.current;
+    setLoading(true);
+    let fallback: PreparedSkin | undefined;
+    try {
+      if (activeSkin.id === id) fallback = await prepareSkin(builtins[0]);
+      await skinApi.uninstall(id);
+      if (request !== generation.current) return;
+      if (fallback) {
+        commit(builtins[0], fallback);
+        fallback = undefined;
+      }
+      setSkins((current) => current.filter((skin) => skin.id !== id));
+      setError(null);
+    } finally {
+      fallback?.dispose();
+      mutation.current = false;
+      setLoading(false);
+      if (request === generation.current) void refreshSkins();
+    }
+  }
   useLayoutEffect(() => {
     applySystemFontSize(fontSize);
     localStorage.setItem(systemFontSizeStorageKey, String(fontSize));
@@ -119,7 +143,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <ThemeContext.Provider value={{
     fontSize, setFontSize: (size) => { if (isSystemFontSize(size)) setFontSize(size); },
     theme: activeSkin.mode === "Dark" ? "matrix-dark" : "light", activeSkin, skins,
-    loading, error, refreshSkins, selectSkin, importSkin,
+    loading, error, refreshSkins, selectSkin, importSkin, uninstallSkin,
   }}>{children}</ThemeContext.Provider>;
 }
 export function useTheme() {

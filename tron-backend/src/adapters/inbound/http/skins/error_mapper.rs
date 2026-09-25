@@ -16,6 +16,7 @@ impl IntoResponse for SkinApiError {
             SkinError::Invalid => StatusCode::BAD_REQUEST,
             SkinError::NotFound => StatusCode::NOT_FOUND,
             SkinError::Conflict => StatusCode::CONFLICT,
+            SkinError::Protected => StatusCode::FORBIDDEN,
             SkinError::Storage => StatusCode::INTERNAL_SERVER_ERROR,
             SkinError::TooLarge => StatusCode::PAYLOAD_TOO_LARGE,
         };
@@ -26,6 +27,7 @@ impl IntoResponse for SkinApiError {
                 "皮肤 ID 已存在，请修改 ID 后导入",
                 "Skin ID already exists; use a different ID",
             ),
+            "tron.skin.protected" => ("内置主题不能卸载", "Built-in themes cannot be uninstalled"),
             "tron.skin.too_large" => (
                 "皮肤包不能超过 20 MB",
                 "Skin packages must be smaller than 20 MB",

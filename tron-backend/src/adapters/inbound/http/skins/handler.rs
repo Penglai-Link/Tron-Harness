@@ -1,7 +1,11 @@
 use super::response::{ActivateSkinVo, ActiveSkinVo, InstallSkinVo, SkinVo};
 use super::{error_mapper::SkinApiError, request::ActivateSkinRequest};
 use crate::adapters::inbound::http::auth::RequestAuthContext;
-use crate::{app::AppState, application::skin::SkinError, response::ApiResponse};
+use crate::{
+    app::AppState,
+    application::skin::SkinError,
+    response::{ApiResponse, EmptyData},
+};
 use axum::{
     Json,
     body::Bytes,
@@ -67,6 +71,14 @@ pub async fn install(
     Ok(Json(ApiResponse::protocol_success(InstallSkinVo {
         skin: skin.into(),
     })))
+}
+pub async fn uninstall(
+    State(state): State<AppState>,
+    auth: RequestAuthContext,
+    Path(id): Path<String>,
+) -> Result<Json<ApiResponse<EmptyData>>, SkinApiError> {
+    blocking(auth.locale, move || state.skins.uninstall(&id)).await?;
+    Ok(Json(ApiResponse::protocol_success(EmptyData {})))
 }
 pub async fn resource(
     State(state): State<AppState>,
