@@ -1,11 +1,37 @@
+import { useEffect } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useBootstrapAuthSession } from "@/domain/auth";
-import { Navigate, Route, Routes } from "react-router";
+import { Navigate, Route, Routes, useNavigate } from "react-router";
 import EntryRoutePage from "./route-page/EntryRoutePage";
 import ProtectedRoute from "./route-page/ProtectedRoute";
 import AppRoutePage from "./route-page/AppRoutePage";
 import { TabPanelRegistryProvider } from "@/shared/layout/content/TabPanelRegistry";
 import { FilePanelHostProvider } from "@/shared/layout/content/FilePanelHostProvider";
 import { ProfileSelectionPage } from "@/domain/profile/pages/ProfileSelectionPage";
+import { buildApiUrl } from "@/shared/api/httpClient";
+import { useAuthStore } from "@/store/authStore";
+
+function ServerAuthDeviceUnboundHandler() {
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const events = new EventSource(buildApiUrl("/api/v1/profiles/events"));
+    const onDeviceUnbound = () => {
+      useAuthStore.getState().markUnauthenticated();
+      queryClient.clear();
+      window.dispatchEvent(new Event("server-auth-device-unbound"));
+      navigate("/profiles?mode=reauth", { replace: true });
+    };
+    events.addEventListener("server-auth-device-unbound", onDeviceUnbound);
+    return () => {
+      events.removeEventListener("server-auth-device-unbound", onDeviceUnbound);
+      events.close();
+    };
+  }, [navigate, queryClient]);
+
+  return null;
+}
 
 export default function RoutedApp() {
   useBootstrapAuthSession();
@@ -13,6 +39,7 @@ export default function RoutedApp() {
   return (
     <FilePanelHostProvider>
       <TabPanelRegistryProvider>
+        <ServerAuthDeviceUnboundHandler />
         <Routes>
         <Route path="/" element={<EntryRoutePage />} />
         <Route path="/profiles" element={<ProfileSelectionPage />} />

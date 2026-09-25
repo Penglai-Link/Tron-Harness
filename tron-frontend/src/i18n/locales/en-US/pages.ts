@@ -4883,6 +4883,8 @@ export const pages = {
     authorizeNewAccount: "Authorize new account",
     authorizing: "Waiting for authorization…",
     cancelAuthorization: "Cancel authorization",
+    reauthorizationRequired: "This device authorization has expired. Sign in to PersonAI again.",
+    reauthorize: "Sign in again",
     agreement: {
       checkboxLabel: "I have read and agree to",
       linkLabel: "User Agreement",

@@ -176,6 +176,15 @@ pub async fn poll_authorization_session(
                 };
                 profile_id = Some(profile.profile_id);
             }
+            if let Err(error) = state.model_providers.heartbeat_active_profile().await {
+                if !matches!(
+                    error,
+                    ModelProviderError::AuthenticationRequired
+                        | ModelProviderError::ConnectionNotReady
+                ) {
+                    eprintln!("[person-ai] login heartbeat failed: {error}");
+                }
+            }
             Json(ApiResponse::success(AuthorizationPollResponse {
                 completed: true,
                 session: result.session,
@@ -287,6 +296,7 @@ fn model_provider_error_response(error: ModelProviderError) -> Response {
             (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_REQUIRED")
         }
         ModelProviderError::Unauthorized => (StatusCode::CONFLICT, "MODEL_PROVIDER_AUTH_REQUIRED"),
+        ModelProviderError::DeviceUnbound => (StatusCode::UNAUTHORIZED, "PERSONAI_DEVICE_UNBOUND"),
         ModelProviderError::Remote(_) => (StatusCode::BAD_GATEWAY, "MODEL_PROVIDER_REMOTE_FAILED"),
         ModelProviderError::Storage => (
             StatusCode::INTERNAL_SERVER_ERROR,

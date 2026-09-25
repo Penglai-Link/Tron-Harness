@@ -22,6 +22,7 @@ interface AuthState {
 }
 
 let initializePromise: Promise<void> | null = null;
+let sessionLoadGeneration = 0;
 
 function sessionFromProfile(profile: {
   personAiUserId: string;
@@ -48,21 +49,30 @@ function sessionFromProfile(profile: {
 }
 
 function transitionToUnauthenticated(set: (state: Partial<AuthState>) => void) {
+  sessionLoadGeneration += 1;
+  setApiAccessToken(null);
   useTabStore.getState().resetAllTabs();
   set({ session: null, status: "unauthenticated" });
 }
 
 async function loadActiveProfile(
   set: (state: Partial<AuthState>) => void,
+  generation: number,
 ): Promise<boolean> {
   try {
     const bootstrap = await fetchBootstrapProfileStatus();
+    if (generation !== sessionLoadGeneration) {
+      return useAuthStore.getState().status === "authenticated";
+    }
     const activeProfile = bootstrap.activeProfile;
     if (!activeProfile || activeProfile.status !== "ACTIVE") {
       transitionToUnauthenticated(set);
       return false;
     }
     const token = await fetchActiveProfileToken();
+    if (generation !== sessionLoadGeneration) {
+      return useAuthStore.getState().status === "authenticated";
+    }
     setApiAccessToken(token.token);
     set({
       session: sessionFromProfile(activeProfile, bootstrap.avatarUrl, bootstrap.account),
@@ -70,19 +80,22 @@ async function loadActiveProfile(
     });
     return true;
   } catch {
-    transitionToUnauthenticated(set);
-    return false;
+    if (generation === sessionLoadGeneration) {
+      transitionToUnauthenticated(set);
+      return false;
+    }
+    return useAuthStore.getState().status === "authenticated";
   }
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
   session: null,
   status: "checking",
-  ensureSessionFresh: () => loadActiveProfile(set),
+  ensureSessionFresh: () => loadActiveProfile(set, ++sessionLoadGeneration),
   initialize: async () => {
     if (initializePromise) return initializePromise;
     set((state) => state.status === "authenticated" ? state : { session: null, status: "checking" });
-    initializePromise = loadActiveProfile(set).then(() => undefined).finally(() => {
+    initializePromise = loadActiveProfile(set, ++sessionLoadGeneration).then(() => undefined).finally(() => {
       initializePromise = null;
     });
     return initializePromise;

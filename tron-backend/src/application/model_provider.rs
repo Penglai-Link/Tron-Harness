@@ -4,7 +4,10 @@ use std::{
     future::Future,
     path::Path,
     pin::Pin,
-    sync::{Arc, Mutex},
+    sync::{
+        Arc, Mutex,
+        atomic::{AtomicBool, Ordering},
+    },
 };
 
 use chrono::DateTime;
@@ -20,6 +23,7 @@ use reqwest::Method;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
+use tokio::sync::broadcast;
 use url::Url;
 
 #[path = "model_provider/chat_auto_routes.rs"]
@@ -189,6 +193,7 @@ pub enum ModelProviderError {
     InvalidSelection(String),
     AuthenticationRequired,
     Unauthorized,
+    DeviceUnbound,
     Remote(String),
     Storage,
 }
@@ -221,6 +226,7 @@ impl std::fmt::Display for ModelProviderError {
             Self::Unauthorized => {
                 formatter.write_str("Person-AI access token was rejected (HTTP 401)")
             }
+            Self::DeviceUnbound => formatter.write_str("Person-AI device was unbound; login again"),
             Self::Remote(message) => formatter.write_str(message),
             Self::Storage => formatter.write_str("model provider storage failed"),
         }
@@ -239,6 +245,7 @@ pub trait ModelProviderAdapter: Send + Sync {
         server_base_url: &'a str,
         client_name: &'a str,
         existing_client_id: Option<&'a str>,
+        device_id: &'a str,
     ) -> ProviderFuture<'a, ExternalAuthorizationSession>;
 
     fn poll_authorization<'a>(
@@ -374,6 +381,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
         server_base_url: &'a str,
         client_name: &'a str,
         existing_client_id: Option<&'a str>,
+        device_id: &'a str,
     ) -> ProviderFuture<'a, ExternalAuthorizationSession> {
         Box::pin(async move {
             let client = LoginClient::new(server_base_url)
@@ -385,14 +393,41 @@ impl ModelProviderAdapter for PersonAiAdapter {
                     callback_url: None,
                 })
                 .await
-                .map_err(remote_error)?;
-            let login_url = session.login_url.unwrap_or_else(|| {
-                client.build_login_url(
-                    &session.session_id,
-                    Some(LoginClient::detect_os_type()),
-                    None,
-                )
-            });
+                .map_err(server_api_error)?;
+            let computer_name = LoginClient::detect_computer_name();
+            let generated_login_url = client.build_login_url_with_device(
+                &session.session_id,
+                Some(LoginClient::detect_os_type()),
+                Some(&computer_name),
+                Some(device_id),
+            );
+            let login_url = match session.login_url {
+                Some(login_url) => match Url::parse(&login_url) {
+                    Ok(mut login_url) => {
+                        let generated_query = Url::parse(&generated_login_url)
+                            .map(|url| {
+                                url.query_pairs()
+                                    .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                                    .collect::<Vec<_>>()
+                            })
+                            .unwrap_or_default();
+                        let generated_keys = generated_query
+                            .iter()
+                            .map(|(key, _)| key.as_str())
+                            .collect::<Vec<_>>();
+                        let mut query = login_url
+                            .query_pairs()
+                            .filter(|(key, _)| !generated_keys.contains(&key.as_ref()))
+                            .map(|(key, value)| (key.into_owned(), value.into_owned()))
+                            .collect::<Vec<_>>();
+                        query.extend(generated_query);
+                        login_url.query_pairs_mut().clear().extend_pairs(query);
+                        login_url.to_string()
+                    }
+                    Err(_) => generated_login_url,
+                },
+                None => generated_login_url,
+            };
             Ok(ExternalAuthorizationSession {
                 session_id: session.session_id,
                 login_url,
@@ -413,7 +448,10 @@ impl ModelProviderAdapter for PersonAiAdapter {
         Box::pin(async move {
             let client = LoginClient::new(server_base_url)
                 .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?;
-            let session = client.get_session(session_id).await.map_err(remote_error)?;
+            let session = client
+                .get_session(session_id)
+                .await
+                .map_err(server_api_error)?;
             let expires_at = session
                 .expires_at
                 .as_deref()
@@ -454,7 +492,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
             let refreshed = client
                 .refresh_token(refresh_token)
                 .await
-                .map_err(remote_error)?;
+                .map_err(server_api_error)?;
             Ok(ProviderCredentials {
                 token: refreshed.token,
                 refresh_token: refreshed
@@ -483,7 +521,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
                 for model in client
                     .list_models(&context, Some(quality), None, None)
                     .await
-                    .map_err(remote_error)?
+                    .map_err(server_api_error)?
                 {
                     distinct.entry(model.model_code.clone()).or_insert_with(|| {
                         ExternalCatalogModel {
@@ -524,7 +562,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
             for model in client
                 .list_models(&context, None)
                 .await
-                .map_err(remote_error)?
+                .map_err(server_api_error)?
             {
                 let Some(catalog_model_type) =
                     ProviderCatalogModelType::from_person_ai_media_type(model.media_type)
@@ -572,7 +610,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
                     None,
                 )
                 .await
-                .map_err(remote_error)?;
+                .map_err(server_api_error)?;
             if response.get("error").is_some() {
                 return Err(ModelProviderError::Remote(
                     "Person-AI high quality Auto chat verification failed".into(),
@@ -595,7 +633,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
                     &json!({ "input": "Tron Person-AI embedding connectivity check" }).to_string(),
                 )
                 .await
-                .map_err(remote_error)?;
+                .map_err(server_api_error)?;
             let valid = response
                 .get("data")
                 .and_then(Value::as_array)
@@ -683,7 +721,7 @@ impl ModelProviderAdapter for PersonAiAdapter {
             client
                 .create(&credentials.context(), &body.to_string())
                 .await
-                .map_err(remote_error)
+                .map_err(server_api_error)
         })
     }
 }
@@ -692,6 +730,9 @@ impl ModelProviderAdapter for PersonAiAdapter {
 pub struct ModelProviderService {
     connection: Arc<Mutex<Connection>>,
     token_refresh_lock: Arc<tokio::sync::Mutex<()>>,
+    server_auth_events: broadcast::Sender<()>,
+    device_unbound: Arc<AtomicBool>,
+    device_id: String,
     cipher: Arc<dyn VariableCipher>,
     adapters: Arc<HashMap<ModelProviderCode, Arc<dyn ModelProviderAdapter>>>,
 }
@@ -719,6 +760,48 @@ impl ModelProviderService {
         trim_provider_sync_runs(&connection, ModelProviderCode::PersonAi)?;
         migrate_legacy_default_model_selections(&connection)?;
         migrate_legacy_person_ai_profile_credentials(&connection)?;
+        connection
+            .execute_batch(
+                "CREATE TABLE IF NOT EXISTS person_ai_device_identity (
+                    singleton_id INTEGER PRIMARY KEY CHECK(singleton_id = 1),
+                    device_id TEXT NOT NULL
+                )",
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+        let saved_device_id = connection
+            .query_row(
+                "SELECT device_id FROM person_ai_device_identity WHERE singleton_id = 1",
+                [],
+                |row| row.get::<_, String>(0),
+            )
+            .optional()
+            .map_err(|_| ModelProviderError::Storage)?;
+        let device_id = match saved_device_id {
+            Some(device_id) => device_id,
+            None => {
+                let device_id = crab_serverapi::detect_device_id();
+                connection
+                    .execute(
+                    "INSERT OR IGNORE INTO person_ai_device_identity(singleton_id, device_id) VALUES (1, ?1)",
+                    [&device_id],
+                    )
+                    .map_err(|_| ModelProviderError::Storage)?;
+                device_id
+            }
+        };
+        let device_unbound = connection
+            .query_row(
+                "SELECT EXISTS(
+                    SELECT 1 FROM provider_connections
+                    WHERE provider_code = ?1 AND last_error = ?2
+                )",
+                params![
+                    ModelProviderCode::PersonAi.storage_value(),
+                    "PersonAI device was unbound; login again",
+                ],
+                |row| row.get::<_, bool>(0),
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
         if sqlite_table_exists(&connection, "default_model_selections")? {
             connection
                 .execute(
@@ -733,6 +816,9 @@ impl ModelProviderService {
         Ok(Self {
             connection: Arc::new(Mutex::new(connection)),
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
+            server_auth_events: broadcast::channel(16).0,
+            device_unbound: Arc::new(AtomicBool::new(device_unbound)),
+            device_id,
             cipher,
             adapters: Arc::new(adapters),
         })
@@ -772,11 +858,76 @@ impl ModelProviderService {
     /// this call when necessary; callers must not persist the returned avatar URL.
     pub async fn get_person_ai_account_info(&self) -> Result<AccountInfo, ModelProviderError> {
         let credentials = self.active_credentials(ModelProviderCode::PersonAi).await?;
-        AccountClient::new(credentials.server_base_url.clone())
+        let result = AccountClient::new(credentials.server_base_url.clone())
             .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?
             .get_info(&credentials.context())
-            .await
-            .map_err(remote_error)
+            .await;
+        match result {
+            Ok(info) => Ok(info),
+            Err(error) => {
+                let mapped = server_api_error(error);
+                self.mark_auth_required_after_rejected_credentials(&mapped);
+                Err(mapped)
+            }
+        }
+    }
+
+    pub fn subscribe_server_auth_events(&self) -> broadcast::Receiver<()> {
+        self.server_auth_events.subscribe()
+    }
+
+    pub fn device_unbound(&self) -> bool {
+        self.device_unbound.load(Ordering::SeqCst)
+    }
+
+    pub async fn heartbeat_active_profile(&self) -> Result<(), ModelProviderError> {
+        let credentials = self.active_credentials(ModelProviderCode::PersonAi).await?;
+        let account = AccountClient::new(credentials.server_base_url.clone())
+            .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?;
+        match account.heartbeat(&credentials.context()).await {
+            Ok(()) => Ok(()),
+            Err(ServerApiError::DeviceUnbound) => {
+                self.clear_credentials_after_device_unbound()?;
+                Err(ModelProviderError::DeviceUnbound)
+            }
+            Err(error) => Err(server_api_error(error)),
+        }
+    }
+
+    pub fn start_person_ai_heartbeat(&self) {
+        let Ok(handle) = tokio::runtime::Handle::try_current() else {
+            return;
+        };
+        let service = self.clone();
+        handle.spawn(async move {
+            if let Err(error) = service.heartbeat_active_profile().await
+                && !matches!(
+                    error,
+                    ModelProviderError::AuthenticationRequired
+                        | ModelProviderError::ConnectionNotReady
+                )
+            {
+                eprintln!("[person-ai] device heartbeat failed: {error}");
+            }
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(5 * 60));
+            interval.tick().await;
+            loop {
+                interval.tick().await;
+                if let Err(error) = service.heartbeat_active_profile().await
+                    && !matches!(
+                        error,
+                        ModelProviderError::AuthenticationRequired
+                            | ModelProviderError::ConnectionNotReady
+                    )
+                {
+                    eprintln!("[person-ai] device heartbeat failed: {error}");
+                }
+            }
+        });
+    }
+
+    pub fn clear_device_unbound_flag(&self) {
+        self.device_unbound.store(false, Ordering::SeqCst);
     }
 
     /// Returns the refreshed token belonging to the currently active profile.
@@ -933,7 +1084,7 @@ impl ModelProviderService {
                 let context = credentials.context();
                 let request = client
                     .new_gateway_request(Method::GET, "/account/info", &context)
-                    .map_err(remote_error)?;
+                    .map_err(server_api_error)?;
                 let response = client
                     .execute_for_raw_json(request, Some(&context), "获取账户信息")
                     .await
@@ -942,7 +1093,9 @@ impl ModelProviderService {
                             "[person-ai] account profile request failed: {}",
                             account_info_error_kind(&error)
                         );
-                        account_info_error(error)
+                        let mapped = account_info_error(error);
+                        self.mark_auth_required_after_rejected_credentials(&mapped);
+                        mapped
                     })?;
                 parse_person_ai_account_info(response)
             }
@@ -1026,13 +1179,22 @@ impl ModelProviderService {
                 server_base_url,
             )
         };
-        let remote = adapter
+        let remote = match adapter
             .create_authorization(
                 &server_base_url,
                 PERSON_AI_CLIENT_NAME,
                 existing_client_id.as_deref(),
+                &self.device_id,
             )
-            .await?;
+            .await
+        {
+            Ok(remote) => remote,
+            Err(ModelProviderError::DeviceUnbound) => {
+                self.clear_credentials_after_device_unbound()?;
+                return Err(ModelProviderError::DeviceUnbound);
+            }
+            Err(error) => return Err(error),
+        };
         let now = now_millis();
         let view = ProviderAuthorizationSessionView {
             provider_code: command.provider_code,
@@ -1105,10 +1267,18 @@ impl ModelProviderService {
             read_authorization_session(&connection, &command.session_id)?
         };
         let adapter = self.adapter(stored.provider_code)?;
-        match adapter
+        let authorization_poll = adapter
             .poll_authorization(&stored.server_base_url, &stored.session_id)
-            .await?
-        {
+            .await;
+        let authorization_poll = match authorization_poll {
+            Ok(authorization_poll) => authorization_poll,
+            Err(ModelProviderError::DeviceUnbound) => {
+                self.clear_credentials_after_device_unbound()?;
+                return Err(ModelProviderError::DeviceUnbound);
+            }
+            Err(error) => return Err(error),
+        };
+        match authorization_poll {
             ExternalAuthorizationPoll::Pending { status, expires_at } => {
                 let now = now_millis();
                 let connection = self
@@ -1138,18 +1308,30 @@ impl ModelProviderService {
                 Err(ModelProviderError::AuthorizationEnded(status))
             }
             ExternalAuthorizationPoll::Completed(credentials) => {
-                let (catalog, multimedia_catalog) = self
-                    .fetch_catalog_snapshot(stored.provider_code, &credentials)
-                    .await?;
-                if catalog.is_empty() {
-                    return Err(ModelProviderError::Remote(
-                        "Person-AI returned no selectable chat models".into(),
-                    ));
+                let validated_identity = async {
+                    let (catalog, multimedia_catalog) = self
+                        .fetch_catalog_snapshot(stored.provider_code, &credentials)
+                        .await?;
+                    if catalog.is_empty() {
+                        return Err(ModelProviderError::Remote(
+                            "Person-AI returned no selectable chat models".into(),
+                        ));
+                    }
+                    adapter.verify_chat_auto(&credentials).await?;
+                    adapter.verify_embedding(&credentials).await?;
+                    let identity = self.fetch_person_ai_identity(&credentials).await?;
+                    Ok::<_, ModelProviderError>((catalog, multimedia_catalog, identity))
                 }
-                adapter.verify_chat_auto(&credentials).await?;
-                adapter.verify_embedding(&credentials).await?;
-                let (person_ai_user_id, person_ai_username) =
-                    self.fetch_person_ai_identity(&credentials).await?;
+                .await;
+                let (catalog, multimedia_catalog, (person_ai_user_id, person_ai_username)) =
+                    match validated_identity {
+                        Ok(validated_identity) => validated_identity,
+                        Err(ModelProviderError::DeviceUnbound) => {
+                            self.clear_credentials_after_device_unbound()?;
+                            return Err(ModelProviderError::DeviceUnbound);
+                        }
+                        Err(error) => return Err(error),
+                    };
                 let encrypted = self.encrypt_credentials(&credentials)?;
                 let now = now_millis();
                 let run_code = sync_run_code(now);
@@ -1176,6 +1358,9 @@ impl ModelProviderService {
                 transaction
                     .commit()
                     .map_err(|_| ModelProviderError::Storage)?;
+                if stored.provider_code == ModelProviderCode::PersonAi {
+                    self.clear_device_unbound_flag();
+                }
                 let session =
                     read_authorization_session(&connection, &stored.session_id)?.to_view();
                 let row = read_connection(&connection, stored.provider_code)?;
@@ -1199,7 +1384,10 @@ impl ModelProviderService {
         let token_status = login
             .get_token_status(&credentials.token)
             .await
-            .map_err(remote_error)?;
+            .map_err(server_api_error)?;
+        if token_status.is_device_unbound() {
+            return Err(ModelProviderError::DeviceUnbound);
+        }
         let person_ai_user_id = token_status
             .subject
             .map(|value| value.trim().to_owned())
@@ -1213,7 +1401,7 @@ impl ModelProviderService {
             .map_err(|_| ModelProviderError::InvalidServerBaseUrl)?
             .get_info(&credentials.context())
             .await
-            .map_err(remote_error)?;
+            .map_err(server_api_error)?;
         let person_ai_username = account
             .username
             .map(|value| value.trim().to_owned())
@@ -1754,7 +1942,11 @@ impl ModelProviderService {
             return client
                 .create(&credentials.context(), &body.to_string())
                 .await
-                .map_err(|e| e.to_string());
+                .map_err(|error| {
+                    let error = server_api_error(error);
+                    self.mark_auth_required_after_rejected_credentials(&error);
+                    error.to_string()
+                });
         }
         let adapter = self
             .adapter(ModelProviderCode::PersonAi)
@@ -1812,7 +2004,11 @@ impl ModelProviderService {
                     sink(event).map_err(crab_serverapi::ServerApiError::Validation)
                 })
                 .await
-                .map_err(|e| e.to_string());
+                .map_err(|error| {
+                    let error = server_api_error(error);
+                    self.mark_auth_required_after_rejected_credentials(&error);
+                    error.to_string()
+                });
             return response;
         }
         let snapshot_service = self.clone();
@@ -1877,7 +2073,10 @@ impl ModelProviderService {
             .map_err(|error| error.to_string())?
             .embed(&credentials, body)
             .await
-            .map_err(|error| error.to_string())
+            .map_err(|error| {
+                self.mark_auth_required_after_rejected_credentials(&error);
+                error.to_string()
+            })
     }
 
     pub async fn llm_rerank(
@@ -2121,6 +2320,10 @@ impl ModelProviderService {
             .await
         {
             Ok(refreshed) if !refreshed.token.trim().is_empty() => refreshed,
+            Err(ModelProviderError::DeviceUnbound) => {
+                self.clear_credentials_after_device_unbound()?;
+                return Err(ModelProviderError::DeviceUnbound);
+            }
             Ok(_) | Err(_) => {
                 self.mark_auth_required(provider_code, "token refresh failed")?;
                 return Err(ModelProviderError::AuthenticationRequired);
@@ -2187,6 +2390,12 @@ impl ModelProviderService {
     }
 
     fn mark_auth_required_after_rejected_credentials(&self, error: &ModelProviderError) {
+        if matches!(error, ModelProviderError::DeviceUnbound) {
+            if let Err(storage_error) = self.clear_credentials_after_device_unbound() {
+                eprintln!("[person-ai] failed to clear unbound credentials: {storage_error}");
+            }
+            return;
+        }
         if matches!(error, ModelProviderError::Unauthorized)
             || is_person_ai_authorization_key_error(error)
         {
@@ -2199,12 +2408,82 @@ impl ModelProviderService {
         }
     }
 
+    fn clear_credentials_after_device_unbound(&self) -> Result<(), ModelProviderError> {
+        let now = now_millis();
+        let connection = self
+            .connection
+            .lock()
+            .map_err(|_| ModelProviderError::Storage)?;
+        let transaction = connection
+            .unchecked_transaction()
+            .map_err(|_| ModelProviderError::Storage)?;
+        transaction
+            .execute(
+                "UPDATE provider_connections SET status = ?2, credentials_encrypted = NULL,
+                 authorization_expires_at = NULL, last_error = ?3, updated_at = ?4 WHERE provider_code = ?1",
+                params![
+                    ModelProviderCode::PersonAi.storage_value(),
+                    ProviderConnectionStatus::AuthRequired.storage_value(),
+                    "PersonAI device was unbound; login again",
+                    now,
+                ],
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+        transaction
+            .execute(
+                "UPDATE person_ai_profile_credentials SET credentials_encrypted = '',
+                 status = ?1, authorization_expires_at = NULL,
+                 last_error = ?2, updated_at = ?3",
+                params![
+                    ProviderConnectionStatus::AuthRequired.storage_value(),
+                    "PersonAI device was unbound; login again",
+                    now,
+                ],
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+        transaction
+            .execute(
+                "DELETE FROM provider_authorization_sessions WHERE provider_code = ?1",
+                [ModelProviderCode::PersonAi.storage_value()],
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+        transaction
+            .execute(
+                "UPDATE provider_catalog_models SET status = ?2, updated_at = ?3 WHERE provider_code = ?1",
+                params![
+                    ModelProviderCode::PersonAi.storage_value(),
+                    ProviderCatalogModelStatus::Unavailable.storage_value(),
+                    now,
+                ],
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+        transaction
+            .execute(
+                "UPDATE provider_multimedia_catalog_models SET status = ?2, updated_at = ?3 WHERE provider_code = ?1",
+                params![
+                    ModelProviderCode::PersonAi.storage_value(),
+                    ProviderCatalogModelStatus::Unavailable.storage_value(),
+                    now,
+                ],
+            )
+            .map_err(|_| ModelProviderError::Storage)?;
+        transaction
+            .commit()
+            .map_err(|_| ModelProviderError::Storage)?;
+        self.device_unbound.store(true, Ordering::SeqCst);
+        let _ = self.server_auth_events.send(());
+        Ok(())
+    }
+
     async fn finish_sync_failure(
         &self,
         provider_code: ModelProviderCode,
         sync_run_code: &str,
         error: &ModelProviderError,
     ) -> Result<(), ModelProviderError> {
+        if matches!(error, ModelProviderError::DeviceUnbound) {
+            self.clear_credentials_after_device_unbound()?;
+        }
         let now = now_millis();
         let summary = safe_error_summary(error);
         let connection = self
@@ -3543,8 +3822,15 @@ fn remote_error(error: impl std::fmt::Display) -> ModelProviderError {
     ModelProviderError::Remote(format!("Person-AI request failed: {error}"))
 }
 
+fn server_api_error(error: ServerApiError) -> ModelProviderError {
+    match error {
+        ServerApiError::DeviceUnbound => ModelProviderError::DeviceUnbound,
+        error => remote_error(error),
+    }
+}
+
 fn person_ai_runtime_error(error: ServerApiError) -> ModelProviderError {
-    remote_error(error)
+    server_api_error(error)
 }
 
 fn is_person_ai_authorization_key_error(error: &ModelProviderError) -> bool {
@@ -3562,6 +3848,7 @@ fn is_person_ai_authorization_key_error(error: &ModelProviderError) -> bool {
 fn account_info_error(error: ServerApiError) -> ModelProviderError {
     match error {
         ServerApiError::DecryptFailed => ModelProviderError::AuthenticationRequired,
+        ServerApiError::DeviceUnbound => ModelProviderError::DeviceUnbound,
         ServerApiError::Business { code, .. } => ModelProviderError::Remote(format!(
             "Person-AI account information request was rejected (code {code})"
         )),
@@ -3577,6 +3864,8 @@ fn account_info_error_kind(error: &ServerApiError) -> &'static str {
         ServerApiError::Json(_) | ServerApiError::Other(_) => "invalid-response",
         ServerApiError::Crypto(_) => "crypto",
         ServerApiError::DecryptFailed => "authorization-key",
+        ServerApiError::Gateway { .. } => "gateway",
+        ServerApiError::DeviceUnbound => "device-unbound",
         ServerApiError::WebSocket(_) => "websocket",
         ServerApiError::Io(_) => "io",
         ServerApiError::Url(_) => "url",
@@ -3711,6 +4000,7 @@ mod tests {
             _server_base_url: &'a str,
             _client_name: &'a str,
             _existing_client_id: Option<&'a str>,
+            _device_id: &'a str,
         ) -> ProviderFuture<'a, ExternalAuthorizationSession> {
             Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
         }
@@ -3843,6 +4133,9 @@ mod tests {
         let service = ModelProviderService {
             connection: Arc::new(Mutex::new(connection)),
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
+            server_auth_events: broadcast::channel(16).0,
+            device_unbound: Arc::new(AtomicBool::new(false)),
+            device_id: "test-device-id".into(),
             cipher,
             adapters: Arc::new(HashMap::from([(
                 ModelProviderCode::PersonAi,

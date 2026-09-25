@@ -542,6 +542,7 @@ where
 {
     let state = AppState::new_with_id_provider(config, id_provider)?;
     state.model_providers.start_background_sync();
+    state.model_providers.start_person_ai_heartbeat();
     let protected_routes = build_protected_routes(&state);
     let profile_routes = build_profile_routes();
     let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone());

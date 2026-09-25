@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { useSearchParams } from "react-router";
+import { useNavigate, useSearchParams } from "react-router";
 import { Globe, Trash2 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -21,6 +21,7 @@ import {
 import { useLocale } from "@/i18n";
 import { isApiError } from "@/shared/api/httpClient";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
+import { useAuthStore } from "@/store/authStore";
 
 function firstAvailableProfileId(profiles: PersonAiProfile[], activeProfileId: string | null) {
   return profiles.find((profile) => profile.profileId === activeProfileId && profile.status !== "PENDING")?.profileId
@@ -57,8 +58,10 @@ export function ProfileSelectionPage() {
   const { t } = useTranslation("pages");
   const { changeLocale, currentLocale, supportedLocales } = useLocale();
   const nextLocale = supportedLocales.find((locale) => locale.code !== currentLocale)?.code ?? currentLocale;
+  const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const forceSelection = searchParams.get("mode") === "switch";
+  const forceReauthorization = searchParams.get("mode") === "reauth";
+  const forceSelection = searchParams.get("mode") === "switch" || forceReauthorization;
   const [profiles, setProfiles] = useState<PersonAiProfile[]>([]);
   const [bootstrap, setBootstrap] = useState<BootstrapProfileStatus | null>(null);
   const [loading, setLoading] = useState(true);
@@ -102,11 +105,11 @@ export function ProfileSelectionPage() {
     if (autoEnteredProfileRef.current === profile.profileId) return;
     autoEnteredProfileRef.current = profile.profileId;
     if (bootstrap?.activeProfileId === profile.profileId) {
-      window.location.assign("/workspace");
+      navigate("/workspace", { replace: true });
       return;
     }
     void selectProfile(profile);
-  }, [authorization, bootstrap, error, forceSelection, loading, profiles]);
+  }, [authorization, bootstrap, error, forceSelection, loading, navigate, profiles]);
 
   useEffect(() => {
     if (!authorization) return;
@@ -131,7 +134,11 @@ export function ProfileSelectionPage() {
         setBootstrap(nextBootstrap);
         setAuthorization(null);
         closeAuthorizationWindow();
-        window.location.assign("/workspace");
+        if (await useAuthStore.getState().ensureSessionFresh()) {
+          navigate("/workspace", { replace: true });
+        } else {
+          setError(t("personAiProfiles.errors.activate"));
+        }
       } catch (reason: unknown) {
         if (active) {
           setAuthorization(null);
@@ -148,7 +155,7 @@ export function ProfileSelectionPage() {
         authorizationPollTimerRef.current = null;
       }
     };
-  }, [authorization, t]);
+  }, [authorization, navigate, t]);
 
   async function beginPersonAiAuthorization() {
     setAuthorizing(true);
@@ -205,7 +212,12 @@ export function ProfileSelectionPage() {
     setError(null);
     try {
       await activateProfile(profile.profileId);
-      window.location.assign("/workspace");
+      const authenticated = await useAuthStore.getState().ensureSessionFresh();
+      if (!authenticated) {
+        navigate("/profiles?mode=reauth", { replace: true });
+        return;
+      }
+      navigate("/workspace", { replace: true });
     } catch (reason: unknown) {
       setError(isApiError(reason) ? reason.message : reason instanceof Error ? reason.message : t("personAiProfiles.errors.activate"));
     } finally {
@@ -255,7 +267,7 @@ export function ProfileSelectionPage() {
           </button>
         </header>
         {loading ? <p className="mt-8 text-sm text-[var(--color-on-surface-variant)]">{t("personAiProfiles.loading")}</p> : null}
-        {!loading && !authorization && bootstrap?.activeProfile?.status !== "PENDING" ? (
+        {!loading && !forceReauthorization && !authorization && bootstrap?.activeProfile?.status !== "PENDING" ? (
           <div className="mt-8 flex items-center gap-2 rounded-lg border border-[var(--color-outline-variant)] bg-[var(--color-surface-container)] px-3 py-3 text-sm text-[var(--color-on-surface-variant)]">
             <input
               id="person-ai-agreement"
@@ -270,8 +282,11 @@ export function ProfileSelectionPage() {
             </button>
           </div>
         ) : null}
-        {!loading && bootstrap?.activeProfile?.status === "PENDING" ? (
+        {!loading && (forceReauthorization || bootstrap?.activeProfile?.status === "PENDING") ? (
           <div className="mt-8">
+            {forceReauthorization && !authorization ? (
+              <p className="mb-4 text-sm text-[var(--color-on-surface-variant)]">{t("personAiProfiles.reauthorizationRequired")}</p>
+            ) : null}
             {authorization ? (
               <div className="space-y-2">
                 <Button className="h-10 w-full" type="button" disabled>
@@ -283,19 +298,19 @@ export function ProfileSelectionPage() {
               </div>
             ) : (
               <Button className="h-10 w-full" type="button" disabled={authorizing} onClick={() => void beginPersonAiAuthorization()}>
-                {authorizing ? t("personAiProfiles.authorizing") : t("personAiProfiles.authorizeNewAccount")}
+                {authorizing ? t("personAiProfiles.authorizing") : forceReauthorization ? t("personAiProfiles.reauthorize") : t("personAiProfiles.authorizeNewAccount")}
               </Button>
             )}
           </div>
         ) : null}
-        {!loading && bootstrap?.activeProfile?.status !== "PENDING" && availableProfiles.length === 0 ? (
+        {!loading && !forceReauthorization && bootstrap?.activeProfile?.status !== "PENDING" && availableProfiles.length === 0 ? (
           <div className="mt-8">
             <Button className="h-10 w-full" type="button" disabled={activating !== null || !agreementChecked} onClick={() => void beginNewAccountAuthorization()}>
               {activating === "pending" ? t("personAiProfiles.switching") : t("personAiProfiles.authorizeNewAccount")}
             </Button>
           </div>
         ) : null}
-        {!loading && !authorization && !authorizing && activating !== "pending" && availableProfiles.length > 0 ? (
+        {!loading && !forceReauthorization && !authorization && !authorizing && activating !== "pending" && availableProfiles.length > 0 ? (
           <div className="mt-3 space-y-3">
             {availableProfiles.map((profile) => (
             <div

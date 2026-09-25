@@ -4871,6 +4871,8 @@ export const pages = {
     authorizeNewAccount: "授权新账号",
     authorizing: "等待授权完成…",
     cancelAuthorization: "取消授权",
+    reauthorizationRequired: "设备授权已失效，请重新登录 PersonAI 账号。",
+    reauthorize: "重新登录",
     agreement: {
       checkboxLabel: "我已阅读并同意",
       linkLabel: "《用户协议》",

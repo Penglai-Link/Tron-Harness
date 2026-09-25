@@ -8,10 +8,14 @@ use axum::{
     body::Body,
     extract::{Path, Query, State},
     http::{HeaderValue, StatusCode, header},
-    response::{IntoResponse, Response},
+    response::{
+        IntoResponse, Response, Sse,
+        sse::{Event, KeepAlive},
+    },
     routing::{delete, get, post},
 };
 use serde::Deserialize;
+use std::{convert::Infallible, time::Duration};
 
 const MAX_PROFILE_AVATAR_BYTES: usize = 2 * 1024 * 1024;
 
@@ -24,6 +28,7 @@ struct BootstrapStatusQuery {
 pub fn routes() -> Router<AppState> {
     Router::new()
         .route("/api/v1/bootstrap/status", get(bootstrap_status))
+        .route("/api/v1/profiles/events", get(server_auth_events))
         .route("/api/v1/profiles/active/token", get(active_profile_token))
         .route("/api/v1/profiles", get(list_profiles))
         .route("/api/v1/profiles/{profile_id}/avatar", get(profile_avatar))
@@ -33,6 +38,26 @@ pub fn routes() -> Router<AppState> {
         )
         .route("/api/v1/profiles/{profile_id}", delete(remove_profile))
         .route("/api/v1/profiles/pending", post(create_pending_profile))
+}
+
+async fn server_auth_events(State(state): State<AppState>) -> Response {
+    let mut receiver = state.model_providers.subscribe_server_auth_events();
+    let stream = async_stream::stream! {
+        if state.model_providers.device_unbound() {
+            yield Ok::<_, Infallible>(Event::default().event("server-auth-device-unbound").data("{}"));
+        }
+        loop {
+            match receiver.recv().await {
+                Ok(()) | Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {
+                    yield Ok(Event::default().event("server-auth-device-unbound").data("{}"));
+                }
+                Err(tokio::sync::broadcast::error::RecvError::Closed) => break,
+            }
+        }
+    };
+    Sse::new(stream)
+        .keep_alive(KeepAlive::new().interval(Duration::from_secs(20)))
+        .into_response()
 }
 
 async fn active_profile_token(State(state): State<AppState>) -> Response {
