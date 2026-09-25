@@ -58,7 +58,7 @@ async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: st
   });
   const resources = new Map<string, string>();
   const rules: postcss.Rule[] = [];
-  root.walkRules((rule) => rules.push(rule));
+  root.walkRules((rule) => { rules.push(rule); });
   for (const rule of rules) {
     const parent = rule.parent;
     const isKeyframe = parent?.type === "atrule" && /^(-webkit-)?keyframes$/i.test(parent.name);
