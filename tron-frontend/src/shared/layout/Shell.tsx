@@ -1036,6 +1036,15 @@ export function TronShell({
                   {email ? <span className="block truncate text-xs text-[var(--color-on-surface-variant)]">{email}</span> : null}
                 </span>
               </a>
+              <button
+                className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-[var(--color-on-surface-variant)] transition-colors hover:bg-[var(--color-hover-surface)] hover:text-[var(--color-on-surface)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-focus-ring)]"
+                type="button"
+                aria-label={t("shell:aria.openSystemSettings")}
+                title={t("shell:aria.openSystemSettings")}
+                onClick={openSystemSettings}
+              >
+                <Settings2 size={16} aria-hidden="true" />
+              </button>
               {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
             </div>
             {personAiPlan || remainingPoints ? (
@@ -1145,15 +1154,6 @@ export function TronShell({
               </div>
               <div className="flex shrink-0 items-center gap-[12px]">
                 {renderedTopbarActions}
-                <Button
-                  className="hidden min-[900px]:inline-flex"
-                  size="icon"
-                  variant="ghost"
-                  aria-label={t("shell:aria.openSystemSettings")}
-                  onClick={openSystemSettings}
-                >
-                  <Settings2 size={17} aria-hidden="true" />
-                </Button>
                 <Button className={cn("hidden min-[900px]:inline-flex", agentOpen ? "bg-[var(--color-surface-container)] text-[var(--color-on-surface)]" : "")} size="icon" type="button" variant="ghost" aria-label={t("shell:assistant.title")} aria-expanded={agentOpen} aria-pressed={agentOpen} title={t("shell:assistant.title")} onClick={handleAgentLauncherClick}>
                   <Bot size={17} aria-hidden="true" />
                 </Button>
@@ -1171,10 +1171,6 @@ export function TronShell({
                   </Button>
                   {topbarToolsMenuOpen ? (
                     <div ref={topbarToolsMenuRef} className="absolute right-0 top-[calc(100%+8px)] z-[70] w-48 rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] p-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]" role="menu">
-                      <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={openSystemSettings}>
-                        <Settings2 size={16} aria-hidden="true" />
-                        {t("shell:utilityPanel.settings")}
-                      </button>
                       <button className="flex h-9 w-full items-center gap-[12px] rounded-lg px-2 text-left hover:bg-[var(--color-hover-surface)]" type="button" role="menuitem" onClick={handleAgentLauncherClick}>
                         <Bot size={16} aria-hidden="true" />
                         {t("shell:assistant.title")}
