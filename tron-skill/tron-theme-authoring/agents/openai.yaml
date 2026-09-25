@@ -1,4 +1,0 @@
-interface:
-  display_name: "Tron 主题包编写"
-  short_description: "编写、校验并打包 Tron 主题，精细调整按钮、输入框、数据行及资源加载"
-  default_prompt: "用 $tron-theme-authoring 制作一个 Tron 主题包，包含按钮状态和数据行样式，并给出导入方法。"

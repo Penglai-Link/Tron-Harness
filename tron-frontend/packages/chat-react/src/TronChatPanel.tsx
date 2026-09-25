@@ -456,6 +456,7 @@ function ChatBubble({
     >
       <article
         className={cx("tron-chat__message", isUser && "tron-chat__message--user")}
+        data-theme-part={isUser ? "chat-message-user" : "chat-message-assistant"}
       >
         <div className="tron-chat__message-header">
           <div className="tron-chat__message-actor">
@@ -1479,7 +1480,8 @@ export function TronChatPanel({
 
   return (
     <MarkdownLinkRendererContext.Provider value={renderMarkdownLink}>
-    <div className="tron-chat">
+    <div className="tron-chat" data-theme-part="chat">
+      <span aria-hidden="true" className="tron-chat__theme-effect-layer" data-theme-effect-layer="chat" />
       <ImagePreviewDialog
         image={previewImage}
         onClose={() => setPreviewImage(null)}
@@ -1693,6 +1695,7 @@ export function TronChatPanel({
                 key={session?.sessionCode ?? "composer"}
                 ref={setComposerNode}
                 className="tron-chat__textarea"
+                data-theme-part="chat-input"
                 disabled={disabledInput}
                 placeholder={composerPlaceholder}
                 value={draft}

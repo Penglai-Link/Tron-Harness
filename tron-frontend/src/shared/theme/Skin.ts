@@ -5,5 +5,5 @@ export interface Skin {
   mode: "Light" | "Dark";
   colors: Record<string, string>;
   layout: Record<string, string>;
-  resources: { background: string | null; font: string | null };
+  resources: { background: string | null; font: string | null; css?: string | null };
 }

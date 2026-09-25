@@ -1,6 +1,8 @@
 #[derive(Debug)]
 pub enum SkinError {
     Invalid,
+    CssRejected(String),
+    Incompatible(String),
     NotFound,
     Conflict,
     Protected,
@@ -16,6 +18,8 @@ impl SkinError {
     pub fn descriptor(&self) -> ApplicationErrorDescriptor {
         let (code, message_key) = match self {
             Self::Invalid => ("101025001", "tron.skin.invalid"),
+            Self::CssRejected(_) => ("101025001", "tron.skin.invalid"),
+            Self::Incompatible(_) => ("101025001", "tron.skin.invalid"),
             Self::NotFound => ("101025002", "tron.skin.not_found"),
             Self::Conflict => ("101025003", "tron.skin.conflict"),
             Self::Protected => ("101025006", "tron.skin.protected"),

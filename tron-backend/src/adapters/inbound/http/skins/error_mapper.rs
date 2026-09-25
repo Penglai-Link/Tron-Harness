@@ -12,8 +12,16 @@ pub struct SkinApiError(pub SkinError, pub String);
 impl IntoResponse for SkinApiError {
     fn into_response(self) -> Response {
         let descriptor = self.0.descriptor();
+        let detail = match &self.0 {
+            SkinError::CssRejected(detail) | SkinError::Incompatible(detail) => {
+                Some(detail.as_str())
+            }
+            _ => None,
+        };
         let status = match self.0 {
             SkinError::Invalid => StatusCode::BAD_REQUEST,
+            SkinError::CssRejected(_) => StatusCode::BAD_REQUEST,
+            SkinError::Incompatible(_) => StatusCode::BAD_REQUEST,
             SkinError::NotFound => StatusCode::NOT_FOUND,
             SkinError::Conflict => StatusCode::CONFLICT,
             SkinError::Protected => StatusCode::FORBIDDEN,
@@ -38,7 +46,13 @@ impl IntoResponse for SkinApiError {
             status,
             Json(ApiResponse::<EmptyData>::protocol_error(
                 descriptor.code,
-                if self.1.starts_with("en") { en } else { zh },
+                if let Some(detail) = detail {
+                    detail.to_string()
+                } else if self.1.starts_with("en") {
+                    en.to_string()
+                } else {
+                    zh.to_string()
+                },
             )),
         )
             .into_response()

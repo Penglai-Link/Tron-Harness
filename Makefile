@@ -429,4 +429,4 @@ skill-memory-spec-test:
 
 .PHONY: skill-theme-test
 skill-theme-test:
-	$(PYTHON) -B tron-skill/tron-theme-authoring/scripts/test_theme_pack.py
+	$(PYTHON) -B tron-skills/tron-theme-spec/scripts/test_theme_pack.py

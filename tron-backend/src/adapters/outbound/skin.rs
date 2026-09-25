@@ -1,6 +1,6 @@
 use crate::{
     application::skin::{SkinError, SkinStore},
-    domain::skin::{Skin, resource_mime, valid_resource_path, valid_skin_id},
+    domain::skin::{Skin, resource_mime, valid_resource_path, valid_skin_id, validate_theme_css},
 };
 use std::{
     collections::HashSet,
@@ -151,9 +151,13 @@ impl SkinStore for FileSkinStore {
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
         self.initialize()?;
         let skin = self.read_skin(id)?;
-        for path in [&skin.resources.background, &skin.resources.font]
-            .into_iter()
-            .flatten()
+        for path in [
+            &skin.resources.background,
+            &skin.resources.font,
+            &skin.resources.css,
+        ]
+        .into_iter()
+        .flatten()
         {
             if !path.starts_with("https://") {
                 self.checked_resource(id, path)?;
@@ -226,19 +230,53 @@ impl SkinStore for FileSkinStore {
         if self.root.join(&skin.id).exists() {
             return Err(SkinError::Conflict);
         }
-        for (path, is_font) in [
-            (&skin.resources.background, false),
-            (&skin.resources.font, true),
+        for (path, expected) in [
+            (&skin.resources.background, "image/"),
+            (&skin.resources.font, "font/"),
+            (&skin.resources.css, "text/css"),
         ] {
             if let Some(path) = path {
                 if path.starts_with("https://") {
                     continue;
                 }
-                let mime = resource_mime(path).ok_or(SkinError::Invalid)?;
-                if mime.starts_with("font/") != is_font || !staging.path().join(path).is_file() {
+                let mime = match resource_mime(path) {
+                    Some(mime) => mime,
+                    None if expected == "text/css" => {
+                        return Err(SkinError::CssRejected(format!(
+                            "{path}: CSS resource must use a .css file"
+                        )));
+                    }
+                    None => return Err(SkinError::Invalid),
+                };
+                if !mime.starts_with(expected) {
+                    if expected == "text/css" {
+                        return Err(SkinError::CssRejected(format!(
+                            "{path}: CSS resource must use a .css file"
+                        )));
+                    }
+                    return Err(SkinError::Invalid);
+                }
+                if !staging.path().join(path).is_file() {
+                    if expected == "text/css" {
+                        return Err(SkinError::CssRejected(format!(
+                            "{path}: CSS file is missing from the package"
+                        )));
+                    }
                     return Err(SkinError::Invalid);
                 }
             }
+        }
+        if let Some(path) = &skin.resources.css
+            && resource_mime(path) != Some("text/css; charset=utf-8")
+        {
+            return Err(SkinError::Invalid);
+        }
+        if let Some(path) = &skin.resources.css {
+            let css = fs::read_to_string(staging.path().join(path)).map_err(|_| {
+                SkinError::CssRejected(format!("{path}: CSS file is missing or is not UTF-8"))
+            })?;
+            validate_theme_css(&css, staging.path())
+                .map_err(|reason| SkinError::CssRejected(format!("{path}: {reason}")))?;
         }
         fs::rename(staging.path(), self.root.join(&skin.id)).map_err(|_| SkinError::Storage)?;
         Ok(skin)
@@ -300,6 +338,27 @@ fn parse_skin(bytes: &[u8]) -> Result<Skin, SkinError> {
         return Err(SkinError::Invalid);
     }
     let skin: Skin = serde_json::from_slice(bytes).map_err(|_| SkinError::Invalid)?;
+    if !matches!(skin.version, 1 | 2) {
+        return Err(SkinError::Incompatible(format!(
+            "skin.json: unsupported theme format version {}",
+            skin.version
+        )));
+    }
+    if skin.resources.css.is_some() && skin.version != 2 {
+        return Err(SkinError::Incompatible(
+            "skin.json: resources.css requires theme format version 2".into(),
+        ));
+    }
+    if skin
+        .resources
+        .css
+        .as_ref()
+        .is_some_and(|path| !valid_resource_path(path))
+    {
+        return Err(SkinError::CssRejected(
+            "skin.json: resources.css must reference a file inside the theme package".into(),
+        ));
+    }
     if !skin.validate() {
         return Err(SkinError::Invalid);
     }
@@ -346,9 +405,9 @@ mod tests {
         let temp = tempfile::tempdir().unwrap();
         let store = FileSkinStore::new(temp.path().into());
         for bytes in [
-            include_bytes!("../../../../tron-skill/tron-theme-authoring/assets/light/skin.json")
+            include_bytes!("../../../../tron-skills/tron-theme-spec/assets/light/skin.json")
                 .as_slice(),
-            include_bytes!("../../../../tron-skill/tron-theme-authoring/assets/dark/skin.json")
+            include_bytes!("../../../../tron-skills/tron-theme-spec/assets/dark/skin.json")
                 .as_slice(),
         ] {
             let skin = store.install(bytes).unwrap();

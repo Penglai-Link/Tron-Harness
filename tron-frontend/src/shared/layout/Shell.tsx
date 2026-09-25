@@ -1125,6 +1125,7 @@ export function TronShell({
       <WorkspaceSpacesContext.Provider value={workspaceSpacesValue}>
         <SidebarProvider
           className="tron-skin-canvas isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]"
+          data-theme-part="app-sidebar-frame"
           open={!sidebarCollapsed}
           onOpenChange={(open) => setSidebarCollapsed(!open)}
         >
@@ -1287,7 +1288,7 @@ export function TronShell({
             onToggleSection={toggleSection}
           />
 
-          <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14">
+          <div className="relative z-0 flex h-screen min-w-0 flex-1 flex-col pt-14" data-theme-part="app-content">
             <Content
               sessionCode={terminalSessionCode}
               contentClassName={renderedContentClassName}

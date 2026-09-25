@@ -21,6 +21,9 @@ interface ThemeContextValue {
   selectSkin: (id: string) => Promise<void>;
   importSkin: (file: File) => Promise<void>;
   uninstallSkin: (id: string) => Promise<void>;
+  previewSkin: (id: string) => Promise<void>;
+  stopPreviewSkin: () => void;
+  previewSkinId: string | null;
 }
 const ThemeContext = createContext<ThemeContextValue | undefined>(undefined);
 
@@ -30,11 +33,22 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [skins, setSkins] = useState<Skin[]>(builtins);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [previewSkinId, setPreviewSkinId] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(() => readStoredSystemFontSize(localStorage) ?? defaultSystemFontSize);
   const applied = useRef<PreparedSkin | null>(null);
   const activeSignature = useRef<string | null>(null);
   const generation = useRef(0);
   const mutation = useRef(false);
+  const previewPrepared = useRef<PreparedSkin | null>(null);
+  const previewGeneration = useRef(0);
+
+  const stopPreviewSkin = useCallback(() => {
+    previewGeneration.current++;
+    previewPrepared.current?.dispose();
+    previewPrepared.current = null;
+    setPreviewSkinId(null);
+    applied.current?.apply();
+  }, []);
 
   const commit = useCallback((skin: Skin, prepared: PreparedSkin) => {
     applied.current?.dispose();
@@ -60,14 +74,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       setSkins(list);
       if (JSON.stringify(skin) !== activeSignature.current) prepared = await prepareSkin(skin);
       if (request !== generation.current) { prepared?.dispose(); return; }
-      if (prepared) commit(skin, prepared);
+      if (prepared) { stopPreviewSkin(); commit(skin, prepared); }
       setError(null);
     } catch (reason) {
       if (request === generation.current) setError(reason instanceof Error ? reason.message : String(reason));
     } finally {
       if (request === generation.current) setLoading(false);
     }
-  }, [commit]);
+  }, [commit, stopPreviewSkin]);
 
   useEffect(() => {
     if (status !== "authenticated") { setLoading(false); return; }
@@ -78,13 +92,14 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     window.addEventListener("focus", onFocus);
     return () => { generation.current++; stop(); window.removeEventListener("focus", onFocus); };
   }, [status, refreshSkins]);
-  useEffect(() => () => { generation.current++; applied.current?.dispose(); }, []);
+  useEffect(() => () => { generation.current++; previewPrepared.current?.dispose(); applied.current?.dispose(); }, []);
 
   async function selectSkin(id: string) {
     if (mutation.current) return;
     const skin = skins.find((item) => item.id === id);
     if (!skin) return;
     mutation.current = true;
+    stopPreviewSkin();
     const request = ++generation.current;
     setLoading(true);
     let prepared: PreparedSkin | undefined;
@@ -106,6 +121,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   async function importSkin(file: File) {
     if (mutation.current) return;
     mutation.current = true;
+    stopPreviewSkin();
     generation.current++;
     setLoading(true);
     try { await skinApi.install(file); }
@@ -115,6 +131,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   async function uninstallSkin(id: string) {
     if (mutation.current || id === "light" || id === "matrix-dark") return;
     mutation.current = true;
+    stopPreviewSkin();
     const request = ++generation.current;
     setLoading(true);
     let fallback: PreparedSkin | undefined;
@@ -135,6 +152,17 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       if (request === generation.current) void refreshSkins();
     }
   }
+  async function previewSkin(id: string) {
+    const skin = skins.find((item) => item.id === id);
+    if (!skin) return;
+    stopPreviewSkin();
+    const request = previewGeneration.current;
+    const prepared = await prepareSkin(skin);
+    if (request !== previewGeneration.current) { prepared.dispose(); return; }
+    prepared.apply();
+    previewPrepared.current = prepared;
+    setPreviewSkinId(id);
+  }
   useLayoutEffect(() => {
     applySystemFontSize(fontSize);
     localStorage.setItem(systemFontSizeStorageKey, String(fontSize));
@@ -143,7 +171,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <ThemeContext.Provider value={{
     fontSize, setFontSize: (size) => { if (isSystemFontSize(size)) setFontSize(size); },
     theme: activeSkin.mode === "Dark" ? "matrix-dark" : "light", activeSkin, skins,
-    loading, error, refreshSkins, selectSkin, importSkin, uninstallSkin,
+    loading, error, refreshSkins, selectSkin, importSkin, uninstallSkin, previewSkin, stopPreviewSkin, previewSkinId,
   }}>{children}</ThemeContext.Provider>;
 }
 export function useTheme() {

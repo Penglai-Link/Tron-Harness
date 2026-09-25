@@ -4845,6 +4845,8 @@ export const pages = {
   settingsAppearance: {
     skins: "主题",
     importSkin: "导入",
+    previewSkin: "预览{{name}}",
+    stopPreview: "停止预览",
     skinFailed: "主题应用失败",
     skinTooLarge: "皮肤包不能超过 20 MB",
     skinImported: "主题已导入，点击即可应用",

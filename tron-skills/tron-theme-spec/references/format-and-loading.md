@@ -7,7 +7,9 @@ my-theme.zip
 ├── skin.json
 └── assets/
     ├── background.webp
-    └── interface.woff2
+    ├── interface.woff2
+    ├── theme.css
+    └── assets/scanline.png
 ```
 
 ZIP 根目录直接有 `skin.json`，不要带外层目录。只调颜色和组件尺寸时可导入单个 JSON。
@@ -16,11 +18,11 @@ ZIP 根目录直接有 `skin.json`，不要带外层目录。只调颜色和组�
 {
   "id": "my-theme",
   "name": "我的主题",
-  "version": 1,
+  "version": 2,
   "mode": "Light",
   "colors": { "--tron-button-primary-bg": "#245b8a" },
   "layout": { "--tron-button-radius": "8px", "--tron-table-row-height": "44px" },
-  "resources": { "background": null, "font": null }
+  "resources": { "background": null, "font": null, "css": "theme.css" }
 }
 ```
 
@@ -28,14 +30,14 @@ ZIP 根目录直接有 `skin.json`，不要带外层目录。只调颜色和组�
 | --- | --- |
 | id | 1–64 个小写字母、数字或连字符；内置 light/matrix-dark 不可覆盖 |
 | name | 非空，UTF-8 最多 120 字节 |
-| version | 协议版本，固定 1，不是主题发布版本 |
+| version | 包协议版本。1 兼容旧格式；2 增加包内 CSS，不是主题发布版本 |
 | mode | Light / Dark；未覆盖的变量继承此模式 |
 | colors / layout | 可省略；变量名 `--[a-z0-9-]+`，最多 100 字符；非空字符串值最多 512 UTF-8 字节；两组共最多 512 个条目 |
-| resources | 可省略；仅 background / font，null 表示没有资源 |
+| resources | 可选 background / font / css。CSS 仅支持版本 2，必须存放在 ZIP 内；单独 JSON 不能带本地 CSS |
 
-不支持任意 CSS、JS、HTML、SVG、音效、图标替换。值中不接受分号、花括号、尖括号、反斜杠、@、CSS 注释、`url()`、`!important`。可以使用 `var()`、`calc()`、`color-mix()`；变量值语法和颜色对比仍需浏览器验证。
+不支持 JS、HTML、SVG、音效或图标替换。JSON 自定义属性值不接受分号、花括号、尖括号、反斜杠、@、CSS 注释、`url()`、`!important`。`var()`、`calc()`、`color-mix()` 等应写在受限 CSS 文件中；变量值语法和颜色对比仍需浏览器验证。
 
-本地资源路径只能用 ASCII 字母、数字、`-_.` 和 `/`，最多 240 字节；禁止空段、`.`、`..`、绝对路径或符号链接。图片扩展名是小写 png/jpg/jpeg/webp/gif，字体是 woff/woff2/ttf/otf。文件扩展名正确不等于内容有效，激活前浏览器还会真正加载/解码。
+本地资源路径只能用 ASCII 字母、数字、`-_.` 和 `/`，最多 240 字节；禁止空段、`.`、`..`、绝对路径或符号链接。图片扩展名是小写 png/jpg/jpeg/webp/gif，字体是 woff/woff2/ttf/otf。CSS 可使用颜色、透明度、边框、阴影、滤镜、渐变、背景、伪元素和动画；模块会保护组件尺寸和布局，仅独立特效层可改自身尺寸和定位。CSS 选择器自动限定在当前 Tron 页面子树，拒绝导入规则、脚本构造和外部 URL；`url()` 只能引用包内文件。CSS 文件最多 1 MiB。文件扩展名正确不等于内容有效，激活前浏览器还会真正加载/解码。
 
 ZIP 最大 20 MiB，解压累计最大 40 MiB，最多 128 个条目，skin.json 最多 256 KiB。打包脚本只包含清单及所引用资源，不附加 README、系统元数据或脚本。
 
@@ -45,7 +47,7 @@ ZIP 最大 20 MiB，解压累计最大 40 MiB，最多 128 个条目，skin.json
 | --- | --- | --- |
 | 纯 JSON，无资源 | 配色、按钮、行样式 | 最简单，可直接导入 |
 | ZIP + 相对资源 | 带背景/字体、离线使用 | 推荐；资源请求通过当前后端读取为 Blob |
-| JSON/ZIP + HTTPS 资源 | 共享远程素材 | 客户端需联网；字体服务器需允许跨域；URL 不含用户名/密码 |
+| JSON/ZIP + HTTPS 背景/字体 | 共享远程素材 | 客户端需联网；字体服务器需允许跨域；URL 不含用户名/密码。CSS 不接受 HTTPS 文件 |
 
 本地资源由后端上传保存，远程 URL 由每个前端直接访问，后端不会下载或缓存到包内。不能使用 file://、data:、http:// 或电脑绝对路径。
 

@@ -16,6 +16,8 @@ MAX_EXPANDED = 40 * 1024 * 1024
 MAX_MANIFEST = 256 * 1024
 IMAGE = {'.png', '.jpg', '.jpeg', '.webp', '.gif'}
 FONT = {'.woff', '.woff2', '.ttf', '.otf'}
+CSS = {'.css'}
+VISUAL_CSS = set('color background background-color background-image background-position background-size background-repeat background-blend-mode border border-color border-style border-width border-radius outline outline-color outline-style outline-width box-shadow text-shadow opacity filter backdrop-filter mix-blend-mode animation animation-name animation-duration animation-delay animation-direction animation-fill-mode animation-iteration-count animation-play-state animation-timing-function transition transition-property transition-duration transition-delay transition-timing-function transform content font-family font-style font-weight text-decoration text-decoration-color text-decoration-style text-decoration-line -webkit-text-stroke -webkit-text-fill-color'.split())
 
 
 def require(condition, message):
@@ -45,7 +47,7 @@ def manifest(raw):
     require(isinstance(data.get('id'), str) and re.fullmatch(r'[a-z0-9-]{1,64}', data['id']), 'Invalid id')
     require(data['id'] not in ('light', 'matrix-dark'), 'Use a new id, not a built-in id')
     require(isinstance(data.get('name'), str) and data['name'].strip() and len(data['name'].encode()) <= 120, 'Invalid name')
-    require(type(data.get('version')) is int and data['version'] == 1, 'version must be 1')
+    require(type(data.get('version')) is int and data['version'] in (1, 2), 'version must be 1 or 2')
     require(data.get('mode') in ('Light', 'Dark'), 'mode must be Light or Dark')
     variables = {}
     count = 0
@@ -77,19 +79,21 @@ def manifest(raw):
     for key in variables:
         visit(key, [])
     resources = data.get('resources', {})
-    require(isinstance(resources, dict) and not set(resources) - {'background', 'font'}, 'Invalid resources object')
+    require(isinstance(resources, dict) and not set(resources) - {'background', 'font', 'css'}, 'Invalid resources object')
+    require(not resources.get('css') or data['version'] == 2, 'CSS resources require format version 2')
     local = []
     for kind, value in resources.items():
         if value is None:
             continue
         require(isinstance(value, str), f'Invalid {kind} resource')
         if value.startswith('https://'):
+            require(kind != 'css', 'CSS must be stored inside the theme package')
             url = urlsplit(value)
             require(url.hostname and not url.username and url.password is None and len(value.encode()) <= 2048 and not re.search(r'["\'\\\n\r<>]', value), 'Invalid HTTPS resource URL')
             print(f'WARNING: {kind} needs network access; fonts also need CORS', file=sys.stderr)
         else:
             require(safe_path(value), f'Unsafe resource path: {value}')
-            require(Path(value).suffix in (FONT if kind == 'font' else IMAGE), f'Wrong resource type: {value}')
+            require(Path(value).suffix in (FONT if kind == 'font' else CSS if kind == 'css' else IMAGE), f'Wrong resource type: {value}')
             local.append(value)
     return data, local
 
@@ -100,6 +104,32 @@ def read_file(path, limit):
     return path.read_bytes()
 
 
+def css_resources(raw, filename):
+    try:
+        source = raw.decode('utf-8')
+    except UnicodeDecodeError as error:
+        raise ValueError(f'{filename}: CSS must be UTF-8') from error
+    require(len(raw) <= 1024 * 1024, f'{filename}: CSS exceeds 1 MiB')
+    require('\\' not in source, f'{filename}: CSS escapes are not supported')
+    require(not re.search(r'@\s*(?!keyframes\b|-webkit-keyframes\b)[\w-]+|!important|expression\s*\(|javascript:', source, re.I), f'{filename}: forbidden at-rule or unsafe CSS')
+    refs = []
+    for value in re.findall(r"""url\(\s*['"]?([^)'"]+)['"]?\s*\)""", source, re.I):
+        require(safe_path(value), f'{filename}: unsafe url() resource: {value}')
+        refs.append(value)
+    # The backend performs structural CSS parsing too. This authoring check catches
+    # geometry changes early and reports the source declaration before packaging.
+    clean = re.sub(r"""/\*.*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""", '', source, flags=re.S)
+    overlay_geometry = set('position inset inset-block inset-inline top right bottom left width height min-width min-height max-width max-height'.split())
+    for match in re.finditer(r'(?:^|[;{])\s*([\w-]+)\s*:', clean, re.M):
+        prop = match.group(1).lower()
+        opening = clean.rfind('{', 0, match.start())
+        closing = clean.rfind('}', 0, opening)
+        selector = clean[closing + 1:opening].strip()
+        overlay = bool(re.fullmatch(r'\[data-theme-effect-layer(?:=[^\]]+)?\](?:::before|::after)?', selector, re.I))
+        require(prop.startswith('--') or prop in VISUAL_CSS or (overlay and prop in overlay_geometry), f'{filename}: property {prop} can change component geometry')
+    return refs
+
+
 def load(source):
     """Return manifest and bounded, validated package members; never extract ZIPs."""
     if source.is_dir():
@@ -108,7 +138,9 @@ def load(source):
         data, refs = manifest(raw)
         files = {'skin.json': raw}
         total = len(raw)
-        for name in set(refs):
+        pending = list(dict.fromkeys(refs))
+        while pending:
+            name = pending.pop()
             path = source / name
             require(not any((source / Path(*Path(name).parts[:i])).is_symlink() for i in range(1, len(Path(name).parts) + 1)), f'Symlink resource: {name}')
             require(path.resolve().is_relative_to(source.resolve()), f'Resource escapes package: {name}')
@@ -116,6 +148,8 @@ def load(source):
             total += path.stat().st_size
             require(total <= MAX_EXPANDED, 'Expanded package exceeds 40 MiB')
             files[name] = read_file(path, MAX_EXPANDED)
+            if Path(name).suffix == '.css':
+                pending.extend(ref for ref in css_resources(files[name], name) if ref not in files and ref not in pending)
     else:
         raw = read_file(source, MAX_PACKAGE)
         if raw.startswith(b'PK'):
@@ -132,13 +166,16 @@ def load(source):
                     require(not stat.S_ISLNK(entry.external_attr >> 16), f'Symlink ZIP entry: {name}')
                     if entry.is_dir():
                         continue
-                    require(name == 'skin.json' or Path(name).suffix in IMAGE | FONT, f'Unsupported file: {name}')
+                    require(name == 'skin.json' or Path(name).suffix in IMAGE | FONT | CSS, f'Unsupported file: {name}')
                     with archive.open(entry) as stream:
                         content = stream.read(min(entry.file_size, MAX_EXPANDED) + 1)
                     require(len(content) == entry.file_size, f'Invalid size: {name}')
                     files[name] = content
             require('skin.json' in files, 'ZIP root must contain skin.json')
             data, refs = manifest(files['skin.json'])
+            for name, content in files.items():
+                if Path(name).suffix == '.css':
+                    refs.extend(css_resources(content, name))
         else:
             data, refs = manifest(raw)
             require(not refs, 'Standalone JSON cannot reference local resources; use a ZIP')

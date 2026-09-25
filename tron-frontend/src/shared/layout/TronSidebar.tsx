@@ -239,6 +239,7 @@ export function TronSidebar({
 
   return (
     <Sidebar
+      data-theme-part="app-sidebar"
       aria-label={translate("shell:aria.primaryNavigation")}
       collapsible="icon"
       id="tron-sidebar"
@@ -248,7 +249,7 @@ export function TronSidebar({
       <SidebarHeader className="gap-1.5 border-b border-[var(--color-card-border)] px-2 py-2.5">
         {renderDomainSelector(compact, isMobile)}
       </SidebarHeader>
-      <SidebarContent>
+      <SidebarContent data-theme-part="app-sidebar-content">
         {renderChatPanel
           ? renderChatPanel(compact, activeSessionCode, navigateToPath)
           : null}

@@ -4857,6 +4857,8 @@ export const pages = {
 },
     skins: "Themes",
     importSkin: "Import",
+    previewSkin: "Preview {{name}}",
+    stopPreview: "Stop preview",
     skinFailed: "Could not apply the theme",
     skinTooLarge: "Theme packages must be smaller than 20 MB",
     skinImported: "Theme imported. Select it to apply.",

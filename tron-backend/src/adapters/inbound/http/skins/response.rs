@@ -18,6 +18,7 @@ pub struct SkinVo {
 pub struct ResourceVo {
     background: Option<String>,
     font: Option<String>,
+    css: Option<String>,
 }
 
 impl From<Skin> for SkinVo {
@@ -35,6 +36,7 @@ impl From<Skin> for SkinVo {
             resources: ResourceVo {
                 background: skin.resources.background,
                 font: skin.resources.font,
+                css: skin.resources.css,
             },
         }
     }

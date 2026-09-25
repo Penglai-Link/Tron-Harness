@@ -14,6 +14,10 @@ if (!root) {
   throw new Error("Tron root element was not found.");
 }
 
+root.dataset.tronApp = "";
+root.dataset.themePart = "app-shell";
+document.body.dataset.tronApp = "";
+
 createRoot(root).render(
   <StrictMode>
     <ToastProvider position="top-center">

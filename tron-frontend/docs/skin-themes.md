@@ -1,6 +1,6 @@
 # Tron 皮肤包
 
-在「设置 → 外观」选择主题，无需重启。内置浅色、Matrix 深色；导入后点击预览卡片应用。主题保存在当前后端实例，连接同一实例的窗口共享主题；UI 字号仍是当前客户端的独立偏好。
+在「设置 → 外观」选择主题，无需重启。内置浅色、Matrix 深色；点眼睛按钮临时预览，点主题卡片正式应用。预览与应用使用同一个 CSS 解析、资源加载和校验流程；预览不会写入当前主题。主题保存在当前后端实例，连接同一实例的窗口共享主题；UI 字号仍是当前客户端的独立偏好。
 
 ```mermaid
 flowchart LR
@@ -9,7 +9,7 @@ flowchart LR
   C --> D[skins/id/skin.json + 资源]
   C --> E[skins/active.json]
   B -->|skin-changed SSE| F[ThemeProvider 重新读取]
-  F --> G[准备背景和字体]
+  F --> G[校验并准备背景、字体、CSS 与包内素材]
   G --> H[清理旧资源并注入 CSS 变量]
 ```
 
@@ -24,6 +24,7 @@ ZIP 的根目录必须包含 `skin.json`，资源路径相对此目录。也可�
 ```text
 ocean.zip
 ├── skin.json
+├── theme.css
 └── assets
     ├── background.webp
     └── interface.woff2
@@ -33,7 +34,7 @@ ocean.zip
 {
   "id": "ocean",
   "name": "Ocean",
-  "version": 1,
+  "version": 2,
   "mode": "Light",
   "colors": {
     "--color-background": "#e8f1fb",
@@ -46,16 +47,41 @@ ocean.zip
   },
   "resources": {
     "background": "assets/background.webp",
-    "font": "assets/interface.woff2"
+    "font": "assets/interface.woff2",
+    "css": "theme.css"
   }
 }
 ```
 
 - `id`：1–64 个小写字母、数字、连字符。ID 已存在时拒绝覆盖，包括内置主题。
-- `version`：当前协议固定为 `1`。`mode` 为 `Light` / `Dark`，控制未覆盖变量的基底、深色组件和终端 ANSI 默认配色。终端和图谱另有独立变量。
+- `version`：版本 1 兼容旧主题；版本 2 增加受限的包内 CSS。`mode` 为 `Light` / `Dark`，控制未覆盖变量的基底、深色组件和终端 ANSI 默认配色。
 - `colors` / `layout`：CSS 自定义属性；合并时 `layout` 优先。常用颜色沿用 `packages/chat-theme/src/theme.scss` 的 `--color-*`，运行时将主要语义颜色同步到 shadcn 的 `--primary`、`--background` 等变量；显式声明的 shadcn 变量优先。
 - `layout` 可设置 `--radius`、`--tron-card-radius`、`--tron-control-radius` 和 `--font-sans`。`--tron-system-font-size` 保留给字号设置，皮肤不可覆盖。未消费的变量不会改变界面。
 - `resources.background`：PNG、JPEG、WebP、GIF；作为工作台及设置页的背景，内容面板保留自身表面色。`resources.font`：WOFF、WOFF2、TTF、OTF。两者都可以为空或 HTTPS URL。本地资源通过受保护的资源接口读取为 Blob URL，切换时撤销 URL 并移除字体。
+- `resources.css`：版本 2 可选 CSS 文件，只能是包内 CSS 路径。CSS 解析后自动限定到 `body[data-tron-app][data-skin="主题ID"]` 子树，只接受颜色、边框、阴影、滤镜、背景、变换、伪元素内容及动画等视觉属性。尺寸、间距、布局、定位和层叠属性会被拒绝；独立特效层可使用定位和尺寸属性。`@import`、其他 at-rule、外部/数据 URL、脚本构造会被拒绝；`url()` 只能引用 ZIP 中的包内文件。CSS 加载错误会指出 CSS 文件和规则。
+- 应用暴露 `data-theme-part` 标记（如 `chat-message-user`、`chat-message-assistant`、`chat-input`）。聊天区含 `data-theme-effect-layer="chat"` 独立覆盖层；它不参与布局，并通过 `pointer-events: none` 保留点击操作。作者可以在其中叠加栅格、扫描线和任意关键帧效果。
+
+```css
+[data-theme-part="chat"] {
+  background-image: linear-gradient(#55ff8818 1px, transparent 1px),
+    linear-gradient(90deg, #55ff8818 1px, transparent 1px);
+  background-size: 18px 18px;
+}
+
+[data-theme-effect-layer="chat"]::before {
+  content: "";
+  position: absolute;
+  inset: 0 0 auto;
+  height: 2px;
+  background: #76ff9a88;
+  animation: scan 7s linear infinite;
+}
+
+@keyframes scan {
+  from { transform: translateY(-2px); }
+  to { transform: translateY(100vh); }
+}
+```
 - 上限：上传 20 MiB、解压 40 MiB、128 个 ZIP 条目、清单 256 KiB、512 个变量。拒绝路径穿越、符号链接、重复文件、脚本文件、样式规则注入以及变量中的 `url()`。
 
 选择主题时先准备资源，再请求后端激活；资源加载或持久化失败时不替换当前皮肤。后台事件和窗口重新获得焦点都会重新读取当前皮肤，过期的异步结果不会覆盖后来的选择。SSE 重新连接时主动刷新一次，补齐断线期间的变更。
@@ -70,7 +96,7 @@ ocean.zip
 | GET | `/api/v1/system/skins/active` | `data.skin` 为当前皮肤 |
 | PUT | `/api/v1/system/skins/active` | 请求 `{ "id": "ocean" }`，返回 `data.skin` |
 | POST | `/api/v1/system/skins` | 原始 ZIP / JSON 文件字节，返回 `data.skin`；安装不自动激活 |
-| GET | `/api/v1/system/skins/{id}/resources/{path}` | 本地图片 / 字体，带 MIME 和 `nosniff` |
+| GET | `/api/v1/system/skins/{id}/resources/{path}` | 本地图片、字体、CSS 及包内素材，带 MIME 和 `nosniff` |
 | GET | `/api/v1/system/skins/events` | SSE `skin-changed`；变更后重新读取列表和当前皮肤 |
 
 本次包含切换、ZIP/JSON 导入、背景及字体；市场、AI 生成、智能体管理工具、音效和图标替换未接入。
@@ -89,16 +115,16 @@ make fe-unit-test TEST=src/shared/theme
 
 ## 主题作者 Skill
 
-仓库提供 [tron-theme-authoring](../../tron-skill/tron-theme-authoring/SKILL.md)，包含浅/深色模板、[组件变量目录](../../tron-skill/tron-theme-authoring/references/tokens.md)、[加载与故障恢复](../../tron-skill/tron-theme-authoring/references/format-and-loading.md)，以及纯 Python 标准库校验/打包脚本。
+仓库提供 [tron-theme-spec](../../tron-skills/tron-theme-spec/SKILL.md)，包含浅/深色模板、[组件变量目录](../../tron-skills/tron-theme-spec/references/tokens.md)、[加载与故障恢复](../../tron-skills/tron-theme-spec/references/format-and-loading.md)，以及纯 Python 标准库校验/打包脚本。
 
 ```sh
-python3 tron-skill/tron-theme-authoring/scripts/theme_pack.py init ./my-theme --id my-theme --name "My Theme" --mode Light
+python3 tron-skills/tron-theme-spec/scripts/theme_pack.py init ./my-theme --id my-theme --name "My Theme" --mode Light
 # 编辑 my-theme/skin.json 后：
-python3 tron-skill/tron-theme-authoring/scripts/theme_pack.py validate ./my-theme
-python3 tron-skill/tron-theme-authoring/scripts/theme_pack.py pack ./my-theme ./my-theme.zip
+python3 tron-skills/tron-theme-spec/scripts/theme_pack.py validate ./my-theme
+python3 tron-skills/tron-theme-spec/scripts/theme_pack.py pack ./my-theme ./my-theme.zip
 ```
 
-用户可阅读 SKILL.md 自行制作，也可将整个 `tron-theme-authoring/` 目录安装到支持 SKILL.md 的智能体技能目录，再要求智能体制作。Skill 自带模板和校验器，不依赖 Tron 源码所在路径。生成的主题 ZIP 与 Skill 目录是不同交付物；外观页导入的是主题 ZIP。
+用户可阅读 SKILL.md 自行制作，也可将整个 `tron-theme-spec/` 目录安装到支持 SKILL.md 的智能体技能目录，再要求智能体制作。Skill 自带模板和校验器，不依赖 Tron 源码所在路径。生成的主题 ZIP 与 Skill 目录是不同交付物；外观页导入的是主题 ZIP。
 
 ## 覆盖审计
 
@@ -121,4 +147,4 @@ python3 tron-skill/tron-theme-authoring/scripts/theme_pack.py pack ./my-theme ./
 
 Chromium 实际渲染（Profile/皮肤 HTTP 接口桩）：主按钮 normal/hover/active 分别为 `#245b8a` / `#1b476f` / `#12324f`；禁用色独立生效。数据行高 52px、padding 14px 20px，选中行与 sticky 单元格同色；输入框 focus 边框为 `#ee7700`。离线 ZIP 的真实 PNG/WOFF2 字节通过 Blob/FontFace 成功加载，Portal 弹窗背景和标题字体一致。切回浅色后背景为 none、自定义 FontFace 为 0、动态样式为 1，按钮圆角恢复 4px。Matrix 刷新恢复、390px 页面无横向溢出。未以这些接口桩结果冒充真实账户的桌面端到端测试。
 
-可直接导入 [Ocean 组件级示例](../../tron-skill/tron-theme-authoring/assets/ocean-detail/skin.json) 查看按钮和行样式。深浅色模板由真实 Rust FileSkinStore 完成安装/激活验证，目录/ZIP 校验与打包由 Python 测试及 CLI 初始化→打包→校验流程验证。
+可直接导入 [Ocean 组件级示例](../../tron-skills/tron-theme-spec/assets/ocean-detail/skin.json) 查看按钮和行样式。深浅色模板由真实 Rust FileSkinStore 完成安装/激活验证，目录/ZIP 校验与打包由 Python 测试及 CLI 初始化→打包→校验流程验证。
