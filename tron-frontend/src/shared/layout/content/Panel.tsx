@@ -148,9 +148,10 @@ export function Panel({ children, contentClassName }: IPanelProps) {
           <ResizablePanel defaultSize="100%" className="min-w-0" style={{ overflow: "hidden" }}>
             <main
               className={cn(
-                "relative z-0 h-full min-w-[400px] overflow-x-hidden overflow-y-auto px-6 py-6",
+                "relative z-0 h-full min-w-[400px] overflow-x-hidden overflow-y-auto bg-[var(--color-background)] px-6 py-6 text-[var(--color-on-surface)]",
                 contentClassName,
               )}
+              data-theme-part="app-page"
             >
               {hasOpenTabs ? children : <EmptyTabWorkspace />}
             </main>
@@ -176,7 +177,8 @@ export function Panel({ children, contentClassName }: IPanelProps) {
               onResize={panelResize}
             >
               <aside
-                className="relative z-10 hidden h-full overflow-y-auto bg-[var(--color-elevated-surface)] lg:block"
+                className="relative z-10 hidden h-full overflow-y-auto bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] lg:block"
+                data-theme-part="app-right-sidebar"
                 data-testid="tron-right-sidebar"
               >
                 <RightPanelContainer />

@@ -59,19 +59,39 @@ ocean.zip
 - `layout` 可设置 `--radius`、`--tron-card-radius`、`--tron-control-radius` 和 `--font-sans`。`--tron-system-font-size` 保留给字号设置，皮肤不可覆盖。未消费的变量不会改变界面。
 - `resources.background`：PNG、JPEG、WebP、GIF；作为工作台及设置页的背景，内容面板保留自身表面色。`resources.font`：WOFF、WOFF2、TTF、OTF。两者都可以为空或 HTTPS URL。本地资源通过受保护的资源接口读取为 Blob URL，切换时撤销 URL 并移除字体。
 - `resources.css`：版本 2 可选 CSS 文件，只能是包内 CSS 路径。CSS 解析后自动限定到 `body[data-tron-app][data-skin="主题ID"]` 子树，只接受颜色、边框、阴影、滤镜、背景、变换、伪元素内容及动画等视觉属性。尺寸、间距、布局、定位和层叠属性会被拒绝；独立特效层可使用定位和尺寸属性。`@import`、其他 at-rule、外部/数据 URL、脚本构造会被拒绝；`url()` 只能引用 ZIP 中的包内文件。CSS 加载错误会指出 CSS 文件和规则。
-- 应用暴露 `data-theme-part` 标记（如 `chat-message-user`、`chat-message-assistant`、`chat-input`）。聊天区含 `data-theme-effect-layer="chat"` 独立覆盖层；它不参与布局，并通过 `pointer-events: none` 保留点击操作。作者可以在其中叠加栅格、扫描线和任意关键帧效果。
+- 主题 CSS 可使用普通 CSS 选择器覆盖当前 Tron 页面中的所有匹配组件，例如 `button`、`input`、`[data-theme-part="app-sidebar"]`；规则会自动限定在当前主题页面内，不会影响其他网站内容。应用额外提供固定于视口的 `data-theme-effect-layer="global"` 全局特效层，跨导航页面持续显示，不参与布局、不拦截点击，支持伪元素、关键帧、栅格、暗角、辉光和扫描线。动画遵循系统的减少动态效果设置。
 
 ```css
-[data-theme-part="chat"] {
+[data-theme-part="app-sidebar"],
+[data-theme-part="app-right-sidebar"],
+[data-theme-part="app-bottom-sidebar"] {
+  background-image: linear-gradient(135deg, #55ff880c, transparent 65%);
+}
+
+[data-theme-part="app-page"] {
+  background-color: #06110a;
+}
+
+[data-slot="table-container"] {
+  box-shadow: 0 0 18px #55ff8818;
+}
+
+input,
+[data-slot="select-button"],
+button {
+  transition: box-shadow 180ms ease, border-color 180ms ease;
+}
+
+[data-theme-effect-layer="global"] {
   background-image: linear-gradient(#55ff8818 1px, transparent 1px),
     linear-gradient(90deg, #55ff8818 1px, transparent 1px);
   background-size: 18px 18px;
 }
 
-[data-theme-effect-layer="chat"]::before {
+[data-theme-effect-layer="global"]::before {
   content: "";
   position: absolute;
-  inset: 0 0 auto;
+  inset: -2px 0 auto;
   height: 2px;
   background: #76ff9a88;
   animation: scan 7s linear infinite;
@@ -127,6 +147,8 @@ python3 tron-skills/tron-theme-spec/scripts/theme_pack.py pack ./my-theme ./my-t
 用户可阅读 SKILL.md 自行制作，也可将整个 `tron-theme-spec/` 目录安装到支持 SKILL.md 的智能体技能目录，再要求智能体制作。Skill 自带模板和校验器，不依赖 Tron 源码所在路径。生成的主题 ZIP 与 Skill 目录是不同交付物；外观页导入的是主题 ZIP。
 
 ## 覆盖审计
+
+应用主框架、左侧导航、右侧工具栏、底部终端面板和页面主体分别提供 `data-theme-part` 标记；它们及其菜单、按钮、表格、筛选输入框和选择器都继承当前皮肤的语义色。主题包可进一步用 CSS 选择器对其中任意页面组件做针对性视觉覆盖。
 
 | 范围 | 当前实现 |
 | --- | --- |

@@ -1256,7 +1256,8 @@ export function TronShell({
                 onClick={closeRightDrawer}
               />
               <aside
-                className="fixed bottom-0 right-0 top-14 z-50 flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-5 py-5 shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
+                className="fixed bottom-0 right-0 top-14 z-50 flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-5 py-5 text-[var(--color-on-surface)] shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
+                data-theme-part="app-right-sidebar"
                 data-testid="tron-mobile-right-sidebar"
                 id="tron-mobile-right-sidebar"
               >

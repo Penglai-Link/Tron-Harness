@@ -1,6 +1,25 @@
 /* Public skin tokens are inherited, so a component can override them locally too.
    Component layer keeps intentional className utilities available to callers. */
 @layer components {
+  [data-theme-part="app-sidebar-frame"],
+  [data-theme-part="app-page"] {
+    background-color: var(--color-background);
+    color: var(--color-on-surface);
+  }
+  [data-theme-part="app-sidebar"] {
+    background-color: var(--sidebar);
+    color: var(--sidebar-foreground);
+    border-color: var(--sidebar-border);
+  }
+  [data-theme-part="app-sidebar-menu"] { color: var(--sidebar-foreground); }
+  [data-theme-part="app-sidebar-menu-item"] { color: inherit; }
+  [data-theme-part="app-right-sidebar"],
+  [data-theme-part="app-bottom-sidebar"] {
+    background-color: var(--color-elevated-surface);
+    color: var(--color-on-surface);
+    border-color: var(--color-outline-variant);
+  }
+
   .tron-button {
     outline: none;
     border: var(--tron-button-border-width, 1px) solid var(--_button-border);

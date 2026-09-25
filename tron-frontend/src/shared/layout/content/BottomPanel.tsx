@@ -164,12 +164,14 @@ export default function BottomPanel({
       />
       <ResizablePanel
         panelRef={panel.panelRef}
+        className="border-t border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)]"
         collapsible
         collapsedSize={0}
         defaultSize={0}
         minSize={100}
         maxSize={maximized ? "100%" : "70%"}
         onResize={panel.panelResize}
+        data-theme-part="app-bottom-sidebar"
       >
         <EditableTabs
           items={items}

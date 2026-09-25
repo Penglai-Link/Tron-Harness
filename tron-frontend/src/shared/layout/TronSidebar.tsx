@@ -168,7 +168,7 @@ export function TronSidebar({
     }
 
     return (
-      <SidebarMenuItem className="space-y-1" key={itemKey}>
+      <SidebarMenuItem className="space-y-1" data-theme-part="app-sidebar-menu-item" key={itemKey}>
         {hasChildren && (compact || item.childDisplay === "Flyout") ? (
           <DropdownMenu>
             <DropdownMenuTrigger
@@ -253,7 +253,7 @@ export function TronSidebar({
         {renderChatPanel
           ? renderChatPanel(compact, activeSessionCode, navigateToPath)
           : null}
-        <nav className={cn("flex flex-1 flex-col gap-[12px] p-2", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")}>
+        <nav className={cn("flex flex-1 flex-col gap-[12px] p-2", compact ? "gap-1" : "")} aria-label={translate("shell:aria.primaryNavigation")} data-theme-part="app-sidebar-menu">
           {navigation.map((section) => {
             const sectionKey = section.id ?? section.label;
             const open = openSections[sectionKey] ?? true;

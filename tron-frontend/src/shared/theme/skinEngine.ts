@@ -62,13 +62,13 @@ async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: st
   for (const rule of rules) {
     const parent = rule.parent;
     const isKeyframe = parent?.type === "atrule" && /^(-webkit-)?keyframes$/i.test(parent.name);
+    const isEffectLayer = !isKeyframe && rule.selectors.length === 1
+      && /^\[data-theme-effect-layer(?:\s*=\s*(['"]?)(?:global|chat)\1)?\](?:::before|::after)?$/i.test(rule.selectors[0].trim());
     if (!isKeyframe) {
       rule.selectors = rule.selectors.map((selector) => `${scope} ${selector.trim()}`);
     }
-    const overlaySelector = !isKeyframe && rule.selectors.length === 1
-      && /^\[data-theme-effect-layer(?:=[^\]]+)?\](?:::before|::after)?$/i.test(rule.selectors[0].trim());
     rule.walkDecls((decl) => {
-      const overlayGeometry = overlaySelector && /^(?:position|inset|inset-block|inset-inline|top|right|bottom|left|width|height|min-width|min-height|max-width|max-height)$/i.test(decl.prop);
+      const overlayGeometry = isEffectLayer && /^(?:position|inset|inset-block|inset-inline|top|right|bottom|left|width|height|min-width|min-height|max-width|max-height)$/i.test(decl.prop);
       if (!decl.prop.startsWith("--") && !visualProperties.has(decl.prop.toLowerCase()) && !overlayGeometry) throw new Error(`主题 CSS ${skin.resources.css}: 属性 ${decl.prop} 会改变组件尺寸或排布`);
       if (/^(?:animation|animation-name)$/i.test(decl.prop)) {
         for (const [name, renamed] of keyframes) {
