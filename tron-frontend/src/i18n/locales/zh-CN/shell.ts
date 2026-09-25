@@ -112,6 +112,14 @@ export const shell = {
     search: "搜索 Tron...",
   },
   userMenu: {
+    checkin: "签到",
+    checkedIn: "已签到",
+    checkingIn: "签到中",
+    checkinDone: "签到成功",
+    checkinSuccess: "签到成功，获得 {{points}} 积分",
+    checkinFailed: "签到失败，请重试",
+    checkinBalanceFailed: "签到已成功，余额刷新失败，请稍后刷新",
+
     plan: "套餐",
     remainingPoints: "剩余积分",
     plans: {

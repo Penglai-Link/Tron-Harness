@@ -20,6 +20,7 @@ interface ThemeContextValue {
   refreshSkins: () => Promise<void>;
   selectSkin: (id: string) => Promise<void>;
   importSkin: (file: File) => Promise<void>;
+  installMarketSkin: (id: string) => Promise<void>;
   uninstallSkin: (id: string) => Promise<void>;
   previewSkin: (id: string) => Promise<void>;
   stopPreviewSkin: () => void;
@@ -140,6 +141,30 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     finally { mutation.current = false; setLoading(false); }
     await refreshSkins();
   }
+  async function installMarketSkin(id: string) {
+    if (mutation.current) return;
+    mutation.current = true;
+    stopPreviewSkin();
+    const request = ++generation.current;
+    setLoading(true);
+    let prepared: PreparedSkin | undefined;
+    try {
+      const { skin } = await skinApi.installMarket(id);
+      setSkins((current) => [...current.filter((item) => item.id !== skin.id), skin]);
+      prepared = await prepareSkin(skin);
+      if (request !== generation.current) return;
+      await skinApi.activate(skin.id);
+      if (request !== generation.current) return;
+      commit(skin, prepared);
+      prepared = undefined;
+      setError(null);
+    } finally {
+      prepared?.dispose();
+      mutation.current = false;
+      setLoading(false);
+      if (request === generation.current) void refreshSkins();
+    }
+  }
   async function uninstallSkin(id: string) {
     if (mutation.current || id === "light" || id === "matrix-dark") return;
     mutation.current = true;
@@ -183,7 +208,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   return <ThemeContext.Provider value={{
     fontSize, setFontSize: (size) => { if (isSystemFontSize(size)) setFontSize(size); },
     theme: activeSkin.mode === "Dark" ? "matrix-dark" : "light", activeSkin, skins,
-    loading, error, refreshSkins, selectSkin, importSkin, uninstallSkin, previewSkin, stopPreviewSkin, previewSkinId,
+    loading, error, refreshSkins, selectSkin, importSkin, installMarketSkin, uninstallSkin, previewSkin, stopPreviewSkin, previewSkinId,
   }}>{children}</ThemeContext.Provider>;
 }
 export function useTheme() {

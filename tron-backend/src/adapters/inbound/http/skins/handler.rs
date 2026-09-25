@@ -21,7 +21,7 @@ use axum::{
 };
 use std::{convert::Infallible, time::Duration};
 
-async fn blocking<T: Send + 'static>(
+pub(super) async fn blocking<T: Send + 'static>(
     locale: String,
     run: impl FnOnce() -> Result<T, SkinError> + Send + 'static,
 ) -> Result<T, SkinApiError> {

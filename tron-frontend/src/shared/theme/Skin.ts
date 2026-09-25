@@ -1,4 +1,5 @@
 export interface Skin {
+  marketId?: string | null;
   id: string;
   name: string;
   version: number;

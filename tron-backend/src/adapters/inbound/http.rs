@@ -22,3 +22,5 @@ pub mod terminals;
 pub mod variables;
 
 pub mod skins;
+
+pub mod person_ai;

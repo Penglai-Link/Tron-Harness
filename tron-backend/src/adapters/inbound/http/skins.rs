@@ -1,5 +1,6 @@
 mod error_mapper;
 mod handler;
+mod market;
 mod request;
 mod response;
 
@@ -8,6 +9,11 @@ use axum::{Router, extract::DefaultBodyLimit, routing::get};
 
 pub fn routes() -> Router<AppState> {
     Router::new()
+        .route("/api/v1/system/skins/market", get(market::list))
+        .route(
+            "/api/v1/system/skins/market/{id}/install",
+            axum::routing::post(market::install),
+        )
         .route(
             "/api/v1/system/skins",
             get(handler::list).post(handler::install),

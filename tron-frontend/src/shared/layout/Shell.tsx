@@ -1,3 +1,4 @@
+import { CheckinButton } from "@/domain/auth/components/CheckinButton";
 import {
   useCallback,
   createContext,
@@ -1047,20 +1048,17 @@ export function TronShell({
               </button>
               {userMenuContent ? <div className="shrink-0">{userMenuContent}</div> : null}
             </div>
-            {personAiPlan || remainingPoints ? (
-              <dl className="grid grid-cols-2 gap-x-4 border-t border-[var(--color-card-border)] px-3 py-2 text-xs">
-                {personAiPlan ? (
-                  <div className="min-w-0">
-                    <dt className="text-[var(--color-on-surface-variant)]">{t("shell:userMenu.plan")}</dt>
-                    <dd className="mt-0.5 truncate font-medium text-[var(--color-on-surface)]">{personAiPlan}</dd>
-                  </div>
-                ) : null}
-                {remainingPoints ? (
-                  <div className="min-w-0">
-                    <dt className="text-[var(--color-on-surface-variant)]">{t("shell:userMenu.remainingPoints")}</dt>
-                    <dd className="mt-0.5 truncate font-medium tabular-nums text-[var(--color-on-surface)]">{remainingPoints}</dd>
-                  </div>
-                ) : null}
+            {authSession ? (
+              <dl className="grid grid-cols-[1fr_1fr_auto] items-center gap-x-3 border-t border-[var(--color-card-border)] px-3 py-2 text-xs">
+                <div className="min-w-0">
+                  <dt className="text-[var(--color-on-surface-variant)]">{t("shell:userMenu.plan")}</dt>
+                  <dd className="mt-0.5 truncate font-medium text-[var(--color-on-surface)]">{personAiPlan ?? "—"}</dd>
+                </div>
+                <div className="min-w-0">
+                  <dt className="text-[var(--color-on-surface-variant)]">{t("shell:userMenu.remainingPoints")}</dt>
+                  <dd className="mt-0.5 truncate font-medium tabular-nums text-[var(--color-on-surface)]">{remainingPoints ?? "—"}</dd>
+                </div>
+                <div className="flex justify-end"><dt className="sr-only">{t("shell:userMenu.checkin")}</dt><dd><CheckinButton /></dd></div>
               </dl>
             ) : null}
             <div className="border-t border-[var(--color-card-border)]">{renderUserPanelContent()}</div>

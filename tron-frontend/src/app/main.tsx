@@ -4,6 +4,7 @@ import { AnchoredToastProvider, ToastProvider } from "@/components/ui/toast"
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { QueryProvider } from "./providers/QueryProvider";
 import { App } from "./App";
+import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import "@/i18n";
 import "@tron/chat-theme";
 import "./styles/globals.css";
@@ -20,6 +21,7 @@ document.body.dataset.tronApp = "";
 
 createRoot(root).render(
   <StrictMode>
+    <RenderErrorBoundary fullScreen>
     <ToastProvider position="top-center">
       <AnchoredToastProvider>
         <TooltipProvider delay={0}>
@@ -29,5 +31,6 @@ createRoot(root).render(
         </TooltipProvider>
       </AnchoredToastProvider>
     </ToastProvider>
+    </RenderErrorBoundary>
   </StrictMode>,
 );

@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SkinVo {
+    market_id: Option<String>,
     id: String,
     name: String,
     version: u32,
@@ -24,6 +25,7 @@ pub struct ResourceVo {
 impl From<Skin> for SkinVo {
     fn from(skin: Skin) -> Self {
         Self {
+            market_id: skin.market_id,
             id: skin.id,
             name: skin.name,
             version: skin.version,

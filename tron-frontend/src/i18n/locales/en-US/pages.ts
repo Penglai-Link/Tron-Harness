@@ -4837,6 +4837,17 @@ export const pages = {
     },
   },
   settingsAppearance: {
+    onlineSkins: "Online themes",
+    marketInstalled: "Theme installed and applied",
+    marketLoading: "Loading online themes…",
+    marketFailed: "Could not load online themes",
+    marketEmpty: "No online themes for Tron yet",
+    marketInstall: "Install",
+    marketApply: "Apply",
+    marketActive: "Active",
+    marketPrevious: "Previous",
+    marketNext: "Next",
+
     preview: {
       "title": "Component preview",
       "default": "Primary",
@@ -4871,7 +4882,7 @@ export const pages = {
     skinUninstallFailed: "Could not uninstall the theme",
     skinLoadFailed: "Could not load themes. Your current appearance is unchanged.",
     retrySkins: "Retry",
-    skinHint: "Applies immediately and is saved on this Tron instance. Import a ZIP package or skin.json (up to 20 MB).",
+    skinHint: "Import a ZIP skin package, up to 20 MB.",
 
     fontSizeError: "Font size must be an integer between {{min}} and {{max}}.",
     fontSize: "UI Font Size",

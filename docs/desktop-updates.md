@@ -20,6 +20,19 @@ TRON_VERSION_SERVER_URL=https://index.example.com make desktop-dev
 
 启动后，Tron 会在登录完成并进入受保护页面约 2.5 秒后静默检查更新；也可以在“设置 → 通用 → 版本更新”手动检查。
 
+### 更新运行中的开发界面
+
+桌面窗口运行时，不要清空它正在使用的前端资源目录。旧窗口仍会按旧文件名加载尚未访问过的页面，删除旧文件会导致动态模块加载失败。
+
+仅修改前端时，可保留旧资源并构建新界面：
+
+```sh
+VITE_TRON_DATA_SOURCE=api TRON_FRONTEND_KEEP_ASSETS=1 \
+  TRON_FRONTEND_OUT_DIR=../electron/resources/frontend make fe-check
+```
+
+新资源生成后，保存当前编辑内容，再刷新窗口。保留资源仅用于开发中的原地更新；正式打包仍使用 `make desktop-build` 的清理流程。
+
 ## 发布要求
 
 服务端每个版本需要登记 `product_code=tron` 的安装包，并为当前架构登记对应的 `os_type`：

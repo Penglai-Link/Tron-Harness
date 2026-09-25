@@ -37,6 +37,11 @@ impl SkinService {
         let _ = self.changes.send(());
         Ok(())
     }
+    pub fn install_market(&self, bytes: &[u8], market_id: &str) -> Result<Skin, SkinError> {
+        let skin = self.store.install_market(bytes, market_id)?;
+        let _ = self.changes.send(());
+        Ok(skin)
+    }
     pub fn resource(&self, id: &str, path: &str) -> Result<Vec<u8>, SkinError> {
         self.store.resource(id, path)
     }

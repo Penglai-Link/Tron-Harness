@@ -45,7 +45,9 @@ export default defineConfig(({ mode }) => {
       },
       ...(frontendOutDir
         ? {
-            emptyOutDir: true,
+            // Live desktop windows may still request chunks from the previous
+            // build. Keep them for in-place development updates only.
+            emptyOutDir: runtimeEnv.TRON_FRONTEND_KEEP_ASSETS !== "1",
             outDir: frontendOutDir,
           }
         : {}),

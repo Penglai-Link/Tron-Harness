@@ -8,7 +8,7 @@ import light from "./builtin/light.json";
 import matrix from "./builtin/matrix-dark.json";
 
 vi.mock("@/store/authStore", () => ({ useAuthStore: () => "authenticated" }));
-vi.mock("./skinApi", () => ({ skinApi: { list: vi.fn(), active: vi.fn(), activate: vi.fn(), install: vi.fn(), watch: vi.fn(() => () => {}) } }));
+vi.mock("./skinApi", () => ({ skinApi: { list: vi.fn(), active: vi.fn(), activate: vi.fn(), install: vi.fn(), installMarket: vi.fn(), watch: vi.fn(() => () => {}) } }));
 let context: ReturnType<typeof useTheme>;
 function Probe() {
   context = useTheme();
@@ -69,5 +69,35 @@ it("keeps installed choices available when the active skin has a broken asset", 
   expect(context.error).toBeTruthy();
   await act(async () => { await context.selectSkin("matrix-dark"); });
   expect(context.activeSkin.id).toBe("matrix-dark");
+  vi.unstubAllGlobals();
+});
+
+
+it("installs an online theme, prepares its resources, and activates it immediately", async () => {
+  const online = { ...matrix, id: "online", marketId: "remote-id" } as Skin;
+  vi.mocked(skinApi.installMarket).mockResolvedValue({ skin: online });
+  vi.mocked(skinApi.activate).mockImplementation(async () => {
+    vi.mocked(skinApi.active).mockResolvedValue({ skin: online });
+    vi.mocked(skinApi.list).mockResolvedValue([light, matrix, online] as Skin[]);
+    return { skin: online };
+  });
+  render(<ThemeProvider><Probe /></ThemeProvider>);
+  await waitFor(() => expect(context.loading).toBe(false));
+  await act(async () => { await context.installMarketSkin("remote-id"); });
+  expect(skinApi.installMarket).toHaveBeenCalledWith("remote-id");
+  expect(skinApi.activate).toHaveBeenCalledWith("online");
+  expect(context.activeSkin.id).toBe("online");
+  expect(document.documentElement.dataset.skin).toBe("online");
+});
+
+it("keeps the previous theme when an online package cannot be prepared", async () => {
+  const broken = { ...matrix, id: "broken-online", resources: { font: null, background: "https://example.invalid/broken.png" } } as Skin;
+  vi.mocked(skinApi.installMarket).mockResolvedValue({ skin: broken });
+  vi.stubGlobal("Image", class { onerror?: () => void; set src(_value: string) { queueMicrotask(() => this.onerror?.()); } });
+  render(<ThemeProvider><Probe /></ThemeProvider>);
+  await waitFor(() => expect(context.loading).toBe(false));
+  await act(async () => { await expect(context.installMarketSkin("broken")).rejects.toThrow(); });
+  expect(skinApi.activate).not.toHaveBeenCalled();
+  expect(context.activeSkin.id).toBe("light");
   vi.unstubAllGlobals();
 });

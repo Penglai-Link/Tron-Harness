@@ -6,6 +6,7 @@ pub trait SkinStore: Send + Sync {
     fn active(&self) -> Result<Skin, SkinError>;
     fn activate(&self, id: &str) -> Result<Skin, SkinError>;
     fn install(&self, bytes: &[u8]) -> Result<Skin, SkinError>;
+    fn install_market(&self, bytes: &[u8], market_id: &str) -> Result<Skin, SkinError>;
     fn uninstall(&self, id: &str) -> Result<(), SkinError>;
     fn resource(&self, id: &str, path: &str) -> Result<Vec<u8>, SkinError>;
 }

@@ -19,6 +19,8 @@ pub struct SkinResources {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 pub struct Skin {
+    #[serde(skip)]
+    pub market_id: Option<String>,
     pub id: String,
     pub name: String,
     pub version: u32,

@@ -4843,6 +4843,17 @@ export const pages = {
     },
   },
   settingsAppearance: {
+    onlineSkins: "在线主题",
+    marketInstalled: "主题已安装并启用",
+    marketLoading: "正在加载在线主题…",
+    marketFailed: "在线主题加载失败",
+    marketEmpty: "暂无 Tron 在线主题",
+    marketInstall: "安装",
+    marketApply: "启用",
+    marketActive: "使用中",
+    marketPrevious: "上一页",
+    marketNext: "下一页",
+
     skins: "主题",
     importSkin: "导入",
     previewSkin: "预览{{name}}",
@@ -4859,7 +4870,7 @@ export const pages = {
     skinUninstallFailed: "主题卸载失败",
     skinLoadFailed: "主题加载失败，已保留当前外观。",
     retrySkins: "重试",
-    skinHint: "切换后立即生效，保存在当前 Tron 实例中。可导入 ZIP 皮肤包或 skin.json，最大 20 MB。",
+    skinHint: "可导入 ZIP 皮肤包，最大 20 MB。",
 
     fontSizeError: "字号必须是 {{min}} 至 {{max}} 之间的整数。",
     fontSize: "UI字号",

@@ -72,6 +72,12 @@ impl FileSkinStore {
             .and_then(|bytes| parse_skin(&bytes))
             .and_then(|skin| {
                 if skin.id == id {
+                    let mut skin = skin;
+                    skin.market_id = self
+                        .checked_resource(id, "market-source.json")
+                        .ok()
+                        .and_then(|path| fs::read(path).ok())
+                        .and_then(|bytes| serde_json::from_slice::<String>(&bytes).ok());
                     Ok(skin)
                 } else {
                     Err(SkinError::Invalid)
@@ -107,77 +113,15 @@ impl FileSkinStore {
     }
 }
 
-impl SkinStore for FileSkinStore {
-    fn list(&self) -> Result<Vec<Skin>, SkinError> {
-        let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
-        self.initialize()?;
-        let mut skins = vec![self.read_skin("light")?, self.read_skin("matrix-dark")?];
-        for entry in fs::read_dir(&self.root)
-            .map_err(|_| SkinError::Storage)?
-            .flatten()
-        {
-            let id = entry.file_name().to_string_lossy().to_string();
-            if id == "light" || id == "matrix-dark" {
-                continue;
-            }
-            if let Ok(skin) = self.read_skin(&id) {
-                skins.push(skin);
-            }
-        }
-        skins[2..].sort_by(|a, b| a.name.cmp(&b.name));
-        Ok(skins)
-    }
-
-    fn active(&self) -> Result<Skin, SkinError> {
-        let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
-        self.initialize()?;
-        let id = fs::read(self.root.join("active.json"))
-            .ok()
-            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
-            .and_then(|value| {
-                value
-                    .get("id")
-                    .and_then(|id| id.as_str())
-                    .map(str::to_owned)
-            });
-        if let Some(skin) = id.and_then(|id| self.read_skin(&id).ok()) {
-            return Ok(skin);
-        }
-        atomic_write(&self.root.join("active.json"), br#"{"id":"light"}"#)?;
-        self.read_skin("light")
-    }
-
-    fn activate(&self, id: &str) -> Result<Skin, SkinError> {
-        let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
-        self.initialize()?;
-        let skin = self.read_skin(id)?;
-        for path in [
-            &skin.resources.background,
-            &skin.resources.font,
-            &skin.resources.css,
-        ]
-        .into_iter()
-        .flatten()
-        {
-            if !path.starts_with("https://") {
-                self.checked_resource(id, path)?;
-            }
-        }
-        atomic_write(
-            &self.root.join("active.json"),
-            &serde_json::to_vec(&serde_json::json!({"id": id})).map_err(|_| SkinError::Storage)?,
-        )?;
-        Ok(skin)
-    }
-
-    fn install(&self, bytes: &[u8]) -> Result<Skin, SkinError> {
+impl FileSkinStore {
+    fn install_package(&self, bytes: &[u8], market_id: Option<&str>) -> Result<Skin, SkinError> {
         if bytes.len() > MAX_PACKAGE {
             return Err(SkinError::Invalid);
         }
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
         self.initialize()?;
         let staging = tempfile::tempdir_in(&self.root).map_err(|_| SkinError::Storage)?;
-        let skin = if bytes.starts_with(b"PK") {
+        let mut skin = if bytes.starts_with(b"PK") {
             let mut archive =
                 zip::ZipArchive::new(Cursor::new(bytes)).map_err(|_| SkinError::Invalid)?;
             if archive.len() > 128 {
@@ -278,8 +222,86 @@ impl SkinStore for FileSkinStore {
             validate_theme_css(&css, staging.path())
                 .map_err(|reason| SkinError::CssRejected(format!("{path}: {reason}")))?;
         }
+        if let Some(id) = market_id {
+            let metadata = serde_json::to_vec(id).map_err(|_| SkinError::Storage)?;
+            fs::write(staging.path().join("market-source.json"), metadata)
+                .map_err(|_| SkinError::Storage)?;
+            skin.market_id = Some(id.to_owned());
+        }
         fs::rename(staging.path(), self.root.join(&skin.id)).map_err(|_| SkinError::Storage)?;
         Ok(skin)
+    }
+}
+
+impl SkinStore for FileSkinStore {
+    fn list(&self) -> Result<Vec<Skin>, SkinError> {
+        let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
+        self.initialize()?;
+        let mut skins = vec![self.read_skin("light")?, self.read_skin("matrix-dark")?];
+        for entry in fs::read_dir(&self.root)
+            .map_err(|_| SkinError::Storage)?
+            .flatten()
+        {
+            let id = entry.file_name().to_string_lossy().to_string();
+            if id == "light" || id == "matrix-dark" {
+                continue;
+            }
+            if let Ok(skin) = self.read_skin(&id) {
+                skins.push(skin);
+            }
+        }
+        skins[2..].sort_by(|a, b| a.name.cmp(&b.name));
+        Ok(skins)
+    }
+
+    fn active(&self) -> Result<Skin, SkinError> {
+        let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
+        self.initialize()?;
+        let id = fs::read(self.root.join("active.json"))
+            .ok()
+            .and_then(|bytes| serde_json::from_slice::<serde_json::Value>(&bytes).ok())
+            .and_then(|value| {
+                value
+                    .get("id")
+                    .and_then(|id| id.as_str())
+                    .map(str::to_owned)
+            });
+        if let Some(skin) = id.and_then(|id| self.read_skin(&id).ok()) {
+            return Ok(skin);
+        }
+        atomic_write(&self.root.join("active.json"), br#"{"id":"light"}"#)?;
+        self.read_skin("light")
+    }
+
+    fn activate(&self, id: &str) -> Result<Skin, SkinError> {
+        let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
+        self.initialize()?;
+        let skin = self.read_skin(id)?;
+        for path in [
+            &skin.resources.background,
+            &skin.resources.font,
+            &skin.resources.css,
+        ]
+        .into_iter()
+        .flatten()
+        {
+            if !path.starts_with("https://") {
+                self.checked_resource(id, path)?;
+            }
+        }
+        atomic_write(
+            &self.root.join("active.json"),
+            &serde_json::to_vec(&serde_json::json!({"id": id})).map_err(|_| SkinError::Storage)?,
+        )?;
+        Ok(skin)
+    }
+
+    fn install(&self, bytes: &[u8]) -> Result<Skin, SkinError> {
+        self.install_package(bytes, None)
+    }
+
+    fn install_market(&self, bytes: &[u8], market_id: &str) -> Result<Skin, SkinError> {
+        self.install_package(bytes, Some(market_id))
     }
 
     fn uninstall(&self, id: &str) -> Result<(), SkinError> {
@@ -420,6 +442,36 @@ mod tests {
         skin.id = "ocean".into();
         skin
     }
+    #[test]
+    fn market_install_persists_origin_and_uninstall_restores_builtin() {
+        let temp = tempfile::tempdir().unwrap();
+        let store = FileSkinStore::new(temp.path().into());
+        let bytes = serde_json::to_vec(&custom()).unwrap();
+        let installed = store.install_market(&bytes, "market-uuid").unwrap();
+        assert_eq!(installed.market_id.as_deref(), Some("market-uuid"));
+        store.activate(&installed.id).unwrap();
+        let reopened = FileSkinStore::new(temp.path().into());
+        assert_eq!(
+            reopened.active().unwrap().market_id.as_deref(),
+            Some("market-uuid")
+        );
+        assert!(matches!(
+            reopened.install_market(&bytes, "other-id"),
+            Err(SkinError::Conflict)
+        ));
+        reopened.uninstall(&installed.id).unwrap();
+        assert_eq!(reopened.active().unwrap().id, "light");
+        let imported = reopened.install(&bytes).unwrap();
+        assert!(imported.market_id.is_none());
+        assert!(
+            reopened
+                .list()
+                .unwrap()
+                .iter()
+                .all(|skin| skin.market_id.is_none())
+        );
+    }
+
     #[test]
     fn skins_survive_restart_and_missing_active_falls_back() {
         let temp = tempfile::tempdir().unwrap();

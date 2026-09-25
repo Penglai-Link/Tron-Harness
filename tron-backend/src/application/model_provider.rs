@@ -28,6 +28,7 @@ use url::Url;
 
 #[path = "model_provider/chat_auto_routes.rs"]
 mod chat_auto_routes;
+mod person_ai_services;
 
 use crate::{
     application::{

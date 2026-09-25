@@ -1,4 +1,8 @@
 export const common = {
+  renderError: {
+    title: "页面暂时无法显示",
+    description: "页面加载或运行出错。可以切换到其他页面，或刷新后重试。刷新会丢失尚未保存的内容。",
+  },
   actions: {
     close: "关闭",
     logout: "退出登录",

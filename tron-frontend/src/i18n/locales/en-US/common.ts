@@ -1,4 +1,8 @@
 export const common = {
+  renderError: {
+    title: "This page could not be displayed",
+    description: "The page failed to load or encountered an error. Open another page, or refresh to try again. Refreshing will discard unsaved changes.",
+  },
   actions: {
     close: "Close",
     logout: "Log out",

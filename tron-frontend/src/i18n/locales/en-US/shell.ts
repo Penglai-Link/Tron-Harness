@@ -112,6 +112,14 @@ export const shell = {
     search: "Search Tron...",
   },
   userMenu: {
+    checkin: "Check in",
+    checkedIn: "Checked in",
+    checkingIn: "Checking in",
+    checkinDone: "Check-in successful",
+    checkinSuccess: "Checked in: +{{points}} points",
+    checkinFailed: "Check-in failed. Please retry.",
+    checkinBalanceFailed: "Checked in, but could not refresh your balance. Please refresh later.",
+
     plan: "Plan",
     remainingPoints: "Remaining points",
     plans: {

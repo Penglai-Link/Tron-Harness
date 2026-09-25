@@ -1,8 +1,10 @@
+import { OnlineSkinMarket } from "./OnlineSkinMarket";
 import { useEffect, useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { Check, Eye, EyeOff, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { InfoTooltip } from "@/components/info-tooltip";
 import { useToast } from "@/components/ui/toast";
 import { SurfaceCard, useTheme } from "@/shared";
 import type { Skin } from "@/shared/theme/Skin";
@@ -47,7 +49,10 @@ export function SkinSettings() {
   return (
     <SurfaceCard className="space-y-4" aria-busy={loading}>
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-sm font-semibold">{t("settingsAppearance.skins")}</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="text-sm font-semibold">{t("settingsAppearance.skins")}</h2>
+          <InfoTooltip ariaLabel={t("settingsAppearance.skinHint")}>{t("settingsAppearance.skinHint")}</InfoTooltip>
+        </div>
         <Button variant="outline" disabled={loading} onClick={() => input.current?.click()}>
           <Upload aria-hidden="true" />{t("settingsAppearance.importSkin")}
         </Button>
@@ -119,7 +124,7 @@ export function SkinSettings() {
           </div>;
         })}
       </div>
-      <p className="text-xs text-muted-foreground">{t("settingsAppearance.skinHint")}</p>
+      <OnlineSkinMarket onUninstall={setSkinToUninstall} />
       <ConfirmDialog
         open={Boolean(skinToUninstall)}
         title={t("settingsAppearance.uninstallSkinTitle")}

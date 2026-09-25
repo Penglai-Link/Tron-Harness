@@ -62,6 +62,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(skill_routes())
         .merge(system_config_routes())
         .merge(crate::adapters::inbound::http::skins::routes())
+        .merge(crate::adapters::inbound::http::person_ai::routes())
         .merge(navigation_routes())
         .merge(terminal_routes())
         .route_layer(middleware::from_fn_with_state(
