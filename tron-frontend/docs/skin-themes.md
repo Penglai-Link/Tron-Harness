@@ -115,7 +115,7 @@ python3 tron-skill/tron-theme-authoring/scripts/theme_pack.py pack ./my-theme ./
 
 这不是任意 CSS 插件，也不以“扫描到零个 HEX”为覆盖标准。主题变量只对消费它的组件生效。新增业务控件应复用公共组件或显式接入变量，不靠全局 `!important` 覆盖业务语义。
 
-外观页的「组件预览」使用真实公共组件，可直接验证交互状态。脚本测试通过 `make skill-theme-test` 运行；模板另由 Rust Store 测试确认可安装激活。
+主题视觉验收应在实际业务页面检查按钮、表单、数据行和弹层等公共组件的交互状态。脚本测试通过 `make skill-theme-test` 运行；模板另由 Rust Store 测试确认可安装激活。
 
 ### 本轮精细变量验收
 

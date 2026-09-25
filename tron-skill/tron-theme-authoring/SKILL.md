@@ -17,7 +17,7 @@ description: 编写、修改和打包 Tron 的 skin.json 或 ZIP 主题包，支
 4. 图片和字体放在包内的 `assets/`。优先制作离线 ZIP；仅用配色时也可交付单个 `skin.json`。远程资源仅支持 HTTPS，远程字体需要跨域许可。不要将用户提供的本地路径原样写入清单。
 5. 运行 `python3 scripts/theme_pack.py validate <目录或ZIP或JSON>`。修正报错；未知变量警告须核实，不能把未消费的变量当成已实现效果。脚本不渲染 CSS，还需检查可读性、按钮各状态及行选中状态。
 6. 运行 `python3 scripts/theme_pack.py pack <目录> <输出ZIP>`。脚本只打包清单及引用资源，确保 ZIP 根目录直接有 `skin.json`，不会混入系统文件或源目录外层。
-7. 有可操作的 Tron 实例时，按用户授权导入并选择，展开外观页「组件预览」，检查按钮 hover/active/focus/disabled、输入框、斑马纹/hover/selected 数据行和弹窗。切回内置主题检查样式清理，刷新检查恢复。没有实例时，明确报告仅完成静态校验，不声称验证了 UI。
+7. 有可操作的 Tron 实例时，按用户授权导入并选择，在实际业务页面检查按钮 hover/active/focus/disabled、输入框、斑马纹/hover/selected 数据行和弹窗。切回内置主题检查样式清理，刷新检查恢复。没有实例时，明确报告仅完成静态校验，不声称验证了 UI。
 8. 交付包文件、关键配色/组件变量、导入步骤及验证边界。更新版本用新的 `id`；`version` 是协议版本，仍固定为 1。
 
 ## 随附示例

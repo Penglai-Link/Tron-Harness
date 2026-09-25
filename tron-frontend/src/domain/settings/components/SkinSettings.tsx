@@ -6,7 +6,6 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { useToast } from "@/components/ui/toast";
 import { SurfaceCard, useTheme } from "@/shared";
 import type { Skin } from "@/shared/theme/Skin";
-import { SkinPreview } from "./SkinPreview";
 
 export function SkinSettings() {
   const { t } = useTranslation("pages");
@@ -103,7 +102,6 @@ export function SkinSettings() {
         })}
       </div>
       <p className="text-xs text-muted-foreground">{t("settingsAppearance.skinHint")}</p>
-      <SkinPreview />
       <ConfirmDialog
         open={Boolean(skinToUninstall)}
         title={t("settingsAppearance.uninstallSkinTitle")}
