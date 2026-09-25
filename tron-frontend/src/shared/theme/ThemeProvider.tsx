@@ -173,11 +173,19 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     setLoading(true);
     let fallback: PreparedSkin | undefined;
     try {
-      if (activeSkin.id === id) fallback = await prepareSkin(builtins[0]);
+      // The backend is authoritative: another window may have changed the active
+      // skin since this provider last refreshed.
+      const { skin: persistedActive } = await skinApi.active();
+      if (persistedActive.id === id) {
+        fallback = await prepareSkin(builtins[0]);
+      } else if (persistedActive.id !== activeSkin.id) {
+        fallback = await prepareSkin(persistedActive);
+      }
       await skinApi.uninstall(id);
       if (request !== generation.current) return;
       if (fallback) {
-        commit(builtins[0], fallback);
+        const nextSkin = persistedActive.id === id ? builtins[0] : persistedActive;
+        commit(nextSkin, fallback);
         fallback = undefined;
       }
       setSkins((current) => current.filter((skin) => skin.id !== id));
