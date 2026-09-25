@@ -4,6 +4,8 @@ import {
   findMatchingShellShortcutAction,
   hasSystemModifier,
   isEditableShortcutTarget,
+  shortcutMatchesKeyboardEvent,
+  type ShellShortcutBinding,
   type ShellShortcutAction,
 } from "@/shared/lib/keyboardShortcuts";
 import { useAppShellStore } from "@/store/appShellStore";
@@ -19,19 +21,32 @@ export type ShellShortcutHandlers = Partial<
   Record<ShellShortcutAction, ShellShortcutHandler>
 >;
 
+const openPlatformSettingsShortcut: ShellShortcutBinding = {
+  altKey: false,
+  key: ",",
+  modKey: true,
+  shiftKey: false,
+};
+
 /**
- * Wires the shortcut bindings configured on the shortcuts settings page to
- * the handlers owned by the shell. Handlers are refreshed on every render, so
- * they can close over shell state freely without stale captures. Adding a new
- * shortcut only requires extending `shellShortcutActions` and passing one
- * extra handler entry.
+ * Wires the configurable shortcuts and the fixed platform-settings shortcut
+ * to handlers owned by the shell. Handlers are refreshed on every render, so
+ * they can close over shell state freely without stale captures.
  */
-export function useShellShortcuts(handlers: ShellShortcutHandlers) {
+export function useShellShortcuts(
+  handlers: ShellShortcutHandlers,
+  onOpenPlatformSettings: ShellShortcutHandler,
+) {
   const shortcutBindings = useAppShellStore((state) => state.shortcutBindings);
   const handlersRef = useRef(handlers);
+  const onOpenPlatformSettingsRef = useRef(onOpenPlatformSettings);
 
   useEffect(() => {
     handlersRef.current = handlers;
+  });
+
+  useEffect(() => {
+    onOpenPlatformSettingsRef.current = onOpenPlatformSettings;
   });
 
   useEffect(() => {
@@ -41,6 +56,12 @@ export function useShellShortcuts(handlers: ShellShortcutHandlers) {
         || event.isComposing
         || event.repeat
       ) {
+        return;
+      }
+
+      if (shortcutMatchesKeyboardEvent(openPlatformSettingsShortcut, event)) {
+        if (onOpenPlatformSettingsRef.current(event) === false) return;
+        event.preventDefault();
         return;
       }
 

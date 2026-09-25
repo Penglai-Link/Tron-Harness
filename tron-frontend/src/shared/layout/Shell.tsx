@@ -773,7 +773,7 @@ export function TronShell({
     toggleRightSidebar: () => {
       toggleRightSidebarPanel();
     },
-  });
+  }, openSystemSettings);
 
   function handleSidebarNavigationClick() {
     closeFloatingPanels();
