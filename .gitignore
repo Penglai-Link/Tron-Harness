@@ -68,6 +68,8 @@ $RECYCLE.BIN/
 *.pyc
 electron/dist
 electron/resources
+/node_modules/
+/output/
 
 docs/brainstorm/
 docs/features/
