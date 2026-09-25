@@ -739,7 +739,9 @@ export function TronShell({
     const nextActiveTab = updatedTabState.tabs.find(
       (tab) => tab.id === updatedTabState.activeTabId,
     );
-    if (nextActiveTab) navigate(nextActiveTab.path);
+    if (nextActiveTab && nextActiveTab.id !== DEFAULT_TAB_ID) {
+      navigate(nextActiveTab.path);
+    }
     return;
   }
 
@@ -748,8 +750,7 @@ export function TronShell({
     closeCurrentTab: () => {
       if (!activeTabId) return false;
       const redirect = closeTab(activeTabId);
-      if (redirect === null) return false;
-      navigate(redirect);
+      if (redirect !== null) navigate(redirect);
     },
     closeOtherTabs: () => closeVisibleTabs(true),
     nextTab: () => activateAdjacentTab(1),

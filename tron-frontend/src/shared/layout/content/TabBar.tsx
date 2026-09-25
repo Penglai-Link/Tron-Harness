@@ -38,7 +38,10 @@ export function TabBar({ className }: TabBarProps) {
 
   const handleTabClose = (tabId: string) => {
     const redirect = closeTab(tabId);
-    if (redirect !== null) {
+    const hasVisibleTabs = useTabStore
+      .getState()
+      .tabs.some((tab) => !tab.hide);
+    if (hasVisibleTabs && redirect !== null) {
       navigate(redirect);
     }
   };

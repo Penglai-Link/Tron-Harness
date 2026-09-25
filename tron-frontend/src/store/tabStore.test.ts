@@ -110,8 +110,9 @@ describe("tab store", () => {
     useTabStore.getState().addToCache(DEFAULT_TAB_ID, "/default", "default");
     useTabStore.getState().addToCache(tabId, "/apps", "apps.index");
 
-    useTabStore.getState().closeTab(tabId);
+    const redirect = useTabStore.getState().closeTab(tabId);
 
+    expect(redirect).toBeNull();
     expect(useTabStore.getState().tabs.map((tab) => tab.id)).toEqual([
       DEFAULT_TAB_ID,
     ]);
@@ -119,6 +120,22 @@ describe("tab store", () => {
     expect(
       useTabStore.getState().cachedTabsList.map((tab) => tab.tabId)
     ).toEqual([DEFAULT_TAB_ID]);
+  });
+
+  it("returns the next tab path when closing one of multiple ordinary tabs", () => {
+    const firstTabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/apps",
+      title: "Apps",
+    });
+    const secondTabId = useTabStore.getState().addTab({
+      closable: true,
+      path: "/tasks",
+      title: "Tasks",
+    });
+
+    expect(useTabStore.getState().closeTab(secondTabId)).toBe("/apps");
+    expect(useTabStore.getState().activeTabId).toBe(firstTabId);
   });
 
   it("keeps the default tab and its panel state when clearing ordinary tabs", () => {

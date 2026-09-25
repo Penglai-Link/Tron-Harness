@@ -138,7 +138,12 @@ export const useTabStore = create<TabState>()((set, get) => ({
     const nextActiveTab = get().tabs.find(
       (tab) => tab.id === get().activeTabId
     );
-    return nextActiveTab?.path ?? DEFAULT_AUTH_REDIRECT;
+    // Keep the current router location when the last visible tab closes.
+    // The shell renders its empty workspace from the tab store, while navigating
+    // to `/` would remount the entry route and re-run bootstrap redirects.
+    return nextActiveTab?.id === DEFAULT_TAB_ID
+      ? null
+      : nextActiveTab?.path ?? DEFAULT_AUTH_REDIRECT;
   },
 
   removeTab: (tabId) => get().removeTabs([tabId]),
