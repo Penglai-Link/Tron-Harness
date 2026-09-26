@@ -1,4 +1,5 @@
 import { SkinSettings } from "../components/SkinSettings";
+import { BackgroundAppearanceSettings } from "../components/BackgroundAppearanceSettings";
 import { useEffect, useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 
@@ -66,6 +67,7 @@ export function SettingsAppearancePage() {
     <div className="w-full space-y-4">
       <PageHeader title={shellT("settings.items.appearance")} />
       <SkinSettings />
+      <BackgroundAppearanceSettings />
       <SurfaceCard className="p-0">
         <Item size="xs">
           <ItemContent>

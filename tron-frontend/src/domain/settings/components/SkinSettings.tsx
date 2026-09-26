@@ -17,7 +17,7 @@ export function SkinSettings() {
   const toast = useToast();
   const [skinToUninstall, setSkinToUninstall] = useState<Skin | null>(null);
   const label = (skin: Skin) => skin.id === "light" ? shellT("theme.options.light")
-    : skin.id === "matrix-dark" ? shellT("theme.options.matrixDark") : skin.id === "matrix-particles" ? shellT("theme.options.matrixParticles") : skin.name;
+    : skin.id === "matrix-dark" ? shellT("theme.options.matrixDark") : skin.name;
 
   async function select(id: string) {
     try { await selectSkin(id); }
@@ -70,7 +70,7 @@ export function SkinSettings() {
           const surface = colors["--color-surface-container"] ?? (dark ? "#102017" : "#f1edec");
           const foreground = colors["--color-on-surface"] ?? (dark ? "#e4ffe8" : "#1c1b1b");
           const accent = colors["--color-primary"] ?? (dark ? "#5cff85" : "#000000");
-          const imported = !["light", "matrix-dark", "matrix-particles"].includes(skin.id);
+          const imported = !["light", "matrix-dark"].includes(skin.id);
           return <div key={skin.id} data-theme-anchor="card" className="relative min-w-0">
             <Button variant="outline" aria-label={label(skin)} aria-pressed={selected}
               disabled={loading} onClick={() => void select(skin.id)}

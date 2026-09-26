@@ -188,7 +188,6 @@ export const shell = {
     label: "主题",
     options: {
       light: "浅色",
-      matrixParticles: "矩阵粒子",
       matrixDark: "矩阵深色",
     },
   },

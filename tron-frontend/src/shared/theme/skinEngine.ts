@@ -1,4 +1,3 @@
-import { mountParticleTheme } from "./particleTheme";
 import type { Skin } from "./Skin";
 import { skinApi } from "./skinApi";
 import postcss from "postcss";
@@ -113,13 +112,11 @@ export async function prepareSkin(skin: Skin): Promise<PreparedSkin> {
   const urls: string[] = [];
   let effects = new Set<EffectLayerName>();
   let stopEffects: (() => void) | undefined;
-  let stopParticles: (() => void) | undefined;
   let font: FontFace | undefined;
   let style: HTMLStyleElement | undefined;
   let customCssStyle: HTMLStyleElement | undefined;
   const dispose = () => {
     stopEffects?.();
-    stopParticles?.();
     style?.remove();
     customCssStyle?.remove();
     if (font) document.fonts.delete(font);
@@ -194,7 +191,6 @@ export async function prepareSkin(skin: Skin): Promise<PreparedSkin> {
         root.dataset.skin = skin.id;
         document.body.dataset.skin = skin.id;
         stopEffects = mountEffectLayers(effects);
-        stopParticles = mountParticleTheme(skin.id === "matrix-particles");
         root.style.colorScheme = skin.mode === "Dark" ? "dark" : "light";
       },
     };

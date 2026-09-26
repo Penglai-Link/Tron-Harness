@@ -14,10 +14,11 @@ const MAX_PACKAGE: usize = 20 * 1024 * 1024;
 const MAX_EXPANDED: u64 = 40 * 1024 * 1024;
 const ORIGINAL_MATRIX: &str =
     include_str!("../../../resources/skins/migrations/matrix-dark-original.json");
-const BUILTINS: [&str; 3] = [
+const LEGACY_MATRIX_PARTICLES: &str =
+    include_str!("../../../resources/skins/migrations/matrix-particles.json");
+const BUILTINS: [&str; 2] = [
     include_str!("../../../resources/skins/light.json"),
     include_str!("../../../resources/skins/matrix-dark.json"),
-    include_str!("../../../resources/skins/matrix-particles.json"),
 ];
 
 pub struct FileSkinStore {
@@ -83,10 +84,12 @@ impl FileSkinStore {
                 } else {
                     Err(SkinError::Invalid)
                 }
-            });
+        });
         result.or_else(|error| {
             BUILTINS
                 .iter()
+                .copied()
+                .chain(std::iter::once(LEGACY_MATRIX_PARTICLES))
                 .filter_map(|content| serde_json::from_str::<Skin>(content).ok())
                 .find(|skin| skin.id == id)
                 .ok_or(error)
@@ -241,7 +244,6 @@ impl SkinStore for FileSkinStore {
         let mut skins = vec![
             self.read_skin("light")?,
             self.read_skin("matrix-dark")?,
-            self.read_skin("matrix-particles")?,
         ];
         for entry in fs::read_dir(&self.root)
             .map_err(|_| SkinError::Storage)?
@@ -255,7 +257,7 @@ impl SkinStore for FileSkinStore {
                 skins.push(skin);
             }
         }
-        skins[3..].sort_by(|a, b| a.name.cmp(&b.name));
+        skins[2..].sort_by(|a, b| a.name.cmp(&b.name));
         Ok(skins)
     }
 
@@ -279,6 +281,9 @@ impl SkinStore for FileSkinStore {
     }
 
     fn activate(&self, id: &str) -> Result<Skin, SkinError> {
+        if id == "matrix-particles" {
+            return Err(SkinError::NotFound);
+        }
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
         self.initialize()?;
         let skin = self.read_skin(id)?;
@@ -405,16 +410,20 @@ fn atomic_write(path: &Path, bytes: &[u8]) -> Result<(), SkinError> {
 mod tests {
     use super::*;
     #[test]
-    fn particle_builtin_persists_and_cannot_be_uninstalled() {
+    fn legacy_particle_theme_is_hidden_and_can_be_migrated() {
         let temp = tempfile::tempdir().unwrap();
+        let legacy_dir = temp.path().join("matrix-particles");
+        fs::create_dir_all(&legacy_dir).unwrap();
+        fs::write(legacy_dir.join("skin.json"), LEGACY_MATRIX_PARTICLES).unwrap();
+        fs::write(temp.path().join("active.json"), br#"{"id":"matrix-particles"}"#).unwrap();
         let store = FileSkinStore::new(temp.path().into());
         let skins = store.list().unwrap();
-        assert_eq!(skins.iter().filter(|skin| skin.id == "matrix-particles").count(), 1);
-        let particles = store.activate("matrix-particles").unwrap();
-        assert_eq!(particles.colors, store.read_skin("matrix-dark").unwrap().colors);
+        assert_eq!(skins.iter().filter(|skin| skin.id == "matrix-particles").count(), 0);
+        assert!(matches!(store.activate("matrix-particles"), Err(SkinError::NotFound)));
         let reopened = FileSkinStore::new(temp.path().into());
         assert_eq!(reopened.active().unwrap().id, "matrix-particles");
         assert!(matches!(reopened.uninstall("matrix-particles"), Err(SkinError::Protected)));
+        assert_eq!(reopened.activate("matrix-dark").unwrap().id, "matrix-dark");
     }
 
     #[test]

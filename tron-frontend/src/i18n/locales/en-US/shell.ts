@@ -188,7 +188,6 @@ export const shell = {
     label: "Theme",
     options: {
       light: "Light",
-      matrixParticles: "Matrix Particles",
       matrixDark: "Matrix Dark",
     },
   },

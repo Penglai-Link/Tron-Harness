@@ -5,7 +5,7 @@ import { mountEffectLayers } from "./effectLayers";
 import { prepareSkin, skinVariables } from "./skinEngine";
 import type { Skin } from "./Skin";
 import light from "./builtin/light.json";
-import particles from "./builtin/matrix-particles.json";
+import particles from "./migrations/matrix-particles.json";
 import matrix from "./builtin/matrix-dark.json";
 import { getTerminalAnsiTheme } from "@/components/terminal/terminalTheme";
 

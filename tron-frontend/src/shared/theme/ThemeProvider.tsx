@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { applySystemFontSize, defaultSystemFontSize, isSystemFontSize, readStoredSystemFontSize, systemFontSizeStorageKey } from "@/shared/lib/systemFontSize";
 import { useAuthStore } from "@/store/authStore";
 import { skinApi } from "./skinApi";
@@ -14,7 +14,23 @@ import type { Skin } from "./Skin";
 import light from "./builtin/light.json";
 import matrix from "./builtin/matrix-dark.json";
 
-import particles from "./builtin/matrix-particles.json";
+import legacyParticles from "./migrations/matrix-particles.json";
+import { BackgroundLayer } from "./BackgroundLayer";
+import {
+  defaultBackgroundEffectSettings,
+  deleteBackgroundImage,
+  hasStoredBackgroundEffectSettings,
+  normalizeBackgroundEffectSettings,
+  normalizeBackgroundImageSettings,
+  readBackgroundEffectSettings,
+  readBackgroundImage,
+  readBackgroundImageSettings,
+  saveBackgroundImage,
+  writeBackgroundEffectSettings,
+  writeBackgroundImageSettings,
+  type BackgroundEffectSettings,
+  type BackgroundImageSettings,
+} from "./backgroundPreferences";
 
 export type AppTheme = "light" | "matrix-dark";
 export type TypingEffect = "off" | "particles" | "glow" | "ripple";
@@ -56,7 +72,7 @@ function readTypingParticleSettings(): TypingParticleSettings {
     return defaultTypingParticleSettings;
   }
 }
-const builtins = [light, matrix, particles] as Skin[];
+const builtins = [light, matrix] as Skin[];
 interface ThemeContextValue {
   fontSize: number;
   setFontSize: (size: number) => void;
@@ -68,6 +84,13 @@ interface ThemeContextValue {
   setAgentReplySpeed: (speed: number) => void;
   typingParticleSettings: TypingParticleSettings;
   setTypingParticleSettings: (settings: TypingParticleSettings) => void;
+  backgroundEffectSettings: BackgroundEffectSettings;
+  setBackgroundEffectSettings: (settings: BackgroundEffectSettings) => void;
+  backgroundImageSettings: BackgroundImageSettings;
+  setBackgroundImageSettings: (settings: BackgroundImageSettings) => void;
+  backgroundImageUrl: string | null;
+  setBackgroundImage: (image: File) => Promise<void>;
+  clearBackgroundImage: () => Promise<void>;
   theme: AppTheme;
   activeSkin: Skin;
   skins: Skin[];
@@ -96,6 +119,15 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [agentReplyEffect, setAgentReplyEffect] = useState<AgentReplyEffect>(readAgentReplyEffect);
   const [agentReplySpeed, setAgentReplySpeed] = useState(readAgentReplySpeed);
   const [typingParticleSettings, setTypingParticleSettings] = useState<TypingParticleSettings>(readTypingParticleSettings);
+  const [backgroundEffectSettings, setBackgroundEffectSettings] = useState<BackgroundEffectSettings>(
+    () => readBackgroundEffectSettings(localStorage),
+  );
+  const [backgroundImageSettings, setBackgroundImageSettings] = useState<BackgroundImageSettings>(
+    () => readBackgroundImageSettings(localStorage),
+  );
+  const [backgroundImage, setBackgroundImageBlob] = useState<Blob | null>(null);
+  const [backgroundImageUrl, setBackgroundImageUrl] = useState<string | null>(null);
+  const hasExplicitBackgroundEffectSettings = useRef(hasStoredBackgroundEffectSettings(localStorage));
   const applied = useRef<PreparedSkin | null>(null);
   const activeSignature = useRef<string | null>(null);
   const generation = useRef(0);
@@ -118,6 +150,21 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     applied.current?.apply();
   }, []);
 
+  const inheritLegacyParticleEffect = useCallback((skin: Skin) => {
+    if (hasExplicitBackgroundEffectSettings.current) return;
+    hasExplicitBackgroundEffectSettings.current = true;
+    const color = skin.colors["--color-on-surface"];
+    const settings = normalizeBackgroundEffectSettings({
+      ...defaultBackgroundEffectSettings,
+      effect: "particles",
+      color: typeof color === "string" && /^#[\da-f]{6}$/i.test(color)
+        ? color
+        : defaultBackgroundEffectSettings.color,
+    });
+    writeBackgroundEffectSettings(localStorage, settings);
+    setBackgroundEffectSettings(settings);
+  }, []);
+
   const commit = useCallback((skin: Skin, prepared: PreparedSkin) => {
     applied.current?.dispose();
     prepared.apply();
@@ -136,10 +183,18 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     const request = ++generation.current;
     let prepared: PreparedSkin | undefined;
     try {
-      const [list, { skin }] = await Promise.all([skinApi.list(), skinApi.active()]);
+      const [list, { skin: active }] = await Promise.all([skinApi.list(), skinApi.active()]);
       if (request !== generation.current) return;
       // Keep recovery choices available even when the active skin's assets fail.
-      setSkins(list);
+      setSkins(list.filter((item) => item.id !== legacyParticles.id));
+      let skin = active;
+      if (skin.id === legacyParticles.id) {
+        inheritLegacyParticleEffect(skin);
+        const replacement = list.find((item) => item.id === "matrix-dark") ?? matrix as Skin;
+        await skinApi.activate(replacement.id);
+        if (request !== generation.current) return;
+        skin = replacement;
+      }
       if (JSON.stringify(skin) !== activeSignature.current) prepared = await prepareSkin(skin);
       if (request !== generation.current) { prepared?.dispose(); return; }
       if (prepared) { stopPreviewSkin(); commit(skin, prepared); }
@@ -149,7 +204,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     } finally {
       if (request === generation.current) setLoading(false);
     }
-  }, [commit, stopPreviewSkin]);
+  }, [commit, inheritLegacyParticleEffect, stopPreviewSkin]);
 
   useEffect(() => {
     if (status !== "authenticated") { setLoading(false); return; }
@@ -279,6 +334,58 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(agentReplySpeedStorageKey, String(agentReplySpeed));
   }, [agentReplyEffect, agentReplySpeed]);
 
+  useEffect(() => {
+    if (hasExplicitBackgroundEffectSettings.current) {
+      writeBackgroundEffectSettings(localStorage, backgroundEffectSettings);
+    }
+  }, [backgroundEffectSettings]);
+
+  useEffect(() => {
+    writeBackgroundImageSettings(localStorage, backgroundImageSettings);
+  }, [backgroundImageSettings]);
+
+  useEffect(() => {
+    let current = true;
+    void readBackgroundImage().then((image) => {
+      if (current) setBackgroundImageBlob(image);
+    }).catch(() => {
+      if (current) setBackgroundImageBlob(null);
+    });
+    return () => { current = false; };
+  }, []);
+
+  useEffect(() => {
+    if (!backgroundImage) {
+      setBackgroundImageUrl(null);
+      return;
+    }
+    const url = URL.createObjectURL(backgroundImage);
+    setBackgroundImageUrl(url);
+    return () => URL.revokeObjectURL(url);
+  }, [backgroundImage]);
+
+  const normalizedBackgroundImageSettings = useMemo(
+    () => normalizeBackgroundImageSettings(backgroundImageSettings),
+    [backgroundImageSettings],
+  );
+
+  const updateBackgroundEffectSettings = useCallback((settings: BackgroundEffectSettings) => {
+    hasExplicitBackgroundEffectSettings.current = true;
+    setBackgroundEffectSettings(normalizeBackgroundEffectSettings(settings));
+  }, []);
+
+  const setBackgroundImage = useCallback(async (image: File) => {
+    await saveBackgroundImage(image);
+    setBackgroundImageBlob(image);
+    setBackgroundImageSettings((current) => normalizeBackgroundImageSettings({ ...current, fileName: image.name }));
+  }, []);
+
+  const clearBackgroundImage = useCallback(async () => {
+    await deleteBackgroundImage();
+    setBackgroundImageBlob(null);
+    setBackgroundImageSettings((current) => normalizeBackgroundImageSettings({ ...current, fileName: null }));
+  }, []);
+
   return <ThemeContext.Provider value={{
     fontSize, setFontSize: (size) => { if (isSystemFontSize(size)) setFontSize(size); },
     typingEffect, setTypingEffect: (effect) => {
@@ -298,9 +405,23 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
       size: Math.min(8, Math.max(1, settings.size)),
       speed: Math.min(3, Math.max(0.5, settings.speed)),
     }),
+    backgroundEffectSettings,
+    setBackgroundEffectSettings: updateBackgroundEffectSettings,
+    backgroundImageSettings: normalizedBackgroundImageSettings,
+    setBackgroundImageSettings: (settings) => setBackgroundImageSettings(normalizeBackgroundImageSettings(settings)),
+    backgroundImageUrl,
+    setBackgroundImage,
+    clearBackgroundImage,
     theme: activeSkin.mode === "Dark" ? "matrix-dark" : "light", activeSkin, skins,
     loading, error, refreshSkins, selectSkin, importSkin, installMarketSkin, uninstallSkin, previewSkin, stopPreviewSkin, previewSkinId,
-  }}>{children}</ThemeContext.Provider>;
+  }}>
+    <BackgroundLayer
+      effectSettings={backgroundEffectSettings}
+      imageSettings={normalizedBackgroundImageSettings}
+      imageUrl={backgroundImageUrl}
+    />
+    {children}
+  </ThemeContext.Provider>;
 }
 export function useTheme() {
   const context = useContext(ThemeContext);

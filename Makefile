@@ -176,6 +176,7 @@ FRONTEND_API_DATA_SOURCE_ASSIGNMENTS := \
 HOST_EXE_SUFFIX := $(if $(filter Windows_NT,$(OS)),.exe,)
 BACKEND_RELEASE_BINARY := tron-backend$(HOST_EXE_SUFFIX)
 BACKEND_RELEASE_PATH := $(BACKEND_DIR)/target/release/$(BACKEND_RELEASE_BINARY)
+BACKEND_DEBUG_PATH := $(BACKEND_DIR)/target/debug/$(BACKEND_RELEASE_BINARY)
 DESKTOP_SIDECAR_PATH := $(ELECTRON_DIR)/resources/binaries/$(BACKEND_RELEASE_BINARY)
 ELECTRON_NPM := $(NPM)
 NODE ?= node
@@ -400,9 +401,20 @@ desktop-build: desktop-clean web-build
 endif
 
 .PHONY: desktop-dev
-desktop-dev:
-	$(MAKE) install
-	$(MAKE) desktop-build
+desktop-dev: install
+	$(MAKE) web-build
+	$(call REMOVE,$(ELECTRON_DIR)/resources/frontend)
+	$(call MKDIR,$(ELECTRON_DIR)/resources/frontend)
+	$(call COPY_TREE,$(BACKEND_FRONTEND_DIR),$(ELECTRON_DIR)/resources/frontend)
+	cp -- "$(BACKEND_DIR)/application.yaml" "$(ELECTRON_DIR)/resources/application.yaml"
+	$(call MKDIR,$(ELECTRON_DIR)/resources/binaries)
+	$(NODE) "$(ELECTRON_DIR)/scripts/write-update-config.cjs" "$(ELECTRON_DIR)/resources/update-config.json"
+	$(call COPY_TREE,$(BACKEND_DIR)/resources/native,$(ELECTRON_DIR)/resources/native)
+	$(CARGO) build --manifest-path "$(BACKEND_MANIFEST)" --bin tron-backend
+	test -f "$(BACKEND_DEBUG_PATH)"
+	cp -- "$(BACKEND_DEBUG_PATH)" "$(DESKTOP_SIDECAR_PATH)"
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(ELECTRON_NPM) install))
+	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_INSTALL_ENV),$(ELECTRON_NPM) run -s ensure-electron))
 	$(call RUN_IN_DIR,$(ELECTRON_DIR),$(call RUN_WITH_ENV,$(ELECTRON_DEV_ENV),$(NPM) run -s dev))
 
 .PHONY: desktop-test

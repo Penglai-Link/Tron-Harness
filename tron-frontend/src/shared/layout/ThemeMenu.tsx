@@ -17,8 +17,7 @@ export function ThemeMenu() {
   const toast = useToast();
 
   const label = (skin: typeof activeSkin) => skin.id === "light" ? t("shell:theme.options.light")
-    : skin.id === "matrix-dark" ? t("shell:theme.options.matrixDark")
-    : skin.id === "matrix-particles" ? t("shell:theme.options.matrixParticles") : skin.name;
+    : skin.id === "matrix-dark" ? t("shell:theme.options.matrixDark") : skin.name;
 
   async function select(id: string) {
     try { await selectSkin(id); }
