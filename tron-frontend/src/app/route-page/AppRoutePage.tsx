@@ -27,7 +27,6 @@ import { consoleNavigationItems, resolveActiveItem } from "./ConsoleFallbackRout
 
 function usesInPlaceSearch(pageId?: string) {
   return (
-    pageId === "chats.index" ||
     pageId === "resources.detail" ||
     pageId === "settings.resourcesDetail"
   );

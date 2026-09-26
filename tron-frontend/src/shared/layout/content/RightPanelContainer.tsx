@@ -121,7 +121,8 @@ const RightPanelTabs = memo(function RightPanelTabs({
 
   const fileTabKeys = useFileTabsStore((state) => state.fileTabKeys);
   const fileTabLabels = useFileTabsStore((state) => state.fileTabLabels);
-  const activeFileTabKey = useFileTabsStore((state) => state.activeFileTabKey);
+  const fileTabOwners = useFileTabsStore((state) => state.fileTabOwners);
+  const activeFileTabKey = useFileTabsStore((state) => state.activeKeysByOwner[tab.tabId] ?? null);
   const openFileTab = useFileTabsStore((state) => state.openFileTab);
   const closeFileTab = useFileTabsStore((state) => state.closeFileTab);
   const setActiveFileTab = useFileTabsStore((state) => state.setActiveFileTab);
@@ -129,7 +130,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
   const filesTabs = useMemo<EditableTab[]>(() => {
     if (!isDesktop) return [];
 
-    return fileTabKeys.map((key) => ({
+    return fileTabKeys.filter((key) => fileTabOwners[key] === tab.tabId).map((key) => ({
       key,
       label: fileTabLabels[key] || t("files.panelTitle"),
       labelClassName: "max-w-[100px]",
@@ -137,7 +138,7 @@ const RightPanelTabs = memo(function RightPanelTabs({
       // 实际内容由全局 FilePanelHost 渲染，这里仅作为 tab 标签占位。
       children: <div className="h-full w-full" />,
     }));
-  }, [fileTabKeys, fileTabLabels, isDesktop, t]);
+  }, [fileTabKeys, fileTabLabels, fileTabOwners, tab.tabId, isDesktop, t]);
 
   const createWebTab = useCallback((): EditableTab => {
     const id = nextTabId.current++;
@@ -151,12 +152,13 @@ const RightPanelTabs = memo(function RightPanelTabs({
       closable: true,
       children: null,
     };
+    setActiveFileTab(null, tab.tabId);
     openRightPanelTab(tab.tabId, newTab);
     return newTab;
-  }, [openRightPanelTab, ownerKey, t, tab.tabId]);
+  }, [openRightPanelTab, ownerKey, setActiveFileTab, t, tab.tabId]);
 
   const handleOpenFileTab = useCallback(() => {
-    openFileTab();
+    openFileTab(tab.tabId);
     updateRightPanelState(tab.tabId, { open: true });
   }, [openFileTab, tab.tabId, updateRightPanelState]);
 
@@ -247,9 +249,9 @@ const RightPanelTabs = memo(function RightPanelTabs({
       onChange={(key) => {
         if (!key) return;
         if (key.startsWith(FILE_TAB_KEY_PREFIX)) {
-          setActiveFileTab(key);
+          setActiveFileTab(key, tab.tabId);
         } else {
-          setActiveFileTab(null);
+          setActiveFileTab(null, tab.tabId);
           setRightPanelActiveKey(tab.tabId, key);
         }
       }}

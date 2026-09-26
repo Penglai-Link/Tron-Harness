@@ -1,5 +1,5 @@
+import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
 import {
-  defaultFloatingState,
   createMockChatAdapter,
   normalizeChatSession,
   readFloatingState,
@@ -39,7 +39,6 @@ interface MainAgentChatWindowProps {
   onWindowStateChange?: (state: ChatFloatingState) => void;
 }
 
-const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 const MAIN_AGENT_SESSION_STORAGE_PREFIX = "tron.main-agent.session";
 const pendingMainAgentSessions = new Map<string, Promise<ChatSession>>();
 
@@ -121,7 +120,7 @@ export function MainAgentChatWindow({
   const controlledWindowState = Boolean(windowState && onWindowStateChange);
   const [localWindowState, setLocalWindowState] = useState<ChatFloatingState>(
     () =>
-      readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultFloatingState),
+      readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultMainAgentWindowState),
   );
   const resolvedWindowState = controlledWindowState
     ? (windowState as ChatFloatingState)

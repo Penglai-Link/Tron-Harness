@@ -12,11 +12,17 @@ import { useTranslation } from "react-i18next";
 
 import { FileTabCoordinatorProvider } from "@/components/files/FileTabCoordinator";
 import { useFileTabsStore } from "@/store/fileTabsStore";
+import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import { cn } from "@/lib/utils";
 
 const FilePanel = lazy(() =>
   import("@/components/files/FilePanel").then((module) => ({ default: module.FilePanel })),
 );
+
+function canReuseFileTab(tabKey: string, sourceTabKey: string) {
+  const owners = useFileTabsStore.getState().fileTabOwners;
+  return owners[tabKey] === owners[sourceTabKey];
+}
 
 const FilePanelMountContext = createContext<
   (element: HTMLElement | null) => void
@@ -30,7 +36,8 @@ export function useFilePanelTarget() {
 function FilePanelHost() {
   const { t } = useTranslation("common");
   const fileTabKeys = useFileTabsStore((state) => state.fileTabKeys);
-  const activeFileTabKey = useFileTabsStore((state) => state.activeFileTabKey);
+  const owner = useTabStore((state) => state.activeTabId ?? DEFAULT_TAB_ID);
+  const activeFileTabKey = useFileTabsStore((state) => state.activeKeysByOwner[owner] ?? null);
 
   if (!fileTabKeys.length) return null;
 
@@ -111,7 +118,7 @@ export function FilePanelHostProvider({ children }: { children: ReactNode }) {
   return (
     <FilePanelMountContext.Provider value={mountFilePanel}>
       {children}
-      <FileTabCoordinatorProvider onFocusTab={setActiveFileTab}>
+      <FileTabCoordinatorProvider onFocusTab={setActiveFileTab} canReuseTab={canReuseFileTab}>
         {createPortal(<FilePanelHost />, container)}
       </FileTabCoordinatorProvider>
     </FilePanelMountContext.Provider>

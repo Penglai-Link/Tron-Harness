@@ -62,6 +62,7 @@ const emptyRegistry: TabPanelRegistryValue = {
 
 const TabPanelRegistryContext =
   createContext<TabPanelRegistryValue>(emptyRegistry);
+const TabPanelRegistrationContext = createContext(emptyRegistry.register);
 const TabPanelScopeContext = createContext<string | null>(null);
 
 interface TabPanelRegistryProviderProps {
@@ -312,7 +313,9 @@ function TabPanelRegistryRoot({ children }: { children: ReactNode }) {
 
   return (
     <TabPanelRegistryContext.Provider value={value}>
-      {children}
+      <TabPanelRegistrationContext.Provider value={register}>
+        {children}
+      </TabPanelRegistrationContext.Provider>
     </TabPanelRegistryContext.Provider>
   );
 }
@@ -335,14 +338,17 @@ function TabPanelRegistryScope({
   );
 }
 
+export function useTabPanelScopeId() {
+  return useContext(TabPanelScopeContext) ?? DEFAULT_TAB_ID;
+}
+
 export function useTabPanelRegistry() {
   return useContext(TabPanelRegistryContext);
 }
 
 export function useTabPanelConfig(config: TabPanelConfig) {
-  const registry = useTabPanelRegistry();
+  const register = useContext(TabPanelRegistrationContext);
   const scopeTabId = useContext(TabPanelScopeContext) ?? DEFAULT_TAB_ID;
-  const register = registry.register;
 
   useEffect(() => {
     if (scopeTabId) {

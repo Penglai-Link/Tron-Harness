@@ -93,7 +93,7 @@ export function usePanel({
         const shouldCollapse = panelSize.inPixels < collapseThreshold
         panelCollapseRequestedRef.current = shouldCollapse
 
-        if (panelSize.inPixels >= collapseThreshold) {
+        if (panelDraggingRef.current && panelSize.inPixels >= collapseThreshold) {
             onSizeChangeRef.current?.(panelSize.inPixels)
         }
 

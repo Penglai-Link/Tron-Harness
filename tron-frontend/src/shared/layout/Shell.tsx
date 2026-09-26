@@ -1,3 +1,4 @@
+import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
 import { LocaleMenu } from "./LocaleMenu";
 import { ThemeMenu } from "./ThemeMenu";
 import { CheckinButton } from "@/domain/auth/components/CheckinButton";
@@ -15,7 +16,6 @@ import {
 } from "react";
 
 import {
-  defaultFloatingState,
   readFloatingState,
   writeFloatingState,
   type ChatFloatingState,
@@ -58,7 +58,7 @@ import {
   findWorkspaceNodePath,
   type WorkspaceTreeNode,
 } from "@/shared/lib/workspaceTree";
-import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
+import { useCreateChatTab } from "./chat/hooks/useCreateChatTab";
 import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { cn } from "@/shared/lib/utils";
 import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
@@ -98,7 +98,6 @@ const TronShellFrameContext = createContext(false);
 
 type WorkspaceSwitcherTreeNode = WorkspaceTreeNode<WorkspaceSwitcherData["secondarySpaces"][number]>;
 
-const MAIN_AGENT_WINDOW_STORAGE_KEY = "tron.main-agent.window";
 const PERSON_AI_WEBSITE_URL = "https://personai.chat/person-ai-index/user/home/usage";
 
 export function useOpenRightSidebar() {
@@ -267,7 +266,7 @@ export function TronShell({
   const [workspaceSwitcherLoading, setWorkspaceSwitcherLoading] = useState(false);
   const [navigationLoading, setNavigationLoading] = useState(false);
   const [mainAgentWindowState, setMainAgentWindowState] = useState<ChatFloatingState>(() => ({
-    ...readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultFloatingState),
+    ...readFloatingState(MAIN_AGENT_WINDOW_STORAGE_KEY, defaultMainAgentWindowState),
     open: false,
   }));
   const [mainAgentPageContext, setMainAgentPageContext] = useState<{
@@ -412,6 +411,7 @@ export function TronShell({
     ? compactWorkspacePath(selectedWorkspaceNode.label)
     : selectedPrimarySpace?.name ?? t("shell:utilityPanel.workspace");
   const activeWorkspaceCode = effectiveSecondarySpaceId || effectivePrimarySpaceId;
+  const { create: createChatTab } = useCreateChatTab(activeWorkspaceCode);
   const workspaceTree = useMemo(
     () => buildWorkspaceTree(workspaceSwitcher.secondarySpaces),
     [workspaceSwitcher.secondarySpaces],
@@ -757,8 +757,7 @@ export function TronShell({
     closeOtherTabs: () => closeVisibleTabs(true),
     nextTab: () => activateAdjacentTab(1),
     newSession: () => {
-      if (pathname !== "/chats" && !pathname.startsWith("/chats/")) return false;
-      window.dispatchEvent(new Event(CREATE_CHAT_SESSION_SHORTCUT_EVENT));
+      void createChatTab();
     },
     previousTab: () => activateAdjacentTab(-1),
     toggleAgentWindow: () => handleAgentLauncherClick(),

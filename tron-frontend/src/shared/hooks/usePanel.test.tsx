@@ -97,3 +97,14 @@ describe("usePanel", () => {
     expect(result.current.panelOpen).toBe(true);
   });
 });
+
+it("does not save transient layout sizes while restoring a different session", () => {
+  const onSizeChange = vi.fn();
+  const { result, rerender } = renderHook(
+    ({ resetKey, initialSize }) => usePanel({ open: true, resetKey, initialSize, onSizeChange }),
+    { initialProps: { resetKey: "a", initialSize: 620 } },
+  );
+  rerender({ resetKey: "b", initialSize: 440 });
+  act(() => result.current.panelResize({ inPixels: 620 } as PanelSize));
+  expect(onSizeChange).not.toHaveBeenCalled();
+});

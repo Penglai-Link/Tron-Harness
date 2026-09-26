@@ -27,7 +27,10 @@ vi.mock("@/router/routes", () => ({
   appRoutes: [{ route: "/chats", pageId: "chats.index", title: "Chats" }],
 }));
 vi.mock("@/router/pageRegistry", () => ({
-  routePages: { "chats.index": () => <main>Session content</main> },
+  routePages: { "chats.index": () => {
+    const location = useLocation();
+    return <main data-session={location.search}>Session content</main>;
+  } },
 }));
 
 const sessionPath = "/chats?sessionCode=session-one";
@@ -70,4 +73,23 @@ it("restores content when reopening the last closed session at the same URL", as
     await screen.findByText("Session content");
     expect(useTabStore.getState().cachedTabsList).toHaveLength(1);
   }
+});
+
+it("never injects another session location into a cached chat while switching", async () => {
+  const secondPath = "/chats?sessionCode=session-two";
+  render(<MemoryRouter initialEntries={[sessionPath]}>
+    <Link to={secondPath}>Second session</Link>
+    <Link to={sessionPath}>First session</Link>
+    <AppRoutePage />
+  </MemoryRouter>);
+  await screen.findByText("Session content");
+  fireEvent.click(screen.getByText("Second session"));
+  await waitFor(() => expect(screen.getAllByText("Session content")).toHaveLength(2));
+  const contents = screen.getAllByText("Session content");
+  expect(contents.map((node) => node.getAttribute("data-session"))).toEqual([
+    "?sessionCode=session-one", "?sessionCode=session-two",
+  ]);
+  fireEvent.click(screen.getByText("First session"));
+  await waitFor(() => expect(contents[0].closest("[hidden]")).toBeNull());
+  expect(contents[1].getAttribute("data-session")).toBe("?sessionCode=session-two");
 });

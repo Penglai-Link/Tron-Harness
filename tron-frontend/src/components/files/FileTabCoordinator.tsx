@@ -29,11 +29,13 @@ export function useFileTabCoordinator(): FileTabCoordinatorValue | null {
 
 interface FileTabCoordinatorProviderProps {
   onFocusTab: (tabKey: string) => void;
+  canReuseTab?: (tabKey: string, sourceTabKey: string) => boolean;
   children: ReactNode;
 }
 
 export function FileTabCoordinatorProvider({
   onFocusTab,
+  canReuseTab,
   children,
 }: FileTabCoordinatorProviderProps) {
   const [activeFiles, setActiveFiles] = useState<Record<string, string>>({});
@@ -42,11 +44,11 @@ export function FileTabCoordinatorProvider({
   const findFileTab = useCallback(
     (fileKey: string, excludeTabKey: string) => {
       for (const [tabKey, activeFile] of Object.entries(activeFiles)) {
-        if (tabKey !== excludeTabKey && activeFile === fileKey) return tabKey;
+        if (tabKey !== excludeTabKey && activeFile === fileKey && (!canReuseTab || canReuseTab(tabKey, excludeTabKey))) return tabKey;
       }
       return null;
     },
-    [activeFiles],
+    [activeFiles, canReuseTab],
   );
 
   const setActiveFile = useCallback((tabKey: string, fileKey: string | null) => {
@@ -61,11 +63,11 @@ export function FileTabCoordinatorProvider({
   const findRootTab = useCallback(
     (rootPath: string, excludeTabKey: string) => {
       for (const [tabKey, activeRoot] of Object.entries(activeRoots)) {
-        if (tabKey !== excludeTabKey && activeRoot === rootPath) return tabKey;
+        if (tabKey !== excludeTabKey && activeRoot === rootPath && (!canReuseTab || canReuseTab(tabKey, excludeTabKey))) return tabKey;
       }
       return null;
     },
-    [activeRoots],
+    [activeRoots, canReuseTab],
   );
 
   const setActiveRoot = useCallback((tabKey: string, rootPath: string | null) => {

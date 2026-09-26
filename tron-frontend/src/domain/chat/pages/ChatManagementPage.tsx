@@ -1,3 +1,4 @@
+import { useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
 import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
 import { openAgentTerminalFromLiveResult } from "../terminal/store";
 import { SessionApplicationsPanel } from "@/domain/chat/components/SessionApplicationsPanel";
@@ -65,7 +66,6 @@ import { useToast } from "@/components/ui/toast";
 import { MarkdownLink } from "@/components/markdown-link";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { cn } from "@/shared/lib/utils";
-import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcuts";
 import {
   archiveChatSession,
   createChatSession,
@@ -279,10 +279,6 @@ const defaultChatSessionSourceTab: ChatSessionSourceTab = "chat";
 const chatSessionSourceTabStorageKey = "tron.chat.activeSourceTab";
 const emptyLiveAguiEvents: ChatAguiStreamEvent[] = [];
 const emptyLiveAguiAnchorMessageCodes: Record<string, string> = {};
-
-function isChatManagementPathname(pathname: string) {
-  return pathname === "/chats" || pathname.startsWith("/chats/");
-}
 
 function ChatAttachmentChip({
   attachment,
@@ -4917,14 +4913,11 @@ function AguiWaitingForModelRail() {
 }
 
 export function ChatManagementPage() {
+  const scopeTabId = useTabPanelScopeId();
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
   const routerSearchText = searchParams.toString();
-  const [currentSearchText, setCurrentSearchText] = useState(() => (
-    typeof window === "undefined"
-      ? routerSearchText
-      : window.location.search.replace(/^\?/, "")
-  ));
+  const [currentSearchText, setCurrentSearchText] = useState(routerSearchText);
   const currentSearchParams = useMemo(() => new URLSearchParams(currentSearchText), [currentSearchText]);
   const requestedSessionCode = currentSearchParams.get("sessionCode")?.trim() ?? "";
   const requestedSourceTab = parseChatSessionSourceTab(currentSearchParams.get("sourceTab"));
@@ -5431,13 +5424,9 @@ export function ChatManagementPage() {
   const handleInspectionConfirmForRightPanel = useStableCallback(handleInspectionConfirm);
 
   const replaceChatSearchParams = useCallback((update: (next: URLSearchParams) => void) => {
-    const currentPathname = typeof window === "undefined" ? "/chats" : window.location.pathname;
-    const currentSearch = typeof window === "undefined"
-      ? currentSearchText
-      : window.location.search.replace(/^\?/, "");
-    if (!isChatManagementPathname(currentPathname)) {
-      return;
-    }
+    if (useTabStore.getState().activeTabId !== scopeTabId) return;
+    const currentPathname = "/chats";
+    const currentSearch = currentSearchText;
     const next = new URLSearchParams(currentSearch);
     update(next);
     const nextSearch = next.toString();
@@ -5447,18 +5436,12 @@ export function ChatManagementPage() {
     }
     setCurrentSearchText(nextSearch);
     navigate(`${currentPathname}${nextSearch ? `?${nextSearch}` : ""}`, { replace: true });
-  }, [currentSearchText, navigate]);
+  }, [currentSearchText, navigate, scopeTabId]);
 
   useEffect(() => {
     setCurrentSearchText(routerSearchText);
   }, [routerSearchText]);
 
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const syncCurrentSearch = () => setCurrentSearchText(window.location.search.replace(/^\?/, ""));
-    window.addEventListener("popstate", syncCurrentSearch);
-    return () => window.removeEventListener("popstate", syncCurrentSearch);
-  }, []);
 
   function scrollToLatestMessage(behavior: ScrollBehavior = "auto") {
     if (scrollFrameRef.current !== null) window.cancelAnimationFrame(scrollFrameRef.current);
@@ -6206,7 +6189,7 @@ export function ChatManagementPage() {
   useTabPanelConfig({
     onPageInspectionConfirm: handleInspectionConfirmForRightPanel,
     rightPanelTabs,
-    rightPanelBrowserOnly: true,
+    rightPanelBrowserOnly: false,
     rightPanelLabel: t("chat.shortTermMemory.workspaceTab"),
   });
 
@@ -7356,17 +7339,6 @@ export function ChatManagementPage() {
     }
   }
 
-  useEffect(() => {
-    const handleShortcut = () => {
-      void handleCreateSession();
-    };
-
-    window.addEventListener(CREATE_CHAT_SESSION_SHORTCUT_EVENT, handleShortcut);
-    return () => window.removeEventListener(
-      CREATE_CHAT_SESSION_SHORTCUT_EVENT,
-      handleShortcut,
-    );
-  }, [handleCreateSession]);
 
   async function handleArchiveSession(session: ChatSession) {
     const returnSourceTab = requestedSourceTab ?? activeSourceTab;
