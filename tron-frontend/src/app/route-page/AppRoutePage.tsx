@@ -96,7 +96,7 @@ function CachedRouteLocationProvider({
 }
 
 export default function AppRoutePage() {
-  const { pathname, search } = useLocation();
+  const { pathname, search, key: locationKey } = useLocation();
   const { t } = useTranslation();
   const chatSessionCode =
     pathname === "/chats"
@@ -243,6 +243,8 @@ export default function AppRoutePage() {
   }, [
     pathname,
     search,
+    // 关闭最后一个标签页会保留 URL；同地址再次导航也需要重建页面缓存。
+    locationKey,
     resolved?.route.pageId,
   ]);
 
