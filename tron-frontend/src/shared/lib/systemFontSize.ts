@@ -1,4 +1,4 @@
-export const defaultSystemFontSize = 16;
+export const defaultSystemFontSize = 14;
 export const minimumSystemFontSize = 12;
 export const maximumSystemFontSize = 20;
 export const systemFontSizeStorageKey = "tron.systemFontSize";

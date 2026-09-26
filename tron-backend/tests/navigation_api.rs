@@ -443,7 +443,6 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         "SERVER_ACCOUNT_MANAGEMENT",
         "RESOURCE_MANAGEMENT",
         "VARIABLES",
-        "OBSERVABILITY",
         "DATA",
     ] {
         let response = request_json(
@@ -485,7 +484,7 @@ async fn default_menu_tree_can_be_restored_after_all_assignments_are_removed() {
         restore_payload["data"]["restoredDomainCodes"],
         json!(["ADVANCED", "CHAT_PANEL"])
     );
-    assert_eq!(restore_payload["data"]["restoredItemCount"], 25);
+    assert_eq!(restore_payload["data"]["restoredItemCount"], 24);
 
     let restored_tree = request_json(
         &router,

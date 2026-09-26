@@ -7,7 +7,6 @@ import {
   DatabaseZap,
   Folder,
   FolderGit2,
-  Gauge,
   KeyRound,
   MessageSquareText,
   Network,
@@ -85,7 +84,6 @@ export const tronNavigation: TronNavSection[] = [
         ],
       },
       { label: "Variables", href: "/variables", icon: KeyRound, translationKey: "shell:nav.items.variables" },
-      { label: "Observability", href: "/observability", icon: Gauge, translationKey: "shell:nav.items.observability" },
     ],
   },
 ];

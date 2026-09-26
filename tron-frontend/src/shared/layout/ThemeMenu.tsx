@@ -16,6 +16,10 @@ export function ThemeMenu() {
   const { skins, activeSkin, loading, selectSkin } = useTheme();
   const toast = useToast();
 
+  const label = (skin: typeof activeSkin) => skin.id === "light" ? t("shell:theme.options.light")
+    : skin.id === "matrix-dark" ? t("shell:theme.options.matrixDark")
+    : skin.id === "matrix-particles" ? t("shell:theme.options.matrixParticles") : skin.name;
+
   async function select(id: string) {
     try { await selectSkin(id); }
     catch (reason) {
@@ -25,17 +29,17 @@ export function ThemeMenu() {
 
   return (
     <DropdownMenu modal={false}>
-      <DropdownMenuTrigger render={<Button variant="ghost" className="w-full justify-start" />}>
+      <DropdownMenuTrigger render={<Button variant="ghost" className="h-9 w-full min-w-0 justify-start gap-2 px-2.5" />}>
         <Palette aria-hidden="true" />
-        <span>{t("shell:theme.label")}</span>
-        <ChevronRight aria-hidden="true" className="ml-auto" />
+        <span className="shrink-0">{t("shell:theme.label")}</span>
+        <span className="ml-auto min-w-0 truncate text-xs text-muted-foreground" title={label(activeSkin)}>{label(activeSkin)}</span>
+        <ChevronRight aria-hidden="true" className="size-3.5 shrink-0" />
       </DropdownMenuTrigger>
       <DropdownMenuContent data-tron-theme-menu side="right" align="end" sideOffset={8} className="w-56 max-w-[calc(100vw-2rem)]">
         <DropdownMenuRadioGroup value={activeSkin.id} onValueChange={(id) => void select(id)} aria-label={t("shell:theme.label")}>
           {skins.map((skin) => (
             <DropdownMenuRadioItem key={skin.id} value={skin.id} disabled={loading} closeOnClick={false} className="min-h-9 break-words">
-              {skin.id === "light" ? t("shell:theme.options.light")
-                : skin.id === "matrix-dark" ? t("shell:theme.options.matrixDark") : skin.name}
+              {label(skin)}
             </DropdownMenuRadioItem>
           ))}
         </DropdownMenuRadioGroup>

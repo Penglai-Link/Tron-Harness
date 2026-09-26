@@ -156,12 +156,6 @@ pub const DEFAULT_NAVIGATION_MENU_TREE_ITEMS: &[DefaultNavigationMenuTreeItem] =
         position: 5,
     },
     DefaultNavigationMenuTreeItem {
-        domain_code: "ADVANCED",
-        menu_code: "OBSERVABILITY",
-        parent_menu_code: Some("DATA"),
-        position: 6,
-    },
-    DefaultNavigationMenuTreeItem {
         domain_code: "CHAT_PANEL",
         menu_code: "CHAT_SESSIONS",
         parent_menu_code: None,

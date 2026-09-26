@@ -24,6 +24,9 @@ impl SqliteNavigationRepository {
         connection
             .execute_batch(NAVIGATION_MENU_TREES_MIGRATION)
             .map_err(|error| navigation_migration_error("generic menu trees", error))?;
+        connection
+            .execute_batch(REMOVE_OBSERVABILITY_NAVIGATION_MIGRATION)
+            .map_err(storage_error)?;
         Self::apply_child_display_migration(&connection)?;
         Ok(Self { connection })
     }

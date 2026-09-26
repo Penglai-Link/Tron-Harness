@@ -7,8 +7,10 @@ import type { Skin } from "./Skin";
 import light from "./builtin/light.json";
 import matrix from "./builtin/matrix-dark.json";
 
+import particles from "./builtin/matrix-particles.json";
+
 export type AppTheme = "light" | "matrix-dark";
-const builtins = [light, matrix] as Skin[];
+const builtins = [light, matrix, particles] as Skin[];
 interface ThemeContextValue {
   fontSize: number;
   setFontSize: (size: number) => void;
@@ -161,7 +163,7 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     }
   }
   async function uninstallSkin(id: string) {
-    if (mutation.current || id === "light" || id === "matrix-dark") return;
+    if (mutation.current || builtins.some((skin) => skin.id === id)) return;
     mutation.current = true;
     stopPreviewSkin();
     const request = ++generation.current;

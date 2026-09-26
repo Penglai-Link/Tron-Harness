@@ -159,3 +159,6 @@ pub(super) const PROJECT_CHAT_CONTEXT_MIGRATION: &str =
     include_str!("../../../../../migrations/20260911_0001_create_project_chat_context.sql");
 pub(super) const CHAT_SESSION_PROJECT_CODE_MIGRATION: &str =
     include_str!("../../../../../migrations/20260911_0002_add_chat_session_project_code.sql");
+
+pub(super) const REMOVE_OBSERVABILITY_NAVIGATION_MIGRATION: &str =
+    include_str!("../../../../../migrations/20260926_0001_remove_observability_navigation.sql");

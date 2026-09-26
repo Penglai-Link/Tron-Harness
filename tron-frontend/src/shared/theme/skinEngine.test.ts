@@ -5,15 +5,33 @@ import { mountEffectLayers } from "./effectLayers";
 import { prepareSkin, skinVariables } from "./skinEngine";
 import type { Skin } from "./Skin";
 import light from "./builtin/light.json";
+import particles from "./builtin/matrix-particles.json";
 import matrix from "./builtin/matrix-dark.json";
 import { getTerminalAnsiTheme } from "@/components/terminal/terminalTheme";
+
+vi.mock("@/components/particles-bg/particleAnimation", () => ({ animateParticles: vi.fn(() => vi.fn()) }));
 
 vi.mock("./skinApi", () => ({ skinApi: { resource: vi.fn(async () => new Blob(["font"])) } }));
 afterEach(() => { mountEffectLayers(new Set()); document.querySelectorAll("style[data-tron-skin], style[data-tron-skin-css]").forEach((style) => style.remove()); vi.unstubAllGlobals(); });
 const custom = (): Skin => ({ id: "test", name: "Test", version: 1, mode: "Light", colors: {}, layout: {}, resources: { background: null, font: null } });
 
 describe("skin runtime", () => {
-  it("accepts both bundled manifests", () => {
+  it("cleans up particles during preview, restore and disposal", async () => {
+    const active = await prepareSkin(particles as Skin);
+    const preview = await prepareSkin(light as Skin);
+    active.apply();
+    expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(1);
+    preview.apply();
+    expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(0);
+    preview.dispose();
+    active.apply();
+    active.apply();
+    expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(1);
+    active.dispose();
+    expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(0);
+  });
+  it("accepts all bundled manifests", () => {
+    expect(() => skinVariables(particles as Skin)).not.toThrow();
     expect(() => skinVariables(light as Skin)).not.toThrow();
     expect(() => skinVariables(matrix as Skin)).not.toThrow();
   });

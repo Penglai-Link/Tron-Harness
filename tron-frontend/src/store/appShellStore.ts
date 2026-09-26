@@ -45,11 +45,15 @@ interface AppShellState {
 
 const defaultWorkspaceSwitcherSnapshot = getEmptyWorkspaceSwitcher();
 
-function migrateAppShellState(persistedState: unknown) {
+function migrateAppShellState(persistedState: unknown, version: number) {
   if (!persistedState || typeof persistedState !== "object") {
     return persistedState;
   }
   const state = persistedState as Partial<AppShellState>;
+  if (version >= 8) return {
+    ...state,
+    shortcutBindings: migrateDefaultShellShortcutBindings(state.shortcutBindings),
+  };
 
   return {
     ...state,
@@ -123,7 +127,7 @@ export const useAppShellStore = create<AppShellState>()(
         })),
     }),
     {
-      version: 8,
+      version: 9,
       name: "tron-app-shell",
       migrate: migrateAppShellState,
       partialize: (state) => ({

@@ -6,6 +6,7 @@ import {
   formatShortcut,
   formatShortcutKeys,
   migrateDefaultShellShortcutBindings,
+  normalizeShellShortcutBindings,
   shellShortcutActions,
   shortcutFromKeyboardEvent,
   shortcutMatchesKeyboardEvent,
@@ -44,22 +45,36 @@ describe("keyboard shortcuts", () => {
     expect(shortcutMatchesKeyboardEvent(binding, keyboardEvent({ ctrlKey: true }))).toBe(false);
   });
 
-  it("ships the requested panel toggles with distinct defaults", () => {
+  it.each(["metaKey", "ctrlKey"] as const)("matches all defaults with %s", (modifier) => {
     const bindings = createDefaultShellShortcutBindings();
+    const expected = {
+      newSession: "N", toggleAgentWindow: "N", closeCurrentTab: "W",
+      previousTab: "H", nextTab: "L", closeAllTabs: "X", closeOtherTabs: "O",
+      toggleLeftSidebar: "ArrowLeft", toggleRightSidebar: "ArrowRight", toggleBottomPanel: "ArrowDown",
+    };
+    for (const action of shellShortcutActions) {
+      expect(findMatchingShellShortcutAction(bindings, keyboardEvent({
+        [modifier]: true, altKey: action !== "newSession", key: expected[action],
+      }))).toBe(action);
+    }
+    expect(formatShortcut(bindings.toggleBottomPanel)).toBe("Ctrl + Alt + ↓");
+    expect(formatShortcutKeys(bindings.toggleBottomPanel, true)).toEqual(["⌘", "⌥", "↓"]);
+  });
 
-    expect(bindings.newSession).toEqual({
-      altKey: true,
-      key: "N",
-      modKey: true,
-      shiftKey: false,
+  it("upgrades the previous defaults and fills formerly unassigned actions", () => {
+    const bindings = migrateDefaultShellShortcutBindings({
+      newSession: { altKey: true, key: "N", modKey: true, shiftKey: false },
+      toggleBottomPanel: { altKey: true, key: "K", modKey: true, shiftKey: false },
+      toggleLeftSidebar: { altKey: true, key: "U", modKey: true, shiftKey: false },
+      toggleRightSidebar: { altKey: true, key: "Y", modKey: true, shiftKey: false },
+      toggleAgentWindow: null, closeAllTabs: null, closeCurrentTab: null,
+      closeOtherTabs: null, previousTab: null, nextTab: null,
     });
-    expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, metaKey: true, key: "n" }))).toBe("newSession");
-    expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, ctrlKey: true, key: "n" }))).toBe("newSession");
-    expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, ctrlKey: true, key: "u" }))).toBe("toggleLeftSidebar");
-    expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, ctrlKey: true, key: "y" }))).toBe("toggleRightSidebar");
-    expect(findMatchingShellShortcutAction(bindings, keyboardEvent({ altKey: true, ctrlKey: true, key: "k" }))).toBe("toggleBottomPanel");
-    expect(formatShortcut(bindings.toggleBottomPanel)).toBe("Ctrl + Alt + K");
-    expect(formatShortcutKeys(bindings.toggleBottomPanel, true)).toEqual(["⌘", "⌥", "K"]);
+    expect(bindings).toEqual(createDefaultShellShortcutBindings());
+  });
+
+  it("keeps explicitly cleared shortcuts disabled during normalization", () => {
+    expect(normalizeShellShortcutBindings({ newSession: null }).newSession).toBeNull();
   });
 
   it("migrates built-in browser-reserved shortcuts but preserves custom bindings", () => {
@@ -81,23 +96,6 @@ describe("keyboard shortcuts", () => {
       modKey: true,
       shiftKey: true,
     });
-  });
-
-  it("exposes configurable Agent and workspace-tab actions without assigning destructive defaults", () => {
-    const bindings = createDefaultShellShortcutBindings();
-
-    expect(shellShortcutActions).toEqual(expect.arrayContaining([
-      "toggleAgentWindow",
-      "previousTab",
-      "nextTab",
-      "closeAllTabs",
-      "closeOtherTabs",
-    ]));
-    expect(bindings.toggleAgentWindow).toBeNull();
-    expect(bindings.previousTab).toBeNull();
-    expect(bindings.nextTab).toBeNull();
-    expect(bindings.closeAllTabs).toBeNull();
-    expect(bindings.closeOtherTabs).toBeNull();
   });
 
   it("does not expose the removed terminal action", () => {
@@ -123,16 +121,16 @@ describe("keyboard shortcuts", () => {
 
   it("matches default bindings via event.code when Mac Option produces special chars", () => {
     const bindings = createDefaultShellShortcutBindings();
-    // Cmd+Option+K on Mac: event.key may be a special character but event.code is "KeyK".
+    // Option+N emits a dead key; the physical key still identifies the Agent shortcut.
     const macEvent = keyboardEvent({
       altKey: true,
-      code: "KeyK",
+      code: "KeyN",
       ctrlKey: false,
-      key: "˚",
+      key: "Dead",
       metaKey: true,
     });
 
-    expect(findMatchingShellShortcutAction(bindings, macEvent)).toBe("toggleBottomPanel");
+    expect(findMatchingShellShortcutAction(bindings, macEvent)).toBe("toggleAgentWindow");
   });
 
   it("rejects dead keys when event.code is unavailable", () => {

@@ -333,14 +333,6 @@ export const appRoutes: AppRoute[] = [
     shellConfig: { searchPlaceholder: "Search MCP servers..." },
   },
   {
-    pageId: "observability.index",
-    route: "/observability",
-    activeNav: "Observability",
-    title: "Observability Dashboard",
-    archetype: "dashboard",
-    shellConfig: { searchPlaceholder: "Search traces, agents, metrics..." },
-  },
-  {
     pageId: "prompts.index",
     route: "/prompts",
     activeNav: "Prompts",

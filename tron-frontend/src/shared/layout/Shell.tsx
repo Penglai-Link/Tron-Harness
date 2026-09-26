@@ -1,3 +1,4 @@
+import { LocaleMenu } from "./LocaleMenu";
 import { ThemeMenu } from "./ThemeMenu";
 import { CheckinButton } from "@/domain/auth/components/CheckinButton";
 import {
@@ -61,7 +62,6 @@ import { CREATE_CHAT_SESSION_SHORTCUT_EVENT } from "@/shared/lib/keyboardShortcu
 import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { cn } from "@/shared/lib/utils";
 import { mapNavigationTree } from "@/shared/lib/navigationMenuMapper";
-import { SelectInput } from "@/components/forms";
 import { useDismissibleLayer } from "@/shared/hooks/useDismissibleLayer";
 import { useManagedAvatar } from "@/shared/hooks/useManagedAvatar";
 import { useShellShortcuts } from "@/shared/hooks/useShellShortcuts";
@@ -74,7 +74,6 @@ import type {
   WorkspaceSwitcherData,
 } from "@/shared/types/WorkspaceSpace";
 import DraggleLine from "@/components/draggle-line";
-import { SelectItem } from "@/components/ui/select";
 import {
   SidebarProvider,
   SidebarTrigger,
@@ -184,7 +183,7 @@ export function TronShell({
   userMenuContent,
 }: TronShellProps) {
   const { t } = useTranslation(["common", "shell"]);
-  const { changeLocale, currentLocale, supportedLocales: locales } = useLocale();
+  const { currentLocale } = useLocale();
   const { session: authSession } = useAuthSession();
   const personAiPlan = authSession?.user.vipLevel === null || authSession?.user.vipLevel === undefined
     ? null
@@ -653,7 +652,7 @@ export function TronShell({
 
   useDismissibleLayer({
     open: Boolean(utilityPanel),
-    nestedLayerSelectors: ["[data-slot='select-positioner']", "[data-tron-theme-menu]"],
+    nestedLayerSelectors: ["[data-slot='select-positioner']", "[data-tron-theme-menu]", "[data-tron-locale-menu]"],
     onDismiss: () => {
       if (!utilityPanel) return;
       toggleUtilityPanel(utilityPanel);
@@ -957,24 +956,8 @@ export function TronShell({
   function renderUserPanelContent() {
     return (
       <>
-        <div className="space-y-3 p-3">
-          <div className="min-w-0">
-            <label className="mb-1 block text-xs font-medium text-[var(--color-on-surface-variant)]" htmlFor="tron-locale-select">
-              {t("common:locale.label")}
-            </label>
-            <SelectInput
-              className="w-full"
-              id="tron-locale-select"
-              value={currentLocale}
-              onValueChange={(event) => void changeLocale(event as typeof currentLocale)}
-            >
-              {locales.map((locale) => (
-                <SelectItem key={locale.code} value={locale.code}>
-                  {t(locale.labelKey)}
-                </SelectItem>
-              ))}
-            </SelectInput>
-          </div>
+        <div className="space-y-1 p-2">
+          <LocaleMenu />
           <ThemeMenu />
         </div>
       </>

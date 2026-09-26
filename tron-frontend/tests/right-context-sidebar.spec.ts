@@ -292,7 +292,6 @@ test.beforeAll(async () => {
         VITE_TRON_MCP_DATA_SOURCE: "mock",
         VITE_TRON_MEMORY_DATA_SOURCE: "mock",
         VITE_TRON_MODEL_DATA_SOURCE: "mock",
-        VITE_TRON_OBSERVABILITY_DATA_SOURCE: "mock",
         VITE_TRON_PROMPT_DATA_SOURCE: "mock",
         VITE_TRON_RAG_DATA_SOURCE: "mock",
         VITE_TRON_RESOURCE_DATA_SOURCE: "mock",
@@ -397,13 +396,6 @@ test("AC-RCS-03: shell right-panel pages retain content and no-panel pages show 
   await rightSidebar(page).getByRole("tab", { name: "Context" }).click();
   await expect(rightSidebar(page).getByText("Short-Term Memory Overview")).toBeVisible();
 
-  await page.goto(`${frontendBaseUrl}/observability`);
-  await expect(page.getByRole("heading", { name: "Observability Dashboard" })).toBeVisible();
-  await openRightSidebar(page);
-  await expect(rightSidebar(page).getByRole("heading", { name: "Inspector" })).toBeVisible();
-  await rightSidebar(page).getByRole("button", { name: "Close inspector" }).click();
-  await expectNoRightSidebarControls(page);
-
   await page.goto(`${frontendBaseUrl}`);
   await openRightSidebar(page);
   await expect(rightSidebar(page).getByText("Resource Pattern")).toBeVisible();
@@ -451,7 +443,7 @@ test("AC-STM-08: chat right sidebar renders short-term memory state and compacti
 
   await page.getByRole("button", { name: "Open user menu" }).click();
   await page.locator("#tron-locale-select").click();
-  await page.getByRole("option", { name: "Simplified Chinese" }).click();
+  await page.getByRole("menuitemradio", { name: "Simplified Chinese" }).click();
   await page.keyboard.press("Escape");
   await expect(sidebar.getByText("短期记忆", { exact: true })).toBeVisible();
   await expect(sidebar.getByTestId("context-runtime-notice")).toContainText("上下文已压缩");

@@ -84,7 +84,6 @@ export const shell = {
       mcpServers: "MCP 服务",
       memory: "记忆",
       models: "模型",
-      observability: "可观测性",
       prompts: "提示词",
       rag: "RAG",
       resources: "资源",
@@ -189,6 +188,7 @@ export const shell = {
     label: "主题",
     options: {
       light: "浅色",
+      matrixParticles: "Matrix 粒子",
       matrixDark: "矩阵深色",
     },
   },

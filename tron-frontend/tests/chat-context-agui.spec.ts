@@ -11,7 +11,7 @@ import {
 let frontend: ResourceUiFrontend;
 
 test.beforeAll(async () => {
-  const mockDomains = ["ADMIN", "AGENT", "APP", "AUTOMATION", "KNOWLEDGE_GRAPH", "MCP", "MEMORY", "MODEL", "OBSERVABILITY", "PROMPT", "RAG", "RESOURCE", "SKILL", "TASK", "VARIABLE"];
+  const mockDomains = ["ADMIN", "AGENT", "APP", "AUTOMATION", "KNOWLEDGE_GRAPH", "MCP", "MEMORY", "MODEL", "PROMPT", "RAG", "RESOURCE", "SKILL", "TASK", "VARIABLE"];
   frontend = await startResourceUiFrontend("/chats", {
     ...Object.fromEntries(mockDomains.map((domain) => [`VITE_TRON_${domain}_DATA_SOURCE`, "mock"])),
     VITE_TRON_API_BASE_URL: "",

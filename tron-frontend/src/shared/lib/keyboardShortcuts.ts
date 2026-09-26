@@ -106,37 +106,20 @@ function isShortcutBinding(value: unknown): value is ShellShortcutBinding {
 }
 
 export function createDefaultShellShortcutBindings(): ShellShortcutBindings {
+  const modAlt = (key: string): ShellShortcutBinding => ({
+    altKey: true, key, modKey: true, shiftKey: false,
+  });
   return {
-    closeAllTabs: null,
-    closeCurrentTab: null,
-    closeOtherTabs: null,
-    nextTab: null,
-    newSession: {
-      altKey: true,
-      key: "N",
-      modKey: true,
-      shiftKey: false,
-    },
-    previousTab: null,
-    toggleAgentWindow: null,
-    toggleBottomPanel: {
-      altKey: true,
-      key: "K",
-      modKey: true,
-      shiftKey: false,
-    },
-    toggleLeftSidebar: {
-      altKey: true,
-      key: "U",
-      modKey: true,
-      shiftKey: false,
-    },
-    toggleRightSidebar: {
-      altKey: true,
-      key: "Y",
-      modKey: true,
-      shiftKey: false,
-    },
+    newSession: { ...modAlt("N"), altKey: false },
+    toggleAgentWindow: modAlt("N"),
+    closeCurrentTab: modAlt("W"),
+    previousTab: modAlt("H"),
+    nextTab: modAlt("L"),
+    closeAllTabs: modAlt("X"),
+    closeOtherTabs: modAlt("O"),
+    toggleLeftSidebar: modAlt("ArrowLeft"),
+    toggleRightSidebar: modAlt("ArrowRight"),
+    toggleBottomPanel: modAlt("ArrowDown"),
   };
 }
 
@@ -147,7 +130,7 @@ export function normalizeShellShortcutBindings(value: unknown): ShellShortcutBin
 
   return shellShortcutActions.reduce<ShellShortcutBindings>((bindings, action) => {
     const binding = persisted[action];
-    bindings[action] = isShortcutBinding(binding)
+    bindings[action] = binding === null ? null : isShortcutBinding(binding)
       ? {
           ...binding,
           key: normalizeKey(binding.key),
@@ -157,27 +140,25 @@ export function normalizeShellShortcutBindings(value: unknown): ShellShortcutBin
   }, defaults);
 }
 
-/**
- * Replaces built-in shortcuts that collided with browser/Electron accelerators
- * when migrating persisted shell state. Custom bindings are left untouched.
- */
+/** Upgrade shipped defaults while retaining explicit custom key combinations. */
 export function migrateDefaultShellShortcutBindings(value: unknown): ShellShortcutBindings {
   const bindings = normalizeShellShortcutBindings(value);
-  const legacyDefaults: Partial<Record<ShellShortcutAction, ShellShortcutBinding>> = {
-    newSession: { altKey: false, key: "N", modKey: true, shiftKey: false },
-    toggleBottomPanel: { altKey: true, key: "J", modKey: true, shiftKey: false },
-    toggleLeftSidebar: { altKey: true, key: "[", modKey: true, shiftKey: false },
-    toggleRightSidebar: { altKey: true, key: "]", modKey: true, shiftKey: false },
+  const defaults = createDefaultShellShortcutBindings();
+  const legacyKeys: Partial<Record<ShellShortcutAction, string[]>> = {
+    newSession: ["N"],
+    toggleBottomPanel: ["J", "K"],
+    toggleLeftSidebar: ["[", "U"],
+    toggleRightSidebar: ["]", "Y"],
   };
-  const safeDefaults = createDefaultShellShortcutBindings();
-
-  for (const action of Object.keys(legacyDefaults) as ShellShortcutAction[]) {
-    const legacyBinding = legacyDefaults[action] ?? null;
-    if (shortcutEquals(bindings[action], legacyBinding)) {
-      bindings[action] = safeDefaults[action];
+  for (const action of shellShortcutActions) {
+    const binding = bindings[action];
+    if (binding === null && !legacyKeys[action]) {
+      bindings[action] = defaults[action];
+    } else if (binding?.modKey && binding.altKey && !binding.shiftKey
+      && legacyKeys[action]?.includes(binding.key)) {
+      bindings[action] = defaults[action];
     }
   }
-
   return bindings;
 }
 

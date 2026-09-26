@@ -84,7 +84,6 @@ export const shell = {
       mcpServers: "MCP Servers",
       memory: "Memory",
       models: "Models",
-      observability: "Observability",
       prompts: "Prompts",
       rag: "RAG",
       resources: "Resources",
@@ -189,6 +188,7 @@ export const shell = {
     label: "Theme",
     options: {
       light: "Light",
+      matrixParticles: "Matrix Particles",
       matrixDark: "Matrix Dark",
     },
   },

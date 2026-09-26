@@ -95,8 +95,7 @@ VALUES
     (734510000000000019, 'DATA_SOURCE_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.dataSources', NULL, 'DatabaseZap', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000020, 'SERVER_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.servers', NULL, 'Server', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
     (734510000000000021, 'SERVER_ACCOUNT_MANAGEMENT', 'BuiltIn', 'Internal', 'resourceManagement.serverAccounts', NULL, 'UserRound', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z'),
-    (734510000000000023, 'OBSERVABILITY', 'BuiltIn', 'Internal', 'observability.index', NULL, 'Gauge', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
+    (734510000000000022, 'VARIABLES', 'BuiltIn', 'Internal', 'variables.index', NULL, 'KeyRound', 1, '2026-08-29T00:00:00Z', '2026-08-29T00:00:00Z');
 
 INSERT OR IGNORE INTO navigation_menu_translations (id, menu_id, locale, label)
 VALUES
@@ -143,6 +142,4 @@ VALUES
     (734530000000000041, 734510000000000021, 'zh-CN', '服务器账号管理'),
     (734530000000000042, 734510000000000021, 'en-US', 'Server Account Management'),
     (734530000000000043, 734510000000000022, 'zh-CN', '变量'),
-    (734530000000000044, 734510000000000022, 'en-US', 'Variables'),
-    (734530000000000045, 734510000000000023, 'zh-CN', '可观测性'),
-    (734530000000000046, 734510000000000023, 'en-US', 'Observability');
+    (734530000000000044, 734510000000000022, 'en-US', 'Variables');

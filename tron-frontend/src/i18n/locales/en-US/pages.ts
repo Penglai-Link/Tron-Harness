@@ -4089,44 +4089,6 @@ export const pages = {
     },
     workspace: "Workspace",
   },
-  observability: {
-    actions: {
-      edit: "Edit",
-      export: "Export",
-      openInspector: "Open Inspector",
-      pauseAgent: "Pause Agent",
-      viewAll: "View All",
-    },
-    aria: { closeInspector: "Close inspector", refreshChart: "Refresh chart" },
-    charts: {
-      errorHeatmap: "Error Heatmap",
-      requestThroughput: "Request Throughput",
-    },
-    columns: {
-      agent: "Agent",
-      latency: "Latency",
-      span: "Span",
-      status: "Status",
-      trace: "Trace",
-    },
-    fields: { budget: "Budget", region: "Region", retries: "Retries" },
-    inspector: {
-      description:
-        "Router span route.llm.failover is sampled at 100% while the failover controller is in review.",
-      title: "Inspector",
-    },
-    messages: {
-      agentPaused: "Agent paused",
-      allTracesOpened: "All traces view opened",
-      chartRefreshed: "Chart refreshed",
-      editOpened: "Inspector edit opened",
-      exportQueued: "Trace export queued",
-      heatmapCell: "Heatmap cell {{index}}: {{value}} events",
-      tabSelected: "{{tab}} inspector selected",
-    },
-    title: "Observability Dashboard",
-    traces: { itemLabel: "traces", title: "Recent Traces" },
-  },
   tasks: {
     apps: {
       ariaLabel: "Task apps",

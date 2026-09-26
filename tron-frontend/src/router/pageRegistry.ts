@@ -149,11 +149,6 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.CreateWorkspaceModelPage,
     })),
   ),
-  "observability.index": lazy(() =>
-    import("@/domain/observability/pages/ObservabilityPage").then((module) => ({
-      default: module.ObservabilityPage,
-    })),
-  ),
   "prompts.index": lazy(() =>
     import("@/domain/prompt/pages/PromptsPage").then((module) => ({
       default: module.PromptsPage,

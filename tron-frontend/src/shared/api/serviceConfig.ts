@@ -28,7 +28,6 @@ export type ServiceDomain =
   | "mcp"
   | "memory"
   | "model"
-  | "observability"
   | "prompt"
   | "project"
   | "rag"
@@ -67,7 +66,6 @@ const domainEnvKeys: Record<ServiceDomain, string> = {
   mcp: "MCP",
   memory: "MEMORY",
   model: "MODEL",
-  observability: "OBSERVABILITY",
   prompt: "PROMPT",
   project: "PROJECT",
   rag: "RAG",

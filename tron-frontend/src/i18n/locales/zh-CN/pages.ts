@@ -4129,41 +4129,6 @@ export const pages = {
     sections: { activity: "最近活动", throughput: "吞吐量分析" },
     workspace: "工作区",
   },
-  observability: {
-    actions: {
-      edit: "编辑",
-      export: "导出",
-      openInspector: "打开检查器",
-      pauseAgent: "暂停智能体",
-      viewAll: "查看全部",
-    },
-    aria: { closeInspector: "关闭检查器", refreshChart: "刷新图表" },
-    charts: { errorHeatmap: "错误热力图", requestThroughput: "请求吞吐量" },
-    columns: {
-      agent: "智能体",
-      latency: "延迟",
-      span: "Span",
-      status: "状态",
-      trace: "Trace",
-    },
-    fields: { budget: "预算", region: "区域", retries: "重试次数" },
-    inspector: {
-      description:
-        "路由 Span route.llm.failover 当前以 100% 采样，故障转移控制器正在评审中。",
-      title: "检查器",
-    },
-    messages: {
-      agentPaused: "智能体已暂停",
-      allTracesOpened: "已打开全部 Trace 视图",
-      chartRefreshed: "图表已刷新",
-      editOpened: "已打开检查器编辑",
-      exportQueued: "Trace 导出已排队",
-      heatmapCell: "热力图单元 {{index}}：{{value}} 个事件",
-      tabSelected: "已选择 {{tab}} 检查器",
-    },
-    title: "可观测性仪表盘",
-    traces: { itemLabel: "Trace", title: "最近 Trace" },
-  },
   tasks: {
     apps: {
       ariaLabel: "任务应用",
