@@ -23,7 +23,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DialogSelect } from "@/components/dialog-select";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 import { MarkdownContent } from "@/components/markdown-content";
 import { OptionSelect } from "@/components/option-select";
@@ -133,7 +132,7 @@ export function TaskDetailsPage() {
   const options = useTaskOptions(task.workspaceCode);
   const toast = useToast();
   const dataSource = getServiceDataSource("task");
-  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading, onUserPageChange, userPage, userPageCount } = useTaskWorkspaceOptions(task.workspaceCode);
+  const { appOptions, loading: workspaceOptionsLoading } = useTaskWorkspaceOptions(task.workspaceCode);
   const [title, setTitle] = useState(task.title);
   const [description, setDescription] = useState(task.description ?? "");
   const [taskType, setTaskType] = useState<TaskType>(task.taskType);
@@ -150,7 +149,6 @@ export function TaskDetailsPage() {
   const [executing, setExecuting] = useState(false);
   const [agentCodesInput, setAgentCodesInput] = useState(task.agentCodes.join(", "));
   const [selectedAppCodes, setSelectedAppCodes] = useState(task.appCodes);
-  const [assigneeUserCodes, setAssigneeUserCodes] = useState(task.assigneeUserCodes);
   const [childTitle, setChildTitle] = useState("Follow-up subtask");
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
   const [executionResultFullscreenOpen, setExecutionResultFullscreenOpen] = useState(false);
@@ -246,7 +244,6 @@ export function TaskDetailsPage() {
     setSelectedModelOptionCode(optionCodeForAutomationModel(task.agentCode || mainAutomationAgentOption.agentCode, task.modelCode ?? null));
     setAgentCodesInput(task.agentCodes.join(", "));
     setSelectedAppCodes(task.appCodes);
-    setAssigneeUserCodes(task.assigneeUserCodes);
     setDescriptionFullscreenOpen(false);
     setExecutionResultFullscreenOpen(false);
     setEditing(false);
@@ -321,13 +318,6 @@ export function TaskDetailsPage() {
     };
   }, [descriptionFullscreenOpen, executionResultFullscreenOpen]);
 
-  const effectiveUserByCode = new Map(effectiveUsers.map((user) => [user.userCode, user]));
-  const userOptions = effectiveUsers.map((user) => ({
-    description: user.userCode,
-    label: user.displayName,
-    value: user.userCode,
-  }));
-  const assignedUsers = assigneeUserCodes.map((userCode) => effectiveUserByCode.get(userCode)?.displayName ?? userCode);
   const detailEditable = editing && !archived;
   const updatesEditable = !archived;
   const progressManagedBySubtasks = task.subtasks.length > 0;
@@ -395,7 +385,6 @@ export function TaskDetailsPage() {
     </InspectorPanel>
   ), [
     archived,
-    assigneeUserCodes,
     availableAppCodeSet,
     childTitle,
     dataSource,
@@ -451,7 +440,6 @@ export function TaskDetailsPage() {
   async function saveUpdateFields(overrides: Partial<{
     agentCodes: string[];
     appCodes: string[];
-    assigneeUserCodes: string[];
     priority: TaskPriority;
     progress: number;
     status: TaskStatus;
@@ -460,7 +448,6 @@ export function TaskDetailsPage() {
     const draft = {
       agentCodes: nextAgentCodes,
       appCodes: nextAppCodes,
-      assigneeUserCodes,
       priority,
       progress: progressValue(progress),
       status,
@@ -470,8 +457,7 @@ export function TaskDetailsPage() {
       || draft.status !== task.status
       || draft.progress !== task.progress
       || !sameCodes(draft.agentCodes, task.agentCodes)
-      || !sameCodes(draft.appCodes, task.appCodes)
-      || !sameCodes(draft.assigneeUserCodes, task.assigneeUserCodes);
+      || !sameCodes(draft.appCodes, task.appCodes);
 
     if (!hasChanges) return;
 
@@ -488,7 +474,6 @@ export function TaskDetailsPage() {
       const payload: UpdateTaskPayload = {};
       if (!sameCodes(draft.agentCodes, task.agentCodes)) payload.agentCodes = draft.agentCodes;
       if (appCodesChanged) payload.appCodes = draft.appCodes;
-      if (!sameCodes(draft.assigneeUserCodes, task.assigneeUserCodes)) payload.assigneeUserCodes = draft.assigneeUserCodes;
       if (draft.priority !== task.priority) payload.priority = draft.priority;
 
       let updated = task;
@@ -567,11 +552,6 @@ export function TaskDetailsPage() {
     });
   }
 
-  function handleAssigneesChange(nextCodes: string[]) {
-    setAssigneeUserCodes(nextCodes);
-    void saveUpdateFields({ assigneeUserCodes: nextCodes });
-  }
-
   async function addSubtask() {
     if (archived) {
       toast.warning(pageT("warnings.restoreBeforeSubtasks", "Restore archived task before adding subtasks"));
@@ -582,7 +562,7 @@ export function TaskDetailsPage() {
         agentCodes: [],
         agentCode: task.agentCode,
         appCodes: selectedAppCodes.filter((code) => availableAppCodeSet.has(code)),
-        assigneeUserCodes: assigneeUserCodes.slice(0, 1),
+        assigneeUserCodes: [],
         description: `Subtask for ${task.taskCode}`,
         modelCode: task.modelCode,
         parentTaskCode: task.taskCode,
@@ -771,27 +751,6 @@ export function TaskDetailsPage() {
                   onRemoveLegacy={updatesEditable ? handleLegacyAppRemove : undefined}
                   onToggle={updatesEditable ? handleAppToggle : undefined}
                 />
-              </Field>
-            </div>
-            <div className="md:col-span-2">
-              <Field label={pageT("fields.assignedUsers", "Assigned Users")} hint={pageT("hints.assignedUsers", "Only effective users from the current workspace can be assigned.")}>
-                {updatesEditable ? (
-                  <DialogSelect
-                    ariaLabel={pageT("aria.assignees", "Task assignees")}
-                    loading={workspaceOptionsLoading}
-                    multiple
-                    onChange={handleAssigneesChange}
-                    onPageChange={onUserPageChange}
-                    options={userOptions}
-                    page={userPage}
-                    pageCount={userPageCount}
-                    pagination
-                    selectedValues={assigneeUserCodes}
-                    title={pageT("fields.assignedUsers", "Assigned Users")}
-                  />
-                ) : (
-                  <ReadValue noneLabel={pageT("detail.none", "None")}>{assignedUsers.join(", ")}</ReadValue>
-                )}
               </Field>
             </div>
           </div>

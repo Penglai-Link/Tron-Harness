@@ -1,6 +1,5 @@
 import { useCallback } from "react";
 import { useTranslation } from "react-i18next";
-import { Command } from "lucide-react";
 import type { ReactNode } from "react";
 
 import {
@@ -49,11 +48,6 @@ function EmptyTabWorkspace() {
       data-testid="tron-empty-tab-workspace"
     >
       <div className="flex w-full max-w-md flex-col items-center animate-in fade-in-0 slide-in-from-bottom-2 duration-300">
-        <Command
-          aria-hidden="true"
-          className="mb-10 size-40 text-[var(--color-surface-container)] sm:size-52"
-          strokeWidth={1}
-        />
         <div
           className="w-full space-y-2.5"
           data-testid="tron-empty-tab-shortcuts"

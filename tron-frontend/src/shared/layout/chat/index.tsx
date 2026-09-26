@@ -220,7 +220,7 @@ export const ChatSidebarPanel = memo(function ChatSidebarPanel({
   }
 
   return (
-    <section className="border-b border-[var(--color-card-border)] p-2 flex flex-col gap-1">
+    <section data-theme-part="app-sidebar-chats" className="border-b border-[var(--color-card-border)] p-2 flex flex-col gap-1">
       {menuChildren.map((menu) => renderMenuItem(menu))}
       <ProjectCreateDialog
         open={projectCreateOpen || Boolean(editingProject)}

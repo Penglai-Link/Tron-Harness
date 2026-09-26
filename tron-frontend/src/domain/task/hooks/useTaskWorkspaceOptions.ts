@@ -8,30 +8,17 @@ import { listAppOptions } from "@/domain/app/mock";
 import type { AppOption } from "@/domain/app/model";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 
-export interface TaskAssigneeOption {
-  userCode: string;
-  displayName: string;
-  email?: string;
-}
-
 export interface TaskWorkspaceOptions {
   appOptions: AppOption[];
-  effectiveUsers: TaskAssigneeOption[];
   loading: boolean;
-  onUserPageChange: (page: number) => void;
-  userPage: number;
-  userPageCount: number;
 }
 
 export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOptions {
   const appDataSource = getServiceDataSource("app");
   const [loadingApps, setLoadingApps] = useState(false);
-  const userPage = 1;
-  const userPageCount = 1;
   const [appOptions, setAppOptions] = useState(() => (
     appDataSource === "api" ? [] : listAppOptions({ workspaceCode })
   ));
-  const effectiveUsers: TaskAssigneeOption[] = [];
 
   useEffect(() => {
     if (appDataSource === "api") return;
@@ -63,14 +50,9 @@ export function useTaskWorkspaceOptions(workspaceCode: string): TaskWorkspaceOpt
     return () => controller.abort();
   }, [appDataSource, workspaceCode]);
 
-  const onUserPageChange = () => undefined;
 
   return {
     appOptions,
-    effectiveUsers,
     loading: loadingApps,
-    onUserPageChange,
-    userPage,
-    userPageCount,
   };
 }

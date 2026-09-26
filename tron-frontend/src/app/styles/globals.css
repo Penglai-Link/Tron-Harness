@@ -314,3 +314,17 @@ body[data-tron-app] [data-theme-effect-layer]::after { content: ""; }
 /* Optional skin assets are removed together with the runtime variable sheet. */
 html, body { accent-color: var(--color-accent); font-family: var(--tron-skin-font, var(--font-sans, "Inter Variable", sans-serif)); }
 body, .tron-skin-canvas { background-image: var(--tron-skin-background, none); background-size: cover; background-position: center; }
+
+/* Built-in Matrix sidebars use tonal separation instead of bright rules. */
+:root:is([data-skin="matrix-dark"], [data-skin="matrix-particles"]) [data-theme-part="app-sidebar"] {
+  --sidebar-border: transparent;
+  border-color: transparent;
+}
+
+:root:is([data-skin="matrix-dark"], [data-skin="matrix-particles"]) [data-theme-part="app-sidebar"] :is([data-slot="sidebar-header"], [data-theme-part="app-sidebar-chats"]) {
+  border-color: transparent;
+}
+
+:root:is([data-skin="matrix-dark"], [data-skin="matrix-particles"]) [data-theme-part="app-sidebar"] [data-slot="sidebar-inner"] {
+  background: linear-gradient(180deg, color-mix(in srgb, var(--sidebar) 85%, var(--color-background)), var(--color-background));
+}

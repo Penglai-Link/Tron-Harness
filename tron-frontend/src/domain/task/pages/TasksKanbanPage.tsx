@@ -225,7 +225,6 @@ function KanbanCard({
       </div>
       <ProgressBar value={task.progress} />
       <div className={cn("flex items-center justify-between gap-[12px]", dense ? "mt-2" : compact ? "mt-2.5" : "mt-3")}>
-        <span className="min-w-0 truncate text-[11px] text-[var(--color-on-surface-variant)]">{task.assigneeUserCodes[0] ?? t("pages:tasks.kanban.unassigned", "Unassigned")}</span>
         <span className="text-[11px] text-[var(--color-on-surface-variant)]">{t("pages:tasks.kanban.subtasks", "{{count}} subtasks", { count: task.subtaskCount })}</span>
       </div>
     </button>

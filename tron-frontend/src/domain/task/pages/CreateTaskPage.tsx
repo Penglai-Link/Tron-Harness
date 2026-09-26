@@ -12,7 +12,6 @@ import {
 } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
-import { DialogSelect } from "@/components/dialog-select";
 import { Field, SelectInput, TextArea, TextInput } from "@/components/forms";
 import { OptionSelect } from "@/components/option-select";
 import {
@@ -74,7 +73,6 @@ export function CreateTaskPage() {
   const [executionOptionsLoading, setExecutionOptionsLoading] = useState(false);
   const [agentCodesInput, setAgentCodesInput] = useState("");
   const [selectedAppCodes, setSelectedAppCodes] = useState<string[]>([]);
-  const [assigneeUserCodes, setAssigneeUserCodes] = useState<string[]>([]);
   const [descriptionFullscreenOpen, setDescriptionFullscreenOpen] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const navigate = useNavigate();
@@ -84,21 +82,13 @@ export function CreateTaskPage() {
   const activeWorkspace = selectedSecondarySpace ?? selectedPrimarySpace;
   const activeWorkspaceCode = activeWorkspace?.workspaceCode ?? "";
   const options = useTaskOptions(activeWorkspaceCode);
-  const { appOptions, effectiveUsers, loading: workspaceOptionsLoading, onUserPageChange, userPage, userPageCount } = useTaskWorkspaceOptions(activeWorkspaceCode);
+  const { appOptions, loading: workspaceOptionsLoading } = useTaskWorkspaceOptions(activeWorkspaceCode);
   const executionAgentSelectOptions = useMemo(
     () => agentOptions.map((agent) => ({
       label: `${agent.name} (${agent.agentCode})`,
       value: agent.agentCode,
     })),
     [agentOptions],
-  );
-  const userOptions = useMemo(
-    () => effectiveUsers.map((user) => ({
-      description: user.userCode,
-      label: user.displayName,
-      value: user.userCode,
-    })),
-    [effectiveUsers],
   );
   const selectedAgent = useMemo(
     () => agentOptions.find((agent) => agent.agentCode === selectedAgentCode) ?? mainAutomationAgentOption,
@@ -172,10 +162,6 @@ export function CreateTaskPage() {
   }, [activeWorkspaceCode, toast]);
 
   useEffect(() => {
-    setAssigneeUserCodes([]);
-  }, [activeWorkspaceCode]);
-
-  useEffect(() => {
     const allowed = new Set(appOptions.map((app) => app.appCode));
     setSelectedAppCodes((current) => current.filter((appCode) => allowed.has(appCode)));
   }, [appOptions]);
@@ -210,7 +196,7 @@ export function CreateTaskPage() {
       agentCode: selectedAgentCode,
       agentCodes: splitCodes(agentCodesInput),
       appCodes: selectedAppCodes,
-      assigneeUserCodes,
+      assigneeUserCodes: [],
       description,
       modelCode: selectedModelCode,
       priority,
@@ -310,21 +296,6 @@ export function CreateTaskPage() {
             </Field>
           </div>
         </div>
-        <Field label={pageT("fields.assignedUsers", "Assigned Users")} hint={pageT("hints.assignedUsers", "Only effective users from the current workspace can be assigned.")}>
-          <DialogSelect
-            ariaLabel={pageT("aria.assignees", "Task assignees")}
-            loading={workspaceOptionsLoading}
-            multiple
-            onChange={setAssigneeUserCodes}
-            onPageChange={onUserPageChange}
-            options={userOptions}
-            page={userPage}
-            pageCount={userPageCount}
-            pagination
-            selectedValues={assigneeUserCodes}
-            title={pageT("fields.assignedUsers", "Assigned Users")}
-          />
-        </Field>
         <SurfaceCard className="rounded-[4px]">
           <div className="grid gap-1.5">
             <div className="flex flex-wrap items-center justify-between gap-[12px]">
