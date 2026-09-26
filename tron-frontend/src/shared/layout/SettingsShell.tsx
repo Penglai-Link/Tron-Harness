@@ -106,7 +106,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
   }
 
   return (
-    <div className="tron-skin-canvas min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)] lg:h-screen lg:overflow-hidden">
+    <div data-theme-anchor="app-shell" className="tron-skin-canvas min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)] lg:h-screen lg:overflow-hidden">
       <header className="fixed inset-x-0 top-0 z-40 h-14 bg-[var(--color-header-backdrop)] px-4 shadow-[0_10px_28px_rgba(15,23,42,0.045)] backdrop-blur sm:px-6">
         <div className="flex h-full items-center justify-between gap-4">
           <div className="flex min-w-0 items-center gap-3">
@@ -125,7 +125,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
       </header>
 
       <div className="pt-14 lg:grid lg:h-screen lg:grid-cols-[260px_minmax(0,1fr)] lg:overflow-hidden">
-        <aside className="bg-[var(--color-elevated-surface)] px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)] lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto lg:px-3 lg:py-6 lg:shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
+        <aside data-theme-anchor="sidebar" className="bg-[var(--color-elevated-surface)] px-4 py-4 shadow-[0_10px_24px_rgba(15,23,42,0.03)] lg:h-[calc(100vh-3.5rem)] lg:overflow-y-auto lg:px-3 lg:py-6 lg:shadow-[10px_0_28px_rgba(15,23,42,0.04)]">
           <p className="px-2 text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
             {t("shell:settings.navigation")}
           </p>
@@ -210,7 +210,7 @@ export function SettingsShell({ activeItem, children, contentClassName, items }:
           </div>
         </aside>
 
-        <main className={cn(
+        <main data-theme-anchor="page" className={cn(
           "min-w-0 lg:h-[calc(100vh-3.5rem)]",
           contentClassName ?? "px-6 py-6 lg:overflow-y-auto",
         )}

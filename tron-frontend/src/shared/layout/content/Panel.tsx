@@ -152,6 +152,7 @@ export function Panel({ children, contentClassName }: IPanelProps) {
                 contentClassName,
               )}
               data-theme-part="app-page"
+              data-theme-anchor="page"
             >
               {hasOpenTabs ? children : <EmptyTabWorkspace />}
             </main>
@@ -179,6 +180,7 @@ export function Panel({ children, contentClassName }: IPanelProps) {
               <aside
                 className="relative z-10 hidden h-full overflow-y-auto bg-[var(--color-elevated-surface)] text-[var(--color-on-surface)] lg:block"
                 data-theme-part="app-right-sidebar"
+                data-theme-anchor="panel"
                 data-testid="tron-right-sidebar"
               >
                 <RightPanelContainer />

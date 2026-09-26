@@ -28,7 +28,7 @@ export default function EntryRoutePage() {
 
   if (profileError) {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6 text-center">
+      <main data-theme-anchor="app-shell" className="flex min-h-screen items-center justify-center bg-[var(--color-background)] px-6 text-center">
         <div>
           <h1 className="text-xl font-semibold">无法读取 PersonAI 档案状态</h1>
           <p className="mt-3 text-sm text-[var(--color-on-surface-variant)]">

@@ -740,7 +740,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
           }
 
           return (
-            <section key={agent.agentCode} className="rounded-2xl bg-[var(--color-surface-container-low)] p-4">
+            <section data-theme-anchor="card" key={agent.agentCode} className="rounded-2xl bg-[var(--color-surface-container-low)] p-4">
               <div className="flex flex-wrap items-start justify-between gap-2.5">
                 <div>
                   <h3 className="text-base font-semibold text-[var(--color-on-surface)]">

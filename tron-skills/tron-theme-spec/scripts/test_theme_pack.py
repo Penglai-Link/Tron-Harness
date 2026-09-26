@@ -3,7 +3,7 @@ import tempfile
 import unittest
 import zipfile
 from pathlib import Path
-from theme_pack import SKILL, load, pack
+from theme_pack import SKILL, css_resources, load, pack
 
 
 class PackageTests(unittest.TestCase):
@@ -18,6 +18,37 @@ class PackageTests(unittest.TestCase):
 
     def save(self):
         (self.source / 'skin.json').write_text(json.dumps(self.skin))
+
+    def test_effect_selector_contract(self):
+        for name in ('global', 'app-shell', 'sidebar', 'page', 'panel', 'card', 'chat', 'chat-message', 'dialog'):
+            css_resources(f'[data-theme-effect-layer="{name}"]::before {{ position: absolute; inset: 0; width: 100%; pointer-events: none; }}'.encode(), 'theme.css')
+        css_resources(b'[data-theme-effect-layer="card"]::before, [data-theme-effect-layer="panel"]::after { height: 20px; }', 'theme.css')
+        for css in (
+            'button { width: 20px; }',
+            '[data-theme-effect-layer="card"] + button { width: 20px; }',
+            '[data-theme-effect-layer="unknown"] { inset: 0; }',
+            '[data-theme-effect-layer="card"] { position: fixed; }',
+            '[data-theme-effect-layer="card"] { pointer-events: auto; }',
+            '[data-theme-effect-layer="card"] { opacity: 1 !important; }',
+            '@keyframes escape { to { width: 20px; } }',
+            '@keyframes escape { [data-theme-effect-layer=card] { width: 20px; } }',
+            '[data-theme-effect-layer="card"] { button { width: 20px; } }',
+            '[data-theme-effect-layer="card"] { background: url(https://example.com/vines.png); }',
+        ):
+            with self.subTest(css=css), self.assertRaises(ValueError):
+                css_resources(css.encode(), 'theme.css')
+
+    def test_css_image_package_round_trip(self):
+        self.skin['version'] = 2
+        self.skin['resources']['css'] = 'theme.css'
+        self.save()
+        (self.source / 'assets').mkdir()
+        (self.source / 'assets/vines.png').write_bytes(b'image-fixture')
+        (self.source / 'theme.css').write_text('/* corners */ [data-theme-effect-layer="card"]::before { position: absolute; inset: 0; background: url("assets/vines.png"); animation: sway 2s infinite; } @keyframes sway { from { opacity: 0.5; } to { opacity: 1; } }')
+        output = self.root / 'effects.zip'
+        pack(self.source, output)
+        _, files = load(output)
+        self.assertEqual(set(files), {'skin.json', 'theme.css', 'assets/vines.png'})
 
     def test_both_starters(self):
         for mode in ('light', 'dark'):

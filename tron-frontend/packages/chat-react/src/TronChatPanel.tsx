@@ -370,7 +370,7 @@ function ImagePreviewDialog({
       aria-label="Image preview"
       aria-modal="true"
       className="tron-chat__image-preview-dialog"
-      role="dialog"
+      role="dialog" data-theme-anchor="dialog"
       onMouseDown={(event) => {
         if (event.target === event.currentTarget) onClose();
       }}
@@ -456,6 +456,7 @@ function ChatBubble({
     >
       <article
         className={cx("tron-chat__message", isUser && "tron-chat__message--user")}
+        data-theme-anchor="chat-message"
         data-theme-part={isUser ? "chat-message-user" : "chat-message-assistant"}
       >
         <div className="tron-chat__message-header">
@@ -1480,8 +1481,7 @@ export function TronChatPanel({
 
   return (
     <MarkdownLinkRendererContext.Provider value={renderMarkdownLink}>
-    <div className="tron-chat" data-theme-part="chat">
-      <span aria-hidden="true" className="tron-chat__theme-effect-layer" data-theme-effect-layer="chat" />
+    <div className="tron-chat" data-theme-part="chat" data-theme-anchor="chat">
       <ImagePreviewDialog
         image={previewImage}
         onClose={() => setPreviewImage(null)}

@@ -247,9 +247,9 @@ export function ProfileSelectionPage() {
   const availableProfiles = profiles.filter((profile) => profile.status !== "PENDING");
 
   return (
-    <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--color-background)] px-6 text-[var(--color-on-surface)]">
+    <main data-theme-anchor="app-shell" className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[var(--color-background)] px-6 text-[var(--color-on-surface)]">
       <ParticlesBackground />
-      <section className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--color-outline)] bg-[var(--color-surface)] p-8 shadow-sm">
+      <section data-theme-anchor="card" className="relative z-10 w-full max-w-md rounded-2xl border border-[var(--color-outline)] bg-[var(--color-surface)] p-8 shadow-sm">
         <header className="flex items-start justify-between gap-3">
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[var(--color-primary)]">Tron</p>

@@ -20,7 +20,7 @@ export function ModalDialog({ children, className, open, title }: ModalDialogPro
           "w-full rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]",
           className,
         )}
-        role="dialog"
+        role="dialog" data-theme-anchor="dialog"
         aria-modal="true"
         aria-label={title}
       >

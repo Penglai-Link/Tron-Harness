@@ -231,7 +231,7 @@ export function WorkspaceManagementPage() {
         </div>
       </div>
       <div className="flex min-h-0 flex-1 gap-4">
-        <section className="w-[34%] min-w-[280px] overflow-auto rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-3">
+        <section data-theme-anchor="panel" className="w-[34%] min-w-[280px] overflow-auto rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-3">
           <div className="mb-3 flex gap-2">
             <input className="min-w-0 flex-1 rounded-md border border-[var(--color-outline-variant)] bg-transparent px-3 py-2 text-sm" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search workspaces" />
             <select className="rounded-md border border-[var(--color-outline-variant)] bg-transparent px-2 text-sm" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
@@ -240,7 +240,7 @@ export function WorkspaceManagementPage() {
           </div>
           {visibleTree.length ? renderTree(visibleTree) : <p className="p-4 text-sm text-[var(--color-on-surface-variant)]">No workspaces.</p>}
         </section>
-        <section className="min-w-0 flex-1 overflow-auto rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-5">
+        <section data-theme-anchor="panel" className="min-w-0 flex-1 overflow-auto rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-5">
           <div className="mb-5 flex items-center gap-2"><FolderTree size={18} /><h2 className="text-lg font-semibold">{mode === "create" ? "Create workspace" : detail?.name ?? "Select a workspace"}</h2></div>
           {mode === "create" || detail ? (
             <div className="grid max-w-2xl gap-4">

@@ -235,27 +235,28 @@
   }
 }
 
-body[data-tron-app] > [data-theme-effect-layer="global"] {
-  position: fixed;
-  inset: 0;
-  z-index: 50;
-  overflow: hidden;
-  pointer-events: none;
-}
+/* Only static hosts need a containing block; fixed/sticky/absolute hosts keep theirs. */
+body[data-tron-app] [data-theme-effect-positioned] { position: relative !important; }
 
-body[data-tron-app] > [data-theme-effect-layer="global"]::before,
-body[data-tron-app] > [data-theme-effect-layer="global"]::after {
+body[data-tron-app] [data-theme-effect-layer],
+body[data-tron-app] [data-theme-effect-layer]::before,
+body[data-tron-app] [data-theme-effect-layer]::after {
   position: absolute;
   inset: 0;
-  pointer-events: none;
-  content: "";
+  display: block;
+  box-sizing: border-box;
+  pointer-events: none !important;
 }
 
+body[data-tron-app] [data-theme-effect-layer]::before,
+body[data-tron-app] [data-theme-effect-layer]::after { content: ""; }
+
 @media (prefers-reduced-motion: reduce) {
-  body[data-tron-app] > [data-theme-effect-layer="global"],
-  body[data-tron-app] > [data-theme-effect-layer="global"]::before,
-  body[data-tron-app] > [data-theme-effect-layer="global"]::after {
+  body[data-tron-app] [data-theme-effect-layer],
+  body[data-tron-app] [data-theme-effect-layer]::before,
+  body[data-tron-app] [data-theme-effect-layer]::after {
     animation: none !important;
+    transition: none !important;
   }
 }
 

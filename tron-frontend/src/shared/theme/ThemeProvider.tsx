@@ -44,13 +44,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const previewGeneration = useRef(0);
 
   useLayoutEffect(() => {
-    const layer = document.createElement("div");
-    layer.dataset.themeEffectLayer = "global";
-    layer.setAttribute("aria-hidden", "true");
     document.body.dataset.tronApp = "";
-    document.body.appendChild(layer);
     return () => {
-      layer.remove();
       delete document.body.dataset.tronApp;
     };
   }, []);

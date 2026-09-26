@@ -220,7 +220,7 @@ export function JsonSchemaDraft7Editor({
 
       {testOpen ? (
         <div className="fixed inset-0 z-[100] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4" role="presentation" onMouseDown={(event) => { if (event.currentTarget === event.target) setTestOpen(false); }}>
-          <section aria-labelledby="json-schema-test-title" aria-modal="true" className="w-full max-w-2xl overflow-hidden rounded-2xl bg-[var(--color-elevated-surface)] shadow-2xl" role="dialog">
+          <section aria-labelledby="json-schema-test-title" aria-modal="true" className="w-full max-w-2xl overflow-hidden rounded-2xl bg-[var(--color-elevated-surface)] shadow-2xl" role="dialog" data-theme-anchor="dialog">
             <header className="flex items-center justify-between gap-3 border-b border-[var(--color-outline-variant)] px-5 py-4">
               <div>
               <h2 id="json-schema-test-title" className="text-lg font-semibold">{tr("test.title", "Test entry")}</h2>

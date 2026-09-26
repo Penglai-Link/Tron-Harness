@@ -203,6 +203,7 @@ function KanbanCard({
         dragging ? "translate-y-0 border-dashed border-[var(--color-primary)]/35 bg-[var(--color-primary)]/5 shadow-none hover:translate-y-0 hover:shadow-none" : "",
         pending ? "cursor-wait opacity-70" : "cursor-grab active:cursor-grabbing",
       )}
+      data-theme-anchor="card"
       data-testid={`task-kanban-card-${task.taskCode}`}
       draggable={!pending}
       type="button"
@@ -530,6 +531,7 @@ export function TasksKanbanPage() {
                   : "bg-[var(--color-error-container)]/40 ring-1 ring-inset ring-[var(--color-error)]/15"
                 : "",
             )}
+            data-theme-anchor="panel"
             data-task-kanban-column={column.status}
             data-testid={`task-kanban-dropzone-${column.status}`}
             key={column.status}

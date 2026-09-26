@@ -77,7 +77,7 @@ export function SkinSettings() {
           const foreground = colors["--color-on-surface"] ?? (dark ? "#e4ffe8" : "#1c1b1b");
           const accent = colors["--color-primary"] ?? (dark ? "#5cff85" : "#000000");
           const imported = skin.id !== "light" && skin.id !== "matrix-dark";
-          return <div key={skin.id} className="relative min-w-0">
+          return <div key={skin.id} data-theme-anchor="card" className="relative min-w-0">
             <Button variant="outline" aria-label={label(skin)} aria-pressed={selected}
               disabled={loading} onClick={() => void select(skin.id)}
               className="h-auto w-full min-w-0 flex-col items-stretch gap-0 overflow-hidden rounded-lg p-0 text-left aria-pressed:border-ring aria-pressed:ring-1 aria-pressed:ring-ring">

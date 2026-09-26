@@ -112,6 +112,38 @@ pub fn validate_theme_css(source: &str, package_root: &std::path::Path) -> Resul
     if source.contains('\\') {
         return Err("CSS escapes are not supported".into());
     }
+    // Prelude/declaration slices must not retain comments. Preserve quoted text,
+    // including literal comment markers inside content strings.
+    let mut cleaned = String::with_capacity(source.len());
+    let mut chars = source.chars().peekable();
+    let mut string_quote = None;
+    while let Some(ch) = chars.next() {
+        if string_quote.is_none() && ch == '/' && chars.peek() == Some(&'*') {
+            chars.next();
+            let mut closed = false;
+            while let Some(ch) = chars.next() {
+                if ch == '*' && chars.peek() == Some(&'/') {
+                    chars.next();
+                    closed = true;
+                    break;
+                }
+            }
+            if !closed {
+                return Err("unclosed CSS comment".into());
+            }
+            cleaned.push(' ');
+            continue;
+        }
+        if matches!(ch, '\'' | '"') {
+            if string_quote == Some(ch) {
+                string_quote = None;
+            } else if string_quote.is_none() {
+                string_quote = Some(ch);
+            }
+        }
+        cleaned.push(ch);
+    }
+    let source = cleaned.as_str();
     let bytes = source.as_bytes();
     let mut quote = 0u8;
     let mut comment = false;
@@ -200,6 +232,11 @@ pub fn validate_theme_css(source: &str, package_root: &std::path::Path) -> Resul
                     if lower.is_empty() || lower.contains('@') {
                         return Err("invalid selector prelude or nested at-rule".into());
                     }
+                    if prelude.contains("data-theme-effect-layer")
+                        && !is_theme_effect_selector(prelude)
+                    {
+                        return Err("effect layers require standalone standard selectors".into());
+                    }
                     true
                 } else {
                     return Err("nested CSS rules are not allowed".into());
@@ -253,14 +290,45 @@ pub fn validate_theme_css(source: &str, package_root: &std::path::Path) -> Resul
 }
 
 fn is_theme_effect_selector(selector: &str) -> bool {
-    let selector = selector.trim();
-    if !selector.starts_with("[data-theme-effect-layer") || selector.contains(',') {
-        return false;
-    }
-    let Some(end) = selector.find(']') else {
-        return false;
-    };
-    matches!(&selector[end + 1..], "" | "::before" | "::after")
+    selector.split(',').all(|selector| {
+        let selector = selector.trim();
+        let Some(rest) = selector.strip_prefix("[data-theme-effect-layer") else {
+            return false;
+        };
+        let Some((attribute, suffix)) = rest.split_once(']') else {
+            return false;
+        };
+        if !matches!(suffix, "" | "::before" | "::after") {
+            return false;
+        }
+        if attribute.trim().is_empty() {
+            return true;
+        }
+        let Some(value) = attribute.trim_start().strip_prefix('=') else {
+            return false;
+        };
+        let value = value.trim();
+        let value = if value.len() >= 2
+            && (value.starts_with('"') && value.ends_with('"')
+                || value.starts_with('\'') && value.ends_with('\''))
+        {
+            &value[1..value.len() - 1]
+        } else {
+            value
+        };
+        matches!(
+            value,
+            "global"
+                | "app-shell"
+                | "sidebar"
+                | "page"
+                | "panel"
+                | "card"
+                | "chat"
+                | "chat-message"
+                | "dialog"
+        )
+    })
 }
 
 fn validate_css_declaration(
@@ -342,11 +410,19 @@ fn validate_css_declaration(
                 | "min-height"
                 | "max-width"
                 | "max-height"
+                | "transform-origin"
+                | "pointer-events"
         );
     if !property.starts_with("--") && !VISUAL.contains(&property.as_str()) && !overlay_geometry {
         return Err(format!(
             "property '{property}' can change component geometry"
         ));
+    }
+    if overlay
+        && ((property == "position" && value.trim() != "absolute")
+            || (property == "pointer-events" && value.trim() != "none"))
+    {
+        return Err(format!("invalid effect layer value for '{property}'"));
     }
     let lower = value.to_ascii_lowercase();
     if lower.contains("!important")
@@ -455,5 +531,53 @@ pub fn resource_mime(path: &str) -> Option<&'static str> {
         "ttf" => Some("font/ttf"),
         "otf" => Some("font/otf"),
         _ => None,
+    }
+}
+
+#[cfg(test)]
+mod effect_tests {
+    use super::validate_theme_css;
+
+    #[test]
+    fn effect_geometry_is_limited_to_standalone_supported_layers() {
+        let root = std::path::Path::new(".");
+        assert!(
+            validate_theme_css(
+                "/* corners */ [data-theme-effect-layer=card] { /* geometry */ inset: 0; }",
+                root
+            )
+            .is_ok()
+        );
+        for name in [
+            "global",
+            "app-shell",
+            "sidebar",
+            "page",
+            "panel",
+            "card",
+            "chat",
+            "chat-message",
+            "dialog",
+        ] {
+            let css = format!(
+                "[data-theme-effect-layer=\"{name}\"]::before {{ position: absolute; inset: 0; width: 100%; pointer-events: none; }}"
+            );
+            assert!(validate_theme_css(&css, root).is_ok(), "{name}");
+        }
+        assert!(validate_theme_css("[data-theme-effect-layer=card]::before, [data-theme-effect-layer=panel]::after { height: 20px; }", root).is_ok());
+        for css in [
+            "button { width: 20px; }",
+            "[data-theme-effect-layer=card] + button { width: 20px; }",
+            "[data-theme-effect-layer=unknown] { inset: 0; }",
+            "[data-theme-effect-layer-evil] { inset: 0; }",
+            "[data-theme-effect-layer=card] { position: fixed; }",
+            "[data-theme-effect-layer=card] { pointer-events: auto; }",
+            "[data-theme-effect-layer=card] { opacity: 1 !important; }",
+            "@keyframes escape { to { width: 20px; } }",
+            "[data-theme-effect-layer=card] { button { width: 20px; } }",
+            "[data-theme-effect-layer=card] { background: url(https://example.com/vines.png); }",
+        ] {
+            assert!(validate_theme_css(css, root).is_err(), "{css}");
+        }
     }
 }

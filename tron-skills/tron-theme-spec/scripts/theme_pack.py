@@ -116,17 +116,50 @@ def css_resources(raw, filename):
     for value in re.findall(r"""url\(\s*['"]?([^)'"]+)['"]?\s*\)""", source, re.I):
         require(safe_path(value), f'{filename}: unsafe url() resource: {value}')
         refs.append(value)
-    # The backend performs structural CSS parsing too. This authoring check catches
-    # geometry changes early and reports the source declaration before packaging.
-    clean = re.sub(r"""/\*.*?\*/|"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'""", '', source, flags=re.S)
-    overlay_geometry = set('position inset inset-block inset-inline top right bottom left width height min-width min-height max-width max-height'.split())
-    for match in re.finditer(r'(?:^|[;{])\s*([\w-]+)\s*:', clean, re.M):
-        prop = match.group(1).lower()
-        opening = clean.rfind('{', 0, match.start())
-        closing = clean.rfind('}', 0, opening)
-        selector = clean[closing + 1:opening].strip()
-        overlay = bool(re.fullmatch(r'\[data-theme-effect-layer(?:=[^\]]+)?\](?:::before|::after)?', selector, re.I))
-        require(prop.startswith('--') or prop in VISUAL_CSS or (overlay and prop in overlay_geometry), f'{filename}: property {prop} can change component geometry')
+    names = r'global|app-shell|sidebar|page|panel|card|chat|chat-message|dialog'
+    effect_selector = re.compile(r'\[data-theme-effect-layer(?:\s*=\s*([\"\']?)(' + names + r')\1)?\s*\](?:::before|::after)?')
+    geometry = set('position inset inset-block inset-inline top right bottom left width height min-width min-height max-width max-height transform-origin pointer-events'.split())
+    # Preserve quoted selector values, and ignore delimiters inside strings/comments.
+    clean = re.sub(r"\"[^\"]*\"|'[^']*'|/\*.*?\*/", lambda match: ' ' if match.group().startswith('/*') else match.group(), source, flags=re.S)
+    stack = []
+    start = 0
+    def declaration(text):
+        if not text.strip():
+            return
+        require(stack and stack[-1][0] == 'declarations', f'{filename}: unexpected statement')
+        prop, separator, value = text.partition(':')
+        prop, value = prop.strip().lower(), value.strip()
+        overlay = stack[-1][1]
+        require(separator and (prop.startswith('--') or prop in VISUAL_CSS or (overlay and prop in geometry)), f'{filename}: property {prop} can change component geometry')
+        require(not (overlay and prop == 'position') or value == 'absolute', f'{filename}: effect position must be absolute')
+        require(not (overlay and prop == 'pointer-events') or value == 'none', f'{filename}: effect cannot intercept input')
+    for token in re.finditer(r"\"[^\"]*\"|'[^']*'|[{};]", clean):
+        delimiter = token.group()
+        if delimiter not in ('{', '}', ';'):
+            continue
+        prelude = clean[start:token.start()].strip()
+        if delimiter == '{':
+            if prelude.startswith('@'):
+                require(not stack and re.fullmatch(r'@(?:-webkit-)?keyframes\s+[a-zA-Z0-9_-]+', prelude), f'{filename}: invalid keyframes')
+                stack.append(('keyframes', False))
+            else:
+                require(not stack or (len(stack) == 1 and stack[-1][0] == 'keyframes'), f'{filename}: nested CSS is not supported')
+                if stack:
+                    require(re.fullmatch(r'from|to|(?:[0-9]+(?:\.[0-9]+)?|\.[0-9]+)%', prelude), f'{filename}: invalid keyframe selector')
+                    if prelude.endswith('%'):
+                        require(0 <= float(prelude[:-1]) <= 100, f'{filename}: invalid keyframe percentage')
+                overlay = not stack and all(effect_selector.fullmatch(part.strip()) for part in prelude.split(','))
+                require('data-theme-effect-layer' not in prelude or overlay, f'{filename}: effect layers require standalone standard selectors')
+                stack.append(('declarations', overlay))
+        elif delimiter == ';':
+            declaration(prelude)
+        else:
+            require(stack, f'{filename}: unmatched closing brace')
+            if stack[-1][0] == 'declarations':
+                declaration(prelude)
+            stack.pop()
+        start = token.end()
+    require(not stack and not clean[start:].strip(), f'{filename}: incomplete CSS rule')
     return refs
 
 
@@ -141,6 +174,7 @@ def load(source):
         pending = list(dict.fromkeys(refs))
         while pending:
             name = pending.pop()
+            require(Path(name).suffix in IMAGE | FONT | CSS, f'Unsupported resource: {name}')
             path = source / name
             require(not any((source / Path(*Path(name).parts[:i])).is_symlink() for i in range(1, len(Path(name).parts) + 1)), f'Symlink resource: {name}')
             require(path.resolve().is_relative_to(source.resolve()), f'Resource escapes package: {name}')

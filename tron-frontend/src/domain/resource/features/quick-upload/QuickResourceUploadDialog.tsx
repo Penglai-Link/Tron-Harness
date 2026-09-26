@@ -289,7 +289,7 @@ export function QuickResourceUploadDialog({
         aria-label={quickT("aria")}
         aria-modal="true"
         className="flex max-h-[min(46rem,calc(100vh-2rem))] w-[min(94vw,38rem)] flex-col overflow-hidden rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-        role="dialog"
+        role="dialog" data-theme-anchor="dialog"
       >
         <header className="flex items-start gap-4 border-b border-[var(--color-outline-variant)] px-5 py-4">
           <div className="min-w-0 flex-1">

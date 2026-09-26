@@ -59,7 +59,7 @@ ocean.zip
 - `layout` 可设置 `--radius`、`--tron-card-radius`、`--tron-control-radius` 和 `--font-sans`。`--tron-system-font-size` 保留给字号设置，皮肤不可覆盖。未消费的变量不会改变界面。
 - `resources.background`：PNG、JPEG、WebP、GIF；作为工作台及设置页的背景，内容面板保留自身表面色。`resources.font`：WOFF、WOFF2、TTF、OTF。两者都可以为空或 HTTPS URL。本地资源通过受保护的资源接口读取为 Blob URL，切换时撤销 URL 并移除字体。
 - `resources.css`：版本 2 可选 CSS 文件，只能是包内 CSS 路径。CSS 解析后自动限定到 `body[data-tron-app][data-skin="主题ID"]` 子树，只接受颜色、边框、阴影、滤镜、背景、变换、伪元素内容及动画等视觉属性。尺寸、间距、布局、定位和层叠属性会被拒绝；独立特效层可使用定位和尺寸属性。`@import`、其他 at-rule、外部/数据 URL、脚本构造会被拒绝；`url()` 只能引用 ZIP 中的包内文件。CSS 加载错误会指出 CSS 文件和规则。
-- 主题 CSS 可使用普通 CSS 选择器覆盖当前 Tron 页面中的所有匹配组件，例如 `button`、`input`、`[data-theme-part="app-sidebar"]`；规则会自动限定在当前主题页面内，不会影响其他网站内容。应用额外提供固定于视口的 `data-theme-effect-layer="global"` 全局特效层，跨导航页面持续显示，不参与布局、不拦截点击，支持伪元素、关键帧、栅格、暗角、辉光和扫描线。动画遵循系统的减少动态效果设置。
+- 主题 CSS 可使用普通 CSS 选择器覆盖当前 Tron 页面中的所有匹配组件，例如 `button`、`input`、`[data-theme-part="app-sidebar"]`；规则会自动限定在当前主题页面内，不会影响其他网站内容。应用额外提供固定于视口的 `data-theme-effect-layer="global"` 全局特效层，跨导航页面持续显示，不参与布局、不拦截点击，支持伪元素、关键帧、栅格、暗角、辉光和扫描线。动画遵循系统的减少动态效果设置。组件装饰支持 `app-shell / sidebar / page / panel / card / chat / chat-message / dialog`，详见[锚点协议](../../tron-skills/tron-theme-spec/references/effect-anchors.md)。
 
 ```css
 [data-theme-part="app-sidebar"],
@@ -170,3 +170,24 @@ python3 tron-skills/tron-theme-spec/scripts/theme_pack.py pack ./my-theme ./my-t
 Chromium 实际渲染（Profile/皮肤 HTTP 接口桩）：主按钮 normal/hover/active 分别为 `#245b8a` / `#1b476f` / `#12324f`；禁用色独立生效。数据行高 52px、padding 14px 20px，选中行与 sticky 单元格同色；输入框 focus 边框为 `#ee7700`。离线 ZIP 的真实 PNG/WOFF2 字节通过 Blob/FontFace 成功加载，Portal 弹窗背景和标题字体一致。切回浅色后背景为 none、自定义 FontFace 为 0、动态样式为 1，按钮圆角恢复 4px。Matrix 刷新恢复、390px 页面无横向溢出。未以这些接口桩结果冒充真实账户的桌面端到端测试。
 
 可直接导入 [Ocean 组件级示例](../../tron-skills/tron-theme-spec/assets/ocean-detail/skin.json) 查看按钮和行样式。深浅色模板由真实 Rust FileSkinStore 完成安装/激活验证，目录/ZIP 校验与打包由 Python 测试及 CLI 初始化→打包→校验流程验证。
+
+
+## 组件锚点运行机制
+
+组件只声明 `data-theme-anchor`。`effectLayers.ts` 按主题 CSS 实际引用的类型，为每个实例创建独立、`aria-hidden`、`inert` 且不接收指针的装饰视口和特效层。没有锚点特效的主题不创建这些节点。装饰视口裁剪越界的图片、变换及动画，防止增加业务滚动范围；层级由 Tron 管理。
+
+- 工作台和设置外壳、侧栏、每个页面主体、右侧/底部面板均有锚点；因此所有使用公共布局的路由自动覆盖。
+- SurfaceCard、MetricCard、Card、表格容器、Dialog/Sheet 及手写确认/编辑弹窗、任务看板列与任务卡、Agent 卡和主题选择卡分别接入。手写新组件必须显式声明锚点，不能靠扫描圆角 CSS 猜卡片。
+- 共享 TronChatPanel 提供聊天区域及每条用户/助手气泡锚点，主聊天、Side Chat 和独立聊天窗口复用同一协议。外部 webview、Canvas 内部节点、PDF 像素和 OS 窗口不属于 DOM 锚点。
+- ResizeObserver 跟随尺寸，捕获 scroll 保持滚动容器边框贴合，MutationObserver 合并处理动态挂载/卸载；不逐帧轮询全部元素。普通祖先滚动和动画由 DOM 定位自然跟随。
+- 主题切换/预览替换整个装饰实例；退出预览重建已激活主题的装饰；卸载时断开观察器并移除节点。仅静态定位宿主临时获得定位上下文，清理时恢复；已有 fixed/absolute/sticky 不改动。
+- CSS 几何权限仅适用于完整标准特效选择器列表，不能通过后代、兄弟、`:is()` 或混入按钮选择器扩大权限。position 仅接受 absolute、pointer-events 仅接受 none，不开放 z-index。关键帧仍只能用视觉属性，例如 transform、opacity。
+
+协议继续使用 `version: 2`，无需修改后端接口和清单字段。前端编译器、Rust 安装校验器、Python 制作脚本同步维护选择器白名单。针对动态节点、清理、样式隔离、几何越权与资源路径的回归检查见 `src/shared/theme`、Rust `domain::skin::manifest::effect_tests` 和 `make skill-theme-test`。
+
+
+### 锚点扩展验收（2026-09-26）
+
+`make fe-check`、`make be-check`、主题/聊天组件 45 项前端单测、9 项 Rust 主题测试、10 项 Python 制作/打包测试及 skill 结构校验通过。浏览器使用独立 Profile/主题 API 桩验证英文外观页、中文应用页；共享 TronChatPanel 使用真实组件配合模拟消息验证。未修改真实账户或已安装主题。
+
+浏览器检查通过：重复卡片、消息新增/删除、消息气泡从 77.5px 增高到 365.5px 后边框贴合、滚动及面板尺寸变化、点击穿透、手写确认弹窗挂载/卸载、390px 无横向溢出、减少动态效果停用动画、预览取消恢复、切回内置主题清除装饰。截图保存在工作区 `output/playwright/theme-effects-*.png`（验收产物，不作为主题素材）。

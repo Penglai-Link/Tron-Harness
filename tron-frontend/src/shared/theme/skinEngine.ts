@@ -1,6 +1,7 @@
 import type { Skin } from "./Skin";
 import { skinApi } from "./skinApi";
 import postcss from "postcss";
+import { effectLayerNames, effectSelectorName, mountEffectLayers, type EffectLayerName } from "./effectLayers";
 
 const aliases: Record<string, string> = {
   "--background": "--color-background", "--foreground": "--color-on-surface",
@@ -43,7 +44,8 @@ export interface PreparedSkin {
 const visualProperties = new Set(("color background background-color background-image background-position background-size background-repeat background-blend-mode border border-color border-style border-width border-radius outline outline-color outline-style outline-width box-shadow text-shadow opacity filter backdrop-filter mix-blend-mode animation animation-name animation-duration animation-delay animation-direction animation-fill-mode animation-iteration-count animation-play-state animation-timing-function transition transition-property transition-duration transition-delay transition-timing-function transform content font-family font-style font-weight text-decoration text-decoration-color text-decoration-style text-decoration-line -webkit-text-stroke -webkit-text-fill-color").split(/\s+/));
 const safeCssFunctions = new Set("url var rgb rgba hsl hsla hwb lab lch oklab oklch color color-mix linear-gradient repeating-linear-gradient radial-gradient repeating-radial-gradient conic-gradient repeating-conic-gradient blur brightness contrast drop-shadow grayscale hue-rotate invert opacity saturate sepia translate translatex translatey translatez translate3d scale scalex scaley scale3d rotate rotatex rotatey rotatez rotate3d skew skewx skewy matrix matrix3d cubic-bezier steps calc min max clamp".split(" "));
 
-async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: string) => Promise<string>): Promise<string> {
+async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: string) => Promise<string>): Promise<{ css: string; effects: Set<EffectLayerName> }> {
+  const effects = new Set<EffectLayerName>();
   let root: postcss.Root;
   try { root = postcss.parse(source, { from: skin.resources.css ?? "theme.css" }); }
   catch (error) { throw new Error(`主题 CSS ${skin.resources.css ?? "theme.css"}: ${error instanceof Error ? error.message : String(error)}`); }
@@ -62,13 +64,22 @@ async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: st
   for (const rule of rules) {
     const parent = rule.parent;
     const isKeyframe = parent?.type === "atrule" && /^(-webkit-)?keyframes$/i.test(parent.name);
-    const isEffectLayer = !isKeyframe && rule.selectors.length === 1
-      && /^\[data-theme-effect-layer(?:\s*=\s*(['"]?)(?:global|chat)\1)?\](?:::before|::after)?$/i.test(rule.selectors[0].trim());
+    if (parent?.type === "rule") throw new Error(`主题 CSS ${skin.resources.css}: 不支持嵌套规则`);
+    const isEffectLayer = !isKeyframe && rule.selectors.every((selector) => effectSelectorName(selector) !== null);
+    if (!isKeyframe && rule.selector.includes("data-theme-effect-layer") && !isEffectLayer) throw new Error(`主题 CSS ${skin.resources.css}: 特效层需使用独立的标准选择器`);
+    if (!isKeyframe) {
+      for (const selector of rule.selectors) {
+        const name = effectSelectorName(selector);
+        if (name === "*") effectLayerNames.forEach((item) => effects.add(item));
+        else if (name) effects.add(name);
+        else if (selector.includes("data-theme-effect-layer")) throw new Error(`主题 CSS ${skin.resources.css}: 特效层需使用独立的标准选择器`);
+      }
+    }
     if (!isKeyframe) {
       rule.selectors = rule.selectors.map((selector) => `${scope} ${selector.trim()}`);
     }
     rule.walkDecls((decl) => {
-      const overlayGeometry = isEffectLayer && /^(?:position|inset|inset-block|inset-inline|top|right|bottom|left|width|height|min-width|min-height|max-width|max-height)$/i.test(decl.prop);
+      const overlayGeometry = isEffectLayer && /^(?:position|inset|inset-block|inset-inline|top|right|bottom|left|width|height|min-width|min-height|max-width|max-height|transform-origin|pointer-events)$/i.test(decl.prop);
       if (!decl.prop.startsWith("--") && !visualProperties.has(decl.prop.toLowerCase()) && !overlayGeometry) throw new Error(`主题 CSS ${skin.resources.css}: 属性 ${decl.prop} 会改变组件尺寸或排布`);
       if (/^(?:animation|animation-name)$/i.test(decl.prop)) {
         for (const [name, renamed] of keyframes) {
@@ -76,6 +87,9 @@ async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: st
           decl.value = decl.value.replace(new RegExp(`(?<![\\w-])${escapedName}(?![\\w-])`, "g"), renamed);
         }
       }
+      if (overlayGeometry && decl.prop.toLowerCase() === "position" && decl.value.trim() !== "absolute") throw new Error(`主题 CSS ${skin.resources.css}: 特效层 position 仅支持 absolute`);
+      if (overlayGeometry && decl.prop.toLowerCase() === "pointer-events" && decl.value.trim() !== "none") throw new Error(`主题 CSS ${skin.resources.css}: 特效层不能拦截操作`);
+      if (decl.important) throw new Error(`主题 CSS ${skin.resources.css}: 禁止 !important`);
       if (decl.value.includes("\\")) throw new Error(`主题 CSS ${skin.resources.css}: CSS 转义不受支持`);
       if (/expression\s*\(|javascript:|behavior\s*:|!important/i.test(decl.value)) throw new Error(`主题 CSS ${skin.resources.css}: 拒绝危险声明 ${decl.prop}`);
       for (const match of decl.value.matchAll(/([a-z-]+)\s*\(/gi)) if (!safeCssFunctions.has(match[1].toLowerCase())) throw new Error(`主题 CSS ${skin.resources.css}: 不支持 CSS 函数 ${match[1]}`);
@@ -90,16 +104,19 @@ async function compileSkinCss(source: string, skin: Skin, resourceUrl: (path: st
   root.walkDecls((decl) => {
     decl.value = decl.value.replace(/url\(\s*(['"]?)([^)'"\s]+)\1\s*\)/gi, (_match, _quote: string, path: string) => `url("${resources.get(path)}")`);
   });
-  return root.toString();
+  return { css: root.toString(), effects };
 }
 
 export async function prepareSkin(skin: Skin): Promise<PreparedSkin> {
   const variables = skinVariables(skin);
   const urls: string[] = [];
+  let effects = new Set<EffectLayerName>();
+  let stopEffects: (() => void) | undefined;
   let font: FontFace | undefined;
   let style: HTMLStyleElement | undefined;
   let customCssStyle: HTMLStyleElement | undefined;
   const dispose = () => {
+    stopEffects?.();
     style?.remove();
     customCssStyle?.remove();
     if (font) document.fonts.delete(font);
@@ -154,7 +171,8 @@ export async function prepareSkin(skin: Skin): Promise<PreparedSkin> {
       });
       customCssStyle = document.createElement("style");
       customCssStyle.dataset.tronSkinCss = skin.id;
-      customCssStyle.textContent = customCss;
+      customCssStyle.textContent = customCss.css;
+      effects = customCss.effects;
     }
     return {
       dispose,
@@ -172,6 +190,7 @@ export async function prepareSkin(skin: Skin): Promise<PreparedSkin> {
         root.dataset.theme = skin.mode === "Dark" ? "matrix-dark" : "light";
         root.dataset.skin = skin.id;
         document.body.dataset.skin = skin.id;
+        stopEffects = mountEffectLayers(effects);
         root.style.colorScheme = skin.mode === "Dark" ? "dark" : "light";
       },
     };

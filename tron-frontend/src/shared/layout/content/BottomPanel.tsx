@@ -172,6 +172,7 @@ export default function BottomPanel({
         maxSize={maximized ? "100%" : "70%"}
         onResize={panel.panelResize}
         data-theme-part="app-bottom-sidebar"
+        data-theme-anchor="panel"
       >
         <EditableTabs
           items={items}

@@ -1018,7 +1018,7 @@ export function TronShell({
               "fixed z-[70] w-[min(20rem,calc(100vw-1rem))] overflow-visible rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
             )}
             style={userPanelStyle ?? { visibility: "hidden" }}
-            role="dialog"
+            role="dialog" data-theme-anchor="dialog"
             aria-label={t("shell:utilityPanel.user")}
           >
             <div className="flex min-w-0 items-center gap-2 px-3 py-2">
@@ -1104,7 +1104,7 @@ export function TronShell({
               "absolute z-[70] w-[min(260px,calc(100vw-2rem))] rounded-xl border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-3 py-2.5 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)]",
               compact && !mobile ? "left-[calc(100%+8px)] top-0" : "left-0 top-[calc(100%+8px)]",
             )}
-            role="dialog"
+            role="dialog" data-theme-anchor="dialog"
             aria-label={t("shell:navigation.selectorTitle")}
           >
             {renderNavigationDomainSwitcherContent()}
@@ -1124,6 +1124,7 @@ export function TronShell({
         <SidebarProvider
           className="tron-skin-canvas isolate min-h-screen bg-[var(--color-background)] text-[var(--color-on-surface)]"
           data-theme-part="app-sidebar-frame"
+          data-theme-anchor="app-shell"
           open={!sidebarCollapsed}
           onOpenChange={(open) => setSidebarCollapsed(!open)}
         >
@@ -1226,7 +1227,7 @@ export function TronShell({
                 ref={utilityPanelRef}
                 id="tron-workspace-selector-panel"
                 className="absolute left-4 top-[calc(100%+8px)] w-[min(220px,calc(100vw-1rem))] rounded-lg border border-[var(--color-card-border)] bg-[var(--color-elevated-surface)] px-2 py-2 text-sm shadow-[0_12px_30px_rgba(0,0,0,0.08)] sm:left-6"
-                role="dialog"
+                role="dialog" data-theme-anchor="dialog"
                 aria-label={t("shell:workspace.selectorTitle")}
               >
                 {renderWorkspaceSwitcherContent()}
@@ -1256,6 +1257,7 @@ export function TronShell({
               <aside
                 className="fixed bottom-0 right-0 top-14 z-50 flex w-[min(22rem,calc(100vw-1rem))] flex-col overflow-y-auto bg-[var(--color-elevated-surface)] px-5 py-5 text-[var(--color-on-surface)] shadow-[-12px_0_34px_rgba(15,23,42,0.12),0_18px_45px_rgba(15,23,42,0.12)] lg:hidden"
                 data-theme-part="app-right-sidebar"
+                data-theme-anchor="panel"
                 data-testid="tron-mobile-right-sidebar"
                 id="tron-mobile-right-sidebar"
               >

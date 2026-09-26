@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { skinApi } from "./skinApi";
+import { mountEffectLayers } from "./effectLayers";
 import { prepareSkin, skinVariables } from "./skinEngine";
 import type { Skin } from "./Skin";
 import light from "./builtin/light.json";
@@ -7,7 +9,7 @@ import matrix from "./builtin/matrix-dark.json";
 import { getTerminalAnsiTheme } from "@/components/terminal/terminalTheme";
 
 vi.mock("./skinApi", () => ({ skinApi: { resource: vi.fn(async () => new Blob(["font"])) } }));
-afterEach(() => { document.querySelectorAll("style[data-tron-skin]").forEach((style) => style.remove()); vi.unstubAllGlobals(); });
+afterEach(() => { mountEffectLayers(new Set()); document.querySelectorAll("style[data-tron-skin], style[data-tron-skin-css]").forEach((style) => style.remove()); vi.unstubAllGlobals(); });
 const custom = (): Skin => ({ id: "test", name: "Test", version: 1, mode: "Light", colors: {}, layout: {}, resources: { background: null, font: null } });
 
 describe("skin runtime", () => {
@@ -64,5 +66,42 @@ describe("skin runtime", () => {
     vi.stubGlobal("FontFace", class { load = vi.fn(async () => { throw new Error("bad font"); }); });
     await expect(prepareSkin(skin)).rejects.toThrow("bad font");
     expect(revokeObjectURL).toHaveBeenCalledTimes(2);
+  });
+});
+
+
+describe("effect CSS compilation", () => {
+  function cssSkin(source: string) {
+    vi.mocked(skinApi.resource).mockResolvedValue({ text: async () => source } as Blob);
+    return { ...custom(), version: 2, resources: { css: "theme.css" } } as Skin;
+  }
+  it("compiles package image geometry and isolated animation names, then disposes layers and URLs", async () => {
+    vi.stubGlobal("ResizeObserver", class { observe() {} unobserve() {} disconnect() {} });
+    vi.stubGlobal("URL", { createObjectURL: () => "blob:vines", revokeObjectURL: vi.fn() });
+    const source = '[data-theme-effect-layer="card"]::before, [data-theme-effect-layer="chat-message"]::after { position: absolute; inset: 0; pointer-events: none; background: url("assets/vines.png"); animation: sway 2s infinite; } @keyframes sway { from { transform: rotate(-1deg); } to { transform: rotate(1deg); } }';
+    const prepared = await prepareSkin(cssSkin(source));
+    const host = document.createElement("section"); host.dataset.themeAnchor = "card"; document.body.append(host);
+    prepared.apply();
+    const css = document.querySelector("style[data-tron-skin-css]")!.textContent;
+    expect(css).toContain('body[data-tron-app][data-skin="test"] [data-theme-effect-layer="card"]::before');
+    expect(css).toContain("test-sway");
+    expect(css).toContain('url("blob:vines")');
+    expect(host.querySelector('[data-theme-effect-layer="card"]')).not.toBeNull();
+    prepared.dispose();
+    expect(host.children).toHaveLength(0);
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:vines"); host.remove();
+  });
+  it.each([
+    'button { position: absolute; }',
+    '[data-theme-effect-layer="card"] + button { width: 100px; }',
+    '[data-theme-effect-layer="card"] { position: fixed; }',
+    '[data-theme-effect-layer="card"] { pointer-events: auto; }',
+    '[data-theme-effect-layer="card"] { opacity: 0 !important; }',
+    '[data-theme-effect-layer="unknown"] { inset: 0; }',
+    '@keyframes escape { to { position: fixed; } }',
+    '[data-theme-effect-layer="card"] { background: url(https://example.com/vines.png); }',
+    '[data-theme-effect-layer="card"] { button { width: 100px; } }',
+  ])("rejects unsafe or layout-changing CSS: %s", async (source) => {
+    await expect(prepareSkin(cssSkin(source))).rejects.toThrow();
   });
 });

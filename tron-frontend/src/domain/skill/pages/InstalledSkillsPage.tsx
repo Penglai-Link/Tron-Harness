@@ -511,7 +511,7 @@ export function InstalledSkillsPage() {
         <div className="fixed inset-0 z-[85] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
           <div
             className="w-[min(92vw,32rem)] rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog"
+            role="dialog" data-theme-anchor="dialog"
             aria-modal="true"
             aria-label={pageT("aria.uninstallConfirmation", "Uninstall skill confirmation")}
           >
@@ -585,7 +585,7 @@ export function InstalledSkillsPage() {
         <div className="fixed inset-0 z-[120] flex items-center justify-center bg-[var(--tron-overlay-bg,var(--color-backdrop-scrim))] p-4 backdrop-blur-sm">
           <div
             className="flex h-[min(88vh,64rem)] w-[min(96vw,72rem)] min-w-0 max-w-full flex-col rounded-2xl border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)] shadow-[0_20px_60px_rgba(0,0,0,0.28)]"
-            role="dialog"
+            role="dialog" data-theme-anchor="dialog"
             aria-modal="true"
             aria-label={pageT("aria.skillMarkdownFullscreenPreview", "Skill markdown fullscreen preview")}
           >
