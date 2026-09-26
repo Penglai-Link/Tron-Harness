@@ -20,6 +20,7 @@ import {
 
 import { tronEditorTheme, tronSyntaxHighlighting } from "./editorTheme";
 import { resolveLanguage } from "./language";
+import { emitTypingParticlesAt } from "@/shared/theme/typingParticles";
 
 export interface CodeEditorProps {
   /** 作为状态缓存键的路径，让每个文件都能保留独立的撤销历史。 */
@@ -97,6 +98,14 @@ export function CodeEditor({
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {
             onChangeRef.current(update.state.doc.toString());
+            const cameFromUserEdit = update.transactions.some((transaction) => (
+              transaction.docChanged
+              && (transaction.isUserEvent("input") || transaction.isUserEvent("delete"))
+            ));
+            if (cameFromUserEdit) {
+              const caret = update.view.coordsAtPos(update.state.selection.main.head);
+              if (caret) emitTypingParticlesAt(caret.left, (caret.top + caret.bottom) / 2);
+            }
           }
         }),
         tronEditorTheme,

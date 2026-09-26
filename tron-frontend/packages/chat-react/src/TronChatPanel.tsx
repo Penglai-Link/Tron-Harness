@@ -435,11 +435,13 @@ function CopyValueButton({
 function ChatBubble({
   currentUserDisplayName,
   emptyAssistantMessage = "No assistant response was produced.",
+  isStreaming = false,
   message,
   onEditMessage,
 }: {
   currentUserDisplayName?: string;
   emptyAssistantMessage?: string;
+  isStreaming?: boolean;
   message: ChatMessage;
   onEditMessage?: (content: string) => void;
 }) {
@@ -458,6 +460,7 @@ function ChatBubble({
         className={cx("tron-chat__message", isUser && "tron-chat__message--user")}
         data-theme-anchor="chat-message"
         data-theme-part={isUser ? "chat-message-user" : "chat-message-assistant"}
+        data-streaming={isStreaming ? "true" : undefined}
       >
         <div className="tron-chat__message-header">
           <div className="tron-chat__message-actor">
@@ -1352,17 +1355,19 @@ export function TronChatPanel({
     || (primarySubmitMode === "queue"
         ? queueDisabled
         : Boolean(sendDisabled));
-  const pendingAssistantMessageCode = useMemo(() => {
-    if (!sending) return undefined;
-    const latestMessage = messages[messages.length - 1];
-    if (
-      latestMessage?.role !== "ASSISTANT" ||
-      latestMessage.content.trim()
-    ) {
-      return undefined;
-    }
-    return latestMessage.messageCode;
-  }, [messages, sending]);
+  const latestMessage = messages[messages.length - 1];
+  const streamingAssistantMessageCode = sending && latestMessage?.role === "ASSISTANT"
+    ? latestMessage.messageCode
+    : undefined;
+  // The runtime creates an empty optimistic assistant message while the agent
+  // is thinking or using tools. Keep it in runtime state for incoming deltas,
+  // but only add the reply card to the transcript once text starts streaming.
+  const transcriptMessages = useMemo(
+    () => messages.filter((message) => (
+      message.messageCode !== streamingAssistantMessageCode || message.content.trim().length > 0
+    )),
+    [messages, streamingAssistantMessageCode],
+  );
   const presentation = useMemo(
     () =>
       buildTranscriptPresentation({
@@ -1387,8 +1392,8 @@ export function TronChatPanel({
     ],
   );
   const historyTurns = useMemo(
-    () => buildChatHistoryTurns(messages, presentation),
-    [messages, presentation],
+    () => buildChatHistoryTurns(transcriptMessages, presentation),
+    [transcriptMessages, presentation],
   );
   const turnByMessageCode = useMemo(() => {
     const next = new Map<string, string>();
@@ -1404,7 +1409,7 @@ export function TronChatPanel({
     historyTurns.forEach((turn) => {
       next.set(turn.id, []);
     });
-    messages.forEach((message) => {
+    transcriptMessages.forEach((message) => {
       const turnId = turnByMessageCode.get(message.messageCode);
       if (!turnId) return;
       const bucket = next.get(turnId);
@@ -1412,7 +1417,7 @@ export function TronChatPanel({
       bucket.push(message);
     });
     return next;
-  }, [historyTurns, messages, turnByMessageCode]);
+  }, [historyTurns, transcriptMessages, turnByMessageCode]);
 
   function scrollToBottom(behavior: ScrollBehavior = "auto") {
     const element = transcriptRef.current;
@@ -1514,7 +1519,7 @@ export function TronChatPanel({
             )}
           >
             <ChatHistoryRail
-              messages={messages}
+              messages={transcriptMessages}
               presentation={presentation}
               transcriptRef={transcriptRef}
             />
@@ -1525,7 +1530,7 @@ export function TronChatPanel({
               onScroll={handleScroll}
             >
               <div className="tron-chat__transcript-inner">
-                {messages.length ? (
+                {transcriptMessages.length ? (
                   historyTurns.map((turn) => (
                     <section
                       className="tron-chat__turn"
@@ -1546,12 +1551,7 @@ export function TronChatPanel({
                               {!isUserInputAnswerSummary(message) ? (
                                 <ChatBubble
                                   currentUserDisplayName={currentUserDisplayName}
-                                  emptyAssistantMessage={
-                                    message.messageCode ===
-                                    pendingAssistantMessageCode
-                                      ? "Waiting for assistant output..."
-                                      : undefined
-                                  }
+                                  isStreaming={message.messageCode === streamingAssistantMessageCode}
                                   message={message}
                                   onEditMessage={onEditMessage}
                                 />
@@ -1560,12 +1560,7 @@ export function TronChatPanel({
                           ) : (
                             <ChatBubble
                               currentUserDisplayName={currentUserDisplayName}
-                              emptyAssistantMessage={
-                                message.messageCode ===
-                                pendingAssistantMessageCode
-                                  ? "Waiting for assistant output..."
-                                  : undefined
-                              }
+                              isStreaming={message.messageCode === streamingAssistantMessageCode}
                               message={message}
                               onEditMessage={onEditMessage}
                             />

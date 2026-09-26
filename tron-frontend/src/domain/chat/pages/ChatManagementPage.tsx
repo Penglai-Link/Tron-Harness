@@ -58,6 +58,7 @@ import {
   useDismissibleLayer,
   useOpenRightSidebar,
   PageView,
+  useTheme,
   type TargetPageFrameInspectionResult,
   useRightPanelTabs,
 } from "@/shared";
@@ -4922,6 +4923,7 @@ export function ChatManagementPage() {
   const requestedSessionCode = currentSearchParams.get("sessionCode")?.trim() ?? "";
   const requestedSourceTab = parseChatSessionSourceTab(currentSearchParams.get("sourceTab"));
   const toast = useToast();
+  const { agentReplyEffect, agentReplySpeed } = useTheme();
   const openRightSidebar = useOpenRightSidebar();
   const { i18n, t } = useTranslation("pages");
   const userInputLabels = useMemo<ChatUserInputLabels>(() => ({
@@ -7501,6 +7503,8 @@ export function ChatManagementPage() {
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {activeSession ? (
           <TronChatRuntimeWindow
+            agentReplyEffect={agentReplyEffect}
+            agentReplySpeed={agentReplySpeed}
             adapter={chatRuntimeAdapter}
             attachmentLabels={attachmentLabels}
             autoFocusComposer={shouldAutoFocusChatComposer()}

@@ -27,6 +27,7 @@ import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { DesktopBridge } from "@/shared/desktop/DesktopBridge";
 import { OPEN_CHATS_PAGE_VIEW_EVENT } from "@/shared/lib/shellEvents";
 import { useToast } from "@/components/ui/toast";
+import { useTheme } from "@/shared";
 
 interface MainAgentChatWindowProps {
   currentUserDisplayName?: string;
@@ -90,6 +91,7 @@ export function MainAgentChatWindow({
 }: MainAgentChatWindowProps) {
   const toast = useToast();
   const { t } = useTranslation("pages");
+  const { agentReplyEffect, agentReplySpeed } = useTheme();
   const workRailLabels = useChatWorkRailLabels();
   const desktopBridge = useMemo(() => new DesktopBridge(), []);
   const openMarkdownLinkInChatsSidebar = useCallback((url: string) => {
@@ -258,6 +260,8 @@ export function MainAgentChatWindow({
   return (
     <>
       <TronChatRuntimeWindow
+        agentReplyEffect={agentReplyEffect}
+        agentReplySpeed={agentReplySpeed}
         adapter={adapter}
         config={windowConfig}
         createSendInput={createSendInput}

@@ -268,7 +268,7 @@ describe("TronChatPanel submit controls", () => {
     expect(screen.getByText("First option")).toBeTruthy();
   });
 
-  it("only labels an active empty assistant message as waiting", () => {
+  it("hides an empty streaming assistant card until its first text delta", () => {
     const userMessage = {
       actor: "User",
       channel: "MAIN_AGENT",
@@ -330,8 +330,26 @@ describe("TronChatPanel submit controls", () => {
       />,
     );
 
-    expect(screen.getByText("Waiting for assistant output...")).toBeTruthy();
+    expect(screen.queryByText("Waiting for assistant output...")).toBeNull();
     expect(screen.queryByText("No assistant response was produced.")).toBeNull();
+
+    rerender(
+      <TronChatPanel
+        draft="Follow up"
+        messages={[
+          userMessage,
+          { ...emptyAssistant, content: "The first streamed chunk" },
+        ]}
+        onDraftChange={() => undefined}
+        onSend={() => undefined}
+        sending
+        session={activeSession()}
+        showHeader={false}
+      />,
+    );
+
+    expect(screen.getByText("The first streamed chunk")).toBeTruthy();
+    expect(screen.queryByText("Waiting for assistant output...")).toBeNull();
   });
 
   it("renders message actions below the message content", () => {

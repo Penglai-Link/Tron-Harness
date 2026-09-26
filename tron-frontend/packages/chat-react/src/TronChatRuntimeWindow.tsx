@@ -50,6 +50,8 @@ interface ToastLikeCallback {
 }
 
 export interface TronChatRuntimeWindowProps {
+  agentReplyEffect?: "off" | "typewriter";
+  agentReplySpeed?: number;
   adapter?: ChatAdapter;
   attachmentLabels?: ChatAttachmentLabels;
   autoFocusComposer?: boolean;
@@ -158,6 +160,8 @@ function PendingAttachmentCard({
 }
 
 export function TronChatRuntimeWindow({
+  agentReplyEffect = "typewriter",
+  agentReplySpeed = 120,
   adapter,
   attachmentLabels,
   autoFocusComposer = false,
@@ -223,6 +227,12 @@ export function TronChatRuntimeWindow({
   const [activeRunStatusPending, setActiveRunStatusPending] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [queuedSubmissions, setQueuedSubmissions] = useState<ChatQueuedSubmission[]>([]);
+  const agentReplyEffectRef = useRef(agentReplyEffect);
+  const agentReplySpeedRef = useRef(agentReplySpeed);
+  const assistantReplyQueueRef = useRef<{ messageCode: string; characters: string[] } | null>(null);
+  const assistantReplyFrameRef = useRef<number | null>(null);
+  const assistantReplyLastFrameRef = useRef(0);
+  const assistantReplyCarryRef = useRef(0);
   const activeSessionCodeRef = useRef("");
   const activeRunCodeRef = useRef("");
   const remoteActiveRunRef = useRef<ChatActiveRun | null>(null);
@@ -249,6 +259,97 @@ export function TronChatRuntimeWindow({
   const pendingAttachmentsRef = useRef<ChatMessageAttachment[]>(controlledPendingAttachments ?? []);
   const draft = controlledDraft ?? internalDraft;
   const pendingAttachments = controlledPendingAttachments ?? internalPendingAttachments;
+
+  agentReplyEffectRef.current = agentReplyEffect;
+  agentReplySpeedRef.current = agentReplySpeed;
+
+  const appendAssistantText = useCallback((messageCode: string, text: string) => {
+    if (!text) return;
+    setMessages((current) => current.map((message) => (
+      message.messageCode === messageCode
+        ? { ...message, content: `${message.content}${text}` }
+        : message
+    )));
+  }, []);
+
+  const drainAssistantReplyQueue = useCallback((messageCode: string, flush = false) => {
+    const queue = assistantReplyQueueRef.current;
+    if (!queue || queue.messageCode !== messageCode) return;
+    if (assistantReplyFrameRef.current !== null) {
+      window.cancelAnimationFrame(assistantReplyFrameRef.current);
+      assistantReplyFrameRef.current = null;
+    }
+    let count = queue.characters.length;
+    if (!flush) {
+      const now = performance.now();
+      const elapsed = Math.min(100, Math.max(0, now - assistantReplyLastFrameRef.current));
+      assistantReplyLastFrameRef.current = now;
+      const available = assistantReplyCarryRef.current + elapsed * agentReplySpeedRef.current / 1000;
+      count = Math.floor(available);
+      assistantReplyCarryRef.current = available - count;
+      count = Math.min(queue.characters.length, count);
+    }
+    const characters = queue.characters.splice(0, count);
+    if (!characters.length && !flush) {
+      assistantReplyFrameRef.current = window.requestAnimationFrame(() => {
+        assistantReplyFrameRef.current = null;
+        drainAssistantReplyQueue(messageCode);
+      });
+      return;
+    }
+    appendAssistantText(messageCode, characters.join(""));
+    if (queue.characters.length) {
+      assistantReplyFrameRef.current = window.requestAnimationFrame(() => {
+        assistantReplyFrameRef.current = null;
+        drainAssistantReplyQueue(messageCode);
+      });
+    } else {
+      assistantReplyQueueRef.current = null;
+      assistantReplyCarryRef.current = 0;
+    }
+  }, [appendAssistantText]);
+
+  const queueAssistantText = useCallback((messageCode: string, text: string) => {
+    if (agentReplyEffectRef.current === "off") {
+      drainAssistantReplyQueue(messageCode, true);
+      appendAssistantText(messageCode, text);
+      return;
+    }
+    let queue = assistantReplyQueueRef.current;
+    if (!queue || queue.messageCode !== messageCode) {
+      if (queue) drainAssistantReplyQueue(queue.messageCode, true);
+      queue = { messageCode, characters: [] };
+      assistantReplyQueueRef.current = queue;
+      assistantReplyCarryRef.current = 0;
+    }
+    queue.characters.push(...Array.from(text));
+    if (assistantReplyFrameRef.current === null) {
+      assistantReplyLastFrameRef.current = performance.now();
+      assistantReplyFrameRef.current = window.requestAnimationFrame(() => {
+        assistantReplyFrameRef.current = null;
+        drainAssistantReplyQueue(messageCode);
+      });
+    }
+  }, [appendAssistantText, drainAssistantReplyQueue]);
+
+  const waitForAssistantReplyQueue = useCallback((messageCode: string) => new Promise<void>((resolve) => {
+    const check = () => {
+      const queue = assistantReplyQueueRef.current;
+      if (!queue || queue.messageCode !== messageCode) {
+        resolve();
+        return;
+      }
+      window.requestAnimationFrame(check);
+    };
+    check();
+  }), []);
+
+  useEffect(() => () => {
+    if (assistantReplyFrameRef.current !== null) {
+      window.cancelAnimationFrame(assistantReplyFrameRef.current);
+    }
+    assistantReplyQueueRef.current = null;
+  }, []);
 
   useEffect(() => {
     draftRef.current = draft;
@@ -643,7 +744,10 @@ export function TronChatRuntimeWindow({
             : Promise.resolve([]),
         ]);
         if (activeSessionCodeRef.current !== session.sessionCode) return;
-        setMessages(nextMessages);
+        // A local send owns an optimistic assistant message that is updated by
+        // SSE deltas. The persisted transcript won't contain it until the run
+        // completes, so polling must not replace the in-flight message list.
+        if (!sendingRef.current) setMessages(nextMessages);
         setAguiEvents(nextAguiEvents);
         setProtocolEvents(nextProtocolEvents);
         setUserInputRequests(nextUserInputRequests);
@@ -808,6 +912,12 @@ export function TronChatRuntimeWindow({
       return false;
     }
     const submittedAttachments = sendInput.attachments ?? [];
+    if (assistantReplyFrameRef.current !== null) {
+      window.cancelAnimationFrame(assistantReplyFrameRef.current);
+      assistantReplyFrameRef.current = null;
+    }
+    assistantReplyQueueRef.current = null;
+    assistantReplyCarryRef.current = 0;
     const autoDrainEpoch = autoDrainEpochRef.current;
     const abortController = new AbortController();
     abortRef.current = abortController;
@@ -892,11 +1002,7 @@ export function TronChatRuntimeWindow({
           onDelta: (delta) => {
             if (abortRef.current !== abortController) return;
             setLiveAguiPending(false);
-            setMessages((current) => current.map((message) => (
-              message.messageCode === optimisticAssistantCode
-                ? { ...message, content: `${message.content}${delta}` }
-                : message
-            )));
+            queueAssistantText(optimisticAssistantCode, delta);
           },
         },
         abortController.signal,
@@ -910,6 +1016,7 @@ export function TronChatRuntimeWindow({
         // committing stale UI state or re-sending an already accepted input.
         throw new Error("Chat stream observer closed");
       }
+      await waitForAssistantReplyQueue(optimisticAssistantCode);
       if (activeSessionCodeRef.current !== activeSession.sessionCode) {
         streamSucceeded = true;
         shouldRestoreSourceSubmission = false;
@@ -958,6 +1065,7 @@ export function TronChatRuntimeWindow({
       completed = currentStreamAbortReason(abortController) === "none"
         && autoDrainEpochRef.current === autoDrainEpoch;
     } catch (error) {
+      drainAssistantReplyQueue(optimisticAssistantCode, true);
       const abortReason = currentStreamAbortReason(abortController);
       const runConflict = error instanceof FetchTransportError
         && error.code === "CHAT_RUN_ALREADY_ACTIVE";

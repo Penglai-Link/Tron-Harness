@@ -97,6 +97,84 @@ function completedResult(
 }
 
 describe("TronChatRuntimeWindow", () => {
+  it("renders the assistant card on the first streamed delta and appends later deltas", async () => {
+    let streamHandlers: ChatStreamHandlers | undefined;
+    let finishStream: ((result: ChatSendResult) => void) | undefined;
+    const streamMessage = vi.fn((
+      _session: ChatSession,
+      _input: SendChatMessageInput,
+      handlers?: ChatStreamHandlers,
+    ) => new Promise<ChatSendResult>((resolve) => {
+      streamHandlers = handlers;
+      finishStream = resolve;
+    }));
+    const adapter = {
+      ...createAdapter().adapter,
+      streamMessage,
+    } satisfies ChatAdapter;
+
+    render(
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        config={{ floating: false, workspaceCode: "WS-1" }}
+        initialSession={restoredSession()}
+      />,
+    );
+    await waitFor(() => expect(adapter.loadMessages).toHaveBeenCalled());
+    fireEvent.change(screen.getByRole("textbox"), {
+      target: { value: "Explain streaming" },
+    });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    await waitFor(() => expect(streamMessage).toHaveBeenCalledTimes(1));
+
+    expect(screen.queryByText("Waiting for assistant output...")).toBeNull();
+    expect(screen.getAllByRole("article")).toHaveLength(1);
+
+    act(() => streamHandlers?.onDelta?.("First chunk "));
+    await waitFor(() => expect(screen.getByText("First chunk", { exact: false })).toBeTruthy());
+    const assistantCard = screen.getByText("First chunk", { exact: false }).closest("article");
+    expect(assistantCard?.getAttribute("data-streaming")).toBe("true");
+
+    act(() => streamHandlers?.onDelta?.("and second chunk"));
+    await waitFor(() => expect(screen.getByText("First chunk and second chunk")).toBeTruthy());
+
+    await act(async () => {
+      finishStream?.(completedResult("RUN-STREAMING"));
+    });
+  });
+
+  it("streams deltas immediately when the Agent reply effect is disabled", async () => {
+    let streamHandlers: ChatStreamHandlers | undefined;
+    let finishStream: ((result: ChatSendResult) => void) | undefined;
+    const adapter = {
+      ...createAdapter().adapter,
+      streamMessage: vi.fn((
+        _session: ChatSession,
+        _input: SendChatMessageInput,
+        handlers?: ChatStreamHandlers,
+      ) => new Promise<ChatSendResult>((resolve) => {
+        streamHandlers = handlers;
+        finishStream = resolve;
+      })),
+    } satisfies ChatAdapter;
+    render(
+      <TronChatRuntimeWindow
+        adapter={adapter}
+        agentReplyEffect="off"
+        config={{ floating: false, workspaceCode: "WS-1" }}
+        initialSession={restoredSession()}
+      />,
+    );
+    await waitFor(() => expect(adapter.loadMessages).toHaveBeenCalled());
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "Quick reply" } });
+    fireEvent.keyDown(screen.getByRole("textbox"), { key: "Enter" });
+    await waitFor(() => expect(adapter.streamMessage).toHaveBeenCalledTimes(1));
+
+    act(() => streamHandlers?.onDelta?.("Immediate chunk"));
+    expect(screen.getByText("Immediate chunk")).toBeTruthy();
+    await act(async () => finishStream?.(completedResult("RUN-INSTANT")));
+  });
+
   it("keeps streamed run errors visible when sending fails before an assistant reply", async () => {
     const onError = vi.fn();
     const adapter: ChatAdapter = {

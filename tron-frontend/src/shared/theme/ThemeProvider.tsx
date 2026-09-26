@@ -3,6 +3,13 @@ import { applySystemFontSize, defaultSystemFontSize, isSystemFontSize, readStore
 import { useAuthStore } from "@/store/authStore";
 import { skinApi } from "./skinApi";
 import { prepareSkin, type PreparedSkin } from "./skinEngine";
+import {
+  defaultTypingParticleSettings,
+  mountTypingEffect,
+  type TypingParticleSettings,
+  type TypingParticleShape,
+  type TypingParticleStyle,
+} from "./typingParticles";
 import type { Skin } from "./Skin";
 import light from "./builtin/light.json";
 import matrix from "./builtin/matrix-dark.json";
@@ -10,10 +17,57 @@ import matrix from "./builtin/matrix-dark.json";
 import particles from "./builtin/matrix-particles.json";
 
 export type AppTheme = "light" | "matrix-dark";
+export type TypingEffect = "off" | "particles" | "glow" | "ripple";
+export type AgentReplyEffect = "off" | "typewriter";
+const typingEffectStorageKey = "tron.typing-effect";
+const typingParticleSettingsStorageKey = "tron.typing-particle-settings";
+const agentReplyEffectStorageKey = "tron.agent-reply-effect";
+const agentReplySpeedStorageKey = "tron.agent-reply-speed";
+function readTypingEffect(): TypingEffect {
+  const stored = localStorage.getItem(typingEffectStorageKey);
+  return stored === "particles" || stored === "glow" || stored === "ripple" ? stored : "off";
+}
+function readAgentReplyEffect(): AgentReplyEffect {
+  return localStorage.getItem(agentReplyEffectStorageKey) === "off" ? "off" : "typewriter";
+}
+function readAgentReplySpeed() {
+  const raw = localStorage.getItem(agentReplySpeedStorageKey);
+  if (raw === null) return 120;
+  const stored = Number(raw);
+  return Number.isFinite(stored) ? Math.min(240, Math.max(30, stored)) : 120;
+}
+function readTypingParticleSettings(): TypingParticleSettings {
+  try {
+    const stored = JSON.parse(localStorage.getItem(typingParticleSettingsStorageKey) ?? "null") as Partial<TypingParticleSettings> | null;
+    if (!stored) return defaultTypingParticleSettings;
+    const styles: TypingParticleStyle[] = ["colorful", "mosaic", "neon", "custom"];
+    const shapes: TypingParticleShape[] = ["circle", "square", "diamond", "star"];
+    return {
+      style: styles.includes(stored.style as TypingParticleStyle) ? stored.style as TypingParticleStyle : defaultTypingParticleSettings.style,
+      shape: shapes.includes(stored.shape as TypingParticleShape) ? stored.shape as TypingParticleShape : defaultTypingParticleSettings.shape,
+      count: typeof stored.count === "number" ? Math.min(24, Math.max(4, stored.count)) : defaultTypingParticleSettings.count,
+      size: typeof stored.size === "number" ? Math.min(8, Math.max(1, stored.size)) : defaultTypingParticleSettings.size,
+      speed: typeof stored.speed === "number" ? Math.min(3, Math.max(0.5, stored.speed)) : defaultTypingParticleSettings.speed,
+      color: typeof stored.color === "string" && /^#[\da-f]{6}$/i.test(stored.color)
+        ? stored.color
+        : defaultTypingParticleSettings.color,
+    };
+  } catch {
+    return defaultTypingParticleSettings;
+  }
+}
 const builtins = [light, matrix, particles] as Skin[];
 interface ThemeContextValue {
   fontSize: number;
   setFontSize: (size: number) => void;
+  typingEffect: TypingEffect;
+  setTypingEffect: (effect: TypingEffect) => void;
+  agentReplyEffect: AgentReplyEffect;
+  setAgentReplyEffect: (effect: AgentReplyEffect) => void;
+  agentReplySpeed: number;
+  setAgentReplySpeed: (speed: number) => void;
+  typingParticleSettings: TypingParticleSettings;
+  setTypingParticleSettings: (settings: TypingParticleSettings) => void;
   theme: AppTheme;
   activeSkin: Skin;
   skins: Skin[];
@@ -38,6 +92,10 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   const [previewSkinId, setPreviewSkinId] = useState<string | null>(null);
   const [fontSize, setFontSize] = useState(() => readStoredSystemFontSize(localStorage) ?? defaultSystemFontSize);
+  const [typingEffect, setTypingEffect] = useState<TypingEffect>(readTypingEffect);
+  const [agentReplyEffect, setAgentReplyEffect] = useState<AgentReplyEffect>(readAgentReplyEffect);
+  const [agentReplySpeed, setAgentReplySpeed] = useState(readAgentReplySpeed);
+  const [typingParticleSettings, setTypingParticleSettings] = useState<TypingParticleSettings>(readTypingParticleSettings);
   const applied = useRef<PreparedSkin | null>(null);
   const activeSignature = useRef<string | null>(null);
   const generation = useRef(0);
@@ -210,8 +268,36 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
     localStorage.setItem(systemFontSizeStorageKey, String(fontSize));
   }, [fontSize]);
 
+  useEffect(() => {
+    localStorage.setItem(typingEffectStorageKey, typingEffect);
+    localStorage.setItem(typingParticleSettingsStorageKey, JSON.stringify(typingParticleSettings));
+    return mountTypingEffect(typingEffect, typingParticleSettings);
+  }, [typingEffect, typingParticleSettings]);
+
+  useEffect(() => {
+    localStorage.setItem(agentReplyEffectStorageKey, agentReplyEffect);
+    localStorage.setItem(agentReplySpeedStorageKey, String(agentReplySpeed));
+  }, [agentReplyEffect, agentReplySpeed]);
+
   return <ThemeContext.Provider value={{
     fontSize, setFontSize: (size) => { if (isSystemFontSize(size)) setFontSize(size); },
+    typingEffect, setTypingEffect: (effect) => {
+      if (["off", "particles", "glow", "ripple"].includes(effect)) setTypingEffect(effect);
+    },
+    agentReplyEffect,
+    setAgentReplyEffect: (effect) => setAgentReplyEffect(effect === "off" ? "off" : "typewriter"),
+    agentReplySpeed,
+    setAgentReplySpeed: (speed) => {
+      if (Number.isFinite(speed)) setAgentReplySpeed(Math.min(240, Math.max(30, speed)));
+    },
+    typingParticleSettings,
+    setTypingParticleSettings: (settings) => setTypingParticleSettings({
+      ...settings,
+      shape: ["circle", "square", "diamond", "star"].includes(settings.shape) ? settings.shape : defaultTypingParticleSettings.shape,
+      count: Math.min(24, Math.max(4, settings.count)),
+      size: Math.min(8, Math.max(1, settings.size)),
+      speed: Math.min(3, Math.max(0.5, settings.speed)),
+    }),
     theme: activeSkin.mode === "Dark" ? "matrix-dark" : "light", activeSkin, skins,
     loading, error, refreshSkins, selectSkin, importSkin, installMarketSkin, uninstallSkin, previewSkin, stopPreviewSkin, previewSkinId,
   }}>{children}</ThemeContext.Provider>;
