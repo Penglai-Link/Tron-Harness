@@ -1,7 +1,7 @@
 import { OnlineSkinMarket } from "./OnlineSkinMarket";
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslation } from "react-i18next";
-import { Check, Eye, EyeOff, Trash2, Upload } from "lucide-react";
+import { Check, Trash2, Upload } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { InfoTooltip } from "@/components/info-tooltip";
@@ -12,11 +12,10 @@ import type { Skin } from "@/shared/theme/Skin";
 export function SkinSettings() {
   const { t } = useTranslation("pages");
   const { t: shellT } = useTranslation("shell");
-  const { skins, activeSkin, loading, error, selectSkin, importSkin, uninstallSkin, refreshSkins, previewSkin, stopPreviewSkin, previewSkinId } = useTheme();
+  const { skins, activeSkin, loading, error, selectSkin, importSkin, uninstallSkin, refreshSkins } = useTheme();
   const input = useRef<HTMLInputElement>(null);
   const toast = useToast();
   const [skinToUninstall, setSkinToUninstall] = useState<Skin | null>(null);
-  useEffect(() => () => stopPreviewSkin(), [stopPreviewSkin]);
   const label = (skin: Skin) => skin.id === "light" ? shellT("theme.options.light")
     : skin.id === "matrix-dark" ? shellT("theme.options.matrixDark") : skin.name;
 
@@ -40,11 +39,6 @@ export function SkinSettings() {
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : t("settingsAppearance.skinUninstallFailed"));
     }
-  }
-  async function preview(id: string) {
-    if (previewSkinId === id) { stopPreviewSkin(); return; }
-    try { await previewSkin(id); }
-    catch (reason) { toast.error(reason instanceof Error ? reason.message : t("settingsAppearance.skinFailed")); }
   }
   return (
     <SurfaceCard className="space-y-4" aria-busy={loading}>
@@ -97,18 +91,6 @@ export function SkinSettings() {
                 <span className="truncate">{label(skin)}</span>
                 {selected ? <Check className="size-4 shrink-0" aria-hidden="true" /> : null}
               </span>
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-sm"
-              aria-label={previewSkinId === skin.id ? t("settingsAppearance.stopPreview") : t("settingsAppearance.previewSkin", { name: label(skin) })}
-              aria-pressed={previewSkinId === skin.id}
-              title={previewSkinId === skin.id ? t("settingsAppearance.stopPreview") : t("settingsAppearance.previewSkin", { name: label(skin) })}
-              disabled={loading}
-              onClick={() => void preview(skin.id)}
-              className={`absolute top-2 ${imported ? "right-11" : "right-2"} z-10 border border-[var(--color-outline-variant)] bg-[var(--color-elevated-surface)]/90 shadow-sm`}
-            >
-              {previewSkinId === skin.id ? <EyeOff aria-hidden="true" /> : <Eye aria-hidden="true" />}
             </Button>
             {imported ? <Button
               variant="ghost"

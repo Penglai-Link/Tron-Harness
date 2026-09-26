@@ -1,3 +1,4 @@
+import { ThemeMenu } from "./ThemeMenu";
 import { CheckinButton } from "@/domain/auth/components/CheckinButton";
 import {
   useCallback,
@@ -652,6 +653,7 @@ export function TronShell({
 
   useDismissibleLayer({
     open: Boolean(utilityPanel),
+    nestedLayerSelectors: ["[data-slot='select-positioner']", "[data-tron-theme-menu]"],
     onDismiss: () => {
       if (!utilityPanel) return;
       toggleUtilityPanel(utilityPanel);
@@ -973,6 +975,7 @@ export function TronShell({
               ))}
             </SelectInput>
           </div>
+          <ThemeMenu />
         </div>
       </>
     );
