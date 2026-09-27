@@ -207,21 +207,24 @@ async fn deleting_a_file_resource_removes_its_stored_object() {
 }
 
 #[tokio::test]
-async fn workspace_page_requires_workspace_read_permission() {
+async fn workspace_page_uses_the_active_profile_instead_of_legacy_bearer_roles() {
     let (app, _) = resource_app("workspace-authorization");
     let token = authenticated_bearer_token(&app).await;
     let created = create_file_resource(&app, &token, "authorized-file", b"body").await;
     assert_eq!(created.status(), StatusCode::OK);
 
-    let viewer_token = signed_access_token("USR-0007", &["VIEWER"], &["SUPPORT", "PLATFORM"]);
-    let forbidden = authenticated_json_response(
+    // Local JWT roles no longer define identity; the selected profile owns this database.
+    let viewer_token = "obsolete-local-bearer";
+    let response = authenticated_json_response(
         &app,
         &viewer_token,
         "/api/v1/resources/page",
         json!({ "workspaceCode": WORKSPACE, "kinds": [], "sourceKind": null, "search": null, "current": 1, "size": 50 }),
     )
     .await;
-    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["data"]["total"], 1);
 }
 
 #[tokio::test]
@@ -359,8 +362,8 @@ async fn platform_admin_can_manage_platform_resources_without_workspace_membersh
         "Inherited"
     );
 
-    let viewer_token = signed_access_token("USR-0007", &["VIEWER"], &["SUPPORT"]);
-    let forbidden = authenticated_json_response(
+    let viewer_token = "obsolete-local-bearer";
+    let response = authenticated_json_response(
         &app,
         &viewer_token,
         "/api/v1/resources/page",
@@ -374,18 +377,16 @@ async fn platform_admin_can_manage_platform_resources_without_workspace_membersh
         }),
     )
     .await;
-    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
+    assert_eq!(response.status(), StatusCode::OK);
+    let body = response_json(response).await;
+    assert_eq!(body["data"]["total"], 1);
 }
 
 #[tokio::test]
 async fn child_workspace_page_projects_inherited_parent_resources() {
     let (app, _) = resource_app("inheritance-projection");
     let token = authenticated_bearer_token(&app).await;
-    let parent_token = signed_access_token(
-        "USR-LARGE-ID",
-        &["WORKSPACE_ADMIN", "DEVELOPER"],
-        &["ENTERPRISE", "PLATFORM"],
-    );
+    let parent_token = token.clone();
     let created = create_file_resource_in_workspace(
         &app,
         &parent_token,
@@ -825,8 +826,6 @@ fn resource_app_without_platform_workspace(test_name: &str) -> (Router, PathBuf)
     connection
         .execute_batch(
             "PRAGMA foreign_keys = OFF;
-             DELETE FROM workspace_role_access WHERE workspace_code = 'PLATFORM';
-             DELETE FROM workspace_user_access WHERE workspace_code = 'PLATFORM';
              UPDATE workspaces
              SET parent_workspace_code = NULL
              WHERE parent_workspace_code = 'PLATFORM';
@@ -858,53 +857,4 @@ fn resource_app_with_database(
     config.resource = ResourceConfig::with_default_root(storage_root.display().to_string());
     config.resource.limits.max_binary_bytes = max_binary_bytes;
     (app_with_config(config), storage_root, database_path)
-}
-
-#[derive(serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct TestAccessTokenClaims {
-    sub: String,
-    sid: String,
-    user_code: String,
-    session_code: String,
-    auth_method: String,
-    provider_code: Option<String>,
-    role_codes: Vec<String>,
-    space_codes: Vec<String>,
-    exp: usize,
-    iat: usize,
-    kind: String,
-}
-
-fn signed_access_token(user_code: &str, role_codes: &[&str], space_codes: &[&str]) -> String {
-    use jsonwebtoken::{Algorithm, EncodingKey, Header, encode};
-    let now = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .expect("clock should advance")
-        .as_secs() as usize;
-    let claims = TestAccessTokenClaims {
-        sub: user_code.to_string(),
-        sid: format!("TEST-{user_code}"),
-        user_code: user_code.to_string(),
-        session_code: format!("TEST-{user_code}"),
-        auth_method: "internal".to_string(),
-        provider_code: None,
-        role_codes: role_codes
-            .iter()
-            .map(|value| (*value).to_string())
-            .collect(),
-        space_codes: space_codes
-            .iter()
-            .map(|value| (*value).to_string())
-            .collect(),
-        exp: now + 300,
-        iat: now,
-        kind: "access".to_string(),
-    };
-    encode(
-        &Header::new(Algorithm::HS256),
-        &claims,
-        &EncodingKey::from_secret(AppConfig::default().auth.jwt_secret.as_bytes()),
-    )
-    .expect("viewer access token should be signed")
 }

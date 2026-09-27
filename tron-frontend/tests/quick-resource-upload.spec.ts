@@ -146,7 +146,7 @@ test("quick upload creates an IMAGE with one multipart file", async ({ page }) =
   await seedResourceUiShell(page);
 
   await page.goto(`${frontend!.baseUrl}/resources`);
-  await expect(page.getByRole("heading", { name: "Resources" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("tab", { name: "Resources", exact: true })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { exact: true, name: "Quick Upload" }).click();
   const dialog = page.getByRole("dialog", { name: "Quick upload resource" });
   await dialog.getByLabel("Choose one file for quick upload").setInputFiles({
@@ -177,7 +177,7 @@ test("quick upload waits for a readable PDF page count before creating", async (
   await seedResourceUiShell(page);
 
   await page.goto(`${frontend!.baseUrl}/resources`);
-  await expect(page.getByRole("heading", { name: "Resources" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("tab", { name: "Resources", exact: true })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { exact: true, name: "Quick Upload" }).click();
   const dialog = page.getByRole("dialog", { name: "Quick upload resource" });
   await dialog.getByLabel("Choose one file for quick upload").setInputFiles({
@@ -200,7 +200,7 @@ test("a resource-code conflict keeps the selected file and expands its editable 
   await seedResourceUiShell(page);
 
   await page.goto(`${frontend!.baseUrl}/resources`);
-  await expect(page.getByRole("heading", { name: "Resources" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("tab", { name: "Resources", exact: true })).toBeVisible({ timeout: 15_000 });
   await page.getByRole("button", { exact: true, name: "Quick Upload" }).click();
   const dialog = page.getByRole("dialog", { name: "Quick upload resource" });
   await dialog.getByLabel("Choose one file for quick upload").setInputFiles({
@@ -224,7 +224,7 @@ test("platform resources have no source filter and only expose quick upload crea
   await seedResourceUiShell(page);
 
   await page.goto(`${frontend!.baseUrl}/settings/resources`);
-  await expect(page.getByRole("heading", { name: "Platform Resources" })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByRole("columnheader", { name: "Resource", exact: true })).toBeVisible({ timeout: 15_000 });
   await expect(page.getByRole("button", { exact: true, name: "Quick Upload" })).toBeVisible();
   await expect(page.getByRole("button", { exact: true, name: "New Resource" })).toHaveCount(0);
   await expect(page.getByLabel("Filter resources by source")).toHaveCount(0);

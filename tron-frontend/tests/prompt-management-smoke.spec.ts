@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -20,7 +21,9 @@ let frontendBaseUrl = "";
 let frontendLogs = "";
 
 function pageTitle(page: Page, title: string) {
-  return page.locator("main header > div > p").filter({ hasText: title });
+  if (title === "Platform Prompts" || title === "平台提示词") return page.getByRole("searchbox", { name: /Search prompts|搜索提示词/ });
+  if (title === "Prompt Management" || title === "提示词管理") return page.getByRole("tab", { name: title === "Prompt Management" ? "Prompts" : "提示词", exact: true });
+  return page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: title });
 }
 
 function reservePort() {
@@ -89,6 +92,7 @@ test.afterAll(async () => {
 });
 
 test("manages workspace prompts and exposes platform prompt routes", async ({ page }) => {
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/prompts`);
   await expect(pageTitle(page, "Prompt Management")).toBeVisible();
   await expect(page.getByRole("button", { name: "All Prompts" })).toHaveCount(0);
@@ -113,11 +117,14 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await expect(pageTitle(page, "Create Prompt Override")).toBeVisible();
   await expect(page.getByRole("button", { name: "Render Preview", exact: true })).toHaveCount(0);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/prompts`);
   await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
+  await expect(page.getByRole("menu")).toBeVisible();
   await expect(page.getByText("Duplicate", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
 
+  await expect(page.getByRole("menu")).toHaveCount(0);
   await page.getByRole("button", { name: "New", exact: true }).click();
   await expect(pageTitle(page, "Create Prompt")).toBeVisible();
   await expect(page.locator("label").filter({ hasText: "Status" })).toBeVisible();
@@ -136,6 +143,7 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
   await expect(pageTitle(page, "Prompt Details")).toBeVisible();
   await expect(page.getByRole("textbox", { name: "Prompt code", exact: true })).toHaveAttribute("readonly", "");
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/prompts`);
   await expect(pageTitle(page, "Platform Prompts")).toBeVisible();
   await expect(page.getByRole("button", { name: "New", exact: true })).toBeVisible();
@@ -145,6 +153,7 @@ test("manages workspace prompts and exposes platform prompt routes", async ({ pa
 });
 
 test("reverts a workspace override without leaving the prompt list", async ({ page }) => {
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/prompts`);
   await page.getByRole("button", { name: "Actions for Workspace Router" }).click();
   await page.getByRole("menuitem", { name: "Create override", exact: true }).click();
@@ -167,6 +176,7 @@ test("reverts a workspace override without leaving the prompt list", async ({ pa
 
 test("localizes prompt UI while preserving prompt data and technical values", async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("tron.locale", "zh-CN"));
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/prompts`);
 
   await expect(pageTitle(page, "提示词管理")).toBeVisible();
@@ -187,10 +197,13 @@ test("localizes prompt UI while preserving prompt data and technical values", as
   await expect(page).toHaveURL(/\/prompts\/edit\?promptCode=.*mode=override/);
   await expect(pageTitle(page, "创建提示词覆盖")).toBeVisible();
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/prompts`);
   await page.getByRole("row").filter({ hasText: "Workspace Router" }).getByRole("button").click();
+  await expect(page.getByRole("menu")).toBeVisible();
   await expect(page.getByText("复制", { exact: true })).toHaveCount(0);
   await page.keyboard.press("Escape");
+  await expect(page.getByRole("menu")).toBeHidden();
 
   await page.getByRole("button", { name: "新建", exact: true }).click();
   await expect(pageTitle(page, "新建提示词")).toBeVisible();
@@ -203,6 +216,7 @@ test("localizes prompt UI while preserving prompt data and technical values", as
   await expect(page.getByRole("code").filter({ hasText: /^name$/ })).toBeVisible();
   await expect(page.getByText("STRING", { exact: true }).first()).toBeVisible();
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/prompts`);
   await expect(pageTitle(page, "平台提示词")).toBeVisible();
   await expect(page.getByRole("button", { name: "新建", exact: true })).toBeVisible();

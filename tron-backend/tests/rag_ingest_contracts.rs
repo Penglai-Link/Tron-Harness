@@ -481,6 +481,7 @@ async fn rag_service_ingest_auto_wires_default_runtime_llm_summary() {
         .with_embeddings((0..8).map(|_| embedding_4096(0.25, 0.75)));
     let runtime = DefaultRagRuntime::new(
         LlmRuntimeService::new(Arc::new(FakeLlmModelResolver), Arc::new(client.clone())),
+        FakeLlmModelResolver,
         std::env::temp_dir(),
     );
     let service = RagService::new(repository, DefaultRagStrategyRegistry::default(), runtime);
@@ -1735,17 +1736,19 @@ impl RagDocumentSourceRuntime for FakeEmbeddingRuntime {
 #[derive(Clone)]
 struct FakeLlmModelResolver;
 
-impl LlmRuntimeModelResolver for FakeLlmModelResolver {
-    fn text_runtime_model_config(
+impl tron_backend::application::model_router::TextModelRouter for FakeLlmModelResolver {
+    fn route_text(
         &self,
         _workspace_code: &str,
         model_code: Option<&str>,
-    ) -> Result<Option<RuntimeModelConfig>, ModelError> {
-        Ok(Some(llm_text_config(
+    ) -> Result<RuntimeModelConfig, String> {
+        Ok(llm_text_config(
             model_code.unwrap_or("workspace-default-summary"),
-        )))
+        ))
     }
+}
 
+impl LlmRuntimeModelResolver for FakeLlmModelResolver {
     fn embedding_runtime_model_config(
         &self,
         _workspace_code: &str,

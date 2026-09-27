@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -98,11 +99,12 @@ async function selectOptionTexts(page: Page, control: Locator) {
 }
 
 async function openCreatePage(page: Page) {
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
-  await expect(page.getByRole("heading", { name: "RAG Management" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "RAG", exact: true })).toBeVisible();
   await page.getByRole("button", { name: "New Corpus" }).click();
   await expect(page).toHaveURL(/\/rag\/corpora\/new$/);
-  await expect(page.getByRole("heading", { name: "New corpus" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "New corpus" })).toBeVisible();
 }
 
 async function openAdvancedStorage(page: Page) {
@@ -427,6 +429,7 @@ test("hides contract mappings by default while keeping custom rows removable", a
 });
 
 test("edits seeded project document storage structure with target reuse in preview", async ({ page }) => {
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
   await page.getByRole("cell", { name: "Project Document project-doc" }).click();
   await expect(page).toHaveURL(/\/rag\/corpora\/project-doc\/edit$/);
@@ -487,6 +490,7 @@ test("edits seeded project document storage structure with target reuse in previ
 });
 
 test("seeded memory-card edit preserves target-first bindings", async ({ page }) => {
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
   await page.getByRole("cell", { name: "Memory Card memory-card" }).click();
   await expect(page).toHaveURL(/\/rag\/corpora\/memory-card\/edit$/);

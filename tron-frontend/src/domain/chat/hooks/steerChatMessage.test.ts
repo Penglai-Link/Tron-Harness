@@ -1,17 +1,5 @@
+// @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
-
-vi.hoisted(() => {
-  Object.defineProperty(globalThis, "window", {
-    configurable: true,
-    value: {
-      localStorage: {
-        getItem: () => null,
-        setItem: () => undefined,
-      },
-      location: { origin: "http://localhost" },
-    },
-  });
-});
 
 import { chatApiEndpoints } from "@/domain/chat/api";
 import type {

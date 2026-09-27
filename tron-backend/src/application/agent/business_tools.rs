@@ -1,10 +1,10 @@
-mod productivity_tools;
-mod file_access;
 mod ask_user;
 mod coding_tools;
 mod discovery;
+mod file_access;
 mod memory_tools;
 mod platform_tools;
+mod productivity_tools;
 mod short_term_memory_tools;
 
 use crate::domain::agent::{EffectiveTool, Tool, ToolError, ToolRegistry};
@@ -62,8 +62,6 @@ pub fn register_default_agent_tools<R, S, E>(
     mcp: McpService,
     memory: MemoryService<R, S, E>,
     short_term_memory: ShortTermMemoryService,
-    code_editor: std::sync::Arc<dyn crate::application::agent::CodeFileEditor>,
-    terminal: std::sync::Arc<dyn crate::application::agent::AgentTerminal>,
 ) -> Result<(), ToolError>
 where
     R: RagIngestRepository
@@ -89,17 +87,81 @@ where
         prompts,
         mcp,
     );
-    tools.extend(coding_tools::coding_domain_tools(resources.clone(), code_editor, terminal));
+    tools.extend(coding_tools::coding_domain_tools(resources.clone()));
     tools.extend(productivity_tools::tools(resources.clone()));
     tools.extend(memory_tools::memory_business_tools(memory));
     tools.extend(short_term_memory_tools::short_term_memory_tools(
         short_term_memory,
     ));
     tools.push(discovery::discovery_tool());
-    tools.push(ask_user::ask_user_tool());
 
     for tool in tools {
         registry.register(tool)?;
     }
     Ok(())
+}
+
+pub(crate) fn framework_local_scope(
+    context: &crate::domain::agent::AgentRunContext,
+) -> Result<
+    eliteforge_agent_official_plugin_tools_local::FileSystemToolsConfig,
+    crate::domain::agent::ToolError,
+> {
+    let cwd = coding_tools::default_cwd_for_context(context);
+    // An unlinked legacy host session explicitly had machine-wide path authority.
+    // Linked sessions retain exactly their resolved application/worktree grants.
+    let roots = if context.execution_scope.allowed_local_directories.is_empty() {
+        vec![
+            cwd.ancestors()
+                .last()
+                .ok_or_else(|| {
+                    crate::domain::agent::ToolError::ExecutionFailed(
+                        "working directory is not absolute".into(),
+                    )
+                })?
+                .to_path_buf(),
+        ]
+    } else {
+        context
+            .execution_scope
+            .allowed_local_directories
+            .iter()
+            .map(|root| coding_tools::expand_tilde(root))
+            .collect()
+    };
+    Ok(
+        eliteforge_agent_official_plugin_tools_local::FileSystemToolsConfig::new(cwd)
+            .with_authorized_roots(roots)
+            .with_authorized_symlinks(true)
+            .with_max_edit_bytes(32 * 1024 * 1024),
+    )
+}
+
+pub(crate) fn framework_file_reference(
+    reference: serde_json::Value,
+    context: &crate::domain::agent::AgentRunContext,
+    resources: &crate::application::resource::ResourceService,
+    max_bytes: usize,
+) -> Result<
+    eliteforge_agent_official_plugin_tools_local::ReferencedFile,
+    crate::domain::agent::ToolError,
+> {
+    let source = file_access::resolve_input_file_bounded(
+        &serde_json::json!({"fileRef":reference}),
+        context,
+        resources,
+        max_bytes as u64,
+    )?;
+    if source.bytes.len() > max_bytes {
+        return Err(crate::domain::agent::ToolError::ExecutionFailed(
+            "attachment exceeds input limit".into(),
+        ));
+    }
+    Ok(
+        eliteforge_agent_official_plugin_tools_local::ReferencedFile {
+            name: source.file_name,
+            bytes: source.bytes,
+            reference: source.reference,
+        },
+    )
 }

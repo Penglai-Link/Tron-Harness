@@ -1,7 +1,7 @@
-use std::{future::Future, path::PathBuf, pin::Pin};
+use std::{future::Future, path::PathBuf, pin::Pin, sync::Arc};
 
 use crate::application::llm::{LlmEmbeddingCallCommand, LlmRerankCallCommand, LlmRuntimeService};
-use crate::application::model_router::LlmModelRouter;
+use crate::application::model_router::TextModelRouter;
 use crate::config::MineruConfig;
 
 use super::{
@@ -20,7 +20,7 @@ use crate::domain::rag::RagError;
 #[derive(Clone)]
 pub struct DefaultRagRuntime {
     llm: LlmRuntimeService,
-    llm_router: LlmModelRouter,
+    llm_router: Arc<dyn TextModelRouter>,
     project_doc_root: PathBuf,
     mineru: MineruConfig,
     document_parser_client: reqwest::Client,
@@ -29,12 +29,12 @@ pub struct DefaultRagRuntime {
 impl DefaultRagRuntime {
     pub fn new(
         llm: LlmRuntimeService,
-        llm_router: LlmModelRouter,
+        llm_router: impl TextModelRouter + 'static,
         project_doc_root: impl Into<PathBuf>,
     ) -> Self {
         Self {
             llm,
-            llm_router,
+            llm_router: Arc::new(llm_router),
             project_doc_root: project_doc_root.into(),
             mineru: MineruConfig::default(),
             document_parser_client: reqwest::Client::new(),

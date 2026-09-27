@@ -11,14 +11,9 @@ use crate::{
     response::{ApiResponse, EmptyData},
 };
 
-use super::{
-    error_mapper::system_config_error_response,
-    request::UpdateSystemConfigRequest,
-};
+use super::{error_mapper::system_config_error_response, request::UpdateSystemConfigRequest};
 
-pub async fn get_system_config(
-    State(service): State<SystemConfigService>,
-) -> Response {
+pub async fn get_system_config(State(service): State<SystemConfigService>) -> Response {
     match service.get() {
         Ok(document) => Json(ApiResponse::success(document)).into_response(),
         Err(error) => system_config_error_response(error),

@@ -10,12 +10,14 @@ use common::{app_with_config, authenticated_request, response_json};
 
 #[tokio::test]
 async fn list_apps_is_workspace_scoped_and_supports_filters() {
-    let router = app_with_config(AppConfig {
+    let config = common::prepared_config(AppConfig {
         database_url: temp_database_url("app-management-list")
             .to_string_lossy()
             .into_owned(),
         ..AppConfig::default()
     });
+    seed_app_list(&config.database_url);
+    let router = app_with_config(config);
 
     let active = authenticated_request(
         &router,
@@ -215,12 +217,14 @@ async fn create_update_archive_restore_and_options_flow_work_for_apps() {
 
 #[tokio::test]
 async fn duplicate_names_are_rejected_within_a_workspace() {
-    let router = app_with_config(AppConfig {
+    let config = common::prepared_config(AppConfig {
         database_url: temp_database_url("app-management-duplicate-name")
             .to_string_lossy()
             .into_owned(),
         ..AppConfig::default()
     });
+    seed_app_list(&config.database_url);
+    let router = app_with_config(config);
 
     let response = authenticated_request(
         &router,
@@ -300,4 +304,54 @@ fn temp_database_url(test_name: &str) -> PathBuf {
         .expect("system time should be after epoch")
         .as_nanos();
     std::env::temp_dir().join(format!("tron-{test_name}-{nanos}.sqlite3"))
+}
+
+fn seed_app_list(database: &str) {
+    use tron_backend::{
+        adapters::outbound::persistence::SqliteAppRepository,
+        application::app::AppRepository,
+        domain::app::{App, AppRuntimeRole, AppStatus, AppTag},
+        shared::id::SnowflakeId,
+    };
+    let mut repository = SqliteAppRepository::connect(database).unwrap();
+    for (index, code, name, status) in [
+        (1, "APP-TRON-API", "Tron API", AppStatus::Active),
+        (2, "APP-ARCHIVED", "Archived App", AppStatus::Archived),
+    ] {
+        let timestamp = "2026-05-19T00:00:00Z";
+        repository
+            .create_app(&App {
+                id: SnowflakeId::new(734510000000000000 + index),
+                app_code: code.into(),
+                workspace_code: "TRON_CORE".into(),
+                name: name.into(),
+                description: Some("Core backend serving task and admin workflows.".into()),
+                local_directory: "/workspace/tron/tron-backend".into(),
+                runtime_role: AppRuntimeRole::Backend,
+                repository_url: Some("https://github.com/clouds3n/tron-backend".into()),
+                default_branch: Some("master".into()),
+                status,
+                created_at: timestamp.into(),
+                updated_at: timestamp.into(),
+                archived_at: if index == 2 {
+                    Some(timestamp.into())
+                } else {
+                    None
+                },
+            })
+            .unwrap();
+        repository
+            .replace_app_tags(
+                code,
+                &["Core", "Rust"]
+                    .into_iter()
+                    .map(|tag| AppTag {
+                        app_code: code.into(),
+                        tag: tag.into(),
+                        linked_at: timestamp.into(),
+                    })
+                    .collect::<Vec<_>>(),
+            )
+            .unwrap();
+    }
 }

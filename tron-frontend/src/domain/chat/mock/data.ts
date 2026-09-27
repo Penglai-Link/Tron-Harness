@@ -554,11 +554,13 @@ export function createMockChatSendResult(session: ChatSession, input: SendChatMe
   const now = new Date().toISOString();
   const runCode = `RUN-${Date.now()}`;
   const finalOutput = `**Recorded in ${session.sessionCode}:**\n\n${input.content}`;
-  const systemAgentSessionId = session.agentCode && session.agentCode !== "main-agent"
+  const agentCode = input.agentCode ?? session.agentCode ?? "main-agent";
+  const systemAgentSessionId = agentCode !== "main-agent"
     ? session.systemAgentSessionId ?? `ses-${session.sessionCode.toLowerCase()}`
     : null;
   const nextSession: ChatSession = {
     ...session,
+    agentCode,
     lastRunCode: runCode,
     lastRunStatus: "COMPLETED",
     systemAgentSessionId,

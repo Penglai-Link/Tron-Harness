@@ -21,7 +21,9 @@ impl WorkspaceService {
 
     pub fn workspace_switcher(&self) -> Result<WorkspaceSwitcherData, WorkspaceError> {
         let workspaces = self.all_workspaces()?;
-        let tree = build_workspace_tree(&workspaces, WorkspaceListQuery {
+        let tree = build_workspace_tree(
+            &workspaces,
+            WorkspaceListQuery {
                 include_archived: None,
                 search: None,
                 status: Some(WorkspaceStatus::Active),
@@ -31,5 +33,4 @@ impl WorkspaceService {
 
         Ok(build_workspace_switcher(&tree))
     }
-
 }

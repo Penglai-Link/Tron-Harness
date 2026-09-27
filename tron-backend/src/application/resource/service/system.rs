@@ -1,9 +1,7 @@
 use std::io::Read;
 
-use crate::domain::{
-    resource::{
-        ManagedResource, ResourceError, ResourceFileRecord, ResourceKind, validate_resource_code,
-    },
+use crate::domain::resource::{
+    ManagedResource, ResourceError, ResourceFileRecord, ResourceKind, validate_resource_code,
 };
 
 use super::{ResourceService, SYSTEM_RESOURCE_SCOPE};

@@ -9,9 +9,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     app::AppState,
-    application::{
-        variable::{PromptVariableOption, VariableService},
-    },
+    application::variable::{PromptVariableOption, VariableService},
     domain::{
         prompt::{
             PromptRuntimeProvider, PromptVariableSourceKind, PromptVariableType,
@@ -106,7 +104,11 @@ pub(crate) fn prompt_variable_options(
         registered_runtime_prompt_variables()
             .filter(|variable| matches_prompt_variable_option(variable, normalized_search))
             .map(|variable| PromptVariableOptionResponse {
-                id: format!("RUNTIME:{}:{}", variable.runtime_provider.code(), variable.name),
+                id: format!(
+                    "RUNTIME:{}:{}",
+                    variable.runtime_provider.code(),
+                    variable.name
+                ),
                 key: variable.name.clone(),
                 variable_type: variable.variable_type,
                 description: Some(variable.description.clone()),

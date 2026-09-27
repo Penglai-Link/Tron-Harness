@@ -1,5 +1,7 @@
 export const shell = {
   aria: {
+    openTerminal: "打开终端",
+    closeTerminal: "关闭终端",
     closeNavigation: "关闭导航菜单",
     closeRightSidebar: "关闭右侧边栏",
     collapseSidebar: "收起侧边栏",
@@ -158,6 +160,8 @@ export const shell = {
       taskFlows: "任务流",
       tools: "工具",
       skillCenter: "技能中心",
+      capabilityPacks: "能力包",
+      capabilityConfiguration: "能力配置",
       users: "用户",
       variables: "公共变量",
       workspaceAdmin: "工作区",

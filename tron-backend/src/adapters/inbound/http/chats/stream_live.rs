@@ -380,9 +380,7 @@ fn stable_reasoning_summary(content: &str) -> Option<String> {
                 .char_indices()
                 .rev()
                 .skip(1)
-                .find(|(_, character)| {
-                    matches!(character, '.' | '!' | '?' | '。' | '！' | '？')
-                })
+                .find(|(_, character)| matches!(character, '.' | '!' | '?' | '。' | '！' | '？'))
                 .map_or(0, |(index, character)| index + character.len_utf8());
             complete[start..].trim()
         })

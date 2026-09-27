@@ -16,19 +16,20 @@ afterEach(() => { mountEffectLayers(new Set()); document.querySelectorAll("style
 const custom = (): Skin => ({ id: "test", name: "Test", version: 1, mode: "Light", colors: {}, layout: {}, resources: { background: null, font: null } });
 
 describe("skin runtime", () => {
-  it("cleans up particles during preview, restore and disposal", async () => {
+  it("switches legacy particle skins without mounting a second background owner", async () => {
+    // BackgroundLayer owns effects independently of skin styles.
     const active = await prepareSkin(particles as Skin);
     const preview = await prepareSkin(light as Skin);
     active.apply();
-    expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(1);
-    preview.apply();
+    expect(document.documentElement.dataset.skin).toBe(particles.id);
     expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(0);
+    preview.apply();
+    expect(document.documentElement.dataset.skin).toBe(light.id);
     preview.dispose();
     active.apply();
-    active.apply();
-    expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(1);
+    expect(document.querySelectorAll("style[data-tron-skin]")).toHaveLength(1);
     active.dispose();
-    expect(document.querySelectorAll("[data-theme-particles]")).toHaveLength(0);
+    expect(document.querySelectorAll("style[data-tron-skin]")).toHaveLength(0);
   });
   it("accepts all bundled manifests", () => {
     expect(() => skinVariables(particles as Skin)).not.toThrow();

@@ -118,6 +118,7 @@ export function PlatformVariableDetailsPage() {
 
   function enterEditing() {
     if (!record) return;
+    setForm(platformVariableFormFromRecord(record));
     setEditing(true);
     setRevealedValue("");
     navigate(`${detailPath(record.key)}&mode=edit`, { replace: true });

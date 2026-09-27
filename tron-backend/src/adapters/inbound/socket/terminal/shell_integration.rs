@@ -4,7 +4,7 @@ use std::{
 };
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use portable_pty::CommandBuilder;
+use eliteforge_agent_capability_tools::PtyCommand;
 use tempfile::TempDir;
 
 /// Hook script sourced by the shell we spawn and injected into subshells we do
@@ -96,8 +96,8 @@ impl ShellIntegration {
         self.kind
     }
 
-    pub(super) fn command(&self) -> CommandBuilder {
-        let mut command = CommandBuilder::new(&self.program);
+    pub(super) fn command(&self) -> PtyCommand {
+        let mut command = PtyCommand::new(&self.program);
         let directory = self.directory.as_ref().map(TempDir::path);
         command.env("__TRON_SUBSHELL_BOOTSTRAP", subshell_bootstrap());
         if let Some(directory) = directory {

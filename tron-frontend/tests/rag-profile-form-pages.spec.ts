@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -67,7 +68,7 @@ async function waitForFrontend(url: string) {
 }
 
 function notifications(page: Page, message: string | RegExp) {
-  return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+  return page.locator('[aria-label="Notifications"]').getByRole("dialog").filter({ hasText: message }).first();
 }
 
 function controlByAriaLabel(page: Page, label: string) {
@@ -268,6 +269,7 @@ test("pipeline flow draws connected edges for serial and parallel branches", asy
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/new?returnProfileType=ingest&corpusId=project-doc`);
   const templateHeading = page.getByRole("heading", { name: /Pipeline templates|流水线模板/i });
   await expect(templateHeading).toBeVisible();
@@ -323,9 +325,10 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/new?returnProfileType=ingest&corpusId=project-doc`);
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/new(\?.*)?$/);
-  await expect(page.getByRole("heading", { name: /(?:Create|New) Ingest Profile|新建写入配置/i })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Profile ID|配置 ID/, exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Write pipeline|写入流水线/i })).toHaveCount(0);
   await expect(page.getByRole("heading", { name: /Pipeline templates|流水线模板/i })).toBeVisible();
   await expect(page.getByText(/Pipeline flow|流水线流向/i)).toBeVisible();
@@ -383,6 +386,7 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
   await expect(page).toHaveURL(/\/rag$/);
   await expect(notifications(page, /support-notes-ingest-v1 (created|已创建)/)).toBeVisible();
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/support-notes-ingest-v1/edit?returnProfileType=ingest`);
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/support-notes-ingest-v1\/edit(\?.*)?$/);
   await expect(page.getByLabel(label.profileId)).toBeDisabled();
@@ -405,8 +409,9 @@ test("creates and edits ingest profiles through management APIs", async ({ page 
 
   await expect(page).toHaveURL(/\/rag$/);
   await expect(notifications(page, /support-notes-ingest-v1 (saved|已保存)/)).toBeVisible();
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/corpora/project-doc/ingest-test`);
-  await expect(page.getByRole("heading", { name: headingName.ingestTest })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: label.ingestProfile })).toBeVisible();
   await expect(page.getByLabel(label.ingestProfile)).toHaveValue("project-doc-mineru-ingest-v1");
   await expect(page.getByLabel(label.ingestProfile)).toHaveAttribute("readonly");
 
@@ -522,8 +527,9 @@ test("preserves legacy split strategy when editing existing ingest profiles", as
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/ingest/project-doc-mineru-ingest-v1/edit`);
-  await expect(page.getByRole("heading", { name: /Edit ingest profile|编辑写入配置/i })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Profile ID|配置 ID/, exact: true })).toBeVisible();
   await openAdvancedNodeConfig(page, "splitText");
   const splitStrategySelect = page.getByLabel(label.splitStrategy);
   await expectSelectOptionAvailable(page, splitStrategySelect, "RAG_SPLIT_PLAIN_TEXT_V1");
@@ -553,8 +559,9 @@ test("retrieval test page displays summary tree hit metadata", async ({ page }) 
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/skill-graph-related-v1/test`);
-  await expect(page.getByRole("heading", { level: 1, name: headingName.retrievalTest })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: label.retrievalProfile })).toBeVisible();
   await page.getByRole("textbox", { name: /^(Query|查询)$/ }).fill("How does summary tree retrieval surface metadata?");
   await page.getByRole("button", { name: buttonName.runRetrieval }).click();
 
@@ -575,8 +582,9 @@ test("retrieval profile keeps summary tree route types", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/new`);
-  await expect(page.getByRole("heading", { name: headingName.newRetrievalProfile })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Profile ID|配置 ID/, exact: true })).toBeVisible();
 
   await page.getByLabel(label.profileId).fill("project-doc-tree-related-v1");
   await expect(page.getByLabel(label.primaryCorpus)).toHaveCount(0);
@@ -619,8 +627,9 @@ test("API catalog exposes summary tree strategies for graph tree corpora", async
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/new`);
-  await expect(page.getByRole("heading", { name: headingName.newRetrievalProfile })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Profile ID|配置 ID/, exact: true })).toBeVisible();
   const supportTreeDetail = await page.evaluate(async () => {
     const response = await fetch("/api/v1/rag/corpora/support-tree-graph");
     return response.json();
@@ -674,6 +683,7 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await installRagManagementApiMock(page, requests);
   page.on("pageerror", (error) => pageErrors.push(error.message));
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag?section=retrieval`);
   await expect(page.getByRole("heading", { name: /Retrieval profiles|检索配置/i })).toBeVisible();
   await expect(page.getByPlaceholder(/Search retrieval profiles|搜索检索配置/i)).toBeVisible();
@@ -683,7 +693,7 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
   await page.getByRole("button", { name: buttonName.addRetrievalProfile }).click();
 
   await expect(page).toHaveURL(/\/rag\/profiles\/retrieval\/new(\?.*)?$/);
-  await expect(page.getByRole("heading", { name: headingName.newRetrievalProfile })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: /Profile ID|配置 ID/, exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: headingName.retrievalRoutes })).toBeVisible();
   await expect(page.getByRole("heading", { name: headingName.retrievalFlow })).toBeVisible();
   await expect(page.getByText(/Backend payload preview|Developer preview|开发者预览/i)).toHaveCount(0);
@@ -749,8 +759,9 @@ test("creates and edits multi-corpus retrieval profiles through management APIs"
 
   await expect(page).toHaveURL(/\/rag\?section=retrieval$/);
   await expect(notifications(page, /support-fusion-v1 (saved|已保存)|配置已更新/)).toBeVisible();
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/support-fusion-v1/test`);
-  await expect(page.getByRole("heading", { level: 1, name: headingName.retrievalTest })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: label.retrievalProfile })).toBeVisible();
   await expect(page.getByLabel(label.retrievalProfile)).toHaveValue("support-fusion-v1");
   await expect(page.getByLabel(label.retrievalProfile)).toHaveAttribute("readonly");
 
@@ -811,8 +822,9 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/corpora/project-doc/ingest-test`);
-  await expect(page.getByRole("heading", { name: headingName.ingestTest })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: label.ingestProfile })).toBeVisible();
   await expect(page.getByRole("heading", { name: /Ingest request|写入请求/i })).toBeVisible();
   await expect(page.getByRole("tab", { name: headingName.retrievalTest })).toHaveCount(0);
 
@@ -821,7 +833,7 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
   await expect(page.getByLabel("Ingest profile", { exact: true })).toHaveValue("project-doc-mineru-ingest-v1");
   await expect(page.getByLabel("Ingest profile", { exact: true })).toHaveAttribute("readonly");
 
-  await expectSelectedOption(page.getByLabel("Scope type", { exact: true }), "SPACE");
+  await expectSelectedOption(page.getByLabel("Scope type", { exact: true }), "Workspace");
   await page.getByLabel("Source code", { exact: true }).fill("docs/features/rag-storage-runtime-workbench");
   await expect(page.getByLabel("Source type", { exact: true })).toHaveCount(0);
   await expect(page.getByLabel("Source version", { exact: true })).toHaveValue("v1");
@@ -856,8 +868,9 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
   await expect(page.getByText("textUnits.generated")).toBeVisible();
   await expect(page.getByText("Warnings: splitter used default overlap")).toBeVisible();
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/profiles/retrieval/project-doc-related-v1/test`);
-  await expect(page.getByRole("heading", { level: 1, name: headingName.retrievalTest })).toBeVisible();
+  await expect(page.getByRole("textbox", { name: label.retrievalProfile })).toBeVisible();
   await expect(page.getByLabel(label.retrievalProfile)).toHaveValue("project-doc-related-v1");
   await expect(page.getByLabel(label.retrievalProfile)).toHaveAttribute("readonly");
   await page.getByLabel(label.query).fill("How does the runtime workbench call backend search?");
@@ -915,7 +928,7 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
     expect.objectContaining({
       accessContext: expect.objectContaining({
         agentCode: "AGENT_CODEX",
-        userCode: "USR-AUTH-0001",
+        userCode: "USR-RESOURCE-0001",
         workspaceCode: "ENTERPRISE",
       }),
       corpusId: "project-doc",
@@ -970,7 +983,7 @@ test("runs ingest and search from contextual RAG test pages through runtime APIs
     expect.objectContaining({
       accessContext: expect.objectContaining({
         agentCode: "AGENT_CODEX",
-        userCode: "USR-AUTH-0001",
+        userCode: "USR-RESOURCE-0001",
         workspaceCode: "ENTERPRISE",
       }),
       context: expect.objectContaining({

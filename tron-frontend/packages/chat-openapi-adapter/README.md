@@ -1,6 +1,6 @@
 # @tron/chat-openapi-adapter
 
-`@tron/chat-openapi-adapter` 提供了用于对接 Tron Open API 开放平台的聊天请求适配器。它实现了 `ChatAdapter` 接口，负责与 `/open-api/v1/...` 相关的开放接口进行安全交互。该适配器内置了基于 AppKey 和数字签名的鉴权机制。
+`@tron/chat-openapi-adapter` 提供了用于对接 Tron Open API 开放平台的聊天请求适配器。它实现了 Tron 宿主 `ChatAdapter` 接口（通过 `@tron/chat-agent-ui-adapter` 转为公共 UI 契约），负责与 `/open-api/v1/...` 相关的开放接口进行安全交互。该适配器内置了基于 AppKey 和数字签名的鉴权机制。
 
 ## 安装
 
@@ -14,10 +14,11 @@
 
 ```typescript
 import { createOpenApiChatAdapter } from "@tron/chat-openapi-adapter";
-import { TronChatRuntimeWindow } from "@tron/chat-react";
+import { ChatRuntimeWindow } from "@eliteforge/agent-ui-chat-react";
+import { createAgentUiAdapter, toUiInput } from "@tron/chat-agent-ui-adapter";
 
 // 1. 创建 Open API 适配器实例
-const adapter = createOpenApiChatAdapter({
+const hostAdapter = createOpenApiChatAdapter({
   baseUrl: "https://openapi.your-domain.com",
   openAppCode: "YOUR_OPEN_APP_CODE",
   appKey: "YOUR_APP_KEY",
@@ -25,13 +26,14 @@ const adapter = createOpenApiChatAdapter({
 });
 
 // 2. 将适配器传递给 UI 组件
+const adapter = createAgentUiAdapter(hostAdapter, { workspaceCode: "WS-XXXXX" });
+
 export default function App() {
   return (
-    <TronChatRuntimeWindow
+    <ChatRuntimeWindow
       adapter={adapter}
-      config={{
-        workspaceCode: "WS-XXXXX",
-      }}
+      config={{ floating: false }}
+      createSendInput={(_session, content) => toUiInput({ content, workspaceCode: "WS-XXXXX" })}
     />
   );
 }

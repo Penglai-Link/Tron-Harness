@@ -99,10 +99,10 @@ async fn protected_agent_invocation_returns_uniform_run_output() {
 }
 
 #[tokio::test]
-async fn agent_invocation_rejects_unauthenticated_and_invalid_requests() {
+async fn agent_invocation_uses_active_profile_and_rejects_invalid_requests() {
     let app = app();
 
-    let unauthenticated = request_with_headers(
+    let profile_request = request_with_headers(
         &app,
         Method::POST,
         "/api/v1/agents/runs",
@@ -111,7 +111,11 @@ async fn agent_invocation_rejects_unauthenticated_and_invalid_requests() {
         None,
     )
     .await;
-    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(profile_request.status(), StatusCode::BAD_REQUEST);
+    assert_eq!(
+        response_json(profile_request).await["code"],
+        "AGENT_MODEL_REQUIRED"
+    );
 
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");

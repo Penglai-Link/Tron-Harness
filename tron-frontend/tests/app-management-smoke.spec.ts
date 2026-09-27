@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -110,7 +111,7 @@ async function seedTronCoreShellSelection(page: Page) {
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, workspaceSwitcher);
 }
@@ -388,34 +389,35 @@ test("app management supports workspace list create detail edit archive restore 
   await routeApi(page, requests, apps);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/apps`);
 
-  await expect(page.getByRole("heading", { name: "App Management" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Apps", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Import$/ })).toHaveCount(0);
   await expect(page.getByText("Tron Console")).toBeVisible();
   await expect(page.getByText("Compliance API")).toHaveCount(0);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/apps/workspaces/TRON_CORE")).toBe(true);
 
-  await page.getByLabel("App status filter").selectOption("Archived");
+  await page.getByLabel("App status").click(); await page.getByRole("option", { name: "Archived", exact: true }).click();
   await expect(page.getByText("Legacy Console")).toBeVisible();
   await expect(page.getByText("Tron API")).toHaveCount(0);
 
-  await page.getByLabel("App status filter").selectOption("Active");
-  await page.getByLabel("Runtime role filter").selectOption("Backend");
+  await page.getByLabel("App status").click(); await page.getByRole("option", { name: "Active", exact: true }).click();
+  await page.getByLabel("Runtime role").click(); await page.getByRole("option", { name: "Backend", exact: true }).click();
   await expect(page.getByText("Tron API")).toBeVisible();
   await expect(page.getByText("Tron Console")).toHaveCount(0);
 
-  await page.getByLabel("Runtime role filter").selectOption("");
+  await page.getByLabel("Runtime role").click(); await page.getByRole("option", { name: "All roles", exact: true }).click();
   await page.getByLabel("Search apps").fill("Console");
   await expect(page.getByText("Tron Console")).toBeVisible();
   await expect(page.getByText("Tron API")).toHaveCount(0);
 
   await page.getByLabel("Search apps").fill("");
-  await page.getByRole("button", { name: "New" }).click();
-  await expect(page.getByRole("heading", { name: "Create App" })).toBeVisible();
+  await page.getByRole("button", { name: "New", exact: true }).click();
+  await expect(page.getByLabel("App name")).toBeVisible();
   await page.getByLabel("App name").fill("Playwright Runtime");
   await page.getByLabel("Local directory").fill("/workspace/apps/playwright-runtime");
-  await page.getByLabel("Runtime role").selectOption("Backend");
+  await page.getByLabel("Runtime role").click(); await page.getByRole("option", { name: "Backend", exact: true }).click();
   await page.getByLabel("Repository URL").fill("https://github.com/clouds3n/playwright-runtime");
   await page.getByLabel("Default branch").fill("main");
   await page.getByLabel("App tags").fill("Automation, Playwright");
@@ -423,27 +425,27 @@ test("app management supports workspace list create detail edit archive restore 
   await page.locator("form").evaluate((form) => (form as HTMLFormElement).requestSubmit());
 
   await expect(page).toHaveURL(/\/apps\/detail\?appCode=APP-PW-0001/);
-  await expect(page.getByRole("heading", { name: "Playwright Runtime" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "APP-PW-0001" })).toBeVisible();
   await expect(page.getByText("Backend", { exact: true })).toBeVisible();
-  await expect(page.getByText("/workspace/apps/playwright-runtime")).toBeVisible();
-  await expect(page.getByText("https://github.com/clouds3n/playwright-runtime")).toBeVisible();
+  await expect(page.locator("main").getByText("/workspace/apps/playwright-runtime")).toBeVisible();
+  await expect(page.getByRole("main").getByText("https://github.com/clouds3n/playwright-runtime")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/apps/workspaces/TRON_CORE" && (request.body as Partial<AppRecord> | null)?.runtimeRole === "Backend" && (request.body as Partial<AppRecord> | null)?.localDirectory === "/workspace/apps/playwright-runtime")).toBe(true);
 
   await page.getByRole("button", { name: "Edit" }).click();
-  await expect(page.getByRole("heading", { name: "Edit Playwright Runtime" })).toBeVisible();
+  await expect(page.getByLabel("App name")).toBeVisible();
   await page.getByLabel("App name").fill("Playwright Runtime Updated");
   await page.getByLabel("Local directory").fill("/workspace/tron/playwright-runtime");
-  await page.getByLabel("Runtime role").selectOption("Frontend");
+  await page.getByLabel("Runtime role").click(); await page.getByRole("option", { name: "Frontend", exact: true }).click();
   await page.getByLabel("Default branch").fill("develop");
   await page.getByLabel("App tags").fill("Automation, UI");
   await page.getByLabel("App description").fill("Frontend app updated from the smoke flow.");
   await page.getByRole("button", { name: "Save" }).click();
 
   await expect(page).toHaveURL(/\/apps\/detail\?appCode=APP-PW-0001/);
-  await expect(page.getByRole("heading", { name: "Playwright Runtime Updated" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "APP-PW-0001" })).toBeVisible();
   await expect(page.locator("span.inline-flex").filter({ hasText: "Frontend" }).first()).toBeVisible();
-  await expect(page.getByText("/workspace/tron/playwright-runtime")).toBeVisible();
-  await expect(page.getByText("develop")).toBeVisible();
+  await expect(page.getByRole("main").getByText("/workspace/tron/playwright-runtime")).toBeVisible();
+  await expect(page.getByRole("main").getByText("develop")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "PATCH" && request.pathname === "/api/v1/apps/APP-PW-0001" && (request.body as Partial<AppRecord> | null)?.runtimeRole === "Frontend" && (request.body as Partial<AppRecord> | null)?.localDirectory === "/workspace/tron/playwright-runtime")).toBe(true);
 
   await page.getByRole("button", { name: "Archive" }).click();
@@ -452,7 +454,7 @@ test("app management supports workspace list create detail edit archive restore 
 
   await page.getByLabel("Breadcrumb").getByRole("link", { name: "Apps" }).click();
   await expect(page).toHaveURL(/\/apps$/);
-  await page.getByLabel("App status filter").selectOption("Archived");
+  await page.getByLabel("App status").click(); await page.getByRole("option", { name: "Archived", exact: true }).click();
   await expect(page.getByText("Playwright Runtime Updated", { exact: true })).toBeVisible();
   await page.getByText("Playwright Runtime Updated", { exact: true }).click();
   await expect(page).toHaveURL(/\/apps\/detail\?appCode=APP-PW-0001/);
@@ -487,9 +489,10 @@ test("app detail does not fall back to mock data when the API request fails", as
   });
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/apps/detail?appCode=APP-TRON-API`);
 
-  await expect(page.getByRole("heading", { name: "App Detail" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toBeVisible();
   await expect(page.getByText("App not found", { exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Tron API" })).toHaveCount(0);
   await expect.poll(() => requests.some((request) => request.method === "GET" && request.pathname === "/api/v1/apps/APP-TRON-API")).toBe(true);

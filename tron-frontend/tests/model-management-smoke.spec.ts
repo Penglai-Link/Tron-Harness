@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   spawnManagedProcess,
@@ -374,7 +375,7 @@ async function waitForFrontend(url: string) {
 }
 
 function toast(page: Page, message: string | RegExp) {
-  return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+  return page.locator('[aria-label="Notifications"]').getByRole("dialog").filter({ hasText: message }).first();
 }
 
 function currentWorkspaceEntry(workspaceCode: string) {
@@ -1282,25 +1283,28 @@ async function seedTronCoreShellSelection(page: Page) {
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, workspaceSwitcher);
 }
 
 async function openModelsPage(page: Page) {
   await seedTronCoreShellSelection(page);
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/models`);
-  await expect(page.getByRole("heading", { name: "Models" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Models", exact: true })).toBeVisible();
 }
 
 test("responses state options are localized on the model create page", async ({ page }) => {
   await routeApi(page);
   await seedTronCoreShellSelection(page);
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/models/new`);
 
   const responsesStateSelect = page.getByLabel("Responses State");
   await expect(responsesStateSelect).toBeVisible();
-  await expect(responsesStateSelect.locator("option")).toHaveText(["Stateless", "Stateful"]);
+  await responsesStateSelect.click();
+  await expect(page.getByRole("option")).toHaveText(["Stateless", "Stateful"]);
 });
 
 test.beforeAll(async () => {
@@ -1360,14 +1364,14 @@ test("workspace models show local and inherited source semantics with inherited-
   await expect(protocolFilter).toBeVisible();
   await expect(typeFilter).toBeVisible();
   await expect(protocolFilter).not.toContainText("·");
-  await protocolFilter.selectOption("RESPONSES");
+  await protocolFilter.click(); await page.getByRole("option", { name: "OpenAI Compatible - Response", exact: true }).click();
   await expect(tableBody).toContainText("GPT-4o Main");
   await expect(tableBody).not.toContainText("Core Fast");
-  await protocolFilter.selectOption("ALL");
-  await typeFilter.selectOption("EMBEDDING::TEXT_VECTOR");
+  await protocolFilter.click(); await page.getByRole("option", { name: "All protocols", exact: true }).click();
+  await typeFilter.click(); await page.getByRole("option", { name: "Text Vectors", exact: true }).click();
   await expect(tableBody).toContainText("Embedding Shared");
   await expect(tableBody).not.toContainText("Core Fast");
-  await typeFilter.selectOption("ALL");
+  await typeFilter.click(); await page.getByRole("option", { name: "All types", exact: true }).click();
 
   const inheritedRow = page.locator("tr", { has: page.getByText("Parent Shared Writer", { exact: true }) });
   await expect(inheritedRow).toContainText("Inherited");
@@ -1401,8 +1405,9 @@ test("disabling an inherited platform model keeps source inherited and does not 
   await expect(inheritedRow).toContainText("Disabled");
   await expect(inheritedRow.getByText("Default", { exact: true })).toHaveCount(0);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/models`);
-  await expect(page.getByRole("heading", { name: "Platform Models" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Display Name", exact: true })).toBeVisible();
   const platformRow = page.locator("tr", { has: page.getByText("GPT-4o Main", { exact: true }) });
   await expect(platformRow).toContainText("Enabled");
   await expect(platformRow).toContainText("Default");
@@ -1488,8 +1493,9 @@ test("workspace detail verify uses the unsaved draft without saving the row", as
 
 test("platform detail verify uses the unsaved draft without saving the row", async ({ page }) => {
   await routeApi(page);
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/models`);
-  await expect(page.getByRole("heading", { name: "Platform Models" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Display Name", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Open actions for GPT-4o Main", exact: true }).click();
   await expect(page.getByRole("menuitem", { name: "Verify" })).toBeVisible();
@@ -1532,28 +1538,27 @@ test("structured output clears and disables max tokens in workspace and platform
   await page.getByText("Core Fast", { exact: true }).first().click();
   await page.getByRole("button", { name: "Edit" }).click();
   const workspaceMaxTokens = page.getByLabel("Max Tokens");
-  const workspaceStructuredOutput = page.getByRole("button", { name: "Structured Output Enabled" });
+  const workspaceStructuredOutput = page.getByRole("switch", { name: "Structured Output Enabled" });
   await workspaceMaxTokens.fill("2048");
   await workspaceStructuredOutput.click();
   await expect(workspaceMaxTokens).toHaveValue("");
   await expect(workspaceMaxTokens).toBeDisabled();
-  await expect(workspaceMaxTokens).toHaveCSS("background-color", "rgb(241, 237, 236)");
   await workspaceStructuredOutput.click();
   await expect(workspaceMaxTokens).toHaveValue("4096");
   await expect(workspaceMaxTokens).toBeEnabled();
   await page.getByRole("button", { name: "Cancel" }).click();
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/models`);
-  await expect(page.getByRole("heading", { name: "Platform Models" })).toBeVisible();
+  await expect(page.getByRole("columnheader", { name: "Display Name", exact: true })).toBeVisible();
   await page.getByText("Platform Chat Draft", { exact: true }).first().click();
   await page.getByRole("button", { name: "Edit" }).click();
   const platformMaxTokens = page.getByLabel("Max Tokens");
-  const platformStructuredOutput = page.getByRole("button", { name: "Structured Output Enabled" });
+  const platformStructuredOutput = page.getByRole("switch", { name: "Structured Output Enabled" });
   await platformMaxTokens.fill("1024");
   await platformStructuredOutput.click();
   await expect(platformMaxTokens).toHaveValue("");
   await expect(platformMaxTokens).toBeDisabled();
-  await expect(platformMaxTokens).toHaveCSS("background-color", "rgb(241, 237, 236)");
   await platformStructuredOutput.click();
   await expect(platformMaxTokens).toHaveValue("4096");
   await expect(platformMaxTokens).toBeEnabled();

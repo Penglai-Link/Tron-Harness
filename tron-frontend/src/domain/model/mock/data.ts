@@ -1033,6 +1033,9 @@ export function getWorkspaceSelectOptions(workspaceCode: string): ModelSelectOpt
     protocol: record.protocol,
     modelType: record.modelType,
     enabled: record.enabled,
+    contextWindowTokens: record.contextWindowTokens,
+    supportedReasoningEfforts: [...record.supportedReasoningEfforts],
+    defaultReasoningEffort: record.defaultReasoningEffort,
   }));
 }
 

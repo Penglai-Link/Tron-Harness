@@ -1,7 +1,6 @@
 use std::{future::Future, pin::Pin};
 
 use serde::Serialize;
-use serde_json::Value;
 
 use crate::domain::agent::{AgentRunContext, AgentRunResult, ModelStreamEvent};
 
@@ -50,59 +49,22 @@ impl ServiceModeRuntime {
             if context.variables.iter().any(|variable| variable.sensitive) {
                 return Err(AgentInvocationError::RuntimeSecretDeliveryUntrusted);
             }
-            let endpoint = normalized_endpoint(&self.endpoint).ok_or_else(|| {
-                AgentInvocationError::RuntimeFailed(format!(
-                    "runtime adapter `{}` endpoint is required",
-                    self.key.code()
-                ))
-            })?;
-
-            let request_path = match action {
-                "start" => "runs/start",
-                "resume" => "runs/resume",
-                _ => {
-                    return Err(AgentInvocationError::RuntimeFailed(format!(
-                        "runtime adapter `{}` does not support action `{action}`",
-                        self.key.code()
-                    )));
-                }
-            };
-            let url = join_endpoint(&endpoint, request_path);
-            let body = ServiceModeRunRequest {
+            let bridge = eliteforge_agent_capability_external::JsonAgentBridge::new(
+                &self.endpoint,
+                self.client.clone(),
+            )
+            .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
+            let body = serde_json::to_value(ServiceModeRunRequest {
                 action: action.into(),
                 requested_session_id,
                 working_directory: self.working_directory.clone(),
                 context,
-            };
-
-            let response = self
-                .client
-                .post(url)
-                .json(&body)
-                .send()
+            })
+            .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
+            let payload = bridge
+                .invoke(action == "resume", &body)
                 .await
-                .map_err(|error| {
-                    AgentInvocationError::RuntimeFailed(format!(
-                        "runtime adapter `{}` request failed: {error}",
-                        self.key.code()
-                    ))
-                })?;
-            let status = response.status();
-            let response_json = response.json::<Value>().await.map_err(|error| {
-                AgentInvocationError::RuntimeFailed(format!(
-                    "runtime adapter `{}` response parse failed: {error}",
-                    self.key.code()
-                ))
-            })?;
-            if !status.is_success() {
-                return Err(AgentInvocationError::RuntimeFailed(format!(
-                    "runtime adapter `{}` returned status {} with payload {}",
-                    self.key.code(),
-                    status.as_u16(),
-                    compact_payload(&response_json)
-                )));
-            }
-            let payload = response_json.get("data").cloned().unwrap_or(response_json);
+                .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
             let run = serde_json::from_value::<AgentRunResult>(payload).map_err(|error| {
                 AgentInvocationError::RuntimeFailed(format!(
                     "runtime adapter `{}` run decode failed: {error}",
@@ -125,41 +87,26 @@ impl ServiceModeRuntime {
         run_code: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), AgentInvocationError>> + Send + 'a>> {
         Box::pin(async move {
-            let endpoint = normalized_endpoint(&self.endpoint).ok_or_else(|| {
-                AgentInvocationError::RuntimeFailed(format!(
-                    "runtime adapter `{}` endpoint is required",
-                    self.key.code()
-                ))
-            })?;
-            let url = join_endpoint(&endpoint, &format!("runs/{run_code}/cancel"));
-            let response = self
-                .client
-                .post(url)
-                .json(&serde_json::json!({ "runCode": run_code }))
-                .send()
-                .await
-                .map_err(|error| {
-                    AgentInvocationError::RuntimeFailed(format!(
-                        "runtime adapter `{}` cancel request failed: {error}",
-                        self.key.code()
-                    ))
-                })?;
-            if response.status().is_success() {
-                return Ok(());
-            }
-            let status = response.status();
-            let body = response.text().await.unwrap_or_default();
-            Err(AgentInvocationError::RuntimeFailed(format!(
-                "runtime adapter `{}` cancel returned status {} with body {}",
-                self.key.code(),
-                status.as_u16(),
-                body.trim()
-            )))
+            eliteforge_agent_capability_external::JsonAgentBridge::new(
+                &self.endpoint,
+                self.client.clone(),
+            )
+            .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?
+            .cancel(run_code, &serde_json::json!({ "runCode": run_code }))
+            .await
+            .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))
         })
     }
 }
 
 impl AgentRuntime for ServiceModeRuntime {
+    fn session_scope(&self) -> Option<String> {
+        use sha2::{Digest, Sha256};
+        let identity =
+            serde_json::to_vec(&(self.key.code(), &self.endpoint, &self.working_directory)).ok()?;
+        Some(format!("{:x}", Sha256::digest(identity)))
+    }
+
     fn key(&self) -> RuntimeAdapterKey {
         self.key
     }
@@ -202,31 +149,6 @@ struct ServiceModeRunRequest {
     requested_session_id: Option<String>,
     working_directory: Option<String>,
     context: AgentRunContext,
-}
-
-fn normalized_endpoint(value: &str) -> Option<String> {
-    let trimmed = value.trim().trim_end_matches('/').to_string();
-    if trimmed.is_empty() {
-        return None;
-    }
-    Some(trimmed)
-}
-
-fn join_endpoint(base: &str, path: &str) -> String {
-    format!(
-        "{}/{}",
-        base.trim_end_matches('/'),
-        path.trim_start_matches('/')
-    )
-}
-
-fn compact_payload(value: &Value) -> String {
-    const LIMIT: usize = 192;
-    let serialized = serde_json::to_string(value).unwrap_or_else(|_| "{}".into());
-    if serialized.len() <= LIMIT {
-        return serialized;
-    }
-    format!("{}...", &serialized[..LIMIT.saturating_sub(3)])
 }
 
 fn split_stream_chunks(output: &str, chunk_chars: usize) -> Vec<String> {

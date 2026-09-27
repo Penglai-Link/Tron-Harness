@@ -171,7 +171,7 @@ export function RagCorporaTab({
                 return (
                   <div className="flex justify-end">
                     <DropdownMenu>
-                      <DropdownMenuTrigger disabled={isBusy}>
+                      <DropdownMenuTrigger disabled={isBusy} aria-label={pageT("actions.openMenu", "Open actions for {{name}}", { name: corpus.name })} onClick={(event) => event.stopPropagation()}>
                         <MoreHorizontal onClick={(event) => {
                           event.stopPropagation();
                         }} size={16} aria-hidden="true" />

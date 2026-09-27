@@ -55,6 +55,7 @@ pub async fn send_message(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
+    .with_framework_host(state.agent_framework.clone())
     .with_directory_inspector(Some(std::sync::Arc::new(
         crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
     )))
@@ -203,6 +204,7 @@ pub(crate) async fn stream_message_command(
         state.agent_tool_registry.clone(),
         state.runtime_http_client.clone(),
     )
+    .with_framework_host(state.agent_framework.clone())
     .with_directory_inspector(Some(std::sync::Arc::new(
         crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
     )))

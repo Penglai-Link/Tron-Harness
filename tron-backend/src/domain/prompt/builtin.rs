@@ -91,7 +91,8 @@ pub fn builtin_prompt_variables(catalog_key: &str) -> Option<Vec<PromptVariable>
     )
 }
 
-pub fn registered_runtime_prompt_variables() -> impl Iterator<Item = &'static BuiltinPromptParameter> {
+pub fn registered_runtime_prompt_variables() -> impl Iterator<Item = &'static BuiltinPromptParameter>
+{
     builtin_prompts()
         .iter()
         .flat_map(|definition| definition.parameters.iter())
@@ -101,7 +102,6 @@ pub fn registered_runtime_prompt_variable(
     name: &str,
     provider: PromptRuntimeProvider,
 ) -> Option<&'static BuiltinPromptParameter> {
-    registered_runtime_prompt_variables().find(|parameter| {
-        parameter.name == name && parameter.runtime_provider == provider
-    })
+    registered_runtime_prompt_variables()
+        .find(|parameter| parameter.name == name && parameter.runtime_provider == provider)
 }

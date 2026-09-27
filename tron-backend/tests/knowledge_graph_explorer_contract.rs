@@ -346,29 +346,30 @@ async fn http_enforces_uniform_response_auth_and_workspace_access() {
     let fixture = KnowledgeGraphFixture::new("http-boundary").await;
 
     let unauthenticated = request(
-        &fixture.router,
+        &common::app_without_profile(),
         Method::GET,
         "/api/v1/knowledge-graph?namespace=rag_skill&workspace-code=TRON_CORE",
         None,
         None,
     )
     .await;
-    assert_eq!(unauthenticated.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(unauthenticated.status(), StatusCode::CONFLICT);
     let unauthenticated_body = response_json(unauthenticated).await;
-    assert_eq!(unauthenticated_body["code"], "AUTH_UNAUTHORIZED");
+    assert_eq!(unauthenticated_body["code"], "PERSONAI_PROFILE_REQUIRED");
     assert!(unauthenticated_body.get("data").is_some());
 
-    let forbidden = authenticated_request(
+    // Profile-based desktop identity can select another existing workspace;
+    // its graph scope must still exclude the current workspace's private data.
+    let other_workspace = authenticated_request(
         &fixture.router,
         Method::GET,
         "/api/v1/knowledge-graph?namespace=rag_skill&workspace-code=COMPLIANCE",
         None,
     )
     .await;
-    assert_eq!(forbidden.status(), StatusCode::FORBIDDEN);
-    let forbidden_body = response_json(forbidden).await;
-    assert_eq!(forbidden_body["code"], "KNOWLEDGE_GRAPH_SCOPE_FORBIDDEN");
-    assert!(forbidden_body.get("data").is_some());
+    assert_eq!(other_workspace.status(), StatusCode::OK);
+    let other_body = response_json(other_workspace).await;
+    assert!(!other_body.to_string().contains("CURRENT_SPACE_NODE"));
 
     let malformed = authenticated_request(
         &fixture.router,
@@ -636,9 +637,6 @@ fn workspace_detail(workspace_code: &str) -> Option<WorkspaceDetail> {
         archived_at: None,
         path,
         children: Vec::<WorkspaceTreeNode>::new(),
-        direct_user_count: 0,
-        role_grant_count: 0,
-        effective_user_count: 0,
     })
 }
 

@@ -1,6 +1,7 @@
 import { createInternalChatAdapter, createInternalTerminalAdapter } from "@tron/chat-internal-adapter";
-import { type AITransport, createTerminalTransport, initTerminal } from "@tron/chat-terminal";
+import { type AITransport, createTerminalTransport, initTerminal } from "@eliteforge/agent-ui-terminal";
 import type { ChatAguiStreamEvent, ChatUserInputAnswer } from "@tron/chat-core";
+import { fromUiResume, toUiEvent } from "@tron/chat-agent-ui-adapter";
 import { useCallback, useEffect, useRef } from "react";
 
 import { useLocale } from "@/i18n";
@@ -11,7 +12,7 @@ import { explainResultMessage, generateAiChatMessage, generateCommandMessage } f
 import { createTerminalChatInput } from "./terminalChatInput";
 import { getTerminalAnsiTheme } from "./terminalTheme";
 
-import "@tron/chat-terminal/styles.css";
+import "@eliteforge/agent-ui-terminal/styles.css";
 import "@xterm/xterm/css/xterm.css";
 
 const CONFIGURED_TERMINAL_WORKSPACE_CODE = import.meta.env.VITE_TRON_TERMINAL_WORKSPACE_CODE?.trim() || null;
@@ -147,10 +148,11 @@ const Terminal = ({ onExit }: TerminalProps) => {
                 onChunk({ delta, requestId });
               },
               onAguiEvent(event: ChatAguiStreamEvent) {
-                onEvent?.(event);
+                onEvent?.(toUiEvent(event));
               },
             };
-            const resumeEntry = resume?.[0];
+            const hostResume = resume ? fromUiResume(resume) : undefined;
+            const resumeEntry = hostResume?.[0];
             if (resumeEntry && chatAdapter.answerUserInputRequestStream) {
               const payload = resumeEntry.payload as { answers?: ChatUserInputAnswer[] };
               await chatAdapter.answerUserInputRequestStream(
@@ -158,7 +160,7 @@ const Terminal = ({ onExit }: TerminalProps) => {
                 resumeEntry.interruptId,
                 {
                   answers: Array.isArray(payload?.answers) ? payload.answers : [],
-                  resume,
+                  resume: hostResume,
                 },
                 handlers,
                 controller.signal,

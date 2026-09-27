@@ -5,6 +5,18 @@ edition = "2024"
 publish = false
 
 [dependencies]
+eliteforge-agent-official-plugin-tools-human = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-human" }
+eliteforge-agent-capability-external = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-external" }
+async-trait = "0.1"
+tokio-util = "0.7"
+eliteforge-agent-official-plugin-tools-mcp = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-mcp" }
+eliteforge-agent-capability-tools = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-tools" }
+tron-agent-harness = { path = "crates/tron-agent-harness" }
+eliteforge-agent-core = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-core" }
+eliteforge-agent-framework = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-framework", default-features = false }
+eliteforge-agent-capability-runtime = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-capability-runtime" }
+eliteforge-agent-official-plugin-tools-local = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-local" }
+eliteforge-agent-official-plugin-storage-sqlite = { path = "../.agent-deps/agent-framework/crates/plugin/storage/eliteforge-agent-official-plugin-storage-sqlite" }
 aes-gcm-siv = "0.11"
 axum = { version = "0.8", features = ["multipart"] }
 async-stream = "0.3"
@@ -21,7 +33,6 @@ jsonwebtoken = "9"
 jsonschema = { version = "0.47", default-features = false }
 opendal = { version = "=0.57.0", default-features = false, features = ["blocking", "executors-tokio", "reqwest-rustls-tls", "services-s3"] }
 ldap3 = "0.12.1"
-portable-pty = "0.9.0"
 rand = "0.9.4"
 reqwest = { version = "0.12", default-features = false, features = ["json", "multipart", "rustls-tls"] }
 rskafka = { version = "0.6", default-features = false, features = ["transport-tls"] }
@@ -29,11 +40,12 @@ rustls = { version = "0.23", default-features = false, features = ["ring", "std"
 rustls-pemfile = "2"
 webpki-roots = "1"
 redis = { version = "0.32.7", default-features = false, features = ["cluster-async", "tokio-rustls-comp"] }
-rusqlite = { version = "0.32", features = ["bundled", "load_extension"] }
+rusqlite = { version = "0.37", features = ["bundled", "load_extension"] }
 russh = { version = "0.62.6", default-features = false, features = ["ring", "rsa"] }
 serde = { version = "1", features = ["derive"] }
 serde_path_to_error = "0.1"
 serde_json = "1"
+semver = "1"
 serde_yaml = "0.9"
 sha2 = "0.10"
 shell-words = "1"

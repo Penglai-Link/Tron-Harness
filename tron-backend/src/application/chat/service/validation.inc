@@ -222,6 +222,8 @@ fn normalized_required(value: Option<String>) -> Option<String> {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct RawUserInputRequest {
+    #[serde(default)]
+    pub(super) framework_interaction_id: Option<String>,
     pub(super) intro: String,
     questions: Vec<RawUserInputQuestion>,
 }
@@ -229,6 +231,8 @@ pub(super) struct RawUserInputRequest {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RawUserInputQuestion {
+    #[serde(default)]
+    id: Option<String>,
     question: String,
     options: Vec<RawUserInputOption>,
 }
@@ -236,6 +240,8 @@ struct RawUserInputQuestion {
 #[derive(Debug, Clone, serde::Deserialize)]
 #[serde(rename_all = "camelCase")]
 struct RawUserInputOption {
+    #[serde(default)]
+    id: Option<String>,
     label: String,
     description: Option<String>,
 }

@@ -116,10 +116,12 @@ pub async fn require_profile(
 fn profile_required_response() -> Response {
     (
         axum::http::StatusCode::CONFLICT,
-        axum::Json(crate::response::ApiResponse::<crate::response::EmptyData>::error(
-            "PERSONAI_PROFILE_REQUIRED",
-            "select a PersonAI profile before using this resource",
-        )),
+        axum::Json(
+            crate::response::ApiResponse::<crate::response::EmptyData>::error(
+                "PERSONAI_PROFILE_REQUIRED",
+                "select a PersonAI profile before using this resource",
+            ),
+        ),
     )
         .into_response()
 }
@@ -127,10 +129,12 @@ fn profile_required_response() -> Response {
 fn profile_registry_error_response() -> Response {
     (
         axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-        axum::Json(crate::response::ApiResponse::<crate::response::EmptyData>::error(
-            "PERSONAI_PROFILE_REGISTRY_FAILED",
-            "the active PersonAI profile could not be resolved",
-        )),
+        axum::Json(
+            crate::response::ApiResponse::<crate::response::EmptyData>::error(
+                "PERSONAI_PROFILE_REGISTRY_FAILED",
+                "the active PersonAI profile could not be resolved",
+            ),
+        ),
     )
         .into_response()
 }

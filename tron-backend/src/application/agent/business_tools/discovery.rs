@@ -6,8 +6,8 @@ use serde_json::{Value, json};
 use crate::{
     domain::{
         agent::{
-        AgentRunContext, EffectiveTool, ExpandedDomainPersistenceMode, Tool, ToolContextDelta,
-        ToolError, ToolExecutionResult, ToolObservation, ToolRequest,
+            AgentRunContext, EffectiveTool, ExpandedDomainPersistenceMode, Tool, ToolContextDelta,
+            ToolError, ToolExecutionResult, ToolObservation, ToolRequest,
         },
         prompt::PromptRuntimeProvider,
     },
@@ -56,11 +56,9 @@ pub fn build_domain_discovery_guidance(
     let locale = SupportedLocale::from_raw(locale);
     let persistence_label = domain_persistence_label(locale, persistence_mode);
     let catalog = serde_json::to_string_pretty(visible_domains).unwrap_or_else(|_| "[]".into());
-    let template = crate::domain::prompt::builtin_prompt_text(
-        "agent.domain-discovery",
-        locale.as_str(),
-    )
-    .expect("domain discovery prompt must be bundled");
+    let template =
+        crate::domain::prompt::builtin_prompt_text("agent.domain-discovery", locale.as_str())
+            .expect("domain discovery prompt must be bundled");
     template
         .replace("{{visible_domains}}", &catalog)
         .replace("{{persistence_mode}}", persistence_label)

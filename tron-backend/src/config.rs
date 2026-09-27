@@ -3,8 +3,8 @@ mod error;
 mod file;
 mod mineru;
 mod parsing;
-mod percentage;
 mod paths;
+mod percentage;
 mod resource;
 mod variable_crypto;
 

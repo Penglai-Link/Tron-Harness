@@ -59,7 +59,11 @@ impl VariableCipher for VariableCipherProvider {
         plaintext: &str,
         aad: &[u8],
     ) -> Result<EncryptedVariableValue, VariableError> {
-        match &*self.state.read().expect("variable cipher state lock poisoned") {
+        match &*self
+            .state
+            .read()
+            .expect("variable cipher state lock poisoned")
+        {
             VariableCipherState::Configured(cipher) => cipher.encrypt(plaintext, aad),
             VariableCipherState::Unavailable => Err(VariableError::EncryptionNotConfigured),
         }
@@ -70,7 +74,11 @@ impl VariableCipher for VariableCipherProvider {
         encrypted: &EncryptedVariableValue,
         aad: &[u8],
     ) -> Result<String, VariableError> {
-        match &*self.state.read().expect("variable cipher state lock poisoned") {
+        match &*self
+            .state
+            .read()
+            .expect("variable cipher state lock poisoned")
+        {
             VariableCipherState::Configured(cipher) => cipher.decrypt(encrypted, aad),
             VariableCipherState::Unavailable => Err(VariableError::EncryptionNotConfigured),
         }

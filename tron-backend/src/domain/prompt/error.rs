@@ -78,8 +78,12 @@ impl Display for PromptError {
             Self::DuplicateDisplayName => {
                 formatter.write_str("displayName already exists in prompt scope")
             }
-            Self::BuiltinMutationDenied => formatter.write_str("built-in prompts cannot be deleted"),
-            Self::RuntimeRequired => formatter.write_str("runtime-required prompts cannot be disabled"),
+            Self::BuiltinMutationDenied => {
+                formatter.write_str("built-in prompts cannot be deleted")
+            }
+            Self::RuntimeRequired => {
+                formatter.write_str("runtime-required prompts cannot be disabled")
+            }
             Self::InheritedMutationDenied => formatter.write_str(
                 "inherited prompt cannot be deleted; use workspace-revert for overrides",
             ),

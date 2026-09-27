@@ -42,7 +42,6 @@ use runtime_helpers::{
     short_term_memory_error, validate_context,
 };
 use runtime_model_request::{model_request_facts, prepared_context_event_payload};
-use runtime_steering::RuntimeSteering;
 
 pub type ModelStreamSink = Arc<dyn Fn(ModelStreamEvent) + Send + Sync>;
 
@@ -78,6 +77,7 @@ pub struct ReactAgentBuilder {
         Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     short_term_memory: Option<ShortTermMemoryService>,
     auto_model_router: Option<AgentModelRouter>,
+    framework_host: Option<super::FrameworkHost>,
 }
 
 impl ReactAgentBuilder {
@@ -93,6 +93,7 @@ impl ReactAgentBuilder {
             directory_inspector: None,
             short_term_memory: None,
             auto_model_router: None,
+            framework_host: None,
         }
     }
 
@@ -114,6 +115,11 @@ impl ReactAgentBuilder {
         self
     }
 
+    pub fn with_framework_host(mut self, host: Option<super::FrameworkHost>) -> Self {
+        self.framework_host = host;
+        self
+    }
+
     pub fn build(self) -> Result<ReactAgent, AgentError> {
         Ok(ReactAgent {
             model_client: self.model_client,
@@ -122,6 +128,7 @@ impl ReactAgentBuilder {
             directory_inspector: self.directory_inspector,
             short_term_memory: self.short_term_memory,
             auto_model_router: self.auto_model_router,
+            framework_host: Some(match self.framework_host { Some(host) => host, None => super::FrameworkHost::temporary(None)? }),
         })
     }
 }
@@ -135,4 +142,5 @@ pub struct ReactAgent {
         Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     short_term_memory: Option<ShortTermMemoryService>,
     auto_model_router: Option<AgentModelRouter>,
+    framework_host: Option<super::FrameworkHost>,
 }

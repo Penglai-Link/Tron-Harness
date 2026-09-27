@@ -31,10 +31,9 @@ use crate::{
                 SqliteAgentManagementRepository, SqliteAgentRunRepository, SqliteAppRepository,
                 SqliteAutomationRepository, SqliteChatRepository, SqliteMcpRepository,
                 SqliteMemoryWorkDomainRepository, SqliteModelRepository,
-                SqliteNavigationRepository, SqliteProjectRepository,
-                SqlitePromptRepository, SqliteResourceRepository,
-                SqliteShortTermMemoryRepository, SqliteSkillRegistryRepository,
-                SqliteTaskRepository, SqliteVariableRepository,
+                SqliteNavigationRepository, SqliteProjectRepository, SqlitePromptRepository,
+                SqliteResourceRepository, SqliteShortTermMemoryRepository,
+                SqliteSkillRegistryRepository, SqliteTaskRepository, SqliteVariableRepository,
                 SqliteWorkspaceRepository,
             },
             resource_connectivity::ProtocolResourceConnectionVerifier,
@@ -123,6 +122,7 @@ pub struct AppState {
     pub agent_management: AgentManagementService,
     pub agent_runs: AgentRunHistoryService,
     pub agent_tool_registry: Arc<ToolRegistry>,
+    pub agent_framework: crate::application::agent::FrameworkHost,
     pub agent_terminal: Arc<dyn crate::application::agent::AgentTerminal>,
     pub active_runs: ActiveRunRegistry,
     pub apps: AppService,
@@ -173,6 +173,18 @@ impl AppState {
             ProfileRegistryService::from_environment()
         }
         .map_err(|source| AppBootstrapError::ProfileRegistryInitFailed { source })?;
+        Self::new_with_profiles(config, id_provider, profiles)
+    }
+
+    /// Explicit identity registry for embedded hosts and isolated integration tests.
+    pub fn new_with_profiles<I>(
+        config: AppConfig,
+        id_provider: Arc<I>,
+        profiles: ProfileRegistryService,
+    ) -> Result<Self, AppBootstrapError>
+    where
+        I: SnowflakeIdProvider + IdGenerator + 'static,
+    {
         let agui_events = Arc::new(AguiEventSink::new(&config.event_bus));
         let agui_replay_store = Arc::new(
             SqliteAgentEventReplayStore::connect(&config.database_url)
@@ -189,18 +201,10 @@ impl AppState {
         let document_parsing_client = http_client_pool.document_parsing_client();
         let workspaces = if config.database_url == ":memory:" {
             GLOBAL_WORKSPACE_SERVICE
-                .get_or_init(|| {
-                    build_workspace_service(
-                        ":memory:",
-                        event_bus.clone(),
-                    )
-                })
+                .get_or_init(|| build_workspace_service(":memory:", event_bus.clone()))
                 .clone()
         } else {
-            build_workspace_service(
-                &config.database_url,
-                event_bus.clone(),
-            )
+            build_workspace_service(&config.database_url, event_bus.clone())
         };
         let navigation = if config.database_url == ":memory:" {
             GLOBAL_NAVIGATION_SERVICE
@@ -394,8 +398,17 @@ impl AppState {
             )
         };
         let short_term_memory = short_term_memory.with_event_bus(event_bus.clone());
+        let agent_framework = crate::application::agent::FrameworkHost::for_database(
+            &config.database_url,
+            resources.clone(),
+        )
+        .expect("initialize Framework storage configuration");
         let agent_tool_registry = Arc::new(ToolRegistry::default());
-        let agent_terminal: Arc<dyn crate::application::agent::AgentTerminal> = Arc::new(crate::adapters::outbound::agent_terminal::LocalAgentTerminal::default());
+        let agent_terminal: Arc<dyn crate::application::agent::AgentTerminal> = Arc::new(
+            crate::adapters::outbound::agent_terminal::LocalAgentTerminal::new(
+                agent_framework.pty(),
+            ),
+        );
         register_default_agent_tools(
             agent_tool_registry.as_ref(),
             workspaces.clone(),
@@ -410,8 +423,6 @@ impl AppState {
             mcp.clone(),
             memory.clone(),
             short_term_memory.clone(),
-            Arc::new(crate::adapters::outbound::code_file_editor::LocalCodeFileEditor),
-            agent_terminal.clone(),
         )
         .expect("default agent tools should register");
         let (graphs, ontologies, graph_explorer) = if config.graph_storage_path == ":memory:" {
@@ -429,6 +440,7 @@ impl AppState {
         } else {
             build_graph_services(graph_core, workspaces.clone(), llm_runtime.clone())
         };
+
         let agent_runs = build_agent_run_history_service(&config.database_url);
         let active_runs = ActiveRunRegistry::new();
         let chats = if config.database_url == ":memory:" {
@@ -465,6 +477,7 @@ impl AppState {
                 agent_tool_registry.clone(),
                 runtime_http_client.clone(),
             )
+            .with_framework_host(agent_framework.clone())
             .with_directory_inspector(Some(std::sync::Arc::new(
                 crate::adapters::outbound::application_directory::GitApplicationDirectoryInspector,
             )))
@@ -495,6 +508,7 @@ impl AppState {
             agent_management,
             agent_runs,
             agent_tool_registry,
+            agent_framework,
             agent_terminal,
             active_runs,
             apps,
@@ -541,11 +555,17 @@ where
     I: SnowflakeIdProvider + IdGenerator + 'static,
 {
     let state = AppState::new_with_id_provider(config, id_provider)?;
+    build_router_with_state(state)
+}
+
+/// Assemble routes from the same state owned by the host lifecycle.
+pub fn build_router_with_state(state: AppState) -> Result<Router, AppBootstrapError> {
     state.model_providers.start_background_sync();
     state.model_providers.start_person_ai_heartbeat();
     let protected_routes = build_protected_routes(&state);
     let profile_routes = build_profile_routes();
-    let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone());
+    let terminal_gateway = terminal_socket::TerminalSocketGateway::new(state.terminal.clone())
+        .with_pty(state.agent_framework.pty());
     let (socket_layer, socket_io) = SocketIo::builder()
         .with_state(terminal_gateway)
         .max_payload(64 * 1024)

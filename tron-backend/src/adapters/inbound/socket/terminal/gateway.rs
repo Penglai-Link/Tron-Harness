@@ -18,6 +18,7 @@ use super::{
 #[derive(Clone)]
 pub struct TerminalSocketGateway {
     terminal: TerminalService,
+    pty: eliteforge_agent_capability_tools::PtyService,
     sessions: Arc<Mutex<HashMap<String, PtySession>>>,
 }
 
@@ -25,8 +26,14 @@ impl TerminalSocketGateway {
     pub fn new(terminal: TerminalService) -> Self {
         Self {
             terminal,
+            pty: Default::default(),
             sessions: Arc::new(Mutex::new(HashMap::new())),
         }
+    }
+
+    pub fn with_pty(mut self, pty: eliteforge_agent_capability_tools::PtyService) -> Self {
+        self.pty = pty;
+        self
     }
 
     pub(super) async fn open_session(
@@ -36,10 +43,13 @@ impl TerminalSocketGateway {
         output: UnboundedSender<TerminalSessionEvent>,
     ) -> Result<SessionDescriptor, TerminalSocketGatewayError> {
         let authorization = self.terminal.consume_socket_ticket(&ticket)?;
-        let (session, descriptor) =
-            tokio::task::spawn_blocking(move || PtySession::spawn(authorization, output))
-                .await
-                .map_err(|_| TerminalSocketGatewayError::PtyFailed)??;
+        let pty = self.pty.clone();
+        let owner = format!("terminal-socket:{socket_id}");
+        let (session, descriptor) = tokio::task::spawn_blocking(move || {
+            PtySession::spawn(pty, owner, authorization, output)
+        })
+        .await
+        .map_err(|_| TerminalSocketGatewayError::PtyFailed)??;
 
         self.sessions
             .lock()

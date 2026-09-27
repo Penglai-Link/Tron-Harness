@@ -1,5 +1,7 @@
 export const shell = {
   aria: {
+    openTerminal: "Open terminal",
+    closeTerminal: "Close terminal",
     closeNavigation: "Close navigation menu",
     closeRightSidebar: "Close right sidebar",
     collapseSidebar: "Collapse sidebar",
@@ -158,6 +160,8 @@ export const shell = {
       taskFlows: "Task Flows",
       tools: "Tools",
       skillCenter: "Skill Center",
+      capabilityPacks: "Capability Packs",
+      capabilityConfiguration: "Capability Configuration",
       users: "Users",
       variables: "Public Variables",
       workspaceAdmin: "Workspace",

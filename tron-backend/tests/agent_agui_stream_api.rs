@@ -37,13 +37,11 @@ async fn short_term_memory_context_events_replay_as_agui_custom_events() {
         SqliteAgentEventReplayStore::connect(&database_path.to_string_lossy())
             .expect("AG-UI replay store should connect"),
     );
-    let event_bus = EventBusRuntimeBuilder::new(
-        config,
-        Arc::new(FixedSnowflakeIdProvider::new(480)),
-    )
-    .register_sink(sink.clone())
-    .register_sink(replay_store.clone())
-    .build();
+    let event_bus =
+        EventBusRuntimeBuilder::new(config, Arc::new(FixedSnowflakeIdProvider::new(480)))
+            .register_sink(sink.clone())
+            .register_sink(replay_store.clone())
+            .build();
     let service = AgentAguiStreamService::with_replay_store(sink, replay_store);
 
     let outcome = event_bus.publish(

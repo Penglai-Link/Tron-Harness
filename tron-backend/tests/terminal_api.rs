@@ -3,7 +3,7 @@ mod common;
 use axum::http::{Method, StatusCode};
 use serde_json::json;
 
-use common::{app, authenticated_request, response_json, signed_open_api_request};
+use common::{app, authenticated_request, request, response_json};
 
 #[tokio::test]
 async fn internal_terminal_ticket_without_app_uses_the_configured_working_directory() {
@@ -67,10 +67,10 @@ async fn terminal_ticket_rejects_mismatched_or_inaccessible_workspaces() {
         })),
     )
     .await;
-    assert_eq!(inaccessible.status(), StatusCode::FORBIDDEN);
+    assert_eq!(inaccessible.status(), StatusCode::NOT_FOUND);
     assert_eq!(
         response_json(inaccessible).await["code"],
-        json!("TERMINAL_WORKSPACE_FORBIDDEN")
+        json!("TERMINAL_APP_NOT_FOUND")
     );
 }
 
@@ -94,15 +94,16 @@ async fn terminal_request_rejections_keep_the_api_envelope_contract() {
         json!("TERMINAL_SOCKET_TICKET_REQUEST_INVALID")
     );
 
-    let open_api = signed_open_api_request(
+    let open_api = request(
         &router,
         Method::POST,
-        "/open-api/v1/terminals/commands/generate",
+        "/api/v1/terminals/commands/generate",
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "prompt": "show changes",
             "unexpected": true
         })),
+        None,
     )
     .await;
     assert_eq!(open_api.status(), StatusCode::BAD_REQUEST);
@@ -113,17 +114,18 @@ async fn terminal_request_rejections_keep_the_api_envelope_contract() {
 }
 
 #[tokio::test]
-async fn open_api_terminal_ticket_uses_the_public_contract() {
+async fn active_profile_terminal_ticket_uses_the_public_contract() {
     let router = app();
 
-    let response = signed_open_api_request(
+    let response = request(
         &router,
         Method::POST,
-        "/open-api/v1/terminals/socket-tickets",
+        "/api/v1/terminals/socket-tickets",
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "appCode": null
         })),
+        None,
     )
     .await;
 
@@ -157,23 +159,24 @@ async fn terminal_command_generation_uses_the_workspace_llm_runtime_contract() {
     assert_eq!(internal.status(), StatusCode::BAD_REQUEST);
     assert_eq!(
         response_json(internal).await["code"],
-        json!("TERMINAL_COMMAND_MODEL_UNAVAILABLE")
+        json!("TERMINAL_COMMAND_MODEL_INVALID")
     );
 
-    let open_api = signed_open_api_request(
+    let open_api = request(
         &router,
         Method::POST,
-        "/open-api/v1/terminals/commands/generate",
+        "/api/v1/terminals/commands/generate",
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "modelCode": null,
             "prompt": "show the current changes"
         })),
+        None,
     )
     .await;
     assert_eq!(open_api.status(), StatusCode::BAD_REQUEST);
     assert_eq!(
         response_json(open_api).await["code"],
-        json!("TERMINAL_COMMAND_MODEL_UNAVAILABLE")
+        json!("TERMINAL_COMMAND_MODEL_INVALID")
     );
 }

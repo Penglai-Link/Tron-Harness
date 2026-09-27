@@ -4,7 +4,7 @@ import { getWorkspacePromptActions } from "./promptActions";
 
 describe("workspace prompt action matrix", () => {
   it.each([
-    ["LOCAL", ["EDIT", "SET_ENABLED", "DELETE"]],
+    ["LOCAL", ["EDIT", "DUPLICATE", "SET_ENABLED", "DELETE"]],
     ["INHERITED", ["OVERRIDE", "SET_ENABLED"]],
     ["OVERRIDE", ["EDIT", "SET_ENABLED", "REVERT"]],
     ["PLATFORM", []],

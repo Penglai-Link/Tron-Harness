@@ -1,7 +1,5 @@
 mod terminal_execution;
-pub use terminal_execution::{AgentTerminal, TerminalStart, TerminalSnapshot, terminal_owner};
-mod code_editing;
-pub use code_editing::{CodeFileEditor, CodeFileChange};
+pub use terminal_execution::{AgentTerminal, TerminalSnapshot, TerminalStart, terminal_owner};
 mod active_run;
 mod agui_stream;
 pub(crate) mod agui_translate;
@@ -10,7 +8,16 @@ mod canonical_event;
 mod dto;
 mod error;
 mod execution_context;
-pub use execution_context::{execution_context_message, refresh_execution_context, project_instructions_message};
+mod framework_runtime;
+pub use execution_context::{
+    execution_context_message, project_instructions_message, refresh_execution_context,
+};
+pub use framework_runtime::{
+    CapabilityPackInfo, ExtensionImplementationInfo, FrameworkHost, capability_pack_catalog,
+    capability_pack_catalog_with_state, extension_implementation_catalog,
+    extension_implementation_catalog_with_state, install_capability_pack,
+    installed_capability_packs,
+};
 mod history;
 mod invocation;
 mod management;
@@ -22,7 +29,6 @@ mod runtime;
 mod runtime_adapter;
 mod runtime_capability;
 mod system_agent_model_probe;
-mod system_cli_output_parser;
 mod tool_catalog;
 mod tool_schema;
 mod turn_state;
@@ -36,8 +42,7 @@ pub use agui_stream::{AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStrea
 pub use business_tools::{
     CHAT_ASK_USER_TOOL, DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, ask_user_definition,
     build_domain_discovery_guidance, discovery_expand_tool_definition,
-    domain_discovery_runtime_values,
-    register_default_agent_tools, tool_record_to_effective_tool,
+    domain_discovery_runtime_values, register_default_agent_tools, tool_record_to_effective_tool,
 };
 pub use canonical_event::CanonicalRuntimeEvent;
 pub(crate) use dto::AgentPageContext;

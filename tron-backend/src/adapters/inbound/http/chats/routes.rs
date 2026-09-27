@@ -12,8 +12,9 @@ use super::handler::{
 };
 use super::run_control::{get_active_run, stop_run};
 use super::short_term_memory::{
-    cancel_goal, clear_goal, create_compaction, get_goal, get_latest_compaction, get_latest_goal,
-    get_context_detail, get_todos, pause_goal, resume_goal, set_goal, update_goal,
+    cancel_goal, clear_goal, create_compaction, get_context_detail, get_goal,
+    get_latest_compaction, get_latest_goal, get_todos, pause_goal, resume_goal, set_goal,
+    update_goal,
 };
 
 pub fn routes() -> Router<AppState> {

@@ -1,8 +1,5 @@
 use crate::{
-    application::{
-        model::RuntimeModelConfig,
-        model_provider::ModelProviderService,
-    },
+    application::{model::RuntimeModelConfig, model_provider::ModelProviderService},
     domain::{
         agent::AgentModelProtocol,
         model::ModelProtocol,
@@ -11,6 +8,15 @@ use crate::{
         },
     },
 };
+
+/// Resolves a text-generation route independently of the model transport.
+pub trait TextModelRouter: Send + Sync {
+    fn route_text(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<RuntimeModelConfig, String>;
+}
 
 #[derive(Clone)]
 pub struct LlmModelRouter {
@@ -107,7 +113,6 @@ impl LlmModelRouter {
             .ok_or_else(|| "LLM Text model is unavailable".to_string())?;
         Ok(runtime_from_agent(config))
     }
-
 }
 
 impl super::router::ModelRouter for LlmModelRouter {}
@@ -164,5 +169,15 @@ fn runtime_from_agent(config: crate::domain::agent::AgentModelConfig) -> Runtime
         context_window_tokens: config.context_window_tokens,
         top_p: config.top_p,
         max_retries: config.max_retries,
+    }
+}
+
+impl TextModelRouter for LlmModelRouter {
+    fn route_text(
+        &self,
+        workspace_code: &str,
+        model_code: Option<&str>,
+    ) -> Result<RuntimeModelConfig, String> {
+        LlmModelRouter::route_text(self, workspace_code, model_code)
     }
 }

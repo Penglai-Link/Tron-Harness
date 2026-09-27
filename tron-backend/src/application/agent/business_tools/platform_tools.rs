@@ -18,9 +18,8 @@ use std::sync::Arc;
 use crate::{
     application::{
         app::AppService, automation::AutomationService, mcp::McpService, model::ModelService,
-        prompt::PromptService, resource::ResourceService,
-        skill::SkillRegistryService, task::TaskService, variable::VariableService,
-        workspace::WorkspaceService,
+        prompt::PromptService, resource::ResourceService, skill::SkillRegistryService,
+        task::TaskService, variable::VariableService, workspace::WorkspaceService,
     },
     domain::agent::Tool,
 };

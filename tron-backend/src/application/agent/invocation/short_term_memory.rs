@@ -18,10 +18,33 @@ pub(super) fn activate_short_term_memory(
     prompt: &str,
     prompt_prefix_messages: Vec<AgentMessage>,
     prompt_prefix_sources: Vec<Option<AgentPromptPrefixSource>>,
-    user_prompt_message: Option<AgentMessage>,
+    mut user_prompt_message: Option<AgentMessage>,
     input_kind: Option<&str>,
     input_metadata: Option<serde_json::Value>,
 ) -> Result<(), AgentInvocationError> {
+    // Carry structured answer identity in the user input for both persistent
+    // and ephemeral runs. It is not promoted into trusted instructions.
+    if let Some(metadata) = input_metadata
+        .as_ref()
+        .filter(|metadata| metadata.get("resume").is_some())
+    {
+        let part = crate::domain::agent::AgentMessagePart::Context {
+            kind: "tron_interaction_response".into(),
+            text: String::new(),
+            metadata: Some(metadata.clone()),
+        };
+        if let Some(message) = user_prompt_message.as_mut() {
+            message.parts.push(part.clone());
+        }
+        if let Some(message) = context
+            .messages
+            .iter_mut()
+            .rev()
+            .find(|message| message.role == "user")
+        {
+            message.parts.push(part);
+        }
+    }
     if !matches!(runtime_selection, RuntimeAdapterSelection::React)
         || requested_conversation_code.is_none()
     {

@@ -28,8 +28,8 @@ pub use collaboration::{
 };
 pub use context::{
     AgentExecutionScope, AgentPromptPrefixSource, AgentRunContext, AgentRunLimits,
-    AgentShortTermMemoryRunContext, AgentToolExposureState, AutoModelRouteContext,
-    EffectiveSkill, EffectiveTool, EffectiveVariable,
+    AgentShortTermMemoryRunContext, AgentToolExposureState, AutoModelRouteContext, EffectiveSkill,
+    EffectiveTool, EffectiveVariable,
 };
 pub use error::AgentError;
 pub use history::{
@@ -57,6 +57,7 @@ pub(crate) use model_exchange::{
     responses_input_item_json,
 };
 pub use run::{AgentRunResult, AgentRunStatus};
+pub(crate) use tool::FrameworkLeaseGuard;
 pub use tool::{
     InProcessTool, Tool, ToolContextDelta, ToolError, ToolExecutionResult, ToolObservation,
     ToolRegistry, ToolRequest,

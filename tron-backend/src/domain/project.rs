@@ -58,16 +58,28 @@ pub enum ProjectError {
 
 pub fn validate_project_code(value: &str) -> Result<(), ProjectError> {
     let value = value.trim();
-    if value.is_empty() || !value.starts_with("PROJECT-") || value.chars().any(|ch| !(ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '-')) {
+    if value.is_empty()
+        || !value.starts_with("PROJECT-")
+        || value
+            .chars()
+            .any(|ch| !(ch.is_ascii_uppercase() || ch.is_ascii_digit() || ch == '-'))
+    {
         return Err(ProjectError::ProjectCodeInvalid);
     }
     Ok(())
 }
 
 pub fn project_status_to_storage(value: ProjectStatus) -> &'static str {
-    match value { ProjectStatus::Active => "ACTIVE", ProjectStatus::Archived => "ARCHIVED" }
+    match value {
+        ProjectStatus::Active => "ACTIVE",
+        ProjectStatus::Archived => "ARCHIVED",
+    }
 }
 
 pub fn project_status_from_storage(value: &str) -> Result<ProjectStatus, ProjectError> {
-    match value { "ACTIVE" => Ok(ProjectStatus::Active), "ARCHIVED" => Ok(ProjectStatus::Archived), _ => Err(ProjectError::StorageFailure) }
+    match value {
+        "ACTIVE" => Ok(ProjectStatus::Active),
+        "ARCHIVED" => Ok(ProjectStatus::Archived),
+        _ => Err(ProjectError::StorageFailure),
+    }
 }

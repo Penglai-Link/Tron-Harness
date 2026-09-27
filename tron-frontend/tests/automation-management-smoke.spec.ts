@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   spawnManagedProcess,
@@ -24,6 +25,8 @@ type AutomationStatus = "Active" | "Paused" | "Archived";
 type AutomationExecutionStatus = "Pending" | "Running" | "Success" | "Failed" | "Canceled" | "Skipped";
 type AutomationTriggerSource = "Scheduler" | "Manual";
 type Automation = {
+  agentCode: string;
+  modelCode: string | null;
   archivedAt: string | null;
   automationCode: string;
   createdAt: string;
@@ -104,7 +107,7 @@ async function seedTronCoreShellSelection(page: Page) {
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, workspaceSwitcher);
 }
@@ -137,7 +140,7 @@ function captureRequest(route: Route): CapturedRequest {
 }
 
 function toast(page: Page, message: string | RegExp) {
-  return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+  return page.locator('[aria-label="Notifications"]').getByRole("dialog").filter({ hasText: message }).first();
 }
 
 function nextRunAt(status: AutomationStatus) {
@@ -173,6 +176,8 @@ function listItem(automation: Automation) {
 
 function createAutomationFixture(values: Partial<Automation> & Pick<Automation, "automationCode" | "id" | "name">): Automation {
   return {
+    agentCode: "main-agent",
+    modelCode: null,
     archivedAt: null,
     automationCode: values.automationCode,
     createdAt: now,
@@ -497,20 +502,21 @@ test("automation management supports workspace-scoped list create detail execute
   await routeApi(page, requests, automations, executions);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/automations`);
-  await expect(page.getByRole("heading", { name: "Automations" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Automations", exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: /^Import$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Sync$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Refresh$/ })).toBeVisible();
   await expect(page.getByRole("button", { name: /^New$/ })).toBeVisible();
-  await expect(page.getByLabel("Automation status filter")).toHaveValue("");
+  await expect(page.getByLabel("Automation status filter")).toContainText("All active states");
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/automations" && request.searchParams.workspaceCode === "TRON_CORE")).toBe(true);
   await page.getByLabel("Search automations").fill("digest");
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/automations" && request.searchParams.search === "digest")).toBe(true);
   await expect(page.getByText("Daily workspace release digest")).toBeVisible();
 
   await page.getByRole("button", { name: /^New$/ }).click();
-  await expect(page.getByRole("heading", { name: "Create Automation" })).toBeVisible();
+  await expect(page.getByLabel("Automation name")).toBeVisible();
   await expect(page.getByRole("combobox", { name: "Workspace" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Import$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Sync$/ })).toHaveCount(0);
@@ -518,7 +524,7 @@ test("automation management supports workspace-scoped list create detail execute
   await page.getByLabel("Automation description").fill("Created through the automation smoke.");
   await page.getByLabel("Cron expression").fill("*/15 * * * *");
   await page.getByRole("button", { name: "Fullscreen" }).click();
-  const promptDialog = page.getByRole("dialog", { name: "Prompt fullscreen editor" });
+  const promptDialog = page.getByRole("dialog", { name: "Automation prompt fullscreen", exact: true });
   await expect(promptDialog).toBeVisible();
   await promptDialog.getByLabel("Automation prompt fullscreen").fill("## Automation Smoke\n- Create detail lifecycle proof.\n- Use workspace scoped prompt.");
   await promptDialog.getByRole("button", { name: "Close prompt fullscreen" }).click();
@@ -527,17 +533,17 @@ test("automation management supports workspace-scoped list create detail execute
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/automations" && (request.body as { workspaceCode?: string; prompt?: string } | null)?.workspaceCode === "TRON_CORE" && ((request.body as { prompt?: string } | null)?.prompt?.includes("Automation Smoke") ?? false))).toBe(true);
 
   await expect(page).toHaveURL(/\/automations\/detail\?automationCode=AUT-PW-0003/);
-  await expect(page.getByRole("heading", { name: "Playwright automation" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "AUT-PW-0003" })).toBeVisible();
   await expect(page.getByLabel("Scheduler expression")).toBeVisible();
   await expect(page.getByRole("button", { name: "Run Now" })).toBeVisible();
   await expect(page.getByLabel("Scheduler expression")).toHaveValue("0 */15 * * * *");
-  await expect(page.getByRole("button", { name: "激活" })).toBeDisabled();
+  await expect(page.getByRole("button", { name: "Activate" })).toBeDisabled();
   await expect(page.getByLabel("Automation prompt preview").getByText("Automation Smoke", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Edit" }).click();
   await page.getByLabel("Automation name").fill("Playwright automation updated");
   await page.getByLabel("Cron expression").fill("0 18 * * *");
   await page.getByRole("button", { name: "Fullscreen" }).click();
-  const editPromptDialog = page.getByRole("dialog", { name: "Prompt fullscreen editor" });
+  const editPromptDialog = page.getByRole("dialog", { name: "Prompt fullscreen editor", exact: true });
   await expect(editPromptDialog).toBeVisible();
   await editPromptDialog.getByLabel("Automation prompt fullscreen").fill("## Automation Smoke Updated\n- Detail save path.\n- Scheduler expression refresh.");
   await editPromptDialog.getByRole("button", { name: "Close prompt fullscreen" }).click();
@@ -549,10 +555,13 @@ test("automation management supports workspace-scoped list create detail execute
   await page.getByRole("button", { name: "Run Now" }).click();
   await expect(toast(page, /Manual execution recorded for AUT-PW-0003/)).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/automations/AUT-PW-0003/execute")).toBe(true);
+  await page.getByRole("button", { name: "Execution instances" }).click();
+  await expect(page).toHaveURL(/\/automations\/executions\?automationCode=AUT-PW-0003/);
   await expect(page.getByText("Success", { exact: true }).first()).toBeVisible();
   await expect(page.getByRole("cell", { name: "Manual" })).toBeVisible();
 
-  await page.getByRole("button", { name: "暂停" }).click();
+  await page.goto(`${frontendBaseUrl}/automations/detail?automationCode=AUT-PW-0003`);
+  await page.getByRole("button", { name: "Pause" }).click();
   await expect(toast(page, /Automation AUT-PW-0003 paused/)).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "PATCH" && request.pathname === "/api/v1/automations/AUT-PW-0003/status" && (request.body as { status?: AutomationStatus } | null)?.status === "Paused")).toBe(true);
 

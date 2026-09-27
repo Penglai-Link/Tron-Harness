@@ -13,7 +13,7 @@ description: 编写、修改和打包 Tron 的 skin.json 或 ZIP 主题包，支
 
 1. 阅读 [format-and-loading.md](references/format-and-loading.md)，确认包格式、资源和加载限制。
 2. 用 `scripts/theme_pack.py init <目录> --id <小写唯一ID> --name <名称> --mode Light` 建立主题；深色用 `Dark`。脚本以 skill 目录为基准找到模板，不依赖工作目录。
-3. 制作边框、藤蔓、花瓣或独立动画时，阅读 [effect-anchors.md](references/effect-anchors.md)，使用组件锚点的装饰层；不要给业务组件设置定位或尺寸。根据需要阅读 [tokens.md](references/tokens.md)。先搭配全局表面色、正文色、强调色，再调整按钮、输入框、数据行。`colors` 和 `layout` 都是 CSS 自定义属性映射，重复键以 `layout` 为准。
+3. 制作边框、藤蔓、花瓣或独立动画时，阅读 [effect-anchors.md](references/effect-anchors.md)，使用组件锚点的装饰层；不要给业务组件设置定位或尺寸。根据需要阅读 [tokens.md](references/tokens.md)。先搭配全局表面色、正文色、强调色，再调整按钮、输入框、数据行。能力包管理页和能力配置页提供 `capability-packs-page`、`capability-pack-card`、`capability-configuration-page`、`capability-implementation` 等 `data-theme-part` 锚点，以及 `--tron-capability-*` 状态/元信息文字色变量；制作平台设置主题时可用它们分别调整能力包卡片、提供方与生效状态。`colors` 和 `layout` 都是 CSS 自定义属性映射，重复键以 `layout` 为准。
 4. 图片和字体放在包内的 `assets/`。优先制作离线 ZIP；仅用配色时也可交付单个 `skin.json`。远程资源仅支持 HTTPS，远程字体需要跨域许可。不要将用户提供的本地路径原样写入清单。
 5. 运行 `python3 scripts/theme_pack.py validate <目录或ZIP或JSON>`。修正报错；未知变量警告须核实，不能把未消费的变量当成已实现效果。脚本不渲染 CSS，还需检查可读性、按钮各状态及行选中状态。
 6. 运行 `python3 scripts/theme_pack.py pack <目录> <输出ZIP>`。脚本只打包清单及引用资源，确保 ZIP 根目录直接有 `skin.json`，不会混入系统文件或源目录外层。

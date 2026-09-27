@@ -104,7 +104,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       await page.goto(fixture.url);
       await page.waitForLoadState("networkidle");
       const transcript = page.getByRole("region", { name: "Chat transcript", exact: true });
-      const input = page.locator(".tron-chat__textarea");
+      const input = page.locator('[data-theme-part="chat-input"]');
       await expect(input).toBeEnabled();
       await input.fill("Inspect tools");
       await input.press("Enter");
@@ -114,7 +114,7 @@ for (const locale of ["en-US", "zh-CN"] as const) {
       await expect(alert).toContainText("27,294");
       await expect(alert).toContainText("21,597");
       await expect(alert).toContainText("89");
-      await expect(transcript.locator("button.tron-chat__rail-summary")).toHaveCount(0);
+      await expect(transcript.locator("button.ef-chat__rail-summary")).toHaveCount(0);
       await expect(transcript.getByRole("article")).toHaveCount(1);
       await page.reload();
       await expect(alert).toContainText(title);
@@ -140,7 +140,7 @@ test("chat updates compaction in place and retains the completed state after ref
   fixture.compact("completed");
   await expect(status).toContainText("上下文已压缩");
   await expect(status).toHaveCount(1);
-  await expect(transcript.locator("button.tron-chat__rail-summary")).toHaveCount(0);
+  await expect(transcript.locator("button.ef-chat__rail-summary")).toHaveCount(0);
   await page.reload();
   await expect(status).toContainText("上下文已压缩");
   await expect(status).toHaveCount(1);

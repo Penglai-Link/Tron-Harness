@@ -10,9 +10,8 @@ use serde_json::{Value, json};
 use std::{
     io::Read,
     path::{Path, PathBuf},
-    process::{Command, Stdio},
     sync::Arc,
-    time::{Duration, Instant},
+    time::Duration,
 };
 
 const MAX_FILE_BYTES: u64 = 32 * 1024 * 1024;
@@ -133,79 +132,41 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), ToolError> {
     Ok(())
 }
 fn run(command: &str, args: &[String], directory: &Path, timeout: u64) -> Result<Value, ToolError> {
-    let mut cmd = Command::new(command);
-    if command == "git" {
-        for (key, _) in std::env::vars_os() {
-            if key.to_string_lossy().starts_with("GIT_") {
-                cmd.env_remove(key);
-            }
-        }
-        cmd.env("GIT_OPTIONAL_LOCKS", "0")
-            .env("GIT_TERMINAL_PROMPT", "0");
-    }
-    let mut child = cmd
-        .args(args)
-        .current_dir(directory)
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(error)?;
-    fn drain(mut stream: impl Read + Send + 'static) -> std::thread::JoinHandle<(Vec<u8>, bool)> {
-        std::thread::spawn(move || {
-            let mut output = Vec::new();
-            let mut truncated = false;
-            let mut buf = [0u8; 8192];
-            loop {
-                match stream.read(&mut buf) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => {
-                        let remaining = MAX_OUTPUT_BYTES.saturating_sub(output.len());
-                        output.extend_from_slice(&buf[..n.min(remaining)]);
-                        truncated |= n > remaining;
-                    }
-                }
-            }
-            (output, truncated)
-        })
-    }
-    let stdout = drain(
-        child
-            .stdout
-            .take()
-            .ok_or_else(|| error("stdout unavailable"))?,
-    );
-    let stderr = drain(
-        child
-            .stderr
-            .take()
-            .ok_or_else(|| error("stderr unavailable"))?,
-    );
-    let deadline = Instant::now() + Duration::from_secs(timeout);
-    let status = loop {
-        if let Some(status) = child.try_wait().map_err(error)? {
-            break status;
-        }
-        if Instant::now() >= deadline {
-            let _ = child.kill();
-            let _ = child.wait();
-            return Err(error(
-                "command timed out; inspect the working tree before retrying",
-            ));
-        }
-        std::thread::sleep(Duration::from_millis(20));
+    use eliteforge_agent_official_plugin_tools_local::capture::{
+        CapturedCommand, capture_command_blocking,
     };
-    // Drain threads can outlive an inherited pipe; do not wait indefinitely for descendants.
-    let drain_deadline = Instant::now() + Duration::from_secs(1);
-    while (!stdout.is_finished() || !stderr.is_finished()) && Instant::now() < drain_deadline {
-        std::thread::sleep(Duration::from_millis(10));
+    let mut env = std::collections::BTreeMap::new();
+    let mut env_remove = Vec::new();
+    if command == "git" {
+        env_remove = std::env::vars_os()
+            .filter_map(|(key, _)| key.into_string().ok())
+            .filter(|key| key.starts_with("GIT_"))
+            .collect();
+        env.insert("GIT_OPTIONAL_LOCKS".into(), "0".into());
+        env.insert("GIT_TERMINAL_PROMPT".into(), "0".into());
     }
-    if !stdout.is_finished() || !stderr.is_finished() {
-        return Err(error("command descendants kept output pipes open"));
+    let output = capture_command_blocking(CapturedCommand {
+        program: command.into(),
+        args: args.to_vec(),
+        cwd: directory.into(),
+        env,
+        env_remove,
+        timeout: Duration::from_secs(timeout),
+        max_output_bytes: MAX_OUTPUT_BYTES,
+    })
+    .map_err(error)?;
+    if matches!(
+        output["status"].as_str(),
+        Some("timed_out" | "failed" | "cancelled" | "running")
+    ) {
+        return Err(error(
+            output["error"]
+                .as_str()
+                .unwrap_or("command did not complete"),
+        ));
     }
-    let (out, out_truncated) = stdout.join().map_err(|_| error("stdout reader failed"))?;
-    let (err, err_truncated) = stderr.join().map_err(|_| error("stderr reader failed"))?;
     Ok(
-        json!({"cwd":directory,"exitCode":status.code(),"stdout":String::from_utf8_lossy(&out),"stderr":String::from_utf8_lossy(&err),"truncated":out_truncated||err_truncated}),
+        json!({ "cwd": directory, "exitCode": output["exitCode"], "stdout": output["stdout"], "stderr": output["stderr"],
+        "truncated": output["stdoutTruncated"].as_bool().unwrap_or(false) || output["stderrTruncated"].as_bool().unwrap_or(false) }),
     )
 }

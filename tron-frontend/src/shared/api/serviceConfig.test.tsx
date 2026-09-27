@@ -8,6 +8,7 @@ import { useServiceQueryState } from "@/shared/api/serviceConfig";
 
 vi.mock("@/i18n", () => ({
   fallbackLocale: "en",
+  applyCurrentLocaleHeader: (headers: Headers) => headers.set("Accept-Language", "en-US"),
   i18n: {
     language: "en",
     resolvedLanguage: "en",

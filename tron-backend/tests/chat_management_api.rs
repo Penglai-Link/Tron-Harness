@@ -981,6 +981,15 @@ async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_st
         sleep(Duration::from_millis(20)).await;
     }
     let active_run_code = active_run_code.expect("active run code should be observable");
+    // RUN_STARTED precedes context assembly. Wait until inference has actually
+    // started so this exercises steering during a model call, not before it.
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while model_state.calls.load(Ordering::SeqCst) == 0 {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .expect("first inference should start before steering");
     let steer = request_with_headers(
         &app,
         Method::POST,
@@ -1019,7 +1028,10 @@ async fn chat_steer_endpoint_persists_server_message_and_continues_the_active_st
     let stream_body =
         String::from_utf8(stream_body.to_vec()).expect("steered stream body should be utf8");
     assert!(stream_body.contains("\"supportsSteer\":true"));
-    assert!(stream_body.contains("steered final output"));
+    assert!(
+        stream_body.contains("steered final output"),
+        "{stream_body}"
+    );
     assert!(stream_body.contains("event: RUN_FINISHED"));
     assert_eq!(model_state.calls.load(Ordering::SeqCst), 2);
     let model_requests = model_state
@@ -2862,6 +2874,7 @@ async fn chat_send_uses_codex_system_agent_cli_runtime() {
         app_with_system_agent_commands("chat-system-codex", &codex_command, &opencode_command);
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let (_working_directory, project_code) = system_agent_project(&app, &authorization).await;
 
     let session_response = request_with_headers(
         &app,
@@ -2870,6 +2883,7 @@ async fn chat_send_uses_codex_system_agent_cli_runtime() {
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "title": "Codex runtime session",
+            "projectCode": project_code,
             "agentCode": "codex"
         })),
         None,
@@ -2897,8 +2911,9 @@ async fn chat_send_uses_codex_system_agent_cli_runtime() {
     )
     .await;
 
-    assert_eq!(send_response.status(), StatusCode::OK);
+    let status = send_response.status();
     let payload = response_json(send_response).await;
+    assert_eq!(status, StatusCode::OK, "{payload}");
     assert_eq!(
         payload["data"]["messages"][1]["content"],
         json!("codex system reply")
@@ -3054,6 +3069,7 @@ async fn chat_send_uses_opencode_system_agent_cli_runtime() {
         app_with_system_agent_commands("chat-system-opencode", &codex_command, &opencode_command);
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let (_working_directory, project_code) = system_agent_project(&app, &authorization).await;
 
     let session_response = request_with_headers(
         &app,
@@ -3062,6 +3078,7 @@ async fn chat_send_uses_opencode_system_agent_cli_runtime() {
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "title": "OpenCode runtime session",
+            "projectCode": project_code,
             "agentCode": "opencode"
         })),
         None,
@@ -3129,6 +3146,7 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
     );
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let (_working_directory, project_code) = system_agent_project(&app, &authorization).await;
 
     let session_response = request_with_headers(
         &app,
@@ -3137,6 +3155,7 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "title": "OpenCode stream session",
+            "projectCode": project_code,
             "agentCode": "opencode"
         })),
         None,
@@ -3209,6 +3228,7 @@ async fn chat_stream_protocol_replay_survives_client_disconnect() {
     );
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let (_working_directory, project_code) = system_agent_project(&app, &authorization).await;
 
     let session_response = request_with_headers(
         &app,
@@ -3217,6 +3237,7 @@ async fn chat_stream_protocol_replay_survives_client_disconnect() {
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "title": "Disconnect replay session",
+            "projectCode": project_code,
             "agentCode": "opencode"
         })),
         None,
@@ -3395,6 +3416,7 @@ async fn chat_send_resumes_codex_system_agent_session() {
     );
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let (_working_directory, project_code) = system_agent_project(&app, &authorization).await;
 
     let session_response = request_with_headers(
         &app,
@@ -3403,6 +3425,7 @@ async fn chat_send_resumes_codex_system_agent_session() {
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "title": "Codex resume session",
+            "projectCode": project_code,
             "agentCode": "codex"
         })),
         None,
@@ -3508,6 +3531,7 @@ echo '{"type":"step_finish","part":{"tokens":{"input":5,"output":3,"total":8}}}'
     );
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let (_working_directory, project_code) = system_agent_project(&app, &authorization).await;
 
     let session_response = request_with_headers(
         &app,
@@ -3516,6 +3540,7 @@ echo '{"type":"step_finish","part":{"tokens":{"input":5,"output":3,"total":8}}}'
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "title": "OpenCode resume session",
+            "projectCode": project_code,
             "agentCode": "opencode"
         })),
         None,
@@ -3603,6 +3628,7 @@ async fn chat_send_resumes_from_runtime_mapping_when_legacy_session_field_is_emp
     });
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    let (_working_directory, project_code) = system_agent_project(&app, &authorization).await;
 
     let session_response = request_with_headers(
         &app,
@@ -3611,6 +3637,7 @@ async fn chat_send_resumes_from_runtime_mapping_when_legacy_session_field_is_emp
         Some(json!({
             "workspaceCode": "TRON_CORE",
             "title": "Runtime mapping session",
+            "projectCode": project_code,
             "agentCode": "codex"
         })),
         None,
@@ -3774,6 +3801,40 @@ async fn create_platform_text_model(app: &Router, authorization: &str, base_url:
         .as_str()
         .expect("created model should return modelCode")
         .to_string()
+}
+
+// Chat execution directories come from an authorized project/application,
+// not arbitrary fields in the message body or the backend process cwd.
+async fn system_agent_project(app: &Router, authorization: &str) -> (tempfile::TempDir, String) {
+    let directory = tempfile::tempdir().unwrap();
+    assert!(
+        std::process::Command::new("git")
+            .args(["init", "-b", "main"])
+            .current_dir(directory.path())
+            .output()
+            .unwrap()
+            .status
+            .success()
+    );
+    let response = request_with_headers(app, Method::POST, "/api/v1/apps/workspaces/TRON_CORE", Some(json!({
+        "name": "CLI fixture", "localDirectory": directory.path(), "runtimeRole": "Backend", "defaultBranch": "main", "tags": []
+    })), None, Some(authorization)).await;
+    let status = response.status();
+    let application = response_json(response).await;
+    assert_eq!(status, StatusCode::CREATED, "{application}");
+    let response = request_with_headers(app, Method::POST, "/api/v1/projects/save", Some(json!({
+        "workspaceCode": "TRON_CORE", "name": "CLI fixture", "appCodes": [application["data"]["appCode"]], "primaryAppCode": application["data"]["appCode"]
+    })), None, Some(authorization)).await;
+    let status = response.status();
+    let project = response_json(response).await;
+    assert!(status.is_success(), "{project}");
+    (
+        directory,
+        project["data"]["projectCode"]
+            .as_str()
+            .expect("project identity")
+            .to_owned(),
+    )
 }
 
 fn app_with_system_agent_commands(

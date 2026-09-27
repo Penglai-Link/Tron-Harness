@@ -176,6 +176,9 @@ export function Panel({ children, contentClassName }: IPanelProps) {
                 data-theme-part="app-right-sidebar"
                 data-theme-anchor="panel"
                 data-testid="tron-right-sidebar"
+                aria-hidden={!panelOpen}
+                inert={!panelOpen}
+                style={{ visibility: panelOpen ? "visible" : "hidden" }}
               >
                 <RightPanelContainer />
               </aside>

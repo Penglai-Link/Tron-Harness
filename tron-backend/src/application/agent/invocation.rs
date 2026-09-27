@@ -56,6 +56,7 @@ pub struct AgentInvocationService {
     auto_model_route: Option<AutoModelRouteContext>,
     auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
     active_runs: ActiveRunRegistry,
+    framework_host: Option<super::FrameworkHost>,
 }
 
 impl AgentInvocationService {
@@ -90,7 +91,13 @@ impl AgentInvocationService {
             auto_model_route: None,
             auto_model_router: None,
             active_runs: ActiveRunRegistry::new(),
+            framework_host: None,
         }
+    }
+
+    pub fn with_framework_host(mut self, host: super::FrameworkHost) -> Self {
+        self.framework_host = Some(host);
+        self
     }
 
     pub fn with_directory_inspector(
@@ -218,6 +225,7 @@ impl AgentInvocationService {
         )
         .with_directory_inspector(self.directory_inspector.clone())
         .with_short_term_memory(self.short_term_memory.clone())
+        .with_framework_host(self.framework_host.clone())
         .with_active_runs(self.active_runs.clone())
         .with_auto_model_router(self.auto_model_router.clone());
         let executor = AgentRunExecutor::new(runtime_registry);

@@ -7,8 +7,6 @@ use super::{
     RuntimeAdapterSelection, run_cancellation::cancel_runtime_after_stop,
 };
 
-const MAX_AGENT_RUN_RETRIES: u32 = 3;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum AgentRunLifecycleState {
     Created,
@@ -119,73 +117,50 @@ impl AgentRunExecutor {
                 .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?,
         };
         let mut cancellation = active_run_guard.as_ref().map(|guard| guard.cancellation());
-        let retry_budget = max_retry_budget(&context);
         let resumed = requested_session_id.is_some() && runtime.capabilities().supports_resume;
-        let mut attempts = 0;
         let mut lifecycle_trace = vec![AgentRunLifecycleState::Created];
 
-        loop {
-            attempts += 1;
-            lifecycle_trace.push(AgentRunLifecycleState::Running);
-            let run_future = match requested_session_id.as_deref() {
-                Some(session_id) if runtime.capabilities().supports_resume => {
-                    runtime.resume(session_id, context.clone(), sink.clone())
-                }
-                _ => runtime.start(context.clone(), sink.clone()),
-            };
+        lifecycle_trace.push(AgentRunLifecycleState::Running);
+        let run_future = match requested_session_id.as_deref() {
+            Some(session_id) if runtime.capabilities().supports_resume => {
+                runtime.resume(session_id, context.clone(), sink.clone())
+            }
+            _ => runtime.start(context.clone(), sink.clone()),
+        };
 
-            let run_result = if let Some(cancellation) = cancellation.as_mut() {
-                tokio::select! {
-                    biased;
-                    _ = cancellation.cancelled() => {
-                        lifecycle_trace.push(AgentRunLifecycleState::Cancelling);
-                        cancel_runtime_after_stop(&runtime, &context.run_code).await;
-                        lifecycle_trace.push(AgentRunLifecycleState::Cancelled);
-                        return Err(AgentInvocationError::RunStopped);
-                    }
-                    result = run_future => result,
+        let run_result = if let Some(cancellation) = cancellation.as_mut() {
+            tokio::select! {
+                biased;
+                _ = cancellation.cancelled() => {
+                    lifecycle_trace.push(AgentRunLifecycleState::Cancelling);
+                    cancel_runtime_after_stop(&runtime, &context.run_code).await;
+                    lifecycle_trace.push(AgentRunLifecycleState::Cancelled);
+                    return Err(AgentInvocationError::RunStopped);
                 }
-            } else {
-                run_future.await
-            };
+                result = run_future => result,
+            }
+        } else {
+            run_future.await
+        };
 
-            match run_result {
-                Ok(run) => {
-                    lifecycle_trace.push(AgentRunLifecycleState::Completed);
-                    return Ok(AgentRunExecutionResult {
-                        run,
-                        runtime_adapter_key,
-                        lifecycle_state: AgentRunLifecycleState::Completed,
-                        lifecycle_trace,
-                        attempts,
-                        resumed,
-                    });
-                }
-                Err(error) => {
-                    if attempts <= retry_budget && is_retryable_error(&error) {
-                        continue;
-                    }
-                    lifecycle_trace.push(AgentRunLifecycleState::Failed);
-                    return Err(error);
-                }
+        match run_result {
+            Ok(run) => {
+                lifecycle_trace.push(AgentRunLifecycleState::Completed);
+                return Ok(AgentRunExecutionResult {
+                    run,
+                    runtime_adapter_key,
+                    lifecycle_state: AgentRunLifecycleState::Completed,
+                    lifecycle_trace,
+                    attempts: 1,
+                    resumed,
+                });
+            }
+            Err(error) => {
+                lifecycle_trace.push(AgentRunLifecycleState::Failed);
+                return Err(error);
             }
         }
     }
-}
-
-fn max_retry_budget(context: &AgentRunContext) -> u32 {
-    context
-        .model
-        .max_retries
-        .unwrap_or(0)
-        .min(MAX_AGENT_RUN_RETRIES)
-}
-
-fn is_retryable_error(error: &AgentInvocationError) -> bool {
-    matches!(
-        error,
-        AgentInvocationError::ModelFailed(_) | AgentInvocationError::RuntimeFailed(_)
-    )
 }
 
 #[cfg(test)]
@@ -487,7 +462,7 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn retries_retryable_failures_within_budget() {
+    async fn does_not_replay_a_whole_run_after_a_model_failure() {
         let executor = run_executor();
         let runtime = std::sync::Arc::new(FakeRuntime::new(
             RuntimeAdapterKey::OpenCodeRun,
@@ -499,25 +474,13 @@ mod tests {
             0,
         ));
 
-        let result = assert_success(
-            executor
-                .execute_with_runtime(runtime.clone(), context(1), None, None)
-                .await,
+        let result = executor
+            .execute_with_runtime(runtime.clone(), context(3), None, None)
+            .await;
+        assert!(
+            matches!(result, Err(AgentInvocationError::ModelFailed(message)) if message == "transient")
         );
-
-        assert_eq!(result.runtime_adapter_key, "OPENCODE_RUN");
-        assert_eq!(result.attempts, 2);
-        assert_eq!(
-            result.lifecycle_trace,
-            vec![
-                AgentRunLifecycleState::Created,
-                AgentRunLifecycleState::Running,
-                AgentRunLifecycleState::Running,
-                AgentRunLifecycleState::Completed,
-            ]
-        );
-        assert_eq!(result.run.final_output, "retried");
-        assert_eq!(runtime.calls(), vec!["start", "start"]);
+        assert_eq!(runtime.calls(), vec!["start"]);
     }
 
     #[tokio::test]

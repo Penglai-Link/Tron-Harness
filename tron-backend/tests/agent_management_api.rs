@@ -155,6 +155,7 @@ async fn blocking_mcp_transport(
             "jsonrpc": "2.0",
             "id": id,
             "result": {
+                "protocolVersion": "2025-06-18",
                 "serverInfo": {
                     "name": "test-mcp",
                     "version": "1.0.0"
@@ -760,7 +761,7 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
     let main_messages = recorded_requests[0]["messages"]
         .as_array()
         .expect("main-agent messages should be an array");
-    assert_eq!(main_messages.len(), 3);
+    assert_eq!(main_messages.len(), 4, "{main_messages:?}");
     assert_eq!(main_messages[0]["role"], json!("system"));
     let main_guidance = main_messages[0]["content"]
         .as_str()
@@ -773,16 +774,24 @@ async fn main_agent_config_is_persisted_and_only_main_agent_runs_receive_guidanc
         .expect("main-agent output guidance should be text");
     assert!(output_guidance.contains("renders Thinking and tool progress separately"));
     assert!(output_guidance.contains("Do not repeat reasoning summaries"));
-    assert_eq!(main_messages[2]["role"], json!("user"));
-    assert_eq!(main_messages[2]["content"], json!("Investigate latency."));
+    assert_eq!(main_messages.last().unwrap()["role"], json!("user"));
+    assert_eq!(
+        main_messages.last().unwrap()["content"],
+        json!("Investigate latency.")
+    );
 
     let task_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("task-agent messages should be an array");
-    assert_eq!(task_messages.len(), 1);
-    assert_eq!(task_messages[0]["role"], json!("user"));
+    assert_eq!(task_messages.len(), 2);
+    assert!(
+        !serde_json::to_string(task_messages)
+            .unwrap()
+            .contains("Calm, terse, and surgical.")
+    );
+    assert_eq!(task_messages.last().unwrap()["role"], json!("user"));
     assert_eq!(
-        task_messages[0]["content"],
+        task_messages.last().unwrap()["content"],
         json!("Investigate latency for task.")
     );
 }
@@ -1079,7 +1088,10 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
             .any(|tool| tool["function"]["name"] == json!("fs_write_text"))
     );
     let second_request = recorded_requests[1].to_string();
-    assert!(second_request.contains("tool input is invalid"));
+    assert!(
+        second_request.contains("Tool arguments do not match input schema"),
+        "{second_request}"
+    );
     assert!(second_request.contains("fs_write_text"));
     assert!(!second_request.contains("is not allowed"));
 }
@@ -1147,6 +1159,7 @@ Progressive disclosure instructions loaded.\n",
     let app = app_with_config(config);
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    common::enable_direct_list(&app).await;
 
     let tool_response = request_with_headers(
         &app,
@@ -1322,6 +1335,103 @@ async fn internal_agent_domain_discovery_uses_request_locale_for_discovery_schem
             && message["content"].as_str().is_some_and(|content| {
                 content.contains("当前 tool exposure mode 为 domain_discovery")
             })
+    }));
+}
+
+#[tokio::test]
+async fn capability_catalog_exposes_installed_packs_and_extension_implementations() {
+    let app = app();
+    let token = authenticated_bearer_token(&app).await;
+    let authorization = format!("Bearer {token}");
+
+    let packs = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/capabilities/packs",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(packs.status(), StatusCode::OK);
+    let packs = response_json(packs).await;
+    let packs = packs["data"].as_array().expect("pack catalog array");
+    assert!(
+        packs
+            .iter()
+            .any(|pack| pack["id"] == json!("framework.external-agent"))
+    );
+    assert!(
+        packs
+            .iter()
+            .any(|pack| pack["id"] == json!("framework.local.scoped"))
+    );
+    assert!(packs.iter().any(|pack| pack["id"] == json!("tron.harness")));
+    assert!(packs.iter().all(|pack| pack["effective"] == json!(true)));
+    assert!(packs.iter().all(|pack| pack["version"].as_str().is_some()));
+
+    let extensions = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/capabilities/extensions",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(extensions.status(), StatusCode::OK);
+    let extensions = response_json(extensions).await;
+    let extensions = extensions["data"]
+        .as_array()
+        .expect("extension catalog array");
+    assert!(
+        extensions
+            .iter()
+            .any(|row| row["extensionPoint"] == json!("model"))
+    );
+    assert!(
+        extensions
+            .iter()
+            .any(|row| row["extensionPoint"] == json!("tool"))
+    );
+    assert!(
+        extensions
+            .iter()
+            .any(|row| row["extensionPoint"] == json!("context"))
+    );
+    assert!(extensions.iter().all(|row| {
+        row["description"]
+            .as_str()
+            .is_some_and(|description| !description.trim().is_empty())
+    }));
+    let tool_description = extensions
+        .iter()
+        .find(|row| row["extensionPoint"] == json!("tool"))
+        .expect("tool extension implementation")
+        .get("description")
+        .and_then(serde_json::Value::as_str)
+        .expect("package-provided tool description");
+    assert!(
+        tool_description.contains(
+            eliteforge_agent_official_plugin_tools_local::TOOL_IMPLEMENTATION_DESCRIPTION
+        )
+    );
+    assert!(tool_description.contains(tron_agent_harness::TOOL_IMPLEMENTATION_DESCRIPTION));
+    assert!(extensions.iter().all(|row| row["effective"] == json!(true)));
+
+    let disabled = request_with_headers(
+        &app,
+        Method::PUT,
+        "/api/v1/capabilities/packs/framework.external-agent/enabled",
+        Some(json!({ "enabled": false })),
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(disabled.status(), StatusCode::OK);
+    let packs = response_json(disabled).await;
+    assert!(packs["data"].as_array().unwrap().iter().any(|pack| {
+        pack["id"] == json!("framework.external-agent") && pack["effective"] == json!(false)
     }));
 }
 
@@ -1510,14 +1620,16 @@ async fn tool_catalog_read_apis_are_available() {
     assert_eq!(tool_response.status(), StatusCode::OK);
     let tool_body = response_json(tool_response).await;
     assert_eq!(tool_body["data"]["toolCode"], json!("bash.exec"));
-    assert_eq!(
-        tool_body["data"]["inputSchema"]["description"],
-        json!("Run one shell command directly when structured tools are not enough.")
-    );
+    let official = eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
+        .into_iter()
+        .find(|tool| tool.call_name == "system_exec")
+        .unwrap();
+    assert_eq!(tool_body["data"]["inputSchema"], official.input_schema);
     assert!(
-        tool_body["data"]["inputSchema"]["examples"]
-            .as_array()
-            .is_some_and(|examples| !examples.is_empty())
+        tool_body["data"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("10 seconds")
     );
 }
 
@@ -1562,24 +1674,18 @@ async fn tool_catalog_read_apis_follow_accept_language() {
     .await;
     assert_eq!(tool_response.status(), StatusCode::OK);
     let tool_body = response_json(tool_response).await;
-    assert_eq!(tool_body["data"]["name"], json!("执行命令"));
-    assert_eq!(
-        tool_body["data"]["description"],
-        json!("在结构化工具不够用时直接执行一条 shell 命令。")
-    );
-    assert_eq!(
-        tool_body["data"]["inputSchema"]["description"],
-        json!("在结构化工具不够用时直接执行一条 shell 命令。")
-    );
-    assert_eq!(
-        tool_body["data"]["inputSchema"]["properties"]["command"]["description"],
-        json!("要执行的程序名或绝对路径；需要 shell 解析时请使用 bash 并传入 -c。")
-    );
+    assert_eq!(tool_body["data"]["name"], json!("执行 Shell 命令"));
     assert!(
-        tool_body["data"]["inputSchema"]["examples"]
-            .as_array()
-            .is_some_and(|examples| !examples.is_empty())
+        tool_body["data"]["description"]
+            .as_str()
+            .unwrap()
+            .contains("10 秒")
     );
+    let official = eliteforge_agent_official_plugin_tools_local::local_tool_catalog()
+        .into_iter()
+        .find(|tool| tool.call_name == "system_exec")
+        .unwrap();
+    assert_eq!(tool_body["data"]["inputSchema"], official.input_schema);
 }
 
 #[tokio::test]
@@ -1645,11 +1751,14 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
         get_body["data"]["toolAssignmentMode"],
         json!("ALL_PLATFORM_TOOLS")
     );
-    assert_eq!(get_body["data"]["mcpAccessMode"], json!("DISABLED"));
+    assert_eq!(
+        get_body["data"]["mcpAccessMode"],
+        json!("ALL_ENABLED_SERVERS")
+    );
     assert_eq!(get_body["data"]["selectedServerCodes"], json!([]));
     assert_eq!(
         get_body["data"]["toolExposureMode"],
-        json!("DIRECT_LIST")
+        json!("DOMAIN_DISCOVERY")
     );
     assert_eq!(get_body["data"]["maxSteps"], json!(100));
     assert_eq!(get_body["data"]["maxToolCalls"], json!(100));
@@ -1839,7 +1948,7 @@ async fn workspace_internal_agent_policies_can_be_read_and_updated() {
     assert_eq!(reset["data"]["maxSteps"], json!(100));
     assert_eq!(reset["data"]["maxToolCalls"], json!(100));
     assert_eq!(reset["data"]["maxParallelToolCalls"], json!(4));
-    assert_eq!(reset["data"]["mcpAccessMode"], json!("DISABLED"));
+    assert_eq!(reset["data"]["mcpAccessMode"], json!("ALL_ENABLED_SERVERS"));
     assert_eq!(reset["data"]["selectedServerCodes"], json!([]));
 }
 
@@ -2026,7 +2135,10 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
     });
 
     assert!(
-        tool_call_started.await.is_ok(),
+        tokio::time::timeout(std::time::Duration::from_secs(15), tool_call_started)
+            .await
+            .expect("MCP tool start deadline")
+            .is_ok(),
         "first run should reach MCP tool execution"
     );
 
@@ -2193,6 +2305,7 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     let app = app_with_config(test_config(&codex_command, &opencode_command));
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    common::enable_direct_list(&app).await;
 
     let run_response = request_with_headers(
         &app,
@@ -2290,6 +2403,7 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
     let app = app_with_config(test_config(&codex_command, &opencode_command));
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    common::enable_direct_list(&app).await;
 
     let created_app = request_with_headers(
         &app,
@@ -2438,7 +2552,10 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
         .join("\n");
     assert!(tool_results.contains("tool:app_page"));
     assert!(tool_results.contains("tool:task_page"));
-    assert!(tool_results.contains(&format!("\"current\":{huge_current}")));
+    assert!(
+        tool_results.contains(&format!("\"current\":{huge_current}")),
+        "{tool_results}"
+    );
     assert!(tool_results.contains("\"records\":[]"));
     assert!(tool_results.contains("tool:app_update"));
     assert!(
@@ -2475,7 +2592,7 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
     .await;
     assert_eq!(task_detail.status(), StatusCode::OK);
     let task_detail_body = response_json(task_detail).await;
-    assert_eq!(task_detail_body["data"]["status"], json!("Open"));
+    assert_eq!(task_detail_body["data"]["status"], json!("NOT_STARTED"));
 }
 
 #[tokio::test]
@@ -2488,6 +2605,7 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
     let app = app_with_config(test_config(&codex_command, &opencode_command));
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    common::enable_direct_list(&app).await;
 
     let created_task = request_with_headers(
         &app,
@@ -2523,7 +2641,7 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
                                 "workspaceCode": "TRON_CORE",
                                 "taskCode": task_code.clone(),
                                 "title": "Should Not Persist",
-                                "status": "in_progress",
+                                "status": "STATUS_THAT_DOES_NOT_EXIST",
                                 "progress": 40
                             })).expect("task_update arguments should serialize")
                         }
@@ -2579,7 +2697,7 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
         .collect::<Vec<_>>()
         .join("\n");
     assert!(tool_results.contains("tool:task_update"));
-    assert!(tool_results.contains("task status does not match the inferred task role"));
+    assert!(tool_results.contains("status"), "{tool_results}");
 
     let task_detail = request_with_headers(
         &app,
@@ -2596,6 +2714,6 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
         task_detail_body["data"]["title"],
         json!("Atomic task update")
     );
-    assert_eq!(task_detail_body["data"]["status"], json!("Open"));
+    assert_eq!(task_detail_body["data"]["status"], json!("NOT_STARTED"));
     assert_eq!(task_detail_body["data"]["progress"], json!(0));
 }

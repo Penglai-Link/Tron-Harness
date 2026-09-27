@@ -5,9 +5,7 @@ use crate::domain::prompt::{
     PromptVariableSourceKind, analyze_template, registered_runtime_prompt_variable,
 };
 
-use super::super::{
-    PromptSpecCommand, PromptTranslationSpecCommand, PromptVariableSpecCommand,
-};
+use super::super::{PromptSpecCommand, PromptTranslationSpecCommand, PromptVariableSpecCommand};
 
 pub(super) fn normalize_spec(
     mut spec: PromptSpecCommand,
@@ -55,8 +53,10 @@ fn normalize_translations(spec: &mut PromptSpecCommand) -> Result<(), PromptErro
                 "translations must contain unique en-US and zh-CN entries".into(),
             ));
         }
-        translation.display_name = required(translation.display_name.clone(), "translation.displayName")?;
-        translation.prompt_body = required(translation.prompt_body.clone(), "translation.promptBody")?;
+        translation.display_name =
+            required(translation.display_name.clone(), "translation.displayName")?;
+        translation.prompt_body =
+            required(translation.prompt_body.clone(), "translation.promptBody")?;
         let names = analyze_template(&translation.prompt_body)?;
         let base_names = analyze_template(&spec.prompt_body)?;
         if names != base_names {
@@ -68,13 +68,14 @@ fn normalize_translations(spec: &mut PromptSpecCommand) -> Result<(), PromptErro
     }
     for locale in ["en-US", "zh-CN"] {
         if !seen.contains(locale) {
-            spec.translations.push(super::super::PromptTranslationSpecCommand {
-                locale: locale.into(),
-                display_name: spec.display_name.clone(),
-                prompt_body: spec.prompt_body.clone(),
-                description: spec.description.clone(),
-                status: PromptTranslationStatus::Draft,
-            });
+            spec.translations
+                .push(super::super::PromptTranslationSpecCommand {
+                    locale: locale.into(),
+                    display_name: spec.display_name.clone(),
+                    prompt_body: spec.prompt_body.clone(),
+                    description: spec.description.clone(),
+                    status: PromptTranslationStatus::Draft,
+                });
         }
     }
     Ok(())
@@ -117,7 +118,9 @@ pub(super) fn synchronize_translation_statuses(
             .translations
             .iter()
             .find(|translation| translation.locale == locale);
-        let previous = previous.iter().find(|translation| translation.locale == locale);
+        let previous = previous
+            .iter()
+            .find(|translation| translation.locale == locale);
         match (current, previous) {
             (Some(current), Some(previous)) => translation_content_changed(current, previous),
             (Some(_), None) => true,

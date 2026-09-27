@@ -73,3 +73,6 @@ electron/resources
 
 docs/brainstorm/
 docs/features/
+
+# Explicit local checkouts for shared Agent projects
+.agent-deps/

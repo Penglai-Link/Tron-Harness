@@ -61,7 +61,6 @@ pub struct McpService {
     workspaces: WorkspaceService,
     variables: VariableService,
     http_client: Client,
-    runtime_tool_bindings: runtime::RuntimeMcpToolBindings,
 }
 
 impl McpService {
@@ -76,7 +75,6 @@ impl McpService {
             workspaces,
             variables,
             http_client,
-            runtime_tool_bindings: runtime::new_runtime_tool_bindings(),
         }
     }
 

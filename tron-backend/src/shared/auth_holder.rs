@@ -20,7 +20,6 @@ impl AuthHolderContext {
     pub fn session_code(&self) -> &str {
         &self.token_identity.session_code
     }
-
 }
 
 task_local! {

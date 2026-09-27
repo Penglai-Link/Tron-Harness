@@ -7,8 +7,7 @@ use std::{io::Cursor, path::Path, process::Command};
 use tron_backend::{
     adapters::outbound::application_directory::GitApplicationDirectoryInspector,
     application::{
-        agent::execution_context_message,
-        project::ApplicationDirectoryInspector,
+        agent::execution_context_message, project::ApplicationDirectoryInspector,
         resource::ChatSessionAttachmentCreateCommand,
     },
     config::AppConfig,
@@ -523,7 +522,8 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
         skill_name: None,
         required_variable_keys: vec![],
     }];
-    let result = state.agent_tool_registry.execute_allowed(
+    let result = execute_tool(
+        &state,
         ToolRequest {
             tool_name: "bash_exec".into(),
             input: json!({"command": "pwd"}),
@@ -531,12 +531,7 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
         },
         &context,
     );
-    assert!(
-        result
-            .unwrap_err()
-            .to_string()
-            .contains("configured working directory")
-    );
+    assert!(result.unwrap_err().to_string().contains("filesystem root"));
     for selection in [
         RuntimeAdapterSelection::CodexExec {
             command_name: "must-not-be-started".into(),
@@ -563,18 +558,20 @@ async fn missing_working_directory_never_runs_in_the_backend_directory() {
     context.tools[0].tool_name = "fs_read_text".into();
     for cwd in [missing, "relative/project".into()] {
         context.execution_scope.local_directory = Some(cwd);
-        let error = state
-            .agent_tool_registry
-            .execute_allowed(
-                ToolRequest {
-                    tool_name: "fs_read_text".into(),
-                    input: json!({"path": "Cargo.toml"}),
-                    invocation_id: None,
-                },
-                &context,
-            )
-            .unwrap_err();
-        assert!(error.to_string().contains("configured working directory"));
+        let error = execute_tool(
+            &state,
+            ToolRequest {
+                tool_name: "fs_read_text".into(),
+                input: json!({"path": "Cargo.toml"}),
+                invocation_id: None,
+            },
+            &context,
+        )
+        .unwrap_err();
+        assert!(
+            error.to_string().contains("filesystem root") || error.to_string().contains("absolute"),
+            "{error}"
+        );
     }
 }
 
@@ -626,18 +623,154 @@ fn call_tool_with_invocation(
     input: serde_json::Value,
     invocation_id: Option<String>,
 ) -> serde_json::Value {
-    let result = state
-        .agent_tool_registry
-        .execute_allowed(
-            tron_backend::domain::agent::ToolRequest {
-                tool_name: name.into(),
-                input,
-                invocation_id,
-            },
-            context,
-        )
-        .unwrap();
+    let result = execute_tool(
+        &state,
+        tron_backend::domain::agent::ToolRequest {
+            tool_name: name.into(),
+            input,
+            invocation_id,
+        },
+        context,
+    )
+    .unwrap();
     serde_json::from_str(&result.observation.output).unwrap()
+}
+
+// Generic tools are exercised through the same framework loop as production.
+// Business-only tool unit cases retain their native harness registry boundary.
+fn execute_tool(
+    state: &tron_backend::app::AppState,
+    request: tron_backend::domain::agent::ToolRequest,
+    context: &tron_backend::domain::agent::AgentRunContext,
+) -> Result<tron_backend::domain::agent::ToolExecutionResult, tron_backend::domain::agent::ToolError>
+{
+    use tron_backend::{
+        application::agent::{FrameworkHost, ModelClient, ReactAgentBuilder},
+        domain::agent::*,
+    };
+    // Terminal contract cases deliberately supply stable invocation IDs and
+    // share the same public executor/service as the production tool provider.
+    // Framework dispatch and schema validation have a separate public integration test.
+    if request.tool_name.starts_with("terminal_") {
+        use eliteforge_agent_official_plugin_tools_local::{
+            FileSystemToolsConfig, SystemCommandConfig, pty_tools::PtyTools,
+        };
+        if !context.is_tool_authorized(&request.tool_name) {
+            return Err(ToolError::ExecutionFailed(
+                "terminal tool is not authorized".into(),
+            ));
+        }
+        let cwd = context
+            .execution_scope
+            .local_directory
+            .as_ref()
+            .ok_or_else(|| ToolError::ExecutionFailed("working directory unavailable".into()))?;
+        let roots: Vec<std::path::PathBuf> =
+            if context.execution_scope.allowed_local_directories.is_empty() {
+                vec![std::path::PathBuf::from(cwd)]
+            } else {
+                context
+                    .execution_scope
+                    .allowed_local_directories
+                    .iter()
+                    .map(std::path::PathBuf::from)
+                    .collect()
+            };
+        let shell = std::env::var_os("SHELL")
+            .map(std::path::PathBuf::from)
+            .filter(|path| path.is_file())
+            .unwrap_or_else(|| "/bin/sh".into());
+        let config = SystemCommandConfig::new()
+            .with_shell(shell)
+            .with_directory_scope(
+                FileSystemToolsConfig::new(cwd)
+                    .with_authorized_roots(roots)
+                    .with_authorized_symlinks(true),
+            );
+        let owner = tron_backend::application::agent::terminal_owner(
+            &context.workspace_code,
+            context.user_code.as_deref(),
+            context
+                .conversation_code
+                .as_deref()
+                .unwrap_or(&context.run_code),
+        );
+        let output = PtyTools::new(state.agent_framework.pty(), owner, config)
+            .execute(&request.tool_name, request.input, request.invocation_id)
+            .map_err(|error| ToolError::ExecutionFailed(error.to_string()))?;
+        return Ok(ToolExecutionResult::observation(ToolObservation {
+            tool_name: request.tool_name,
+            output: serde_json::to_string(&output).unwrap(),
+        }));
+    }
+    if !(request.tool_name.starts_with("fs_") || request.tool_name.starts_with("bash_")) {
+        return state.agent_tool_registry.execute_allowed(request, context);
+    }
+    struct CallModel(std::sync::Mutex<Option<ToolRequest>>);
+    impl ModelClient for CallModel {
+        fn generate<'a>(
+            &'a self,
+            _: &'a AgentModelConfig,
+            _: &'a ModelRequest,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+        > {
+            Box::pin(async move {
+                Ok(match self.0.lock().unwrap().take() {
+                    Some(call) => ModelResponse::tool_call(call.tool_name, call.input),
+                    None => ModelResponse::final_output("verified"),
+                })
+            })
+        }
+    }
+    let mut context = context.clone();
+    context.limits.max_steps = 2;
+    context.limits.max_tool_calls = 1;
+    context.observations.clear();
+    context
+        .messages
+        .push(AgentMessage::user("execute this tool"));
+    context.short_term_memory = None;
+    context
+        .tools
+        .retain(|tool| tool.tool_name == request.tool_name);
+    let name = request.tool_name.clone();
+    let result = std::thread::scope(|scope| {
+        scope
+            .spawn(|| {
+                tokio::runtime::Runtime::new().unwrap().block_on(async {
+                    let host = FrameworkHost::temporary(Some(state.resources.clone())).unwrap();
+                    let agent = ReactAgentBuilder::new(
+                        std::sync::Arc::new(CallModel(std::sync::Mutex::new(Some(request)))),
+                        state.agent_tool_registry.clone(),
+                        state.event_bus.clone(),
+                    )
+                    .with_framework_host(Some(host.clone()))
+                    .build()
+                    .unwrap();
+                    let result = agent.run(context).await;
+                    host.close().await;
+                    result
+                })
+            })
+            .join()
+            .unwrap()
+    })
+    .map_err(|error| ToolError::ExecutionFailed(error.to_string()))?;
+    let observation = result
+        .observations
+        .into_iter()
+        .find(|value| value.tool_name == name)
+        .ok_or_else(|| ToolError::ExecutionFailed("tool did not produce an observation".into()))?;
+    let output: serde_json::Value = serde_json::from_str(&observation.output)
+        .map_err(|_| ToolError::ExecutionFailed(observation.output.clone()))?;
+    if output.get("error").is_some_and(|value| !value.is_null()) {
+        return Err(ToolError::ExecutionFailed(observation.output));
+    }
+    Ok(ToolExecutionResult {
+        observation,
+        context_delta: Default::default(),
+    })
 }
 
 #[test]
@@ -673,7 +806,7 @@ fn office_tools_round_trip_without_overwriting_sources() {
         call_tool(&state, &context, "word_read", json!({"path":"final.docx"}))["paragraphs"][1]["text"],
         "状态：正式 & 待检查"
     );
-    let error=state.agent_tool_registry.execute_allowed(tron_backend::domain::agent::ToolRequest{tool_name:"word_replace_text".into(),input:json!({"path":"report.docx","outputPath":"bad.docx","find":"草稿","replace":"正式","expectedCount":2}),invocation_id:None},&context).unwrap_err();
+    let error=execute_tool(&state, tron_backend::domain::agent::ToolRequest{tool_name:"word_replace_text".into(),input:json!({"path":"report.docx","outputPath":"bad.docx","find":"草稿","replace":"正式","expectedCount":2}),invocation_id:None},&context).unwrap_err();
     assert!(error.to_string().contains("found 1"));
     assert!(!root.join("bad.docx").exists());
     call_tool(
@@ -720,17 +853,16 @@ fn office_tools_round_trip_without_overwriting_sources() {
         ("word_read", json!({"path":"../outside.docx"})),
     ] {
         assert!(
-            state
-                .agent_tool_registry
-                .execute_allowed(
-                    tron_backend::domain::agent::ToolRequest {
-                        tool_name: name.into(),
-                        input,
-                        invocation_id: None,
-                    },
-                    &context
-                )
-                .is_err()
+            execute_tool(
+                &state,
+                tron_backend::domain::agent::ToolRequest {
+                    tool_name: name.into(),
+                    input,
+                    invocation_id: None,
+                },
+                &context
+            )
+            .is_err()
         );
     }
 }
@@ -769,6 +901,28 @@ fn office_tools_read_session_attachments_through_file_refs() {
     assert_eq!(text["content"], "第一行\nsecond line");
     assert_eq!(text["fileName"], "notes.txt");
     assert_eq!(text["fileRef"]["kind"], "session_attachment");
+
+    for foreign_workspace in [false, true] {
+        let mut foreign = context.clone();
+        if foreign_workspace {
+            foreign.workspace_code = "FOREIGN-WORKSPACE".into();
+        } else {
+            foreign.conversation_code = Some("FOREIGN-SESSION".into());
+        }
+        let result = execute_tool(
+            &state,
+            tron_backend::domain::agent::ToolRequest {
+                tool_name: "fs_read_text".into(),
+                input: json!({"fileRef":{"kind":"session_attachment","attachmentCode":text_code}}),
+                invocation_id: None,
+            },
+            &foreign,
+        );
+        assert!(
+            result.is_err(),
+            "an attachment must remain scoped to its workspace and session"
+        );
+    }
 
     std::fs::write(root.join("payload.json"), r#"{"topics":["alpha","beta"]}"#).unwrap();
     let json_from_workspace = call_tool(
@@ -900,8 +1054,8 @@ fn office_tools_read_session_attachments_through_file_refs() {
                 session_code: context.conversation_code.clone().unwrap(),
                 attachment_code: excel_code.into(),
                 file_name: "servers.xlsx".into(),
-                content_type:
-                    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".into(),
+                content_type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+                    .into(),
             },
             &mut Cursor::new(excel_bytes),
         )
@@ -945,17 +1099,16 @@ fn productivity_domains_are_localized_and_discoverable() {
             assert!(domains.iter().any(|item| item.domain_code == domain));
             let tools = BusinessToolCatalog::list_tools(Some(domain), None, locale);
             assert!(!tools.is_empty());
-            let expanded = state
-                .agent_tool_registry
-                .execute_allowed(
-                    tron_backend::domain::agent::ToolRequest {
-                        tool_name: "discovery_expand_tool_domain".into(),
-                        input: json!({"domainCode":domain}),
-                        invocation_id: None,
-                    },
-                    &context,
-                )
-                .unwrap();
+            let expanded = execute_tool(
+                &state,
+                tron_backend::domain::agent::ToolRequest {
+                    tool_name: "discovery_expand_tool_domain".into(),
+                    input: json!({"domainCode":domain}),
+                    invocation_id: None,
+                },
+                &context,
+            )
+            .unwrap();
             assert_eq!(expanded.context_delta.add_tools.len(), tools.len());
             assert!(
                 expanded
@@ -1070,8 +1223,15 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
     let requests = requests.lock().unwrap();
     assert_eq!(requests.len(), 4);
     for (index, request) in requests.iter().enumerate() {
-        let has_main = request.messages.iter().any(|m| m.text_content().contains("main-only project instruction"));
-        assert_eq!(has_main, index == 0 || index == 3, "instruction scope at request {index}");
+        let has_main = request
+            .messages
+            .iter()
+            .any(|m| m.text_content().contains("main-only project instruction"));
+        assert_eq!(
+            has_main,
+            index == 0 || index == 3,
+            "instruction scope at request {index}"
+        );
     }
     let scopes = requests
         .iter()
@@ -1163,17 +1323,16 @@ async fn deleting_selected_worktree_never_reverts_to_old_tool_observations() {
         ApplicationDirectoryStatus::MissingDirectory
     );
     assert!(
-        state
-            .agent_tool_registry
-            .execute_allowed(
-                ToolRequest {
-                    tool_name: "bash_exec".into(),
-                    input: json!({"command":"pwd"}),
-                    invocation_id: None,
-                },
-                &context
-            )
-            .is_err()
+        execute_tool(
+            &state,
+            ToolRequest {
+                tool_name: "bash_exec".into(),
+                input: json!({"command":"pwd"}),
+                invocation_id: None,
+            },
+            &context
+        )
+        .is_err()
     );
 }
 
@@ -1238,17 +1397,16 @@ fn word_replacement_preserves_split_run_formatting_and_other_package_parts() {
         ),
     ] {
         assert!(
-            state
-                .agent_tool_registry
-                .execute_allowed(
-                    tron_backend::domain::agent::ToolRequest {
-                        tool_name: name.into(),
-                        input,
-                        invocation_id: None,
-                    },
-                    &context
-                )
-                .is_err()
+            execute_tool(
+                &state,
+                tron_backend::domain::agent::ToolRequest {
+                    tool_name: name.into(),
+                    input,
+                    invocation_id: None,
+                },
+                &context
+            )
+            .is_err()
         );
     }
     assert!(!root.join("invalid.docx").exists());
@@ -1272,8 +1430,12 @@ fn code_patch_previews_and_applies_multiple_files_and_moves() {
         json!({"patch":patch,"dryRun":true}),
     );
     assert_eq!(preview["applied"], false);
-    assert!(preview["diff"].as_str().unwrap().contains("+fn new() {}"));
-    assert_eq!(preview["files"].as_array().unwrap().len(), 5);
+    assert!(preview["changes"].as_array().unwrap().iter().any(|change| {
+        change["diff"]
+            .as_str()
+            .is_some_and(|diff| diff.contains("+fn new() {}"))
+    }));
+    assert_eq!(preview["changes"].as_array().unwrap().len(), 5);
     assert!(!root.join("nested").exists());
     assert!(root.join("remove.txt").exists());
     let result = call_tool(&state, &context, "fs_apply_patch", json!({"patch":patch}));
@@ -1316,17 +1478,16 @@ fn code_patch_rejects_invalid_edits_and_preserves_unrelated_changes() {
     ];
     for patch in patches {
         assert!(
-            state
-                .agent_tool_registry
-                .execute_allowed(
-                    ToolRequest {
-                        tool_name: "fs_apply_patch".into(),
-                        input: json!({"patch":patch}),
-                        invocation_id: None,
-                    },
-                    &context
-                )
-                .is_err(),
+            execute_tool(
+                &state,
+                ToolRequest {
+                    tool_name: "fs_apply_patch".into(),
+                    input: json!({"patch":patch}),
+                    invocation_id: None,
+                },
+                &context
+            )
+            .is_err(),
             "{patch}"
         );
         assert_eq!(
@@ -1339,7 +1500,7 @@ fn code_patch_rejects_invalid_edits_and_preserves_unrelated_changes() {
     std::fs::write(root.join("a.txt"), "first\n").unwrap();
     call_tool(&state, &context, "fs_read_text", json!({"path":"a.txt"}));
     std::fs::write(root.join("a.txt"), "first\nconcurrent change\n").unwrap();
-    assert!(state.agent_tool_registry.execute_allowed(ToolRequest{tool_name:"fs_apply_patch".into(),input:json!({"patch":"*** Begin Patch\n*** Update File: a.txt\n@@\n-first\n+updated\n*** End Patch"}),invocation_id:None},&context).is_ok());
+    assert!(execute_tool(&state, ToolRequest{tool_name:"fs_apply_patch".into(),input:json!({"patch":"*** Begin Patch\n*** Update File: a.txt\n@@\n-first\n+updated\n*** End Patch"}),invocation_id:None},&context).is_ok());
     assert_eq!(
         std::fs::read_to_string(root.join("a.txt")).unwrap(),
         "updated\nconcurrent change\n"
@@ -1395,7 +1556,8 @@ fn legacy_patch_guards_ambiguity_and_catalog_removes_code_check() {
     let context = productivity_context(&root);
     std::fs::write(root.join("a.txt"), "old old").unwrap();
     let request = |input| {
-        state.agent_tool_registry.execute_allowed(
+        execute_tool(
+            &state,
             ToolRequest {
                 tool_name: "fs_apply_patch".into(),
                 input,
@@ -1469,7 +1631,18 @@ fn code_patch_preserves_executable_permissions_and_rejects_symlinks() {
         0o755
     );
     symlink(root.join("bin/run.sh"), root.join("link.sh")).unwrap();
-    assert!(state.agent_tool_registry.execute_allowed(ToolRequest{tool_name:"fs_apply_patch".into(),input:json!({"patch":"*** Begin Patch\n*** Delete File: link.sh\n*** End Patch"}),invocation_id:None},&context).is_err());
+    assert!(
+        execute_tool(
+            &state,
+            ToolRequest {
+                tool_name: "fs_apply_patch".into(),
+                input: json!({"patch":"*** Begin Patch\n*** Delete File: link.sh\n*** End Patch"}),
+                invocation_id: None
+            },
+            &context
+        )
+        .is_err()
+    );
     assert!(root.join("bin/run.sh").exists());
 }
 
@@ -1543,9 +1716,16 @@ fn agent_terminal_retries_are_idempotent_and_bare_shells_are_rejected() {
         Some("run-id:call-2".into()),
     );
     assert_ne!(first["terminalId"], second["terminalId"]);
-    assert_eq!(call_tool(&state, &context, "terminal_list", json!({})).as_array().unwrap().len(), 2);
+    assert_eq!(
+        call_tool(&state, &context, "terminal_list", json!({}))
+            .as_array()
+            .unwrap()
+            .len(),
+        2
+    );
 
-    let bare_shell = state.agent_tool_registry.execute_allowed(
+    let bare_shell = execute_tool(
+        &state,
         ToolRequest {
             tool_name: "terminal_start".into(),
             input: json!({"command":"bash"}),
@@ -1553,7 +1733,12 @@ fn agent_terminal_retries_are_idempotent_and_bare_shells_are_rejected() {
         },
         &context,
     );
-    assert!(bare_shell.unwrap_err().to_string().contains("interactive: true"));
+    assert!(
+        bare_shell
+            .unwrap_err()
+            .to_string()
+            .contains("interactive: true")
+    );
 
     for terminal in [first, second] {
         call_tool(
@@ -1585,17 +1770,16 @@ fn agent_terminal_survives_turns_accepts_input_and_isolates_conversations() {
     let mut outsider = context.clone();
     outsider.conversation_code = Some("other".into());
     assert!(
-        state
-            .agent_tool_registry
-            .execute_allowed(
-                ToolRequest {
-                    tool_name: "terminal_read".into(),
-                    input: json!({"terminalId":id}),
-                    invocation_id: None,
-                },
-                &outsider
-            )
-            .is_err()
+        execute_tool(
+            &state,
+            ToolRequest {
+                tool_name: "terminal_read".into(),
+                input: json!({"terminalId":id}),
+                invocation_id: None,
+            },
+            &outsider
+        )
+        .is_err()
     );
     assert_eq!(
         call_tool(&state, &outsider, "terminal_list", json!({})),
@@ -1702,60 +1886,182 @@ fn agent_terminal_bounds_output_and_stops_running_process() {
 async fn terminal_http_and_agent_share_process_with_conversation_isolation() {
     use axum::{Extension, body::Body, http::Request};
     use tower::ServiceExt;
-    use tron_backend::{adapters::inbound::http::{auth::RequestAuthContext, chats::routes}, application::chat::CreateChatSessionCommand};
+    use tron_backend::{
+        adapters::inbound::http::{auth::RequestAuthContext, chats::routes},
+        application::chat::CreateChatSessionCommand,
+    };
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path().canonicalize().unwrap();
     let state = productivity_state(&root);
-    let auth = RequestAuthContext::from_profile(&state.profiles.current_context().unwrap(), "en-US".into());
-    let create = || state.chats.create_session(CreateChatSessionCommand {
-        workspace_code: Some("TRON_CORE".into()), project_code: None, title: Some("Terminal UI test".into()), app_code: None, task_code: None, source_type: None, source_code: None, agent_code: Some("main-agent".into()),
-    }, None).unwrap();
+    let auth = RequestAuthContext::from_profile(
+        &state.profiles.current_context().unwrap(),
+        "en-US".into(),
+    );
+    let create = || {
+        state
+            .chats
+            .create_session(
+                CreateChatSessionCommand {
+                    workspace_code: Some("TRON_CORE".into()),
+                    project_code: None,
+                    title: Some("Terminal UI test".into()),
+                    app_code: None,
+                    task_code: None,
+                    source_type: None,
+                    source_code: None,
+                    agent_code: Some("main-agent".into()),
+                },
+                None,
+            )
+            .unwrap()
+    };
     let session = create();
     let other = create();
     let mut context = productivity_context(&root);
     context.workspace_code = session.workspace_code.clone();
     context.user_code = Some(auth.user().user_code.clone());
     context.conversation_code = Some(session.session_code.clone());
-    let started = call_tool(&state, &context, "terminal_start", json!({"command":"/bin/bash","args":["--noprofile","--norc","-c","printf 'shared process'; read answer"],"cwd":root}));
+    // Exercise the production FrameworkHost and official scoped tool lease,
+    // then access that exact process through the product HTTP API.
+    use tron_backend::application::agent::{ModelClient, ReactAgentBuilder};
+    use tron_backend::domain::agent::{AgentModelConfig, ModelRequest, ModelResponse};
+    struct StartTerminalModel(std::sync::Mutex<Option<serde_json::Value>>);
+    impl ModelClient for StartTerminalModel {
+        fn generate<'a>(
+            &'a self,
+            _: &'a AgentModelConfig,
+            _: &'a ModelRequest,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+        > {
+            Box::pin(async move {
+                Ok(match self.0.lock().unwrap().take() {
+                    Some(input) => ModelResponse::tool_call("terminal_start", input),
+                    None => ModelResponse::final_output("terminal started"),
+                })
+            })
+        }
+    }
+    let model = StartTerminalModel(std::sync::Mutex::new(Some(
+        json!({"command":"/bin/bash","args":["--noprofile","--norc","-c","printf 'shared process'; read answer"],"cwd":root}),
+    )));
+    let mut run_context = context.clone();
+    run_context.short_term_memory = None;
+    run_context
+        .tools
+        .retain(|tool| tool.tool_name == "terminal_start");
+    run_context.limits.max_steps = 2;
+    run_context.limits.max_tool_calls = 1;
+    let run = ReactAgentBuilder::new(
+        std::sync::Arc::new(model),
+        state.agent_tool_registry.clone(),
+        state.event_bus.clone(),
+    )
+    .with_framework_host(Some(state.agent_framework.clone()))
+    .build()
+    .unwrap()
+    .run(run_context)
+    .await
+    .expect("official terminal tool should run through FrameworkHost");
+    let observation = run
+        .observations
+        .iter()
+        .find(|item| item.tool_name == "terminal_start")
+        .unwrap();
+    let started: serde_json::Value = serde_json::from_str(&observation.output).unwrap();
     let id = started["terminalId"].as_str().unwrap();
-    let router = routes::routes().with_state(state.clone()).layer(Extension(auth));
-    let base = format!("/api/v1/chats/sessions/{}/terminals",session.session_code);
-    let response = router.clone().oneshot(Request::builder().uri(&base).body(Body::empty()).unwrap()).await.unwrap();
-    assert_eq!(response.status(),StatusCode::OK);
-    let list=response_json(response).await;
-    assert_eq!(list["data"][0]["terminalId"],id);
-    assert_eq!(list["data"][0]["command"],"/bin/bash");
-    let invalid = router.clone().oneshot(Request::builder().uri(format!("{base}/{id}?cursor=-1")).body(Body::empty()).unwrap()).await.unwrap();
+    let router = routes::routes()
+        .with_state(state.clone())
+        .layer(Extension(auth));
+    let base = format!("/api/v1/chats/sessions/{}/terminals", session.session_code);
+    let response = router
+        .clone()
+        .oneshot(Request::builder().uri(&base).body(Body::empty()).unwrap())
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    let list = response_json(response).await;
+    assert_eq!(list["data"][0]["terminalId"], id);
+    assert_eq!(list["data"][0]["command"], "/bin/bash");
+    let invalid = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .uri(format!("{base}/{id}?cursor=-1"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
     assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
     assert_eq!(response_json(invalid).await["code"], "101028002");
-    for method in [Method::GET,Method::POST] {
-        let suffix=if method==Method::POST {"/stop"} else {""};
-        let response=router.clone().oneshot(Request::builder().method(method).uri(format!("/api/v1/chats/sessions/{}/terminals/{id}{suffix}",other.session_code)).body(Body::empty()).unwrap()).await.unwrap();
-        assert_eq!(response.status(),StatusCode::NOT_FOUND);
+    for method in [Method::GET, Method::POST] {
+        let suffix = if method == Method::POST { "/stop" } else { "" };
+        let response = router
+            .clone()
+            .oneshot(
+                Request::builder()
+                    .method(method)
+                    .uri(format!(
+                        "/api/v1/chats/sessions/{}/terminals/{id}{suffix}",
+                        other.session_code
+                    ))
+                    .body(Body::empty())
+                    .unwrap(),
+            )
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::NOT_FOUND);
     }
-    assert_eq!(call_tool(&state,&context,"terminal_read",json!({"terminalId":id}))["running"],true);
-    let response=router.clone().oneshot(Request::builder().method(Method::POST).uri(format!("{base}/{id}/stop")).body(Body::empty()).unwrap()).await.unwrap();
-    assert_eq!(response.status(),StatusCode::OK);
-    assert_eq!(call_tool(&state,&context,"terminal_read",json!({"terminalId":id}))["running"],false);
+    assert_eq!(
+        call_tool(&state, &context, "terminal_read", json!({"terminalId":id}))["running"],
+        true
+    );
+    let response = router
+        .clone()
+        .oneshot(
+            Request::builder()
+                .method(Method::POST)
+                .uri(format!("{base}/{id}/stop"))
+                .body(Body::empty())
+                .unwrap(),
+        )
+        .await
+        .unwrap();
+    assert_eq!(response.status(), StatusCode::OK);
+    assert_eq!(
+        call_tool(&state, &context, "terminal_read", json!({"terminalId":id}))["running"],
+        false
+    );
+    state.agent_framework.close().await;
 }
 
 #[test]
 fn project_instructions_follow_scope_precedence_and_size_limit() {
     use tron_backend::application::project::ApplicationDirectoryInspector;
-    let temp=tempfile::tempdir().unwrap();let root=temp.path().canonicalize().unwrap();
-    git(&root,&["init","-b","main"]);
-    let nested=root.join("src");std::fs::create_dir(&nested).unwrap();
-    std::fs::write(root.join("AGENTS.md"),"root rules").unwrap();
-    std::fs::write(root.join("CLAUDE.md"),"unused fallback").unwrap();
-    std::fs::write(nested.join("CLAUDE.md"),"nested rules").unwrap();
-    let reader=GitApplicationDirectoryInspector;
-    let files=reader.instruction_files(nested.to_str().unwrap()).unwrap();
-    assert_eq!(files.len(),2);assert_eq!(files[0].content,"root rules");assert_eq!(files[1].content,"nested rules");
-    std::fs::write(root.join("AGENTS.override.md"),"override rules").unwrap();
-    assert_eq!(reader.instruction_files(nested.to_str().unwrap()).unwrap()[0].content,"override rules");
-    std::fs::write(root.join("AGENTS.override.md"),"规则".repeat(10000)).unwrap();
-    let limited=reader.instruction_files(nested.to_str().unwrap()).unwrap();
-    assert_eq!(limited.len(),1);assert!(limited[0].truncated);assert!(limited[0].content.len()<=32768);
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    git(&root, &["init", "-b", "main"]);
+    let nested = root.join("src");
+    std::fs::create_dir(&nested).unwrap();
+    std::fs::write(root.join("AGENTS.md"), "root rules").unwrap();
+    std::fs::write(root.join("CLAUDE.md"), "unused fallback").unwrap();
+    std::fs::write(nested.join("CLAUDE.md"), "nested rules").unwrap();
+    let reader = GitApplicationDirectoryInspector;
+    let files = reader.instruction_files(nested.to_str().unwrap()).unwrap();
+    assert_eq!(files.len(), 2);
+    assert_eq!(files[0].content, "root rules");
+    assert_eq!(files[1].content, "nested rules");
+    std::fs::write(root.join("AGENTS.override.md"), "override rules").unwrap();
+    assert_eq!(
+        reader.instruction_files(nested.to_str().unwrap()).unwrap()[0].content,
+        "override rules"
+    );
+    std::fs::write(root.join("AGENTS.override.md"), "规则".repeat(10000)).unwrap();
+    let limited = reader.instruction_files(nested.to_str().unwrap()).unwrap();
+    assert_eq!(limited.len(), 1);
+    assert!(limited[0].truncated);
+    assert!(limited[0].content.len() <= 32768);
     assert!(!limited[0].content.contains('\u{fffd}'));
 }
 
@@ -1763,39 +2069,111 @@ fn project_instructions_follow_scope_precedence_and_size_limit() {
 #[test]
 fn project_instructions_reject_external_links_and_ignore_unrelated_files() {
     use tron_backend::application::project::ApplicationDirectoryInspector;
-    let temp=tempfile::tempdir().unwrap();let root=temp.path().join("project");std::fs::create_dir(&root).unwrap();
-    std::fs::write(temp.path().join("AGENTS.md"),"unrelated parent").unwrap();
-    std::fs::write(root.join("README.md"),"not automatically loaded").unwrap();
-    let reader=GitApplicationDirectoryInspector;
-    assert!(reader.instruction_files(root.to_str().unwrap()).unwrap().is_empty());
-    std::os::unix::fs::symlink(temp.path().join("AGENTS.md"),root.join("AGENTS.md")).unwrap();
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().join("project");
+    std::fs::create_dir(&root).unwrap();
+    std::fs::write(temp.path().join("AGENTS.md"), "unrelated parent").unwrap();
+    std::fs::write(root.join("README.md"), "not automatically loaded").unwrap();
+    let reader = GitApplicationDirectoryInspector;
+    assert!(
+        reader
+            .instruction_files(root.to_str().unwrap())
+            .unwrap()
+            .is_empty()
+    );
+    std::os::unix::fs::symlink(temp.path().join("AGENTS.md"), root.join("AGENTS.md")).unwrap();
     assert!(reader.instruction_files(root.to_str().unwrap()).is_err());
 }
 
 #[tokio::test]
 async fn project_instructions_refresh_without_duplicating_and_primary_tools_use_cwd() {
-    let temp=tempfile::tempdir().unwrap();let root=temp.path().canonicalize().unwrap();
-    let state=productivity_state(&root);let mut context=productivity_context(&root);
-    context.short_term_memory = Some(tron_backend::domain::agent::AgentShortTermMemoryRunContext {
-        session_code: "instruction-test".into(), input_code: "input-test".into(), input_kind: "USER_PROMPT".into(), input_metadata: None,
-        prompt_prefix: context.messages.clone(), prompt_prefix_sources: vec![None; context.messages.len()], current_input_message: None, agent_code: None, todo_enabled: false,
-    });
-    let reader=std::sync::Arc::new(GitApplicationDirectoryInspector);
-    std::fs::write(root.join("AGENTS.md"),"first version").unwrap();
-    assert!(tron_backend::application::agent::refresh_execution_context(&mut context,reader.clone()).await.unwrap());
-    assert!(context.messages.iter().any(|m|m.role=="system"&&m.text_content().contains("first version")));
-    assert!(!tron_backend::application::agent::refresh_execution_context(&mut context,reader.clone()).await.unwrap());
-    std::fs::write(root.join("AGENTS.md"),"second version").unwrap();
-    assert!(tron_backend::application::agent::refresh_execution_context(&mut context,reader.clone()).await.unwrap());
-    assert!(!context.messages.iter().any(|m|m.text_content().contains("first version")));
-    assert_eq!(context.messages.iter().filter(|m|m.text_content().contains("second version")).count(),1);
-    let memory=context.short_term_memory.as_ref().unwrap();
-    assert_eq!(memory.prompt_prefix.iter().filter(|m|m.text_content().contains("second version")).count(),1);
-    assert_eq!(memory.prompt_prefix.len(),memory.prompt_prefix_sources.len());
-    let output=call_tool(&state,&context,"bash_exec",json!({"command":"pwd"}));
-    assert_eq!(output["cwd"],root.to_str().unwrap());
-    assert_eq!(output["stdout"].as_str().unwrap().trim(),root.to_str().unwrap());
+    let temp = tempfile::tempdir().unwrap();
+    let root = temp.path().canonicalize().unwrap();
+    let state = productivity_state(&root);
+    let mut context = productivity_context(&root);
+    context.short_term_memory = Some(
+        tron_backend::domain::agent::AgentShortTermMemoryRunContext {
+            session_code: "instruction-test".into(),
+            input_code: "input-test".into(),
+            input_kind: "USER_PROMPT".into(),
+            input_metadata: None,
+            prompt_prefix: context.messages.clone(),
+            prompt_prefix_sources: vec![None; context.messages.len()],
+            current_input_message: None,
+            agent_code: None,
+            todo_enabled: false,
+        },
+    );
+    let reader = std::sync::Arc::new(GitApplicationDirectoryInspector);
+    std::fs::write(root.join("AGENTS.md"), "first version").unwrap();
+    assert!(
+        tron_backend::application::agent::refresh_execution_context(&mut context, reader.clone())
+            .await
+            .unwrap()
+    );
+    assert!(
+        context
+            .messages
+            .iter()
+            .any(|m| m.role == "system" && m.text_content().contains("first version"))
+    );
+    assert!(
+        !tron_backend::application::agent::refresh_execution_context(&mut context, reader.clone())
+            .await
+            .unwrap()
+    );
+    std::fs::write(root.join("AGENTS.md"), "second version").unwrap();
+    assert!(
+        tron_backend::application::agent::refresh_execution_context(&mut context, reader.clone())
+            .await
+            .unwrap()
+    );
+    assert!(
+        !context
+            .messages
+            .iter()
+            .any(|m| m.text_content().contains("first version"))
+    );
+    assert_eq!(
+        context
+            .messages
+            .iter()
+            .filter(|m| m.text_content().contains("second version"))
+            .count(),
+        1
+    );
+    let memory = context.short_term_memory.as_ref().unwrap();
+    assert_eq!(
+        memory
+            .prompt_prefix
+            .iter()
+            .filter(|m| m.text_content().contains("second version"))
+            .count(),
+        1
+    );
+    assert_eq!(
+        memory.prompt_prefix.len(),
+        memory.prompt_prefix_sources.len()
+    );
+    let output = call_tool(&state, &context, "bash_exec", json!({"command":"pwd"}));
+    assert_eq!(
+        std::fs::canonicalize(output["cwd"].as_str().unwrap()).unwrap(),
+        root
+    );
+    assert_eq!(
+        output["stdout"].as_str().unwrap().trim(),
+        root.to_str().unwrap()
+    );
     std::fs::remove_file(root.join("AGENTS.md")).unwrap();
-    assert!(tron_backend::application::agent::refresh_execution_context(&mut context,reader).await.unwrap());
-    assert!(!context.messages.iter().any(|m|m.text_content().contains("second version")));
+    assert!(
+        tron_backend::application::agent::refresh_execution_context(&mut context, reader)
+            .await
+            .unwrap()
+    );
+    assert!(
+        !context
+            .messages
+            .iter()
+            .any(|m| m.text_content().contains("second version"))
+    );
 }

@@ -1,3 +1,5 @@
+mod page_context;
+use page_context::page_context_message;
 use std::{collections::HashMap, sync::Arc};
 
 use crate::{
@@ -22,9 +24,9 @@ use crate::{
 
 use crate::application::agent::{
     AgentInvocationCommand, AgentInvocationError, AgentManagementService, AgentPageContext,
-    BusinessToolCatalog,
-    ResolvedAgentRuntime, RuntimeAdapterSelection, discovery_expand_tool_definition,
-    domain_discovery_runtime_values, tool_record_to_effective_tool,
+    BusinessToolCatalog, ResolvedAgentRuntime, RuntimeAdapterSelection,
+    discovery_expand_tool_definition, domain_discovery_runtime_values,
+    tool_record_to_effective_tool,
 };
 
 use super::{
@@ -32,37 +34,13 @@ use super::{
     attachments::user_prompt_message,
     build_system_runtime_model_config, generate_agent_run_code,
     helpers::{
-        agent_kind_for_runtime, is_main_agent, map_agent_error, map_mcp_error,
-        normalize_optional, required_runtime_command_name, runtime_type_label,
+        agent_kind_for_runtime, is_main_agent, map_agent_error, map_mcp_error, normalize_optional,
+        required_runtime_command_name, runtime_type_label,
     },
     short_term_memory::activate_short_term_memory,
 };
 
 const MAIN_AGENT_CODE: &str = "main-agent";
-
-fn page_context_message(page_context: Option<&AgentPageContext>) -> Option<AgentMessage> {
-    let page_context = page_context?;
-    let title = truncate_chars(page_context.title.trim(), 80);
-    let path = page_context
-        .path
-        .trim()
-        .split(['?', '#'])
-        .next()
-        .unwrap_or_default();
-    let path = truncate_chars(path, 160);
-    if title.is_empty() && path.is_empty() {
-        return None;
-    }
-
-    let metadata = serde_json::json!({ "title": title, "path": path });
-    Some(AgentMessage::system(format!(
-        "Opened from UI page (metadata only): {metadata}"
-    )))
-}
-
-fn truncate_chars(value: &str, limit: usize) -> String {
-    value.chars().take(limit).collect()
-}
 
 fn managed_system_prompt(
     prompt_service: Option<&PromptService>,
@@ -111,6 +89,7 @@ fn invocation_locale(request_locale: Option<&str>) -> String {
 }
 
 pub(crate) struct PreparedAgentRun {
+    pub leases: crate::domain::agent::FrameworkLeaseGuard,
     pub run_code: String,
     pub conversation_code: Option<String>,
     pub workspace_code: String,
@@ -138,7 +117,8 @@ pub(crate) struct AgentRunContextBuilder {
     short_term_memory: Option<ShortTermMemoryService>,
     prompt_service: Option<PromptService>,
     auto_model_route: Option<AutoModelRouteContext>,
-    directory_inspector: Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
+    directory_inspector:
+        Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
 }
 
 impl AgentRunContextBuilder {
@@ -154,7 +134,9 @@ impl AgentRunContextBuilder {
         short_term_memory: Option<ShortTermMemoryService>,
         prompt_service: Option<PromptService>,
         auto_model_route: Option<AutoModelRouteContext>,
-        directory_inspector: Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
+        directory_inspector: Option<
+            Arc<dyn crate::application::project::ApplicationDirectoryInspector>,
+        >,
     ) -> Self {
         Self {
             workspaces,
@@ -236,6 +218,7 @@ impl AgentRunContextBuilder {
         let agent_kind = agent_kind_for_runtime(resolved_agent.runtime_type);
         let locale = invocation_locale(locale.as_deref());
         let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
+        let leases = self.tool_registry.framework_lease_guard(&run_code);
         let mut tools = requested_tools;
         let mut effective_tools = tools.clone();
         let mut tool_exposure = AgentToolExposureState::default();
@@ -243,10 +226,11 @@ impl AgentRunContextBuilder {
             .management
             .list_workspace_internal_agents(&workspace.workspace_code)
             .map_err(|error| map_agent_error(&resolved_agent.agent_code, error))?;
-        let internal_agent_policy = if internal_agents
-            .iter()
-            .any(|policy| policy.agent_code.eq_ignore_ascii_case(&resolved_agent.agent_code))
-        {
+        let internal_agent_policy = if internal_agents.iter().any(|policy| {
+            policy
+                .agent_code
+                .eq_ignore_ascii_case(&resolved_agent.agent_code)
+        }) {
             Some(
                 self.management
                     .workspace_internal_agent_policy(
@@ -396,9 +380,13 @@ impl AgentRunContextBuilder {
         let mut prompt_prefix_sources = Vec::new();
         let empty_runtime_prompt_values = HashMap::new();
         if requested_task_code.is_none() && is_main_agent(&resolved_agent.agent_code) {
-            if let Some(guidance) = self.management.current_main_agent_guidance(&locale).map_err(|_| {
-                AgentInvocationError::RuntimeFailed("main agent config load failed".into())
-            })? {
+            if let Some(guidance) = self
+                .management
+                .current_main_agent_guidance(&locale)
+                .map_err(|_| {
+                    AgentInvocationError::RuntimeFailed("main agent config load failed".into())
+                })?
+            {
                 messages.push(AgentMessage::system(guidance));
                 prompt_prefix_sources.push(None);
             }
@@ -425,10 +413,8 @@ impl AgentRunContextBuilder {
                 &locale,
                 &empty_runtime_prompt_values,
             )?));
-            prompt_prefix_sources.push(Some(managed_system_prompt_source(
-                "chat.ask-user",
-                &locale,
-            )));
+            prompt_prefix_sources
+                .push(Some(managed_system_prompt_source("chat.ask-user", &locale)));
         }
         if tool_exposure.tool_exposure_mode == Some(ToolExposureMode::DomainDiscovery)
             && !tool_exposure.visible_domains.is_empty()
@@ -523,11 +509,17 @@ impl AgentRunContextBuilder {
         }
         if context.agent_kind == crate::domain::agent::AgentKind::React {
             if let Some(inspector) = &self.directory_inspector {
-                if let Some(message) = crate::application::agent::project_instructions_message(&context.execution_scope, inspector.as_ref())
-                    .map_err(AgentInvocationError::RuntimeFailed)? {
+                if let Some(message) = crate::application::agent::project_instructions_message(
+                    &context.execution_scope,
+                    inspector.as_ref(),
+                )
+                .map_err(AgentInvocationError::RuntimeFailed)?
+                {
                     prompt_prefix_messages.push(message.clone());
                     prompt_prefix_sources.push(None);
-                    context.messages.insert(context.messages.len().saturating_sub(1), message);
+                    context
+                        .messages
+                        .insert(context.messages.len().saturating_sub(1), message);
                 }
             }
         }
@@ -555,6 +547,7 @@ impl AgentRunContextBuilder {
         }
 
         Ok(PreparedAgentRun {
+            leases,
             run_code,
             conversation_code: context.conversation_code.clone(),
             workspace_code: context.workspace_code.clone(),

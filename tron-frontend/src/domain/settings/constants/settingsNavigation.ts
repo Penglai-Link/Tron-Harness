@@ -10,6 +10,7 @@ import {
   Network,
   PanelTop,
   Package,
+  Puzzle,
   MessageSquareText,
   Settings2,
   Sparkles,
@@ -88,6 +89,18 @@ export const settingsNavigation = [
         href: "/settings/tools",
         icon: Wrench,
         translationKey: "shell:settings.items.tools",
+      },
+      {
+        label: "Capability Packs",
+        href: "/settings/capability-packs",
+        icon: Package,
+        translationKey: "shell:settings.items.capabilityPacks",
+      },
+      {
+        label: "Capability Configuration",
+        href: "/settings/capability-configuration",
+        icon: Puzzle,
+        translationKey: "shell:settings.items.capabilityConfiguration",
       },
       {
         label: "Public Variables",

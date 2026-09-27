@@ -62,7 +62,7 @@ test("stops descendants and releases their port after the managed parent exits",
   const port = await reservePort();
   const serverScript = [
     "const { createServer } = require('node:net');",
-    "const server = createServer((socket) => socket.end('ok'));",
+    "const server = createServer((socket) => { socket.on('error', () => {}); socket.end('ok'); });",
     "server.listen(Number(process.argv[1]), '127.0.0.1');",
     "setInterval(() => {}, 1000);",
   ].join("");
@@ -106,8 +106,8 @@ test("escalates to SIGKILL when the process group ignores SIGTERM", async () => 
   const port = await reservePort();
   const serverScript = [
     "const { createServer } = require('node:net');",
-    "process.on('SIGTERM', () => console.log('SIGTERM_IGNORED'));",
-    "createServer((socket) => socket.end('ok')).listen(Number(process.argv[1]), '127.0.0.1');",
+    "process.on('SIGTERM', () => require('node:fs').writeSync(1, 'SIGTERM_IGNORED'));",
+    "createServer((socket) => { socket.on('error', () => {}); socket.end('ok'); }).listen(Number(process.argv[1]), '127.0.0.1');",
     "setInterval(() => {}, 1000);",
   ].join("");
   const managedProcess = spawnManagedProcess(
@@ -126,16 +126,17 @@ test("escalates to SIGKILL when the process group ignores SIGTERM", async () => 
     await waitForPortState(port, true);
     await stopManagedProcess(managedProcess, {
       forceTimeoutMs: 1_000,
-      gracefulTimeoutMs: 100,
+      gracefulTimeoutMs: 1_000,
     });
 
     await waitForPortState(port, false);
     expect(output).toContain("SIGTERM_IGNORED");
+    expect(managedProcess.signalCode).toBe("SIGKILL");
     expect(isProcessGroupAlive(groupId)).toBe(false);
   } finally {
     await stopManagedProcess(managedProcess, {
       forceTimeoutMs: 1_000,
-      gracefulTimeoutMs: 100,
+      gracefulTimeoutMs: 1_000,
     });
   }
 });

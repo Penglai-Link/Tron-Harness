@@ -13,143 +13,54 @@ use common::{app_with_config, authenticated_request, response_json};
 async fn task_options_and_default_kanban_exclude_archived_tasks_and_seed_data() {
     let router = task_app("options-kanban");
 
-    let options_response =
-        authenticated_request(&router, Method::GET, "/api/v1/tasks/options", None).await;
+    let options_response = authenticated_request(
+        &router,
+        Method::GET,
+        "/api/v1/tasks/options?workspaceCode=TRON_CORE",
+        None,
+    )
+    .await;
     assert_eq!(options_response.status(), StatusCode::OK);
-    let options_json = response_json(options_response).await;
+    let options = response_json(options_response).await;
+    assert_eq!(options["data"]["flow"]["flowCode"], "DEFAULT");
+    let statuses = options["data"]["statuses"].as_array().unwrap();
     assert_eq!(
-        options_json["data"]["statuses"],
-        json!([
-            "Open",
-            "Designing",
-            "Red",
-            "Green",
-            "Regressioning",
-            "Review",
-            "InProgress",
-            "Reopen",
-            "Completed",
-            "Archived"
-        ])
+        statuses
+            .iter()
+            .map(|s| s["statusCode"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["NOT_STARTED", "IN_PROGRESS", "REOPEN", "CLOSED"]
     );
-    assert_eq!(options_json["data"]["taskTypes"], json!(["Feature", "Bug"]));
+    assert_eq!(options["data"]["taskTypes"], json!(["Feature", "Bug"]));
     assert_eq!(
-        options_json["data"]["priorities"],
+        options["data"]["priorities"],
         json!(["Low", "Medium", "High", "Extra High"])
     );
-    assert_eq!(
-        options_json["data"]["statusRules"],
-        json!({
-            "featureRoot": ["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"],
-            "featureChild": ["Open", "InProgress", "Completed", "Archived"],
-            "bug": ["Open", "InProgress", "Reopen", "Completed", "Archived"]
-        })
-    );
-    assert_eq!(
-        options_json["data"]["defaultStatuses"],
-        json!({
-            "featureRoot": "Open",
-            "featureChild": "Open",
-            "bug": "Open"
-        })
-    );
-
-    let kanban_response = authenticated_request(
-        &router,
-        Method::GET,
-        "/api/v1/tasks/kanban?workspaceCode=TRON_CORE",
-        None,
-    )
-    .await;
-    assert_eq!(kanban_response.status(), StatusCode::OK);
-    let kanban_json = response_json(kanban_response).await;
-    let columns = kanban_json["data"]
-        .as_array()
-        .expect("kanban data should be an array");
-    assert_eq!(columns.len(), 9);
-    assert!(!columns.iter().any(|column| column["status"] == "Archived"));
-    assert!(columns.iter().all(|column| column["tasks"] == json!([])));
-
-    let feature_kanban = authenticated_request(
-        &router,
-        Method::GET,
-        "/api/v1/tasks/kanban?workspaceCode=TRON_CORE&taskType=Feature",
-        None,
-    )
-    .await;
-    assert_eq!(feature_kanban.status(), StatusCode::OK);
-    assert_eq!(
-        response_json(feature_kanban).await["data"]
-            .as_array()
-            .expect("feature kanban data should be an array")
-            .iter()
-            .map(|column| column["status"].as_str().unwrap_or_default())
-            .collect::<Vec<_>>(),
-        vec![
-            "Open",
-            "Designing",
-            "Red",
-            "Green",
-            "Regressioning",
-            "Review",
-            "Completed",
-        ]
-    );
-
-    let bug_kanban = authenticated_request(
-        &router,
-        Method::GET,
-        "/api/v1/tasks/kanban?workspaceCode=TRON_CORE&taskType=Bug",
-        None,
-    )
-    .await;
-    assert_eq!(bug_kanban.status(), StatusCode::OK);
-    assert_eq!(
-        response_json(bug_kanban).await["data"]
-            .as_array()
-            .expect("bug kanban data should be an array")
-            .iter()
-            .map(|column| column["status"].as_str().unwrap_or_default())
-            .collect::<Vec<_>>(),
-        vec!["Open", "InProgress", "Reopen", "Completed"]
-    );
-
-    let list_response = authenticated_request(
-        &router,
-        Method::GET,
-        "/api/v1/tasks?workspaceCode=TRON_CORE",
-        None,
-    )
-    .await;
-    assert_eq!(response_json(list_response).await["data"]["total"], 0);
+    for suffix in ["", "&taskType=Feature", "&taskType=Bug"] {
+        let response = authenticated_request(
+            &router,
+            Method::GET,
+            &format!("/api/v1/tasks/kanban?workspaceCode=TRON_CORE{suffix}"),
+            None,
+        )
+        .await;
+        assert_eq!(response.status(), StatusCode::OK);
+        let body = response_json(response).await;
+        let columns = body["data"].as_array().unwrap();
+        assert_eq!(
+            columns
+                .iter()
+                .map(|c| c["status"].as_str().unwrap())
+                .collect::<Vec<_>>(),
+            vec!["NOT_STARTED", "IN_PROGRESS", "REOPEN", "CLOSED"]
+        );
+        assert!(columns.iter().all(|c| c["tasks"] == json!([])));
+    }
 }
 
 #[tokio::test]
-async fn create_task_validates_workspace_assignees_and_defaults_to_open() {
+async fn create_task_normalizes_assignments_and_defaults_to_not_started() {
     let router = task_app("create-validation");
-
-    let invalid = authenticated_request(
-        &router,
-        Method::POST,
-        "/api/v1/tasks",
-        Some(json!({
-            "workspaceCode": "TRON_CORE",
-            "title": "Invalid",
-            "priority": "Low",
-            "taskType": "Feature",
-            "sourceType": "Internal",
-            "sourceUrl": "",
-            "assigneeUserCodes": ["USR-ARCHIVED"],
-            "agentCodes": ["agent-main"],
-            "appCodes": ["APP-TRON-API"]
-        })),
-    )
-    .await;
-    assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        response_json(invalid).await["code"],
-        "TASK_ASSIGNEE_INVALID"
-    );
 
     let created = authenticated_request(
         &router,
@@ -165,14 +76,14 @@ async fn create_task_validates_workspace_assignees_and_defaults_to_open() {
             "sourceUrl": "",
             "assigneeUserCodes": ["USR-AUTH-0001"],
             "agentCodes": ["agent-main", "agent-main", "agent-reviewer"],
-            "appCodes": ["APP-TRON-API"]
+            "appCodes": ["APP-TRON-CONSOLE"]
         })),
     )
     .await;
     assert_eq!(created.status(), StatusCode::CREATED);
     let body = response_json(created).await;
     assert_eq!(body["data"]["taskType"], "Bug");
-    assert_eq!(body["data"]["status"], "Open");
+    assert_eq!(body["data"]["status"], "NOT_STARTED");
     assert_eq!(
         body["data"]["description"],
         "Persist the role-aware task workflow"
@@ -180,7 +91,7 @@ async fn create_task_validates_workspace_assignees_and_defaults_to_open() {
     assert_eq!(body["data"]["executionResult"], Value::Null);
     assert_eq!(body["data"]["sourceType"], "GitHub");
     assert_eq!(body["data"]["sourceUrl"], "");
-    assert_eq!(body["data"]["appCodes"], json!(["APP-TRON-API"]));
+    assert_eq!(body["data"]["appCodes"], json!(["APP-TRON-CONSOLE"]));
     assert_eq!(
         body["data"]["agentCodes"],
         json!(["agent-main", "agent-reviewer"])
@@ -225,14 +136,14 @@ async fn task_app_codes_must_reference_active_apps_in_the_same_workspace() {
         Method::PATCH,
         &format!("/api/v1/tasks/{task_code}"),
         Some(json!({
-            "appCodes": ["APP-TRON-CONSOLE", "APP-TRON-API"]
+            "appCodes": ["APP-TRON-CONSOLE", "APP-TRON-CONSOLE"]
         })),
     )
     .await;
     assert_eq!(updated.status(), StatusCode::OK);
     assert_eq!(
         response_json(updated).await["data"]["appCodes"],
-        json!(["APP-TRON-API", "APP-TRON-CONSOLE"])
+        json!(["APP-TRON-CONSOLE"])
     );
 
     let invalid_update = authenticated_request(
@@ -266,7 +177,7 @@ async fn subtask_creation_rejects_cross_workspace_parent() {
     .await;
     assert_eq!(child["data"]["parentTaskCode"], parent_code);
     assert_eq!(child["data"]["parent"]["taskCode"], parent_code);
-    assert_eq!(child["data"]["status"], "Open");
+    assert_eq!(child["data"]["status"], "NOT_STARTED");
 
     let invalid = authenticated_request(
         &router,
@@ -357,7 +268,7 @@ async fn parent_detail_archive_rules_ignore_archived_subtasks_and_restore_to_ope
         json!([{
             "taskCode": active_child_code.clone(),
             "title": "Active child",
-            "status": "Open",
+            "status": "NOT_STARTED",
             "priority": "High",
             "progress": 0,
             "taskType": "Feature"
@@ -392,7 +303,7 @@ async fn parent_detail_archive_rules_ignore_archived_subtasks_and_restore_to_ope
     .await;
     assert_eq!(
         response_json(parent_archived).await["data"]["previousStatus"],
-        "Open"
+        "NOT_STARTED"
     );
 
     clear_previous_status(&database_path, &parent_code);
@@ -404,7 +315,10 @@ async fn parent_detail_archive_rules_ignore_archived_subtasks_and_restore_to_ope
         None,
     )
     .await;
-    assert_eq!(response_json(restored).await["data"]["status"], "Open");
+    assert_eq!(
+        response_json(restored).await["data"]["status"],
+        "NOT_STARTED"
+    );
 }
 
 #[tokio::test]
@@ -438,7 +352,7 @@ async fn parent_progress_is_derived_from_active_subtasks() {
         &router,
         Method::PATCH,
         &format!("/api/v1/tasks/{first_child_code}/status"),
-        Some(json!({ "status": "Completed", "progress": 10 })),
+        Some(json!({ "status": "CLOSED", "progress": 10 })),
     )
     .await;
     assert_eq!(first_completed.status(), StatusCode::OK);
@@ -446,7 +360,7 @@ async fn parent_progress_is_derived_from_active_subtasks() {
         &router,
         Method::PATCH,
         &format!("/api/v1/tasks/{second_child_code}/status"),
-        Some(json!({ "status": "InProgress", "progress": 0 })),
+        Some(json!({ "status": "IN_PROGRESS", "progress": 0 })),
     )
     .await;
     assert_eq!(second_in_progress.status(), StatusCode::OK);
@@ -483,119 +397,41 @@ async fn parent_progress_is_derived_from_active_subtasks() {
 }
 
 #[tokio::test]
-async fn role_based_status_updates_and_type_changes_are_validated() {
-    let router = task_app("role-validation");
-
-    let feature_root = create_task(&router, "TRON_CORE", None, "Root feature", "Feature").await;
-    let feature_root_code = feature_root["data"]["taskCode"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-
-    let designing = authenticated_request(
-        &router,
-        Method::PATCH,
-        &format!("/api/v1/tasks/{feature_root_code}/status"),
-        Some(json!({ "status": "Designing", "progress": 35 })),
-    )
-    .await;
-    assert_eq!(designing.status(), StatusCode::OK);
-    let designing_body = response_json(designing).await;
-    assert_eq!(designing_body["data"]["status"], "Designing");
-    assert_eq!(designing_body["data"]["progress"], 35);
-
-    let invalid_feature_root = authenticated_request(
-        &router,
-        Method::PATCH,
-        &format!("/api/v1/tasks/{feature_root_code}/status"),
-        Some(json!({ "status": "InProgress", "progress": 55 })),
-    )
-    .await;
-    assert_eq!(invalid_feature_root.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        response_json(invalid_feature_root).await["code"],
-        "TASK_STATUS_ROLE_INVALID"
-    );
-
-    let invalid_type_change = authenticated_request(
-        &router,
-        Method::PATCH,
-        &format!("/api/v1/tasks/{feature_root_code}"),
-        Some(json!({ "taskType": "Bug" })),
-    )
-    .await;
-    assert_eq!(invalid_type_change.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        response_json(invalid_type_change).await["code"],
-        "TASK_STATUS_ROLE_INVALID"
-    );
-
-    let feature_open = create_task(
-        &router,
-        "TRON_CORE",
-        None,
-        "Feature can become bug",
-        "Feature",
-    )
-    .await;
-    let feature_open_code = feature_open["data"]["taskCode"]
-        .as_str()
-        .unwrap()
-        .to_owned();
-    let valid_type_change = authenticated_request(
-        &router,
-        Method::PATCH,
-        &format!("/api/v1/tasks/{feature_open_code}"),
-        Some(json!({ "taskType": "Bug", "sourceType": "GitLab" })),
-    )
-    .await;
-    assert_eq!(valid_type_change.status(), StatusCode::OK);
-    assert_eq!(
-        response_json(valid_type_change).await["data"]["taskType"],
-        "Bug"
-    );
-
-    let bug = create_task(&router, "TRON_CORE", None, "Bug task", "Bug").await;
-    let bug_code = bug["data"]["taskCode"].as_str().unwrap().to_owned();
-    let reopen = authenticated_request(
-        &router,
-        Method::PATCH,
-        &format!("/api/v1/tasks/{bug_code}/status"),
-        Some(json!({ "status": "Reopen", "progress": 20 })),
-    )
-    .await;
-    assert_eq!(reopen.status(), StatusCode::OK);
-    assert_eq!(response_json(reopen).await["data"]["status"], "Reopen");
-
-    let child = create_task(
-        &router,
-        "TRON_CORE",
-        Some(&feature_root_code),
-        "Feature child",
-        "Feature",
-    )
-    .await;
-    let child_code = child["data"]["taskCode"].as_str().unwrap().to_owned();
-    let child_in_progress = authenticated_request(
-        &router,
-        Method::PATCH,
-        &format!("/api/v1/tasks/{child_code}/status"),
-        Some(json!({ "status": "InProgress", "progress": 40 })),
-    )
-    .await;
-    assert_eq!(child_in_progress.status(), StatusCode::OK);
-    let invalid_child_status = authenticated_request(
-        &router,
-        Method::PATCH,
-        &format!("/api/v1/tasks/{child_code}/status"),
-        Some(json!({ "status": "Review", "progress": 60 })),
-    )
-    .await;
-    assert_eq!(invalid_child_status.status(), StatusCode::BAD_REQUEST);
-    assert_eq!(
-        response_json(invalid_child_status).await["code"],
-        "TASK_STATUS_ROLE_INVALID"
-    );
+async fn flow_status_validation_is_independent_of_task_type_and_parentage() {
+    let router = task_app("flow-validation");
+    let parent = create_task(&router, "TRON_CORE", None, "Parent", "Feature").await;
+    let parent_code = parent["data"]["taskCode"].as_str().unwrap();
+    let child = create_task(&router, "TRON_CORE", Some(parent_code), "Child", "Feature").await;
+    for task in [&parent, &child] {
+        let code = task["data"]["taskCode"].as_str().unwrap();
+        let valid = authenticated_request(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/tasks/{code}/status"),
+            Some(json!({"status":"IN_PROGRESS","progress":35})),
+        )
+        .await;
+        assert_eq!(valid.status(), StatusCode::OK);
+        let invalid = authenticated_request(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/tasks/{code}/status"),
+            Some(json!({"status":"NOT_IN_THIS_FLOW","progress":60})),
+        )
+        .await;
+        assert_eq!(invalid.status(), StatusCode::BAD_REQUEST);
+        let changed_type = authenticated_request(
+            &router,
+            Method::PATCH,
+            &format!("/api/v1/tasks/{code}"),
+            Some(json!({"taskType":"Bug"})),
+        )
+        .await;
+        assert_eq!(changed_type.status(), StatusCode::OK);
+        let body = response_json(changed_type).await;
+        assert_eq!(body["data"]["status"], "IN_PROGRESS");
+        assert_eq!(body["data"]["taskType"], "Bug");
+    }
 }
 
 #[tokio::test]
@@ -691,7 +527,8 @@ async fn task_repository_resets_legacy_schema_and_removes_seed_tasks() {
         .expect("tasks definition should exist");
     assert!(!create_sql.contains("Backlog"));
     assert!(!create_sql.contains("BugFix"));
-    assert!(create_sql.contains("Regressioning"));
+    assert!(create_sql.contains("flow_code"));
+    assert!(!create_sql.contains("Regressioning"));
 }
 
 async fn create_task(

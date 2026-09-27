@@ -15,6 +15,8 @@ import { useTranslation } from "react-i18next";
 import {
   matchPath,
   Navigate,
+  Route,
+  Routes,
   UNSAFE_LocationContext,
   useLocation,
   useNavigationType,
@@ -42,6 +44,13 @@ function routeRenderKeyForLocation(
   search: string,
   pageId?: string,
 ) {
+  if (pageId === "settings.variablesDetail") {
+    // Changing edit mode must not replace the form while the user is typing.
+    // A different variable still gets a fresh component and draft.
+    const parameters = new URLSearchParams(search);
+    parameters.delete("mode");
+    return `${pathname}?${parameters.toString()}`;
+  }
   return usesInPlaceSearch(pageId) ? pathname : `${pathname}${search}`;
 }
 
@@ -143,7 +152,7 @@ export default function AppRoutePage() {
         return null;
       }
 
-      const { Component } = cachedResolved;
+      const { Component, route: cachedRoute } = cachedResolved;
       return (
         <div
           key={`${cachedTab.tabId}:${cachedTab.revision}`}
@@ -155,9 +164,9 @@ export default function AppRoutePage() {
             tabId={cachedTab.tabId}
           >
             <CachedRouteLocationProvider path={`${cachedPathname}${searchParam}`}>
-              <SuspendedRoute>
-                <Component />
-              </SuspendedRoute>
+              <Routes>
+                <Route path={new URL(cachedRoute.route, "https://tron.local").pathname} element={<SuspendedRoute><Component /></SuspendedRoute>} />
+              </Routes>
             </CachedRouteLocationProvider>
           </TabPanelRegistryProvider>
         </div>
@@ -260,9 +269,9 @@ export default function AppRoutePage() {
         contentClassName={route.shellConfig?.contentClassName}
         items={settingsNavigation}
       >
-        <SuspendedRoute>
-          <resolved.Component key={routeRenderKey} />
-        </SuspendedRoute>
+        <Routes>
+          <Route path={new URL(route.route, "https://tron.local").pathname} element={<SuspendedRoute><resolved.Component key={routeRenderKey} /></SuspendedRoute>} />
+        </Routes>
       </SettingsShell>
     );
   }

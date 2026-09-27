@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import type { ReactNode } from "react";
-import { Link, MemoryRouter, useLocation } from "react-router";
+import { useState, type ReactNode } from "react";
+import { Link, MemoryRouter, useLocation, useParams } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import { DEFAULT_TAB_ID, useTabStore } from "@/store/tabStore";
 import AppRoutePage from "./AppRoutePage";
@@ -24,10 +24,13 @@ vi.mock("./ConsoleFallbackRoutePage", () => ({
 }));
 vi.mock("./ConsoleFallbackPage", () => ({ default: () => null }));
 vi.mock("@/router/routes", () => ({
-  appRoutes: [{ route: "/chats", pageId: "chats.index", title: "Chats" }],
+  appRoutes: [{route:"/settings/variables/detail",pageId:"settings.variablesDetail",title:"Variable",layout:"settings"}, { route: "/chats", pageId: "chats.index", title: "Chats" }, {route:"/records/:recordCode/edit",pageId:"records.edit",title:"Edit record",activeNav:"Records"}],
 }));
 vi.mock("@/router/pageRegistry", () => ({
-  routePages: { "chats.index": () => {
+  routePages: { "settings.variablesDetail": () => {
+    const [draft, setDraft] = useState("");
+    return <input aria-label="Variable draft" value={draft} onChange={event => setDraft(event.target.value)} />;
+  }, "records.edit": () => <main>Editing {useParams().recordCode}</main>, "chats.index": () => {
     const location = useLocation();
     return <main data-session={location.search}>Session content</main>;
   } },
@@ -92,4 +95,29 @@ it("never injects another session location into a cached chat while switching", 
   fireEvent.click(screen.getByText("First session"));
   await waitFor(() => expect(contents[0].closest("[hidden]")).toBeNull());
   expect(contents[1].getAttribute("data-session")).toBe("?sessionCode=session-two");
+});
+
+it("provides dynamic route parameters to cached editors", async () => {
+  render(<MemoryRouter initialEntries={["/records/alpha/edit"]}>
+    <Link to="/records/beta/edit">Edit beta</Link><AppRoutePage />
+  </MemoryRouter>);
+  await screen.findByText("Editing alpha");
+  fireEvent.click(screen.getByText("Edit beta"));
+  await screen.findByText("Editing beta");
+  expect(screen.queryByText("Editing alpha")).toBeNull();
+});
+
+it("preserves a settings variable draft across edit mode but resets for another variable", () => {
+  render(<MemoryRouter initialEntries={["/settings/variables/detail?variableKey=alpha"]}>
+    <Link to="/settings/variables/detail?variableKey=alpha&mode=edit">Edit variable</Link>
+    <Link to="/settings/variables/detail?variableKey=beta">Other variable</Link>
+    <AppRoutePage />
+  </MemoryRouter>);
+  const draft = screen.getByLabelText("Variable draft") as HTMLInputElement;
+  fireEvent.change(draft, { target: { value: "unsaved replacement" } });
+  fireEvent.click(screen.getByText("Edit variable"));
+  expect(screen.getByLabelText("Variable draft")).toBe(draft);
+  expect(draft.value).toBe("unsaved replacement");
+  fireEvent.click(screen.getByText("Other variable"));
+  expect((screen.getByLabelText("Variable draft") as HTMLInputElement).value).toBe("");
 });

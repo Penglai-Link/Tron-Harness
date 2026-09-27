@@ -1,12 +1,6 @@
-mod terminal;
-mod bash;
 mod chat_attachments;
-mod filesystem;
-mod patch;
-mod search;
 
 use std::{
-    collections::BTreeMap,
     fs,
     path::{Path, PathBuf},
     sync::Arc,
@@ -19,116 +13,10 @@ use crate::{
     domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolObservation},
 };
 
-pub(super) fn coding_domain_tools(resources: ResourceService, editor: Arc<dyn crate::application::agent::CodeFileEditor>, terminal: Arc<dyn crate::application::agent::AgentTerminal>) -> Vec<Arc<dyn Tool>> {
-    let mut tools: Vec<Arc<dyn Tool>> = vec![
-        Arc::new(filesystem::FsReadTextTool {
-            resources: resources.clone(),
-        }),
-        Arc::new(filesystem::FsWriteTextTool),
-        Arc::new(filesystem::FsApplyPatchTool(editor)),
-        Arc::new(filesystem::FsListTool),
-        Arc::new(filesystem::FsStatTool),
-        Arc::new(search::SearchGrepTool),
-        Arc::new(search::SearchGlobTool),
-        Arc::new(search::SearchPathTool),
-    ];
-    tools.extend(bash::tools());
-    tools.extend(terminal::tools(terminal));
-    tools.extend(chat_attachments::tools(resources));
-    tools
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FsReadTextOutput {
-    pub path: Option<String>,
-    pub file_name: String,
-    pub file_ref: serde_json::Value,
-    pub content: String,
-    pub start_line: usize,
-    pub end_line: usize,
-    pub truncated: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FsWriteTextOutput {
-    pub path: String,
-    pub mode: &'static str,
-    pub bytes_written: usize,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FsApplyPatchOutput {
-    pub path: String,
-    pub action: &'static str,
-    pub replacements: usize,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FsListOutput {
-    pub path: String,
-    pub entries: Vec<FsListEntry>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FsListEntry {
-    pub path: String,
-    pub name: String,
-    pub is_file: bool,
-    pub is_directory: bool,
-    pub is_symlink: bool,
-    pub size_bytes: Option<u64>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct FsStatOutput {
-    pub path: String,
-    pub exists: bool,
-    pub is_file: bool,
-    pub is_directory: bool,
-    pub is_symlink: bool,
-    pub size_bytes: Option<u64>,
-    pub readonly: bool,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct SearchGrepOutput {
-    pub root: String,
-    pub pattern: String,
-    pub lines: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct SearchGlobOutput {
-    pub root: String,
-    pub patterns: Vec<String>,
-    pub paths: Vec<String>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct SearchPathOutput {
-    pub root: String,
-    pub patterns: Vec<String>,
-    pub entry_type: &'static str,
-    pub entries: Vec<SearchPathEntry>,
-}
-
-#[derive(Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub(super) struct SearchPathEntry {
-    pub path: String,
-    pub name: String,
-    pub is_file: bool,
-    pub is_directory: bool,
-    pub is_symlink: bool,
+// Product-owned attachment publication. Generic file, command and terminal
+// tools are leased from the official Framework capability pack.
+pub(super) fn coding_domain_tools(resources: ResourceService) -> Vec<Arc<dyn Tool>> {
+    chat_attachments::tools(resources)
 }
 
 pub(super) fn parse_tool_input<T: for<'de> Deserialize<'de>>(
@@ -136,36 +24,6 @@ pub(super) fn parse_tool_input<T: for<'de> Deserialize<'de>>(
 ) -> Result<T, ToolError> {
     serde_json::from_value(input)
         .map_err(|error| ToolError::ExecutionFailed(format!("tool input is invalid: {error}")))
-}
-
-// A command string is shell syntax. Explicit args keep direct argv semantics.
-pub(super) fn resolve_command_invocation(
-    command: &str,
-    args: Option<&[String]>,
-    _cwd: &Path,
-) -> Result<(String, Vec<String>), ToolError> {
-    let command = command.trim();
-    if command.is_empty() {
-        return Err(ToolError::ExecutionFailed("command is required".into()));
-    }
-    if let Some(args) = args {
-        return Ok((command.into(), args.to_vec()));
-    }
-
-    #[cfg(windows)]
-    {
-        Ok(("cmd".into(), vec!["/C".into(), command.into()]))
-    }
-
-    #[cfg(not(windows))]
-    {
-        Ok((
-            crate::application::shell_program::resolve_user_shell()
-                .to_string_lossy()
-                .into_owned(),
-            vec!["-c".into(), command.into()],
-        ))
-    }
 }
 
 pub(super) fn json_observation<T: Serialize>(
@@ -326,7 +184,7 @@ pub(super) fn default_cwd() -> PathBuf {
     std::env::current_dir().unwrap_or_else(|_| PathBuf::from("."))
 }
 
-fn expand_tilde(raw_path: &str) -> PathBuf {
+pub(super) fn expand_tilde(raw_path: &str) -> PathBuf {
     if let Some(rest) = raw_path.strip_prefix('~') {
         if rest.is_empty() {
             if let Some(home) = home_dir() {
@@ -346,63 +204,6 @@ fn home_dir() -> Option<PathBuf> {
         .or_else(|| std::env::var_os("USERPROFILE"))
         .map(PathBuf::from)
 }
-
-pub(super) fn apply_replace(
-    source: &mut String,
-    target: &str,
-    replacement: &str,
-    replace_all: bool,
-) -> Result<usize, ToolError> {
-    let occurrences = source.matches(target).count();
-    if occurrences == 0 {
-        return Err(ToolError::ExecutionFailed(
-            "target text was not found".into(),
-        ));
-    }
-    *source = if replace_all {
-        source.replace(target, replacement)
-    } else {
-        source.replacen(target, replacement, 1)
-    };
-    Ok(if replace_all { occurrences } else { 1 })
-}
-
-pub(super) fn apply_insert(
-    source: &mut String,
-    target: &str,
-    content: &str,
-    replace_all: bool,
-    before: bool,
-) -> Result<usize, ToolError> {
-    let occurrences = source.matches(target).count();
-    if occurrences == 0 {
-        return Err(ToolError::ExecutionFailed(
-            "target text was not found".into(),
-        ));
-    }
-    let replacement = if before {
-        format!("{content}{target}")
-    } else {
-        format!("{target}{content}")
-    };
-    *source = if replace_all {
-        source.replace(target, replacement.as_str())
-    } else {
-        source.replacen(target, replacement.as_str(), 1)
-    };
-    Ok(if replace_all { occurrences } else { 1 })
-}
-
-pub(super) fn ensure_parent_dirs(path: &PathBuf) -> Result<(), ToolError> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| {
-            ToolError::ExecutionFailed(format!("create parent directories failed: {error}"))
-        })?;
-    }
-    Ok(())
-}
-
-pub(super) type EnvVars = BTreeMap<String, String>;
 
 #[cfg(test)]
 mod tests {
@@ -510,70 +311,5 @@ mod tests {
         let resolved =
             resolve_path(&context, "tron-backend/src").expect("relative path should resolve");
         assert_eq!(resolved, root.join("tron-backend/src"));
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn complete_command_line_uses_the_users_preferred_noninteractive_shell() {
-        let cwd = Path::new("/tmp");
-        let shell = crate::application::shell_program::resolve_user_shell()
-            .to_string_lossy()
-            .into_owned();
-        assert_eq!(
-            resolve_command_invocation("npm run dev", None, cwd).unwrap(),
-            (shell.clone(), vec!["-c".into(), "npm run dev".into()])
-        );
-        assert_eq!(
-            resolve_command_invocation("bash -c \"cd front && npm run dev\"", None, cwd).unwrap(),
-            (
-                shell.clone(),
-                vec!["-c".into(), "bash -c \"cd front && npm run dev\"".into()]
-            )
-        );
-        assert_eq!(
-            resolve_command_invocation("cd front && npm run dev", None, cwd).unwrap(),
-            (shell, vec!["-c".into(), "cd front && npm run dev".into()])
-        );
-    }
-
-    #[cfg(windows)]
-    #[test]
-    fn full_command_line_uses_cmd_on_windows() {
-        assert_eq!(
-            resolve_command_invocation("npm run dev", None, Path::new(".")).unwrap(),
-            ("cmd".into(), vec!["/C".into(), "npm run dev".into()])
-        );
-    }
-
-    #[test]
-    fn explicit_args_and_existing_executable_paths_stay_literal() {
-        let temporary = tempfile::tempdir().unwrap();
-        let executable = temporary.path().join("program with spaces");
-        fs::write(&executable, "").unwrap();
-        let path = executable.to_string_lossy();
-        assert_eq!(
-            resolve_command_invocation(&path, Some(&[]), temporary.path()).unwrap(),
-            (path.to_string(), vec![])
-        );
-        assert_eq!(
-            resolve_command_invocation("echo", Some(&["a b".into()]), temporary.path()).unwrap(),
-            ("echo".into(), vec!["a b".into()])
-        );
-        assert_eq!(
-            resolve_command_invocation("echo", Some(&[]), temporary.path()).unwrap(),
-            ("echo".into(), Vec::new())
-        );
-    }
-
-    #[cfg(unix)]
-    #[test]
-    fn command_syntax_is_passed_to_the_selected_shell_for_interpretation() {
-        let shell = crate::application::shell_program::resolve_user_shell()
-            .to_string_lossy()
-            .into_owned();
-        assert_eq!(
-            resolve_command_invocation("bash -c 'unterminated", None, Path::new("/tmp")).unwrap(),
-            (shell, vec!["-c".into(), "bash -c 'unterminated".into()])
-        );
     }
 }

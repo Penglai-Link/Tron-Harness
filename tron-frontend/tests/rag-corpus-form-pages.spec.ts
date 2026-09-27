@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -67,7 +68,7 @@ async function waitForFrontend(url: string) {
 }
 
 function notifications(page: Page, message: string | RegExp) {
-  return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+  return page.locator('[aria-label="Notifications"]').getByRole("dialog").filter({ hasText: message }).first();
 }
 
 async function chooseSelectOption(page: Page, control: Locator, name: string | RegExp) {
@@ -81,7 +82,7 @@ async function chooseSelectOption(page: Page, control: Locator, name: string | R
 }
 
 async function expectSelectedOption(control: Locator, value: string) {
-  await expect(control).toContainText(value);
+  await expect(control).toContainText(value === "tree-store" ? "rag_support_tree_tree_nodes" : value === "content-store" ? "rag_project_doc_text_units" : value);
 }
 
 function storageTargetBackendSelect(page: Page) {
@@ -148,8 +149,9 @@ test("summary tree corpus form submits tree segment and graph tree payload", asy
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/corpora/new`);
-  await expect(page.getByRole("heading", { name: /New corpus|Create Corpus|新建语料库/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: /New corpus|Create Corpus|新建语料库/ })).toBeVisible();
 
   await page.getByLabel(/Corpus code|语料库编码/).fill("support-tree");
   await page.getByLabel(/Corpus name|语料库名称/).fill("Support Tree");
@@ -207,8 +209,9 @@ test("loads corpora from management APIs and persists create/edit through verify
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
-  await expect(page.getByRole("heading", { name: /RAG Management|RAG 管理|知识检索管理/ })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "RAG", exact: true })).toBeVisible();
   const corpusTable = page.getByRole("table").first();
   await expect(page.getByRole("cell", { name: "Project Document project-doc" })).toBeVisible();
   await expect(corpusTable.getByRole("columnheader", { name: /Ingest profile|写入配置/ })).toBeVisible();
@@ -222,21 +225,25 @@ test("loads corpora from management APIs and persists create/edit through verify
   await page.getByRole("button", { name: /Open actions for Project Document|打开 Project Document 的操作/ }).click();
   await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/project-doc-mineru-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("cell", { name: "Memory Card memory-card" })).toBeVisible();
   await page.getByRole("button", { name: /Open actions for Memory Card|打开 Memory Card 的操作/ }).click();
   await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/memory-card-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("cell", { name: "Skill skill" })).toBeVisible();
   await page.getByRole("button", { name: "Open actions for Skill", exact: true }).click();
   await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/skill-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("cell", { name: "Skill Graph skill-graph" })).toBeVisible();
   await page.getByRole("button", { name: "Open actions for Skill Graph", exact: true }).click();
   await page.getByRole("menuitem", { name: /Edit ingest profile|编辑写入配置/ }).click();
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/skill-graph-ingest-v1\/edit\?returnProfileType=ingest$/);
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("cell", { name: "Support Graph Tree support-tree-graph" })).toBeVisible();
   await page.getByRole("button", { name: /Open actions for Support Graph Tree|打开 Support Graph Tree 的操作/ }).click();
@@ -244,12 +251,13 @@ test("loads corpora from management APIs and persists create/edit through verify
   await expect(page).toHaveURL(/\/rag\/profiles\/ingest\/new\?returnProfileType=ingest&corpusId=support-tree-graph$/);
   await expect(page.getByLabel(/Primary corpus|主语料库/)).toHaveValue("support-tree-graph");
   await expect(page.getByLabel(/Primary corpus|主语料库/)).toHaveAttribute("readonly");
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag`);
   await expect(page.getByRole("cell", { name: "Project Document project-doc" })).toBeVisible();
 
   await page.getByRole("button", { name: /New corpus|新建语料库/ }).click();
   await expect(page).toHaveURL(/\/rag\/corpora\/new$/);
-  await expect(page.getByRole("heading", { name: /New corpus|Create Corpus|新建语料库/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: /New corpus|Create Corpus|新建语料库/ })).toBeVisible();
 
   await page.getByLabel(/Corpus code|语料库编码/).fill("support-notes");
   await page.getByLabel(/Corpus name|语料库名称/).fill("Support Notes");
@@ -277,7 +285,7 @@ test("loads corpora from management APIs and persists create/edit through verify
 
   await page.getByRole("cell", { name: "Project Document project-doc" }).click();
   await expect(page).toHaveURL(/\/rag\/corpora\/project-doc\/edit$/);
-  await expect(page.getByRole("heading", { name: /Edit corpus|Edit Corpus|编辑语料库/ })).toBeVisible();
+  await expect(page.getByLabel(/Corpus code|语料库编码/)).toBeVisible();
   await expect(page.getByLabel(/Corpus code|语料库编码/)).toHaveValue("project-doc");
   await expect(page.getByLabel(/Corpus code|语料库编码/)).toBeDisabled();
   await expect(page.getByLabel(/Text unit target|Text Unit target|文本单元目标/)).toHaveCount(0);
@@ -371,8 +379,9 @@ test("allows mixed graph and sqlite segment bindings", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   await installRagManagementApiMock(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/rag/corpora/new`);
-  await expect(page.getByRole("heading", { name: /New corpus|Create Corpus|新建语料库/ })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: /New corpus|Create Corpus|新建语料库/ })).toBeVisible();
 
   await page.getByLabel(/Corpus code|语料库编码/).fill("support-mixed");
   await page.getByLabel(/Corpus name|语料库名称/).fill("Support Mixed");

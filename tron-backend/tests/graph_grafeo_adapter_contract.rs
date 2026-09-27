@@ -550,9 +550,6 @@ fn workspace_detail(workspace_code: &str) -> Option<WorkspaceDetail> {
         archived_at: None,
         path,
         children: Vec::new(),
-        direct_user_count: 0,
-        role_grant_count: 0,
-        effective_user_count: 0,
     })
 }
 

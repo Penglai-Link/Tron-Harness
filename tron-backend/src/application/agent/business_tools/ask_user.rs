@@ -1,164 +1,47 @@
-use std::sync::Arc;
-
-use serde::Deserialize;
-use serde_json::json;
-
-use crate::domain::agent::{
-    AgentRunContext, EffectiveTool, Tool, ToolError, ToolExecutionResult, ToolObservation,
-    ToolRequest,
-};
-use crate::shared::locale::SupportedLocale;
-
+//! Product naming and localization for the official structured-question tool.
 use crate::application::agent::tool_catalog::{materialize_schema, translate};
-
+use crate::domain::agent::EffectiveTool;
+use crate::shared::locale::SupportedLocale;
 pub const CHAT_ASK_USER_TOOL: &str = "chat_ask_user";
-
 pub fn ask_user_definition(locale: &str) -> EffectiveTool {
     let locale = SupportedLocale::from_raw(locale);
+    let mut schema =
+        eliteforge_agent_official_plugin_tools_human::AskUserTool::descriptor().input_schema;
+    // Tron offers both free-text and skip on every question. Omit optional
+    // configuration that its presentation does not expose; shared defaults apply.
+    let question = &mut schema["properties"]["questions"]["items"]["properties"];
+    if let Some(properties) = question.as_object_mut() {
+        properties.remove("allow_free_text");
+        properties.remove("allow_skip");
+    }
+    for (pointer, name) in [
+        ("/properties/intro", "intro"),
+        ("/properties/questions", "questions"),
+        (
+            "/properties/questions/items/properties/question",
+            "question",
+        ),
+        ("/properties/questions/items/properties/options", "options"),
+        (
+            "/properties/questions/items/properties/options/items/properties/label",
+            "optionLabel",
+        ),
+        (
+            "/properties/questions/items/properties/options/items/properties/description",
+            "optionDescription",
+        ),
+    ] {
+        if let Some(field) = schema.pointer_mut(pointer) {
+            field["x-i18n-description-key"] =
+                format!("agent.toolCatalog.tools.chat.ask_user.params.{name}").into();
+        }
+    }
     EffectiveTool {
         tool_name: CHAT_ASK_USER_TOOL.into(),
         domain_code: Some("chat".into()),
         description: translate(locale, "agent.toolCatalog.tools.chat.ask_user.description").into(),
-        input_schema: materialize_schema(
-            locale,
-            &json!({
-                "type": "object",
-                "additionalProperties": false,
-                "required": ["intro", "questions"],
-                "properties": {
-                    "intro": {
-                        "type": "string",
-                        "maxLength": 500,
-                        "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.intro"
-                    },
-                    "questions": {
-                        "type": "array", "minItems": 1, "maxItems": 3,
-                        "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.questions",
-                        "items": {
-                            "type": "object", "additionalProperties": false,
-                            "required": ["question", "options"],
-                            "properties": {
-                                "question": {
-                                    "type": "string",
-                                    "maxLength": 500,
-                                    "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.question"
-                                },
-                                "options": {
-                                    "type": "array", "minItems": 2, "maxItems": 5,
-                                    "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.options",
-                                    "items": {
-                                        "type": "object", "additionalProperties": false,
-                                        "required": ["label"],
-                                        "properties": {
-                                            "label": {
-                                                "type": "string",
-                                                "maxLength": 120,
-                                                "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.optionLabel"
-                                            },
-                                            "description": {
-                                                "type": ["string", "null"],
-                                                "maxLength": 240,
-                                                "x-i18n-description-key": "agent.toolCatalog.tools.chat.ask_user.params.optionDescription"
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }),
-        ),
+        input_schema: materialize_schema(locale, &schema),
         skill_name: None,
-        required_variable_keys: Vec::new(),
-    }
-}
-
-pub fn ask_user_tool() -> Arc<dyn Tool> {
-    Arc::new(AskUserTool)
-}
-
-struct AskUserTool;
-
-#[derive(Debug, Deserialize)]
-#[serde(rename_all = "camelCase")]
-struct AskUserInput {
-    intro: String,
-    questions: Vec<AskUserQuestion>,
-}
-
-#[derive(Debug, Deserialize, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AskUserQuestion {
-    question: String,
-    options: Vec<AskUserOption>,
-}
-
-#[derive(Debug, Deserialize, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-struct AskUserOption {
-    label: String,
-    description: Option<String>,
-}
-
-impl Tool for AskUserTool {
-    fn name(&self) -> &str {
-        CHAT_ASK_USER_TOOL
-    }
-
-    fn exec(
-        &self,
-        request: ToolRequest,
-        _context: &AgentRunContext,
-    ) -> Result<ToolExecutionResult, ToolError> {
-        let input: AskUserInput = serde_json::from_value(request.input).map_err(|error| {
-            ToolError::ExecutionFailed(format!("tool input is invalid: {error}"))
-        })?;
-        let intro = input.intro.trim().to_string();
-        if intro.is_empty() || intro.chars().count() > 500 {
-            return Err(ToolError::ExecutionFailed(
-                "intro must contain 1 to 500 characters".into(),
-            ));
-        }
-        if !(1..=3).contains(&input.questions.len()) {
-            return Err(ToolError::ExecutionFailed(
-                "questions must contain 1 to 3 items".into(),
-            ));
-        }
-        for question in &input.questions {
-            if question.question.trim().is_empty() || question.question.chars().count() > 500 {
-                return Err(ToolError::ExecutionFailed(
-                    "each question must contain 1 to 500 characters".into(),
-                ));
-            }
-            if !(2..=5).contains(&question.options.len()) {
-                return Err(ToolError::ExecutionFailed(
-                    "each question must contain 2 to 5 options".into(),
-                ));
-            }
-            for option in &question.options {
-                if option.label.trim().is_empty() || option.label.chars().count() > 120 {
-                    return Err(ToolError::ExecutionFailed(
-                        "each option label must contain 1 to 120 characters".into(),
-                    ));
-                }
-                if option
-                    .description
-                    .as_deref()
-                    .is_some_and(|description| description.chars().count() > 240)
-                {
-                    return Err(ToolError::ExecutionFailed(
-                        "option descriptions must contain at most 240 characters".into(),
-                    ));
-                }
-            }
-        }
-        let output =
-            serde_json::to_string(&json!({ "intro": intro, "questions": input.questions }))
-                .map_err(|error| ToolError::ExecutionFailed(error.to_string()))?;
-        Ok(ToolExecutionResult::observation(ToolObservation {
-            tool_name: self.name().into(),
-            output,
-        }))
+        required_variable_keys: vec![],
     }
 }

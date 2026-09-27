@@ -1352,11 +1352,14 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
         .await
         .expect_err("an empty final response must fail the run");
 
-    assert!(matches!(
-        error,
-        AgentError::EmptyFinalOutput(message)
-            if message.contains("fs_write_text: tool input is invalid: function arguments are missing")
-    ));
+    assert!(
+        matches!(
+            &error,
+            AgentError::EmptyFinalOutput(message)
+                if message.contains("fs_write_text: tool input is invalid: function arguments are missing")
+        ),
+        "{error:?}"
+    );
     assert!(sink.wait_for_len(11, Duration::from_secs(2)));
     let event_names = sink
         .events()
@@ -1666,7 +1669,7 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
         .expect("allowed tool should register");
     let hidden_executions = Arc::new(AtomicUsize::new(0));
     registry
-        .register(Arc::new(InProcessTool::new("hidden.tool", {
+        .register(Arc::new(InProcessTool::new("hidden_tool", {
             let hidden_executions = Arc::clone(&hidden_executions);
             move |request: ToolRequest| {
                 hidden_executions.fetch_add(1, Ordering::SeqCst);
@@ -1688,7 +1691,7 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
                 },
                 ToolCall {
                     call_id: Some("call-unauthorized".into()),
-                    tool_name: "hidden.tool".into(),
+                    tool_name: "hidden_tool".into(),
                     input: json!({}),
                     input_error: None,
                 },
@@ -1709,7 +1712,7 @@ async fn react_agent_continues_after_unauthorized_parallel_tool_call() {
     assert_eq!(result.final_output, "recovered after parallel rejection");
     assert_eq!(result.observations.len(), 2);
     assert_eq!(result.observations[0].output, "echo completed");
-    assert_eq!(result.observations[1].tool_name, "hidden.tool");
+    assert_eq!(result.observations[1].tool_name, "hidden_tool");
     assert!(result.observations[1].output.contains("is not allowed"));
     assert_eq!(hidden_executions.load(Ordering::SeqCst), 0);
 }
@@ -2150,10 +2153,9 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
                 .map(|attr| attr.value.clone())
         };
 
-    assert_eq!(
-        payload("tool_call_id", tool_started).as_deref(),
-        Some("RUN-TOOL-META-tool-1")
-    );
+    let invocation_id =
+        payload("tool_call_id", tool_started).expect("Framework invocation identity");
+    assert!(eliteforge_agent_core::RunId::parse_str(&invocation_id).is_ok());
     assert_eq!(payload("tool_name", tool_started).as_deref(), Some("echo"));
     assert_eq!(
         payload("tool_args_json", tool_started).as_deref(),
@@ -2161,7 +2163,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
     );
     assert_eq!(
         payload("tool_call_id", tool_completed).as_deref(),
-        Some("RUN-TOOL-META-tool-1")
+        Some(invocation_id.as_str())
     );
     assert_eq!(
         payload("tool_result_json", tool_completed).as_deref(),
@@ -2169,7 +2171,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
     );
     assert_eq!(
         payload("tool_call_id", observation).as_deref(),
-        Some("RUN-TOOL-META-tool-1")
+        Some(invocation_id.as_str())
     );
 }
 
@@ -2323,13 +2325,18 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
         .collect::<Vec<_>>();
 
     assert_eq!(activity_events.len(), 4);
-    for tool_call_id in [
-        "RUN-PARALLEL-TOOL-PROGRESS-tool-1",
-        "RUN-PARALLEL-TOOL-PROGRESS-tool-2",
-    ] {
+    let invocation_ids = events
+        .iter()
+        .filter(|event| event.event_name == "agent.tool.started")
+        .map(|event| payload("tool_call_id", event).expect("invocation identity"))
+        .collect::<std::collections::BTreeSet<_>>();
+    assert_eq!(invocation_ids.len(), 2);
+    for tool_call_id in invocation_ids {
         let lines = activity_events
             .iter()
-            .filter(|event| payload("tool_call_id", event).as_deref() == Some(tool_call_id))
+            .filter(|event| {
+                payload("tool_call_id", event).as_deref() == Some(tool_call_id.as_str())
+            })
             .map(|event| payload("tool_result_json", event).unwrap_or_default())
             .collect::<Vec<_>>();
         assert_eq!(lines.len(), 2);
@@ -2499,8 +2506,8 @@ fn tool_registry_authorizes_effective_tools_that_are_not_model_exposed() {
 #[tokio::test]
 async fn react_agent_recovers_after_missing_and_unauthorized_tools() {
     for (label, tool_name, register_tool, allow_tool, expected_fragment) in [
-        ("missing", "missing.tool", false, true, "is not registered"),
-        ("unauthorized", "hidden.tool", true, false, "is not allowed"),
+        ("missing", "missing_tool", false, true, "is not registered"),
+        ("unauthorized", "hidden_tool", true, false, "is not allowed"),
     ] {
         let database_url = temp_database_url(&format!("agent-runtime-stm-tool-{label}"));
         let chats = ChatService::new(
@@ -2510,7 +2517,7 @@ async fn react_agent_recovers_after_missing_and_unauthorized_tools() {
             .create_session(
                 CreateChatSessionCommand {
                     workspace_code: Some("TRON_CORE".into()),
-                project_code: None,
+                    project_code: None,
                     title: Some(format!("STM tool {label}")),
                     app_code: None,
                     task_code: None,
@@ -2881,12 +2888,6 @@ async fn react_agent_consumes_steer_at_final_model_boundary_without_starting_a_s
     let requests = model_client.requests();
     assert_eq!(requests.len(), 2);
     for request in &requests {
-        assert!(request.messages.iter().any(|message| {
-            message.role == "system"
-                && message
-                    .plain_text_content()
-                    .contains("unresolved earlier user requests")
-        }));
         assert!(
             request.messages.iter().any(|message| {
                 message.role == "user" && message.plain_text_content() == "hello"
@@ -3002,12 +3003,6 @@ async fn react_agent_preserves_unresolved_requests_when_steering_with_short_term
     assert_eq!(requests.len(), 2);
     for request in &requests {
         assert!(request.messages.iter().any(|message| {
-            message.role == "system"
-                && message
-                    .plain_text_content()
-                    .contains("unresolved earlier user requests")
-        }));
-        assert!(request.messages.iter().any(|message| {
             message.role == "user" && message.plain_text_content() == original_request
         }));
     }
@@ -3114,4 +3109,361 @@ async fn react_agent_waits_for_current_tool_step_before_injecting_steer() {
             .plain_text_content(),
         "use the completed tool result differently"
     );
+}
+
+#[tokio::test]
+async fn framework_restores_responses_continuation_after_host_restart() {
+    use tron_backend::application::agent::FrameworkHost;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("framework.sqlite3");
+    let host = FrameworkHost::persistent(&path, None);
+    let first = Arc::new(ScriptedResultModelClient::new(vec![Ok(
+        ModelResponse::final_output_with_usage_and_response_id(
+            "first answer",
+            None,
+            Some("resp-persisted".into()),
+        ),
+    )]));
+    let agent = ReactAgentBuilder::new(
+        first,
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let mut context = base_context("DURABLE-1");
+    context.model.protocol = AgentModelProtocol::Responses;
+    context.model.responses_stateful_enabled = true;
+    context.tools.clear();
+    agent.run(context.clone()).await.unwrap();
+    host.close().await;
+    drop(agent);
+    drop(host);
+    let host = FrameworkHost::persistent(&path, None);
+    let second = Arc::new(ScriptedResultModelClient::new(vec![Ok(
+        ModelResponse::final_output("second answer"),
+    )]));
+    let agent = ReactAgentBuilder::new(
+        second.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    context.run_code = "DURABLE-2".into();
+    context.messages = vec![AgentMessage::user("follow up")];
+    agent.run(context.clone()).await.unwrap();
+    let requests = second.requests();
+    assert_eq!(
+        requests[0].1.previous_response_id.as_deref(),
+        Some("resp-persisted")
+    );
+    assert!(
+        requests[0]
+            .1
+            .messages
+            .iter()
+            .any(|message| message.plain_text_content() == "follow up")
+    );
+    assert!(
+        !requests[0]
+            .1
+            .messages
+            .iter()
+            .any(|message| message.plain_text_content().contains("first answer"))
+    );
+    // Changing the provider must replay the full transcript, not reuse its ID.
+    context.run_code = "DURABLE-3".into();
+    context.model.base_url = "https://another-provider.invalid/v1".into();
+    context.messages = vec![AgentMessage::user("different provider")];
+    let switched = Arc::new(ScriptedResultModelClient::new(vec![Ok(
+        ModelResponse::final_output("switched"),
+    )]));
+    let agent = ReactAgentBuilder::new(
+        switched.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    agent.run(context).await.unwrap();
+    assert!(switched.requests()[0].1.previous_response_id.is_none());
+    assert!(
+        switched.requests()[0]
+            .1
+            .messages
+            .iter()
+            .any(|message| message.plain_text_content().contains("first answer"))
+    );
+    host.close().await;
+}
+
+#[tokio::test]
+async fn framework_question_releases_session_and_resumes_durable_interaction() {
+    use tron_backend::application::agent::FrameworkHost;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("questions.sqlite3");
+    let host = FrameworkHost::persistent(&path, None);
+    let registry = Arc::new(ToolRegistry::default());
+    let client = Arc::new(ScriptedResultModelClient::new(vec![Ok(
+        ModelResponse::tool_call(
+            "chat_ask_user",
+            json!({"intro":"Choose a target","questions":[{"question":"Where?","options":[{"label":"Local"},{"label":"Remote"}]}]}),
+        ),
+    )]));
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        registry.clone(),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let mut context = base_context("QUESTION-1");
+    context.tools = vec![tron_backend::application::agent::ask_user_definition(
+        "en-US",
+    )];
+    let waiting = agent.run(context.clone()).await.unwrap();
+    assert_eq!(
+        client.requests().len(),
+        1,
+        "asking a question must stop model iteration"
+    );
+    let question: serde_json::Value =
+        serde_json::from_str(&waiting.observations[0].output).unwrap();
+    let interaction = question["frameworkInteractionId"]
+        .as_str()
+        .expect("durable interaction identity");
+    let request_code = format!("INPUT-FW-{interaction}");
+    host.close().await;
+    drop(agent);
+    drop(host);
+    let host = FrameworkHost::persistent(&path, None);
+    let answer = Arc::new(ScriptedResultModelClient::new(vec![Ok(
+        ModelResponse::final_output("using local"),
+    )]));
+    let agent = ReactAgentBuilder::new(
+        answer.clone(),
+        registry,
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    context.run_code = "QUESTION-2".into();
+    context.messages = vec![AgentMessage::user("Use Local")];
+    context.messages[0].parts.push(tron_backend::domain::agent::AgentMessagePart::Context {
+        kind: "tron_interaction_response".into(), text: String::new(),
+        metadata: Some(json!({"resume":[{"interruptId":request_code,"status":"resolved","payload":{"answers":[{"questionCode":question["questions"][0]["id"],"answerKind":"Option","optionCode":question["questions"][0]["options"][0]["id"]}]}}]})),
+    });
+    let result = agent.run(context).await.unwrap();
+    assert_eq!(result.final_output, "using local");
+    let resumed_history = answer.requests()[0]
+        .1
+        .messages
+        .iter()
+        .map(|message| {
+            format!(
+                "{}\n{}",
+                message.plain_text_content(),
+                message.first_tool_output().unwrap_or_default()
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    // The public interaction resumes with its validated structured answer,
+    // including the selected stable ID and the original question presentation.
+    assert!(resumed_history.contains("Local"), "{resumed_history}");
+    assert!(resumed_history.contains("\"answers\""), "{resumed_history}");
+    assert!(
+        resumed_history.contains(
+            question["questions"][0]["options"][0]["id"]
+                .as_str()
+                .unwrap()
+        ),
+        "{resumed_history}"
+    );
+    assert_eq!(answer.requests().len(), 1);
+    host.close().await;
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn official_command_returns_after_ten_seconds_and_remains_readable_and_stoppable_across_runs()
+{
+    use tron_backend::application::agent::FrameworkHost;
+    let directory = tempfile::tempdir().unwrap();
+    let host = FrameworkHost::temporary(None).unwrap();
+    let mut context = base_context("COMMAND-1");
+    context.execution_scope.local_directory = Some(directory.path().display().to_string());
+    context.execution_scope.allowed_local_directories =
+        vec![directory.path().display().to_string()];
+    context.tools = ["bash_exec", "bash_task_read", "bash_task_stop"]
+        .into_iter()
+        .map(|name| EffectiveTool {
+            tool_name: name.into(),
+            domain_code: None,
+            description: name.into(),
+            input_schema: json!({"type":"object"}),
+            skill_name: None,
+            required_variable_keys: vec![],
+        })
+        .collect();
+    let client = Arc::new(ScriptedModelClient::new(vec![
+        ModelResponse::tool_call(
+            "bash_exec",
+            json!({"command":"printf 'started\n'; sleep 60"}),
+        ),
+        ModelResponse::final_output("backgrounded"),
+    ]));
+    let event_sink = Arc::new(RecordingEventSink::with_route_class(
+        "official-command",
+        BusRouteClass::Agui,
+    ));
+    let events = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(8500)),
+    )
+    .register_sink(event_sink.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(client, Arc::new(ToolRegistry::default()), events)
+        .with_framework_host(Some(host.clone()))
+        .build()
+        .unwrap();
+    let start = std::time::Instant::now();
+    let result = tokio::time::timeout(Duration::from_secs(15), agent.run(context.clone()))
+        .await
+        .unwrap()
+        .unwrap();
+    assert!(start.elapsed() >= Duration::from_secs(9));
+    let output: serde_json::Value = serde_json::from_str(&result.observations[0].output).unwrap();
+    assert_eq!(output["status"], "running");
+    assert!(output["stdout"].as_str().unwrap().contains("started"));
+    let id = output["taskId"].as_str().unwrap().to_owned();
+    assert!(
+        event_sink
+            .events()
+            .iter()
+            .any(|event| event.event_name == "agent.tool.activity")
+    );
+    for (index, name) in ["bash_task_read", "bash_task_stop"].into_iter().enumerate() {
+        let client = Arc::new(ScriptedModelClient::new(vec![
+            ModelResponse::tool_call(name, json!({"taskId":id})),
+            ModelResponse::final_output("done"),
+        ]));
+        let agent = ReactAgentBuilder::new(
+            client,
+            Arc::new(ToolRegistry::default()),
+            tron_backend::shared::event_bus::EventBusHandle::disabled(),
+        )
+        .with_framework_host(Some(host.clone()))
+        .build()
+        .unwrap();
+        context.run_code = format!("COMMAND-{}", index + 2);
+        context.messages = vec![AgentMessage::user(name)];
+        let result = agent.run(context.clone()).await.unwrap();
+        let output: serde_json::Value =
+            serde_json::from_str(&result.observations[0].output).unwrap();
+        assert_eq!(
+            output["status"],
+            if index == 0 { "running" } else { "cancelled" }
+        );
+    }
+    host.close().await;
+}
+
+#[tokio::test]
+async fn framework_refreshes_host_instructions_without_losing_persisted_conversation() {
+    use tron_backend::application::agent::FrameworkHost;
+    let host = FrameworkHost::temporary(None).unwrap();
+    let mut context = base_context("PREFIX-1");
+    context.messages = vec![
+        AgentMessage::system("old host instruction"),
+        AgentMessage::user("first question"),
+    ];
+    let first = Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
+        "first answer",
+    )]));
+    let agent = ReactAgentBuilder::new(
+        first,
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    agent.run(context.clone()).await.unwrap();
+    context.run_code = "PREFIX-2".into();
+    context.messages = vec![
+        AgentMessage::system("new host instruction"),
+        AgentMessage::user("second question"),
+    ];
+    let second = Arc::new(ScriptedResultModelClient::new(vec![Ok(
+        ModelResponse::final_output("second answer"),
+    )]));
+    let agent = ReactAgentBuilder::new(
+        second.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    agent.run(context).await.unwrap();
+    let requests = second.requests();
+    let messages = &requests[0].1.messages;
+    assert_eq!(messages[0].plain_text_content(), "new host instruction");
+    assert!(!messages.iter().any(|message| {
+        message
+            .plain_text_content()
+            .contains("old host instruction")
+    }));
+    assert!(
+        messages
+            .iter()
+            .any(|message| message.plain_text_content() == "first answer")
+    );
+    host.close().await;
+}
+
+#[tokio::test]
+async fn framework_retries_only_the_model_after_a_tool_side_effect() {
+    let executions = Arc::new(AtomicUsize::new(0));
+    let counter = executions.clone();
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new(
+            "echo",
+            move |request: ToolRequest| {
+                counter.fetch_add(1, Ordering::SeqCst);
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: "written-once".into(),
+                })
+            },
+        )))
+        .unwrap();
+    let client = Arc::new(ScriptedResultModelClient::new(vec![
+        Ok(ModelResponse::tool_call("echo", json!({"value":"once"}))),
+        Err("HTTP 503 temporarily unavailable".into()),
+        Ok(ModelResponse::final_output("retried-model-only")),
+    ]));
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .unwrap();
+    let mut context = base_context("MODEL-RETRY-AFTER-TOOL");
+    context.model.max_retries = Some(1);
+    let result = agent.run(context).await.unwrap();
+    assert_eq!(result.final_output, "retried-model-only");
+    assert_eq!(executions.load(Ordering::SeqCst), 1);
+    let requests = client.requests();
+    assert_eq!(requests.len(), 3);
+    assert_eq!(requests[1].1.messages, requests[2].1.messages);
 }

@@ -13,14 +13,25 @@ use tron_backend::config::AppConfig;
 use common::{app_with_config, authenticated_request, request, response_json};
 
 #[tokio::test]
-async fn corpus_management_routes_require_auth_and_expose_targeted_projection() {
+async fn corpus_management_routes_require_profile_and_expose_targeted_projection() {
     let database_url = temp_database_path("rag-management-corpus-detail")
         .to_string_lossy()
         .to_string();
     let router = app_with_database(&database_url);
 
-    let unauthorized = request(&router, Method::GET, "/api/v1/rag/corpora", None, None).await;
-    assert_eq!(unauthorized.status(), StatusCode::UNAUTHORIZED);
+    let unauthorized = request(
+        &common::app_without_profile(),
+        Method::GET,
+        "/api/v1/rag/corpora",
+        None,
+        None,
+    )
+    .await;
+    assert_eq!(unauthorized.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(unauthorized).await["code"],
+        "PERSONAI_PROFILE_REQUIRED"
+    );
 
     let list = authenticated_request(&router, Method::GET, "/api/v1/rag/corpora", None).await;
     assert_eq!(list.status(), StatusCode::OK);

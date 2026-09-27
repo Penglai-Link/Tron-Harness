@@ -198,6 +198,7 @@ export function TronShell({
     void ensureSessionFresh();
   }, [ensureSessionFresh]);
   const isMobileViewport = useIsMobile();
+  const isRightDrawerViewport = useIsMobile(1024);
   const { pathname, search } = useLocation();
   const navigate = useNavigate();
   const navigateToPath = useCallback((path: string) => navigate(path), [navigate]);
@@ -626,8 +627,8 @@ export function TronShell({
   }, [pathname]);
 
   useEffect(() => {
-    setRightDrawerOpen(Boolean(activeTab?.rightPanelOpen));
-  }, [activeTab?.id, activeTab?.rightPanelOpen]);
+    setRightDrawerOpen(isRightDrawerViewport && Boolean(activeTab?.rightPanelOpen));
+  }, [activeTab?.id, activeTab?.rightPanelOpen, isRightDrawerViewport]);
 
   useEffect(() => {
     if (!rightDrawerOpen) {
@@ -1173,6 +1174,8 @@ export function TronShell({
                   size="icon"
                   type="button"
                   variant="ghost"
+                  aria-label={t(showBottomPanel ? "shell:aria.closeTerminal" : "shell:aria.openTerminal")}
+                  aria-expanded={showBottomPanel}
                   onClick={toggleBottomPanel}
                 >
                   {showBottomPanel ? <PanelBottomClose size={17} /> : <PanelBottomOpen size={17} />}
@@ -1230,7 +1233,7 @@ export function TronShell({
             />
           ) : null}
 
-          {rightDrawerOpen ? (
+          {rightDrawerOpen && isRightDrawerViewport ? (
             <>
               <button
                 className="fixed inset-x-0 bottom-0 top-14 z-40 bg-[var(--color-backdrop-scrim)] lg:hidden"

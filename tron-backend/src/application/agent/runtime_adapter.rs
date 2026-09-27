@@ -177,7 +177,12 @@ impl RuntimeCapabilities {
 }
 
 pub trait AgentRuntime: Send + Sync {
+    /// Framework-managed runs must never be replayed wholesale after side effects.
     fn key(&self) -> RuntimeAdapterKey;
+    /// Stable transport configuration identity for durable remote-session reuse.
+    fn session_scope(&self) -> Option<String> {
+        None
+    }
     fn capabilities(&self) -> RuntimeCapabilities;
 
     fn start<'a>(
@@ -234,6 +239,7 @@ pub struct AgentRuntimeRegistry {
         Option<Arc<dyn crate::application::project::ApplicationDirectoryInspector>>,
     short_term_memory: Option<ShortTermMemoryService>,
     active_runs: ActiveRunRegistry,
+    framework_host: Option<super::FrameworkHost>,
     auto_model_router: Option<crate::application::model_router::AgentModelRouter>,
 }
 
@@ -252,8 +258,19 @@ impl AgentRuntimeRegistry {
             directory_inspector: None,
             short_term_memory: None,
             active_runs: ActiveRunRegistry::new(),
+            framework_host: Some(
+                super::FrameworkHost::temporary(None)
+                    .expect("standalone Framework storage should initialize"),
+            ),
             auto_model_router: None,
         }
+    }
+
+    pub fn with_framework_host(mut self, host: Option<super::FrameworkHost>) -> Self {
+        if host.is_some() {
+            self.framework_host = host;
+        }
+        self
     }
 
     pub fn with_directory_inspector(
@@ -287,10 +304,11 @@ impl AgentRuntimeRegistry {
     }
 
     pub fn resolve(&self, selection: RuntimeAdapterSelection) -> Arc<dyn AgentRuntime> {
-        match selection {
+        let runtime: Arc<dyn AgentRuntime> = match selection {
             RuntimeAdapterSelection::React => Arc::new(ReactRuntime::new(
                 RuntimeAdapterKey::React,
                 RuntimeCapabilities::react(),
+                self.framework_host.clone(),
                 self.default_model_client.clone(),
                 self.tool_registry.clone(),
                 self.event_bus.clone(),
@@ -349,6 +367,16 @@ impl AgentRuntimeRegistry {
                 working_directory,
                 self.runtime_http_client.clone(),
             )),
+        };
+        if runtime.key() == RuntimeAdapterKey::React {
+            return runtime;
         }
+        Arc::new(super::framework_runtime::FrameworkExternalRuntime {
+            host: self
+                .framework_host
+                .clone()
+                .expect("Framework host is initialized"),
+            transport: runtime,
+        })
     }
 }

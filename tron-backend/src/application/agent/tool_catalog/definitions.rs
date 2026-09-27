@@ -1,8 +1,8 @@
 mod business;
 mod coding;
-mod terminal;
 mod memory;
 mod productivity;
+mod terminal;
 
 use serde_json::Value;
 use serde_json::json;
@@ -67,7 +67,11 @@ pub(super) struct ToolCatalogDefinition {
 
 pub(super) fn domain_definitions() -> Vec<ToolDomainDefinition> {
     vec![
-        ToolDomainDefinition { domain_code: "terminal", name_i18n_key: "agent.toolCatalog.terminal.name", description_i18n_key: "agent.toolCatalog.terminal.description" },
+        ToolDomainDefinition {
+            domain_code: "terminal",
+            name_i18n_key: "agent.toolCatalog.terminal.name",
+            description_i18n_key: "agent.toolCatalog.terminal.description",
+        },
         ToolDomainDefinition {
             domain_code: "worktree",
             name_i18n_key: "agent.toolCatalog.domains.worktree.name",

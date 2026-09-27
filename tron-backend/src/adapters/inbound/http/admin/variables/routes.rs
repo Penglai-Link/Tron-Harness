@@ -6,8 +6,8 @@ use axum::{
 use crate::app::AppState;
 
 use super::handler::{
-    create_platform_variable, delete_platform_variable, list_platform_variables,
-    list_platform_prompt_variable_options, patch_platform_variable, reveal_platform_variable,
+    create_platform_variable, delete_platform_variable, list_platform_prompt_variable_options,
+    list_platform_variables, patch_platform_variable, reveal_platform_variable,
 };
 
 pub fn routes() -> Router<AppState> {

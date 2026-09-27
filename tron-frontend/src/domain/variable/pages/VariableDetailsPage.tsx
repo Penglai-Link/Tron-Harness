@@ -133,15 +133,13 @@ export function VariableDetailsPage() {
 
   function beginEdit() {
     if (!selectedRecord || !isWorkspaceVariableEditable(selectedRecord)) return;
-    setMode("edit");
-    setForm(workspaceVariableFormFromRecord(selectedRecord));
+    // Enter edit mode when the cached route receives the new query. Showing
+    // the form before navigation finishes lets the cache replace a typed draft.
     navigate(detailHref("edit"), { replace: true });
   }
 
   function beginOverride() {
     if (!selectedRecord || selectedRecord.sourceKind !== "Inherited") return;
-    setMode("override");
-    setForm(workspaceVariableFormFromOverride(selectedRecord));
     navigate(detailHref("override"), { replace: true });
   }
 

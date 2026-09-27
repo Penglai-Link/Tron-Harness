@@ -7,10 +7,7 @@ use rusqlite::Connection;
 use serde_json::json;
 use tron_backend::config::AppConfig;
 
-use common::{
-    AUTH_PASSWORD, app, app_with_config, authenticated_bearer_token, authenticated_request,
-    request_with_headers, response_json,
-};
+use common::{app, app_with_config, authenticated_request, response_json};
 
 #[tokio::test]
 async fn prompt_variable_options_combine_safe_managed_and_registered_runtime_variables() {
@@ -52,7 +49,10 @@ async fn prompt_variable_options_combine_safe_managed_and_registered_runtime_var
         visible_domains["runtimeProvider"],
         json!("AGENT_VISIBLE_DOMAINS")
     );
-    assert_eq!(visible_domains["managedVariableKey"], serde_json::Value::Null);
+    assert_eq!(
+        visible_domains["managedVariableKey"],
+        serde_json::Value::Null
+    );
 
     let managed_response = authenticated_request(
         &router,
@@ -82,10 +82,12 @@ async fn prompt_variable_options_combine_safe_managed_and_registered_runtime_var
     )
     .await;
     assert_eq!(sensitive_response.status(), StatusCode::OK);
-    assert!(response_json(sensitive_response).await["data"]
-        .as_array()
-        .expect("sensitive prompt options should be an array")
-        .is_empty());
+    assert!(
+        response_json(sensitive_response).await["data"]
+            .as_array()
+            .expect("sensitive prompt options should be an array")
+            .is_empty()
+    );
 
     let platform_runtime_response = authenticated_request(
         &router,
@@ -95,14 +97,16 @@ async fn prompt_variable_options_combine_safe_managed_and_registered_runtime_var
     )
     .await;
     assert_eq!(platform_runtime_response.status(), StatusCode::OK);
-    assert!(response_json(platform_runtime_response).await["data"]
-        .as_array()
-        .expect("platform runtime prompt options should be an array")
-        .iter()
-        .any(|option| {
-            option["key"] == json!("visible_domains")
-                && option["sourceKind"] == json!("RUNTIME")
-        }));
+    assert!(
+        response_json(platform_runtime_response).await["data"]
+            .as_array()
+            .expect("platform runtime prompt options should be an array")
+            .iter()
+            .any(|option| {
+                option["key"] == json!("visible_domains")
+                    && option["sourceKind"] == json!("RUNTIME")
+            })
+    );
 }
 
 #[tokio::test]
@@ -419,7 +423,7 @@ async fn update_local_variable_persists_new_value() {
     );
     let payload = response_json(response).await;
     assert_eq!(payload["data"]["value"], json!("sk-tron-core-rotated"));
-    assert_eq!(payload["data"]["sourceKind"], json!("Local"));
+    assert_eq!(payload["data"]["sourceKind"], json!("Override"));
 }
 
 #[tokio::test]
@@ -757,316 +761,97 @@ async fn sensitive_edit_rules_preserve_replace_demote_and_inherited_override_saf
 }
 
 #[tokio::test]
-async fn step_up_token_reveals_one_sensitive_value_and_does_not_refresh_session() {
-    let router = app_with_config(AppConfig {
-        database_url: temp_database_url("variable-sensitive-reveal")
-            .to_string_lossy()
-            .into_owned(),
-        ..AppConfig::default()
-    });
-    let access_token = authenticated_bearer_token(&router).await;
-    let authorization = format!("Bearer {access_token}");
-    let sensitive_value = sensitive_test_value("reveal");
-
-    let create_response = request_with_headers(
+async fn active_profile_reveals_one_sensitive_value_without_creating_login_cookies() {
+    let router = app();
+    let secret = sensitive_test_value("profile-reveal");
+    let created = authenticated_request(
         &router,
         Method::POST,
         "/api/v1/admin/platform/variables",
         Some(json!({
-            "key": "VSD_REVEAL_TOKEN",
-            "value": sensitive_value,
-            "description": "Sensitive reveal token",
-            "isSensitive": true,
-            "valueMode": "REPLACE"
+            "key":"PROFILE_SECRET", "value":secret, "isSensitive":true, "valueMode":"REPLACE"
         })),
-        None,
-        Some(&authorization),
     )
     .await;
-    assert_eq!(create_response.status(), StatusCode::CREATED);
-
-    let session_only_reveal = request_with_headers(
+    assert_eq!(created.status(), StatusCode::CREATED);
+    let response = authenticated_request(
         &router,
         Method::POST,
         "/api/v1/admin/platform/variables/reveal-platform-variable",
-        Some(json!({
-            "variableKey": "VSD_REVEAL_TOKEN"
-        })),
-        None,
-        Some(&authorization),
+        Some(json!({"variableKey":"PROFILE_SECRET"})),
     )
     .await;
-    assert_ne!(
-        session_only_reveal.status(),
-        StatusCode::OK,
-        "AC-VSD-05 RED: reveal must not succeed with only the login session"
-    );
-
-    let step_up_response = request_with_headers(
-        &router,
-        Method::POST,
-        "/api/v1/auth/verify-step-up-password",
-        Some(json!({
-            "password": AUTH_PASSWORD,
-            "target": {
-                "scope": "platform",
-                "variableKey": "VSD_REVEAL_TOKEN"
-            }
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(
-        step_up_response.status(),
-        StatusCode::OK,
-        "AC-VSD-05 RED: current-user password step-up should issue a scoped token"
-    );
+    assert_eq!(response.status(), StatusCode::OK);
     assert!(
-        step_up_response
+        response
             .headers()
-            .get_all(axum::http::header::SET_COOKIE)
-            .iter()
-            .next()
-            .is_none(),
-        "AC-VSD-05 RED: step-up must not refresh or replace login cookies"
+            .get(axum::http::header::SET_COOKIE)
+            .is_none()
     );
-    let step_up_json = response_json(step_up_response).await;
-    let step_up_token = step_up_json["data"]["stepUpToken"]
-        .as_str()
-        .expect("step-up response should include a token")
-        .to_owned();
-    assert!(
-        step_up_json["data"]["expiresAt"].is_string(),
-        "step-up response should include an expiry timestamp"
+    assert_eq!(
+        response_json(response).await["data"],
+        json!({"value":secret})
     );
-
-    let reveal_response = request_with_headers(
+    // Explicit reveal does not alter the masked list contract.
+    let response = authenticated_request(
         &router,
-        Method::POST,
-        "/api/v1/admin/platform/variables/reveal-platform-variable",
-        Some(json!({
-            "variableKey": "VSD_REVEAL_TOKEN",
-            "stepUpToken": step_up_token
-        })),
+        Method::GET,
+        "/api/v1/admin/platform/variables",
         None,
-        Some(&authorization),
     )
     .await;
-    assert_eq!(reveal_response.status(), StatusCode::OK);
-    let reveal_json = response_json(reveal_response).await;
-    assert_eq!(reveal_json["data"]["value"], json!(sensitive_value));
-    assert_eq!(
-        reveal_json["data"]
-            .as_object()
-            .expect("reveal data should be an object")
-            .len(),
-        1,
-        "AC-VSD-05 RED: reveal should return one plaintext field only"
-    );
-
-    let wrong_scope_response = request_with_headers(
-        &router,
-        Method::POST,
-        "/api/v1/variables/reveal-workspace-variable",
-        Some(json!({
-            "workspaceCode": "TRON_CORE",
-            "variableKey": "VSD_REVEAL_TOKEN",
-            "stepUpToken": "wrong-token"
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(wrong_scope_response.status(), StatusCode::BAD_REQUEST);
-    let wrong_scope_json = response_json(wrong_scope_response).await;
-    assert_eq!(
-        wrong_scope_json["code"],
-        json!("VARIABLE_STEP_UP_TOKEN_MISMATCH")
-    );
+    assert!(!response_json(response).await.to_string().contains(&secret));
 }
 
 #[tokio::test]
-async fn step_up_token_is_bound_to_exact_reveal_target() {
-    let router = app_with_config(AppConfig {
-        database_url: temp_database_url("variable-step-up-target-bound")
-            .to_string_lossy()
-            .into_owned(),
-        ..AppConfig::default()
-    });
-    let access_token = authenticated_bearer_token(&router).await;
-    let authorization = format!("Bearer {access_token}");
-
-    for key in ["VSD_TARGET_A", "VSD_TARGET_B"] {
-        let create_response = request_with_headers(
-            &router,
-            Method::POST,
-            "/api/v1/admin/platform/variables",
-            Some(json!({
-                "key": key,
-                "value": sensitive_test_value(key),
-                "description": "Target-bound platform token",
-                "isSensitive": true,
-                "valueMode": "REPLACE"
-            })),
-            None,
-            Some(&authorization),
-        )
-        .await;
-        assert_eq!(create_response.status(), StatusCode::CREATED);
-    }
-
-    for key in ["VSD_TARGET_WORKSPACE", "VSD_TARGET_WORKSPACE_B"] {
-        let workspace_create = request_with_headers(
-            &router,
-            Method::POST,
+async fn sensitive_reveal_uses_the_exact_platform_or_workspace_target() {
+    let router = app();
+    for (endpoint, value) in [
+        ("/api/v1/admin/platform/variables", "platform-fixture"),
+        (
             "/api/v1/variables/workspaces/TRON_CORE",
-            Some(json!({
-                "key": key,
-                "value": sensitive_test_value(key),
-                "description": "Target-bound workspace token",
-                "isSensitive": true,
-                "valueMode": "REPLACE"
-            })),
-            None,
-            Some(&authorization),
+            "workspace-fixture",
+        ),
+    ] {
+        let response = authenticated_request(
+            &router,
+            Method::POST,
+            endpoint,
+            Some(json!({"key":"SAME_KEY", "value":value,"isSensitive":true,"valueMode":"REPLACE"})),
         )
         .await;
-        assert_eq!(workspace_create.status(), StatusCode::CREATED);
+        assert_eq!(response.status(), StatusCode::CREATED);
     }
-
-    let step_up_response = request_with_headers(
-        &router,
-        Method::POST,
-        "/api/v1/auth/verify-step-up-password",
-        Some(json!({
-            "password": AUTH_PASSWORD,
-            "target": {
-                "scope": "platform",
-                "variableKey": "VSD_TARGET_A"
-            }
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(step_up_response.status(), StatusCode::OK);
-    let step_up_json = response_json(step_up_response).await;
-    let platform_a_token = step_up_json["data"]["stepUpToken"]
-        .as_str()
-        .expect("step-up response should include a token")
-        .to_owned();
-
-    let platform_b_reveal = request_with_headers(
+    let platform = authenticated_request(
         &router,
         Method::POST,
         "/api/v1/admin/platform/variables/reveal-platform-variable",
-        Some(json!({
-            "variableKey": "VSD_TARGET_B",
-            "stepUpToken": platform_a_token
-        })),
-        None,
-        Some(&authorization),
+        Some(json!({"variableKey":"SAME_KEY"})),
     )
     .await;
-    assert_eq!(platform_b_reveal.status(), StatusCode::BAD_REQUEST);
-    let platform_b_error = response_json(platform_b_reveal).await;
     assert_eq!(
-        platform_b_error["code"],
-        json!("VARIABLE_STEP_UP_TOKEN_MISMATCH"),
-        "AC-VSD-05 RED: platform step-up token must not reveal another platform key"
+        response_json(platform).await["data"]["value"],
+        "platform-fixture"
     );
-
-    let platform_a_token = step_up_json["data"]["stepUpToken"]
-        .as_str()
-        .expect("step-up response should include a token");
-    let workspace_reveal_with_platform_token = request_with_headers(
+    let workspace = authenticated_request(
         &router,
         Method::POST,
         "/api/v1/variables/reveal-workspace-variable",
-        Some(json!({
-            "workspaceCode": "TRON_CORE",
-            "variableKey": "VSD_TARGET_WORKSPACE",
-            "stepUpToken": platform_a_token
-        })),
-        None,
-        Some(&authorization),
+        Some(json!({"workspaceCode":"TRON_CORE","variableKey":"SAME_KEY"})),
     )
     .await;
     assert_eq!(
-        workspace_reveal_with_platform_token.status(),
-        StatusCode::BAD_REQUEST
+        response_json(workspace).await["data"]["value"],
+        "workspace-fixture"
     );
-    let workspace_reveal_error = response_json(workspace_reveal_with_platform_token).await;
-    assert_eq!(
-        workspace_reveal_error["code"],
-        json!("VARIABLE_STEP_UP_TOKEN_MISMATCH"),
-        "AC-VSD-05 RED: platform step-up token must not reveal workspace variables"
-    );
-
-    let workspace_step_up_response = request_with_headers(
-        &router,
-        Method::POST,
-        "/api/v1/auth/verify-step-up-password",
-        Some(json!({
-            "password": AUTH_PASSWORD,
-            "target": {
-                "scope": "workspace",
-                "workspaceCode": "TRON_CORE",
-                "variableKey": "VSD_TARGET_WORKSPACE"
-            }
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(workspace_step_up_response.status(), StatusCode::OK);
-    let workspace_step_up_json = response_json(workspace_step_up_response).await;
-    let workspace_token = workspace_step_up_json["data"]["stepUpToken"]
-        .as_str()
-        .expect("workspace step-up response should include a token");
-
-    let wrong_workspace_key_reveal = request_with_headers(
+    let missing = authenticated_request(
         &router,
         Method::POST,
         "/api/v1/variables/reveal-workspace-variable",
-        Some(json!({
-            "workspaceCode": "TRON_CORE",
-            "variableKey": "VSD_TARGET_WORKSPACE_B",
-            "stepUpToken": workspace_token
-        })),
-        None,
-        Some(&authorization),
+        Some(json!({"workspaceCode":"TRON_CORE","variableKey":"MISSING_KEY"})),
     )
     .await;
-    assert_eq!(wrong_workspace_key_reveal.status(), StatusCode::BAD_REQUEST);
-    let wrong_workspace_key_error = response_json(wrong_workspace_key_reveal).await;
-    assert_eq!(
-        wrong_workspace_key_error["code"],
-        json!("VARIABLE_STEP_UP_TOKEN_MISMATCH"),
-        "AC-VSD-05 RED: workspace step-up token must not reveal another variable key"
-    );
-
-    let wrong_workspace_reveal = request_with_headers(
-        &router,
-        Method::POST,
-        "/api/v1/variables/reveal-workspace-variable",
-        Some(json!({
-            "workspaceCode": "ENTERPRISE",
-            "variableKey": "VSD_TARGET_WORKSPACE",
-            "stepUpToken": workspace_token
-        })),
-        None,
-        Some(&authorization),
-    )
-    .await;
-    assert_eq!(wrong_workspace_reveal.status(), StatusCode::BAD_REQUEST);
-    let wrong_workspace_error = response_json(wrong_workspace_reveal).await;
-    assert_eq!(
-        wrong_workspace_error["code"],
-        json!("VARIABLE_STEP_UP_TOKEN_MISMATCH"),
-        "AC-VSD-05 RED: workspace step-up token must not reveal another workspace target"
-    );
+    assert_eq!(missing.status(), StatusCode::NOT_FOUND);
 }
 
 #[tokio::test]

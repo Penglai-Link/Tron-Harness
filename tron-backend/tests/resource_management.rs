@@ -329,43 +329,33 @@ fn resource_tools_require_actor_and_enforce_scope_and_action_shapes() {
         .expect_err("missing userCode must be rejected");
     assert!(error.to_string().contains("authenticated user"));
 
-    let mut viewer_scope_context = context.clone();
-    viewer_scope_context.user_code = Some(VIEWER.to_string());
-    let inaccessible_workspace = state
+    // The active local profile can access every active workspace. Removed
+    // legacy bearer-role names must not reintroduce the old ACL model.
+    let mut profile_context = context.clone();
+    profile_context.user_code = Some(VIEWER.to_string());
+    state
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource_query".to_string(),
-                input: json!({ "workspaceCode": "ENTERPRISE" }),
+                tool_name: "resource_query".into(),
+                input: json!({"workspaceCode":"ENTERPRISE"}),
                 invocation_id: None,
             },
-            &viewer_scope_context,
+            &profile_context,
         )
-        .expect_err("Resources permission does not bypass workspace access");
-    assert!(
-        inaccessible_workspace
-            .to_string()
-            .contains("not authorized")
-    );
-
-    let mut viewer_context = context.clone();
-    viewer_context.user_code = Some(VIEWER.to_string());
-    let viewer_denied = state
+        .expect("local profile may query active workspaces");
+    let invalid_workspace = state
         .agent_tool_registry
         .execute_allowed(
             ToolRequest {
-                tool_name: "resource_binary".to_string(),
-                input: json!({
-                    "action": "upload",
-                    "resourceCode": "viewer-file",
-                    "sourcePath": "payload.txt"
-                }),
+                tool_name: "resource_query".into(),
+                input: json!({"workspaceCode":"MISSING-WORKSPACE"}),
                 invocation_id: None,
             },
-            &viewer_context,
+            &profile_context,
         )
-        .expect_err("binary upload requires workspace write permission");
-    assert!(viewer_denied.to_string().contains("not authorized"));
+        .unwrap_err();
+    assert!(invalid_workspace.to_string().contains("workspace"));
 
     let invalid_binary = state
         .agent_tool_registry
@@ -639,8 +629,6 @@ fn resource_state(test_name: &str) -> AppState {
         state.mcp.clone(),
         state.memory.clone(),
         state.short_term_memory.clone(),
-        Arc::new(tron_backend::adapters::outbound::code_file_editor::LocalCodeFileEditor),
-        Arc::new(tron_backend::adapters::outbound::agent_terminal::LocalAgentTerminal::default()),
     )
     .expect("resource test tools should register");
     state.agent_tool_registry = agent_tool_registry;

@@ -1,7 +1,6 @@
 import {
   deriveReasoningPreview,
   formatTime,
-  reasoningLastSentence,
   truncateLabel,
 } from "./display";
 import type {
@@ -948,7 +947,7 @@ export function buildMockStreamingEvents(
 }
 
 export function summarizeReasoning(card: ReasoningWorkCard) {
-  return deriveReasoningPreview(card.summary || reasoningLastSentence(card.content));
+  return deriveReasoningPreview(card.summary);
 }
 
 export function describeDebugEvent(event: TranscriptAguiEvent) {

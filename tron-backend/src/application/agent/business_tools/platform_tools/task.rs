@@ -206,9 +206,9 @@ impl Tool for TaskUpdateTool {
         let task_type = parse_task_type(input.task_type.as_deref())?;
         let source_type = parse_task_source_type(input.source_type.as_deref())?;
         let status = parse_task_status(input.status.as_deref())?;
-        let mut output = self
+        let output = self
             .tasks
-            .update_task(
+            .update_task_with_status(
                 &task_code,
                 UpdateTaskCommand {
                     title: input.title,
@@ -223,20 +223,12 @@ impl Tool for TaskUpdateTool {
                     agent_codes: input.agent_codes,
                     app_codes: input.app_codes,
                 },
+                status.map(|status| UpdateTaskStatusCommand {
+                    status,
+                    progress: input.progress,
+                }),
             )
             .map_err(service_tool_error)?;
-        if let Some(status) = status {
-            output = self
-                .tasks
-                .update_status(
-                    &task_code,
-                    UpdateTaskStatusCommand {
-                        status,
-                        progress: input.progress,
-                    },
-                )
-                .map_err(service_tool_error)?;
-        }
         json_observation(self.name(), &output)
     }
 }
@@ -309,11 +301,13 @@ impl Tool for TaskRestoreTool {
 }
 
 fn parse_task_status(value: Option<&str>) -> Result<Option<String>, ToolError> {
-    Ok(normalize_optional_token(value).map(|value| match value.as_str() {
-        "open" | "not_started" => "NOT_STARTED".to_string(),
-        "completed" | "closed" => "CLOSED".to_string(),
-        other => other.to_ascii_uppercase(),
-    }))
+    Ok(
+        normalize_optional_token(value).map(|value| match value.as_str() {
+            "open" | "not_started" => "NOT_STARTED".to_string(),
+            "completed" | "closed" => "CLOSED".to_string(),
+            other => other.to_ascii_uppercase(),
+        }),
+    )
 }
 
 fn parse_task_priority(value: Option<&str>) -> Result<Option<TaskPriority>, ToolError> {

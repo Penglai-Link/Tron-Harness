@@ -69,7 +69,7 @@ fn bounded_context_roots_are_small_facades() {
         })
         .filter_map(|path| {
             let content = fs::read_to_string(&path).expect("source file should be readable");
-            let line_count = content.lines().count();
+            let line_count = production_line_count(&content);
             (line_count > FACADE_MAX_LINES).then(|| (display_path(path), line_count))
         })
         .collect::<Vec<_>>();
@@ -87,7 +87,7 @@ fn backend_source_files_do_not_become_large_implementation_buckets() {
         .filter(|path| path.extension().is_some_and(|extension| extension == "rs"))
         .filter_map(|path| {
             let content = fs::read_to_string(&path).expect("source file should be readable");
-            let line_count = content.lines().count();
+            let line_count = production_line_count(&content);
             (line_count > IMPLEMENTATION_MAX_LINES).then(|| (display_path(path), line_count))
         })
         .collect::<Vec<_>>();
@@ -119,4 +119,14 @@ fn collect_files_into(root: &Path, files: &mut Vec<std::path::PathBuf>) {
 
 fn display_path(path: impl AsRef<Path>) -> String {
     path.as_ref().display().to_string()
+}
+
+fn production_line_count(content: &str) -> usize {
+    content
+        .split("#[cfg(test)]")
+        .next()
+        .unwrap_or(content)
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .count()
 }

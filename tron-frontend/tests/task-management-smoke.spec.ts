@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -83,8 +84,7 @@ const defaultStatuses = {
 const now = "2026-05-16T12:00:00Z";
 
 function kanbanStatusesForTaskType(taskType?: TaskType): TaskStatus[] {
-  if (taskType === "Bug") return statusRules.bug;
-  if (taskType === "Feature") return statusRules.featureRoot;
+  void taskType;
   return statuses;
 }
 
@@ -233,13 +233,14 @@ async function seedTronCoreShellSelection(page: Page) {
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, workspaceSwitcher);
 }
 
 function task(values: Partial<Task> & Pick<Task, "taskCode" | "title">): Task {
   return {
+    agentCode: "main-agent", modelCode: null, flowCode: "test-flow", executionResult: null,
     agentCodes: [],
     appCodes: [],
     archivedAt: null,
@@ -367,6 +368,7 @@ function filtered(tasks: Task[], query: Record<string, string>) {
     if (!includeArchived && item.status === "Archived") return false;
     if (query.workspaceCode && item.workspaceCode !== query.workspaceCode) return false;
     if (query.status && item.status !== query.status) return false;
+    if (query.taskType && item.taskType !== query.taskType) return false;
     if (query.priority && item.priority !== query.priority) return false;
     if (!search) return true;
     return `${item.taskCode} ${item.title} ${item.description ?? ""} ${item.sourceUrl ?? ""}`.toLowerCase().includes(search);
@@ -379,11 +381,11 @@ function inferTaskRole(taskType: TaskType, parentTaskCode: string | null) {
 }
 
 function toast(page: Page, message: string | RegExp) {
-  return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+  return page.locator('[aria-label="Notifications"]').getByRole("dialog").filter({ hasText: message }).first();
 }
 
 async function openDesktopRightSidebar(page: Page) {
-  const reopen = page.getByTestId("tron-right-sidebar-reopen");
+  const reopen = page.getByRole("button", { name: "Open right sidebar", exact: true });
   if (await reopen.count()) {
     await reopen.click();
   }
@@ -493,10 +495,16 @@ async function routeApi(
       }));
   }
 
+  const testFlow = { flowCode: "test-flow", name: "Test flow", statuses: statuses.filter(status => status !== "Archived").map((statusCode, position) => ({ statusCode, name: statusTitle(statusCode), position, required: false })) };
   await page.route("**/api/v1/**", async (route) => {
     const captured = captureRequest(route);
     requests.push(captured);
 
+    if (/^\/api\/v1\/task-flows\/workspaces\//.test(captured.pathname)) return fulfillJson(route, successEnvelope({ workspaceCode: captured.pathname.split("/").pop(), flow: testFlow }));
+    if (captured.pathname === "/api/v1/admin/task-flows") return fulfillJson(route, successEnvelope([testFlow]));
+    if (/^\/api\/v1\/agents\/workspaces\/[^/]+\/system$/.test(captured.pathname)) return fulfillJson(route, successEnvelope([]));
+    if (/^\/api\/v1\/models\/workspaces\/[^/]+\/select-options$/.test(captured.pathname)) return fulfillJson(route, successEnvelope([]));
+    if (captured.pathname === "/api/v1/chats/session-groups") return fulfillJson(route, successEnvelope([]));
     if (captured.pathname === "/api/v1/auth/providers") return fulfillJson(route, successEnvelope({ providers: [{ code: "internal", name: "Internal Account", type: "internal" }] }));
     if (captured.pathname === "/api/v1/auth/refresh") return fulfillJson(route, successEnvelope({ accessToken: "task-token", tokenType: "Bearer", expiresIn: 900, session: authenticatedSession }));
     if (captured.pathname === "/api/v1/auth/session") return fulfillJson(route, successEnvelope(authenticatedSession));
@@ -513,7 +521,7 @@ async function routeApi(
     if (appOptionsMatch) {
       return fulfillJson(route, successEnvelope(listAppOptions(decodeURIComponent(appOptionsMatch[1]), captured.searchParams.search)));
     }
-    if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], statuses, taskTypes: ["Feature", "Bug"], statusRules, defaultStatuses }));
+    if (captured.pathname === "/api/v1/tasks/options") return fulfillJson(route, successEnvelope({ priorities: ["Low", "Medium", "High"], sourceTypes: ["Internal", "GitHub", "GitLab"], flow: testFlow, statuses: testFlow.statuses, taskTypes: ["Feature", "Bug"] }));
     if (captured.pathname === "/api/v1/tasks/quick-reference") {
       return fulfillJson(route, successEnvelope({
         tips: [
@@ -554,6 +562,7 @@ async function routeApi(
       }));
       return fulfillJson(route, successEnvelope(detail(tasks, taskCode)), 201);
     }
+    if (/^\/api\/v1\/tasks\/[^/]+\/execute$/.test(captured.pathname)) return fulfillJson(route, successEnvelope({ message: "Task execution started", sessionCode: "SESSION-TASK", taskCode: captured.pathname.split("/")[4] }));
     const archiveMatch = captured.pathname.match(/^\/api\/v1\/tasks\/([^/]+)\/(archive|restore)$/);
     if (archiveMatch) {
       const selected = tasks.find((item) => item.taskCode === decodeURIComponent(archiveMatch[1]));
@@ -643,6 +652,9 @@ async function waitForFrontend(url: string) {
   throw new Error(`Frontend dev server did not become ready.\n${frontendLogs}`);
 }
 
+test.beforeEach(async ({ page }) => {
+});
+
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
@@ -664,7 +676,7 @@ test.afterAll(async () => {
   }
 });
 
-test("task management supports kanban search create detail updates subtasks archive restore execution toast and no import export actions", async ({ page }) => {
+test("task management supports workflow search create detail updates subtasks and execution", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   const tasks: Task[] = [
     task({ description: "Seeded task for board search", priority: "Medium", taskCode: "TSK-SEED-FEATURE", title: "Design task management v1" }),
@@ -674,8 +686,9 @@ test("task management supports kanban search create detail updates subtasks arch
   await routeApi(page, requests, tasks, { createTaskDelayMs: 150 });
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
-  const taskHeader = page.locator("header").filter({ has: page.getByRole("heading", { name: "Task Management" }) });
+  const taskHeader = page.locator("header").filter({ has: page.getByRole("tab", { name: "Tasks", exact: true }) });
   const kanbanColumnTitles = page.locator("[data-task-kanban-column] h2");
   await expect(taskHeader.getByText("Kanban", { exact: true })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Refresh$/ })).toBeVisible();
@@ -684,60 +697,54 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(toast(page, "Task board refreshed")).toBeVisible();
   await expect(page.getByLabel("Task workspace")).toHaveCount(0);
   await expect(page.getByLabel("Task type filter")).toBeVisible();
-  await expect(page.getByLabel("Task type filter")).toHaveValue("Feature");
-  await expect(page.getByLabel("Task type filter").locator("option")).toHaveText(["Feature", "Bug"]);
+  await expect(page.getByLabel("Task type filter")).toContainText("Feature");
+  await page.getByLabel("Task type filter").click(); await expect(page.getByRole("option")).toHaveText(["Feature", "Bug"]); await page.keyboard.press("Escape");
   await expect(page.getByLabel("Task priority filter")).toBeVisible();
   await expect(page.getByLabel("Task status filter")).toHaveCount(0);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Feature")).toBe(true);
   await expect(page.getByRole("button", { name: /^Import$/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: /^Export$/ })).toHaveCount(0);
-  await expect(page.getByText("Reopen", { exact: true })).toHaveCount(0);
-  await expect(page.getByText("In Progress", { exact: true })).toHaveCount(0);
-  await expect(kanbanColumnTitles).toHaveText(["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed"]);
+
+
+  await expect(kanbanColumnTitles).toHaveText(statuses.filter(status => status !== "Archived").map(statusTitle));
   await page.getByPlaceholder("Filter task code, title, or description...").fill("Design");
   await expect(page.getByText("Design task management v1")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.search === "Design" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Feature")).toBe(true);
 
   await page.getByPlaceholder("Filter task code, title, or description...").fill("");
   await expect(page.getByText("Verify task smoke flow")).toHaveCount(0);
-  await page.getByLabel("Task type filter").selectOption("Bug");
+  await page.getByLabel("Task type filter").click(); await page.getByRole("option", { name: "Bug", exact: true }).click();
   await expect(page.getByText("Reopen", { exact: true })).toBeVisible();
-  await expect(page.getByText("Designing", { exact: true })).toHaveCount(0);
-  await expect(kanbanColumnTitles).toHaveText(["Open", "In Progress", "Reopen", "Completed"]);
-  await page.getByLabel("Task priority filter").selectOption("High");
+
+  await expect(kanbanColumnTitles).toHaveText(statuses.filter(status => status !== "Archived").map(statusTitle));
+  await page.getByLabel("Task priority filter").click(); await page.getByRole("option", { name: "High", exact: true }).click();
   await expect(page.getByText("Verify task smoke flow")).toBeVisible();
   const highPriorityTaskCard = page.getByRole("button", { name: /Verify task smoke flow/ });
-  await expect.poll(async () => {
-    const taskTypeClass = await highPriorityTaskCard.getByText("Bug", { exact: true }).getAttribute("class");
-    const sourceTypeClass = await highPriorityTaskCard.getByText("Internal", { exact: true }).getAttribute("class");
-    return taskTypeClass !== null && sourceTypeClass !== null && taskTypeClass !== sourceTypeClass;
-  }).toBe(true);
+  await expect(highPriorityTaskCard).toHaveAccessibleName(/High Bug/);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/kanban" && request.searchParams.priority === "High" && request.searchParams.workspaceCode === "TRON_CORE" && request.searchParams.taskType === "Bug")).toBe(true);
 
   await page.getByRole("button", { name: /^New$/ }).click();
-  await expect(page.getByRole("heading", { name: "Create Task" })).toBeVisible();
+  await expect(page.getByLabel("Task title")).toBeVisible();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create Task" })).toHaveCount(0);
   await expect(page.getByRole("combobox", { name: "Workspace" })).toHaveCount(0);
   await expect(page.getByText("Classification & Source", { exact: true })).toHaveCount(0);
   await expect(page.getByText(/Only effective users in/)).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Editor Tools" })).toHaveCount(0);
-  await expect(page.getByLabel("Task Type").locator("option")).toHaveText(["Feature", "Bug"]);
-  await expect(page.getByLabel("Task Type").locator("option", { hasText: "BugFix" })).toHaveCount(0);
-  await expect(page.getByLabel("Task Type").locator("option", { hasText: "Refactor" })).toHaveCount(0);
+  await page.getByLabel("Task Type").click(); await expect(page.getByRole("option")).toHaveText(["Feature", "Bug"]); await page.keyboard.press("Escape");
   await expect(page.getByRole("heading", { name: "Quick Reference" })).toHaveCount(0);
   await expect(page.getByText("assigneeUserCodes", { exact: true })).toHaveCount(0);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/apps/workspaces/TRON_CORE/options")).toBe(true);
   await page.getByLabel("Task title").fill("Playwright created task");
-  await page.getByLabel("Priority").selectOption("High");
-  await page.getByLabel("Task Type").selectOption("Feature");
-  await page.getByLabel("Source Type").selectOption("GitHub");
+  await page.getByLabel("Priority").click(); await page.getByRole("option", { name: "High", exact: true }).click();
+  await page.getByLabel("Task Type").click(); await page.getByRole("option", { name: "Feature", exact: true }).click();
+  await page.getByLabel("Source Type").click(); await page.getByRole("option", { name: "GitHub", exact: true }).click();
   await page.getByLabel("Source URL").fill("https://github.com/clouds3n/tron/issues/100");
   await page.getByLabel("Agent Codes").fill("agent-reviewer, agent-builder");
-  await page.getByLabel("Available apps").getByText("Tron API", { exact: true }).click();
-  await page.getByLabel("Assign Auth Operator").check();
+  await page.getByRole("combobox", { name: "Apps", exact: true }).click(); await page.getByRole("option", { name: /Tron API/ }).click(); await page.keyboard.press("Escape");
+  await expect(page.getByLabel("Assign Auth Operator")).toHaveCount(0);
   await page.getByRole("button", { name: "Open description fullscreen" }).click();
-  const createDescriptionFullscreenEditor = page.getByRole("dialog", { name: "Description fullscreen editor" });
+  const createDescriptionFullscreenEditor = page.getByRole("dialog", { name: "Task description fullscreen", exact: true });
   await expect(createDescriptionFullscreenEditor).toBeVisible();
   await createDescriptionFullscreenEditor.getByLabel("Task description fullscreen").fill("## Playwright Notes\n- Created through the task-management smoke.\n- Uses $VAR1 during execution.");
   await createDescriptionFullscreenEditor.getByRole("button", { name: "Close description fullscreen" }).click();
@@ -747,8 +754,8 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
   await expect(page.getByText("Playwright created task")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Task Definition" })).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Task Attributes" })).toBeVisible();
+  await expect(page.getByText("Task Title", { exact: true })).toBeVisible();
+  await expect(page.getByLabel("Task detail priority")).toBeVisible();
   await expect(page.getByRole("heading", { name: "Updates" })).toHaveCount(0);
   await expect(page.getByText("Operational Updates", { exact: true })).toHaveCount(0);
   await expect(page.getByText("Changes save automatically.", { exact: true })).toHaveCount(0);
@@ -756,18 +763,18 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByRole("button", { name: "Restore" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Save Updates" })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Reset Updates" })).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "Edit Details" })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Edit", exact: true })).toBeVisible();
   await expect(page.getByLabel("Task detail title")).toHaveCount(0);
   await expect(page.getByLabel("Task detail type")).toHaveCount(0);
   await expect(page.getByLabel("Task detail source type")).toHaveCount(0);
   await expect(page.getByLabel("Task detail source URL")).toHaveCount(0);
   await expect(page.getByLabel("Task detail status")).toBeVisible();
-  await expect(page.getByLabel("Task detail status").locator("option")).toHaveText(["Open", "Designing", "Red", "Green", "Regressioning", "Review", "Completed", "Archived"]);
+  await page.getByLabel("Task detail status").click(); await expect(page.getByRole("option")).toHaveText(statuses.filter(status => status !== "Archived").map(statusTitle)); await page.keyboard.press("Escape");
   await expect(page.getByLabel("Task detail priority")).toBeVisible();
   await expect(page.getByLabel("Task detail progress")).toBeVisible();
   await expect(page.getByLabel("Task detail agent codes")).toBeVisible();
   await expect(page.getByLabel("Task detail app codes")).toHaveCount(0);
-  await expect(page.getByLabel("Available apps").getByText("Tron API", { exact: true })).toBeVisible();
+  await expect(page.getByRole("toolbar").filter({ has: page.getByRole("combobox", { name: "Apps", exact: true }) })).toContainText("Tron API");
   const descriptionMarkdown = page.getByLabel("Task description markdown");
   await expect(descriptionMarkdown.getByText("Playwright Notes", { exact: true })).toBeVisible();
   await expect(descriptionMarkdown.getByRole("listitem").filter({ hasText: "Created through the task-management smoke." })).toBeVisible();
@@ -790,26 +797,27 @@ test("task management supports kanban search create detail updates subtasks arch
       && body.appCodes?.includes("APP-TRON-API") === true;
   }).toBe(true);
 
-  await page.getByLabel("Task detail priority").selectOption("Low");
+  await page.getByLabel("Task detail priority").click(); await page.getByRole("option", { name: "Low", exact: true }).click();
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
-  await page.getByLabel("Task detail status").selectOption("Green");
+  await page.getByLabel("Task detail status").click(); await page.getByRole("option", { name: "Green", exact: true }).click();
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
   await page.getByLabel("Task detail progress").fill("55");
   await page.getByLabel("Task detail progress").press("Tab");
   await page.getByLabel("Task detail agent codes").fill("agent-reviewer, agent-builder, agent-qa");
   await page.getByLabel("Task detail agent codes").press("Tab");
-  await page.getByLabel("Available apps").getByText("Tron Console", { exact: true }).click();
+  await page.getByRole("combobox", { name: "Apps", exact: true }).click(); await page.getByRole("option", { name: /Tron Console/ }).click(); await page.keyboard.press("Escape");
   await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeVisible();
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.priority === "Low")).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.agentCodes?.includes("agent-qa") === true)).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001" && request.method !== "GET" && (request.body as Partial<Task> | null)?.appCodes?.includes("APP-TRON-CONSOLE") === true)).toBe(true);
   await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/tasks/TSK-PW-0001/status" && (request.body as { progress?: number; status?: TaskStatus } | null)?.progress === 55 && (request.body as { status?: TaskStatus } | null)?.status === "Green")).toBe(true);
-  await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeHidden();
+  await page.mouse.move(0, 0);
+  await expect(toast(page, /Task TSK-PW-0001 updates saved/)).toBeHidden({ timeout: 10_000 });
 
-  await page.getByRole("button", { name: "Edit Details" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Task detail title").fill("Playwright created task updated");
-  await expect(page.getByLabel("Task detail type").locator("option")).toHaveText(["Feature", "Bug"]);
-  await page.getByLabel("Task detail source type").selectOption("GitLab");
+  await page.getByLabel("Task detail type").click(); await expect(page.getByRole("option")).toHaveText(["Feature", "Bug"]); await page.keyboard.press("Escape");
+  await page.getByLabel("Task detail source type").click(); await page.getByRole("option", { name: "GitLab", exact: true }).click();
   await page.getByLabel("Task detail source URL").fill("https://gitlab.com/clouds3n/tron/-/issues/101");
   await page.getByRole("button", { name: "Open description fullscreen" }).click();
   const descriptionFullscreenEditor = page.getByRole("dialog", { name: "Description fullscreen editor" });
@@ -831,27 +839,17 @@ test("task management supports kanban search create detail updates subtasks arch
   await expect(page.getByText("Smoke child task")).toBeVisible();
   await expect.poll(() => requests.some((request) => request.method === "POST" && request.pathname === "/api/v1/tasks" && (request.body as { parentTaskCode?: string; taskType?: TaskType } | null)?.parentTaskCode === "TSK-PW-0001" && (request.body as { taskType?: TaskType } | null)?.taskType === "Feature")).toBe(true);
 
-  await page.getByLabel("Task detail status").selectOption("Archived");
-  await expect(toast(page, "archive active subtasks before archiving the parent task")).toBeVisible();
-  await expect(page.getByLabel("Task detail status")).toHaveValue("Green");
-
   await page.getByRole("link", { name: /Smoke child task/ }).click();
   await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0002/);
   const childBreadcrumb = page.getByRole("navigation", { name: "Breadcrumb" });
-  await expect(childBreadcrumb.getByRole("link", { name: "Tasks" })).toBeVisible();
   await expect(childBreadcrumb.getByRole("link", { name: "TSK-PW-0001" })).toBeVisible();
-  await expect(childBreadcrumb.getByText("TSK-PW-0002", { exact: true })).toBeVisible();
-  await expect(page.getByLabel("Task detail status").locator("option")).toHaveText(["Open", "In Progress", "Completed", "Archived"]);
-  await page.getByLabel("Task detail status").selectOption("Archived");
-  await expect(toast(page, "Task TSK-PW-0002 archived")).toBeVisible();
-  await expect(page.getByLabel("Task detail status")).toHaveValue("Archived");
-  await childBreadcrumb.getByRole("link", { name: "TSK-PW-0001" }).click();
-  await expect(page).toHaveURL(/\/tasks\/detail\?taskCode=TSK-PW-0001/);
-  await expect(page.getByText("No active subtasks.")).toBeVisible();
+  await page.getByLabel("Task detail status").click();
+  await expect(page.getByRole("option")).toHaveText(statuses.filter(status => status !== "Archived").map(statusTitle));
+  await page.keyboard.press("Escape");
+  await page.getByRole("button", { name: "Execute", exact: true }).click();
+  await expect(toast(page, "Task TSK-PW-0002 execution started")).toBeVisible();
+  await expect.poll(() => requests.some(request => request.pathname === "/api/v1/tasks/TSK-PW-0002/execute" && request.method === "POST")).toBe(true);
 
-  await expect(page.getByRole("button", { name: "Execute Task" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Execute" }).click();
-  await expect(toast(page, "Task execution is not available in v1")).toBeVisible();
 });
 
 test("parent task detail derives progress from active subtasks and keeps the progress field read-only", async ({ page }) => {
@@ -864,13 +862,14 @@ test("parent task detail derives progress from active subtasks and keeps the pro
   await routeApi(page, requests, tasks);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-PROGRESS-PARENT`);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
   await expect(page.getByLabel("Task detail progress")).toHaveValue("50");
   await expect(page.getByLabel("Task detail progress")).toBeDisabled();
   await openDesktopRightSidebar(page);
-  await expect(page.getByText("Completed child")).toBeVisible();
-  await expect(page.getByText("Open child")).toBeVisible();
+  await expect(page.getByTestId("tron-right-sidebar").getByText("Completed child")).toBeVisible();
+  await expect(page.getByTestId("tron-right-sidebar").getByText("Open child")).toBeVisible();
 });
 
 test("task kanban drag updates a valid task status and refreshes the board", async ({ page }) => {
@@ -881,8 +880,9 @@ test("task kanban drag updates a valid task status and refreshes the board", asy
   await routeApi(page, requests, tasks);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
-  await expect(page.getByRole("heading", { name: "Task Management" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Tasks", exact: true })).toBeVisible();
 
   const card = page.getByTestId("task-kanban-card-TSK-DRAG-ROOT");
   await expect(card).toBeVisible();
@@ -892,38 +892,39 @@ test("task kanban drag updates a valid task status and refreshes the board", asy
   await page.goBack();
   await expect(card).toBeVisible();
 
-  await card.dragTo(page.getByTestId("task-kanban-dropzone-Green"));
+  await dispatchTaskDrag(page, "TSK-DRAG-ROOT", "Green");
 
   await expect.poll(() => requests.some((request) => request.method === "POST"
     && request.pathname === "/api/v1/tasks/TSK-DRAG-ROOT/status"
     && (request.body as { progress?: number; status?: TaskStatus } | null)?.status === "Green"
     && (request.body as { progress?: number } | null)?.progress === undefined)).toBe(true);
-  await expect(toast(page, "Task TSK-DRAG-ROOT moved to Green")).toBeVisible();
+  await expect(toast(page, "Task TSK-DRAG-ROOT moved")).toBeVisible();
   await expect(page.getByTestId("task-kanban-dropzone-Green").getByTestId("task-kanban-card-TSK-DRAG-ROOT")).toBeVisible();
   await expect(page.getByTestId("task-kanban-dropzone-Open").getByTestId("task-kanban-card-TSK-DRAG-ROOT")).toHaveCount(0);
 });
 
-test("task kanban drag blocks invalid and same-column drops without calling the status API", async ({ page }) => {
+test("task kanban ignores same-column drops and permits statuses from the configured flow", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   const tasks: Task[] = [
-    task({ parentTaskCode: "TSK-DRAG-PARENT", status: "Open", taskCode: "TSK-DRAG-CHILD", title: "Drag child feature with limited states" }),
+    task({ status: "Open", taskCode: "TSK-DRAG-CHILD", title: "Drag feature with configured flow" }),
     task({ status: "Designing", taskCode: "TSK-DRAG-PARENT", title: "Parent feature for child drag" }),
   ];
   await routeApi(page, requests, tasks);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
   await expect(page.getByTestId("task-kanban-card-TSK-DRAG-CHILD")).toBeVisible();
 
   const statusRequestCount = () => requests.filter((request) => request.pathname === "/api/v1/tasks/TSK-DRAG-CHILD/status").length;
   const initialCount = statusRequestCount();
-  await page.getByTestId("task-kanban-card-TSK-DRAG-CHILD").dragTo(page.getByTestId("task-kanban-dropzone-Open"));
+  await dispatchTaskDrag(page, "TSK-DRAG-CHILD", "Open");
   await expect.poll(statusRequestCount).toBe(initialCount);
 
-  await page.getByTestId("task-kanban-card-TSK-DRAG-CHILD").dragTo(page.getByTestId("task-kanban-dropzone-Red"));
-  await expect.poll(statusRequestCount).toBe(initialCount);
-  await expect(page.getByTestId("task-kanban-dropzone-Open").getByTestId("task-kanban-card-TSK-DRAG-CHILD")).toBeVisible();
-  await expect(toast(page, "Task TSK-DRAG-CHILD cannot move to Red")).toBeVisible();
+  await dispatchTaskDrag(page, "TSK-DRAG-CHILD", "Red");
+  await expect.poll(statusRequestCount).toBe(initialCount + 1);
+  await expect(page.getByTestId("task-kanban-dropzone-Red").getByTestId("task-kanban-card-TSK-DRAG-CHILD")).toBeVisible();
+  await expect(toast(page, "Task TSK-DRAG-CHILD moved")).toBeVisible();
 });
 
 test("task kanban drag restores the prior board when status update fails", async ({ page }) => {
@@ -934,10 +935,11 @@ test("task kanban drag restores the prior board when status update fails", async
   await routeApi(page, requests, tasks, { failStatusUpdatesFor: { "TSK-DRAG-FAIL": "backend rejected status move" } });
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
   await expect(page.getByTestId("task-kanban-card-TSK-DRAG-FAIL")).toBeVisible();
 
-  await page.getByTestId("task-kanban-card-TSK-DRAG-FAIL").dragTo(page.getByTestId("task-kanban-dropzone-Green"));
+  await dispatchTaskDrag(page, "TSK-DRAG-FAIL", "Green");
 
   await expect.poll(() => requests.some((request) => request.method === "POST"
     && request.pathname === "/api/v1/tasks/TSK-DRAG-FAIL/status"
@@ -959,6 +961,7 @@ test("task kanban sorts cards by priority and descending task code, including af
   await routeApi(page, requests, tasks);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
   await expect(page.getByTestId("task-kanban-card-TSK-200")).toBeVisible();
 
@@ -1008,6 +1011,7 @@ test("task detail description preview stays bounded inline and expands in fullsc
   await routeApi(page, [], tasks);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-DESC-PREVIEW`);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
 
@@ -1056,11 +1060,12 @@ test("task detail keeps legacy app codes visible and does not resend them on unr
   await routeApi(page, requests, tasks);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks/detail?taskCode=TSK-LEGACY-APP`);
   await expect(page.getByRole("heading", { name: "Task Details" })).toBeVisible();
   await expect(page.getByText("github", { exact: true })).toBeVisible();
 
-  await page.getByLabel("Task detail priority").selectOption("Low");
+  await page.getByLabel("Task detail priority").click(); await page.getByRole("option", { name: "Low", exact: true }).click();
   await expect(toast(page, /Task TSK-LEGACY-APP updates saved/)).toBeVisible();
   const priorityUpdate = requests.find((request) => request.pathname === "/api/v1/tasks/TSK-LEGACY-APP" && request.method === "PATCH" && (request.body as Partial<Task> | null)?.priority === "Low");
   expect(priorityUpdate).toBeTruthy();
@@ -1079,22 +1084,22 @@ test("task shell exposes a navigation drawer below the desktop breakpoint", asyn
   await routeApi(page, requests, tasks);
 
   await page.setViewportSize({ width: 393, height: 852 });
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
 
   const openNavigationButton = page.getByRole("button", { name: "Open navigation menu" });
   await expect(openNavigationButton).toBeVisible();
-  await expect(page.locator("#tron-mobile-sidebar")).toHaveCount(0);
+  await expect(page.getByRole("dialog", { name: "Sidebar", exact: true })).toHaveCount(0);
 
   await openNavigationButton.click();
 
-  const mobileSidebar = page.locator("#tron-mobile-sidebar");
+  const mobileSidebar = page.getByRole("dialog", { name: "Sidebar", exact: true });
   await expect(mobileSidebar).toBeVisible();
   await expect(mobileSidebar.getByRole("link", { name: "Tasks" })).toBeVisible();
-  await mobileSidebar.getByRole("button", { name: "Administration" }).click();
-  await expect(mobileSidebar.getByRole("link", { name: "Workspace" })).toBeVisible();
+  await expect(mobileSidebar.getByRole("button", { name: "Open user menu" })).toBeVisible();
 
-  await page.getByRole("button", { name: "Close navigation menu" }).click();
-  await expect(mobileSidebar).toHaveCount(0);
+  await page.keyboard.press("Escape");
+  await expect(mobileSidebar).toBeHidden();
 });
 
 test("workspace switcher refreshes from the API on every header click", async ({ page }) => {
@@ -1126,6 +1131,7 @@ test("workspace switcher refreshes from the API on every header click", async ({
     }),
   });
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
 
   const workspaceButton = page.locator("header button[aria-busy]").first();
@@ -1230,6 +1236,7 @@ test("topbar workspace selector exposes the full hierarchy and updates the selec
     }),
   });
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
 
   const workspaceTrigger = page.locator("#tron-workspace-trigger");
@@ -1328,9 +1335,10 @@ test("task board uses the exact topbar workspace without inheriting parent works
           secondarySpaces: [],
         },
       },
-      version: 3,
+      version: 9,
     }));
   });
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
 
   const workspaceTrigger = page.locator("#tron-workspace-trigger");
@@ -1353,6 +1361,7 @@ test("workspace switcher keeps a generic label when the API returns no spaces", 
     }),
   });
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
 
   const workspaceButton = page.locator("header button[aria-busy]").first();
@@ -1398,6 +1407,7 @@ test("topbar workspace selector keeps root-only spaces selectable without render
     }),
   });
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/tasks`);
 
   const workspaceTrigger = page.locator("#tron-workspace-trigger");

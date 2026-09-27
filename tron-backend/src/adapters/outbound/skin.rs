@@ -84,7 +84,7 @@ impl FileSkinStore {
                 } else {
                     Err(SkinError::Invalid)
                 }
-        });
+            });
         result.or_else(|error| {
             BUILTINS
                 .iter()
@@ -241,10 +241,7 @@ impl SkinStore for FileSkinStore {
     fn list(&self) -> Result<Vec<Skin>, SkinError> {
         let _guard = self.lock.lock().map_err(|_| SkinError::Storage)?;
         self.initialize()?;
-        let mut skins = vec![
-            self.read_skin("light")?,
-            self.read_skin("matrix-dark")?,
-        ];
+        let mut skins = vec![self.read_skin("light")?, self.read_skin("matrix-dark")?];
         for entry in fs::read_dir(&self.root)
             .map_err(|_| SkinError::Storage)?
             .flatten()
@@ -415,14 +412,30 @@ mod tests {
         let legacy_dir = temp.path().join("matrix-particles");
         fs::create_dir_all(&legacy_dir).unwrap();
         fs::write(legacy_dir.join("skin.json"), LEGACY_MATRIX_PARTICLES).unwrap();
-        fs::write(temp.path().join("active.json"), br#"{"id":"matrix-particles"}"#).unwrap();
+        fs::write(
+            temp.path().join("active.json"),
+            br#"{"id":"matrix-particles"}"#,
+        )
+        .unwrap();
         let store = FileSkinStore::new(temp.path().into());
         let skins = store.list().unwrap();
-        assert_eq!(skins.iter().filter(|skin| skin.id == "matrix-particles").count(), 0);
-        assert!(matches!(store.activate("matrix-particles"), Err(SkinError::NotFound)));
+        assert_eq!(
+            skins
+                .iter()
+                .filter(|skin| skin.id == "matrix-particles")
+                .count(),
+            0
+        );
+        assert!(matches!(
+            store.activate("matrix-particles"),
+            Err(SkinError::NotFound)
+        ));
         let reopened = FileSkinStore::new(temp.path().into());
         assert_eq!(reopened.active().unwrap().id, "matrix-particles");
-        assert!(matches!(reopened.uninstall("matrix-particles"), Err(SkinError::Protected)));
+        assert!(matches!(
+            reopened.uninstall("matrix-particles"),
+            Err(SkinError::Protected)
+        ));
         assert_eq!(reopened.activate("matrix-dark").unwrap().id, "matrix-dark");
     }
 

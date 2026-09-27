@@ -217,7 +217,10 @@ impl AgentManagementService {
         Ok(config)
     }
 
-    pub fn current_main_agent_guidance(&self, locale: &str) -> Result<Option<String>, AgentManagementError> {
+    pub fn current_main_agent_guidance(
+        &self,
+        locale: &str,
+    ) -> Result<Option<String>, AgentManagementError> {
         let config = self.get_main_agent_config()?;
         Ok(main_agent_guidance(&config, locale))
     }
@@ -286,7 +289,10 @@ fn main_agent_guidance(config: &PlatformMainAgentConfig, locale: &str) -> Option
     }
     if !config.instructions.trim().is_empty() {
         let label = if chinese { "指令" } else { "Instructions" };
-        sections.push(format!("{label}{separator}\n{}", config.instructions.trim()));
+        sections.push(format!(
+            "{label}{separator}\n{}",
+            config.instructions.trim()
+        ));
     }
     if sections.is_empty() {
         return None;

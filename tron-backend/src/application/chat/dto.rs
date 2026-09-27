@@ -40,7 +40,7 @@ pub struct UpdateChatSessionCommand {
     pub title: Option<String>,
 }
 
-#[derive(Debug, Clone, Deserialize)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ChatResumeEntry {
     pub interrupt_id: String,

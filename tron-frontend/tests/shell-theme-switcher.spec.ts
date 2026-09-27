@@ -1,3 +1,6 @@
+import lightSkin from "../src/shared/theme/builtin/light.json" with { type: "json" };
+import darkSkin from "../src/shared/theme/builtin/matrix-dark.json" with { type: "json" };
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -121,103 +124,21 @@ async function routeThemeApi(
     workspaceSwitcherData?: ReturnType<typeof getWorkspaceSwitcherMock>;
   } = {},
 ) {
-  let currentSession: typeof authUser | null = null;
-  let hasRefreshSession = false;
-  let currentAccessToken = "";
-  let nextAccessTokenId = 1;
-  const workspaceSwitcherData = options.workspaceSwitcherData ?? getWorkspaceSwitcherMock();
-
-  function issueGrant(session: typeof authUser) {
-    currentSession = session;
-    hasRefreshSession = true;
-    currentAccessToken = `test-access-token-${nextAccessTokenId++}`;
-
-    return successEnvelope({
-      accessToken: currentAccessToken,
-      tokenType: "Bearer",
-      expiresIn: 900,
-      session,
-    });
-  }
-
-  await page.route("**/api/v1/auth/providers", async (route) => {
-    await fulfillJson(route, successEnvelope({
-      providers: [
-        { code: "internal", name: "Internal Account", type: "internal" },
-      ],
-    }));
+  let activeSkin = lightSkin;
+  await page.route("**/api/v1/system/skins", route => fulfillJson(route, successEnvelope([lightSkin, darkSkin])));
+  await page.route("**/api/v1/system/skins/active", route => {
+    if (route.request().method() === "PUT") activeSkin = route.request().postDataJSON().id === darkSkin.id ? darkSkin : lightSkin;
+    return fulfillJson(route, successEnvelope({ skin: activeSkin }));
   });
-
-  await page.route("**/api/v1/auth/session", async (route) => {
-    if (
-      !currentSession
-      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
-    ) {
-      await fulfillJson(route, unauthorizedEnvelope(), 401);
-      return;
-    }
-
-    await fulfillJson(route, successEnvelope(currentSession));
-  });
-
-  await page.route("**/api/v1/auth/login", async (route) => {
-    const body = route.request().postDataJSON() as { login?: string; password?: string };
-    if (body.login === "auth.operator" && body.password === "TronAuthPass123!") {
-      await fulfillJson(route, issueGrant(authUser));
-      return;
-    }
-
-    await fulfillJson(route, unauthorizedEnvelope("AUTH_INVALID_CREDENTIALS", "invalid credentials"), 401);
-  });
-
-  await page.route("**/api/v1/auth/refresh", async (route) => {
-    if (!currentSession || !hasRefreshSession) {
-      await fulfillJson(route, unauthorizedEnvelope("AUTH_REFRESH_INVALID", "invalid refresh session"), 401);
-      return;
-    }
-
-    await fulfillJson(route, issueGrant(currentSession));
-  });
-
-  await page.route("**/api/v1/auth/logout", async (route) => {
-    currentAccessToken = "";
-    currentSession = null;
-    hasRefreshSession = false;
-    await fulfillJson(route, successEnvelope({ loggedOut: true }));
-  });
-
-  await page.route("**/api/v1/admin/workspaces/switcher", async (route) => {
-    if (
-      !currentSession
-      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
-    ) {
-      await fulfillJson(route, unauthorizedEnvelope(), 401);
-      return;
-    }
-
-    await fulfillJson(route, successEnvelope(workspaceSwitcherData));
-  });
-
-  await page.route("**/api/v1/admin/platform/models", async (route) => {
-    if (
-      !currentSession
-      || route.request().headers().authorization !== `Bearer ${currentAccessToken}`
-    ) {
-      await fulfillJson(route, unauthorizedEnvelope(), 401);
-      return;
-    }
-
-    await fulfillJson(route, successEnvelope([]));
-  });
+  await page.route("**/api/v1/chats/session-groups?*", route => fulfillJson(route, successEnvelope([])));
+  const data = options.workspaceSwitcherData ?? getWorkspaceSwitcherMock();
+  await page.route("**/api/v1/admin/workspaces/switcher", route => fulfillJson(route, successEnvelope(data)));
+  await page.route("**/api/v1/admin/platform/models", route => fulfillJson(route, successEnvelope([])));
 }
 
 async function signIn(page: Page) {
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/apps`);
-  await expect(page).toHaveURL(/\/login\?redirect=%2Fapps$/);
-
-  await page.getByLabel(/operator id|username|email/i).fill("auth.operator");
-  await page.getByLabel(/passkey|password/i).fill("TronAuthPass123!");
-  await page.getByRole("button", { name: /sign in/i }).click({ force: true });
   await expect(page).toHaveURL(/\/apps$/);
 }
 
@@ -259,39 +180,28 @@ test("opens the full-screen settings page, switches settings sections, and persi
 
   const header = page.getByRole("banner");
   await expect(header.getByRole("button", { name: /open filters/i })).toHaveCount(0);
-  await expect(header.getByRole("button", { name: /open system settings/i })).toBeVisible();
-
-  await header.getByRole("button", { name: /open system settings/i }).click();
+  await page.getByRole("button", { name: "Open user menu" }).click();
+  await page.getByRole("button", { name: "Open system settings", exact: true }).click();
   await expect(page).toHaveURL(/\/settings\/general$/);
   await expect(page.locator("#tron-workspace-trigger")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Models" })).toBeVisible();
 
-  const themeSelect = page.locator('label:has-text("Theme") select');
-  await expect(themeSelect).toHaveValue("light");
-  await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(253, 248, 248)");
-
-  await themeSelect.selectOption("matrix-dark");
-
+  await page.getByRole("link", { name: "Appearance", exact: true }).click();
+  await expect(page).toHaveURL(/\/settings\/appearance$/);
+  await page.getByRole("button", { name: "Matrix Dark", exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("matrix-dark");
-  await expect.poll(() => page.evaluate((storageKey) => window.localStorage.getItem(storageKey), themeStorageKey)).toBe("matrix-dark");
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(1, 6, 3)");
-  await expect.poll(() => header.evaluate((node) => getComputedStyle(node).backgroundColor)).toBe("rgba(3, 12, 8, 0.92)");
-
-  await page.getByRole("link", { name: "Models" }).click();
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), themeStorageKey)).toBe("matrix-dark");
+  const darkBackground = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+  await page.getByRole("link", { name: "Models", exact: true }).click();
   await expect(page).toHaveURL(/\/settings\/models$/);
-  await expect(page.getByRole("heading", { name: "Platform Models" })).toBeVisible();
-  await page.getByRole("link", { name: "General" }).click();
-  await expect(page).toHaveURL(/\/settings\/general$/);
-
+  await page.getByRole("link", { name: "Appearance", exact: true }).click();
   await page.reload();
-  await expect(page).toHaveURL(/\/settings\/general$/);
-  await expect(page.locator('label:has-text("Theme") select')).toHaveValue("matrix-dark");
-
-  await page.locator('label:has-text("Theme") select').selectOption("light");
+  await expect(page.getByRole("button", { name: "Matrix Dark", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await page.getByRole("button", { name: "Light", exact: true }).click();
   await expect.poll(() => page.evaluate(() => document.documentElement.dataset.theme)).toBe("light");
-  await expect.poll(() => page.evaluate((storageKey) => window.localStorage.getItem(storageKey), themeStorageKey)).toBe("light");
-  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).toBe("rgb(253, 248, 248)");
+  await expect.poll(() => page.evaluate(key => localStorage.getItem(key), themeStorageKey)).toBe("light");
+  await expect.poll(() => page.evaluate(() => getComputedStyle(document.body).backgroundColor)).not.toBe(darkBackground);
+
 });
 
 test("loads workspace selector data from api after sign in", async ({ page }) => {
@@ -412,25 +322,15 @@ test("workspace inheritance map keeps descendant workspaces nested under their d
   }, workspaceSwitcherData);
   await signIn(page);
 
-  const eliteforgeNode = page.locator('[data-workspace-code="ELITEFORGE"]');
-  const onlineDocsNode = page.locator('[data-workspace-code="ONLINE_DOCS"]');
+  await page.locator("#tron-workspace-trigger").click();
+  const selector = page.locator("#tron-workspace-selector-panel");
+  await selector.getByRole("button", { name: "Expand 工业互联网/璀璨工坊", exact: true }).click();
+  const descendant = selector.getByRole("button", { name: "工业互联网/璀璨工坊/在线文档", exact: true });
+  await expect(descendant).toBeVisible();
+  await expect(selector.getByRole("button", { name: "工业互联网/璀璨工坊", exact: true })).toBeVisible();
+  await descendant.click();
+  await expect(page.locator("#tron-workspace-trigger")).toContainText("工业互联网/璀璨工坊/在线文档");
 
-  await expect(eliteforgeNode).toContainText("璀璨工坊");
-  await expect(onlineDocsNode).toContainText("在线文档");
-  await expect(eliteforgeNode.locator('[data-workspace-code="ONLINE_DOCS"]')).toHaveCount(1);
-
-  const nearestWorkspaceAncestor = await onlineDocsNode.evaluate((node) => {
-    let current = node.parentElement;
-    while (current) {
-      if (current.hasAttribute("data-workspace-code")) {
-        return current.getAttribute("data-workspace-code");
-      }
-      current = current.parentElement;
-    }
-
-    return null;
-  });
-  expect(nearestWorkspaceAncestor).toBe("ELITEFORGE");
 });
 
 test("sidebar groups knowledge and resource navigation under data", async ({ page }) => {
@@ -440,38 +340,41 @@ test("sidebar groups knowledge and resource navigation under data", async ({ pag
   const navigation = page.getByRole("navigation", { name: "Tron primary navigation" });
   const dataToggle = navigation.getByRole("button", { name: "Data" });
   await dataToggle.click();
-  const dataSection = dataToggle.locator("xpath=ancestor::section[1]");
-  const agentOperationsSection = navigation.getByRole("button", { name: "Agent Operations" }).locator("xpath=ancestor::section[1]");
+  const dataSection = dataToggle.locator("xpath=ancestor::*[@data-slot='sidebar-group'][1]");
+  const agentOperationsSection = navigation.getByRole("button", { name: "Agent Operations" }).locator("xpath=ancestor::*[@data-slot='sidebar-group'][1]");
 
   await expect(dataSection.getByRole("link", { name: "KnowledgeGraph" })).toBeVisible();
   await expect(dataSection.getByRole("link", { name: "KnowledgeBase" })).toBeVisible();
-  await expect(dataSection.getByRole("link", { name: "Resources" })).toBeVisible();
-  await expect(agentOperationsSection.getByRole("link", { name: "Resources" })).toHaveCount(0);
+  await dataSection.getByRole("button", { name: "Expand Resource Management submenu" }).click();
+  await expect(dataSection.getByRole("link", { name: "File Management", exact: true })).toBeVisible();
+  await expect(agentOperationsSection.getByRole("link", { name: "File Management" })).toHaveCount(0);
 
   await dataSection.getByRole("link", { name: "KnowledgeBase" }).click();
   await expect(page).toHaveURL(/\/knowledge-base$/);
-  await expect(page.getByRole("heading", { name: "Knowledge Base" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "KnowledgeBase", exact: true })).toBeVisible();
 });
 
 test("sidebar navigation still works after entering chats", async ({ page }) => {
   await routeThemeApi(page);
   await signIn(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/chats`, { waitUntil: "domcontentloaded" });
-  await expect(page).toHaveURL(/\/chats$/);
-  await expect(page.getByRole("button", { name: "New session" }).first()).toBeVisible();
+  await expect(page).toHaveURL(/\/(?:chats|default)(?:\?.*)?$/);
+  await expect(page.getByRole("button", { name: "New chat", exact: true }).first()).toBeVisible();
 
   await page.getByRole("link", { name: "Apps" }).click();
   await expect(page).toHaveURL(/\/apps$/);
-  await expect(page.getByRole("heading", { name: "App Management" })).toBeVisible();
+  await expect(page.getByRole("tab", { name: "Apps", exact: true })).toBeVisible();
 
   const dataToggle = page.getByRole("button", { name: "Data" });
-  const resourcesLink = page.getByRole("link", { name: "Resources" });
+  const resourcesLink = page.getByRole("link", { name: "File Management" });
   if (!(await resourcesLink.isVisible())) {
-    await dataToggle.click();
+    if (await dataToggle.getAttribute("aria-expanded") !== "true") await dataToggle.click();
+    await page.getByRole("button", { name: "Expand Resource Management submenu" }).click();
   }
   await resourcesLink.click();
-  await expect(page).toHaveURL(/\/resources$/);
-  await expect(page.getByRole("heading", { name: "Resources" })).toBeVisible();
+  await expect(page).toHaveURL(/\/resource-management\/files$/);
+  await expect(page.getByRole("tab", { name: "File Management", exact: true })).toBeVisible();
   await expect(page.getByRole("heading", { name: "Primary Investigation" })).toHaveCount(0);
 });

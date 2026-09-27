@@ -62,7 +62,9 @@ async fn server_auth_events(State(state): State<AppState>) -> Response {
 
 async fn active_profile_token(State(state): State<AppState>) -> Response {
     match state.model_providers.get_person_ai_access_token().await {
-        Ok(token) => Json(ApiResponse::success(serde_json::json!({ "token": token }))).into_response(),
+        Ok(token) => {
+            Json(ApiResponse::success(serde_json::json!({ "token": token }))).into_response()
+        }
         Err(_) => generic_profile_error(
             StatusCode::UNAUTHORIZED,
             "PERSONAI_PROFILE_AUTH_REQUIRED",

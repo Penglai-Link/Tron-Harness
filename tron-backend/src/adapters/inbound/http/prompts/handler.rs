@@ -9,10 +9,10 @@ use crate::application::prompt::PromptService;
 use super::{
     error_mapper::prompt_error_response,
     request::{
-        AnalyzeTemplateRequest, PromptJson, TranslateDraftRequest, WorkspaceCreateRequest, WorkspaceDeleteRequest,
-        WorkspaceDetailRequest, WorkspaceDuplicateRequest, WorkspaceExportRequest,
-        WorkspacePageRequest, WorkspaceRevertRequest, WorkspaceSetAllowInheritanceRequest,
-        WorkspaceSetEnabledRequest, WorkspaceUpdateRequest,
+        AnalyzeTemplateRequest, PromptJson, TranslateDraftRequest, WorkspaceCreateRequest,
+        WorkspaceDeleteRequest, WorkspaceDetailRequest, WorkspaceDuplicateRequest,
+        WorkspaceExportRequest, WorkspacePageRequest, WorkspaceRevertRequest,
+        WorkspaceSetAllowInheritanceRequest, WorkspaceSetEnabledRequest, WorkspaceUpdateRequest,
     },
     response::PromptApiResponse,
 };
@@ -108,15 +108,19 @@ pub async fn translate_draft(
     State(prompts): State<PromptService>,
     PromptJson(request): PromptJson<TranslateDraftRequest>,
 ) -> Response {
-    prompt_response(prompts.translate_prompt_draft(
-        request.prompt_code.as_deref(),
-        request.workspace_code.as_deref(),
-        &request.source_locale,
-        &request.target_locale,
-        &request.display_name,
-        &request.prompt_body,
-        request.description.as_deref(),
-    ).await)
+    prompt_response(
+        prompts
+            .translate_prompt_draft(
+                request.prompt_code.as_deref(),
+                request.workspace_code.as_deref(),
+                &request.source_locale,
+                &request.target_locale,
+                &request.display_name,
+                &request.prompt_body,
+                request.description.as_deref(),
+            )
+            .await,
+    )
 }
 
 pub async fn workspace_export(

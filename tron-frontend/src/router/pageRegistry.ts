@@ -279,6 +279,12 @@ export const routePages: Record<string, RoutePageComponent> = {
       default: module.SettingsAppearancePage,
     })),
   ),
+  "settings.capabilityPacks": lazy(() =>
+    import("@/domain/settings/pages/CapabilityPacksPage").then((module) => ({ default: module.CapabilityPacksPage })),
+  ),
+  "settings.capabilityConfiguration": lazy(() =>
+    import("@/domain/settings/pages/CapabilityConfigurationPage").then((module) => ({ default: module.CapabilityConfigurationPage })),
+  ),
   "settings.general": lazy(() =>
     import("@/domain/settings/pages/SettingsGeneralPage").then((module) => ({
       default: module.SettingsGeneralPage,

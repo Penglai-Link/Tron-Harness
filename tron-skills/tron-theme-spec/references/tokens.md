@@ -63,6 +63,29 @@
 
 组件可通过已有 className/style 明确覆盖公共样式，所以这些变量不承诺控制所有手写原生 button 或业务专属布局。开发新页面时应使用公共组件。
 
+## 能力包管理页
+
+能力包和能力配置页面提供以下稳定 `data-theme-part` 选择器，可在版本 2 的包内 CSS 中按页面、能力卡片、扩展实现、提供方、状态或包 ID 定制。页面默认消费的局部变量可在 `colors` 或 `layout` 中设置：
+
+- `--tron-capability-effective-fg`：已生效状态文字，默认跟随成功色。
+- `--tron-capability-inactive-fg`：未生效状态文字，默认跟随次要文字色。
+- `--tron-capability-id-fg`：能力包 ID 文字，默认跟随次要文字色。
+- `--tron-capability-provider-fg`：扩展实现提供方文字，默认跟随次要文字色。
+
+页面选择器：`capability-packs-page`、`capability-configuration-page`；子部件：`capability-pack-card`、`capability-pack-id`、`capability-extension-tabs`、`capability-implementation`、`capability-provider`、`capability-status-effective`、`capability-status-inactive`。例如：
+
+```css
+[data-theme-part="capability-pack-card"] {
+  border-color: var(--color-accent);
+}
+
+[data-theme-part="capability-status-effective"] {
+  background: var(--color-success-container);
+}
+```
+
+这些页面仍沿用 `--color-*` 语义色、`--tron-card-*` 卡片变量和按钮/标签公共组件变量；新增页面部件变量只用于局部语义文字色。
+
 ## Markdown、代码、图谱、终端
 
 - Markdown 表面、正文、边框、链接、状态色默认跟随全局语义色；局部覆盖使用 `--tron-markdown-*`（如 `--tron-markdown-fg-color-accent`）。原 GitHub `--fgColor-*` 在子元素声明，不能直接通过包覆盖。

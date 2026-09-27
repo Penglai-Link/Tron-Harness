@@ -178,12 +178,9 @@ impl SqliteExtensionContext {
     }
 
     fn extract_simple_dict(&self) -> Result<PathBuf, rusqlite::Error> {
-        let source_root = native_resource_root(
-            "sqlite-simple",
-            SQLITE_SIMPLE_VERSION,
-            SIMPLE_RESOURCE_ROOT,
-        )
-        .join("dict");
+        let source_root =
+            native_resource_root("sqlite-simple", SQLITE_SIMPLE_VERSION, SIMPLE_RESOURCE_ROOT)
+                .join("dict");
         let target_root = self.runtime_root.join(SQLITE_SIMPLE_VERSION).join("dict");
         copy_dir_once(&source_root, &target_root)?;
         Ok(target_root)
@@ -219,7 +216,7 @@ impl AbsolutePath for PathBuf {
 fn load_extension(connection: &Connection, path: &Path) -> Result<(), rusqlite::Error> {
     unsafe {
         let _guard = LoadExtensionGuard::new(connection)?;
-        connection.load_extension(path, None)
+        connection.load_extension(path, None::<&str>)
     }
 }
 

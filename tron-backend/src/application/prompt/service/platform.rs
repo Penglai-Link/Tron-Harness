@@ -111,14 +111,14 @@ impl PromptService {
                 variables: source
                     .variables
                     .into_iter()
-                        .map(|variable| PromptVariableSpecCommand {
-                            name: variable.name,
-                            variable_type: variable.variable_type,
-                            description: variable.description,
-                            source_kind: variable.source_kind,
-                            managed_variable_key: variable.managed_variable_key,
-                            runtime_provider: variable.runtime_provider,
-                        })
+                    .map(|variable| PromptVariableSpecCommand {
+                        name: variable.name,
+                        variable_type: variable.variable_type,
+                        description: variable.description,
+                        source_kind: variable.source_kind,
+                        managed_variable_key: variable.managed_variable_key,
+                        runtime_provider: variable.runtime_provider,
+                    })
                     .collect(),
             },
             allow_inheritance: None,

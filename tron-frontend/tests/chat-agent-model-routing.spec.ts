@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import { createServer } from "node:net";
 import { resolve } from "node:path";
@@ -92,7 +93,7 @@ async function expectMainComposerFocused(page: Page) {
 }
 
 async function selectTaskSessions(page: Page) {
-  await page.getByRole("tab", { name: "Task sessions" }).click();
+  await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-8842`);
   await expect(page.getByText("Primary investigation", { exact: true }).first()).toBeVisible();
 }
 
@@ -199,6 +200,18 @@ async function signIn(page: Page, targetPath: string, expectedPath = targetPath)
   await expect(page).toHaveURL(expectedUrlPattern);
 }
 
+test.beforeEach(async ({ page }) => {
+  await routeActiveProfileApi(page);
+  await page.addInitScript(() => window.localStorage.setItem("tron.locale", "en-US"));
+});
+
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) {
+    await page.screenshot({ path: info.outputPath("failure.png"), fullPage: true });
+    console.log("UI SNAPSHOT", await page.locator("body").innerText());
+  }
+});
+
 test.beforeAll(async () => {
   const port = await reservePort();
   frontendBaseUrl = `http://127.0.0.1:${port}`;
@@ -263,18 +276,18 @@ test("chat agent and model selectors are linked and agent locks after first turn
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, getWorkspaceSwitcherMock());
 
-  await page.goto(`${frontendBaseUrl}/chats`);
-  await expect(page).toHaveURL(/\/chats$/);
-  await selectTaskSessions(page);
+  await routeActiveProfileApi(page);
+  await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
+  await expect(page).toHaveURL(/sessionCode=SESSION-REFACTOR$/);
 
-  await page.locator("[aria-label='New session']").first().click();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
 
-  const agentSelector = page.getByLabel("Select chat agent");
-  const modelSelector = page.getByLabel("Select chat model");
+  const agentSelector = page.getByRole("button", { name: "Select chat agent", exact: true });
+  const modelSelector = page.getByRole("button", { name: "Select chat model", exact: true });
   await expect(agentSelector).toBeEnabled();
   await expect(modelSelector).toBeEnabled();
 
@@ -285,26 +298,25 @@ test("chat agent and model selectors are linked and agent locks after first turn
   expect((agentBox?.x ?? 0)).toBeLessThan(modelBox?.x ?? 0);
 
   await modelSelector.click();
-  const mainModelList = page.getByRole("listbox", { name: "Chat models" });
+  const mainModelList = page.getByRole("menu");
   await expect(mainModelList.getByText("GPT-4o Main")).toBeVisible();
   const modelSearch = page.getByLabel("Search chat models");
   await modelSearch.type("GPT-4o Main");
   await expect(modelSearch).toHaveValue("GPT-4o Main");
-  await expect(
-    page.getByRole("menuitemradio", { name: "GPT-4o Main", exact: true }),
-  ).toHaveAttribute("aria-checked", "true");
+  await page.getByRole("menuitemradio", { name: "GPT-4o Main", exact: true }).click();
+  await expect(modelSelector).toContainText("GPT-4o Main");
 
   await agentSelector.click();
-  const agentList = page.getByRole("listbox", { name: "Chat agents" });
-  await agentList.getByRole("option", { name: /Codex/i }).click();
+  const agentList = page.getByRole("menu");
+  await agentList.getByRole("menuitem", { name: /Codex/i }).click();
 
   await modelSelector.click();
-  const systemModelList = page.getByRole("listbox", { name: "Chat models" });
-  await expect(systemModelList.getByRole("option", { name: "GPT-5 Codex", exact: true })).toBeVisible();
+  const systemModelList = page.getByRole("menu");
+  await expect(systemModelList.getByRole("menuitemradio", { name: "GPT-5 Codex", exact: true })).toBeVisible();
   await expect(systemModelList.getByText("GPT-4o Main")).toHaveCount(0);
-  await systemModelList.getByRole("option", { name: /GPT-5 Codex/ }).first().click();
+  await systemModelList.getByRole("menuitemradio", { name: /GPT-5 Codex/ }).first().click();
 
-  const composer = page.locator("main").getByPlaceholder("Enter to send, Shift+Enter for newline");
+  const composer = page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline", exact: true });
   await composer.fill("lock agent after first turn");
   await composer.press("Enter");
 
@@ -316,8 +328,8 @@ test("chat agent and model selectors are linked and agent locks after first turn
 
   await modelSelector.click();
   await expect(
-    page.getByRole("listbox", { name: "Chat models" })
-      .getByRole("option", { name: "GPT-5 Codex", exact: true }),
+    page.getByRole("menu")
+      .getByRole("menuitemradio", { name: "GPT-5 Codex", exact: true }),
   ).toBeVisible();
 });
 
@@ -348,21 +360,17 @@ test("new sessions always start on main agent after browsing a system agent sess
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, getWorkspaceSwitcherMock());
 
-  await page.goto(`${frontendBaseUrl}/chats`);
-  await expect(page).toHaveURL(/\/chats$/);
-  await selectTaskSessions(page);
+  await routeActiveProfileApi(page);
+  await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
+  await expect(page.getByRole("button", { name: "Select chat model", exact: true })).toContainText("GPT-5 Codex");
 
-  await page.getByText("Refactor discussion", { exact: true }).first().click();
-  const sessionHeader = page.locator("main > header");
-  await expect(sessionHeader.getByText("CODEX", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
 
-  await page.locator("[aria-label='New session']").first().click();
-
-  await expect(sessionHeader.getByText("MAIN", { exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "Select chat agent", exact: true })).toContainText("Main");
 });
 
 test("composer autofocuses when opening or creating a session on desktop", async ({ page }) => {
@@ -392,7 +400,7 @@ test("composer autofocuses when opening or creating a session on desktop", async
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, getWorkspaceSwitcherMock());
 
@@ -402,10 +410,10 @@ test("composer autofocuses when opening or creating a session on desktop", async
 
   await expectMainComposerFocused(page);
 
-  await page.getByText("Refactor discussion", { exact: true }).first().click();
+  await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
   await expectMainComposerFocused(page);
 
-  await page.locator("[aria-label='New session']").first().click();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
   await expectMainComposerFocused(page);
 });
 
@@ -436,22 +444,17 @@ test("system agent sessions show history snapshot in context sidebar", async ({ 
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, getWorkspaceSwitcherMock());
 
-  await page.goto(`${frontendBaseUrl}/chats`);
-  await expect(page).toHaveURL(/\/chats$/);
-  await selectTaskSessions(page);
-
-  await page.getByText("Refactor discussion", { exact: true }).first().click();
+  await routeActiveProfileApi(page);
+  await page.goto(`${frontendBaseUrl}/chats?sessionCode=SESSION-REFACTOR`);
   const openRightSidebarButton = page.getByRole("button", { name: "Open right sidebar" });
-  if ((await openRightSidebarButton.count()) > 0) {
-    await openRightSidebarButton.first().click();
-  }
+  await expect(page.getByRole("button", { name: "Select chat model", exact: true })).toContainText("GPT-5 Codex");
+  await openRightSidebarButton.click();
   const rightSidebar = page.getByTestId("tron-right-sidebar");
-  await rightSidebar.getByRole("tab", { name: "Context" }).click();
-  await expect(rightSidebar.getByText("Short-Term Memory Overview")).toBeVisible();
-  await expect(rightSidebar.getByText("Context Structure")).toBeVisible();
+  await rightSidebar.getByRole("tab", { name: "Short-term memory", exact: true }).click();
+  await expect(rightSidebar.getByText("Session Total", { exact: true })).toBeVisible();
   await expect(rightSidebar.getByText("Current Session History")).toBeVisible();
 });

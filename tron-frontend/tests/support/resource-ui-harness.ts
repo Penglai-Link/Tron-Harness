@@ -85,10 +85,34 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
   });
 }
 
+/** Current desktop profile bootstrap, independent of a suite's product/API fixtures. */
+export async function routeActiveProfileApi(page: Page) {
+  await page.route(/\/api\/v1\/(?:bootstrap\/status|profiles(?:\/active\/token|\/events)?)(?:\?.*)?$/, async (route) => {
+    const pathname = new URL(route.request().url()).pathname;
+    // Profile-based authentication replaced the legacy auth/session bootstrap.
+    const activeProfile = {
+      profileId: "PROFILE-RESOURCE", personAiUserId: authenticatedSession.user.userCode,
+      personAiUsername: authenticatedSession.user.displayName, status: "ACTIVE",
+      createdAt: "2026-09-27T00:00:00Z", lastActivatedAt: null, avatarUrl: null,
+    };
+    if (pathname === "/api/v1/bootstrap/status") {
+      return fulfillJson(route, successEnvelope({
+        hasProfiles: true, activeProfileId: activeProfile.profileId, activeProfile,
+        avatarUrl: null, account: null,
+      }));
+    }
+    if (pathname === "/api/v1/profiles") return fulfillJson(route, successEnvelope([activeProfile]));
+    if (pathname === "/api/v1/profiles/active/token") return fulfillJson(route, successEnvelope({ token: "resource-ui-token" }));
+    if (pathname === "/api/v1/profiles/events") return route.fulfill({ status: 204 });
+
+  });
+}
+
 export async function routeResourceUiShellApi(page: Page) {
   await page.route("**/api/v1/**", async (route) => {
     const request = route.request();
     const pathname = new URL(request.url()).pathname;
+
 
     if (pathname === "/api/v1/auth/session" && request.method() === "GET") {
       return fulfillJson(route, successEnvelope(authenticatedSession));
@@ -111,6 +135,7 @@ export async function routeResourceUiShellApi(page: Page) {
       message: `${request.method()} ${pathname} is not mocked`,
     }, 404);
   });
+  await routeActiveProfileApi(page);
 }
 
 export async function seedResourceUiShell(page: Page, locale: "en-US" | "zh-CN" = "en-US") {
@@ -124,7 +149,7 @@ export async function seedResourceUiShell(page: Page, locale: "en-US" | "zh-CN" 
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: switcher,
       },
-      version: 4,
+      version: 9,
     }));
   }, { selectedLocale: locale, switcher: resourceWorkspaceSwitcher });
 }

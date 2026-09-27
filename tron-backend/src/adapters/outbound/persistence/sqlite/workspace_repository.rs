@@ -5,8 +5,8 @@ use rusqlite::{Connection, params};
 use crate::{
     application::workspace::WorkspaceRepository,
     domain::workspace::{
-        Workspace, WorkspaceError, WorkspaceStatus,
-        workspace_status_from_storage, workspace_status_to_storage,
+        Workspace, WorkspaceError, WorkspaceStatus, workspace_status_from_storage,
+        workspace_status_to_storage,
     },
     shared::{
         id::SnowflakeId,
@@ -81,11 +81,9 @@ impl WorkspaceRepository for SqliteWorkspaceRepository {
     fn next_id(&mut self) -> Result<i64, WorkspaceError> {
         let max_id: i64 = self
             .connection
-            .query_row(
-                "SELECT max(id) FROM workspaces",
-                [],
-                |row| row.get::<_, Option<i64>>(0),
-            )
+            .query_row("SELECT max(id) FROM workspaces", [], |row| {
+                row.get::<_, Option<i64>>(0)
+            })
             .map_err(storage_error)?
             .unwrap_or(734_400_000_000_000_000);
         Ok(max_id + 1)

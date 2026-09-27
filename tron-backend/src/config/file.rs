@@ -7,10 +7,9 @@ use std::{
 };
 
 use super::{
-    AppConfig, ConfigError, HttpClientProfileConfig, HttpClientProfilesConfig,
-    SystemAgentConfig, mineru::MineruFileConfig,
-    paths::default_application_config_path_from_home, paths::normalize_storage_path,
-    resource::ResourceFileConfig, variable_crypto,
+    AppConfig, ConfigError, HttpClientProfileConfig, HttpClientProfilesConfig, SystemAgentConfig,
+    mineru::MineruFileConfig, paths::default_application_config_path_from_home,
+    paths::normalize_storage_path, resource::ResourceFileConfig, variable_crypto,
 };
 
 #[path = "file_event_bus.rs"]
@@ -125,10 +124,11 @@ impl AppConfig {
         let mut key = [0_u8; 16];
         rand::rng().fill_bytes(&mut key);
         let key_base64 = BASE64.encode(key);
-        let content = fs::read_to_string(path).map_err(|source| ConfigError::ConfigFileReadFailed {
-            path: path.display().to_string(),
-            source,
-        })?;
+        let content =
+            fs::read_to_string(path).map_err(|source| ConfigError::ConfigFileReadFailed {
+                path: path.display().to_string(),
+                source,
+            })?;
         let next_content = if content
             .lines()
             .any(|line| line.trim_start().starts_with("keyBase64:"))

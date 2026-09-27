@@ -6,17 +6,13 @@ use axum::{
 };
 
 use crate::{
-    adapters::inbound::http::auth::RequestAuthContext,
-    application::workspace::WorkspaceService,
-    domain::workspace::WorkspaceListQuery,
-    response::ApiResponse,
+    adapters::inbound::http::auth::RequestAuthContext, application::workspace::WorkspaceService,
+    domain::workspace::WorkspaceListQuery, response::ApiResponse,
 };
 
 use super::{
     error_mapper::workspace_error_response,
-    request::{
-        CreateWorkspaceRequest, MoveWorkspaceRequest, UpdateWorkspaceRequest,
-    },
+    request::{CreateWorkspaceRequest, MoveWorkspaceRequest, UpdateWorkspaceRequest},
 };
 
 pub async fn list_workspaces(

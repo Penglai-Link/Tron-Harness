@@ -220,6 +220,7 @@ async fn main_agent_default_all_platform_tools_injects_memory_tools() {
     let app = app();
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
+    common::enable_direct_list(&app).await;
 
     let response = request_with_headers(
         &app,
@@ -1553,7 +1554,7 @@ fn parse_memory_observation_message(
         }
         let output = message["content"].as_str()?;
         let output = serde_json::from_str(output).unwrap_or_else(|error| {
-            panic!("{tool_name} observation should be valid JSON: {error}")
+            panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
         });
         return Some(ParsedObservation {
             tool_name: tool_name.to_string(),
@@ -1571,8 +1572,9 @@ fn parse_memory_observation(content: &str) -> Option<ParsedObservation> {
     if !tool_name.starts_with("memory_") {
         return None;
     }
-    let output = serde_json::from_str(output)
-        .unwrap_or_else(|error| panic!("{tool_name} observation should be valid JSON: {error}"));
+    let output = serde_json::from_str(output).unwrap_or_else(|error| {
+        panic!("{tool_name} observation should be valid JSON: {error}; output={output}")
+    });
     Some(ParsedObservation {
         tool_name: tool_name.to_string(),
         output,

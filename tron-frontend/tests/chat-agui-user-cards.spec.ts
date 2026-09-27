@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -196,12 +197,24 @@ async function signIn(page: Page, targetPath: string, expectedPath = targetPath)
 }
 
 async function chooseSelectOption(page: Page, label: string, optionName: string) {
-  const control = page.getByRole("combobox", { name: label });
+  const control = page.getByRole("button", { name: label, exact: true });
   await control.click();
   await expect(control).toHaveAttribute("aria-expanded", "true");
-  await page.getByRole("option", { name: optionName, exact: true }).click();
+  await page.getByRole("menuitem", { name: optionName, exact: true }).click();
   await expect(control).toHaveAttribute("aria-expanded", "false");
 }
+
+test.beforeEach(async ({ page }) => {
+  await routeActiveProfileApi(page);
+  await page.addInitScript(() => window.localStorage.setItem("tron.locale", "en-US"));
+});
+
+test.afterEach(async ({ page }, info) => {
+  if (info.status !== info.expectedStatus) {
+    await page.screenshot({ path: info.outputPath("failure.png"), fullPage: true });
+    console.log("UI SNAPSHOT", await page.locator("body").innerText());
+  }
+});
 
 test.beforeAll(async () => {
   const port = await reservePort();
@@ -251,7 +264,7 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, 
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, getWorkspaceSwitcherMock());
   await signIn(page, "/chats");
@@ -266,18 +279,20 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, 
   if (await expandPlatform.count()) await expandPlatform.click();
   await workspaceSelector.getByRole("button", { name: /Tron Core/ }).click();
   await expect(workspaceTrigger).toContainText("Enterprise/Platform/Tron Core");
-  await page.getByRole("button", { name: "New session" }).first().click();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("button", { name: "Select chat model", exact: true }).click();
+  await page.getByRole("menuitemradio", { name: "GPT-4o Main", exact: true }).click();
   await chooseSelectOption(page, "Reasoning effort", "High");
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show grouped agui cards");
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
-  const streamingRunWork = page.getByLabel("AG-UI run work");
+  await page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline" }).fill("show grouped agui cards");
+  await page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline" }).press("Enter");
+  const streamingRunWork = page.getByLabel("Agent work", { exact: true });
   const streamingRunSummary = streamingRunWork.getByRole("button", { name: /Worked for/ });
   await expect(streamingRunSummary).toBeVisible();
   await expect(streamingRunSummary).toHaveAttribute("aria-expanded", "false");
   await expect(page.getByLabel("Agent work rail")).toHaveCount(0);
 
   const transcript = page.getByLabel("Chat transcript");
-  const userMessageBubble = transcript.locator("article").first();
+  const userMessageBubble = transcript.locator(".ef-chat__message-entry").first();
   await expect(userMessageBubble).toBeVisible();
   await expect(userMessageBubble).toContainText("show grouped agui cards");
   await expect(userMessageBubble.getByRole("button", { name: "Copy raw markdown" })).toBeVisible();
@@ -285,15 +300,15 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, 
   await userMessageBubble.getByRole("button", { name: "Copy raw markdown" }).click();
   await expect.poll(() => page.evaluate(() => navigator.clipboard.readText())).toContain("show grouped agui cards");
   await userMessageBubble.getByRole("button", { name: "Edit message" }).click();
-  await expect(page.getByPlaceholder("Enter to send, Shift+Enter for newline")).toHaveValue("show grouped agui cards");
+  await expect(page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline" })).toHaveValue("show grouped agui cards");
 
-  const runWork = page.getByLabel("AG-UI run work");
+  const runWork = page.getByLabel("Agent work", { exact: true });
   const runSummary = runWork.getByRole("button", { name: /Worked for/ });
   await expect(runSummary).toBeVisible();
   await expect(runSummary).toHaveCount(1);
   await expect(runSummary).toContainText("High");
   await expect(page.getByLabel("Waiting for model")).toHaveCount(0);
-  const assistantMessageBubble = transcript.locator("article").filter({ hasText: "Assistant" }).last();
+  const assistantMessageBubble = transcript.locator(".ef-chat__message-entry").filter({ hasText: "Assistant" }).last();
   const copyMarkdownButton = assistantMessageBubble.getByRole("button", { name: /Copy raw markdown/ });
   await expect(copyMarkdownButton).toBeVisible();
   await copyMarkdownButton.click();
@@ -329,21 +344,21 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, 
   await expect(firstThinkingCard.getByText(/Raw reasoning stream segment/)).toHaveCount(0);
   await expect(secondThinkingCard.getByText("Reviewing session context and available skills.")).toHaveCount(0);
   const toolRunGroup = userCards.getByLabel("Tool run steps");
-  const toolRunGroupButton = toolRunGroup.getByRole("button", { name: /Ran 6 commands/ });
+  const toolRunGroupButton = toolRunGroup.getByRole("button", { name: /6 tool calls/ });
   await expect(toolRunGroupButton).toBeVisible();
   await expect(toolRunGroupButton).toHaveAttribute("aria-expanded", "false");
-  await expect(toolRunGroup.getByRole("button", { name: /Ran workspace\.page/ })).toHaveCount(0);
+  await expect(toolRunGroup.getByRole("button", { name: /workspace\.page/ })).toHaveCount(0);
   await toolRunGroupButton.click();
   await expect(toolRunGroupButton).toHaveAttribute("aria-expanded", "true");
-  await expect(toolRunGroup.getByRole("button", { name: /Ran workspace\.page/ })).toBeVisible();
-  await expect(toolRunGroup.getByRole("button", { name: /Ran variable\.page/ })).toBeVisible();
-  await expect(toolRunGroup.getByRole("button", { name: /Ran / })).toHaveCount(7);
+  await expect(toolRunGroup.getByRole("button", { name: /workspace\.page/ })).toBeVisible();
+  await expect(toolRunGroup.getByRole("button", { name: /variable\.page/ })).toBeVisible();
+  await expect(toolRunGroup.locator("li")).toHaveCount(6);
   await secondThinkingButton.click();
   await expect(secondThinkingButton).toHaveAttribute("aria-expanded", "true");
   await expect(secondThinkingCard).toContainText("Summarizing tool results before replying.");
   await expect(secondThinkingCard.getByText(/Raw reasoning stream segment/)).toHaveCount(0);
 
-  const toolCard = toolRunGroup.getByRole("button", { name: /Ran workspace\.page/ });
+  const toolCard = toolRunGroup.getByRole("button", { name: /workspace\.page/ });
   await expect(toolCard).toBeVisible();
   await expect(firstThinkingCard.getByText(/workspace\.page · .*tool-/)).toHaveCount(0);
   await toolCard.click();
@@ -370,9 +385,9 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, 
     return transcriptText.indexOf("Reviewing session context and available skills.") < transcriptText.indexOf("Assistant");
   }).toBe(true);
 
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show second reasoning stream");
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
-  const secondRunWork = page.getByLabel("AG-UI run work").last();
+  await page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline" }).fill("show second reasoning stream");
+  await page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline" }).press("Enter");
+  const secondRunWork = page.getByLabel("Agent work", { exact: true }).last();
   const secondRunSummary = secondRunWork.getByRole("button", { name: /Worked for/ });
   await expect(secondRunSummary).toHaveAttribute("aria-expanded", "false");
   await expect.poll(async () => transcript.evaluate((node) => Math.round(node.scrollHeight - node.clientHeight - node.scrollTop))).toBeLessThanOrEqual(2);
@@ -390,10 +405,10 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, 
   await expect(secondRunThinkingCards.nth(0)).toContainText("Reviewing session context and available skills.");
   await expect(secondRunThinkingCards.nth(0).getByText(/Raw reasoning stream segment/)).toHaveCount(0);
   const secondToolRunGroup = secondUserCards.getByLabel("Tool run steps");
-  const secondToolRunGroupButton = secondToolRunGroup.getByRole("button", { name: /Ran 6 commands/ });
+  const secondToolRunGroupButton = secondToolRunGroup.getByRole("button", { name: /6 tool calls/ });
   await expect(secondToolRunGroupButton).toHaveAttribute("aria-expanded", "false");
   await secondToolRunGroupButton.click();
-  await expect(secondToolRunGroup.getByRole("button", { name: /Ran / })).toHaveCount(7);
+  await expect(secondToolRunGroup.locator("li")).toHaveCount(6);
   await secondRunSecondThinkingButton.click();
   await expect(secondRunThinkingCards.nth(1)).toContainText("Summarizing tool results before replying.");
   await expect(page.getByText("No reasoning content")).toHaveCount(0);
@@ -408,18 +423,19 @@ test("AC-AGUI-01/02/03: chat shows grouped user AG-UI cards", async ({ context, 
   await expect.poll(async () => transcript.evaluate((node) => Math.round(node.scrollHeight - node.clientHeight - node.scrollTop))).toBeLessThanOrEqual(2);
   await expect(jumpToLatest).toHaveCount(0);
 
-  await page.getByRole("button", { name: "New session" }).first().click();
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").fill("show scrolling tool log");
-  await page.getByPlaceholder("Enter to send, Shift+Enter for newline").press("Enter");
-  const logScrollRunWork = page.getByLabel("AG-UI run work").last();
+  await page.getByRole("button", { name: "New chat", exact: true }).click();
+  await page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline" }).fill("show scrolling tool log");
+  await page.getByRole("textbox", { name: "Enter to send, Shift+Enter for newline" }).press("Enter");
+  await expect(page.getByRole("article").filter({ hasText: "Recorded in" }).last()).toBeVisible();
+  const logScrollRunWork = page.getByLabel("Agent work", { exact: true }).last();
   const logScrollRunSummary = logScrollRunWork.getByRole("button", { name: /Worked for/ });
   await expect(logScrollRunSummary).toHaveAttribute("aria-expanded", "false");
   await logScrollRunSummary.click();
   const logScrollThinking = logScrollRunWork.getByLabel("Thinking").nth(0);
   await expect(logScrollThinking.getByRole("button", { name: /Reviewing session context and available skills/ })).toHaveAttribute("aria-expanded", "false");
   const logScrollToolGroup = logScrollRunWork.getByLabel("Tool run steps").first();
-  await expect(logScrollToolGroup.getByRole("button", { name: /Ran 7 commands/ })).toHaveAttribute("aria-expanded", "true");
-  await expect(logScrollToolGroup.getByRole("button", { name: /Running bash\.exec/ })).toHaveAttribute("aria-expanded", "true");
+  await expect(logScrollToolGroup.getByRole("button", { name: /7 tool calls/ })).toHaveAttribute("aria-expanded", "true");
+  await expect(logScrollToolGroup.getByRole("button", { name: /bash/ })).toHaveAttribute("aria-expanded", "true");
   await expect(logScrollToolGroup.getByText("stream log line 40")).toBeVisible();
   const runningLogContainer = logScrollToolGroup.locator("div.max-h-64").filter({ hasText: "stream log line 40" });
   await expect(runningLogContainer).toHaveCount(1);

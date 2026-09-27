@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -72,7 +73,7 @@ async function seedTronCoreShellSelection(page: Page) {
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, workspaceSwitcher);
 }
@@ -333,9 +334,10 @@ test.describe("Knowledge graph mock mode", () => {
   });
 
   test("renders backend-shaped graph mock data and updates inspector from result selection", async ({ page }) => {
-    await page.goto(`${harness.baseUrl}/knowledge-graph`);
+    await routeActiveProfileApi(page);
+  await page.goto(`${harness.baseUrl}/knowledge-graph`);
 
-    await expect(page.getByRole("heading", { name: "Knowledge Graph" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "KnowledgeGraph", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Explore" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Run Traversal" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Export", exact: true })).toHaveCount(0);
@@ -362,11 +364,18 @@ test.describe("Knowledge graph mock mode", () => {
       window.localStorage.setItem("tron.theme", "matrix-dark");
     });
 
-    await page.goto(`${harness.baseUrl}/knowledge-graph`);
+    await routeActiveProfileApi(page);
+  await page.goto(`${harness.baseUrl}/knowledge-graph`);
 
     const canvas = page.getByLabel("G6 semantic knowledge graph canvas");
     await expect(canvas).toBeVisible();
-    await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundImage)).toContain("92, 255, 133");
+    const gridColor = await canvas.evaluate(element => {
+      const sample = document.createElement("span");
+      sample.style.color = "var(--tron-graph-grid, var(--color-outline-variant))";
+      element.append(sample);
+      const color = getComputedStyle(sample).color; sample.remove(); return color;
+    });
+    await expect.poll(() => canvas.evaluate(element => getComputedStyle(element).backgroundImage)).toContain(gridColor);
     await expect.poll(() => canvas.evaluate((element) => getComputedStyle(element).backgroundImage)).not.toContain("255, 255, 255");
 
     const metrics = page.getByLabel("Graph canvas metrics");
@@ -470,9 +479,10 @@ test.describe("Knowledge graph API mode", () => {
       await fulfillGraph(route, expandWindow);
     });
 
-    await page.goto(`${harness.baseUrl}/knowledge-graph`);
+    await routeActiveProfileApi(page);
+  await page.goto(`${harness.baseUrl}/knowledge-graph`);
 
-    await expect(page.getByRole("heading", { name: "Knowledge Graph" })).toBeVisible();
+    await expect(page.getByRole("tab", { name: "KnowledgeGraph", exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Explore" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Run Traversal" })).toHaveCount(0);
     await expect(page.getByRole("button", { name: "Export", exact: true })).toHaveCount(0);

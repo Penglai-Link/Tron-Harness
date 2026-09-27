@@ -14,7 +14,6 @@ use super::{
 
 const PERSON_AI_LLM_FALLBACK_ROUTE: &str = "PERSON_AI:ROUTE:LlmFallback";
 
-
 pub(super) fn rank_route_rows(
     rows: Vec<RagSearchRow>,
     route: &RetrievalRoute,

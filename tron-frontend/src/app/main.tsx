@@ -6,7 +6,7 @@ import { QueryProvider } from "./providers/QueryProvider";
 import { App } from "./App";
 import { RenderErrorBoundary } from "./RenderErrorBoundary";
 import "@/i18n";
-import "@tron/chat-theme";
+import "@eliteforge/agent-ui-chat-theme";
 import "./styles/globals.css";
 
 const root = document.getElementById("root");

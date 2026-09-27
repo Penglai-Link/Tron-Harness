@@ -1,3 +1,4 @@
+import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
 import { useTabPanelScopeId } from "@/shared/layout/content/TabPanelRegistry";
 import { AgentTerminalToolCard, AgentTerminalSessionContext } from "../terminal/AgentTerminalToolCard";
 import { openAgentTerminalFromLiveResult } from "../terminal/store";
@@ -117,10 +118,9 @@ import { getApiAccessToken, isApiError, requestApi } from "@/shared/api/httpClie
 import { chatApiEndpoints } from "@/domain/chat/api";
 import { getServiceDataSource } from "@/shared/api/serviceConfig";
 import { useAguiWorkReplayPreferences } from "@/domain/settings/model/aguiWorkReplayPreferences";
-import { TronChatRuntimeWindow } from "@tron/chat-react";
+import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
 import {
-  createMockChatAdapter,
   enqueueChatSubmission,
   isSteerQueueFallbackCode,
   mergeChatMessagesChronologically,
@@ -3974,7 +3974,6 @@ function ChatModelSelector({
     }
     const frame = window.requestAnimationFrame(() => {
       searchInputRef.current?.focus();
-      searchInputRef.current?.select();
     });
     return () => window.cancelAnimationFrame(frame);
   }, [open]);
@@ -4020,7 +4019,7 @@ function ChatModelSelector({
           {filteredModels.length ? (
             <DropdownMenuRadioGroup
               value={selectedModelCode}
-              onValueChange={(modelCode) => onSelect(modelCode)}
+              onValueChange={(modelCode) => { onSelect(modelCode); setOpen(false); }}
             >
               {autoModels.map((model) => (
                 <DropdownMenuRadioItem
@@ -4947,7 +4946,7 @@ export function ChatManagementPage() {
   const activeWorkspaceCode = (selectedSecondarySpace ?? selectedPrimarySpace)?.workspaceCode ?? "";
   const chatRuntimeAdapter = useMemo(
     () => getServiceDataSource("chat") === "mock"
-      ? createMockChatAdapter()
+      ? createTronMockChatAdapter()
       : createInternalChatAdapter({
           getAccessToken: getApiAccessToken,
           getHeaders: () => applyCurrentLocaleHeader(new Headers()),
@@ -7502,7 +7501,7 @@ export function ChatManagementPage() {
       </div>
       <main className="flex min-h-0 min-w-0 flex-1 flex-col">
         {activeSession ? (
-          <TronChatRuntimeWindow
+          <AgentChatWindow
             agentReplyEffect={agentReplyEffect}
             agentReplySpeed={agentReplySpeed}
             adapter={chatRuntimeAdapter}

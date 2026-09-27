@@ -796,30 +796,66 @@ async fn scheduler_ticks_are_claimed_once_across_multiple_instances() {
         .expect("active automation should be created");
     let second_state = AppState::new(config).expect("second app state should build");
 
-    let records = wait_for_scheduler_records(
+    let _records = wait_for_scheduler_records(
         &service,
         &automation.automation_code,
         2,
         Duration::from_secs(4),
     )
     .await;
+    // Freeze the schedule before counting. Otherwise a new second can add an
+    // execution while the assertion is waiting for earlier model requests.
+    service
+        .update_status(
+            &automation.automation_code,
+            UpdateAutomationStatusCommand {
+                status: AutomationStatus::Paused,
+            },
+        )
+        .unwrap();
+    second_state
+        .automations
+        .update_status(
+            &automation.automation_code,
+            UpdateAutomationStatusCommand {
+                status: AutomationStatus::Paused,
+            },
+        )
+        .unwrap();
+    let records = service
+        .list_execution_records(
+            &automation.automation_code,
+            AutomationExecutionListQuery {
+                current: Some(1),
+                size: Some(100),
+            },
+        )
+        .unwrap()
+        .records;
     let scheduler_ticks = records
         .iter()
-        .filter(|record| record.trigger_source == AutomationTriggerSource::Scheduler)
         .filter_map(|record| record.scheduled_at.clone())
         .collect::<Vec<_>>();
-    let unique_ticks = scheduler_ticks.iter().cloned().collect::<HashSet<_>>();
-
+    let unique_ticks = scheduler_ticks.iter().collect::<HashSet<_>>();
     assert_eq!(
         scheduler_ticks.len(),
         unique_ticks.len(),
-        "each planned scheduler tick should be claimed by only one backend instance"
+        "each tick must be claimed once across both instances"
     );
-    wait_for_model_requests(&server, unique_ticks.len(), Duration::from_secs(3)).await;
+    for record in &records {
+        wait_for_final_execution_status(
+            &service,
+            &automation.automation_code,
+            &record.execution_code,
+            AutomationExecutionStatus::Success,
+            Duration::from_secs(30),
+        )
+        .await;
+    }
     assert_eq!(
         server.request_count.load(Ordering::SeqCst),
         unique_ticks.len(),
-        "each claimed scheduler tick should dispatch main-agent exactly once"
+        "each claimed tick must invoke the model exactly once"
     );
     drop(second_state);
     drop(first_state);

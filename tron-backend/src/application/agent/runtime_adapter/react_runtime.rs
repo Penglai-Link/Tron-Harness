@@ -16,6 +16,7 @@ use super::{
 pub(super) struct ReactRuntime {
     key: RuntimeAdapterKey,
     capabilities: RuntimeCapabilities,
+    framework_host: Option<super::super::FrameworkHost>,
     model_client: Arc<dyn ModelClient>,
     tool_registry: Arc<ToolRegistry>,
     event_bus: EventBusHandle,
@@ -30,6 +31,7 @@ impl ReactRuntime {
     pub(super) fn new(
         key: RuntimeAdapterKey,
         capabilities: RuntimeCapabilities,
+        framework_host: Option<super::super::FrameworkHost>,
         model_client: Arc<dyn ModelClient>,
         tool_registry: Arc<ToolRegistry>,
         event_bus: EventBusHandle,
@@ -43,6 +45,7 @@ impl ReactRuntime {
         Self {
             key,
             capabilities,
+            framework_host,
             model_client,
             tool_registry,
             event_bus,
@@ -73,6 +76,7 @@ impl ReactRuntime {
                 self.tool_registry.clone(),
                 self.event_bus.clone(),
             )
+            .with_framework_host(self.framework_host.clone())
             .with_directory_inspector(self.directory_inspector.clone())
             .with_short_term_memory(self.short_term_memory.clone())
             .with_auto_model_router(self.auto_model_router.clone())

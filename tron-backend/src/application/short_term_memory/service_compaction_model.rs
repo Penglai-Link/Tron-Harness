@@ -273,7 +273,11 @@ impl ShortTermMemoryService {
         config
     }
 
-    pub fn compaction_model_request(&self, input: &PreparedCompactionInput, locale: &str) -> ModelRequest {
+    pub fn compaction_model_request(
+        &self,
+        input: &PreparedCompactionInput,
+        locale: &str,
+    ) -> ModelRequest {
         ModelRequest {
             messages: vec![
                 AgentMessage::system(compaction_system_prompt(locale)),
@@ -513,7 +517,10 @@ mod tests {
 
     #[test]
     fn compaction_system_prompt_uses_the_requested_locale() {
-        assert_eq!(compaction_system_prompt("zh-CN"), "生成短期记忆压缩检查点。只返回最终文本。");
+        assert_eq!(
+            compaction_system_prompt("zh-CN"),
+            "生成短期记忆压缩检查点。只返回最终文本。"
+        );
     }
 }
 

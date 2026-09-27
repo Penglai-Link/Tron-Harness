@@ -50,12 +50,7 @@ impl ChatAutoModelRouter {
                     .cloned()
             })
             .or_else(|| {
-                choose_initial_candidate(
-                    &candidates,
-                    workspace_code,
-                    session_code,
-                    agent_code,
-                )
+                choose_initial_candidate(&candidates, workspace_code, session_code, agent_code)
             })
             .ok_or_else(|| "Auto has no available Text model with a context window".to_string())?;
         self.providers
@@ -113,7 +108,9 @@ impl ChatAutoModelRouter {
         let Some(candidate) = eligible.into_iter().next() else {
             return Ok(None);
         };
-        route.failed_candidate_keys.push(route.current_candidate_key.clone());
+        route
+            .failed_candidate_keys
+            .push(route.current_candidate_key.clone());
         route.fallback_attempts = route.fallback_attempts.saturating_add(1);
         route.current_candidate_key = candidate.key;
         self.providers
@@ -181,7 +178,8 @@ impl ChatAutoModelRouter {
                 .map_err(|error| error.to_string())?
             {
                 config.reasoning_effort = reasoning_effort;
-                let prefers_responses = config.protocol == crate::domain::agent::AgentModelProtocol::Responses;
+                let prefers_responses =
+                    config.protocol == crate::domain::agent::AgentModelProtocol::Responses;
                 candidates.push(Candidate {
                     key: candidate_key(&option.selection),
                     selection: option.selection,
@@ -243,13 +241,22 @@ fn choose_initial_candidate(
         pool
     };
     pool.into_iter()
-        .max_by_key(|candidate| (u8::from(candidate.prefers_responses), rendezvous_score(workspace_code, session_code, agent_code, &candidate.key)))
+        .max_by_key(|candidate| {
+            (
+                u8::from(candidate.prefers_responses),
+                rendezvous_score(workspace_code, session_code, agent_code, &candidate.key),
+            )
+        })
         .cloned()
 }
 
 fn candidate_key(selection: &ModelSelection) -> String {
     serde_json::to_string(selection).unwrap_or_else(|_| {
-        format!("{}:{:?}", selection.model_code.as_deref().unwrap_or_default(), selection.kind)
+        format!(
+            "{}:{:?}",
+            selection.model_code.as_deref().unwrap_or_default(),
+            selection.kind
+        )
     })
 }
 

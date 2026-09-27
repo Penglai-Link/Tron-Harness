@@ -11,8 +11,9 @@ use super::{
     TerminalSocketGateway,
     protocol::{
         TERMINAL_EXIT_EVENT, TERMINAL_OUTPUT_EVENT, TERMINAL_SESSION_EVENT, TerminalExitMessage,
-        TerminalInputPayload, TerminalOutputMessage, TerminalResizePayload, TerminalSessionEvent,
-        TerminalSessionErrorMessage, TerminalSessionMessage, TerminalSignalPayload,
+        TerminalInputPayload, TerminalOutputMessage, TerminalResizePayload,
+        TerminalSessionErrorMessage, TerminalSessionEvent, TerminalSessionMessage,
+        TerminalSignalPayload,
     },
 };
 
@@ -49,8 +50,9 @@ async fn terminal_connected(
     tokio::spawn(async move {
         while let Some(event) = output_events.recv().await {
             let emitted = match event {
-                TerminalSessionEvent::Output(data) => output_socket
-                    .emit(TERMINAL_OUTPUT_EVENT, &TerminalOutputMessage::new(data)),
+                TerminalSessionEvent::Output(data) => {
+                    output_socket.emit(TERMINAL_OUTPUT_EVENT, &TerminalOutputMessage::new(data))
+                }
                 TerminalSessionEvent::Exit(exit_code) => {
                     let _ = output_socket
                         .emit(TERMINAL_EXIT_EVENT, &TerminalExitMessage::new(exit_code));

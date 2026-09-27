@@ -154,14 +154,17 @@ mod tests {
             .expect("app page tool should be catalogued");
         assert_eq!(page.tool_code, "app.page");
         assert_eq!(page.tool_name, "app_page");
-        assert!(page
-            .tool_name
-            .chars()
-            .all(|character| character.is_ascii_alphanumeric() || character == '_' || character == '-'));
+        assert!(
+            page.tool_name
+                .chars()
+                .all(|character| character.is_ascii_alphanumeric()
+                    || character == '_'
+                    || character == '-')
+        );
 
         let payload = serde_json::to_value(&page).expect("catalog record should serialize");
         assert!(payload.get("toolCode").is_some());
-        assert!(payload.get("toolName").is_none());
+        assert_eq!(payload["toolName"], "app_page");
     }
 
     #[test]

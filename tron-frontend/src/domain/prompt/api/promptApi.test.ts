@@ -19,6 +19,7 @@ describe("prompt API", () => {
 
   it("registers the frozen POST-only endpoint contract", () => {
     expect(promptApiEndpoints).toEqual({
+      translateDraft: "POST /api/v1/prompts/translate-draft",
       analyzeTemplate: "POST /api/v1/prompts/analyze-template",
       createPlatform: "POST /api/v1/admin/platform/prompts/create",
       createWorkspace: "POST /api/v1/prompts/workspace-create",

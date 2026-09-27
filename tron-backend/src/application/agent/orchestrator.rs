@@ -81,6 +81,7 @@ impl AgentOrchestrator {
             .prepare(command, user_code, locale)
             .await?;
         let PreparedAgentRun {
+            leases: _leases,
             run_code,
             conversation_code,
             workspace_code,

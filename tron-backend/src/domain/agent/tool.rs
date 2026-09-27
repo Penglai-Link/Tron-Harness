@@ -129,9 +129,49 @@ where
 #[derive(Default)]
 pub struct ToolRegistry {
     tools: Mutex<HashMap<String, Arc<dyn Tool>>>,
+    // Public plugin leases are transferred to Framework's run lifecycle. This
+    // registry only transports bindings; it implements no external tool protocol.
+    framework_leases: Mutex<HashMap<String, Vec<eliteforge_agent_core::ToolLease>>>,
+}
+
+/// Releases run-scoped plugin connections if preparation or execution is
+/// cancelled before the Framework takes ownership of their leases.
+pub(crate) struct FrameworkLeaseGuard {
+    registry: Arc<ToolRegistry>,
+    run_code: String,
+}
+impl Drop for FrameworkLeaseGuard {
+    fn drop(&mut self) {
+        drop(self.registry.take_framework_leases(&self.run_code));
+    }
 }
 
 impl ToolRegistry {
+    pub(crate) fn framework_lease_guard(self: &Arc<Self>, run_code: &str) -> FrameworkLeaseGuard {
+        FrameworkLeaseGuard {
+            registry: self.clone(),
+            run_code: run_code.into(),
+        }
+    }
+    pub fn register_framework_lease(
+        &self,
+        run_code: &str,
+        lease: eliteforge_agent_core::ToolLease,
+    ) {
+        self.framework_leases
+            .lock()
+            .expect("framework leases poisoned")
+            .entry(run_code.into())
+            .or_default()
+            .push(lease);
+    }
+    pub fn take_framework_leases(&self, run_code: &str) -> Vec<eliteforge_agent_core::ToolLease> {
+        self.framework_leases
+            .lock()
+            .expect("framework leases poisoned")
+            .remove(run_code)
+            .unwrap_or_default()
+    }
     pub fn register(&self, tool: Arc<dyn Tool>) -> Result<(), ToolError> {
         let name = tool.name().trim();
         if name.is_empty() {
@@ -170,5 +210,35 @@ impl ToolRegistry {
             .cloned()
             .ok_or_else(|| ToolError::MissingTool(request.tool_name.clone()))?;
         tool.exec_with_progress(request, context, progress)
+    }
+}
+
+#[cfg(test)]
+mod framework_lease_tests {
+    use super::*;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
+    #[test]
+    fn preparation_guard_releases_only_its_runs_pending_plugins() {
+        let registry = Arc::new(ToolRegistry::default());
+        let released = Arc::new(AtomicBool::new(false));
+        let other = Arc::new(AtomicBool::new(false));
+        let guard = registry.framework_lease_guard("failed");
+        for (run, flag) in [("failed", released.clone()), ("other", other.clone())] {
+            registry.register_framework_lease(
+                run,
+                eliteforge_agent_core::ToolLease::new(vec![]).with_cleanup(move || {
+                    flag.store(true, Ordering::SeqCst);
+                }),
+            );
+        }
+        drop(guard);
+        assert!(released.load(Ordering::SeqCst));
+        assert!(!other.load(Ordering::SeqCst));
+        let transferred = registry.take_framework_leases("other");
+        drop(registry.framework_lease_guard("other"));
+        assert!(!other.load(Ordering::SeqCst));
+        drop(transferred);
+        assert!(other.load(Ordering::SeqCst));
     }
 }

@@ -111,7 +111,9 @@ pub(super) fn assemble_context(
             raw_tail_transcript_tokens: recent_transcript_tokens,
             compressed_history_tokens: 0,
             tool_schema_tokens: 0,
-            tool_schema_budget_tokens: Some(budget_plan.block_budgets.tool_schema.effective_limit_tokens),
+            tool_schema_budget_tokens: Some(
+                budget_plan.block_budgets.tool_schema.effective_limit_tokens,
+            ),
             estimated_input_tokens: estimated_tokens,
             prompt_prefix_budget_tokens: Some(
                 budget_plan

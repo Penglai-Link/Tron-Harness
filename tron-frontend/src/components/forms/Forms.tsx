@@ -31,15 +31,13 @@ const disabledControlClasses =
 export function Field({ children, className, error, hint, hintAriaLabel = "打开字段说明", label, required = false }: FieldProps) {
   return (
     <FieldPrimitive className={className}>
-      <FieldLabel>
-        {label}
-        {required && <span className="text-destructive-foreground" aria-hidden="true">*</span>}
-        {
-          hint && <InfoTooltip ariaLabel={hintAriaLabel}>
-            {hint}
-          </InfoTooltip>
-        }
-      </FieldLabel>
+      <div className="flex items-center gap-1">
+        <FieldLabel>
+          {label}
+          {required && <span className="text-destructive-foreground" aria-hidden="true">*</span>}
+        </FieldLabel>
+        {hint && <InfoTooltip ariaLabel={hintAriaLabel}>{hint}</InfoTooltip>}
+      </div>
       {children}
       {error && <FieldError match>{error}</FieldError>}
     </FieldPrimitive>

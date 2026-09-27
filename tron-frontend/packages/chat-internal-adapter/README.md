@@ -1,6 +1,6 @@
 # @tron/chat-internal-adapter
 
-`@tron/chat-internal-adapter` 提供了用于 Tron 内部系统的聊天请求适配器。它实现了 `ChatAdapter` 接口，负责与 Tron 的内部 API（`/api/v1/chats/...` 等）进行数据交互，包括会话管理、消息收发、流式响应（SSE）及 AG-UI 事件流。
+`@tron/chat-internal-adapter` 提供了用于 Tron 内部系统的聊天请求适配器。它实现了 Tron 宿主 `ChatAdapter` 接口（通过 `@tron/chat-agent-ui-adapter` 转为公共 UI 契约），负责与 Tron 的内部 API（`/api/v1/chats/...` 等）进行数据交互，包括会话管理、消息收发、流式响应（SSE）及 AG-UI 事件流。
 
 ## 安装
 
@@ -8,16 +8,17 @@
 
 ## 使用说明
 
-你需要通过 `createInternalChatAdapter` 方法创建一个适配器实例，并将其传递给聊天 UI 组件（如 `TronChatRuntimeWindow` 或 `TronChatPanel`）。
+你需要通过 `createInternalChatAdapter` 方法创建一个适配器实例，并将其传递给聊天 UI 组件（通过 `@tron/chat-agent-ui-adapter` 接入公共 `ChatRuntimeWindow`）。
 
 ### 基本示例
 
 ```typescript
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
-import { TronChatRuntimeWindow } from "@tron/chat-react";
+import { ChatRuntimeWindow } from "@eliteforge/agent-ui-chat-react";
+import { createAgentUiAdapter, toUiInput } from "@tron/chat-agent-ui-adapter";
 
 // 1. 创建适配器实例
-const adapter = createInternalChatAdapter({
+const hostAdapter = createInternalChatAdapter({
   baseUrl: "https://api.your-domain.com", // 可选，默认使用当前域名
   getAccessToken: () => {
     // 返回当前的身份验证 Token
@@ -26,13 +27,14 @@ const adapter = createInternalChatAdapter({
 });
 
 // 2. 将适配器传递给组件
+const adapter = createAgentUiAdapter(hostAdapter, { workspaceCode: "WS-XXXXX" });
+
 export default function App() {
   return (
-    <TronChatRuntimeWindow
+    <ChatRuntimeWindow
       adapter={adapter}
-      config={{
-        workspaceCode: "WS-XXXXX",
-      }}
+      config={{ floating: false }}
+      createSendInput={(_session, content) => toUiInput({ content, workspaceCode: "WS-XXXXX" })}
     />
   );
 }

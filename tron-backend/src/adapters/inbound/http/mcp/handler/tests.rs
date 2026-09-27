@@ -12,12 +12,28 @@ use axum::{
 use serde_json::{Value, json};
 use tower::ServiceExt;
 
-use crate::{app::build_router, config::AppConfig};
+use crate::{
+    app::{AppState, build_router_with_state},
+    config::AppConfig,
+};
+fn build_router(config: AppConfig) -> Result<axum::Router, crate::app::AppBootstrapError> {
+    let profiles = crate::application::profile::ProfileRegistryService::new(":memory:").unwrap();
+    profiles
+        .register_or_update("USR-MCP-TEST", "mcp.operator")
+        .unwrap();
+    build_router_with_state(AppState::new_with_profiles(
+        config,
+        std::sync::Arc::new(crate::shared::id::FixedSnowflakeIdProvider::new(
+            734500000000000000,
+        )),
+        profiles,
+    )?)
+}
 
 use super::transport::MCP_PROTOCOL_VERSION;
 
 #[tokio::test]
-async fn invalid_bearer_token_is_rejected_for_variables_transport() {
+async fn disabled_gateway_rejects_variables_transport() {
     let (config, database_path) = test_config("mcp-variables-auth");
     let router = build_router(config).expect("router should build");
 
@@ -42,9 +58,9 @@ async fn invalid_bearer_token_is_rejected_for_variables_transport() {
     )
     .await;
 
-    assert_eq!(response.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(response.status(), StatusCode::SERVICE_UNAVAILABLE);
     let payload = response_json(response).await;
-    assert_eq!(payload["error"]["code"], -32001);
+    assert_eq!(payload["error"]["code"], -32002);
 
     let _ = fs::remove_file(database_path);
 }
@@ -276,24 +292,9 @@ async fn variables_transport_reads_and_writes_effective_workspace_variables() {
     let _ = fs::remove_file(database_path);
 }
 
-async fn login(router: &axum::Router) -> String {
-    let response = issue_json_request(
-        router.clone(),
-        Method::POST,
-        "/api/v1/auth/login",
-        None,
-        json!({
-            "login": "admin",
-            "password": "TronAdminPass123!"
-        }),
-    )
-    .await;
-    assert_eq!(response.status(), StatusCode::OK);
-    let payload = response_json(response).await;
-    payload["data"]["accessToken"]
-        .as_str()
-        .expect("login should return an access token")
-        .to_string()
+// The desktop profile owns identity; bearer login was removed.
+async fn login(_router: &axum::Router) -> String {
+    "profile-test-token".into()
 }
 
 async fn enable_gateway(router: &axum::Router, access_token: &str) {

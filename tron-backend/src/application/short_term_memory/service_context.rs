@@ -48,12 +48,20 @@ impl ShortTermMemoryService {
             "compaction": self.config.compaction,
             "goalLoop": self.config.goal_loop,
         });
-        let family_context = prepared.messages.iter().flat_map(|message| message.parts.iter()).filter_map(|part| {
-            match part {
-                crate::domain::agent::AgentMessagePart::Context { kind, text, .. } if kind == "session_family_context" => Some(text.clone()),
+        let family_context = prepared
+            .messages
+            .iter()
+            .flat_map(|message| message.parts.iter())
+            .filter_map(|part| match part {
+                crate::domain::agent::AgentMessagePart::Context { kind, text, .. }
+                    if kind == "session_family_context" =>
+                {
+                    Some(text.clone())
+                }
                 _ => None,
-            }
-        }).collect::<Vec<_>>().join("\n\n");
+            })
+            .collect::<Vec<_>>()
+            .join("\n\n");
         let memory_hash = hash_json(&memory_policy);
         let epoch = ShortTermMemoryContextEpoch {
             id: 0,
@@ -301,12 +309,18 @@ fn variables_snapshot(
 }
 
 fn variables_hash_snapshot(context: &AgentRunContext) -> Value {
-    json!(context.variables.iter().map(|variable| json!({
-        "key": variable.key,
-        "source": variable.source,
-        "sensitive": variable.sensitive,
-        "valueHash": hash_text(&variable.value),
-    })).collect::<Vec<_>>())
+    json!(
+        context
+            .variables
+            .iter()
+            .map(|variable| json!({
+                "key": variable.key,
+                "source": variable.source,
+                "sensitive": variable.sensitive,
+                "valueHash": hash_text(&variable.value),
+            }))
+            .collect::<Vec<_>>()
+    )
 }
 
 fn hash_json(value: &Value) -> String {

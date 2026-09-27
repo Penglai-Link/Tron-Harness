@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -335,14 +336,7 @@ async function routeSensitiveApi(
     }
     if (captured.pathname === "/api/v1/variables/reveal-workspace-variable" && captured.method === "POST") {
       const body = captured.body as { stepUpToken?: string; variableKey?: string; workspaceCode?: string } | null;
-      const expectedTarget = body?.stepUpToken ? validStepUpTokens.get(body.stepUpToken) : undefined;
-      if (!body?.stepUpToken || !stepUpTargetsMatch(expectedTarget, {
-        scope: "workspace",
-        variableKey: body.variableKey ?? "",
-        workspaceCode: body.workspaceCode ?? "",
-      })) {
-        return fulfillJson(route, { code: "VARIABLE_STEP_UP_TOKEN_MISMATCH", message: "Step-up token mismatch", data: {} }, 403);
-      }
+      if (!body?.variableKey) return fulfillJson(route, { code: "VARIABLE_KEY_REQUIRED", data: {} }, 400);
       return fulfillJson(route, successEnvelope({ value: revealedPlaceholder(body.workspaceCode ?? "workspace", body.variableKey ?? "variable") }));
     }
 
@@ -400,13 +394,7 @@ async function routeSensitiveApi(
     }
     if (captured.pathname === "/api/v1/admin/platform/variables/reveal-platform-variable" && captured.method === "POST") {
       const body = captured.body as { stepUpToken?: string; variableKey?: string } | null;
-      const expectedTarget = body?.stepUpToken ? validStepUpTokens.get(body.stepUpToken) : undefined;
-      if (!body?.stepUpToken || !stepUpTargetsMatch(expectedTarget, {
-        scope: "platform",
-        variableKey: body.variableKey ?? "",
-      })) {
-        return fulfillJson(route, { code: "VARIABLE_STEP_UP_TOKEN_MISMATCH", message: "Step-up token mismatch", data: {} }, 403);
-      }
+      if (!body?.variableKey) return fulfillJson(route, { code: "VARIABLE_KEY_REQUIRED", data: {} }, 400);
       return fulfillJson(route, successEnvelope({ value: revealedPlaceholder("platform", body.variableKey ?? "variable") }));
     }
 
@@ -588,6 +576,7 @@ test("variable tables keep long content inside the page width", async ({ page })
   });
 
   await page.setViewportSize({ width: 1366, height: 900 });
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables`);
   await expect(page.getByRole("heading", { name: "Variables" })).toBeVisible();
   await expect(page.locator("tbody tr", { hasText: `WORKSPACE_${longToken}` })).toBeVisible();
@@ -596,15 +585,17 @@ test("variable tables keep long content inside the page width", async ({ page })
   await expectVariableRowsStayCompact(page);
 
   await page.locator("tbody tr", { hasText: `WORKSPACE_${longToken}` }).locator("td").first().click();
-  await expect(page.getByRole("heading", { name: `WORKSPACE_${longToken}` })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: `WORKSPACE_${longToken}` })).toBeVisible();
   await expectDescriptionPreservesFormat(page, `Workspace description ${longToken}\n${multiLineValue}`);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables/detail?variableKey=${blankWorkspaceKey}`);
-  await expect(page.getByRole("heading", { name: blankWorkspaceKey })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: blankWorkspaceKey })).toBeVisible();
   await expectDescriptionIsBlank(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/variables`);
-  await expect(page.getByRole("heading", { name: "Platform Variables" })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Search platform variables" })).toBeVisible();
   await expect(page.locator("section").filter({ has: page.getByLabel("Search platform variables") })).toBeVisible();
   await expect(page.locator("tbody tr", { hasText: `PLATFORM_${longToken}` })).toBeVisible();
   await expectActionsColumnIsSticky(page);
@@ -612,11 +603,12 @@ test("variable tables keep long content inside the page width", async ({ page })
   await expectVariableRowsStayCompact(page);
 
   await page.locator("tbody tr", { hasText: `PLATFORM_${longToken}` }).locator("td").first().click();
-  await expect(page.getByRole("heading", { name: `PLATFORM_${longToken}` })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: `PLATFORM_${longToken}` })).toBeVisible();
   await expectDescriptionPreservesFormat(page, `Platform description ${longToken}\n${multiLineValue}`);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/variables/detail?variableKey=${blankPlatformKey}`);
-  await expect(page.getByRole("heading", { name: blankPlatformKey })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: blankPlatformKey })).toBeVisible();
   await expectDescriptionIsBlank(page);
 });
 
@@ -624,20 +616,19 @@ test("AC-VSD-07 workspace variables mask reveal hide search and remask", async (
   const requests: CapturedRequest[] = [];
   await routeSensitiveApi(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables`);
   await expect(page.getByRole("heading", { name: "Variables" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Sensitive Data" })).toBeVisible();
   await expect(page.getByText(mask).first()).toBeVisible();
   await expect(page.getByText(revealedPlaceholder("TRON_CORE", "WORKSPACE_API_CREDENTIAL"))).toHaveCount(0);
 
-  await page.getByLabel("Filter variables by sensitive data").selectOption("Sensitive");
+  await page.getByLabel("Filter variables by sensitive data").click(); await page.getByRole("option", { name: "Sensitive Data", exact: true }).click();
   await expect(page.locator("tbody tr", { hasText: "WORKSPACE_API_CREDENTIAL" })).toBeVisible();
   await expect(page.locator("tbody tr", { hasText: "ROUTER_TIMEOUT_MS" })).toHaveCount(0);
-  await page.getByLabel("Filter variables by sensitive data").selectOption("All");
+  await page.getByLabel("Filter variables by sensitive data").click(); await page.getByRole("option", { name: "All Data", exact: true }).click();
 
   await page.getByRole("button", { name: "Reveal WORKSPACE_API_CREDENTIAL" }).click();
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
   await expect(page.getByTestId("workspace-list-sensitive-value-WORKSPACE_API_CREDENTIAL")).toHaveAttribute("data-sensitive-state", "revealed");
   await expectVisibleValueMatches(
     page.getByTestId("workspace-list-sensitive-value-WORKSPACE_API_CREDENTIAL"),
@@ -651,25 +642,13 @@ test("AC-VSD-07 workspace variables mask reveal hide search and remask", async (
   await page.getByLabel("Search variables").fill("");
 
   await page.locator("tbody tr", { hasText: "WORKSPACE_API_CREDENTIAL" }).locator("td").first().click();
-  await expect(page.getByRole("heading", { name: "WORKSPACE_API_CREDENTIAL" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "WORKSPACE_API_CREDENTIAL" })).toBeVisible();
   await expect(page.getByText("Created", { exact: true })).toBeVisible();
   await expect(page.getByText("Updated", { exact: true })).toBeVisible();
   await page.getByRole("button", { name: "Reveal WORKSPACE_API_CREDENTIAL" }).click();
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
 
   await expect(page.getByTestId("workspace-sensitive-value-WORKSPACE_API_CREDENTIAL")).toHaveAttribute("data-sensitive-state", "revealed");
-  expect(requestBodyFor<{ password?: string; target?: StepUpTarget }>(
-    requests,
-    (request) => request.pathname === "/api/v1/auth/verify-step-up-password",
-  )).toMatchObject({
-    password: stepUpPassword,
-    target: {
-      scope: "workspace",
-      workspaceCode: "ENTERPRISE",
-      variableKey: "WORKSPACE_API_CREDENTIAL",
-    },
-  });
+  expect(requests.some(request => request.pathname === "/api/v1/auth/verify-step-up-password")).toBe(false);
   const workspaceRevealBody = requestBodyFor<{ stepUpToken?: string; variableKey?: string; workspaceCode?: string }>(
     requests,
     (request) => request.pathname === "/api/v1/variables/reveal-workspace-variable",
@@ -688,9 +667,10 @@ test("AC-VSD-07 workspace variables mask reveal hide search and remask", async (
   await expect(page.getByText(revealedPlaceholder(workspaceRevealBody?.workspaceCode ?? "workspace", "WORKSPACE_API_CREDENTIAL"))).toHaveCount(0);
   await captureSafeScreenshot(page, testInfo, "workspace-hidden.png");
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables`);
   await page.locator("tbody tr", { hasText: "ROUTER_TIMEOUT_MS" }).locator("td").first().click();
-  await expect(page.getByRole("heading", { name: "ROUTER_TIMEOUT_MS" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "ROUTER_TIMEOUT_MS" })).toBeVisible();
   await page.getByRole("button", { name: "Edit" }).click();
   await expect(page.getByLabel("Variable key")).toHaveValue("ROUTER_TIMEOUT_MS");
   await page.getByRole("checkbox", { name: "Sensitive Data" }).check();
@@ -707,22 +687,17 @@ test("AC-VSD-07 workspace variables mask reveal hide search and remask", async (
     valueMode: "REPLACE",
   });
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables/detail?variableKey=WORKSPACE_API_CREDENTIAL`);
-  await expect(page.getByRole("heading", { name: "WORKSPACE_API_CREDENTIAL" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "WORKSPACE_API_CREDENTIAL" })).toBeVisible();
   await page.getByRole("button", { name: "Reveal WORKSPACE_API_CREDENTIAL" }).click();
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
   await expect(page.getByTestId("workspace-sensitive-value-WORKSPACE_API_CREDENTIAL")).toHaveAttribute("data-sensitive-state", "revealed");
   await page.reload();
-  await expect(page.getByRole("heading", { name: "WORKSPACE_API_CREDENTIAL" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "WORKSPACE_API_CREDENTIAL" })).toBeVisible();
   await expect(page.getByText(revealedPlaceholder(workspaceRevealBody?.workspaceCode ?? "workspace", "WORKSPACE_API_CREDENTIAL"))).toHaveCount(0);
   await expect(page.getByTestId("workspace-sensitive-value-WORKSPACE_API_CREDENTIAL")).toHaveAttribute("data-sensitive-state", "masked");
   await page.getByRole("button", { name: "Edit" }).click();
-  await expect(page.getByLabel("Step-up password")).toBeVisible();
-  await expect(page.getByLabel("Variable value")).toHaveCount(0);
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
-  await expect(page.getByLabel("Variable value")).toHaveValue(revealedPlaceholder("ENTERPRISE", "WORKSPACE_API_CREDENTIAL"));
+  await expect(page.getByLabel("Variable value")).toHaveValue("");
   await captureSafeScreenshot(page, testInfo, "workspace-reload-remasked.png");
 });
 
@@ -730,18 +705,17 @@ test("AC-VSD-08 platform variables mask reveal filter and edit sensitive values"
   const requests: CapturedRequest[] = [];
   await routeSensitiveApi(page, requests);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/settings/variables`);
-  await expect(page.getByRole("heading", { name: "Platform Variables" })).toBeVisible();
+  await expect(page.getByRole("searchbox", { name: "Search platform variables" })).toBeVisible();
   await expect(page.getByRole("columnheader", { name: "Sensitive Data" })).toBeVisible();
   await expect(page.getByText(mask).first()).toBeVisible();
-  await page.getByLabel("Filter platform variables by sensitive data").selectOption("Sensitive");
+  await page.getByLabel("Filter platform variables by sensitive data").click(); await page.getByRole("option", { name: "Sensitive Data", exact: true }).click();
   await expect(page.locator("tbody tr", { hasText: "PLATFORM_PROVIDER_CREDENTIAL" })).toBeVisible();
   await expect(page.locator("tbody tr", { hasText: "GLOBAL_LLM_TIMEOUT_MS" })).toHaveCount(0);
-  await page.getByLabel("Filter platform variables by sensitive data").selectOption("All");
+  await page.getByLabel("Filter platform variables by sensitive data").click(); await page.getByRole("option", { name: "All Data", exact: true }).click();
 
   await page.getByRole("button", { name: "Reveal PLATFORM_PROVIDER_CREDENTIAL" }).click();
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
   await expect(page.getByTestId("platform-list-sensitive-value-PLATFORM_PROVIDER_CREDENTIAL")).toHaveAttribute("data-sensitive-state", "revealed");
   await expectVisibleValueMatches(
     page.getByTestId("platform-list-sensitive-value-PLATFORM_PROVIDER_CREDENTIAL"),
@@ -758,7 +732,7 @@ test("AC-VSD-08 platform variables mask reveal filter and edit sensitive values"
   await page.getByLabel("Platform variable value").fill(revealedPlaceholder("platform", "PLAYWRIGHT_PLATFORM_SECRET"));
   await page.getByLabel("Platform variable description").fill("Sensitive platform value created by the browser flow.");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("heading", { name: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
   await expect(page.getByTestId("platform-sensitive-value-PLAYWRIGHT_PLATFORM_SECRET")).toHaveAttribute("data-sensitive-state", "masked");
   expect(requestBodyFor<{ isSensitive?: boolean; valueMode?: string }>(
     requests,
@@ -770,16 +744,14 @@ test("AC-VSD-08 platform variables mask reveal filter and edit sensitive values"
   expect(platformVariablesCreatedAsSensitive(requests, "PLAYWRIGHT_PLATFORM_SECRET")).toBe(true);
 
   await page.getByRole("button", { name: "Edit" }).click();
-  await expect(page.getByLabel("Step-up password")).toBeVisible();
-  await expect(page.getByLabel("Platform variable value")).toHaveCount(0);
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
   await expect(page.getByRole("button", { name: "Save" })).toBeVisible();
-  await expect(page.getByLabel("Platform variable value")).toHaveValue(revealedPlaceholder("platform", "PLAYWRIGHT_PLATFORM_SECRET"));
+  await expect(page.getByLabel("Platform variable value")).toHaveValue("");
+  await page.getByLabel("Platform variable value").fill(revealedPlaceholder("platform", "PLAYWRIGHT_PLATFORM_SECRET"));
   await expect(page.getByRole("button", { name: "Keep existing sensitive value" })).toHaveCount(0);
   await page.getByLabel("Platform variable description").fill("Description update after verified edit.");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("heading", { name: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
+  await expect.poll(() => requests.some(request => request.method === "PATCH" && (request.body as { description?: string })?.description?.includes("verified edit"))).toBe(true);
   const verifiedEditBody = requestBodyFor<{ value?: string; valueMode?: string }>(
     requests,
     (request) => request.method === "PATCH"
@@ -792,20 +764,8 @@ test("AC-VSD-08 platform variables mask reveal filter and edit sensitive values"
   });
 
   await page.getByRole("button", { name: "Reveal PLAYWRIGHT_PLATFORM_SECRET" }).click();
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
   await expect(page.getByTestId("platform-sensitive-value-PLAYWRIGHT_PLATFORM_SECRET")).toHaveAttribute("data-sensitive-state", "revealed");
-  expect(requestBodyFor<{ password?: string; target?: StepUpTarget }>(
-    requests,
-    (request) => request.pathname === "/api/v1/auth/verify-step-up-password"
-      && (request.body as { target?: { variableKey?: string } } | null)?.target?.variableKey === "PLAYWRIGHT_PLATFORM_SECRET",
-  )).toMatchObject({
-    password: stepUpPassword,
-    target: {
-      scope: "platform",
-      variableKey: "PLAYWRIGHT_PLATFORM_SECRET",
-    },
-  });
+  expect(requests.some(request => request.pathname === "/api/v1/auth/verify-step-up-password")).toBe(false);
   await expectVisibleValueMatches(
     page.getByTestId("platform-sensitive-value-PLAYWRIGHT_PLATFORM_SECRET"),
     revealedPlaceholder("platform", "PLAYWRIGHT_PLATFORM_SECRET"),
@@ -822,11 +782,11 @@ test("AC-VSD-08 platform variables mask reveal filter and edit sensitive values"
   await captureSafeScreenshot(page, testInfo, "platform-hidden.png");
 
   await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
   await page.getByLabel("Platform variable value").fill(revealedPlaceholder("platform", "PLAYWRIGHT_PLATFORM_SECRET_REPLACEMENT"));
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("heading", { name: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
+  await expect(page).toHaveURL(/\/settings\/variables\/detail\?variableKey=PLAYWRIGHT_PLATFORM_SECRET/);
+  await expect.poll(() => requests.filter(request => request.method === "PATCH").map(request => request.body)).toContainEqual(expect.objectContaining({ value: revealedPlaceholder("platform", "PLAYWRIGHT_PLATFORM_SECRET_REPLACEMENT"), isSensitive: true, valueMode: "REPLACE" }));
   const replaceBody = requestBodyFor<{ isSensitive?: boolean; value?: string; valueMode?: string }>(
     requests,
     (request) => request.method === "PATCH"
@@ -840,15 +800,13 @@ test("AC-VSD-08 platform variables mask reveal filter and edit sensitive values"
   await captureSafeScreenshot(page, testInfo, "platform-replace-remasked.png");
 
   await page.getByRole("button", { name: "Edit" }).click();
-  await page.getByLabel("Step-up password").fill(stepUpPassword);
-  await page.getByRole("button", { name: "Reveal Value" }).click();
   await page.getByRole("checkbox", { name: "Sensitive Data" }).uncheck();
   await page.getByLabel("Platform variable value").fill("");
   await page.getByRole("button", { name: "Save" }).click();
   await expect(page.getByText("New value is required before turning off sensitivity")).toBeVisible();
   await page.getByLabel("Platform variable value").fill("platform-visible-replacement");
   await page.getByRole("button", { name: "Save" }).click();
-  await expect(page.getByRole("heading", { name: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "PLAYWRIGHT_PLATFORM_SECRET" })).toBeVisible();
   const downgradeBody = requestBodyFor<{ isSensitive?: boolean; value?: string; valueMode?: string }>(
     requests,
     (request) => request.method === "PATCH"

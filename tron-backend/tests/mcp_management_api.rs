@@ -59,6 +59,7 @@ async fn probe_mcp(Json(body): Json<Value>) -> Json<Value> {
             "id": id,
             "result": {
                 "protocolVersion": "2025-06-18",
+                "protocolVersion": "2025-06-18",
                 "serverInfo": {
                     "name": "tron-mcp-probe",
                     "version": "1.0.0"
@@ -163,7 +164,7 @@ async fn gateway_config_persists_and_transport_enablement_is_enforced() {
     assert_eq!(patch_json["data"]["gatewayEnabled"], json!(true));
     assert_eq!(patch_json["data"]["variablesEndpointEnabled"], json!(true));
 
-    let unauthorized_transport = request_with_headers(
+    let profile_transport = request_with_headers(
         &router,
         Method::POST,
         "/mcp/variables",
@@ -176,7 +177,8 @@ async fn gateway_config_persists_and_transport_enablement_is_enforced() {
         None,
     )
     .await;
-    assert_eq!(unauthorized_transport.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(profile_transport.status(), StatusCode::OK);
+    assert_eq!(response_json(profile_transport).await["result"], json!({}));
 
     let enabled_transport = request_with_headers(
         &router,

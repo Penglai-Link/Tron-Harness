@@ -177,7 +177,7 @@ impl ChatService {
             page_context: command.page_context,
             supports_user_input_requests,
             transcript_input_kind: None,
-            transcript_input_metadata: None,
+            transcript_input_metadata: (!command.resume.is_empty()).then(|| json!({"resume": command.resume})),
         };
         let run = if let Some(sink) = sink {
             agent
@@ -299,14 +299,14 @@ impl ChatService {
             .into_iter()
             .enumerate()
             .map(|(index, question)| ChatUserInputQuestion {
-                question_code: format!("QUESTION-{id}-{index}"),
+                question_code: question.id.unwrap_or_else(|| format!("QUESTION-{id}-{index}")),
                 question: question.question,
                 options: question
                     .options
                     .into_iter()
                     .enumerate()
                     .map(|(option_index, option)| ChatUserInputOption {
-                        option_code: format!("OPTION-{id}-{index}-{option_index}"),
+                        option_code: option.id.unwrap_or_else(|| format!("OPTION-{id}-{index}-{option_index}")),
                         label: option.label,
                         description: option.description,
                     })
@@ -319,7 +319,7 @@ impl ChatService {
             )));
         }
         let request = ChatUserInputRequest {
-            request_code: format!("INPUT-{id}"),
+            request_code: raw.framework_interaction_id.map(|id| format!("INPUT-FW-{id}")).unwrap_or_else(|| format!("INPUT-{id}")),
             session_code: session_code.to_string(),
             run_code: run.run_code.clone(),
             assistant_message_code: Some(assistant_message.message_code.clone()),

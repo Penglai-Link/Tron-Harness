@@ -1,33 +1,18 @@
 import { expect, test } from "@playwright/test";
-
 import { deriveReasoningPreview } from "../src/domain/chat/pages/chatReasoningPreview";
 
-test("reasoning preview keeps a readable Chinese last sentence", () => {
-  const preview = deriveReasoningPreview(
-    "我需要先梳理用户上下文，再确认工具调用顺序。然后再进入执行阶段。",
-    [],
-  );
-
-  expect(preview).toBe("然后再进入执行阶段。");
+test("reasoning preview preserves the supplied summary", () => {
+  const summary = "先梳理用户上下文，再确认工具调用顺序。然后进入执行阶段。";
+  expect(deriveReasoningPreview(summary)).toBe(summary);
 });
 
-test("reasoning preview falls back to the full detail when the clause is too short", () => {
-  const preview = deriveReasoningPreview(
-    "\" in Chinese. The user asked \"我是谁\" and I should answer in Chinese with enough context to be useful.",
-    [],
-  );
-
-  expect(preview).toContain("我是谁");
-  expect(preview).toContain("answer in Chinese");
-  expect(preview.length).toBeGreaterThan(40);
+test("reasoning preview normalizes markdown and whitespace", () => {
+  expect(deriveReasoningPreview("**Reviewing** context.\n\n  Checking tools.")).toBe("Reviewing context. Checking tools.");
 });
 
-test("reasoning preview appends tool counts without losing the main detail", () => {
-  const preview = deriveReasoningPreview(
-    "Reviewing session context and available skills. Additional detail follows.",
-    [{ started: true }, { started: true }],
-  );
-
-  expect(preview).toContain("Additional detail follows.");
-  expect(preview).toContain("Used 2 tools.");
+test("reasoning preview truncates long summaries without adding tool counts", () => {
+  const preview = deriveReasoningPreview("Reviewing context and available skills. ".repeat(10));
+  expect(preview.length).toBeLessThanOrEqual(121);
+  expect(preview).toContain("Reviewing context");
+  expect(preview).not.toContain("Used");
 });

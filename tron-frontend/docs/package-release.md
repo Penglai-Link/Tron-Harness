@@ -8,10 +8,9 @@
 
 - `@tron/chat-core`
 - `@tron/chat-openapi-adapter`
-- `@tron/chat-react`
-- `@tron/chat-terminal`
-- `@tron/chat-theme`
-- `@tron/chat-vue`
+- `@tron/chat-agent-ui-adapter`
+
+React、Vue、theme 和 terminal 渲染包已迁到 `eliteforge-agent-ui`，从公共项目发布 `@eliteforge/agent-ui-*`。Tron 不再发布这四个旧渲染包。
 
 `@tron/chat-internal-adapter` 设置了 `private: true`，不会发布。
 
@@ -25,9 +24,12 @@ http://nexus.cisdigital.cn/repository/npm-internal/
 
 ### 1. 安装依赖
 
-在仓库根目录执行：
+先按 [接入文档](../../docs/agent-framework-ui-integration.md) 配置两个公共项目路径，再在仓库根目录执行：
 
 ```bash
+make agent-deps
+make agent-ui-install
+make agent-ui-build
 make fe-install
 ```
 

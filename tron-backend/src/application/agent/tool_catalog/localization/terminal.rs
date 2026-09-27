@@ -27,9 +27,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.terminal.result" => {
             Some("Terminal identity, working directory, state and bounded output.")
         }
-        "agent.toolCatalog.terminal.params.command" => {
-            Some("Complete command line, e.g. npm run dev. When args is supplied, use only the executable name or path.")
-        }
+        "agent.toolCatalog.terminal.params.command" => Some(
+            "Complete command line, e.g. npm run dev. When args is supplied, use only the executable name or path.",
+        ),
         "agent.toolCatalog.terminal.params.args" => {
             Some("Optional literal argv. Omit when command already contains the full command line.")
         }
@@ -84,7 +84,9 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.terminal.params.command" => {
             Some("完整命令行，如 npm run dev；提供 args 时这里只填写程序名或路径。")
         }
-        "agent.toolCatalog.terminal.params.args" => Some("可选的逐项参数；command 已含完整命令行时省略。"),
+        "agent.toolCatalog.terminal.params.args" => {
+            Some("可选的逐项参数；command 已含完整命令行时省略。")
+        }
         "agent.toolCatalog.terminal.params.interactive" => {
             Some("设为 true 可打开用户默认 Shell；此时不能传 command 或 args。")
         }

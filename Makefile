@@ -200,6 +200,13 @@ help:
 	@echo "  make packages-build Build publishable frontend workspace packages"
 	@echo "  make fe-clean     Remove frontend build artifacts"
 	@echo ""
+	@echo "Shared Agent projects (explicit local paths required):"
+	@echo "  make agent-deps          Link TRON_AGENT_FRAMEWORK_DIR and TRON_AGENT_UI_DIR"
+	@echo "  make agent-ui-install    Install shared UI dependencies"
+	@echo "  make agent-ui-build      Build shared UI packages"
+	@echo "  make agent-harness-check Compile Tron harness capability package"
+	@echo "  make agent-harness-test  Test framework assembly and host scope isolation"
+	@echo ""
 	@echo "Backend commands:"
 	@echo "  make be-install   Fetch backend dependencies"
 	@echo "  make be-check     Compile backend"
@@ -294,6 +301,22 @@ fe-clean:
 .PHONY: be-install
 be-install:
 	$(CARGO) fetch --manifest-path "$(BACKEND_MANIFEST)"
+
+.PHONY: agent-deps agent-ui-install agent-ui-build agent-harness-check agent-harness-test
+agent-deps:
+	$(NODE) scripts/prepare-agent-dependencies.mjs
+
+agent-ui-install:
+	$(call RUN_IN_DIR,.agent-deps/agent-ui,$(NPM) ci)
+
+agent-ui-build:
+	$(call RUN_IN_DIR,.agent-deps/agent-ui,$(NPM) run build)
+
+agent-harness-check:
+	$(CARGO) check --manifest-path "$(BACKEND_DIR)/crates/tron-agent-harness/Cargo.toml"
+
+agent-harness-test:
+	$(CARGO) test --manifest-path "$(BACKEND_DIR)/crates/tron-agent-harness/Cargo.toml" $(TEST)
 
 .PHONY: be-check
 be-check:
@@ -441,3 +464,8 @@ skill-memory-spec-test:
 .PHONY: skill-theme-test
 skill-theme-test:
 	$(PYTHON) -B tron-skills/tron-theme-spec/scripts/test_theme_pack.py
+
+# Dedicated real-PTY browser fixture; all state lives in TRON_ACCEPTANCE_DIRECTORY.
+.PHONY: be-ui-acceptance
+be-ui-acceptance:
+	$(CARGO) run --manifest-path "$(BACKEND_MANIFEST)" --example ui_acceptance_server

@@ -155,6 +155,11 @@ export function WorkspaceManagementPage() {
       const createdOrUpdated = result as WorkspaceDetailRecord;
       await loadTree();
       if (createdOrUpdated?.workspaceCode) {
+        const refreshed = isApiMode ? await fetchWorkspaceDetail(createdOrUpdated.workspaceCode) : getWorkspaceDetail(createdOrUpdated.workspaceCode);
+        setDetail(refreshed);
+        setName(refreshed?.name ?? "");
+        setDescription(refreshed?.description ?? "");
+        setParentCode(refreshed?.parentWorkspaceCode ?? ROOT_PARENT);
         setMode("edit");
         setSelectedCode(createdOrUpdated.workspaceCode);
       }
@@ -234,7 +239,7 @@ export function WorkspaceManagementPage() {
         <section data-theme-anchor="panel" className="w-[34%] min-w-[280px] overflow-auto rounded-xl border border-[var(--color-outline-variant)] bg-[var(--color-surface)] p-3">
           <div className="mb-3 flex gap-2">
             <input className="min-w-0 flex-1 rounded-md border border-[var(--color-outline-variant)] bg-transparent px-3 py-2 text-sm" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search workspaces" />
-            <select className="rounded-md border border-[var(--color-outline-variant)] bg-transparent px-2 text-sm" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
+            <select aria-label="Filter workspaces by status" className="rounded-md border border-[var(--color-outline-variant)] bg-transparent px-2 text-sm" value={status} onChange={(event) => setStatus(event.target.value as StatusFilter)}>
               <option value="All">All</option><option value="Active">Active</option><option value="Archived">Archived</option>
             </select>
           </div>

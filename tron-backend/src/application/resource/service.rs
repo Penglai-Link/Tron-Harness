@@ -14,10 +14,7 @@ use std::{
 };
 
 use crate::{
-    application::{
-        variable::VariableService,
-        workspace::WorkspaceService,
-    },
+    application::{variable::VariableService, workspace::WorkspaceService},
     config::ResourceConfig,
     domain::resource::ResourceError,
     shared::event_bus::EventBusHandle,

@@ -1,57 +1,18 @@
-use std::{
-    collections::{BTreeMap, HashMap},
-    sync::{Arc, Mutex},
-};
-
-use reqwest::Client;
-use serde_json::Value;
-use tokio::runtime::Handle;
-
+use super::McpService;
 use crate::domain::{
-    agent::{
-        EffectiveTool, McpAccessMode, Tool, ToolError, ToolExecutionResult, ToolObservation,
-        ToolRegistry, ToolRequest,
-    },
+    agent::{EffectiveTool, McpAccessMode, ToolRegistry},
     mcp::{McpError, McpServerAuthKind, McpServerTransportKind, PlatformMcpServerRecord},
 };
-
-use super::McpService;
-
-mod http;
-mod stdio;
-
-pub(super) type RuntimeMcpToolBindings =
-    Arc<Mutex<HashMap<String, HashMap<String, RuntimeMcpToolBinding>>>>;
-
-pub(super) fn new_runtime_tool_bindings() -> RuntimeMcpToolBindings {
-    Arc::new(Mutex::new(HashMap::new()))
-}
-
-#[derive(Debug, Clone)]
-pub(super) enum RuntimeMcpToolBinding {
-    StreamableHttp {
-        server_code: String,
-        remote_tool_name: String,
-        url: String,
-        headers: BTreeMap<String, String>,
-    },
-    Stdio {
-        server_code: String,
-        remote_tool_name: String,
-        command: String,
-        args: Vec<String>,
-        env: BTreeMap<String, String>,
-        working_directory: Option<String>,
-        protocol_mode: stdio::StdioProtocolMode,
-    },
-}
-
-#[derive(Debug, Clone)]
-pub(super) struct DiscoveredMcpTool {
-    remote_tool_name: String,
-    description: Option<String>,
-    input_schema: Value,
-}
+use eliteforge_agent_core as fw;
+use eliteforge_agent_official_plugin_tools_mcp::{
+    McpClient, McpConfig, McpStdioFraming, McpTransport,
+};
+use serde_json::Value;
+use std::{
+    collections::{BTreeMap, HashMap},
+    time::Duration,
+};
+use tokio_util::sync::CancellationToken;
 
 #[derive(Debug, Clone)]
 pub(crate) struct RuntimeToolMaterialization {
@@ -66,9 +27,6 @@ pub(crate) struct RuntimeMcpWarning {
     pub message: String,
 }
 
-/// MCP servers may expose names containing dots, slashes, or other characters
-/// that are not accepted by the model tool-name contract. Keep the remote name
-/// in the binding, but expose a deterministic model-safe name at runtime.
 fn runtime_tool_name(server_code: &str, remote_tool_name: &str) -> String {
     let mut name = String::from("mcp_");
     for byte in server_code
@@ -86,67 +44,6 @@ fn runtime_tool_name(server_code: &str, remote_tool_name: &str) -> String {
     name
 }
 
-struct McpRuntimeToolDispatch {
-    name: String,
-    http_client: Client,
-    runtime_handle: Handle,
-    bindings: RuntimeMcpToolBindings,
-}
-
-impl McpRuntimeToolDispatch {
-    fn new(
-        name: String,
-        http_client: Client,
-        runtime_handle: Handle,
-        bindings: RuntimeMcpToolBindings,
-    ) -> Self {
-        Self {
-            name,
-            http_client,
-            runtime_handle,
-            bindings,
-        }
-    }
-}
-
-impl Tool for McpRuntimeToolDispatch {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn exec(
-        &self,
-        request: ToolRequest,
-        context: &crate::domain::agent::AgentRunContext,
-    ) -> Result<ToolExecutionResult, ToolError> {
-        let binding = self
-            .bindings
-            .lock()
-            .expect("MCP runtime binding mutex poisoned")
-            .get(&self.name)
-            .and_then(|runs| runs.get(&context.run_code))
-            .cloned()
-            .ok_or_else(|| {
-                ToolError::ExecutionFailed(format!(
-                    "MCP runtime binding for `{}` is unavailable in run `{}`",
-                    self.name, context.run_code
-                ))
-            })?;
-        let tool_name = self.name.clone();
-        let http_client = self.http_client.clone();
-        let runtime_handle = self.runtime_handle.clone();
-        let input = request.input;
-        let output = runtime_handle
-            .block_on(async move { invoke_runtime_tool_call(&http_client, binding, input).await })
-            .map_err(ToolError::ExecutionFailed)?;
-
-        Ok(ToolExecutionResult::observation(ToolObservation {
-            tool_name,
-            output,
-        }))
-    }
-}
-
 impl McpService {
     pub fn resolve_runtime_server_codes(
         &self,
@@ -160,7 +57,6 @@ impl McpService {
             .map(|server| server.server_code)
             .collect())
     }
-
     pub(crate) async fn materialize_runtime_tools(
         &self,
         run_code: &str,
@@ -168,142 +64,155 @@ impl McpService {
         access_mode: McpAccessMode,
         selected_server_codes: &[String],
         variable_values: &HashMap<String, String>,
-        tool_registry: &ToolRegistry,
+        registry: &ToolRegistry,
     ) -> Result<RuntimeToolMaterialization, McpError> {
-        let runtime_handle = Handle::current();
-        let servers =
-            self.resolve_runtime_servers(workspace_code, access_mode, selected_server_codes)?;
-        let mut effective_tools = Vec::new();
+        let mut tools = Vec::new();
         let mut warnings = Vec::new();
-
-        for server in servers {
-            let required_variable_keys = required_variable_keys(&server);
-            match server.transport_kind {
-                McpServerTransportKind::StreamableHttp => {
-                    let headers = match resolve_runtime_headers(&server, variable_values) {
-                        Ok(headers) => headers,
-                        Err(error) => {
-                            warnings.push(runtime_warning(&server, error));
-                            continue;
-                        }
-                    };
-                    let discovered_tools = match http::discover_streamable_http_tools(
-                        &self.http_client,
-                        &server,
-                        &headers,
-                    )
-                    .await
-                    {
-                        Ok(discovered_tools) => discovered_tools,
-                        Err(error) => {
-                            warnings.push(runtime_warning(&server, error));
-                            continue;
-                        }
-                    };
-
-                    for discovered_tool in discovered_tools {
-                        let tool_name = runtime_tool_name(
-                            &server.server_code,
-                            &discovered_tool.remote_tool_name,
-                        );
-                        let binding = RuntimeMcpToolBinding::StreamableHttp {
-                            server_code: server.server_code.clone(),
-                            remote_tool_name: discovered_tool.remote_tool_name.clone(),
-                            url: server.url.clone(),
-                            headers: headers.clone(),
-                        };
-                        self.bind_runtime_tool(&tool_name, run_code, binding);
-                        tool_registry
-                            .register(Arc::new(McpRuntimeToolDispatch::new(
-                                tool_name.clone(),
-                                self.http_client.clone(),
-                                runtime_handle.clone(),
-                                self.runtime_tool_bindings.clone(),
-                            )))
-                            .map_err(|error| McpError::RuntimeDiscoveryFailed(error.to_string()))?;
-                        effective_tools.push(EffectiveTool {
-                            tool_name,
-                            domain_code: Some(format!("mcp.{}", server.server_code)),
-                            description: discovered_tool.description.unwrap_or_else(|| {
-                                format!(
-                                    "Call remote MCP tool `{}` from `{}`.",
-                                    discovered_tool.remote_tool_name, server.name
-                                )
-                            }),
-                            input_schema: http::normalize_runtime_input_schema(
-                                discovered_tool.input_schema,
-                            ),
-                            skill_name: None,
-                            required_variable_keys: required_variable_keys.clone(),
-                        });
-                    }
-                }
-                McpServerTransportKind::Stdio => {
-                    let env = match resolve_runtime_stdio_env(&server, variable_values) {
-                        Ok(env) => env,
-                        Err(error) => {
-                            warnings.push(runtime_warning(&server, error));
-                            continue;
-                        }
-                    };
-                    let discovery = match stdio::discover_stdio_tools(&server, &env).await {
-                        Ok(discovery) => discovery,
-                        Err(error) => {
-                            warnings.push(runtime_warning(&server, error));
-                            continue;
-                        }
-                    };
-
-                    for discovered_tool in discovery.tools {
-                        let tool_name = runtime_tool_name(
-                            &server.server_code,
-                            &discovered_tool.remote_tool_name,
-                        );
-                        let binding = RuntimeMcpToolBinding::Stdio {
-                            server_code: server.server_code.clone(),
-                            remote_tool_name: discovered_tool.remote_tool_name.clone(),
-                            command: server.command.clone(),
-                            args: server.args.clone(),
-                            env: env.clone(),
-                            working_directory: server.working_directory.clone(),
-                            protocol_mode: discovery.protocol_mode,
-                        };
-                        self.bind_runtime_tool(&tool_name, run_code, binding);
-                        tool_registry
-                            .register(Arc::new(McpRuntimeToolDispatch::new(
-                                tool_name.clone(),
-                                self.http_client.clone(),
-                                runtime_handle.clone(),
-                                self.runtime_tool_bindings.clone(),
-                            )))
-                            .map_err(|error| McpError::RuntimeDiscoveryFailed(error.to_string()))?;
-                        effective_tools.push(EffectiveTool {
-                            tool_name,
-                            domain_code: Some(format!("mcp.{}", server.server_code)),
-                            description: discovered_tool.description.unwrap_or_else(|| {
-                                format!(
-                                    "Call remote MCP tool `{}` from `{}`.",
-                                    discovered_tool.remote_tool_name, server.name
-                                )
-                            }),
-                            input_schema: http::normalize_runtime_input_schema(
-                                discovered_tool.input_schema,
-                            ),
-                            skill_name: None,
-                            required_variable_keys: required_variable_keys.clone(),
-                        });
+        for server in
+            self.resolve_runtime_servers(workspace_code, access_mode, selected_server_codes)?
+        {
+            let discovered = async {
+                let config = runtime_config(&server, variable_values)?;
+                let client = McpClient::connect(config).await.map_err(mcp_error)?;
+                match client.discover(&CancellationToken::new()).await {
+                    Ok(bindings) => Ok((client, bindings)),
+                    Err(error) => {
+                        let _ = client.close().await;
+                        Err(mcp_error(error))
                     }
                 }
             }
+            .await;
+            let (client, bindings) = match discovered {
+                Ok(value) => value,
+                Err(error) => {
+                    warnings.push(runtime_warning(&server, error));
+                    continue;
+                }
+            };
+            let mut public_bindings = Vec::new();
+            for mut binding in bindings {
+                // Resource operations use their public call name and executor too.
+                let remote_name = binding
+                    .descriptor
+                    .id
+                    .splitn(3, '/')
+                    .nth(2)
+                    .unwrap_or(&binding.descriptor.call_name)
+                    .to_owned();
+                let tool_name = runtime_tool_name(&server.server_code, &remote_name);
+                if tools
+                    .iter()
+                    .any(|tool: &EffectiveTool| tool.tool_name == tool_name)
+                {
+                    client.cancel();
+                    return Err(McpError::RuntimeDiscoveryFailed(
+                        "MCP names collide after host mapping".into(),
+                    ));
+                }
+                tools.push(EffectiveTool {
+                    tool_name: tool_name.clone(),
+                    domain_code: Some(format!("mcp.{}", server.server_code)),
+                    description: binding.descriptor.description.clone(),
+                    input_schema: binding.descriptor.input_schema.clone(),
+                    skill_name: None,
+                    required_variable_keys: required_variable_keys(&server),
+                });
+                binding.descriptor.id = format!("tron.{tool_name}");
+                binding.descriptor.call_name = tool_name;
+                public_bindings.push(binding);
+            }
+            let close = client.clone();
+            registry.register_framework_lease(
+                run_code,
+                fw::ToolLease::new(public_bindings)
+                    .with_cleanup(move || {
+                        client.cancel();
+                    })
+                    .with_shutdown(move || async move {
+                        close.close().await.map_err(|error| error.to_string())
+                    }),
+            );
         }
-
-        Ok(RuntimeToolMaterialization {
-            tools: effective_tools,
-            warnings,
-        })
+        Ok(RuntimeToolMaterialization { tools, warnings })
     }
 }
-
+fn mcp_error(error: impl ToString) -> McpError {
+    McpError::RuntimeDiscoveryFailed(error.to_string())
+}
+fn runtime_config(
+    server: &PlatformMcpServerRecord,
+    variables: &HashMap<String, String>,
+) -> Result<McpConfig, McpError> {
+    use sha2::{Digest, Sha256};
+    let namespace = format!(
+        "tron_{}",
+        hex::encode(&Sha256::digest(server.server_code.as_bytes())[..8])
+    );
+    let transport = match server.transport_kind {
+        McpServerTransportKind::Stdio => McpTransport::Stdio {
+            program: server.command.clone().into(),
+            args: server.args.clone(),
+            env: resolve_runtime_stdio_env(server, variables)?
+                .into_iter()
+                .collect(),
+            current_dir: server.working_directory.clone().map(Into::into),
+            inherit_env: true,
+        },
+        McpServerTransportKind::StreamableHttp => McpTransport::StreamableHttp {
+            url: server.url.clone(),
+            headers: resolve_runtime_headers(server, variables)?
+                .into_iter()
+                .map(|(key, value)| {
+                    Ok((
+                        key.parse().map_err(mcp_error)?,
+                        value.parse().map_err(mcp_error)?,
+                    ))
+                })
+                .collect::<Result<_, McpError>>()?,
+        },
+    };
+    let mut config = McpConfig::new(namespace, transport);
+    config.stdio_framing = McpStdioFraming::Auto;
+    config.connect_timeout = Duration::from_secs(3);
+    config.request_timeout = Duration::from_secs(30);
+    Ok(config)
+}
+pub(super) async fn verify_stdio_server(
+    server: &PlatformMcpServerRecord,
+    env: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let mut clone = server.clone();
+    clone.env_variable_refs.clear();
+    clone.env_passthrough_refs.clear();
+    let mut config = runtime_config(&clone, &HashMap::new()).map_err(|error| error.to_string())?;
+    if let McpTransport::Stdio { env: target, .. } = &mut config.transport {
+        *target = env.clone().into_iter().collect();
+    }
+    verify(config).await
+}
+pub(super) async fn verify_streamable_http_server(
+    _http: &reqwest::Client,
+    server: &PlatformMcpServerRecord,
+    headers: &BTreeMap<String, String>,
+) -> Result<(), String> {
+    let mut clone = server.clone();
+    clone.auth_kind = McpServerAuthKind::None;
+    clone.headers_variable_refs.clear();
+    clone.headers = headers.clone();
+    verify(runtime_config(&clone, &HashMap::new()).map_err(|error| error.to_string())?).await
+}
+async fn verify(config: McpConfig) -> Result<(), String> {
+    let client = McpClient::connect(config)
+        .await
+        .map_err(|error| error.to_string())?;
+    let result = client.discover(&CancellationToken::new()).await;
+    let closed = client.close().await;
+    result
+        .map(|_| ())
+        .and(closed)
+        .map_err(|error| error.to_string())
+}
 impl McpService {
     fn resolve_runtime_servers(
         &self,
@@ -358,17 +267,7 @@ impl McpService {
             }
         }
     }
-
-    fn bind_runtime_tool(&self, tool_name: &str, run_code: &str, binding: RuntimeMcpToolBinding) {
-        self.runtime_tool_bindings
-            .lock()
-            .expect("MCP runtime binding mutex poisoned")
-            .entry(tool_name.to_string())
-            .or_default()
-            .insert(run_code.to_string(), binding);
-    }
 }
-
 fn required_variable_keys(server: &PlatformMcpServerRecord) -> Vec<String> {
     let mut keys = Vec::new();
     if let McpServerAuthKind::BearerStatic = server.auth_kind
@@ -450,67 +349,6 @@ fn resolve_runtime_variable_value(
                 server.server_code, variable_ref
             ))
         })
-}
-
-async fn invoke_runtime_tool_call(
-    http_client: &Client,
-    binding: RuntimeMcpToolBinding,
-    input: Value,
-) -> Result<String, String> {
-    match binding {
-        RuntimeMcpToolBinding::StreamableHttp {
-            server_code,
-            remote_tool_name,
-            url,
-            headers,
-        } => http::call_streamable_http_tool(http_client, &url, &headers, &remote_tool_name, input)
-            .await
-            .map_err(|error| {
-                format!(
-                    "MCP tool `{}` on server `{}` failed: {}",
-                    remote_tool_name,
-                    server_code,
-                    runtime_error_message(&error)
-                )
-            }),
-        RuntimeMcpToolBinding::Stdio {
-            server_code,
-            remote_tool_name,
-            command,
-            args,
-            env,
-            working_directory,
-            protocol_mode,
-        } => stdio::invoke_stdio_tool_call(
-            server_code.clone(),
-            remote_tool_name.clone(),
-            command,
-            args,
-            env,
-            working_directory,
-            protocol_mode,
-            input,
-        )
-        .await
-        .map_err(|error| {
-            format!("MCP tool `{remote_tool_name}` on server `{server_code}` failed: {error}")
-        }),
-    }
-}
-
-pub(super) async fn verify_stdio_server(
-    server: &PlatformMcpServerRecord,
-    env: &BTreeMap<String, String>,
-) -> Result<(), String> {
-    stdio::verify_stdio_server(server, env).await
-}
-
-pub(super) async fn verify_streamable_http_server(
-    http_client: &Client,
-    server: &PlatformMcpServerRecord,
-    headers: &BTreeMap<String, String>,
-) -> Result<(), String> {
-    http::verify_streamable_http_server(http_client, server, headers).await
 }
 
 fn runtime_warning(server: &PlatformMcpServerRecord, error: McpError) -> RuntimeMcpWarning {

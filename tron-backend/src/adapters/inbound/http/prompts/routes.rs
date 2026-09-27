@@ -3,9 +3,9 @@ use axum::{Router, routing::post};
 use crate::app::AppState;
 
 use super::handler::{
-    analyze_template, workspace_create, workspace_delete, workspace_detail, workspace_duplicate,
-    translate_draft, workspace_export, workspace_page, workspace_revert, workspace_set_allow_inheritance,
-    workspace_set_enabled, workspace_update,
+    analyze_template, translate_draft, workspace_create, workspace_delete, workspace_detail,
+    workspace_duplicate, workspace_export, workspace_page, workspace_revert,
+    workspace_set_allow_inheritance, workspace_set_enabled, workspace_update,
 };
 
 pub fn routes() -> Router<AppState> {

@@ -69,6 +69,7 @@ export default defineConfig(({ mode }) => {
           },
     },
     resolve: {
+      dedupe: ["react", "react-dom", "@eliteforge/agent-ui-chat-core"],
       alias: {
         "@": fileURLToPath(new URL("./src", import.meta.url)),
       },

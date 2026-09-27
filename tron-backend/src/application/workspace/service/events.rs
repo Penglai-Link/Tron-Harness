@@ -21,8 +21,7 @@ impl WorkspaceService {
                         .parent_workspace_code
                         .clone()
                         .unwrap_or_else(|| "ROOT".into()),
-                )
-                ,
+                ),
         );
     }
 
@@ -45,5 +44,4 @@ impl WorkspaceService {
                 ),
         );
     }
-
 }

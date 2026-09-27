@@ -74,12 +74,19 @@ pub async fn get_context_detail(
     {
         return invalid_request_response("sessionCode and a supported blockCode are required");
     }
-    match state.short_term_memory.context_detail(&query.session_code, &query.block_code) {
+    match state
+        .short_term_memory
+        .context_detail(&query.session_code, &query.block_code)
+    {
         Ok(Some(detail)) => Json(ApiResponse::success(detail)).into_response(),
         Ok(None) => (
             StatusCode::NOT_FOUND,
-            Json(ApiResponse::error("CHAT_CONTEXT_DETAIL_NOT_FOUND", "context detail is not available for this session")),
-        ).into_response(),
+            Json(ApiResponse::error(
+                "CHAT_CONTEXT_DETAIL_NOT_FOUND",
+                "context detail is not available for this session",
+            )),
+        )
+            .into_response(),
         Err(error) => short_term_memory_error_response(error),
     }
 }

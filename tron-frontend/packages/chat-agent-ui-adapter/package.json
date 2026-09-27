@@ -1,0 +1,32 @@
+{
+  "name": "@tron/chat-agent-ui-adapter",
+  "version": "0.1.0",
+  "type": "module",
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/src/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/src/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "vite build"
+  },
+  "dependencies": {
+    "@tron/chat-core": "^0.1.1"
+  },
+  "peerDependencies": {
+    "@eliteforge/agent-ui-chat-core": "^0.1.0"
+  },
+  "publishConfig": {
+    "registry": "http://nexus.cisdigital.cn/repository/npm-internal/",
+    "access": "restricted"
+  }
+}

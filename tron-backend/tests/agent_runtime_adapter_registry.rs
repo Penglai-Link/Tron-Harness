@@ -483,3 +483,187 @@ async fn service_mode_runtime_rejects_sensitive_variables_before_posting() {
         "AC-VSD-06 RED: sensitive context must fail before external POST"
     );
 }
+
+#[tokio::test]
+async fn service_adapters_restore_sessions_from_framework_after_host_restart() {
+    use tron_backend::application::agent::FrameworkHost;
+    let server = service_runtime_mock_server().await;
+    let directory = tempfile::tempdir().unwrap();
+    for (index, selection) in [
+        RuntimeAdapterSelection::CodexAppServer {
+            endpoint: server.base_url.clone(),
+            working_directory: None,
+        },
+        RuntimeAdapterSelection::OpenCodeServe {
+            endpoint: server.base_url.clone(),
+            working_directory: None,
+        },
+        RuntimeAdapterSelection::OpenCodeAcp {
+            endpoint: server.base_url.clone(),
+            working_directory: None,
+        },
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        let path = directory.path().join(format!("runtime-{index}.sqlite3"));
+        let host = FrameworkHost::persistent(&path, None);
+        let runtime = registry()
+            .with_framework_host(Some(host.clone()))
+            .resolve(selection.clone());
+        runtime.start(base_context(), None).await.unwrap();
+        host.close().await;
+        drop(runtime);
+        drop(host);
+        let host = FrameworkHost::persistent(&path, None);
+        let runtime = registry()
+            .with_framework_host(Some(host.clone()))
+            .resolve(selection);
+        let mut context = base_context();
+        context.run_code = "RUN-RESTARTED".into();
+        context.messages = vec![AgentMessage::user("continue after restart")];
+        let result = runtime.start(context.clone(), None).await.unwrap();
+        assert_eq!(result.final_output, "service resume output");
+        assert_eq!(
+            server.requests.lock().unwrap().last().unwrap()["requestedSessionId"],
+            "svc-start-session"
+        );
+        // Reusing a chat ID under another owner cannot reuse that remote session.
+        context.user_code = Some("ANOTHER-USER".into());
+        context.run_code = "RUN-OTHER-USER".into();
+        runtime.start(context, None).await.unwrap();
+        assert_eq!(
+            server.requests.lock().unwrap().last().unwrap()["action"],
+            "start"
+        );
+        host.close().await;
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn cli_adapters_restore_native_sessions_after_host_restart() {
+    use std::os::unix::fs::PermissionsExt;
+    use tron_backend::application::agent::FrameworkHost;
+    for codex in [true, false] {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("agent");
+        let log = directory.path().join("argv.txt");
+        let event = if codex {
+            r#"echo '{"type":"thread.started","thread_id":"cli-session"}'
+echo '{"type":"item.completed","item":{"type":"agent_message","text":"cli reply"}}'"#
+        } else {
+            r#"echo '{"type":"step_start","sessionID":"cli-session"}'
+echo '{"type":"text","part":{"text":"cli reply"}}'"#
+        };
+        std::fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nprintf '%s\\n' \"$*\" >> '{}'\n{event}\n",
+                log.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let command_name = executable.to_string_lossy().into_owned();
+        let selection = if codex {
+            RuntimeAdapterSelection::CodexExec {
+                command_name,
+                working_directory: Some(directory.path().to_string_lossy().into_owned()),
+            }
+        } else {
+            RuntimeAdapterSelection::OpenCodeRun {
+                command_name,
+                working_directory: Some(directory.path().to_string_lossy().into_owned()),
+            }
+        };
+        let path = directory.path().join("framework.sqlite3");
+        for turn in 0..2 {
+            let host = FrameworkHost::persistent(&path, None);
+            let runtime = registry()
+                .with_framework_host(Some(host.clone()))
+                .resolve(selection.clone());
+            let mut context = base_context();
+            context.run_code = format!("CLI-{turn}");
+            let result = runtime.start(context, None).await.unwrap();
+            assert_eq!(
+                result.system_agent_session_id.as_deref(),
+                Some("cli-session")
+            );
+            assert_eq!(result.final_output, "cli reply");
+            host.close().await;
+        }
+        let argv = std::fs::read_to_string(log).unwrap();
+        let lines: Vec<_> = argv.lines().collect();
+        assert!(!lines[0].contains("cli-session"));
+        assert!(lines[1].contains("cli-session"), "{argv}");
+        if codex {
+            assert!(lines[1].contains("resume"));
+        } else {
+            assert!(lines[1].contains("--session"));
+        }
+    }
+}
+
+#[cfg(unix)]
+#[tokio::test]
+async fn dropping_cli_run_terminates_its_child_process_tree() {
+    use std::os::unix::fs::PermissionsExt;
+    for codex in [true, false] {
+        let directory = tempfile::tempdir().unwrap();
+        let executable = directory.path().join("agent");
+        let pid_file = directory.path().join("child.pid");
+        std::fs::write(
+            &executable,
+            format!(
+                "#!/bin/sh\nsleep 60 &\necho $! > '{}'\nwait\n",
+                pid_file.display()
+            ),
+        )
+        .unwrap();
+        std::fs::set_permissions(&executable, std::fs::Permissions::from_mode(0o755)).unwrap();
+        let command_name = executable.to_string_lossy().into_owned();
+        let selection = if codex {
+            RuntimeAdapterSelection::CodexExec {
+                command_name,
+                working_directory: Some(directory.path().to_string_lossy().into_owned()),
+            }
+        } else {
+            RuntimeAdapterSelection::OpenCodeRun {
+                command_name,
+                working_directory: Some(directory.path().to_string_lossy().into_owned()),
+            }
+        };
+        let runtime = registry().resolve(selection);
+        let task = tokio::spawn(async move { runtime.start(base_context(), None).await });
+        let pid = tokio::time::timeout(std::time::Duration::from_secs(10), async {
+            loop {
+                if let Ok(pid) = std::fs::read_to_string(&pid_file) {
+                    if !pid.trim().is_empty() {
+                        break pid.trim().to_owned();
+                    }
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("CLI child did not start");
+        task.abort();
+        assert!(task.await.unwrap_err().is_cancelled());
+        tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            loop {
+                let output = std::process::Command::new("ps")
+                    .args(["-o", "stat=", "-p", &pid])
+                    .output()
+                    .unwrap();
+                let state = String::from_utf8_lossy(&output.stdout);
+                if state.trim().is_empty() || state.trim().starts_with('Z') {
+                    break;
+                }
+                tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+            }
+        })
+        .await
+        .expect("CLI cancellation left a running descendant");
+    }
+}

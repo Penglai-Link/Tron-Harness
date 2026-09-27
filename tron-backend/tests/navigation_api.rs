@@ -41,10 +41,10 @@ async fn request_json(
 }
 
 #[tokio::test]
-async fn runtime_navigation_is_authenticated_localized_and_separate_from_domain_list() {
+async fn runtime_navigation_requires_profile_and_is_localized_and_separate_from_domain_list() {
     let router = app();
     let anonymous = request_json(
-        &router,
+        &common::app_without_profile(),
         Method::GET,
         "/api/v1/navigation/domains",
         None,
@@ -52,7 +52,11 @@ async fn runtime_navigation_is_authenticated_localized_and_separate_from_domain_
         None,
     )
     .await;
-    assert_eq!(anonymous.status(), StatusCode::UNAUTHORIZED);
+    assert_eq!(anonymous.status(), StatusCode::CONFLICT);
+    assert_eq!(
+        response_json(anonymous).await["code"],
+        "PERSONAI_PROFILE_REQUIRED"
+    );
 
     let token = authenticated_bearer_token(&router).await;
     let domains = request_json(
@@ -200,7 +204,7 @@ async fn custom_menu_lifecycle_and_copy_conflicts_follow_navigation_rules() {
     .await;
     let runtime_after_add_payload = response_json(runtime_after_add).await;
     assert!(
-        !runtime_after_add_payload
+        runtime_after_add_payload
             .to_string()
             .contains("COMPLIANCE_PORTAL")
     );

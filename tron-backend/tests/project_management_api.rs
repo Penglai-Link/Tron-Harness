@@ -18,6 +18,15 @@ async fn saving_a_project_and_listing_it_returns_without_blocking() {
         ..AppConfig::default()
     });
 
+    let app = authenticated_request(&router, Method::POST, "/api/v1/apps/workspaces/TRON_CORE", Some(json!({
+        "name": "Tron API", "localDirectory": "/workspace/tron/backend", "runtimeRole": "Backend", "tags": []
+    }))).await;
+    assert_eq!(app.status(), StatusCode::CREATED);
+    let backend_app_code = response_json(app).await["data"]["appCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+
     let created = timeout(
         Duration::from_secs(1),
         authenticated_request(
@@ -27,8 +36,8 @@ async fn saving_a_project_and_listing_it_returns_without_blocking() {
             Some(json!({
                 "workspaceCode": "TRON_CORE",
                 "name": "Tron workspace",
-                "appCodes": ["APP-TRON-API", "APP-TRON-CONSOLE"],
-                "primaryAppCode": "APP-TRON-API"
+                "appCodes": [backend_app_code, "APP-TRON-CONSOLE"],
+                "primaryAppCode": backend_app_code
             })),
         ),
     )
@@ -38,7 +47,7 @@ async fn saving_a_project_and_listing_it_returns_without_blocking() {
     let created_json = response_json(created).await;
     assert_eq!(created_json["code"], "SUCCESS");
     assert_eq!(created_json["data"]["name"], "Tron workspace");
-    assert_eq!(created_json["data"]["primaryAppCode"], "APP-TRON-API");
+    assert_eq!(created_json["data"]["primaryAppCode"], backend_app_code);
 
     let project_code = created_json["data"]["projectCode"]
         .as_str()
@@ -73,8 +82,7 @@ async fn saving_a_project_and_listing_it_returns_without_blocking() {
     assert_eq!(repeated_session.status(), StatusCode::CREATED);
     let repeated_session_json = response_json(repeated_session).await;
     assert_eq!(
-        repeated_session_json["data"]["sessionCode"],
-        first_session_json["data"]["sessionCode"],
+        repeated_session_json["data"]["sessionCode"], first_session_json["data"]["sessionCode"],
         "a project can have only one active empty chat session"
     );
 

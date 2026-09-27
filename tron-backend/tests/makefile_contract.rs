@@ -162,7 +162,7 @@ fn make_be_dev_port_override_is_wired_into_backend_config() {
     let config_source = fs::read_to_string(repo_root.join("tron-backend/src/config/parsing.rs"))
         .expect("backend config parsing source should be readable");
     assert!(
-        config_source.contains("ENV_BACKEND_PORT")
+        config_source.contains("TRON_BACKEND_PORT")
             && config_source.contains("env_port_override")
             && config_source.contains("parse::<u16>()"),
         "backend config parsing must consume TRON_BACKEND_PORT as a u16 override"

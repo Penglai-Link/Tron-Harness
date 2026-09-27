@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -103,6 +104,7 @@ test("memory rows preserve line breaks in a bounded plain-text preview", async (
   ].join("\n");
 
   await page.setViewportSize({ width: 1440, height: 900 });
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/memory/new`);
   await page.getByLabel("Title").fill(title);
   await page.locator('[data-slot="field"]', { hasText: "Memory text" }).locator("textarea").fill(text);
@@ -115,7 +117,7 @@ test("memory rows preserve line breaks in a bounded plain-text preview", async (
     .click();
   await expect(page).toHaveURL(/\/memory$/);
   const titleButton = page.getByRole("button", { name: title, exact: true });
-  const row = page.locator("article").filter({ has: titleButton });
+  const row = page.getByRole("row").filter({ has: titleButton });
   const preview = row.getByTestId("memory-record-text");
 
   await expect(row).toBeVisible();

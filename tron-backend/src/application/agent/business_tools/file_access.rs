@@ -40,6 +40,16 @@ pub(super) fn resolve_input_file(
     context: &AgentRunContext,
     resources: &ResourceService,
 ) -> Result<ResolvedInputFile, ToolError> {
+    resolve_input_file_bounded(input, context, resources, MAX_INPUT_FILE_BYTES)
+}
+
+pub(super) fn resolve_input_file_bounded(
+    input: &Value,
+    context: &AgentRunContext,
+    resources: &ResourceService,
+    limit: u64,
+) -> Result<ResolvedInputFile, ToolError> {
+    let limit = limit.min(MAX_INPUT_FILE_BYTES);
     let reference = match (input.get("fileRef"), input.get("path")) {
         (Some(_), Some(_)) => {
             return Err(ToolError::ExecutionFailed(
@@ -71,19 +81,19 @@ pub(super) fn resolve_input_file(
                 .metadata()
                 .map_err(|e| ToolError::ExecutionFailed(format!("file metadata failed: {e}")))?
                 .len();
-            if size > MAX_INPUT_FILE_BYTES {
-                return Err(ToolError::ExecutionFailed(
-                    "file exceeds 32 MiB limit".into(),
-                ));
+            if size > limit {
+                return Err(ToolError::ExecutionFailed(format!(
+                    "file exceeds {limit} byte input limit"
+                )));
             }
             let mut bytes = Vec::with_capacity(size as usize);
-            file.take(MAX_INPUT_FILE_BYTES + 1)
+            file.take(limit.saturating_add(1))
                 .read_to_end(&mut bytes)
                 .map_err(|e| ToolError::ExecutionFailed(format!("file read failed: {e}")))?;
-            if bytes.len() as u64 > MAX_INPUT_FILE_BYTES {
-                return Err(ToolError::ExecutionFailed(
-                    "file exceeds 32 MiB limit".into(),
-                ));
+            if bytes.len() as u64 > limit {
+                return Err(ToolError::ExecutionFailed(format!(
+                    "file exceeds {limit} byte input limit"
+                )));
             }
             let file_name = path
                 .file_name()
@@ -114,17 +124,24 @@ pub(super) fn resolve_input_file(
                         "session attachment fileRef requires a conversation session".into(),
                     )
                 })?;
-            let (record, bytes) = resources
-                .read_chat_session_attachment(
+            let (record, _, bytes) = resources
+                .read_chat_session_attachment_range(
                     &context.workspace_code,
                     session_code,
                     attachment_code,
+                    0,
+                    limit,
                 )
                 .map_err(|error| {
                     ToolError::ExecutionFailed(format!(
                         "session attachment `{attachment_code}` could not be read: {error}"
                     ))
                 })?;
+            if record.byte_size > limit {
+                return Err(ToolError::ExecutionFailed(format!(
+                    "attachment exceeds {limit} byte input limit"
+                )));
+            }
             Ok(ResolvedInputFile {
                 file_name: record.file_name.clone(),
                 bytes,

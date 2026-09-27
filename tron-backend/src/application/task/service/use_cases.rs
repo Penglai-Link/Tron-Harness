@@ -123,9 +123,33 @@ impl TaskService {
         task_code: &str,
         command: UpdateTaskCommand,
     ) -> Result<TaskDetail, TaskError> {
+        self.update_task_with_status(task_code, command, None)
+    }
+
+    /// Validate the requested status before committing any other task fields.
+    pub fn update_task_with_status(
+        &self,
+        task_code: &str,
+        command: UpdateTaskCommand,
+        status_update: Option<UpdateTaskStatusCommand>,
+    ) -> Result<TaskDetail, TaskError> {
         let mut task = self.get_task_record(task_code)?;
         if task.archived_at.is_some() {
             return Err(TaskError::ArchivedMutationDenied);
+        }
+        if let Some(status_update) = status_update {
+            let status =
+                normalized_flow_code(&status_update.status).ok_or(TaskError::InvalidRequest)?;
+            let flow = self.get_task_flow(&task.flow_code)?;
+            if !Self::flow_contains_status(&flow, &status) {
+                return Err(TaskError::StatusNotInFlow);
+            }
+            task.progress = if status == crate::domain::task::CLOSED_STATUS_CODE {
+                100
+            } else {
+                status_update.progress.unwrap_or(task.progress).min(100)
+            };
+            task.status = status;
         }
         if let Some(title) = command.title {
             task.title = normalized_required(title).ok_or(TaskError::InvalidRequest)?;

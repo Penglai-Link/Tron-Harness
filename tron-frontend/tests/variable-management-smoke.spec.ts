@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import { expect, test, type Page, type Route } from "@playwright/test";
 import {
   spawnManagedProcess,
@@ -135,7 +136,7 @@ async function seedTronCoreShellSelection(page: Page) {
         sidebarCollapsed: false,
         workspaceSwitcherSnapshot: snapshot,
       },
-      version: 4,
+      version: 9,
     }));
   }, workspaceSwitcher);
 }
@@ -305,7 +306,7 @@ async function routeApi(page: Page, requests: CapturedRequest[], variables: Loca
 }
 
 function toast(page: Page, message: string | RegExp) {
-  return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+  return page.locator('[aria-label="Notifications"]').getByRole("dialog").filter({ hasText: message }).first();
 }
 
 function appendFrontendLog(chunk: Buffer) {
@@ -428,6 +429,7 @@ test("variable management supports inheritance override revert local CRUD and wo
   await routeApi(page, requests, variables);
   await seedTronCoreShellSelection(page);
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables`);
 
   await expect(page.getByRole("heading", { name: "Variables" })).toBeVisible();
@@ -437,13 +439,13 @@ test("variable management supports inheritance override revert local CRUD and wo
   await expect(page.locator("tbody tr", { hasText: "ROUTER_TIMEOUT_MS" })).toBeVisible();
 
   await page.locator("tbody tr", { hasText: "DEFAULT_REGION" }).click();
-  await expect(page.getByRole("heading", { name: "DEFAULT_REGION" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "DEFAULT_REGION" })).toBeVisible();
   await expect(page.getByText("Inherited From", { exact: true })).toBeVisible();
   await expect(page.getByRole("button", { name: "Override", exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Override", exact: true }).click();
   await page.getByLabel("Variable value").fill("ap-southeast-1");
-  await page.getByLabel("Variable description").fill("Regional override for APAC");
+  await page.getByRole("textbox", { name: "Description", exact: true }).fill("Regional override for APAC");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toast(page, "DEFAULT_REGION overridden in TRON_CORE")).toBeVisible();
   await expect.poll(() => requests.some((request) => (
@@ -462,11 +464,12 @@ test("variable management supports inheritance override revert local CRUD and wo
   ))).toBe(true);
   await expect(page.getByText("Inherited From", { exact: true })).toBeVisible();
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/variables`);
   await page.getByRole("button", { name: "New", exact: true }).click();
   await page.getByLabel("Variable key").fill("MAX_CONTEXT_WINDOW");
   await page.getByLabel("Variable value").fill("128000");
-  await page.getByLabel("Variable description").fill("Local window size");
+  await page.getByRole("textbox", { name: "Description", exact: true }).fill("Local window size");
   await page.getByRole("button", { name: "Save", exact: true }).click();
   await expect(toast(page, "MAX_CONTEXT_WINDOW created")).toBeVisible();
   await expect.poll(() => requests.some((request) => (
@@ -475,7 +478,7 @@ test("variable management supports inheritance override revert local CRUD and wo
     && (request.body as { key?: string } | null)?.key === "MAX_CONTEXT_WINDOW"
   ))).toBe(true);
 
-  await expect(page.getByRole("heading", { name: "MAX_CONTEXT_WINDOW" })).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" }).filter({ hasText: "MAX_CONTEXT_WINDOW" })).toBeVisible();
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByLabel("Variable value").fill("256000");
   await page.getByRole("button", { name: "Save", exact: true }).click();

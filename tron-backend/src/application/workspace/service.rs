@@ -5,12 +5,18 @@ use rand::RngCore;
 use crate::{
     domain::{
         auth::AuthenticatedUser,
-        workspace::{Workspace, WorkspaceDetail, WorkspaceError, WorkspaceLifecycleResult,
-            WorkspaceListQuery, WorkspaceOption, WorkspaceStatus,
+        workspace::{
+            Workspace, WorkspaceDetail, WorkspaceError, WorkspaceLifecycleResult,
+            WorkspaceLineageItem, WorkspaceListQuery, WorkspaceOption, WorkspaceStatus,
             WorkspaceSwitcherData, WorkspaceSwitcherPrimarySpace, WorkspaceSwitcherSecondarySpace,
-            WorkspaceTreeNode, WorkspaceLineageItem},
+            WorkspaceTreeNode,
+        },
     },
-    shared::{event_bus::{BusEventDraft, EventBusHandle}, id::SnowflakeId, time::current_timestamp},
+    shared::{
+        event_bus::{BusEventDraft, EventBusHandle},
+        id::SnowflakeId,
+        time::current_timestamp,
+    },
 };
 
 const GENERATED_WORKSPACE_CODE_PREFIX: &str = "WS-";
@@ -22,9 +28,12 @@ mod lifecycle_use_cases;
 mod query_use_cases;
 mod tree_projection;
 
-use hierarchy::{build_workspace_path, descendant_codes, find_workspace, generate_workspace_code, subtree_height};
-use tree_projection::{build_child_summaries, build_workspace_options, build_workspace_switcher,
-    build_workspace_tree};
+use hierarchy::{
+    build_workspace_path, descendant_codes, find_workspace, generate_workspace_code, subtree_height,
+};
+use tree_projection::{
+    build_child_summaries, build_workspace_options, build_workspace_switcher, build_workspace_tree,
+};
 
 #[derive(Debug, Clone)]
 pub struct CreateWorkspaceCommand {
@@ -49,10 +58,16 @@ pub trait WorkspaceRepository: Send {
     fn next_id(&mut self) -> Result<i64, WorkspaceError>;
     fn create_workspace(&mut self, workspace: &Workspace) -> Result<(), WorkspaceError>;
     fn update_workspace(&mut self, workspace: &Workspace) -> Result<(), WorkspaceError>;
-    fn archive_subtree(&mut self, workspace_codes: &[String], archived_at: &str)
-        -> Result<usize, WorkspaceError>;
-    fn restore_subtree(&mut self, workspace_codes: &[String], restored_at: &str)
-        -> Result<usize, WorkspaceError>;
+    fn archive_subtree(
+        &mut self,
+        workspace_codes: &[String],
+        archived_at: &str,
+    ) -> Result<usize, WorkspaceError>;
+    fn restore_subtree(
+        &mut self,
+        workspace_codes: &[String],
+        restored_at: &str,
+    ) -> Result<usize, WorkspaceError>;
 }
 
 #[derive(Clone)]
@@ -143,5 +158,7 @@ impl WorkspaceService {
 }
 
 fn optional_trimmed(value: Option<String>) -> Option<String> {
-    value.map(|value| value.trim().to_string()).filter(|value| !value.is_empty())
+    value
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
 }

@@ -24,8 +24,7 @@ pub struct CreateAuthorizationRequest {
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
-pub struct PollAuthorizationRequest {
-}
+pub struct PollAuthorizationRequest {}
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]

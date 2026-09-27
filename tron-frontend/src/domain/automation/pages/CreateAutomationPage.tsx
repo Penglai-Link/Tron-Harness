@@ -266,7 +266,7 @@ export function CreateAutomationPage() {
               <span className="text-[11px] font-semibold uppercase tracking-[0.05em] text-[var(--color-on-surface-variant)]">
                 {pageT("fields.prompt", "Prompt body")}
               </span>
-              <Button size="lg" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
+              <Button aria-label={pageT("aria.openPrompt", "Fullscreen")} size="lg" type="button" variant="ghost" onClick={() => setPromptFullscreenOpen(true)}>
                 <Maximize2 size={14} aria-hidden="true" />
               </Button>
             </div>

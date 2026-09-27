@@ -13,7 +13,10 @@ use crate::{
 pub struct GitApplicationDirectoryInspector;
 
 impl ApplicationDirectoryInspector for GitApplicationDirectoryInspector {
-    fn instruction_files(&self, directory: &str) -> Result<Vec<crate::application::project::ProjectInstructionFile>, String> {
+    fn instruction_files(
+        &self,
+        directory: &str,
+    ) -> Result<Vec<crate::application::project::ProjectInstructionFile>, String> {
         instruction_files::read(directory)
     }
 

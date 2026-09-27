@@ -191,9 +191,10 @@ describe("buildAguiUserWorkCards", () => {
       event({ type: "TOOL_CALL_END", timestamp: 3_003, toolCallId: "tool-bash" }),
     ]);
 
-    const toolGroup = cards.find((card) => card.kind === "toolGroup");
-    if (!toolGroup || toolGroup.kind !== "toolGroup") throw new Error("expected tool group card");
-    expect(toolGroup.value.toolCards[0]?.toolName).toBe("bash_exec");
+    const tool = cards.find((card) => card.kind === "tool");
+    if (!tool || tool.kind !== "tool") throw new Error("expected tool card");
+    expect(tool.value.toolName).toBe("bash_exec");
+
   });
 });
 

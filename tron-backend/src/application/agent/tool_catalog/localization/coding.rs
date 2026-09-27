@@ -77,9 +77,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
             Some("taskId returned by bash_exec.")
         }
         "agent.toolCatalog.tools.fs.read_text.name" => Some("Read text file"),
-        "agent.toolCatalog.tools.fs.read_text.description" => {
-            Some("Read UTF-8 text from a linked project file or this session's attachment, optionally by line range.")
-        }
+        "agent.toolCatalog.tools.fs.read_text.description" => Some(
+            "Read UTF-8 text from a linked project file or this session's attachment, optionally by line range.",
+        ),
         "agent.toolCatalog.tools.fs.read_text.sampleResultSummary" => {
             Some("Returns file content and the materialized line range.")
         }
@@ -152,9 +152,9 @@ pub(super) fn translate_en_us(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.fs.apply_patch.description" => Some(
             "Edit code with a context-based multi-file patch: add, update, delete, or move files. All operations are validated before writing; dryRun previews changes. Legacy path/action/target text edits remain supported; ambiguous targets are rejected.",
         ),
-        "agent.toolCatalog.tools.fs.apply_patch.sampleResultSummary" => Some(
-            "Returns changed paths and a bounded diff; dryRun does not write files.",
-        ),
+        "agent.toolCatalog.tools.fs.apply_patch.sampleResultSummary" => {
+            Some("Returns changed paths and a bounded diff; dryRun does not write files.")
+        }
         "agent.toolCatalog.tools.fs.apply_patch.params.path" => Some(
             "Target file path, absolute, relative to the workspace root, or a ~ home-directory path.",
         ),
@@ -321,12 +321,12 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
         "agent.toolCatalog.tools.bash.exec.sampleResultSummary" => {
             Some("返回 stdout、stderr、退出状态，以及运行中的 taskId。")
         }
-        "agent.toolCatalog.tools.bash.exec.params.command" => {
-            Some("完整命令行，如 npm run build 或 bash -c 'echo ok'；提供 args 时这里只填写程序名或路径。")
-        }
-        "agent.toolCatalog.tools.bash.exec.params.args" => Some(
-            "可选的逐项参数。传完整命令行时省略；填写后 command 只能是程序名或路径。",
+        "agent.toolCatalog.tools.bash.exec.params.command" => Some(
+            "完整命令行，如 npm run build 或 bash -c 'echo ok'；提供 args 时这里只填写程序名或路径。",
         ),
+        "agent.toolCatalog.tools.bash.exec.params.args" => {
+            Some("可选的逐项参数。传完整命令行时省略；填写后 command 只能是程序名或路径。")
+        }
         "agent.toolCatalog.tools.bash.exec.params.cwd" => {
             Some("可选工作目录；可填写绝对路径、相对路径或 `~` 家目录路径。")
         }
@@ -394,9 +394,9 @@ pub(super) fn translate_zh_cn(key: &str) -> Option<&'static str> {
             Some("本次最多读取的字节数；服务端上限为 262144 字节。")
         }
         "agent.toolCatalog.tools.chat_attachment.parse_json.name" => Some("解析会话附件 JSON"),
-        "agent.toolCatalog.tools.chat_attachment.parse_json.description" => {
-            Some("解析项目文件或会话附件中的 JSON，返回文档统计，并可通过 JSON Pointer 查看指定节点。")
-        }
+        "agent.toolCatalog.tools.chat_attachment.parse_json.description" => Some(
+            "解析项目文件或会话附件中的 JSON，返回文档统计，并可通过 JSON Pointer 查看指定节点。",
+        ),
         "agent.toolCatalog.tools.chat_attachment.parse_json.sampleResultSummary" => {
             Some("返回完整 JSON 文档统计和受限大小的指定节点值。")
         }

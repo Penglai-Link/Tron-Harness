@@ -92,6 +92,52 @@ impl TurnStateAdapter {
         }
     }
 
+    /// Persist only provider continuation metadata, never credentials or messages.
+    /// The digest prevents replaying a response against edited/compacted history.
+    pub(crate) fn checkpoint(&self, messages: &[AgentMessage]) -> Result<Option<Value>, String> {
+        let Self::Responses(state) = self else {
+            return Ok(None);
+        };
+        let Some(response_id) = &state.previous_response_id else {
+            return Ok(None);
+        };
+        let consumed = state.consumed_message_count;
+        if consumed > messages.len() {
+            return Err("continuation exceeds transcript".into());
+        }
+        Ok(Some(serde_json::json!({
+            "responseId": response_id,
+            "consumedMessages": consumed,
+            "prefixDigest": continuation_digest(&messages[..consumed])?,
+            "contextHash": state.context_hash,
+        })))
+    }
+
+    pub(crate) fn restore_checkpoint(
+        &mut self,
+        value: &Value,
+        messages: &[AgentMessage],
+    ) -> Result<bool, String> {
+        let Self::Responses(state) = self else {
+            return Ok(false);
+        };
+        let checkpoint: ResponsesCheckpoint = serde_json::from_value(value.clone())
+            .map_err(|e| format!("invalid continuation checkpoint: {e}"))?;
+        if checkpoint.response_id.is_empty()
+            || checkpoint.consumed_messages > messages.len()
+            || checkpoint.prefix_digest
+                != continuation_digest(&messages[..checkpoint.consumed_messages])?
+        {
+            // A user edited history or compaction changed the prefix. Replay it fully.
+            *state = ResponsesItemState::default();
+            return Ok(false);
+        }
+        state.previous_response_id = Some(checkpoint.response_id);
+        state.consumed_message_count = checkpoint.consumed_messages;
+        state.context_hash = checkpoint.context_hash;
+        Ok(true)
+    }
+
     pub fn record_tool_observation(
         &mut self,
         observation: &ToolObservation,
@@ -99,6 +145,21 @@ impl TurnStateAdapter {
     ) -> AgentMessage {
         tool_observation_message(observation, model_call_id)
     }
+}
+
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct ResponsesCheckpoint {
+    response_id: String,
+    consumed_messages: usize,
+    prefix_digest: String,
+    context_hash: Option<String>,
+}
+
+fn continuation_digest(messages: &[AgentMessage]) -> Result<String, String> {
+    use sha2::{Digest, Sha256};
+    let bytes = serde_json::to_vec(messages).map_err(|error| error.to_string())?;
+    Ok(format!("{:x}", Sha256::digest(bytes)))
 }
 
 #[derive(Debug, Clone, Default)]
@@ -448,5 +509,38 @@ mod tests {
         assert_eq!(items[2]["type"], json!("function_call_output"));
         assert_eq!(items[2]["call_id"], json!("call-1"));
         assert_eq!(items[2]["output"], json!("found"));
+    }
+    #[test]
+    fn durable_continuation_rejects_edited_prefix_and_restores_exact_history() {
+        let context = responses_context();
+        let mut state = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
+        state.apply_model_response(
+            &ModelResponse::final_output_with_usage_and_response_id(
+                "ok",
+                None,
+                Some("resp-durable".into()),
+            ),
+            context.messages.len(),
+        );
+        let checkpoint = state.checkpoint(&context.messages).unwrap().unwrap();
+        assert!(!checkpoint.to_string().contains("sk-test"));
+        let mut restored = TurnStateAdapter::new(AgentModelProtocol::Responses, true);
+        let mut next = context.messages.clone();
+        next.push(AgentMessage::user("continue"));
+        assert!(restored.restore_checkpoint(&checkpoint, &next).unwrap());
+        let request = restored.build_request(&context, &next, false, None);
+        assert_eq!(
+            request.previous_response_id.as_deref(),
+            Some("resp-durable")
+        );
+        assert_eq!(request.messages.len(), 1);
+        next[0] = AgentMessage::system("New instructions");
+        assert!(!restored.restore_checkpoint(&checkpoint, &next).unwrap());
+        assert!(
+            restored
+                .build_request(&context, &next, false, None)
+                .previous_response_id
+                .is_none()
+        );
     }
 }

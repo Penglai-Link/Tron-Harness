@@ -1,3 +1,4 @@
+import { routeActiveProfileApi } from "./support/resource-ui-harness";
 import {
   expect,
   test,
@@ -263,7 +264,7 @@ async function fulfillJson(route: Route, data: unknown, status = 200) {
 }
 
 function sharedToastMessage(page: Page, message: string | RegExp) {
-  return page.locator('[aria-label="Notifications"]').getByRole("status").filter({ hasText: message }).first();
+  return page.locator('[aria-label="Notifications"]').getByRole("dialog").filter({ hasText: message }).first();
 }
 
 async function chooseSelectOption(page: Page, control: Locator, value: string) {
@@ -645,7 +646,7 @@ test.afterAll(async () => {
   }
 });
 
-test("workspace management page supports hierarchy and separated access grants", async ({ page }) => {
+test("workspace management preserves hierarchy search create edit move archive and restore", async ({ page }) => {
   const requests: CapturedRequest[] = [];
   let workspaceNodes: WorkspaceNode[] = normalizeTree([
     {
@@ -1007,119 +1008,47 @@ test("workspace management page supports hierarchy and separated access grants",
     }
   });
 
+  await routeActiveProfileApi(page);
   await page.goto(`${frontendBaseUrl}/admin/workspace`);
 
-  await expect(page.getByRole("heading", { name: "Workspace Management" })).toBeVisible();
-  await expect(page.getByText("Platform", { exact: true }).first()).toBeVisible();
-
-  const workspaceUrl = page.url();
-  const searchBox = page.getByRole("searchbox", { name: "Search workspaces" });
-  await searchBox.fill("Compliance");
-  await expect.poll(() => requests.some((request) => (
-    request.pathname === "/api/v1/admin/workspaces"
-    && request.method === "GET"
-    && request.searchParams.search === "Compliance"
-    && request.searchParams.status === "Active"
-  ))).toBe(true);
-  await expect(page.getByRole("button", { name: "Select workspace COMPLIANCE", exact: true })).toBeVisible();
-
-  const requestCountBeforeClear = requests.length;
-  await page.getByRole("button", { name: "Clear workspace search" }).click();
-  await expect(searchBox).toHaveValue("");
-  await expect.poll(() => requests.slice(requestCountBeforeClear).some((request) => (
-    request.pathname === "/api/v1/admin/workspaces"
-    && request.method === "GET"
-    && request.searchParams.search === undefined
-    && request.searchParams.status === "Active"
-  ))).toBe(true);
-  await expect(page.getByRole("button", { name: "Select workspace PLATFORM", exact: true })).toBeVisible();
-
-  const statusFilterSelect = page.getByRole("combobox", { name: "Filter workspaces by status" });
-  const requestCountBeforeAllStatus = requests.length;
-  await chooseSelectOption(page, statusFilterSelect, "All Status");
-  await expect.poll(() => requests.slice(requestCountBeforeAllStatus).some((request) => (
-    request.pathname === "/api/v1/admin/workspaces"
-    && request.method === "GET"
-    && request.searchParams.includeArchived === "true"
-    && request.searchParams.status === undefined
-  ))).toBe(true);
-  await expect(page.getByRole("button", { name: "Select workspace ARCHIVE_VAULT", exact: true })).toBeVisible();
-
-  const requestCountBeforeActiveStatus = requests.length;
-  await chooseSelectOption(page, statusFilterSelect, "Active");
-  await expect.poll(() => requests.slice(requestCountBeforeActiveStatus).some((request) => (
-    request.pathname === "/api/v1/admin/workspaces"
-    && request.method === "GET"
-    && request.searchParams.status === "Active"
-    && request.searchParams.includeArchived === undefined
-  ))).toBe(true);
-  await expect(page.getByRole("button", { name: "Select workspace PLATFORM", exact: true })).toBeVisible();
-
-  await page.getByRole("button", { name: "Select workspace PLATFORM", exact: true }).click();
-  const overviewSection = page.getByRole("combobox", { name: "Move parent" }).locator("xpath=ancestor::section[1]");
-  await expect(page).toHaveURL(workspaceUrl);
-  await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Platform");
-
-  await page.getByRole("button", { name: "Root", exact: true }).click();
-  await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk");
-  await page.getByRole("textbox", { name: "Workspace description" }).fill("Risk governance workspace");
-  await page.getByRole("button", { name: "Save", exact: true }).first().click();
-  await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 created")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces" && request.method === "POST")).toBe(true);
-  await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk");
-
-  await page.getByRole("button", { name: "Child", exact: true }).click();
-  await page.getByRole("textbox", { name: "Workspace name" }).fill("Risk Review");
-  await page.getByRole("textbox", { name: "Workspace description" }).fill("Child workspace for risk reviews");
-  await page.getByRole("button", { name: "Save", exact: true }).first().click();
-  await expect(sharedToastMessage(page, "Workspace WS-0000000000000002 created")).toBeVisible();
-  await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Review");
-
-  await page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true }).click();
-  await overviewSection.getByRole("textbox", { name: "Name", exact: true }).fill("Risk Control");
-  await overviewSection.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 updated")).toBeVisible();
-  await expect(overviewSection.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Control");
-
-  await chooseSelectOption(page, overviewSection.getByRole("combobox", { name: "Move parent" }), "Compliance (COMPLIANCE) · Level 1");
-  await overviewSection.getByRole("button", { name: "Move", exact: true }).click();
-  await expect(sharedToastMessage(page, "Workspace WS-0000000000000001 moved")).toBeVisible();
-  await expect(page.getByText("Compliance / Risk Control")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/WS-0000000000000001/move" && request.method === "POST")).toBe(true);
-
-  await page.getByRole("button", { name: "Select workspace PLATFORM", exact: true }).click();
-  await page.getByRole("tab", { name: "Access", exact: true }).click();
-  const directUserSection = page.getByRole("combobox", { name: "Add direct user access" }).locator("xpath=ancestor::section[1]");
-  await chooseSelectOption(page, directUserSection.getByRole("combobox", { name: "Add direct user access" }), "Auth Operator (USR-AUTH-0001)");
-  await directUserSection.getByRole("button", { name: "Add", exact: true }).click();
-  await directUserSection.locator("tr", { hasText: "Auth Operator" }).getByRole("button", { name: "Member" }).click();
-  await directUserSection.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(sharedToastMessage(page, "Direct user access updated")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/PLATFORM/access/users" && request.method === "PUT")).toBe(true);
-
-  const roleAccessSection = page.getByRole("combobox", { name: "Add workspace role access" }).locator("xpath=ancestor::section[1]");
-  await chooseSelectOption(page, roleAccessSection.getByRole("combobox", { name: "Add workspace role access" }), "Viewer (VIEWER)");
-  await roleAccessSection.getByRole("button", { name: "Add", exact: true }).click();
-  await roleAccessSection.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(sharedToastMessage(page, "Role access updated")).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/PLATFORM/access/roles" && request.method === "PUT")).toBe(true);
-
-  const effectiveUsersTable = page.locator("table").last();
-  await expect(effectiveUsersTable.getByText("Auth Operator", { exact: true }).first()).toBeVisible();
-  await expect(effectiveUsersTable.getByText("DirectAndRole", { exact: true }).first()).toBeVisible();
-  await expect(effectiveUsersTable.getByText("Chen Wei", { exact: true }).first()).toBeVisible();
-  await expect(effectiveUsersTable.getByText("Viewer", { exact: true }).first()).toBeVisible();
-
-  await chooseSelectOption(page, statusFilterSelect, "All Status");
-  await expect(page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "Select workspace WS-0000000000000001", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Workspaces", exact: true })).toBeVisible();
+  const treeButton = (code: string) => page.getByRole("button", { name: new RegExp(`${code}$`) });
+  const search = page.getByPlaceholder("Search workspaces");
+  await search.fill("Compliance");
+  await expect(treeButton("COMPLIANCE")).toBeVisible();
+  await expect(treeButton("PLATFORM")).toBeHidden();
+  await search.fill("");
+  await expect(treeButton("PLATFORM")).toBeVisible();
+  const statusFilter = page.getByLabel("Filter workspaces by status");
+  await statusFilter.selectOption("Active");
+  await expect(treeButton("ARCHIVE_VAULT")).toBeHidden();
+  await statusFilter.selectOption("All");
+  await expect(treeButton("ARCHIVE_VAULT")).toBeVisible();
+  await page.getByRole("button", { name: "Create workspace", exact: true }).click();
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Risk");
+  await page.getByRole("textbox", { name: "Description", exact: true }).fill("Risk governance workspace");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(treeButton("WS-0000000000000001")).toBeVisible();
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk");
+  await treeButton("WS-0000000000000001").locator("..").getByRole("button", { name: "Create child workspace", exact: true }).click();
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Risk Review");
+  await page.getByRole("button", { name: "Create", exact: true }).click();
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk Review");
+  await expect(page.getByRole("combobox", { name: "Parent", exact: true })).toHaveValue("WS-0000000000000001");
+  await treeButton("WS-0000000000000001").click();
+  await expect(page.getByRole("textbox", { name: "Name", exact: true })).toHaveValue("Risk");
+  await page.getByRole("textbox", { name: "Name", exact: true }).fill("Risk Control");
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(treeButton("WS-0000000000000001")).toContainText("Risk Control");
+  await expect(page.getByRole("heading", { name: "Risk Control", exact: true })).toBeVisible();
+  await page.getByRole("combobox", { name: "Parent", exact: true }).selectOption("COMPLIANCE");
+  await page.getByRole("button", { name: "Move", exact: true }).click();
+  await expect.poll(() => requests.some(request => request.pathname.endsWith("/WS-0000000000000001/move") && request.method === "POST")).toBe(true);
+  await expect(page.getByRole("combobox", { name: "Parent", exact: true })).toHaveValue("COMPLIANCE");
   await page.getByRole("button", { name: "Archive", exact: true }).click();
-  await expect(sharedToastMessage(page, "WS-0000000000000001 archived")).toBeVisible();
   await expect(page.getByRole("button", { name: "Restore", exact: true })).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/WS-0000000000000001/archive" && request.method === "POST")).toBe(true);
-
   await page.getByRole("button", { name: "Restore", exact: true }).click();
-  await expect(sharedToastMessage(page, "WS-0000000000000001 restored")).toBeVisible();
   await expect(page.getByRole("button", { name: "Archive", exact: true })).toBeVisible();
-  await expect.poll(() => requests.some((request) => request.pathname === "/api/v1/admin/workspaces/WS-0000000000000001/restore" && request.method === "POST")).toBe(true);
+  await expect.poll(() => requests.some(request => request.pathname.endsWith("/WS-0000000000000001/restore") && request.method === "POST")).toBe(true);
+  expect(requests.some(request => /\/access\/(users|roles)$/.test(request.pathname))).toBe(false);
 });

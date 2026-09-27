@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -29,7 +29,7 @@ describe("TabBar", () => {
     useTabStore.getState().clearAllTabs();
   });
 
-  it("closes other tabs from a tab context menu", async () => {
+  it("closes other tabs from a tab context menu", () => {
     useTabStore.getState().addTab({ closable: true, path: "/apps", title: "Apps" });
     const tasksTabId = useTabStore.getState().addTab({ closable: true, path: "/tasks", title: "Tasks" });
     useTabStore.getState().addTab({ closable: true, path: "/chats", title: "Chats" });
@@ -40,10 +40,10 @@ describe("TabBar", () => {
       </MemoryRouter>,
     );
 
-    fireEvent.contextMenu(screen.getByRole("tab", { name: "Tasks" }));
-    fireEvent.click(await screen.findByText("Close other tabs"));
+    fireEvent.contextMenu(screen.getByRole("tab", { name: "Tasks" }), {button:2,clientX:20,clientY:20});
+    fireEvent.click(screen.getByText("Close other tabs"));
 
-    await waitFor(() => expect(useTabStore.getState().tabs.map((tab) => tab.id)).toEqual([tasksTabId]));
+    expect(useTabStore.getState().tabs.filter((tab) => !tab.hide).map((tab) => tab.id)).toEqual([tasksTabId]);
   });
 
   it("keeps the current location when closing the last visible tab", () => {

@@ -3,10 +3,9 @@ use crate::{
 };
 
 use super::{
-    AppConfig, DEFAULT_BIND_ADDRESS,
-    DEFAULT_PORT, DEFAULT_SYSTEM_AGENT_CODEX_COMMAND, DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND,
-    HttpClientProfilesConfig, MineruConfig, NavigationConfig, ResourceConfig, SystemAgentConfig,
-    TEST_DATABASE_URL, VariableCryptoConfig,
+    AppConfig, DEFAULT_BIND_ADDRESS, DEFAULT_PORT, DEFAULT_SYSTEM_AGENT_CODEX_COMMAND,
+    DEFAULT_SYSTEM_AGENT_OPENCODE_COMMAND, HttpClientProfilesConfig, MineruConfig,
+    NavigationConfig, ResourceConfig, SystemAgentConfig, TEST_DATABASE_URL, VariableCryptoConfig,
 };
 
 impl Default for AppConfig {

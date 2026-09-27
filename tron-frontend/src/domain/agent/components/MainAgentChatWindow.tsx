@@ -1,6 +1,6 @@
+import { createTronMockChatAdapter } from "@/domain/chat/mock/adapter";
 import { defaultMainAgentWindowState, MAIN_AGENT_WINDOW_STORAGE_KEY } from "@/domain/agent/model/mainAgentWindowState";
 import {
-  createMockChatAdapter,
   normalizeChatSession,
   readFloatingState,
   writeFloatingState,
@@ -9,8 +9,8 @@ import {
   type SendChatMessageInput,
 } from "@tron/chat-core";
 import { createInternalChatAdapter } from "@tron/chat-internal-adapter";
-import { TronChatRuntimeWindow } from "@tron/chat-react";
-import "@tron/chat-react/styles.css"
+import { AgentChatWindow } from "@/domain/chat/components/AgentChatWindow";
+import "@eliteforge/agent-ui-chat-react/styles.css"
 import {
   useCallback,
   useEffect,
@@ -113,7 +113,7 @@ export function MainAgentChatWindow({
   const adapter = useMemo(
     () =>
       getServiceDataSource("chat") === "mock"
-        ? createMockChatAdapter()
+        ? createTronMockChatAdapter()
         : createInternalChatAdapter({
           getAccessToken: getApiAccessToken,
         }),
@@ -259,7 +259,7 @@ export function MainAgentChatWindow({
 
   return (
     <>
-      <TronChatRuntimeWindow
+      <AgentChatWindow
         agentReplyEffect={agentReplyEffect}
         agentReplySpeed={agentReplySpeed}
         adapter={adapter}
