@@ -93,14 +93,16 @@ impl fw::ChatModel for TronChatModel {
             .map(super::messages::decode)
             .collect::<Result<Vec<_>, _>>()
             .map_err(fw::ModelError::Fatal)?;
-        let provider_identity = provider_scope(&state.context.model)?;
+        let provider_identity = provider_scope(&state.context)?;
         if let Some(saved) = request
             .messages
             .iter()
             .rev()
             .find_map(|message| message.model_context.as_ref())
         {
-            if saved.format == "tron.responses.v1"
+            if saved.format == "tron.responses.v2"
+                && saved.model == fw::ModelRef::new("tron", "route")
+                && saved.protocol == "tron-host"
                 && saved.data.get("providerScope").and_then(|v| v.as_str())
                     == Some(provider_identity.as_str())
             {
@@ -177,6 +179,11 @@ impl fw::ChatModel for TronChatModel {
                 );
                 tokio::pin!(invocation);
                 loop {
+                    if overflow.load(std::sync::atomic::Ordering::Acquire) {
+                        break Err(crate::domain::agent::AgentError::InvalidConfiguration(
+                            "model stream exceeded the bounded host handoff capacity".into(),
+                        ));
+                    }
                     tokio::select! {
                         biased;
                         event = receiver.recv() => {
@@ -227,6 +234,10 @@ impl fw::ChatModel for TronChatModel {
             }
         }
         if overflow.load(std::sync::atomic::Ordering::Acquire) {
+            *native_error = Some(crate::domain::agent::AgentError::InvalidConfiguration(
+                "model stream exceeded the bounded host handoff capacity".into(),
+            ));
+            *last_model_failure = None;
             return Err(fw::ModelError::Fatal(
                 "model stream exceeded the bounded host handoff capacity".into(),
             ));
@@ -259,14 +270,14 @@ impl fw::ChatModel for TronChatModel {
             persisted_messages.push(response.assistant.clone());
             turn.apply_model_response(&response, persisted_messages.len());
         }
-        let provider_identity = provider_scope(&context.model)?;
+        let provider_identity = provider_scope(context)?;
         let continuation = turn
             .checkpoint(&persisted_messages)
             .map_err(fw::ModelError::Fatal)?;
         let model_context = continuation.map(|continuation| fw::ModelMessageContext {
             model: fw::ModelRef::new("tron", "route"),
             protocol: "tron-host".into(),
-            format: "tron.responses.v1".into(),
+            format: "tron.responses.v2".into(),
             data: serde_json::json!({"providerScope": provider_identity, "continuation": continuation}),
         });
         Ok(fw::ChatResponse {
@@ -283,10 +294,14 @@ impl fw::ChatModel for TronChatModel {
 }
 
 fn provider_scope(
-    model: &crate::domain::agent::AgentModelConfig,
+    context: &crate::domain::agent::AgentRunContext,
 ) -> Result<String, fw::ModelError> {
     use sha2::{Digest, Sha256};
+    let model = &context.model;
     let identity = serde_json::to_vec(&(
+        &context.user_code,
+        &context.workspace_code,
+        &model.api_key,
         &model.model_code,
         &model.model_name,
         &model.base_url,

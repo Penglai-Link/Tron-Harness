@@ -121,6 +121,7 @@ impl AgentLoop for ProbeLoop {
             .await
             .map_err(|e| AgentError::ToolSetup(e.to_string()))?;
         Ok(RunResult {
+            external_session: None,
             output: result.content.text(),
             content: result.content,
             structured: result.structured,

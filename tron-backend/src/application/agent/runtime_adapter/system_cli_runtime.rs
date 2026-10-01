@@ -42,18 +42,39 @@ impl SystemCliRuntime {
             model: Some(context.model.model_name.clone()),
             session_id: context.system_agent_session_id.clone(),
         };
-        let sink = sink.map(|sink| {
-            std::sync::Arc::new(
-                move |event: eliteforge_agent_capability_external::ExternalAgentEvent| {
-                    sink(match event.kind {
-                        ExternalAgentEventKind::Text => ModelStreamEvent::text_delta(event.delta),
-                        ExternalAgentEventKind::ReasoningSummary => {
-                            ModelStreamEvent::reasoning_summary_delta(event.delta)
-                        }
-                    });
-                },
-            ) as eliteforge_agent_capability_external::ExternalAgentSink
-        });
+        let observations = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let observed = observations.clone();
+        let overflow = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let observed_overflow = overflow.clone();
+        let sink = Some(std::sync::Arc::new(
+            move |event: eliteforge_agent_capability_external::ExternalAgentEvent| match event.kind
+            {
+                ExternalAgentEventKind::Text | ExternalAgentEventKind::ReasoningSummary => {
+                    if let Some(sink) = &sink {
+                        sink(match event.kind {
+                            ExternalAgentEventKind::Text => {
+                                ModelStreamEvent::text_delta(event.delta)
+                            }
+                            _ => ModelStreamEvent::reasoning_summary_delta(event.delta),
+                        });
+                    }
+                }
+                _ => {
+                    let mut observations = observed.lock().unwrap();
+                    let output = serde_json::json!({"delta": event.delta, "detail": event.detail})
+                        .to_string();
+                    if observations.len() >= 1024 || output.len() > 256 * 1024 {
+                        observed_overflow.store(true, std::sync::atomic::Ordering::Release);
+                    } else {
+                        observations.push(crate::domain::agent::ToolObservation {
+                            tool_name: format!("external_{:?}", event.kind),
+                            output,
+                        });
+                    }
+                }
+            },
+        )
+            as eliteforge_agent_capability_external::ExternalAgentSink);
         let result = ExternalCli::new(
             self.kind,
             &self.command_name,
@@ -67,6 +88,11 @@ impl SystemCliRuntime {
             }
             error => AgentInvocationError::RuntimeFailed(error.to_string()),
         })?;
+        if overflow.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(AgentInvocationError::RuntimeFailed(
+                "external observations exceeded bounded capacity".into(),
+            ));
+        }
         Ok(AgentRunResult {
             run_code: context.run_code,
             conversation_code: context.conversation_code,
@@ -83,7 +109,7 @@ impl SystemCliRuntime {
             latest_request_estimate: None,
             latest_usage_audit: None,
             system_agent_session_id: result.session_id,
-            observations: vec![],
+            observations: observations.lock().unwrap().clone(),
         })
     }
 }

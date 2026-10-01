@@ -56,7 +56,7 @@ test.beforeAll(async () => {
   api = `http://127.0.0.1:${port}`;
   let logs = "";
   backend = spawnManagedProcess("make", ["be-ui-acceptance", `CARGO=${process.env.TRON_ACCEPTANCE_CARGO || "cargo"}`], {
-    cwd: resolve(fileURLToPath(import.meta.url), "../../.."), env: { ...process.env, CARGO_PROFILE_DEV_DEBUG: "0", CARGO_INCREMENTAL: "0", CARGO_BUILD_JOBS: "2", TRON_ACCEPTANCE_DIRECTORY: directory, TRON_ACCEPTANCE_PORT: String(port) }, stdio: "pipe",
+    cwd: resolve(fileURLToPath(import.meta.url), "../../.."), env: { ...process.env, CARGO_PROFILE_DEV_DEBUG: process.env.CARGO_PROFILE_DEV_DEBUG || "0", CARGO_INCREMENTAL: process.env.CARGO_INCREMENTAL || "0", CARGO_BUILD_JOBS: "2", TRON_ACCEPTANCE_DIRECTORY: directory, TRON_ACCEPTANCE_PORT: String(port) }, stdio: "pipe",
   });
   backend.stdout.on("data", data => logs += data.toString()); backend.stderr.on("data", data => logs += data.toString());
   const deadline = Date.now() + 210_000;

@@ -1,6 +1,5 @@
-//! External agent transports run as a single Framework model stage. Framework
-//! owns run admission, cancellation and durable conversation/checkpoint state;
-//! the remote/CLI agent retains its own tool loop and native session protocol.
+//! Independent Framework ExternalAgentLoop delegates the native tool loop.
+//! Tron owns session identity binding; external runtimes own native checkpoints.
 use super::FrameworkHost;
 use crate::{
     application::agent::{
@@ -22,7 +21,7 @@ pub(super) struct ExternalExecution {
     pub result: Mutex<Option<Result<AgentRunResult, AgentInvocationError>>>,
 }
 impl ExternalExecution {
-    pub fn session_scope(&self) -> Option<String> {
+    pub fn legacy_session_scope(&self) -> Option<String> {
         use sha2::{Digest, Sha256};
         let transport = self.transport.session_scope()?;
         let context = &self.context;
@@ -38,28 +37,106 @@ impl ExternalExecution {
         .ok()?;
         Some(format!("{:x}", Sha256::digest(identity)))
     }
+    pub fn session_scope(&self) -> Option<String> {
+        use sha2::{Digest, Sha256};
+        let identity = serde_json::to_vec(&(
+            self.legacy_session_scope()?,
+            &self.context.model.api_path,
+            self.context.model.protocol,
+        ))
+        .ok()?;
+        Some(format!("{:x}", Sha256::digest(identity)))
+    }
 }
+pub(super) struct HostExternalAgent;
 #[async_trait::async_trait]
-impl eliteforge_agent_capability_external::ExternalAgentInvocation for ExternalExecution {
-    async fn invoke(
+impl fw::ExternalAgent for HostExternalAgent {
+    async fn run(
         &self,
-        session: Option<String>,
-        _stream: &dyn fw::ChatStream,
-    ) -> Result<eliteforge_agent_capability_external::ExternalStageResult, fw::ModelError> {
-        let mut context = self.context.clone();
+        request: fw::ExternalAgentRequest,
+        sink: &dyn fw::ExternalAgentEventSink,
+    ) -> Result<fw::ExternalAgentResult, fw::AgentError> {
+        let execution = request
+            .extensions
+            .get::<ExternalExecution>()
+            .ok_or_else(|| fw::AgentError::Run("external execution is missing".into()))?;
+        let mut context = execution.context.clone();
+        let session = request.session.map(|session| session.session_id);
         context.system_agent_session_id = session.clone();
-        let result = match session {
-            Some(session) => {
-                self.transport
-                    .resume(&session, context, self.sink.clone())
-                    .await
+        let (sender, mut receiver) = tokio::sync::mpsc::channel(1024);
+        let product_sink = execution.sink.clone();
+        let overflow = Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let callback_overflow = overflow.clone();
+        let observed: ModelStreamSink = Arc::new(move |event| {
+            if event.delta.len() > 256 * 1024 || sender.try_send(event.clone()).is_err() {
+                callback_overflow.store(true, std::sync::atomic::Ordering::Release);
+                return;
             }
-            None => self.transport.start(context, self.sink.clone()).await,
+            if let Some(sink) = &product_sink {
+                sink(event);
+            }
+        });
+        let invocation = async {
+            match session {
+                Some(session) => {
+                    execution
+                        .transport
+                        .resume(&session, context, Some(observed))
+                        .await
+                }
+                None => execution.transport.start(context, Some(observed)).await,
+            }
         };
+        tokio::pin!(invocation);
+        let result = loop {
+            if overflow.load(std::sync::atomic::Ordering::Acquire) {
+                return Err(fw::AgentError::Run(
+                    "external stream exceeded bounded event capacity".into(),
+                ));
+            }
+            tokio::select! {
+                result = &mut invocation => break result,
+                event = receiver.recv() => match event {
+                    Some(event) => forward_event(event, sink).await,
+                    None => break invocation.await,
+                },
+            }
+        };
+        while let Ok(event) = receiver.try_recv() {
+            forward_event(event, sink).await;
+        }
+        if overflow.load(std::sync::atomic::Ordering::Acquire) {
+            return Err(fw::AgentError::Run(
+                "external stream exceeded bounded event capacity".into(),
+            ));
+        }
+        if let Ok(result) = &result {
+            for observation in &result.observations {
+                let value: serde_json::Value =
+                    serde_json::from_str(&observation.output).unwrap_or_default();
+                let event = match observation.tool_name.as_str() {
+                    "external_ToolObserved" => Some(fw::ExternalAgentEvent::Tool {
+                        name: value["delta"].as_str().unwrap_or("external").into(),
+                        detail: value["detail"].clone(),
+                    }),
+                    "external_ApprovalObserved" => Some(fw::ExternalAgentEvent::Approval {
+                        detail: value["detail"].clone(),
+                    }),
+                    "external_Status" => Some(fw::ExternalAgentEvent::Status(
+                        value["delta"].as_str().unwrap_or_default().into(),
+                    )),
+                    "external_SessionObserved" => None, // authoritative session comes from the transport result
+                    _ => None,
+                };
+                if let Some(event) = event {
+                    sink.emit(event).await;
+                }
+            }
+        }
         let response = match &result {
-            Ok(result) => Ok(eliteforge_agent_capability_external::ExternalStageResult {
-                output: result.final_output.clone(),
-                payload: serde_json::to_value(result).ok(),
+            Ok(result) => Ok(fw::ExternalAgentResult {
+                content: result.final_output.clone().into(),
+                structured: serde_json::to_value(result).ok(),
                 usage: result
                     .token_usage
                     .map(|usage| fw::Usage {
@@ -67,16 +144,38 @@ impl eliteforge_agent_capability_external::ExternalAgentInvocation for ExternalE
                         output_tokens: usage.output_tokens as u64,
                     })
                     .unwrap_or_default(),
-                session_id: result.system_agent_session_id.clone(),
+                session: result.system_agent_session_id.clone().map(|session_id| {
+                    fw::ExternalSessionRef {
+                        session_id,
+                        run_id: None,
+                    }
+                }),
             }),
-            Err(error) => Err(fw::ModelError::Fatal(format!("{error:?}"))),
+            Err(error) => Err(fw::AgentError::Run(format!("{error:?}"))),
         };
-        *self
+        *execution
             .result
             .lock()
-            .map_err(|_| fw::ModelError::Fatal("external result lock unavailable".into()))? =
+            .map_err(|_| fw::AgentError::Run("external result lock unavailable".into()))? =
             Some(result);
         response
+    }
+}
+async fn forward_event(
+    event: crate::domain::agent::ModelStreamEvent,
+    sink: &dyn fw::ExternalAgentEventSink,
+) {
+    use crate::domain::agent::ModelStreamEventKind;
+    match event.kind {
+        ModelStreamEventKind::Text => {
+            sink.emit(fw::ExternalAgentEvent::TextDelta(event.delta))
+                .await
+        }
+        ModelStreamEventKind::ReasoningSummary => {
+            sink.emit(fw::ExternalAgentEvent::ReasoningDelta(event.delta))
+                .await
+        }
+        ModelStreamEventKind::Reasoning => {}
     }
 }
 
@@ -86,6 +185,9 @@ pub(crate) struct FrameworkExternalRuntime {
     pub transport: Arc<dyn AgentRuntime>,
 }
 impl AgentRuntime for FrameworkExternalRuntime {
+    fn session_scope(&self) -> Option<String> {
+        self.transport.session_scope()
+    }
     fn key(&self) -> RuntimeAdapterKey {
         self.transport.key()
     }

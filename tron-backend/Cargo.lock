@@ -1361,7 +1361,8 @@ name = "eliteforge-agent-capability-external"
 version = "0.1.0"
 dependencies = [
  "eliteforge-agent-core",
- "eliteforge-agent-official-plugin-model-external",
+ "eliteforge-agent-framework",
+ "eliteforge-agent-official-plugin-agent-external",
 ]
 
 [[package]]
@@ -1406,28 +1407,10 @@ name = "eliteforge-agent-capability-tools"
 version = "0.1.0"
 dependencies = [
  "eliteforge-agent-core",
+ "eliteforge-agent-official-plugin-tools-agents",
+ "eliteforge-agent-official-plugin-tools-human",
  "eliteforge-agent-official-plugin-tools-local",
-]
-
-[[package]]
-name = "eliteforge-agent-context"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "base64 0.22.1",
- "cap-fs-ext",
- "cap-std",
- "eliteforge-agent-context-contracts",
- "eliteforge-agent-core",
- "eliteforge-agent-sqlite-extensions",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "thiserror 2.0.18",
- "tokio",
- "tokio-rusqlite",
- "tokio-util",
- "uuid",
+ "eliteforge-agent-official-plugin-tools-mcp",
 ]
 
 [[package]]
@@ -1483,22 +1466,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "eliteforge-agent-memory"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "eliteforge-agent-core",
- "eliteforge-agent-sqlite-extensions",
- "serde",
- "serde_json",
- "tokio",
- "tokio-rusqlite",
- "tokio-util",
- "uuid",
-]
-
-[[package]]
-name = "eliteforge-agent-official-plugin-model-external"
+name = "eliteforge-agent-official-plugin-agent-external"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -1524,18 +1492,35 @@ dependencies = [
 ]
 
 [[package]]
-name = "eliteforge-agent-official-plugin-storage-sqlite"
+name = "eliteforge-agent-official-plugin-storage-local"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "eliteforge-agent-context",
+ "cap-fs-ext",
+ "cap-std",
+ "eliteforge-agent-context-contracts",
  "eliteforge-agent-core",
- "eliteforge-agent-memory",
- "eliteforge-agent-sqlite-extensions",
- "eliteforge-agent-state-sqlite",
+ "rusqlite",
  "serde",
  "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.18",
+ "tokio",
+ "tokio-rusqlite",
  "tokio-util",
+ "uuid",
+]
+
+[[package]]
+name = "eliteforge-agent-official-plugin-tools-agents"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "eliteforge-agent-core",
+ "serde",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]
@@ -1596,29 +1581,6 @@ dependencies = [
  "futures",
  "thiserror 2.0.18",
  "tokio",
-]
-
-[[package]]
-name = "eliteforge-agent-sqlite-extensions"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "rusqlite",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.18",
-]
-
-[[package]]
-name = "eliteforge-agent-state-sqlite"
-version = "0.1.0"
-dependencies = [
- "async-trait",
- "eliteforge-agent-core",
- "eliteforge-agent-sqlite-extensions",
- "serde_json",
- "tokio",
- "tokio-rusqlite",
 ]
 
 [[package]]
@@ -6243,7 +6205,7 @@ dependencies = [
  "eliteforge-agent-capability-tools",
  "eliteforge-agent-core",
  "eliteforge-agent-framework",
- "eliteforge-agent-official-plugin-storage-sqlite",
+ "eliteforge-agent-official-plugin-storage-local",
  "eliteforge-agent-official-plugin-tools-human",
  "eliteforge-agent-official-plugin-tools-local",
  "eliteforge-agent-official-plugin-tools-mcp",

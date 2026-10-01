@@ -178,7 +178,7 @@ async fn service_runtime_start(
         "runCode": context.get("runCode").and_then(|value| value.as_str()).unwrap_or("RUN-SVC-START"),
         "conversationCode": context.get("conversationCode"),
         "workspaceCode": context.get("workspaceCode").and_then(|value| value.as_str()).unwrap_or("TRON_CORE"),
-        "finalOutput": "service start output",
+        "finalOutput": if context["runCode"] == "RUN-FLOOD" { "x".repeat(72 * 2_000) } else { "service start output".into() },
         "stepCount": 1,
         "tokenUsage": {
             "inputTokens": 3,
@@ -215,7 +215,7 @@ async fn service_runtime_resume(
             "outputTokens": 6,
             "totalTokens": 10
         },
-        "systemAgentSessionId": format!("{requested_session}-next"),
+        "systemAgentSessionId": if context["runCode"] == "RUN-STABLE" { requested_session.to_owned() } else { format!("{requested_session}-next") },
         "observations": []
     }))
 }
@@ -528,6 +528,24 @@ async fn service_adapters_restore_sessions_from_framework_after_host_restart() {
             server.requests.lock().unwrap().last().unwrap()["requestedSessionId"],
             "svc-start-session"
         );
+        assert!(!runtime.capabilities().supports_streaming);
+        // Product runtime mappings supply explicit IDs; they cannot bypass known ownership.
+        context.system_agent_session_id = Some("svc-start-session".into());
+        context.model.api_key = "different-account".into();
+        runtime.start(context.clone(), None).await.unwrap();
+        assert_eq!(
+            server.requests.lock().unwrap().last().unwrap()["action"],
+            "start"
+        );
+        // The same native string may be allocated by both accounts; the original binding
+        // still cannot be resumed for a third account.
+        context.model.api_key = "third-account".into();
+        assert!(
+            runtime
+                .resume("svc-start-session", context.clone(), None)
+                .await
+                .is_err()
+        );
         // Reusing a chat ID under another owner cannot reuse that remote session.
         context.user_code = Some("ANOTHER-USER".into());
         context.run_code = "RUN-OTHER-USER".into();
@@ -638,10 +656,10 @@ async fn dropping_cli_run_terminates_its_child_process_tree() {
         let task = tokio::spawn(async move { runtime.start(base_context(), None).await });
         let pid = tokio::time::timeout(std::time::Duration::from_secs(10), async {
             loop {
-                if let Ok(pid) = std::fs::read_to_string(&pid_file) {
-                    if !pid.trim().is_empty() {
-                        break pid.trim().to_owned();
-                    }
+                if let Ok(pid) = std::fs::read_to_string(&pid_file)
+                    && !pid.trim().is_empty()
+                {
+                    break pid.trim().to_owned();
                 }
                 tokio::time::sleep(std::time::Duration::from_millis(20)).await;
             }
@@ -666,4 +684,307 @@ async fn dropping_cli_run_terminates_its_child_process_tree() {
         .await
         .expect("CLI cancellation left a running descendant");
     }
+}
+
+#[tokio::test]
+async fn legacy_external_reference_is_imported_without_rewriting_history() {
+    use eliteforge_agent_core as fw;
+    use eliteforge_agent_core::ConversationStore;
+    use eliteforge_agent_official_plugin_storage_local::SqliteConversationStore;
+    use sha2::{Digest, Sha256};
+    use tron_backend::application::agent::FrameworkHost;
+    let server = service_runtime_mock_server().await;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("legacy.sqlite3");
+    let selection = RuntimeAdapterSelection::CodexAppServer {
+        endpoint: server.base_url.clone(),
+        working_directory: None,
+    };
+    let raw = registry()
+        .with_framework_host(None)
+        .resolve(selection.clone());
+    let context = base_context();
+    let identity = serde_json::to_vec(&(
+        raw.session_scope().unwrap(),
+        &context.user_code,
+        &context.workspace_code,
+        &context.execution_scope,
+        &context.model.base_url,
+        &context.model.api_key,
+        &context.model.model_name,
+    ))
+    .unwrap();
+    let old_scope = format!("{:x}", Sha256::digest(identity));
+    let store = SqliteConversationStore::open(&path, Default::default())
+        .await
+        .unwrap();
+    let mut old = store
+        .open(context.conversation_code.as_deref().unwrap())
+        .await
+        .unwrap();
+    let mut message = fw::Message::assistant("old external answer remains readable");
+    message.model_context = Some(fw::ModelMessageContext {
+        model: fw::ModelRef::new("framework.external", "agent"),
+        protocol: "external-agent".into(),
+        format: "framework.external-session.v1".into(),
+        data: json!({"scope":old_scope,"sessionId":"legacy-native"}),
+    });
+    old.append(&[message.clone()]).await.unwrap();
+    old.finish(fw::ConversationOutcome::Completed)
+        .await
+        .unwrap();
+    drop(old);
+    store.close().await.unwrap();
+    let host = FrameworkHost::persistent(&path, None);
+    let runtime = registry()
+        .with_framework_host(Some(host.clone()))
+        .resolve(selection.clone());
+    let result = runtime.start(context.clone(), None).await.unwrap();
+    assert_eq!(result.final_output, "service resume output");
+    assert_eq!(
+        server.requests.lock().unwrap().last().unwrap()["requestedSessionId"],
+        "legacy-native"
+    );
+    let mut stable = context.clone();
+    stable.run_code = "RUN-STABLE".into();
+    for _ in 0..3 {
+        runtime.start(stable.clone(), None).await.unwrap();
+    }
+    let mut wrong_account = context.clone();
+    wrong_account.model.api_key = "other-account".into();
+    let before = server.requests.lock().unwrap().len();
+    assert!(
+        runtime
+            .resume("legacy-native", wrong_account, None)
+            .await
+            .is_err()
+    );
+    assert_eq!(server.requests.lock().unwrap().len(), before);
+    host.close().await;
+    drop(runtime);
+    drop(host);
+    let store = SqliteConversationStore::open(&path, Default::default())
+        .await
+        .unwrap();
+    let mut binding = store
+        .open_branch(
+            &fw::ConversationKey::new(context.conversation_code.as_deref().unwrap())
+                .branch("tron.external/CODEX_APP_SERVER"),
+        )
+        .await
+        .unwrap();
+    assert_eq!(
+        binding.snapshot().await.unwrap().revision,
+        1,
+        "repeated same native references must not consume history capacity"
+    );
+    binding
+        .finish(fw::ConversationOutcome::Completed)
+        .await
+        .unwrap();
+    drop(binding);
+    let mut old = store
+        .open(context.conversation_code.as_deref().unwrap())
+        .await
+        .unwrap();
+    assert_eq!(old.snapshot().await.unwrap().messages, vec![message]);
+    old.finish(fw::ConversationOutcome::Completed)
+        .await
+        .unwrap();
+    drop(old);
+    store.close().await.unwrap();
+    let host = FrameworkHost::persistent(&path, None);
+    let runtime = registry()
+        .with_framework_host(Some(host.clone()))
+        .resolve(selection);
+    // Switching back to an older known ID must become the next automatic choice.
+    runtime
+        .resume("alternate-native", stable.clone(), None)
+        .await
+        .unwrap();
+    runtime
+        .resume("legacy-native-next", stable.clone(), None)
+        .await
+        .unwrap();
+    runtime.start(stable, None).await.unwrap();
+    assert_eq!(
+        server.requests.lock().unwrap().last().unwrap()["requestedSessionId"],
+        "legacy-native-next"
+    );
+    let mut changed = context;
+    changed.model.api_path = Some("/different-protocol-path".into());
+    changed.system_agent_session_id = Some("legacy-native-next".into());
+    runtime.start(changed, None).await.unwrap();
+    assert_eq!(
+        server.requests.lock().unwrap().last().unwrap()["action"],
+        "start"
+    );
+    host.set_pack_enabled("framework.external-agent", false)
+        .await
+        .unwrap();
+    let before = server.requests.lock().unwrap().len();
+    assert!(runtime.start(base_context(), None).await.is_err());
+    assert_eq!(server.requests.lock().unwrap().len(), before);
+    host.close().await;
+}
+
+#[tokio::test]
+async fn external_run_respects_busy_configuration_and_releases_binding_on_drop() {
+    use tron_backend::application::agent::FrameworkHost;
+    let server = service_runtime_mock_server_with_start_delay(30_000).await;
+    let host = FrameworkHost::temporary(None).unwrap();
+    let runtime = registry().with_framework_host(Some(host.clone())).resolve(
+        RuntimeAdapterSelection::CodexAppServer {
+            endpoint: server.base_url.clone(),
+            working_directory: None,
+        },
+    );
+    let task = tokio::spawn({
+        let runtime = runtime.clone();
+        async move { runtime.start(base_context(), None).await }
+    });
+    tokio::time::timeout(Duration::from_secs(5), async {
+        while server.requests.lock().unwrap().is_empty() {
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(host.set_extension_enabled("runtime", false).await.is_err());
+    assert!(
+        runtime.start(base_context(), None).await.is_err(),
+        "same native binding must remain exclusive"
+    );
+    task.abort();
+    let _ = task.await;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            if host.set_extension_enabled("runtime", false).await.is_ok() {
+                break;
+            }
+            sleep(Duration::from_millis(10)).await;
+        }
+    })
+    .await
+    .unwrap();
+    assert!(runtime.start(base_context(), None).await.is_err());
+    host.close().await;
+}
+
+#[tokio::test]
+async fn external_bridge_observation_overflow_fails_and_releases_the_binding() {
+    use tron_backend::application::agent::FrameworkHost;
+    let server = service_runtime_mock_server().await;
+    let host = FrameworkHost::temporary(None).unwrap();
+    let runtime = registry().with_framework_host(Some(host.clone())).resolve(
+        RuntimeAdapterSelection::CodexAppServer {
+            endpoint: server.base_url.clone(),
+            working_directory: None,
+        },
+    );
+    let mut flood = base_context();
+    flood.run_code = "RUN-FLOOD".into();
+    let error = runtime.start(flood, None).await.unwrap_err();
+    assert!(format!("{error:?}").contains("bounded event capacity"));
+    assert_eq!(
+        runtime
+            .start(base_context(), None)
+            .await
+            .unwrap()
+            .final_output,
+        "service start output"
+    );
+    host.close().await;
+}
+
+#[tokio::test]
+async fn closing_host_releases_native_bindings_even_when_outer_future_is_not_polled() {
+    use tron_backend::application::agent::FrameworkHost;
+    let slow = service_runtime_mock_server_with_start_delay(30_000).await;
+    let fast = service_runtime_mock_server().await;
+    let directory = tempfile::tempdir().unwrap();
+    let path = directory.path().join("closing.sqlite3");
+    let host = FrameworkHost::persistent(&path, None);
+    let runtime = registry().with_framework_host(Some(host.clone())).resolve(
+        RuntimeAdapterSelection::CodexAppServer {
+            endpoint: slow.base_url.clone(),
+            working_directory: None,
+        },
+    );
+    let mut execution = Box::pin(runtime.start(base_context(), None));
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            tokio::select! {
+                result = &mut execution => panic!("expected in-flight run: {result:?}"),
+                _ = sleep(Duration::from_millis(10)) => {
+                    if !slow.requests.lock().unwrap().is_empty() {
+                        break;
+                    }
+                }
+            }
+        }
+    })
+    .await
+    .unwrap();
+    // A different store's owner must remain fenced independently of this host.
+    use eliteforge_agent_core::{ConversationKey, ConversationStore};
+    use eliteforge_agent_official_plugin_storage_local::SqliteConversationStore;
+    let foreign = SqliteConversationStore::open(&path, Default::default())
+        .await
+        .unwrap();
+    let foreign_key =
+        ConversationKey::new("foreign-owner").branch("tron.external/CODEX_APP_SERVER");
+    let mut foreign_session = foreign.open_branch(&foreign_key).await.unwrap();
+    // The outer future retains the native lease while the inner run is drained.
+    tokio::time::timeout(Duration::from_secs(5), host.close())
+        .await
+        .unwrap();
+    drop(execution);
+    assert!(foreign.open_branch(&foreign_key).await.is_err());
+    foreign_session
+        .append(&[eliteforge_agent_core::Message::assistant(
+            "foreign owner still valid",
+        )])
+        .await
+        .unwrap();
+    foreign_session
+        .finish(eliteforge_agent_core::ConversationOutcome::Completed)
+        .await
+        .unwrap();
+    drop(foreign_session);
+    foreign.close().await.unwrap();
+    let reopened = FrameworkHost::persistent(&path, None);
+    let runtime = registry()
+        .with_framework_host(Some(reopened.clone()))
+        .resolve(RuntimeAdapterSelection::CodexAppServer {
+            endpoint: fast.base_url.clone(),
+            working_directory: None,
+        });
+    assert_eq!(
+        runtime
+            .start(base_context(), None)
+            .await
+            .unwrap()
+            .final_output,
+        "service start output"
+    );
+    reopened.close().await;
+    let unopened = FrameworkHost::persistent(directory.path().join("unused.sqlite3"), None);
+    unopened.close().await;
+    let runtime = registry()
+        .with_framework_host(Some(unopened.clone()))
+        .resolve(RuntimeAdapterSelection::CodexAppServer {
+            endpoint: fast.base_url.clone(),
+            working_directory: None,
+        });
+    let before = fast.requests.lock().unwrap().len();
+    let error = runtime.start(base_context(), None).await.unwrap_err();
+    assert!(format!("{error:?}").contains("host is closed"));
+    assert_eq!(fast.requests.lock().unwrap().len(), before);
+    let react = registry()
+        .with_framework_host(Some(unopened))
+        .resolve(RuntimeAdapterSelection::React);
+    let error = react.start(base_context(), None).await.unwrap_err();
+    assert!(format!("{error:?}").contains("host is closed"));
+    assert!(!directory.path().join("unused.sqlite3").exists());
 }

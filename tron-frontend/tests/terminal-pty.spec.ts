@@ -21,7 +21,7 @@ test.beforeAll(async () => {
   });
   const root = resolve(fileURLToPath(import.meta.url), "../../..");
   backend = spawnManagedProcess("make", ["be-ui-acceptance", `CARGO=${process.env.TRON_ACCEPTANCE_CARGO || "cargo"}`], { cwd: root, env: { ...process.env,
-    CARGO_PROFILE_DEV_DEBUG: "0", CARGO_INCREMENTAL: "0", CARGO_BUILD_JOBS: "2",
+    CARGO_PROFILE_DEV_DEBUG: process.env.CARGO_PROFILE_DEV_DEBUG || "0", CARGO_INCREMENTAL: process.env.CARGO_INCREMENTAL || "0", CARGO_BUILD_JOBS: "2",
     TRON_ACCEPTANCE_DIRECTORY: directory, TRON_ACCEPTANCE_PORT: String(port),
   }, stdio: "pipe" });
   backend.stdout.on("data", data => backendLogs += data.toString());

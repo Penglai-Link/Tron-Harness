@@ -169,7 +169,7 @@ impl RuntimeCapabilities {
             supports_resume: true,
             supports_cancel: true,
             supports_steer: false,
-            supports_streaming: true,
+            supports_streaming: false,
             supports_ephemeral: false,
             supports_workdir: true,
         }

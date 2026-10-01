@@ -725,7 +725,7 @@ async fn internal_agent_automation_tools_are_cataloged_and_executable() {
     assert_eq!(restored["status"], json!("Paused"));
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread", worker_threads = 2)]
 async fn active_automation_scheduler_persists_real_tick() {
     let server = recording_agent_model_server().await;
     let database_path = database_path("scheduler-real-tick");
@@ -984,16 +984,22 @@ async fn wait_for_final_execution_status(
             )
             .expect("execution records should list")
             .records;
-        if let Some(record) = records
+        let latest = records
             .into_iter()
-            .find(|record| record.execution_code == execution_code)
-            && record.status == expected_status
-        {
-            return record;
+            .find(|record| record.execution_code == execution_code);
+        if let Some(record) = &latest {
+            if record.status == expected_status {
+                return record.clone();
+            }
+            assert!(
+                record.status != AutomationExecutionStatus::Failed,
+                "execution {execution_code} failed: {:?}",
+                record.summary
+            );
         }
         assert!(
             Instant::now() < deadline,
-            "timed out waiting for execution {execution_code} to reach {expected_status:?}"
+            "timed out waiting for execution {execution_code} to reach {expected_status:?}; latest: {latest:?}"
         );
         sleep(Duration::from_millis(100)).await;
     }
@@ -1148,7 +1154,14 @@ fn config_for_path(database_path: PathBuf) -> AppConfig {
 fn database_path(test_name: &str) -> PathBuf {
     PathBuf::from(env!("CARGO_TARGET_TMPDIR"))
         .join("automation-management")
-        .join(format!("{test_name}.sqlite"))
+        .join(format!(
+            "{test_name}-{}-{}.sqlite",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ))
 }
 
 fn insert_chat_assistant_message(

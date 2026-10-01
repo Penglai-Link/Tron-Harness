@@ -7,7 +7,7 @@ use crate::application::agent::{ActiveRunControl, ModelStreamSink, runtime::Reac
 use crate::domain::agent::{AgentError, AgentRunContext, AgentRunResult};
 use eliteforge_agent_core as fw;
 use eliteforge_agent_framework::{Agent, AgentBuilder};
-use eliteforge_agent_official_plugin_storage_sqlite::SqliteStoragePlugin;
+use eliteforge_agent_official_plugin_storage_local::{LocalStoragePlugin, SqliteConversationStore};
 use eliteforge_agent_official_plugin_tools_local::FileReferenceReaderService;
 use std::{
     collections::BTreeMap,
@@ -17,6 +17,9 @@ use std::{
     time::Duration,
 };
 use tokio::sync::{Mutex, OnceCell};
+
+#[path = "host_external.rs"]
+mod host_external;
 
 #[derive(Clone)]
 pub struct FrameworkHost(Arc<Host>);
@@ -29,6 +32,10 @@ struct Host {
     config_lock: tokio::sync::Mutex<()>,
     pty: eliteforge_agent_capability_tools::PtyService,
     agent: OnceCell<Agent>,
+    external_agent: OnceCell<Agent>,
+    native_sessions: OnceCell<SqliteConversationStore>,
+    native_bindings: super::native_sessions::Bindings,
+    closed: std::sync::atomic::AtomicBool,
     resources: Option<crate::application::resource::ResourceService>,
     _temporary: Option<tempfile::TempDir>,
 }
@@ -51,6 +58,7 @@ impl FrameworkHost {
 
     pub async fn set_pack_enabled(&self, id: &str, enabled: bool) -> Result<(), String> {
         let _guard = self.0.config_lock.lock().await;
+        self.ensure_external_idle()?;
         let mut packs = self.0.capability_state.read().unwrap().clone();
         let previous = packs.clone();
         let extensions = self.0.extension_state.read().unwrap().clone();
@@ -69,6 +77,7 @@ impl FrameworkHost {
 
     pub async fn set_extension_enabled(&self, point: &str, enabled: bool) -> Result<(), String> {
         let _guard = self.0.config_lock.lock().await;
+        self.ensure_external_idle()?;
         let packs = self.0.capability_state.read().unwrap().clone();
         let mut extensions = self.0.extension_state.read().unwrap().clone();
         let previous = extensions.clone();
@@ -95,18 +104,11 @@ impl FrameworkHost {
             .with_input_modalities([fw::Modality::Text, fw::Modality::Image]);
         descriptor.supports_tools = Some(true);
         let builder = AgentBuilder::new().default_models(false);
-        let builder = if packs
-            .get("framework.external-agent")
-            .copied()
-            .unwrap_or(true)
-            && enabled("runtime")
-        {
-            builder.capability_pack(eliteforge_agent_capability_external::external_agent_pack())
-        } else {
-            builder
-        };
         let builder = if enabled("storage") {
-            builder.plugin(SqliteStoragePlugin::new(&self.0.path))
+            builder.plugin(LocalStoragePlugin::new(
+                &self.0.path,
+                self.0.path.with_extension("artifacts"),
+            ))
         } else {
             builder
         };
@@ -183,9 +185,56 @@ impl FrameworkHost {
         Ok(builder)
     }
 
+    fn ensure_external_idle(&self) -> Result<(), String> {
+        self.ensure_open()?;
+        if let Some(agent) = self.0.external_agent.get()
+            && !agent
+                .reconfiguration_blockers()
+                .map_err(|e| e.to_string())?
+                .is_empty()
+        {
+            return Err("external runtime is busy".into());
+        }
+        Ok(())
+    }
+    fn prepare_artifacts(&self) -> Result<(), String> {
+        let path = self.0.path.with_extension("artifacts");
+        if !path.exists() {
+            let mut builder = fs::DirBuilder::new();
+            builder.recursive(true);
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::DirBuilderExt;
+                builder.mode(0o700);
+            }
+            builder.create(&path).map_err(|e| e.to_string())?;
+        }
+        Ok(())
+    }
+    fn ensure_open(&self) -> Result<(), String> {
+        if self.0.closed.load(std::sync::atomic::Ordering::Acquire) {
+            return Err("framework host is closed".into());
+        }
+        Ok(())
+    }
     pub async fn close(&self) {
+        let _admission = self.0.config_lock.lock().await;
+        if self
+            .0
+            .closed
+            .swap(true, std::sync::atomic::Ordering::AcqRel)
+        {
+            return;
+        }
         if let Some(agent) = self.0.agent.get() {
             agent.close().await;
+        }
+        if let Some(agent) = self.0.external_agent.get() {
+            agent.close().await;
+        }
+        self.0.native_bindings.close().await;
+        if let Some(store) = self.0.native_sessions.get() {
+            let _ = store.close().await;
         }
         let pty = self.pty();
         let _ = tokio::task::spawn_blocking(move || pty.close()).await;
@@ -207,6 +256,10 @@ impl FrameworkHost {
             extension_state: std::sync::RwLock::new(extensions),
             config_lock: tokio::sync::Mutex::new(()),
             agent: OnceCell::new(),
+            external_agent: OnceCell::new(),
+            native_sessions: OnceCell::new(),
+            native_bindings: Default::default(),
+            closed: Default::default(),
             pty: Default::default(),
             resources,
             _temporary: None,
@@ -226,6 +279,10 @@ impl FrameworkHost {
             extension_state: std::sync::RwLock::new(BTreeMap::new()),
             config_lock: tokio::sync::Mutex::new(()),
             agent: OnceCell::new(),
+            external_agent: OnceCell::new(),
+            native_sessions: OnceCell::new(),
+            native_bindings: Default::default(),
+            closed: Default::default(),
             pty: Default::default(),
             resources,
             _temporary: Some(directory),
@@ -259,6 +316,8 @@ impl FrameworkHost {
                     std::fs::create_dir_all(parent)
                         .map_err(|error| fw::AgentError::InvalidConfiguration(error.to_string()))?;
                 }
+                self.prepare_artifacts()
+                    .map_err(fw::AgentError::InvalidConfiguration)?;
                 let (packs, extensions) = self.capability_state();
                 self.agent_builder(&packs, &extensions)
                     .map_err(fw::AgentError::InvalidConfiguration)?
@@ -266,97 +325,6 @@ impl FrameworkHost {
                     .await
             })
             .await
-    }
-    pub(crate) async fn run_external(
-        &self,
-        transport: Arc<dyn crate::application::agent::AgentRuntime>,
-        context: AgentRunContext,
-        sink: Option<ModelStreamSink>,
-        resume: bool,
-    ) -> Result<AgentRunResult, crate::application::agent::AgentInvocationError> {
-        use crate::application::agent::AgentInvocationError;
-        let map = |error: fw::AgentError| AgentInvocationError::RuntimeFailed(error.to_string());
-        let agent = self.agent().await.map_err(map)?;
-        let session = context
-            .conversation_code
-            .clone()
-            .unwrap_or_else(|| context.run_code.clone());
-        let input = context
-            .messages
-            .iter()
-            .rfind(|message| message.role == "user")
-            .ok_or(AgentInvocationError::PromptRequired)?;
-        let input = super::messages::encode(input)
-            .map_err(AgentInvocationError::RuntimeFailed)?
-            .content;
-        let mut request = fw::RunRequest::new(&session, input);
-        request.model = Some(fw::ModelRef::new(
-            eliteforge_agent_capability_external::CONNECTION,
-            "agent",
-        ));
-        request.limits.max_steps = 1;
-        request.limits.max_model_retries = 0;
-        request.limits.max_context_tokens =
-            context.model.context_window_tokens.unwrap_or(128_000) as usize;
-        request.limits.max_model_output_tokens = context
-            .model
-            .max_tokens
-            .filter(|value| *value > 0)
-            .unwrap_or(4096);
-        request.limits.model_timeout = Duration::from_secs(3600);
-        request.limits.run_timeout = Duration::from_secs(3600);
-        request
-            .extensions
-            .insert(super::external::ExternalExecution {
-                transport,
-                context: context.clone(),
-                sink,
-                result: std::sync::Mutex::new(None),
-            });
-        tron_agent_harness::TronRunScope {
-            user_code: context.user_code.unwrap_or_else(|| "system".into()),
-            workspace_code: context.workspace_code,
-            session_code: session,
-            run_code: context.run_code,
-            app_code: context.execution_scope.app_code,
-            task_code: context.execution_scope.task_code,
-            agent_code: context
-                .short_term_memory
-                .and_then(|memory| memory.agent_code),
-        }
-        .attach(&mut request)
-        .map_err(map)?;
-        let execution = request
-            .extensions
-            .get::<super::external::ExternalExecution>()
-            .expect("registered external execution");
-        request
-            .extensions
-            .insert(eliteforge_agent_capability_external::ExternalStage {
-                scope: execution.session_scope().ok_or_else(|| {
-                    AgentInvocationError::RuntimeFailed("external scope is missing".into())
-                })?,
-                session_id: execution.context.system_agent_session_id.clone(),
-                require_resume: resume,
-                invocation: execution.clone(),
-            });
-        let result = agent.run(request).await;
-        let native = execution
-            .result
-            .lock()
-            .map_err(|_| {
-                AgentInvocationError::RuntimeFailed("external result lock unavailable".into())
-            })?
-            .take();
-        if let Some(Err(error)) = native {
-            return Err(error);
-        }
-        result.map_err(map)?;
-        native.ok_or_else(|| {
-            AgentInvocationError::RuntimeFailed(
-                "external runtime completed without a result".into(),
-            )
-        })?
     }
 
     pub(crate) async fn run(
@@ -366,6 +334,9 @@ impl FrameworkHost {
         sink: Option<ModelStreamSink>,
         steering: Option<ActiveRunControl>,
     ) -> Result<AgentRunResult, AgentError> {
+        let admission = self.0.config_lock.lock().await;
+        self.ensure_open()
+            .map_err(AgentError::InvalidConfiguration)?;
         harness.framework_started(&context)?;
         let agent = self.agent().await.map_err(map_error)?;
         let session = context
@@ -523,7 +494,12 @@ impl FrameworkHost {
                     control,
                 })));
         }
-        let result = agent.run(request).await;
+        let started = agent.start(request);
+        drop(admission);
+        let result = match started {
+            Ok(handle) => agent.wait(handle).await,
+            Err(error) => Err(error),
+        };
         let state = state.lock().await;
         let failure = match &result {
             Ok(result) if result.status == fw::RunStatus::StepLimit => {

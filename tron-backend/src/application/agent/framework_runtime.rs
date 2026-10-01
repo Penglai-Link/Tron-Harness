@@ -16,6 +16,7 @@ pub use capability_catalog::{
 pub use host::FrameworkHost;
 
 mod external;
+mod native_sessions;
 pub(crate) use external::FrameworkExternalRuntime;
 
 mod question;

@@ -3142,7 +3142,11 @@ async fn framework_restores_responses_continuation_after_host_restart() {
     drop(host);
     let host = FrameworkHost::persistent(&path, None);
     let second = Arc::new(ScriptedResultModelClient::new(vec![Ok(
-        ModelResponse::final_output("second answer"),
+        ModelResponse::final_output_with_usage_and_response_id(
+            "second answer",
+            None,
+            Some("resp-second".into()),
+        ),
     )]));
     let agent = ReactAgentBuilder::new(
         second.clone(),
@@ -3173,6 +3177,34 @@ async fn framework_restores_responses_continuation_after_host_restart() {
             .messages
             .iter()
             .any(|message| message.plain_text_content().contains("first answer"))
+    );
+    // Same endpoint/model with another credential must not reuse the previous account ID.
+    context.run_code = "DURABLE-ACCOUNT".into();
+    context.model.api_key = "another-account-key".into();
+    context.messages = vec![AgentMessage::user("another account")];
+    let account = Arc::new(ScriptedResultModelClient::new(vec![Ok(
+        ModelResponse::final_output_with_usage_and_response_id(
+            "new account",
+            None,
+            Some("resp-account".into()),
+        ),
+    )]));
+    let account_agent = ReactAgentBuilder::new(
+        account.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    account_agent.run(context.clone()).await.unwrap();
+    assert!(account.requests()[0].1.previous_response_id.is_none());
+    assert!(
+        account.requests()[0]
+            .1
+            .messages
+            .iter()
+            .any(|m| m.plain_text_content().contains("first answer"))
     );
     // Changing the provider must replay the full transcript, not reuse its ID.
     context.run_code = "DURABLE-3".into();
@@ -3466,4 +3498,91 @@ async fn framework_retries_only_the_model_after_a_tool_side_effect() {
     let requests = client.requests();
     assert_eq!(requests.len(), 3);
     assert_eq!(requests[1].1.messages, requests[2].1.messages);
+}
+
+#[derive(Clone)]
+struct FloodThenFinalModel {
+    calls: Arc<AtomicUsize>,
+    dropped: Arc<std::sync::atomic::AtomicBool>,
+}
+struct FloodInvocationDrop(Arc<std::sync::atomic::AtomicBool>);
+impl Drop for FloodInvocationDrop {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::SeqCst);
+    }
+}
+impl ModelClient for FloodThenFinalModel {
+    fn generate<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        _: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        Box::pin(async { Ok(ModelResponse::final_output("recovered")) })
+    }
+    fn generate_stream<'a>(
+        &'a self,
+        _: &'a AgentModelConfig,
+        _: &'a ModelRequest,
+        sink: tron_backend::application::agent::ModelStreamSink,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        Box::pin(async move {
+            if self.calls.fetch_add(1, Ordering::SeqCst) == 0 {
+                let _drop = FloodInvocationDrop(self.dropped.clone());
+                for _ in 0..2048 {
+                    sink(tron_backend::domain::agent::ModelStreamEvent::text_delta(
+                        "x",
+                    ));
+                }
+                std::future::pending::<Result<ModelResponse, String>>().await
+            } else {
+                Ok(ModelResponse::final_output("recovered"))
+            }
+        })
+    }
+}
+#[tokio::test]
+async fn framework_stream_overflow_stops_unfinished_provider_without_retry_and_releases_session() {
+    use tron_backend::application::agent::FrameworkHost;
+    let calls = Arc::new(AtomicUsize::new(0));
+    let dropped = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let host = FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        Arc::new(FloodThenFinalModel {
+            calls: calls.clone(),
+            dropped: dropped.clone(),
+        }),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .build()
+    .unwrap();
+    let mut context = base_context("STREAM-FLOOD");
+    context.tools.clear();
+    let result = tokio::time::timeout(
+        Duration::from_secs(3),
+        agent.run_stream(context.clone(), Arc::new(|_| {})),
+    )
+    .await
+    .unwrap();
+    assert!(
+        result
+            .unwrap_err()
+            .to_string()
+            .contains("bounded host handoff capacity")
+    );
+    assert!(dropped.load(Ordering::SeqCst));
+    assert_eq!(
+        calls.load(Ordering::SeqCst),
+        1,
+        "partial output must never be retried"
+    );
+    context.run_code = "STREAM-RECOVERED".into();
+    let result = agent.run_stream(context, Arc::new(|_| {})).await.unwrap();
+    assert_eq!(result.final_output, "recovered");
+    host.close().await;
 }

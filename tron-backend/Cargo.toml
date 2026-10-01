@@ -16,7 +16,7 @@ eliteforge-agent-core = { path = "../.agent-deps/agent-framework/crates/framewor
 eliteforge-agent-framework = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-framework", default-features = false }
 eliteforge-agent-capability-runtime = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-capability-runtime" }
 eliteforge-agent-official-plugin-tools-local = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-local" }
-eliteforge-agent-official-plugin-storage-sqlite = { path = "../.agent-deps/agent-framework/crates/plugin/storage/eliteforge-agent-official-plugin-storage-sqlite" }
+eliteforge-agent-official-plugin-storage-local = { path = "../.agent-deps/agent-framework/crates/plugin/storage/eliteforge-agent-official-plugin-storage-local" }
 aes-gcm-siv = "0.11"
 axum = { version = "0.8", features = ["multipart"] }
 async-stream = "0.3"

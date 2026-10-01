@@ -159,17 +159,17 @@ pub fn extension_implementation_catalog() -> Vec<ExtensionImplementationInfo> {
         (
             "runtime",
             "Runtime",
-            "ExternalAgent capability stage",
-            eliteforge_agent_capability_external::RUNTIME_IMPLEMENTATION_DESCRIPTION,
+            "Independent ExternalAgentLoop",
+            "Independent external execution with native session ownership and observation events",
             "framework.external-agent",
             "EliteForge",
         ),
         (
             "storage",
             "Storage",
-            "SqliteStoragePlugin",
-            eliteforge_agent_official_plugin_storage_sqlite::STORAGE_IMPLEMENTATION_DESCRIPTION,
-            "framework.storage.sqlite",
+            "LocalStoragePlugin",
+            eliteforge_agent_official_plugin_storage_local::STORAGE_IMPLEMENTATION_DESCRIPTION,
+            "framework.storage.local",
             "EliteForge",
         ),
     ]

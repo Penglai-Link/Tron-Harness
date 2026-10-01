@@ -858,3 +858,69 @@ fn resource_app_with_database(
     config.resource.limits.max_binary_bytes = max_binary_bytes;
     (app_with_config(config), storage_root, database_path)
 }
+
+#[tokio::test]
+async fn preexisting_chat_history_and_product_attachment_survive_framework_host_restart() {
+    use axum::http::Method;
+    let directory = tempfile::tempdir().unwrap();
+    let database = directory.path().join("product.sqlite3");
+    let storage = directory.path().join("product-files");
+    let mut config = AppConfig::default();
+    config.database_url = database.display().to_string();
+    config.resource = ResourceConfig::with_default_root(storage.display().to_string());
+    let app = app_with_config(config.clone());
+    let token = authenticated_bearer_token(&app).await;
+    let created =
+        create_file_resource(&app, &token, "old-attachment", b"existing attachment bytes").await;
+    assert_eq!(created.status(), StatusCode::OK);
+    let session = request_with_headers(
+        &app,
+        Method::POST,
+        "/api/v1/chats/sessions",
+        Some(json!({"workspaceCode": WORKSPACE,"title":"Existing history"})),
+        None,
+        Some(&format!("Bearer {token}")),
+    )
+    .await;
+    assert_eq!(session.status(), StatusCode::CREATED);
+    let session = response_json(session).await["data"]["sessionCode"]
+        .as_str()
+        .unwrap()
+        .to_owned();
+    let attachment = json!([{"id":"old-product-file","kind":"resource","summary":"Existing file","resourceCode":"old-attachment","fileName":"notes.txt","contentType":"text/plain","byteSize":25,"metadata":{}}]);
+    {
+        let db = rusqlite::Connection::open(&database).unwrap();
+        db.execute("INSERT INTO chat_messages(id,message_code,session_code,run_code,role,channel,actor,content,attachments_json,created_at) VALUES(1,'OLD-MESSAGE',?1,NULL,'USER','MAIN_AGENT','USR-AUTH-0001','existing user history',?2,1)", rusqlite::params![&session, attachment.to_string()]).unwrap();
+    }
+    drop(app);
+    // Reopen the product DB with the new host present. Product files are distinct
+    // from the Framework artifact BLOB format excluded by the Framework design.
+    let app = app_with_config(config);
+    let token = authenticated_bearer_token(&app).await;
+    let history = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/{session}/messages"),
+        None,
+        None,
+        Some(&format!("Bearer {token}")),
+    )
+    .await;
+    assert_eq!(history.status(), StatusCode::OK);
+    let history = response_json(history).await;
+    assert_eq!(history["data"][0]["content"], "existing user history");
+    assert_eq!(
+        history["data"][0]["attachments"][0]["resourceCode"],
+        "old-attachment"
+    );
+    let downloaded = authenticated_json_response(
+        &app,
+        &token,
+        "/api/v1/resources/download-binary",
+        json!({"workspaceCode":WORKSPACE,"resourceCode":"old-attachment"}),
+    )
+    .await;
+    assert_eq!(downloaded.status(), StatusCode::OK);
+    let bytes = to_bytes(downloaded.into_body(), usize::MAX).await.unwrap();
+    assert_eq!(bytes.as_ref(), b"existing attachment bytes");
+}
