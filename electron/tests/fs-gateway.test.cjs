@@ -8,7 +8,7 @@ const path = require("node:path");
 const { handleFsCommand, _internals } = require("../main/fs-gateway.cjs");
 
 function makeRoot() {
-  const realPath = fs.mkdtempSync(path.join(os.tmpdir(), "tron-fs-"));
+  const realPath = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "tron-fs-")));
   const rootId = crypto.randomUUID();
   _internals.roots.set(rootId, { realPath, name: path.basename(realPath) });
   return { rootId, realPath };

@@ -458,6 +458,7 @@ function shouldOpenMainDevTools() {
 async function bootstrap() {
   const resourcesDir = resolveResourcesDir(app);
   const appDataDir = resolveDesktopDataDir();
+  state.appDataDir = appDataDir;
   fs.mkdirSync(appDataDir, { recursive: true });
 
   state.backendHost = resolveBackendHost({ isPackaged: app.isPackaged });
