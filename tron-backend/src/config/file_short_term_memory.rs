@@ -9,6 +9,23 @@ use crate::application::short_term_memory::{
 
 impl ShortTermMemoryConfig {
     pub(super) fn apply_overrides(&mut self, overrides: ShortTermMemoryFileConfig) {
+        let explicit_history_target = overrides
+            .context
+            .as_ref()
+            .and_then(|context| context.providers.as_ref())
+            .and_then(|providers| providers.history.as_ref())
+            .is_some_and(|history| history.target_ratio_bps.is_some());
+        let explicit_history_strategy = overrides
+            .context
+            .as_ref()
+            .and_then(|context| context.providers.as_ref())
+            .and_then(|providers| providers.history.as_ref())
+            .is_some_and(|history| history.strategy.is_some());
+        let legacy_history_target = overrides
+            .compaction
+            .as_ref()
+            .and_then(|compaction| compaction.retained_history_ratio_bps);
+
         if let Some(value) = overrides.tool_output {
             self.tool_output.apply_overrides(value);
         }
@@ -23,6 +40,14 @@ impl ShortTermMemoryConfig {
         }
         if let Some(value) = overrides.compaction {
             self.compaction.apply_overrides(value);
+        }
+        if !explicit_history_target && let Some(target) = legacy_history_target {
+            self.context.providers.history.target_ratio_bps = target.min(10_000);
+            if target >= 10_000 && !explicit_history_strategy {
+                // Legacy full retention has no compressible head; preserve its no-op behavior.
+                self.context.providers.history.strategy =
+                    crate::application::short_term_memory::ContextReductionStrategy::Keep;
+            }
         }
         if let Some(value) = overrides.goal_loop {
             self.goal_loop.apply_overrides(value);
@@ -88,6 +113,9 @@ impl ContextBudgetConfig {
         if let Some(value) = overrides.reasoning_summary_replay_enabled {
             self.reasoning_summary_replay_enabled = value;
         }
+        if let Some(value) = overrides.providers {
+            value.apply_to(&mut self.providers);
+        }
         if let Some(value) = overrides.blocks {
             self.blocks.apply_overrides(value);
             if let Some(ratio) = self.blocks.session_family_context.max_ratio_bps {
@@ -129,7 +157,11 @@ impl FamilyLoadConfig {
     }
 }
 
-impl ContextBlockBudgets {
+trait ApplyMemoryOverrides<T> {
+    fn apply_overrides(&mut self, overrides: T);
+}
+
+impl ApplyMemoryOverrides<ContextBlockBudgetsFileConfig> for ContextBlockBudgets {
     fn apply_overrides(&mut self, overrides: ContextBlockBudgetsFileConfig) {
         if let Some(value) = overrides.seed_prompt_prefix {
             self.seed_prompt_prefix.apply_overrides(value);
@@ -149,19 +181,22 @@ impl ContextBlockBudgets {
     }
 }
 
-impl ContextBlockBudgetConfig {
+impl ApplyMemoryOverrides<ContextBlockBudgetFileConfig> for ContextBlockBudgetConfig {
     fn apply_overrides(&mut self, overrides: ContextBlockBudgetFileConfig) {
         if let Some(value) = overrides.max_ratio_bps {
             self.max_ratio_bps = Some(value.min(10_000));
         }
         if let Some(value) = overrides.max_tokens {
-            self.max_tokens = Some(value.max(1));
+            self.max_tokens = value.map(|value| value.max(1));
         }
     }
 }
 
 impl CompactionPolicyConfig {
     fn apply_overrides(&mut self, overrides: CompactionPolicyFileConfig) {
+        if let Some(enabled) = overrides.auto_enabled {
+            self.auto_enabled = enabled;
+        }
         if let Some(value) = overrides.trigger_ratio_bps {
             self.trigger_ratio_bps = value.min(10_000);
         }
@@ -235,6 +270,7 @@ struct ContextBudgetFileConfig {
     family_context_max_chars: Option<usize>,
     reasoning_summary_replay_enabled: Option<bool>,
     blocks: Option<ContextBlockBudgetsFileConfig>,
+    providers: Option<ContextProvidersFileConfig>,
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -257,7 +293,15 @@ struct ContextBlockBudgetFileConfig {
         deserialize_with = "optional_ratio"
     )]
     max_ratio_bps: Option<u32>,
-    max_tokens: Option<u32>,
+    #[serde(default, deserialize_with = "explicit_optional_tokens")]
+    max_tokens: Option<Option<u32>>,
+}
+
+// Missing preserves the default; explicit YAML null removes only this cap.
+fn explicit_optional_tokens<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<Option<Option<u32>>, D::Error> {
+    Option::<u32>::deserialize(deserializer).map(Some)
 }
 
 #[derive(Debug, Deserialize, Default)]
@@ -310,6 +354,7 @@ struct FamilyLoadFileConfig {
 #[derive(Debug, Deserialize, Default)]
 #[serde(rename_all = "camelCase", deny_unknown_fields)]
 struct CompactionPolicyFileConfig {
+    auto_enabled: Option<bool>,
     #[serde(
         default,
         rename = "triggerRatio",
@@ -334,4 +379,152 @@ struct GoalLoopFileConfig {
     judge_max_attempts_per_run: Option<u32>,
     judge_input_max_chars: Option<usize>,
     judge_output_max_tokens: Option<u32>,
+}
+
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContextProvidersFileConfig {
+    order: Option<Vec<String>>,
+    checkpoint: Option<ContextProviderFilePolicy>,
+    family: Option<ContextProviderFilePolicy>,
+    working: Option<ContextProviderFilePolicy>,
+    history: Option<ContextProviderFilePolicy>,
+    prices: Option<crate::application::short_term_memory::ContextPriceInputs>,
+    max_auxiliary_calls_per_step: Option<usize>,
+}
+impl ContextProvidersFileConfig {
+    fn apply_to(self, config: &mut crate::application::short_term_memory::ContextProvidersConfig) {
+        if let Some(order) = self.order {
+            config.order = order;
+        }
+        if let Some(policy) = self.checkpoint {
+            policy.apply_to(&mut config.checkpoint);
+        }
+        if let Some(policy) = self.family {
+            policy.apply_to(&mut config.family);
+        }
+        if let Some(policy) = self.working {
+            policy.apply_to(&mut config.working);
+        }
+        if let Some(policy) = self.history {
+            policy.apply_to(&mut config.history);
+        }
+        if let Some(prices) = self.prices {
+            config.prices = prices;
+        }
+        if let Some(calls) = self.max_auxiliary_calls_per_step {
+            config.max_auxiliary_calls_per_step = calls;
+        }
+    }
+}
+#[derive(Debug, Deserialize, Default)]
+#[serde(rename_all = "camelCase", deny_unknown_fields)]
+struct ContextProviderFilePolicy {
+    strategy: Option<crate::application::short_term_memory::ContextReductionStrategy>,
+    #[serde(
+        default,
+        rename = "triggerRatio",
+        alias = "triggerRatioBps",
+        deserialize_with = "optional_ratio"
+    )]
+    trigger_ratio_bps: Option<u32>,
+    #[serde(
+        default,
+        rename = "targetRatio",
+        alias = "targetRatioBps",
+        deserialize_with = "optional_ratio"
+    )]
+    target_ratio_bps: Option<u32>,
+    min_gain_tokens: Option<usize>,
+}
+impl ContextProviderFilePolicy {
+    fn apply_to(self, config: &mut crate::application::short_term_memory::ContextProviderPolicy) {
+        if let Some(strategy) = self.strategy {
+            config.strategy = strategy;
+        }
+        if let Some(trigger) = self.trigger_ratio_bps {
+            config.trigger_ratio_bps = trigger.min(10_000);
+        }
+        if let Some(target) = self.target_ratio_bps {
+            config.target_ratio_bps = target.min(10_000);
+        }
+        if let Some(gain) = self.min_gain_tokens {
+            config.min_gain_tokens = gain;
+        }
+    }
+}
+
+#[cfg(test)]
+mod provider_tests {
+    use super::*;
+    #[test]
+    fn provider_percent_strings_and_legacy_bps_preserve_layout_and_strategy() {
+        for ratio in [
+            "triggerRatio: '75%'\n      targetRatio: '25%'",
+            "triggerRatioBps: 7500\n      targetRatioBps: 2500",
+        ] {
+            let text = format!(
+                "context:\n  providers:\n    order: [application_context, seed_prompt_prefix, current_session_checkpoint, session_family_context, current_session_working_state, current_session_history]\n    working:\n      strategy: semantic\n      {ratio}\n"
+            );
+            let overrides: ShortTermMemoryFileConfig = serde_yaml::from_str(&text).unwrap();
+            let mut config = ShortTermMemoryConfig::default();
+            config.apply_overrides(overrides);
+            assert_eq!(config.context.providers.order[0], "application_context");
+            assert_eq!(
+                config.context.providers.working.strategy,
+                crate::application::short_term_memory::ContextReductionStrategy::Semantic
+            );
+            assert_eq!(config.context.providers.working.trigger_ratio_bps, 7500);
+            assert_eq!(config.context.providers.working.target_ratio_bps, 2500);
+        }
+    }
+
+    #[test]
+    fn provider_explicit_history_target_overrides_legacy_retention_without_silent_loss() {
+        for (policy, expected) in [
+            ("", 5000),
+            (
+                "context:\n  providers:\n    history:\n      targetRatio: '10%'\n",
+                1000,
+            ),
+        ] {
+            let text = format!("{policy}compaction:\n  retainedHistoryRatio: '50%'\n");
+            let mut config = ShortTermMemoryConfig::default();
+            config.apply_overrides(serde_yaml::from_str(&text).unwrap());
+            assert_eq!(config.context.providers.history.target_ratio_bps, expected);
+        }
+        let mut config = ShortTermMemoryConfig::default();
+        config.apply_overrides(
+            serde_yaml::from_str("compaction:\n  retainedHistoryRatio: '100%'\n").unwrap(),
+        );
+        assert_eq!(config.context.providers.history.target_ratio_bps, 10000);
+        assert_eq!(
+            config.context.providers.history.strategy,
+            crate::application::short_term_memory::ContextReductionStrategy::Keep
+        );
+        config.apply_overrides(serde_yaml::from_str("context:\n  providers:\n    history:\n      strategy: checkpoint\n      targetRatio: '100%'\n").unwrap());
+        assert_eq!(
+            config.context.providers.history.strategy,
+            crate::application::short_term_memory::ContextReductionStrategy::Checkpoint
+        );
+    }
+    #[test]
+    fn provider_optional_prices_are_bounded_validated_estimate_inputs() {
+        use crate::application::short_term_memory::ContextPriceInputs;
+        assert!(ContextPriceInputs::default().validate().is_ok());
+        let price = ContextPriceInputs {
+            input: Some("1.25".into()),
+            currency: Some("USD".into()),
+            ..Default::default()
+        };
+        assert!(price.validate().is_ok());
+        for input in ["-1", "nan", "1e3", "1.2.3", "", "1."] {
+            let mut invalid = price.clone();
+            invalid.input = Some(input.into());
+            assert!(invalid.validate().is_err());
+        }
+        let mut invalid = price;
+        invalid.currency = None;
+        assert!(invalid.validate().is_err());
+    }
 }

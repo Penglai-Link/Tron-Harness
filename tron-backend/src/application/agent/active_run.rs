@@ -6,6 +6,8 @@ use std::{
 };
 
 use tokio::sync::watch;
+#[path = "active_run_group.rs"]
+mod group;
 
 use crate::domain::chat::ChatMessageAttachment;
 
@@ -82,6 +84,8 @@ pub struct ActiveRunRegistry {
 #[derive(Default)]
 struct ActiveRunRegistryInner {
     entries: Mutex<BTreeMap<String, Arc<ActiveRunEntry>>>,
+    admission: Mutex<()>,
+    groups: Mutex<BTreeMap<String, Arc<group::ActiveRunGroup>>>,
 }
 
 struct ActiveRunEntry {
@@ -159,6 +163,11 @@ impl ActiveRunRegistry {
         supports_steer: bool,
         starting: bool,
     ) -> Result<ActiveRunGuard, ActiveRunError> {
+        let _admission = self
+            .inner
+            .admission
+            .lock()
+            .map_err(|_| ActiveRunError::RegistryUnavailable)?;
         let mut entries = self
             .inner
             .entries
@@ -167,6 +176,7 @@ impl ActiveRunRegistry {
         if entries.contains_key(session_code) {
             return Err(ActiveRunError::AlreadyActive);
         }
+        self.admit_group_child(session_code, run_code, runtime_adapter_key)?;
         let (cancellation_sender, _) = watch::channel(false);
         let entry = Arc::new(ActiveRunEntry {
             run_code: run_code.to_string(),
@@ -224,7 +234,7 @@ impl ActiveRunRegistry {
                     .cloned()
             };
             let Some(entry) = entry else {
-                return Ok(None);
+                return self.group_snapshot(session_code);
             };
             let (starting, finishing) = {
                 let state = entry
@@ -260,7 +270,14 @@ impl ActiveRunRegistry {
         session_code: &str,
         expected_run_code: &str,
     ) -> Result<ActiveRunSnapshot, ActiveRunError> {
-        let entry = self.entry(session_code)?;
+        let group = self.stop_group(session_code, expected_run_code)?;
+        let entry = match self.entry(session_code) {
+            Ok(entry) => entry,
+            Err(ActiveRunError::NoActiveRun) if group.is_some() => {
+                return Ok(group.expect("group snapshot"));
+            }
+            Err(error) => return Err(error),
+        };
         validate_expected_run(&entry, expected_run_code)?;
         {
             let mut state = entry
@@ -291,7 +308,7 @@ impl ActiveRunRegistry {
             .entries
             .lock()
             .map_err(|_| ActiveRunError::RegistryUnavailable)?;
-        let mut stopped = 0;
+        let mut stopped = self.stop_groups()?;
         for entry in entries.values() {
             let mut state = entry
                 .state

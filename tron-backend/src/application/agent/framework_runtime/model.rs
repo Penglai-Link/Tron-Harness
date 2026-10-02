@@ -10,6 +10,8 @@ use tokio::sync::Mutex;
 pub(super) struct HostRunState {
     pub context: AgentRunContext,
     pub trusted_prefix: Vec<crate::domain::agent::AgentMessage>,
+    /// Actual admitted native IDs for product exposure audits; never an executor.
+    pub tool_catalog: std::collections::BTreeMap<String, String>,
     pub tool_sequence: u32,
     pub tool_sequences: std::collections::BTreeMap<String, u32>,
     pub error: Option<crate::domain::agent::AgentError>,
@@ -20,6 +22,8 @@ pub(super) struct HostRunState {
     pub estimate: Option<TokenEstimateSnapshot>,
     pub audit: Option<TokenUsageAuditSnapshot>,
     pub last_model_failure: Option<String>,
+    pub context_force_compression: bool,
+    pub context_auxiliary_calls: Option<(usize, Arc<std::sync::atomic::AtomicUsize>)>,
     pub prepared: Option<crate::application::short_term_memory::PreparedModelContext>,
 }
 
@@ -38,6 +42,7 @@ impl HostRunState {
         Self {
             context,
             trusted_prefix,
+            tool_catalog: Default::default(),
             tool_sequence: 0,
             tool_sequences: Default::default(),
             error: None,
@@ -49,6 +54,8 @@ impl HostRunState {
             audit: None,
             prepared: None,
             last_model_failure: None,
+            context_force_compression: false,
+            context_auxiliary_calls: None,
         }
     }
 }
@@ -57,6 +64,7 @@ pub(super) struct HostExecution {
     pub harness: ReactAgent,
     pub state: Arc<Mutex<HostRunState>>,
     pub sink: Option<ModelStreamSink>,
+    pub summaries: Arc<eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore>,
 }
 
 impl HostExecution {
@@ -67,26 +75,66 @@ impl HostExecution {
     }
 }
 
-pub(super) struct TronChatModel;
+#[path = "native_models.rs"]
+mod native;
+pub(crate) use native::NativeModelScope;
+pub(super) use native::{compaction_model_reference, synchronize_selected_model};
+pub(super) struct TronChatModel {
+    reference: fw::ModelRef,
+    config: crate::domain::agent::AgentModelConfig,
+    client: Arc<dyn super::super::ModelClient>,
+    auxiliary: bool,
+}
 
 #[async_trait]
 impl fw::ChatModel for TronChatModel {
+    fn on_failure(&self, _: &fw::Extensions, error: &fw::ModelError) {
+        self.client.on_model_failure(&self.config, error);
+    }
+    async fn recover_authentication(
+        &self,
+        _: &fw::Extensions,
+        error: &fw::ModelError,
+    ) -> Result<bool, fw::ModelError> {
+        self.client
+            .recover_authentication(&self.config, error)
+            .await
+    }
+
     async fn generate(
         &self,
         model_id: &str,
         request: fw::ChatRequest,
         stream: &dyn fw::ChatStream,
     ) -> Result<fw::ChatResponse, fw::ModelError> {
-        if model_id == "compaction" {
+        if self.auxiliary {
+            if model_id != self.config.model_code {
+                return Err(fw::ModelError::Fatal(
+                    "native model binding identity mismatch".into(),
+                ));
+            }
             let input = request
                 .extensions
                 .get::<super::super::runtime::CompactionModelInput>()
                 .ok_or_else(|| fw::ModelError::Fatal("compaction input is missing".into()))?;
-            return input.generate().await;
+            return input
+                .with_client(self.client.clone())
+                .generate(&request)
+                .await;
         }
         let host = HostExecution::from_extensions(&request.extensions)
             .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
         let mut state = host.state.lock().await;
+        synchronize_selected_model(
+            &mut state,
+            &self.reference,
+            &request.extensions,
+            &request.options,
+        )
+        .map_err(|e| fw::ModelError::Fatal(e.to_string()))?;
+        let harness = host
+            .harness
+            .framework_with_model_client(self.client.clone());
         let native = request
             .messages
             .iter()
@@ -101,8 +149,8 @@ impl fw::ChatModel for TronChatModel {
             .find_map(|message| message.model_context.as_ref())
         {
             if saved.format == "tron.responses.v2"
-                && saved.model == fw::ModelRef::new("tron", "route")
-                && saved.protocol == "tron-host"
+                && saved.model == self.reference
+                && saved.protocol == native::protocol(&self.config)
                 && saved.data.get("providerScope").and_then(|v| v.as_str())
                     == Some(provider_identity.as_str())
             {
@@ -118,27 +166,21 @@ impl fw::ChatModel for TronChatModel {
             }
         }
         state.context.messages = native;
+        state.context.model.temperature = request.options.temperature;
+        state.context.model.top_p = request.options.top_p;
+        state.context.model.max_tokens = request.options.max_output_tokens;
+        let selected_messages = state.context.messages.clone();
+        if let Some(prepared) = &mut state.prepared {
+            prepared.messages = selected_messages;
+        }
         // The Framework catalog has already applied authorization and exposure.
         // Preserve product policy metadata while using the public descriptor schema.
         let tools = request
             .tools
             .iter()
             .map(|descriptor| {
-                let mut tool = state
-                    .context
-                    .authorized_tools()
-                    .iter()
-                    .find(|tool| tool.tool_name == descriptor.call_name)
-                    .cloned()
-                    .ok_or_else(|| {
-                        fw::ModelError::Fatal(format!(
-                            "unauthorized tool in model request: {}",
-                            descriptor.call_name
-                        ))
-                    })?;
-                tool.description = descriptor.description.clone();
-                tool.input_schema = descriptor.input_schema.clone();
-                Ok(tool)
+                super::tools::map_authorized_descriptor(&state.context, descriptor)
+                    .map_err(|error| fw::ModelError::Fatal(error.to_string()))
             })
             .collect::<Result<Vec<_>, fw::ModelError>>()?;
         state.context.tools = tools;
@@ -170,12 +212,13 @@ impl fw::ChatModel for TronChatModel {
         } = &mut *state;
         let response = {
             let response = {
-                let invocation = host.harness.framework_model_turn(
+                let invocation = harness.framework_model_turn(
                     context,
                     turn,
                     *usage,
                     host.sink.as_ref().map(|_| callback),
                     prepared.clone(),
+                    Some(&request),
                 );
                 tokio::pin!(invocation);
                 loop {
@@ -275,12 +318,16 @@ impl fw::ChatModel for TronChatModel {
             .checkpoint(&persisted_messages)
             .map_err(fw::ModelError::Fatal)?;
         let model_context = continuation.map(|continuation| fw::ModelMessageContext {
-            model: fw::ModelRef::new("tron", "route"),
-            protocol: "tron-host".into(),
+            model: self.reference.clone(),
+            protocol: native::protocol(&self.config).into(),
             format: "tron.responses.v2".into(),
             data: serde_json::json!({"providerScope": provider_identity, "continuation": continuation}),
         });
-        Ok(fw::ChatResponse {
+        let metrics = response.token_usage.map(|usage| fw::ProviderMetrics {
+            cached_input_tokens: usage.cached_input_tokens.map(u64::from),
+            reasoning_tokens: usage.reasoning_tokens.map(u64::from),
+        });
+        let result = fw::ChatResponse {
             content: message.content,
             structured: None,
             tool_calls: message.tool_calls,
@@ -289,6 +336,10 @@ impl fw::ChatModel for TronChatModel {
                 output_tokens: response.token_usage.unwrap_or_default().output_tokens as u64,
             },
             model_context,
+        };
+        Ok(match metrics {
+            Some(metrics) => result.with_provider_metrics(metrics),
+            None => result,
         })
     }
 }

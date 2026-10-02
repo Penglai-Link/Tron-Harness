@@ -3,8 +3,8 @@ use serde_json::json;
 use crate::{
     domain::{
         agent::{
-            AgentMessage, AgentModelConfig, AgentModelProtocol, ModelFinish, ModelRequest,
-            ModelResponse, ModelTokenUsage, TokenEstimateSnapshot, TokenUsageAuditSnapshot,
+            AgentModelConfig, AgentModelProtocol, ModelTokenUsage, TokenEstimateSnapshot,
+            TokenUsageAuditSnapshot,
         },
         short_term_memory::{
             ShortTermMemoryCompaction, ShortTermMemoryError, ShortTermMemoryMessage,
@@ -15,12 +15,11 @@ use crate::{
 };
 
 use super::{
-    CompactionContextPolicy, CreateCompactionCommand, ModelCompactionFailure,
-    ModelCompactionOutput, PreparedCompactionInput, ShortTermMemoryService,
+    CompactionContextPolicy, CreateCompactionCommand, ModelCompactionOutput,
+    PreparedCompactionInput, ShortTermMemoryService,
     history_retention::{select_history_from_tail_start, select_retained_history},
     service_compaction::previous_checkpoint_context_from_parts,
-    service_compaction_prompt::{CompactionPromptParts, hash_prompt, render_compaction_prompt},
-    service_compaction_summary::compaction_transcript_summary,
+    service_compaction_summary::{authorized_compaction_history, compaction_transcript_summary},
     service_parts::estimate_text_tokens,
 };
 
@@ -94,12 +93,10 @@ impl ShortTermMemoryService {
             "AUTO_CHECKPOINT" | "OVERFLOW_CHECKPOINT" | "MANUAL_CHECKPOINT"
         );
         let retained_history_tokens = requested_retained_history_tokens.unwrap_or_else(|| {
-            budget_plan.effective_input_budget.saturating_mul(
-                self.config
-                    .compaction
-                    .retained_history_ratio_bps
-                    .min(10_000),
-            ) / 10_000
+            eliteforge_agent_memory::ratio_tokens(
+                budget_plan.effective_input_budget,
+                self.config.compaction.retained_history_ratio_bps,
+            )
         });
         let selection = if let Some(tail_start_seq) = requested_tail_start_seq {
             select_history_from_tail_start(
@@ -163,14 +160,25 @@ impl ShortTermMemoryService {
             } else {
                 selection.tail_token_estimate
             };
-        let prompt = render_compaction_prompt(CompactionPromptParts {
-            previous_checkpoint: previous_checkpoint_context.as_deref(),
-            history_to_compact: &history_to_compact,
-            retained_recent: &recent,
-            reason: command.reason.as_deref(),
-            note: command.note.as_deref(),
-        });
-        let prompt_hash = hash_prompt(&prompt);
+        let mut history = authorized_compaction_history(
+            &head_messages,
+            self.config.context.reasoning_summary_replay_enabled,
+        );
+        history.insert(
+            0,
+            eliteforge_agent_memory::MemoryCompactionMetadata {
+                reason: command.reason.clone(),
+                note: command.note.clone(),
+                retained_recent: Some(recent.clone()),
+            }
+            .as_record(),
+        );
+        // Compatibility audit field now contains source data, never instructions.
+        let prompt=serde_json::json!({"previous_checkpoint":previous_checkpoint_context,"history":history}).to_string();
+        let prompt_hash = {
+            use sha2::{Digest, Sha256};
+            hex::encode(Sha256::digest(prompt.as_bytes()))
+        };
         let compaction_input_token_estimate = estimate_text_tokens(&prompt);
         let max_input_tokens =
             self.compaction_input_budget(context_window_tokens, effective_max_output_tokens);
@@ -209,6 +217,8 @@ impl ShortTermMemoryService {
             prompt,
             prompt_hash,
             pinned_start_seq: selection.pinned_start_seq,
+            history,
+            previous_summary: previous_checkpoint_context,
         };
 
         self.append_event(
@@ -245,17 +255,6 @@ impl ShortTermMemoryService {
             None,
         )?;
 
-        if input.compaction_input_token_estimate > input.max_input_tokens {
-            self.record_compaction_failed(
-                &input,
-                &ModelCompactionFailure {
-                    error_code: "COMPACTION_INPUT_TOO_LARGE".into(),
-                    message: "compaction input is too large".into(),
-                },
-            )?;
-            return Err(ShortTermMemoryError::CompactionInputTooLarge);
-        }
-
         Ok(input)
     }
 
@@ -271,56 +270,6 @@ impl ShortTermMemoryService {
         config.thinking_enabled = false;
         config.responses_stateful_enabled = false;
         config
-    }
-
-    pub fn compaction_model_request(
-        &self,
-        input: &PreparedCompactionInput,
-        locale: &str,
-    ) -> ModelRequest {
-        ModelRequest {
-            messages: vec![
-                AgentMessage::system(compaction_system_prompt(locale)),
-                AgentMessage::user(input.prompt.clone()),
-            ],
-            tools: Vec::new(),
-            system_agent_session_id: None,
-            prepared_tool_schema: None,
-            response_input_items: None,
-            previous_response_id: None,
-        }
-    }
-
-    pub fn model_compaction_output(
-        &self,
-        response: &ModelResponse,
-    ) -> Result<ModelCompactionOutput, ModelCompactionFailure> {
-        if !response.tool_calls().is_empty() {
-            return Err(ModelCompactionFailure {
-                error_code: "COMPACTION_MODEL_TOOL_CALL".into(),
-                message: "compaction model returned tool calls".into(),
-            });
-        }
-        if response.finish != ModelFinish::Final {
-            return Err(ModelCompactionFailure {
-                error_code: "COMPACTION_MODEL_NON_FINAL".into(),
-                message: "compaction model returned a non-final response".into(),
-            });
-        }
-        let summary = response.output_text().trim().to_string();
-        if summary.is_empty() {
-            return Err(ModelCompactionFailure {
-                error_code: "COMPACTION_MODEL_EMPTY_OUTPUT".into(),
-                message: "compaction model returned empty output".into(),
-            });
-        }
-        Ok(ModelCompactionOutput {
-            summary,
-            token_usage: response.token_usage(),
-            provider_metadata: Some(json!({
-                "responseId": response.response_id(),
-            })),
-        })
     }
 
     pub fn commit_model_compaction(
@@ -485,13 +434,38 @@ impl ShortTermMemoryService {
             event_payload.clone(),
             None,
         )?;
-        self.repository().create_compaction(
-            &compaction,
-            &message,
-            &[summary_part, recent_part],
-            event.as_ref(),
-            input.enforce_idle,
-        )?;
+        use eliteforge_agent_memory::{MemoryRevision, MemoryScope, ShortTermMemoryEngine};
+        let expected = MemoryRevision {
+            scope: MemoryScope::new(&input.workspace_code, &input.session_code)
+                .map_err(|_| ShortTermMemoryError::StorageFailure)?,
+            generation: input
+                .previous_checkpoint_message_code
+                .clone()
+                .unwrap_or_default(),
+            revision: input.selection_source_end_seq.max(0) as u64,
+        };
+        let mut repository = self.repository();
+        let mut store = CheckpointProjectionStore {
+            repository: repository.as_mut(),
+        };
+        ShortTermMemoryEngine::write_projection(
+            &mut store,
+            &expected,
+            CheckpointProjection {
+                compaction: &compaction,
+                message: &message,
+                parts: &[summary_part, recent_part],
+                event: event.as_ref(),
+                enforce_idle: input.enforce_idle,
+            },
+        )
+        .map_err(|error| match error {
+            eliteforge_agent_core::MemoryError::Conflict => {
+                ShortTermMemoryError::CompactionConflict
+            }
+            _ => ShortTermMemoryError::StorageFailure,
+        })?;
+        drop(repository);
         self.publish_context_event(
             &input.session_code,
             &input.workspace_code,
@@ -503,24 +477,6 @@ impl ShortTermMemoryService {
                 .unwrap_or(&event_payload),
         );
         Ok(compaction)
-    }
-}
-
-fn compaction_system_prompt(locale: &str) -> &'static str {
-    crate::domain::prompt::builtin_prompt_text("memory.compaction-system", locale)
-        .expect("compaction prompt must be bundled")
-}
-
-#[cfg(test)]
-mod tests {
-    use super::compaction_system_prompt;
-
-    #[test]
-    fn compaction_system_prompt_uses_the_requested_locale() {
-        assert_eq!(
-            compaction_system_prompt("zh-CN"),
-            "生成短期记忆压缩检查点。只返回最终文本。"
-        );
     }
 }
 
@@ -596,5 +552,42 @@ fn compaction_usage_audit(
             .map(str::to_string),
         usage_source: usage_source.into(),
         usage_confidence: usage_confidence.into(),
+    }
+}
+
+/// Product persistence mapping implements the Framework projection store.
+struct CheckpointProjection<'a> {
+    compaction: &'a ShortTermMemoryCompaction,
+    message: &'a ShortTermMemoryMessage,
+    parts: &'a [ShortTermMemoryPart],
+    event: Option<&'a crate::domain::short_term_memory::ShortTermMemoryEvent>,
+    enforce_idle: bool,
+}
+struct CheckpointProjectionStore<'a> {
+    repository: &'a mut dyn super::ShortTermMemoryRepository,
+}
+impl<'a> eliteforge_agent_memory::ShortTermMemoryProjectionStore<CheckpointProjection<'a>>
+    for CheckpointProjectionStore<'_>
+{
+    fn compare_exchange_projection(
+        &mut self,
+        expected: &eliteforge_agent_memory::MemoryRevision,
+        projection: CheckpointProjection<'a>,
+    ) -> Result<(), eliteforge_agent_core::MemoryError> {
+        self.repository
+            .create_compaction_at_revision(
+                projection.compaction,
+                projection.message,
+                projection.parts,
+                projection.event,
+                projection.enforce_idle,
+                expected,
+            )
+            .map_err(|error| match error {
+                ShortTermMemoryError::CompactionConflict => {
+                    eliteforge_agent_core::MemoryError::Conflict
+                }
+                _ => eliteforge_agent_core::MemoryError::Backend(error.to_string()),
+            })
     }
 }

@@ -30,6 +30,7 @@ fn current_input_replaces_text_only_transcript_message() {
     );
 
     let prepared = assemble_context(
+        &eliteforge_agent_memory::MemoryScope::new("WS-1", "SESSION-1").unwrap(),
         &[AgentMessage::system("system guidance")],
         Some(&current_input),
         Some("RUN-2"),
@@ -46,7 +47,8 @@ fn current_input_replaces_text_only_transcript_message() {
         false,
         &budget_plan,
         false,
-    );
+    )
+    .unwrap();
 
     let current_messages = prepared
         .messages
@@ -55,6 +57,11 @@ fn current_input_replaces_text_only_transcript_message() {
         .collect::<Vec<_>>();
     assert_eq!(current_messages.len(), 1);
     assert!(current_messages[0].has_image_parts());
+    assert!(!prepared.over_budget);
+    assert!(
+        prepared.message_token_estimate
+            > super::assembler::estimate_messages_tokens(&[AgentMessage::user("second question")])
+    );
 
     let current_index = prepared
         .messages
@@ -74,6 +81,7 @@ fn current_input_without_rich_replacement_keeps_transcript_message() {
     let budget_plan = ShortTermMemoryConfig::default().model_context_budget_plan(None, None);
 
     let prepared = assemble_context(
+        &eliteforge_agent_memory::MemoryScope::new("WS-1", "SESSION-1").unwrap(),
         &[AgentMessage::system("system guidance")],
         None,
         Some("RUN-2"),
@@ -88,7 +96,8 @@ fn current_input_without_rich_replacement_keeps_transcript_message() {
         false,
         &budget_plan,
         false,
-    );
+    )
+    .unwrap();
 
     let text = prepared
         .messages
@@ -151,4 +160,140 @@ fn transcript_entry(
             completed_at: Some(now),
         }],
     )
+}
+
+#[test]
+fn context_source_cannot_set_its_own_session_or_workspace_scope() {
+    let plan = ShortTermMemoryConfig::default().model_context_budget_plan(None, None);
+    for (workspace, session) in [("WS-2", "SESSION-1"), ("WS-1", "SESSION-2")] {
+        let scope = eliteforge_agent_memory::MemoryScope::new(workspace, session).unwrap();
+        let result = assemble_context(
+            &scope,
+            &[],
+            None,
+            None,
+            None,
+            None,
+            &[],
+            None,
+            vec![transcript_entry("ATM-X", None, 1, "user", "data")],
+            false,
+            &plan,
+            false,
+        );
+        assert!(result.is_err());
+    }
+}
+
+#[test]
+fn complete_rich_input_image_and_attachment_context_fit_a_valid_budget() {
+    let scope = eliteforge_agent_memory::MemoryScope::new("WS-1", "SESSION-1").unwrap();
+    let input = AgentMessage::new(
+        "user",
+        vec![
+            AgentMessagePart::Text {
+                text: "inspect this attached image".into(),
+            },
+            AgentMessagePart::Image {
+                mime_type: "image/png".into(),
+                data: "a".repeat(4_000),
+            },
+            AgentMessagePart::Context {
+                kind: "attachment".into(),
+                text: "attached notes to preserve".into(),
+                metadata: Some(
+                    serde_json::json!({"fileRef":{"path":"images/sample.png"},"permission":"authorized"}),
+                ),
+            },
+        ],
+    );
+    let plan =
+        ShortTermMemoryConfig::default().model_context_budget_plan(Some(20_000), Some(1_000));
+    let prepared = assemble_context(
+        &scope,
+        &[AgentMessage::system("inspect authorized files")],
+        Some(&input),
+        Some("RUN-IMAGE"),
+        None,
+        None,
+        &[],
+        None,
+        vec![transcript_entry(
+            "ATM-IMAGE",
+            Some("RUN-IMAGE"),
+            1,
+            "user",
+            "inspect this attached image",
+        )],
+        false,
+        &plan,
+        false,
+    )
+    .unwrap();
+    assert!(!prepared.over_budget);
+    assert!(prepared.messages.iter().any(AgentMessage::has_image_parts));
+    assert!(prepared.messages.contains(&input));
+    assert!(prepared.estimated_tokens > 4_000);
+    assert_eq!(prepared.output_token_reserve, Some(1_000));
+}
+
+#[test]
+fn disabled_mandatory_blocks_preserve_rich_input_and_still_reject_prefix_overflow() {
+    let scope = eliteforge_agent_memory::MemoryScope::new("WS-1", "SESSION-1").unwrap();
+    let input = AgentMessage::new(
+        "user",
+        vec![
+            AgentMessagePart::Text {
+                text: "current question".into(),
+            },
+            AgentMessagePart::Image {
+                mime_type: "image/png".into(),
+                data: "fixture-image".into(),
+            },
+        ],
+    );
+    let prefix = AgentMessage::system("mandatory guidance");
+    let mut plan =
+        ShortTermMemoryConfig::default().model_context_budget_plan(Some(20000), Some(1000));
+    plan.block_budgets.seed_prompt_prefix.enabled = false;
+    plan.block_budgets.current_session_history.enabled = false;
+    for prefix_limit in [1000, 0] {
+        plan.block_budgets.seed_prompt_prefix.effective_limit_tokens = prefix_limit;
+        let mut prepared = assemble_context(
+            &scope,
+            std::slice::from_ref(&prefix),
+            Some(&input),
+            Some("RUN-1"),
+            None,
+            None,
+            &[],
+            None,
+            vec![transcript_entry(
+                "ATM-1",
+                Some("RUN-1"),
+                1,
+                "user",
+                "current question",
+            )],
+            false,
+            &plan,
+            false,
+        )
+        .unwrap();
+        assert!(prepared.messages.contains(&prefix));
+        assert!(prepared.messages.contains(&input));
+        super::service_budget::apply_request_budget_fields(
+            &mut prepared,
+            &plan,
+            &ShortTermMemoryConfig::default(),
+            0,
+        );
+        assert_eq!(prepared.over_budget, prefix_limit == 0);
+        if prefix_limit == 0 {
+            assert_eq!(
+                prepared.over_budget_reason.as_deref(),
+                Some("SEED_PROMPT_PREFIX_OVER_BUDGET")
+            );
+        }
+    }
 }

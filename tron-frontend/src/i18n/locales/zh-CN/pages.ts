@@ -663,6 +663,8 @@ export const pages = {
       browserClose: "关闭",
     },
     userInput: {
+      approve: "批准",
+      reject: "拒绝",
       ariaLabel: "助手问题",
       progress: "第 {{current}} / {{total}} 题",
       back: "上一步",
@@ -935,6 +937,11 @@ export const pages = {
         overBudget: "超预算",
         inputBudget: "/ {{budget}} 输入预算",
         runtimeNotices: {
+          mcp_unavailable: {title: "MCP 服务不可用"},
+          presentation_incomplete: {
+            title: "展示回放不完整",
+            detail: "部分输出未能显示或保存，执行结果会单独报告。",
+          },
           compaction_requested: {
             title: "即将压缩上下文",
             detail: "当前输入已达到压缩阈值，正在准备生成检查点。",

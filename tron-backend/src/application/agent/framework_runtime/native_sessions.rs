@@ -21,11 +21,29 @@ impl Bindings {
         owned.push(binding.clone());
         BindingGuard { binding, session }
     }
-    pub async fn close(&self) {
-        let owned = std::mem::take(&mut *self.0.lock().unwrap());
+    pub async fn close(&self) -> eliteforge_agent_plugin_core::ShutdownReport {
+        let owned = std::mem::take(&mut *self.0.lock().unwrap_or_else(|e| e.into_inner()));
+        let mut owners = tokio::task::JoinSet::new();
         for binding in owned {
-            let _ = binding.lock().await.failed().await;
+            owners.spawn(async move { binding.lock().await.failed().await });
         }
+        let mut report = eliteforge_agent_plugin_core::ShutdownReport::default();
+        while let Some(result) = owners.join_next().await {
+            match result {
+                Ok(Ok(())) => {}
+                Ok(Err(error)) => report.errors.push(format!(
+                    "external session binding close: {}",
+                    error.message()
+                )),
+                Err(error) => {
+                    report.panics += usize::from(error.is_panic());
+                    report
+                        .errors
+                        .push(format!("external session binding close owner: {error}"));
+                }
+            }
+        }
+        report
     }
 }
 impl BindingGuard {

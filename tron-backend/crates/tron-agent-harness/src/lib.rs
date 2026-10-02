@@ -9,7 +9,7 @@ use std::{collections::HashSet, sync::Arc};
 
 use async_trait::async_trait;
 use eliteforge_agent_core::{
-    AgentError, CapabilityPackBuilder, ContextPlugin, ContextProvider, Message, RunContext,
+    AgentError, CapabilityPackBuilder, ContextContributor, ContextContributorPlugin, RunContext,
     RunRequest, Tool, ToolDescriptor, ToolError, ToolLease, ToolOutput, ToolProvider,
     ToolProviderPlugin,
 };
@@ -85,7 +85,7 @@ impl TronRunScope {
 /// The same contracts that the shared runtime consumes. No product-specific
 /// loop, filesystem implementation, command manager or model client is copied.
 pub struct TronHarness {
-    context: Arc<dyn ContextProvider>,
+    context_sources: Vec<Arc<dyn ContextContributor>>,
     preparation: Option<Arc<dyn eliteforge_agent_core::Plugin>>,
     tools: Arc<dyn ToolProvider>,
     shared_ids: HashSet<String>,
@@ -97,7 +97,6 @@ impl TronHarness {
     /// discovery, etc.). Local tools are always reserved, even if not selected.
     /// Descriptors are metadata only: adding one does not grant tool authority.
     pub fn new(
-        context: Arc<dyn ContextProvider>,
         tools: Arc<dyn ToolProvider>,
         shared_tools: impl IntoIterator<Item = ToolDescriptor>,
     ) -> Self {
@@ -106,12 +105,17 @@ impl TronHarness {
             .chain(shared_tools)
             .collect();
         Self {
-            context,
+            context_sources: Vec::new(),
             preparation: None,
             tools,
             shared_ids: catalog.iter().map(|tool| tool.id.clone()).collect(),
             shared_names: catalog.into_iter().map(|tool| tool.call_name).collect(),
         }
+    }
+
+    pub fn with_context_source(mut self, source: impl ContextContributor + 'static) -> Self {
+        self.context_sources.push(Arc::new(source));
+        self
     }
 
     /// Select the host's context projection and summary persistence policy.
@@ -131,29 +135,19 @@ impl TronHarness {
 
     pub fn capability_pack(self) -> CapabilityPackBuilder<()> {
         let shared = Arc::new(self);
-        let pack = CapabilityPackBuilder::new(PACK_ID, ())
-            .plugin(ContextPlugin::from_arc(
-                "tron.harness.context",
-                shared.clone(),
-            ))
-            .plugin(ToolProviderPlugin::from_arc(
-                "tron.harness.tools",
-                shared.clone(),
+        let mut pack = CapabilityPackBuilder::new(PACK_ID, ()).plugin(
+            ToolProviderPlugin::from_arc("tron.harness.tools", shared.clone()),
+        );
+        for source in &shared.context_sources {
+            pack = pack.plugin(ContextContributorPlugin::from_arc(
+                source.block_id(),
+                source.clone(),
             ));
+        }
         match &shared.preparation {
             Some(plugin) => pack.plugin_arc(plugin.clone()),
             None => pack,
         }
-    }
-}
-
-#[async_trait]
-impl ContextProvider for TronHarness {
-    async fn context(&self, run: &RunContext) -> Result<Vec<Message>, AgentError> {
-        TronRunScope::from_run(run)?;
-        // Preserve the host's ordered, typed messages and provider metadata.
-        // History persistence and context compaction require their own adapters.
-        self.context.context(run).await
     }
 }
 

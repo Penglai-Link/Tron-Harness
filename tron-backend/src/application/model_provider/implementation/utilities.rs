@@ -78,10 +78,6 @@ pub(super) fn server_api_error(error: ServerApiError) -> ModelProviderError {
     }
 }
 
-pub(super) fn person_ai_runtime_error(error: ServerApiError) -> ModelProviderError {
-    server_api_error(error)
-}
-
 pub(super) fn is_person_ai_authorization_key_error(error: &ModelProviderError) -> bool {
     let message = error.to_string().to_ascii_lowercase();
     [

@@ -8,6 +8,8 @@ use super::ToolError;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentError {
     InvalidConfiguration(String),
+    SessionBusy(String),
+    Cancelled,
     ModelFailure(String),
     MissingTool(String),
     UnauthorizedTool(String),
@@ -23,6 +25,10 @@ impl Display for AgentError {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
         match self {
             Self::InvalidConfiguration(message) => f.write_str(message),
+            Self::SessionBusy(session) => {
+                write!(f, "session already has an active SDK run: {session}")
+            }
+            Self::Cancelled => f.write_str("agent run was stopped"),
             Self::ModelFailure(message) => write!(f, "model failure: {message}"),
             Self::MissingTool(tool) => write!(f, "missing tool: {tool}"),
             Self::UnauthorizedTool(tool) => write!(f, "unauthorized tool: {tool}"),

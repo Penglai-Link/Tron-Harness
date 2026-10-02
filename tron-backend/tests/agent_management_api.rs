@@ -25,6 +25,39 @@ use common::{
     app, app_with_config, authenticated_bearer_token, request_with_headers, response_json,
 };
 
+// Associate native provider results with their exact assistant call, rather than
+// treating tool output as a synthetic user message containing a tool-name prefix.
+fn provider_tool_result<'a>(messages: &'a [Value], name: &str) -> &'a str {
+    let calls: Vec<_> = messages
+        .iter()
+        .filter(|message| message["role"] == json!("assistant"))
+        .filter_map(|message| message["tool_calls"].as_array())
+        .flatten()
+        .filter(|call| call["function"]["name"] == json!(name))
+        .collect();
+    assert_eq!(
+        calls.len(),
+        1,
+        "expected one provider call for {name}: {messages:?}"
+    );
+    let id = calls[0]["id"]
+        .as_str()
+        .expect("provider call must have an ID");
+    assert_eq!(id, format!("call_{name}"));
+    let results: Vec<_> = messages
+        .iter()
+        .filter(|message| message["role"] == json!("tool") && message["tool_call_id"] == json!(id))
+        .collect();
+    assert_eq!(
+        results.len(),
+        1,
+        "expected one native result for {name}/{id}: {messages:?}"
+    );
+    results[0]["content"]
+        .as_str()
+        .expect("tool output must be text")
+}
+
 struct RecordingModelServer {
     base_url: String,
     requests: Arc<Mutex<Vec<Value>>>,
@@ -809,6 +842,8 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
                 "message": {
                     "role": "assistant",
                     "tool_calls": [{
+                        "id": "call_discovery_expand_tool_domain",
+                        "type": "function",
                         "function": {
                             "name": "discovery_expand_tool_domain",
                             "arguments": "{\"domainCode\":\"workspace\"}"
@@ -822,6 +857,8 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
                 "message": {
                     "role": "assistant",
                     "tool_calls": [{
+                        "id": "call_workspace_page",
+                        "type": "function",
                         "function": {
                             "name": "workspace_page",
                             "arguments": "{}"
@@ -877,8 +914,9 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
         Some(&authorization),
     )
     .await;
-    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_status = run_response.status();
     let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
     assert_eq!(
         run_body["data"]["finalOutput"],
         json!("expanded and executed")
@@ -952,32 +990,29 @@ async fn internal_agent_domain_discovery_expands_and_executes_workspace_tools() 
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
-    let expansion_result = second_messages
-        .iter()
-        .filter(|message| message["role"] == json!("user"))
-        .filter_map(|message| message["content"].as_str())
-        .find(|content| content.contains("discovery_expand_tool_domain"))
-        .expect("expansion result should be present");
-    assert!(expansion_result.contains("\"status\":\"expanded\""));
-    assert!(expansion_result.contains("\"toolCount\":"));
+    let expansion_result = provider_tool_result(second_messages, "discovery_expand_tool_domain");
+    let expansion: Value = serde_json::from_str(expansion_result).expect("expansion result JSON");
+    assert_eq!(expansion["status"], json!("expanded"));
+    assert_eq!(expansion["domainCode"], json!("workspace"));
+    assert!(
+        expansion["toolCount"]
+            .as_u64()
+            .is_some_and(|count| count > 0)
+    );
     assert!(!expansion_result.contains("inputSchema"));
-    assert!(!expansion_result.contains("\"tools\":"));
-    assert!(second_messages.iter().any(|message| {
-        message["role"] == json!("user")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("discovery_expand_tool_domain"))
-    }));
+    assert!(expansion.get("tools").is_none());
 
     let third_messages = recorded_requests[2]["messages"]
         .as_array()
         .expect("third request messages should be an array");
-    assert!(third_messages.iter().any(|message| {
-        message["role"] == json!("user")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("workspace_page"))
-    }));
+    let workspace_result: Value =
+        serde_json::from_str(provider_tool_result(third_messages, "workspace_page"))
+            .expect("workspace page result JSON");
+    assert!(
+        workspace_result["records"]
+            .as_array()
+            .is_some_and(|records| !records.is_empty())
+    );
 }
 
 #[tokio::test]
@@ -1056,8 +1091,9 @@ async fn internal_agent_domain_discovery_keeps_unexposed_effective_tools_authori
         Some(&authorization),
     )
     .await;
-    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_status = run_response.status();
     let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
     assert_eq!(
         run_body["data"]["finalOutput"],
         json!("recovered with the discovered schema")
@@ -1136,6 +1172,8 @@ Progressive disclosure instructions loaded.\n",
                 "message": {
                     "role": "assistant",
                     "tool_calls": [{
+                        "id": "call_skill_view",
+                        "type": "function",
                         "function": {
                             "name": "skill_view",
                             "arguments": "{\"skillName\":\"progressive-reviewer\"}"
@@ -1215,15 +1253,18 @@ Progressive disclosure instructions loaded.\n",
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
-                "modelName": "gpt-test"
+                "modelName": "gpt-test",
+                // Direct-list exposes the complete 102-tool schema within the SDK budget.
+                "contextWindowTokens": 65536
             }
         })),
         None,
         Some(&authorization),
     )
     .await;
-    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_status = run_response.status();
     let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
     assert_eq!(
         run_body["data"]["finalOutput"],
         json!("skill detail loaded")
@@ -1246,14 +1287,15 @@ Progressive disclosure instructions loaded.\n",
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
-    assert!(second_messages.iter().any(|message| {
-        message["role"] == json!("user")
-            && message["content"].as_str().is_some_and(|content| {
-                content.contains("skill_view")
-                    && content.contains("Progressive disclosure instructions loaded.")
-                    && content.contains("references/checklist.md")
-            })
-    }));
+    let skill_result = provider_tool_result(second_messages, "skill_view");
+    assert!(
+        skill_result.contains("Progressive disclosure instructions loaded."),
+        "{skill_result}"
+    );
+    assert!(
+        skill_result.contains("references/checklist.md"),
+        "{skill_result}"
+    );
 }
 
 #[tokio::test]
@@ -1966,8 +2008,8 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
                     "role": "assistant",
                     "tool_calls": [{
                         "function": {
-                            "name": "workspace_page",
-                            "arguments": "{}"
+                            "name": "task_create",
+                            "arguments": "{\"workspaceCode\":\"TRON_CORE\",\"title\":\"RuntimePolicyLimitWitness\"}"
                         }
                     }]
                 }
@@ -1993,7 +2035,8 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
         "/api/v1/agents/workspaces/TRON_CORE/internal/main-agent/policy",
         Some(json!({
             "maxSteps": 1,
-            "maxToolCalls": 1
+            "maxToolCalls": 1,
+            "toolExposureMode": "direct_list"
         })),
         None,
         Some(&authorization),
@@ -2013,16 +2056,65 @@ async fn workspace_internal_agent_policy_limits_flow_into_runtime() {
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
-                "modelName": "gpt-test"
+                "modelName": "gpt-test",
+                // The complete direct-list schema has the same capacity as the
+                // other production API fixtures; execution limits stay 1/1.
+                "contextWindowTokens": 65536
             }
         })),
         None,
         Some(&authorization),
     )
     .await;
-    assert_eq!(run_response.status(), StatusCode::BAD_REQUEST);
+    let run_status = run_response.status();
     let run_body = response_json(run_response).await;
-    assert_eq!(run_body["code"], json!("AGENT_MAX_STEPS_EXCEEDED"));
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
+    assert_eq!(run_body["data"]["status"], json!("STEP_LIMIT"));
+    let native = &run_body["data"]["native"];
+    assert_eq!(native["status"], json!("StepLimit"));
+    assert!(native["runId"].as_str().is_some_and(|id| !id.is_empty()));
+    assert_eq!(run_body["data"]["stepCount"], json!(1));
+    // Tool observations are deliberately omitted from the HTTP DTO. A real
+    // product-side effect proves the single permitted invocation executed.
+    let tasks = request_with_headers(
+        &app,
+        Method::GET,
+        "/api/v1/tasks?workspaceCode=TRON_CORE&search=RuntimePolicyLimitWitness",
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let task_status = tasks.status();
+    let tasks = response_json(tasks).await;
+    assert_eq!(task_status, StatusCode::OK, "{tasks}");
+    let records = tasks["data"]["records"]
+        .as_array()
+        .unwrap_or_else(|| panic!("task page: {tasks}"));
+    assert_eq!(records.len(), 1, "{tasks}");
+    assert_eq!(records[0]["title"], json!("RuntimePolicyLimitWitness"));
+    assert_eq!(records[0]["workspaceCode"], json!("TRON_CORE"));
+
+    let run_code = run_body["data"]["runCode"].as_str().expect("run code");
+    let history = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/agents/runs/{run_code}"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(history.status(), StatusCode::OK);
+    let history = response_json(history).await;
+    assert_eq!(history["data"]["status"], json!("FAILED"));
+    assert_eq!(history["data"]["outcome"], json!("step_limit"));
+    assert_eq!(
+        history["data"]["errorCode"],
+        json!("AGENT_MAX_STEPS_EXCEEDED")
+    );
+    assert_eq!(history["data"]["stepCount"], json!(1));
+    assert_eq!(history["data"]["observationCount"], json!(1));
 
     let recorded_requests = model_server
         .requests
@@ -2158,8 +2250,9 @@ async fn internal_agent_mcp_tools_materialize_and_keep_run_snapshots_stable() {
     let run_response = run_task
         .await
         .expect("first run task should join successfully");
-    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_status = run_response.status();
     let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
     assert_eq!(run_body["data"]["finalOutput"], json!("run one finished"));
 
     let recorded_model_requests = model_server
@@ -2251,6 +2344,8 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                     "role": "assistant",
                     "tool_calls": [
                         {
+                            "id": "call_bash_exec",
+                            "type": "function",
                             "function": {
                                 "name": "bash_exec",
                                 "arguments": serde_json::to_string(&json!({
@@ -2260,6 +2355,8 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                             }
                         },
                         {
+                            "id": "call_fs_read_text",
+                            "type": "function",
                             "function": {
                                 "name": "fs_read_text",
                                 "arguments": serde_json::to_string(&json!({
@@ -2270,6 +2367,8 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                             }
                         },
                         {
+                            "id": "call_search_glob",
+                            "type": "function",
                             "function": {
                                 "name": "search_glob",
                                 "arguments": serde_json::to_string(&json!({
@@ -2279,6 +2378,8 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                             }
                         },
                         {
+                            "id": "call_search_path",
+                            "type": "function",
                             "function": {
                                 "name": "search_path",
                                 "arguments": serde_json::to_string(&json!({
@@ -2319,15 +2420,18 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
-                "modelName": "gpt-test"
+                "modelName": "gpt-test",
+                // Direct-list exposes the complete 102-tool schema within the SDK budget.
+                "contextWindowTokens": 65536
             }
         })),
         None,
         Some(&authorization),
     )
     .await;
-    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_status = run_response.status();
     let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
     assert_eq!(
         run_body["data"]["finalOutput"],
         json!("coding tools executed")
@@ -2367,30 +2471,29 @@ async fn internal_agent_direct_list_materializes_and_executes_coding_tools() {
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
-    assert!(second_messages.iter().any(|message| {
-        message["role"] == json!("user")
-            && message["content"].as_str().is_some_and(|content| {
-                content.contains("bash_exec") && content.contains("[package]")
-            })
-    }));
-    assert!(second_messages.iter().any(|message| {
-        message["role"] == json!("user")
-            && message["content"].as_str().is_some_and(|content| {
-                content.contains("fs_read_text") && content.contains("ToolRegistry")
-            })
-    }));
-    assert!(second_messages.iter().any(|message| {
-        message["role"] == json!("user")
-            && message["content"].as_str().is_some_and(|content| {
-                content.contains("search_glob") && content.contains("src/lib.rs")
-            })
-    }));
-    assert!(second_messages.iter().any(|message| {
-        message["role"] == json!("user")
-            && message["content"]
-                .as_str()
-                .is_some_and(|content| content.contains("search_path") && content.contains("src"))
-    }));
+    let command_result: Value =
+        serde_json::from_str(provider_tool_result(second_messages, "bash_exec"))
+            .expect("command result JSON");
+    assert_eq!(command_result["exitCode"], json!(0));
+    assert!(
+        command_result["stdout"]
+            .as_str()
+            .is_some_and(|stdout| stdout.contains("[package]")),
+        "{command_result}"
+    );
+    let file_result: Value =
+        serde_json::from_str(provider_tool_result(second_messages, "fs_read_text"))
+            .expect("file result JSON");
+    assert!(
+        file_result["content"]
+            .as_str()
+            .is_some_and(|content| content.contains("ToolRegistry")),
+        "{file_result}"
+    );
+    let glob_result = provider_tool_result(second_messages, "search_glob");
+    assert!(glob_result.contains("src/lib.rs"), "{glob_result}");
+    let path_result = provider_tool_result(second_messages, "search_path");
+    assert!(path_result.contains("src"), "{path_result}");
 }
 
 #[tokio::test]
@@ -2456,6 +2559,8 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
                     "role": "assistant",
                     "tool_calls": [
                         {
+                            "id": "call_app_page",
+                            "type": "function",
                             "function": {
                                 "name": "app_page",
                                 "arguments": serde_json::to_string(&json!({
@@ -2466,6 +2571,8 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
                             }
                         },
                         {
+                            "id": "call_task_page",
+                            "type": "function",
                             "function": {
                                 "name": "task_page",
                                 "arguments": serde_json::to_string(&json!({
@@ -2476,6 +2583,8 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
                             }
                         },
                         {
+                            "id": "call_app_update",
+                            "type": "function",
                             "function": {
                                 "name": "app_update",
                                 "arguments": serde_json::to_string(&json!({
@@ -2486,6 +2595,8 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
                             }
                         },
                         {
+                            "id": "call_task_delete",
+                            "type": "function",
                             "function": {
                                 "name": "task_delete",
                                 "arguments": serde_json::to_string(&json!({
@@ -2521,15 +2632,18 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
-                "modelName": "gpt-test"
+                "modelName": "gpt-test",
+                // Direct-list exposes the complete 102-tool schema within the SDK budget.
+                "contextWindowTokens": 65536
             }
         })),
         None,
         Some(&authorization),
     )
     .await;
-    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_status = run_response.status();
     let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
     assert_eq!(
         run_body["data"]["finalOutput"],
         json!("workspace guard applied")
@@ -2544,28 +2658,23 @@ async fn internal_agent_platform_mutations_reject_workspace_mismatches() {
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
-    let tool_results = second_messages
-        .iter()
-        .filter(|message| message["role"] == json!("user"))
-        .filter_map(|message| message["content"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(tool_results.contains("tool:app_page"));
-    assert!(tool_results.contains("tool:task_page"));
+    for name in ["app_page", "task_page"] {
+        let page: Value = serde_json::from_str(provider_tool_result(second_messages, name))
+            .expect("page result JSON");
+        assert_eq!(page["current"], json!(huge_current), "{name}: {page}");
+        assert_eq!(page["records"], json!([]), "{name}: {page}");
+    }
+    let update_result = provider_tool_result(second_messages, "app_update");
     assert!(
-        tool_results.contains(&format!("\"current\":{huge_current}")),
-        "{tool_results}"
+        update_result
+            .contains("workspaceCode `ENTERPRISE` does not match app workspace `TRON_CORE`"),
+        "{update_result}"
     );
-    assert!(tool_results.contains("\"records\":[]"));
-    assert!(tool_results.contains("tool:app_update"));
+    let delete_result = provider_tool_result(second_messages, "task_delete");
     assert!(
-        tool_results
-            .contains("workspaceCode `ENTERPRISE` does not match app workspace `TRON_CORE`")
-    );
-    assert!(tool_results.contains("tool:task_delete"));
-    assert!(
-        tool_results
-            .contains("workspaceCode `ENTERPRISE` does not match task workspace `TRON_CORE`")
+        delete_result
+            .contains("workspaceCode `ENTERPRISE` does not match task workspace `TRON_CORE`"),
+        "{delete_result}"
     );
 
     let app_detail = request_with_headers(
@@ -2635,6 +2744,8 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
                 "message": {
                     "role": "assistant",
                     "tool_calls": [{
+                        "id": "call_task_update",
+                        "type": "function",
                         "function": {
                             "name": "task_update",
                             "arguments": serde_json::to_string(&json!({
@@ -2672,14 +2783,18 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
                 "protocol": "CHAT_COMPLETIONS",
                 "baseUrl": model_server.base_url,
                 "apiKey": "sk-test-api",
-                "modelName": "gpt-test"
+                "modelName": "gpt-test",
+                // Direct-list exposes the complete 102-tool schema within the SDK budget.
+                "contextWindowTokens": 65536
             }
         })),
         None,
         Some(&authorization),
     )
     .await;
-    assert_eq!(run_response.status(), StatusCode::OK);
+    let run_status = run_response.status();
+    let run_body = response_json(run_response).await;
+    assert_eq!(run_status, StatusCode::OK, "{run_body}");
 
     let recorded_requests = model_server
         .requests
@@ -2690,14 +2805,8 @@ async fn internal_agent_task_update_rejects_invalid_status_without_partial_updat
     let second_messages = recorded_requests[1]["messages"]
         .as_array()
         .expect("second request messages should be an array");
-    let tool_results = second_messages
-        .iter()
-        .filter(|message| message["role"] == json!("user"))
-        .filter_map(|message| message["content"].as_str())
-        .collect::<Vec<_>>()
-        .join("\n");
-    assert!(tool_results.contains("tool:task_update"));
-    assert!(tool_results.contains("status"), "{tool_results}");
+    let update_result = provider_tool_result(second_messages, "task_update");
+    assert!(update_result.contains("status"), "{update_result}");
 
     let task_detail = request_with_headers(
         &app,

@@ -2,7 +2,7 @@ import { useMemo, useState } from "react";
 import { useTranslation } from "react-i18next";
 import { ChevronRight } from "lucide-react";
 
-import { SelectInput, TextInput } from "@/components/forms";
+import { SelectInput, TextArea, TextInput } from "@/components/forms";
 import { InfoTooltip } from "@/components/info-tooltip";
 import { SurfaceCard } from "@/shared";
 import { useToast } from "@/components/ui/toast";
@@ -62,7 +62,7 @@ export function SystemConfigTable() {
   async function handleSave() {
     if (!document || dirtyItems.length === 0) return;
     try {
-      await save(dirtyItems.map((item) => ({ path: item.path, value: changes[item.path] })), confirmMigration);
+      await save(dirtyItems.map((item) => ({ path: item.path, value: Array.isArray(changes[item.path]) ? (changes[item.path] as string[]).map((entry) => entry.trim()).filter(Boolean) : changes[item.path] })), confirmMigration);
       setChanges({});
       setConfirmMigration(false);
       toast.success(t("settingsGeneral.systemConfig.messages.saved"));
@@ -135,7 +135,14 @@ export function SystemConfigTable() {
                           </InfoTooltip>
                         </div>
                       </div>
-                      {item.valueType === "boolean" ? (
+                      {item.valueType === "array" ? (
+                        <TextArea
+                          aria-label={item.path}
+                          rows={6}
+                          value={Array.isArray(value) ? value.join("\n") : ""}
+                          onChange={(event) => update(item.path, event.target.value.split("\n"))}
+                        />
+                      ) : item.valueType === "boolean" ? (
                         <SelectInput value={String(value)} onValueChange={(next) => update(item.path, next === "true")}>
                           <SelectItem value="true">{t("settingsGeneral.systemConfig.values.true")}</SelectItem>
                           <SelectItem value="false">{t("settingsGeneral.systemConfig.values.false")}</SelectItem>
@@ -146,7 +153,7 @@ export function SystemConfigTable() {
                           placeholder={item.sensitive ? t("settingsGeneral.systemConfig.sensitivePlaceholder") : undefined}
                           type={item.sensitive ? "password" : item.valueType === "number" ? "number" : "text"}
                           value={value === null ? "" : String(value)}
-                          onChange={(event) => update(item.path, item.valueType === "number" ? Number(event.target.value) : event.target.value)}
+                          onChange={(event) => update(item.path, item.valueType === "number" ? (event.target.value === "" ? null : Number(event.target.value)) : (item.path.includes(".prices.") && event.target.value === "" ? null : event.target.value))}
                         />
                       )}
                     </div>

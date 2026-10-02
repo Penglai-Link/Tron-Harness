@@ -1,31 +1,15 @@
-use std::{future::Future, pin::Pin, sync::Arc};
-
-use serde_json::{Value, json};
-
-use crate::{
-    application::{
-        llm::{LlmRuntimeClient, LlmRuntimeRerankHit},
-        model::RuntimeModelConfig,
-        model_provider::ModelProviderService,
-    },
-    domain::{
-        agent::{AgentMessage, AgentModelConfig, AgentModelProtocol, ModelFinish, ModelRequest},
-        model::{ModelProtocol, ModelType},
-    },
-};
-
-use super::{
-    HttpLlmRuntimeClient, HttpModelProviderClient, ModelProviderClient, adapter_for_protocol,
-};
-
-const PERSON_AI_CONVERSATION_PATH_PREFIX: &str = "person-ai/conversations/";
+use super::{HttpModelProviderClient, http_model_client::convert};
+use crate::{application::model_provider::ModelProviderService, domain::agent::AgentModelConfig};
+use async_trait::async_trait;
+use eliteforge_agent_core as fw;
+use eliteforge_agent_official_plugin_model_http as sdk;
+use std::sync::Arc;
 
 #[derive(Clone)]
 pub struct PersonAiModelProviderClient {
     fallback: HttpModelProviderClient,
     providers: ModelProviderService,
 }
-
 impl PersonAiModelProviderClient {
     pub fn new(fallback: HttpModelProviderClient, providers: ModelProviderService) -> Self {
         Self {
@@ -34,145 +18,49 @@ impl PersonAiModelProviderClient {
         }
     }
 }
-
-impl ModelProviderClient for PersonAiModelProviderClient {
-    fn post_json<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        url: &'a str,
-        body: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + 'a>> {
+#[async_trait]
+impl sdk::ModelTransportFactory for PersonAiModelProviderClient {
+    fn authorization_scope(
+        &self,
+        config: &sdk::AgentModelConfig,
+    ) -> Result<Option<String>, fw::ModelError> {
         if self.providers.is_person_ai_config(&config.model_code) {
-            let (conversation_id, run_code) = person_ai_runtime_metadata(config);
-            return Box::pin(async move {
-                self.providers
-                    .chat_completion(config, body, conversation_id, run_code)
-                    .await
-            });
+            self.providers.sdk_model_authorization_scope().map(Some)
+        } else {
+            self.fallback.authorization_scope(config)
         }
-        self.fallback.post_json(config, url, body)
     }
-
-    fn post_event_stream<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        url: &'a str,
-        body: &'a Value,
-        sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
+    fn on_failure(&self, config: &sdk::AgentModelConfig, error: &fw::ModelError) {
         if self.providers.is_person_ai_config(&config.model_code) {
-            let (conversation_id, run_code) = person_ai_runtime_metadata(config);
-            return Box::pin(async move {
-                self.providers
-                    .chat_completion_stream(config, body, conversation_id, run_code, sink)
-                    .await
-            });
-        }
-        self.fallback.post_event_stream(config, url, body, sink)
-    }
-}
-
-#[derive(Clone)]
-pub struct PersonAiAwareLlmRuntimeClient {
-    fallback: HttpLlmRuntimeClient,
-    providers: ModelProviderService,
-}
-
-impl PersonAiAwareLlmRuntimeClient {
-    pub fn new(fallback: HttpLlmRuntimeClient, providers: ModelProviderService) -> Self {
-        Self {
-            fallback,
-            providers,
+            self.providers.sdk_final_model_failure(error);
         }
     }
-}
-
-impl LlmRuntimeClient for PersonAiAwareLlmRuntimeClient {
-    fn generate<'a>(
-        &'a self,
-        config: &'a RuntimeModelConfig,
-        prompt: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
-        if !self.providers.is_person_ai_config(&config.model_code) {
-            return self.fallback.generate(config, prompt);
-        }
-        Box::pin(async move {
-            if config.model_type != ModelType::Text {
-                return Err("Person-AI text generation requires a TEXT model".into());
-            }
-            let model_config = runtime_to_agent_config(config);
-            let request = ModelRequest {
-                messages: vec![AgentMessage::user(prompt)],
-                tools: Vec::new(),
-                prepared_tool_schema: None,
-                system_agent_session_id: None,
-                response_input_items: None,
-                previous_response_id: None,
-            };
-            let adapter = adapter_for_protocol(model_config.protocol)
-                .ok_or_else(|| "Person-AI model protocol is unsupported".to_string())?;
-            let body = adapter.request_body(&model_config, &request)?;
-            let response = self
-                .providers
-                .chat_completion(&model_config, &body, None, None)
-                .await?;
-            let response = adapter.parse_response(&response).map_err(|_| {
-                "Person-AI text generation returned an unsupported response".to_string()
-            })?;
-            if response.finish != ModelFinish::Final {
-                return Err("Person-AI text generation unexpectedly requested tool calls".into());
-            }
-            Ok(response.output_text())
-        })
-    }
-
-    fn embed<'a>(
-        &'a self,
-        config: &'a RuntimeModelConfig,
-        input: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        if !self.providers.is_person_ai_config(&config.model_code) {
-            return self.fallback.embed(config, input);
-        }
-        Box::pin(async move {
-            if config.model_type != ModelType::Embedding {
-                return Err("Person-AI embeddings require an EMBEDDING model".into());
-            }
-            let response = self.providers.embedding(&json!({ "input": input })).await?;
-            parse_embedding(&response)
-        })
-    }
-
-    fn rerank<'a>(
-        &'a self,
-        config: &'a RuntimeModelConfig,
-        query: &'a str,
-        documents: &'a [String],
-        top_n: Option<usize>,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>> {
-        if !self.providers.is_person_ai_config(&config.model_code)
-            || config.model_type != ModelType::Rerank
-        {
-            return self.fallback.rerank(config, query, documents, top_n);
-        }
-        Box::pin(async move {
-            let model_config = runtime_to_agent_config(config);
+    async fn create(
+        &self,
+        config: &sdk::AgentModelConfig,
+    ) -> Result<Arc<dyn sdk::ModelTransport>, fw::ModelError> {
+        if self.providers.is_person_ai_config(&config.model_code) {
             self.providers
-                .llm_rerank_with_config(&model_config, query, documents, top_n)
+                .sdk_model_transport(&convert(config).map_err(fw::ModelError::Fatal)?)
                 .await
-                .map(|items| {
-                    items
-                        .into_iter()
-                        .map(|(document_index, score)| LlmRuntimeRerankHit {
-                            document_index,
-                            score,
-                        })
-                        .collect()
-                })
-        })
+        } else {
+            self.fallback.create(config).await
+        }
+    }
+    async fn recover_authentication(
+        &self,
+        config: &sdk::AgentModelConfig,
+        error: &fw::ModelError,
+    ) -> Result<bool, fw::ModelError> {
+        if self.providers.is_person_ai_config(&config.model_code) {
+            self.providers.sdk_recover_model_authentication(error).await
+        } else {
+            Ok(false)
+        }
     }
 }
 
+const PERSON_AI_CONVERSATION_PATH_PREFIX: &str = "person-ai/conversations/";
 pub fn with_person_ai_conversation(
     mut config: AgentModelConfig,
     session_code: &str,
@@ -190,62 +78,21 @@ pub fn with_person_ai_conversation(
     }
     config
 }
-
-fn person_ai_runtime_metadata(config: &AgentModelConfig) -> (Option<&str>, Option<&str>) {
-    let path = config
+pub(crate) fn person_ai_runtime_metadata(
+    config: &AgentModelConfig,
+) -> (Option<&str>, Option<&str>) {
+    let Some(path) = config
         .api_path
         .as_deref()
-        .and_then(|path| path.strip_prefix(PERSON_AI_CONVERSATION_PATH_PREFIX));
-    let Some(path) = path else {
+        .and_then(|path| path.strip_prefix(PERSON_AI_CONVERSATION_PATH_PREFIX))
+    else {
         return (None, None);
     };
-    let (conversation_id, query) = path.split_once('?').unwrap_or((path, ""));
-    let conversation_id = (!conversation_id.trim().is_empty()).then_some(conversation_id);
-    let run_code = query
-        .split('&')
-        .find_map(|entry| entry.strip_prefix("runCode="))
-        .filter(|value| !value.trim().is_empty());
-    (conversation_id, run_code)
-}
-
-fn runtime_to_agent_config(config: &RuntimeModelConfig) -> AgentModelConfig {
-    AgentModelConfig {
-        model_code: config.model_code.clone(),
-        protocol: match config.protocol {
-            ModelProtocol::Responses => AgentModelProtocol::Responses,
-            ModelProtocol::OpenAiCompatible => AgentModelProtocol::ChatCompletions,
-            _ => AgentModelProtocol::ChatCompletions,
-        },
-        base_url: config.base_url.clone(),
-        api_path: config.api_path.clone(),
-        api_key: config.api_key.clone(),
-        model_name: config.model_name.clone(),
-        thinking_enabled: config.thinking_enabled,
-        reasoning_effort: config.reasoning_effort,
-        responses_stateful_enabled: config.responses_stateful_enabled,
-        temperature: config.temperature,
-        max_tokens: config.max_tokens,
-        context_window_tokens: config.context_window_tokens,
-        top_p: config.top_p,
-        max_retries: config.max_retries,
-    }
-}
-
-fn parse_embedding(response: &Value) -> Result<Vec<f32>, String> {
-    response
-        .get("data")
-        .and_then(Value::as_array)
-        .and_then(|items| items.first())
-        .and_then(|item| item.get("embedding"))
-        .and_then(Value::as_array)
-        .ok_or_else(|| "Person-AI embedding response missing vector".to_string())?
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            value
-                .as_f64()
-                .map(|value| value as f32)
-                .ok_or_else(|| format!("Person-AI embedding value {index} was not numeric"))
-        })
-        .collect()
+    let (conversation, query) = path.split_once('?').unwrap_or((path, ""));
+    (
+        (!conversation.trim().is_empty()).then_some(conversation),
+        query
+            .split('&')
+            .find_map(|entry| entry.strip_prefix("runCode=")),
+    )
 }

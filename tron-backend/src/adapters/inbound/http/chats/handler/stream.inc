@@ -13,6 +13,9 @@ pub async fn send_message(
     if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
         return response;
     }
+    if let Err(response) = ensure_native_resume(&state, &session_code, &request.resume).await {
+        return response;
+    }
     let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
@@ -139,11 +142,13 @@ pub(crate) async fn stream_message_command(
     if let Err(response) = ensure_no_pending_user_input(&state, &session_code) {
         return response;
     }
+    if let Err(response) = ensure_native_resume(&state, &session_code, &request.resume).await {
+        return response;
+    }
     let resolved_runtime = match resolve_chat_agent_runtime(&state, &session, &request) {
         Ok(runtime) => runtime,
         Err(error) => return chat_send_error_response(error),
     };
-    let system_agent_live_stream = uses_system_live_stream(&resolved_runtime);
     let supports_steer = matches!(resolved_runtime.runtime_type, AgentRuntimeType::React);
     let run_code = generate_agent_run_code();
     request.run_code = Some(run_code.clone());
@@ -170,23 +175,11 @@ pub(crate) async fn stream_message_command(
         Some(&run_code),
     );
 
-    let agui_stream = AgentAguiStreamService::with_replay_store(
-        state.agui_events.clone(),
-        state.agui_replay_store.clone(),
-    );
+    let agui_stream = state.agent_presentation.clone();
     let _ = agui_stream.activate(&session_code);
 
     let (completion_sender, mut completion_receiver) =
         tokio::sync::mpsc::channel::<ChatSsePayload>(1);
-    let (model_event_sender, mut model_event_receiver) =
-        tokio::sync::mpsc::unbounded_channel::<ModelStreamEvent>();
-    let live_replay_recorder = SystemAgentLiveReplayRecorder::new(
-        agui_stream.clone(),
-        &session_code,
-        &run_code,
-        system_agent_live_stream,
-    );
-    live_replay_recorder.start();
     let chats = state.chats.clone();
     let session_code_for_task = session_code.clone();
     let run_code_for_task = run_code.clone();
@@ -212,18 +205,9 @@ pub(crate) async fn stream_message_command(
     .with_active_runs(state.active_runs.clone())
     .with_prompt_service(state.prompts.clone())
     .with_auto_model_route(auto_model_route, auto_model_router);
-    let live_replay_recorder_for_sink = live_replay_recorder.clone();
     let forwarding_gate = ChatStreamForwardingGate::new();
-    let forwarding_gate_for_sink = forwarding_gate.clone();
-    let sink = Arc::new(move |event: ModelStreamEvent| {
-        live_replay_recorder_for_sink.ingest(event.clone());
-        if forwarding_gate_for_sink.is_open() {
-            let _ = model_event_sender.send(event);
-        }
-    });
+    let sink = Arc::new(|_event: ModelStreamEvent| {});
 
-    let replay_service_for_task = agui_stream.clone();
-    let live_replay_recorder_for_task = live_replay_recorder.clone();
     let llm_runtime = state.llm_runtime.clone();
     let run_task = AuthHolder::spawn(async move {
         let result = chats
@@ -246,14 +230,7 @@ pub(crate) async fn stream_message_command(
                 ChatStreamCompletion::Error { code, message }
             }
         };
-        live_replay_recorder_for_task.finalize();
         let done_payload = completion.payload(&session_code_for_task, &run_code_for_task);
-        record_protocol_event(
-            &replay_service_for_task,
-            &session_code_for_task,
-            &done_payload.event_name,
-            &done_payload.data,
-        );
         let _ = completion_sender.send(done_payload).await;
     });
 
@@ -271,115 +248,88 @@ pub(crate) async fn stream_message_command(
         let mut lifecycle_guard = lifecycle_guard;
         let mut seen = BTreeSet::<String>::new();
         let mut completion: Option<ChatSsePayload> = None;
-        let mut drain_ticks = 0u16;
         let mut interval = tokio::time::interval(Duration::from_millis(CHAT_STREAM_POLL_INTERVAL_MS));
-        let mut live_event_builder = SystemAgentLiveEventBuilder::new(
-            &stream_key,
-            &stream_run_code,
-            system_agent_live_stream,
-        );
-
-        for payload in live_event_builder.start() {
-            let data = run_started_with_supports_steer(
-                &payload.sse_event,
-                payload.data,
-                supports_steer,
-            );
-            let key = format!("{}:{}", payload.sse_event, data);
-            if seen.insert(key) {
-                yield Ok::<Event, Infallible>(ChatSsePayload::agui(payload.sse_event, data).event());
-            }
-        }
-
+        let mut native_terminals: std::collections::BTreeMap<String,crate::domain::agent::AgentAguiProtocolEvent> = std::collections::BTreeMap::new();
+        let mut routed_child_runs = std::collections::BTreeSet::new();
+        let mut continuation_seen = false;
+        let mut presentation_incomplete = false;
+        let mut replay_read_stalled = false;
         loop {
             interval.tick().await;
-
             if completion.is_none() {
-                if let Ok(received) = completion_receiver.try_recv() {
-                    completion = Some(received);
-                }
+                let (received, unavailable)=poll_product_completion(&mut completion_receiver,&stream_key,&stream_run_code);
+                completion=received;
+                presentation_incomplete |= unavailable;
+                if unavailable { stream_service.mark_incomplete(&stream_key,"product completion acknowledgment is unavailable"); }
             }
-
-            let mut emitted = false;
-            while let Ok(event) = model_event_receiver.try_recv() {
-                for payload in live_event_builder.ingest(event) {
-                    let data = run_started_with_supports_steer(
-                        &payload.sse_event,
-                        payload.data,
-                        supports_steer,
-                    );
-                    let key = format!("{}:{}", payload.sse_event, data);
-                    if seen.insert(key) {
-                        emitted = true;
-                        yield Ok::<Event, Infallible>(
-                            ChatSsePayload::agui(payload.sse_event, data).event()
-                        );
+            let replay = if replay_read_stalled {
+                None
+            } else {
+                let (events, stalled) = read_protocol_with_deadline(stream_service.clone(), stream_key.clone(), Duration::from_secs(5)).await;
+                replay_read_stalled |= stalled;
+                Some(events)
+            };
+            match replay {
+                Some(Ok(events)) => {
+                    // A child can persist before its parent's relation frame. Resolve
+                    // native relations across the same snapshot before streaming it.
+                    resolve_native_child_routes(&events, &stream_run_code, &mut routed_child_runs);
+                    let has_continuation = events.iter().any(|event| event.data.pointer("/metadata/tron/parentProductRunCode").and_then(Value::as_str)==Some(stream_run_code.as_str()));
+                    if has_continuation && !continuation_seen {
+                        continuation_seen = true;
+                        if let Some(terminal) = native_terminals.get(&stream_run_code) {
+                            yield Ok::<Event, Infallible>(ChatSsePayload::agui(terminal.sse_event.clone(), terminal.data.clone()).event());
+                        }
                     }
-                }
-            }
-            if let Ok(events) = stream_service.protocol_events(&stream_key) {
-                for event in events {
-                    if !protocol_event_belongs_to_run(&event.data, &stream_run_code) {
-                        continue;
-                    }
-                    if matches!(event.sse_event.as_str(), "RUN_FINISHED" | "RUN_ERROR") {
-                        continue;
-                    }
-                    if live_event_builder.enabled()
-                        && matches!(
-                            event.sse_event.as_str(),
-                            "RUN_STARTED"
-                                | "ACTIVITY_SNAPSHOT"
-                                | "REASONING_START"
-                                | "REASONING_MESSAGE_START"
-                                | "REASONING_MESSAGE_CONTENT"
-                                | "REASONING_TEXT_CONTENT"
-                                | "REASONING_MESSAGE_END"
-                                | "REASONING_END"
-                                | "TEXT_MESSAGE_START"
-                                | "TEXT_MESSAGE_CONTENT"
-                                | "TEXT_MESSAGE_END"
-                        )
-                    {
-                        continue;
-                    }
-                    let data = run_started_with_supports_steer(
-                        &event.sse_event,
-                        event.data,
-                        supports_steer,
-                    );
-                    let key = format!("{}:{}", event.sse_event, data);
-                    if seen.insert(key) {
-                        emitted = true;
+                    for event in events {
+                        if !protocol_event_belongs_to_invocation_tree(&event.data, &stream_run_code, &routed_child_runs) { continue; }
+                        let Some(key) = crate::application::agent::protocol_event_identity(&event) else {
+                            presentation_incomplete = true;
+                            continue;
+                        };
+                        if !seen.insert(key) { continue; }
+                        if event.sse_event == "RUN_ERROR" && !native_protocol_execution_terminal(&event) {
+                            presentation_incomplete = true;
+                            yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, event.data).event());
+                            continue;
+                        }
+                        if native_protocol_execution_terminal(&event) {
+                            let product_run = event.data.get("runId").and_then(Value::as_str).unwrap_or(&stream_run_code).to_owned();
+                            if continuation_seen || product_run != stream_run_code {
+                                yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event.clone(),event.data.clone()).event());
+                            }
+                            native_terminals.insert(product_run,event);
+                            continue;
+                        }
+                        let data = run_started_with_supports_steer(&event.sse_event, event.data, supports_steer);
                         yield Ok::<Event, Infallible>(ChatSsePayload::agui(event.sse_event, data).event());
                     }
                 }
+                Some(Err(_)) if !presentation_incomplete => {
+                    presentation_incomplete = true;
+                    yield Ok::<Event, Infallible>(ChatSsePayload::agui("CUSTOM", json!({
+                        "type": "CUSTOM", "name": "tron.presentation.incomplete", "value": {"code": "AGENT_AGUI_REPLAY_INCOMPLETE"},
+                        "threadId": stream_key, "runId": stream_run_code,
+                    })).event());
+                }
+                Some(Err(_)) | None => {}
             }
-
-            if let Some(done) = completion.as_ref() {
-                for payload in live_event_builder.finalize() {
-                    let key = format!("{}:{}", payload.sse_event, payload.data);
-                    if seen.insert(key) {
-                        emitted = true;
-                        yield Ok::<Event, Infallible>(
-                            ChatSsePayload::agui(payload.sse_event, payload.data).event()
-                        );
-                    }
-                }
-                if emitted {
-                    drain_ticks = 0;
-                    continue;
-                }
-                drain_ticks = drain_ticks.saturating_add(1);
-                if drain_ticks < CHAT_STREAM_DRAIN_AFTER_COMPLETION_TICKS {
-                    continue;
-                }
-                let done_event = done.event();
+            if let Some(done) = completion.take() {
+                // Native terminal identity/outcome are authoritative. Attach the product
+                // result required by the existing HTTP contract after its transaction finishes.
+                let actual_run = done.data.get("runId").and_then(Value::as_str).unwrap_or(&stream_run_code);
+                let native_terminal = native_terminals.remove(actual_run).or_else(|| {
+                    if done.data.get("code").and_then(Value::as_str)==Some("CHAT_STREAM_COMPLETION_UNAVAILABLE") {
+                        native_terminals.into_values().max_by_key(|event|event.data.get("timestamp").and_then(Value::as_i64).unwrap_or(0))
+                    } else { None }
+                });
+                let payload = product_completion_payload(native_terminal, done, presentation_incomplete);
                 lifecycle_guard.complete();
-                yield Ok::<Event, Infallible>(done_event);
+                yield Ok::<Event, Infallible>(payload.event());
                 break;
             }
         }
+
     };
 
     Sse::new(stream)
@@ -415,4 +365,224 @@ pub(crate) fn run_started_with_supports_steer(
         object.insert("supportsSteer".to_string(), Value::Bool(supports_steer));
     }
     data
+}
+
+/// Product result decoration, not a protocol lifecycle generator. When presentation
+/// terminated early, the independently completed execution still reports its real outcome.
+// Output failures do not replace the last authoritative native execution outcome.
+fn native_protocol_execution_terminal(
+    event: &crate::domain::agent::AgentAguiProtocolEvent,
+) -> bool {
+    match event.sse_event.as_str() {
+        "RUN_FINISHED" => matches!(
+            event.data.pointer("/outcome/type").and_then(Value::as_str),
+            Some("success" | "interrupt")
+        ),
+        "RUN_ERROR" => !event
+            .data
+            .get("code")
+            .and_then(Value::as_str)
+            .is_some_and(|code| {
+                code.starts_with("AGUI_") || code == "CHAT_STREAM_COMPLETION_UNAVAILABLE"
+            }),
+        _ => false,
+    }
+}
+
+fn product_completion_payload(
+    native: Option<crate::domain::agent::AgentAguiProtocolEvent>,
+    mut completion: ChatSsePayload,
+    incomplete: bool,
+) -> ChatSsePayload {
+    if let Some(object) = completion.data.as_object_mut() {
+        object.insert("productCompletion".into(), json!(true));
+    }
+    if let Some(native) = native {
+        if completion.data.get("code").and_then(Value::as_str)
+            == Some("CHAT_STREAM_COMPLETION_UNAVAILABLE")
+        {
+            let mut data = native.data;
+            if let Some(object) = data.as_object_mut() {
+                object.insert("productCompletion".into(), json!(true));
+                object.insert("presentationIncomplete".into(), json!(true));
+                object.insert("productCompletionError".into(), json!({"code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":"product completion acknowledgment is unavailable"}));
+            }
+            return ChatSsePayload::agui(native.sse_event, data);
+        }
+        let output_failed = native
+            .data
+            .get("code")
+            .and_then(Value::as_str)
+            .is_some_and(|code| code.starts_with("AGUI_"));
+        if !output_failed
+            && (completion.event_name == native.sse_event || native.sse_event == "RUN_ERROR")
+        {
+            let mut data = native.data;
+            if let Some(object) = data.as_object_mut() {
+                if let Some(result) = completion.data.get("result") {
+                    object.insert("result".into(), result.clone());
+                }
+                // Enrich interrupt metadata with product question IDs, retaining native
+                // interaction records in the result rather than reconstructing execution.
+                if native.sse_event == "RUN_FINISHED" {
+                    if let Some(outcome) = completion.data.get("outcome").filter(|outcome| {
+                        outcome.get("type").and_then(Value::as_str) == Some("interrupt")
+                    }) {
+                        object.insert("outcome".into(), outcome.clone());
+                    }
+                }
+                object.insert("productCompletion".into(), json!(true));
+                object.insert("presentationIncomplete".into(), json!(incomplete));
+            }
+            return ChatSsePayload::agui(native.sse_event, data);
+        }
+        if let Some(object) = completion.data.as_object_mut() {
+            object.insert("metadata".into(), json!({"nativeTerminal": native.data}));
+        }
+    }
+    if let Some(object) = completion.data.as_object_mut() {
+        object.insert("presentationIncomplete".into(), json!(incomplete));
+    }
+    completion
+}
+
+async fn ensure_native_resume(
+    state: &AppState,
+    session_code: &str,
+    resume: &[crate::application::chat::ChatResumeEntry],
+) -> Result<(), Response> {
+    use crate::domain::agent::AgentError;
+    match state
+        .agent_framework
+        .validate_native_resume(session_code, resume)
+        .await
+    {
+        Ok(()) => Ok(()),
+        Err(AgentError::AwaitingUserInput) => Err(chat_error_response(ChatError::UserInputPending)),
+        Err(AgentError::InvalidConfiguration(_)) => Err(chat_error_response(
+            ChatError::UserInputAnswerInvalid("invalid native interaction response".into()),
+        )),
+        Err(AgentError::SessionBusy(session)) => {
+            Err(chat_send_error_response(ChatSendError::Agent(
+                crate::application::agent::AgentInvocationError::SessionBusy(session),
+            )))
+        }
+        Err(AgentError::Cancelled) => Err(chat_send_error_response(ChatSendError::Agent(
+            crate::application::agent::AgentInvocationError::RunStopped,
+        ))),
+        Err(_) => Err(chat_send_error_response(ChatSendError::Agent(
+            crate::application::agent::AgentInvocationError::RuntimeFailed(
+                "native interaction validation failed".into(),
+            ),
+        ))),
+    }
+}
+
+fn completion_channel_closed_payload(session_code: &str, run_code: &str) -> ChatSsePayload {
+    ChatSsePayload::agui(
+        "RUN_ERROR",
+        json!({
+            "type":"RUN_ERROR","threadId":session_code,"runId":run_code,
+            "code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":"product completion acknowledgment is unavailable",
+            "presentationIncomplete":true,
+            "productCompletionError":{"code":"CHAT_STREAM_COMPLETION_UNAVAILABLE","message":"product completion acknowledgment is unavailable"},
+        }),
+    )
+}
+
+#[cfg(test)]
+#[path = "channel_tests.rs"]
+mod channel_tests;
+
+fn poll_product_completion(
+    receiver: &mut tokio::sync::mpsc::Receiver<ChatSsePayload>,
+    session_code: &str,
+    run_code: &str,
+) -> (Option<ChatSsePayload>, bool) {
+    match receiver.try_recv() {
+        Ok(completion) => (Some(completion), false),
+        Err(tokio::sync::mpsc::error::TryRecvError::Empty) => (None, false),
+        Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => (
+            Some(completion_channel_closed_payload(session_code, run_code)),
+            true,
+        ),
+    }
+}
+
+/// One blocked SQLite read may outlive its acknowledgment deadline. Never start
+/// another reader behind it; the caller continues polling native execution completion.
+async fn read_protocol_with_deadline(
+    service: crate::application::agent::AgentAguiStreamService,
+    session: String,
+    deadline: Duration,
+) -> (
+    Result<
+        Vec<crate::domain::agent::AgentAguiProtocolEvent>,
+        crate::application::agent::AgentAguiStreamError,
+    >,
+    bool,
+) {
+    let reader = service.clone();
+    let stream_key = session.clone();
+    match tokio::time::timeout(
+        deadline,
+        tokio::task::spawn_blocking(move || reader.protocol_events(&stream_key)),
+    )
+    .await
+    {
+        Ok(Ok(result)) => (result, false),
+        _ => {
+            service.mark_incomplete(
+                &session,
+                "presentation replay read acknowledgment unavailable",
+            );
+            (
+                Err(
+                    crate::application::agent::AgentAguiStreamError::ReplayReadFailed(
+                        "presentation replay read acknowledgment unavailable".into(),
+                    ),
+                ),
+                true,
+            )
+        }
+    }
+}
+
+fn protocol_event_belongs_to_invocation_tree(
+    data: &Value,
+    product_run: &str,
+    children: &std::collections::BTreeSet<String>,
+) -> bool {
+    protocol_event_belongs_to_run(data, product_run)
+        || data
+            .pointer("/metadata/tron/parentProductRunCode")
+            .and_then(Value::as_str)
+            == Some(product_run)
+        || data
+            .pointer("/metadata/framework/runId")
+            .and_then(Value::as_str)
+            .is_some_and(|run| children.contains(run))
+}
+fn resolve_native_child_routes(
+    events: &[crate::domain::agent::AgentAguiProtocolEvent],
+    product_run: &str,
+    children: &mut std::collections::BTreeSet<String>,
+) {
+    loop {
+        let before = children.len();
+        for event in events {
+            if protocol_event_belongs_to_invocation_tree(&event.data, product_run, children)
+                && matches!(
+                    event.sse_event.as_str(),
+                    "SUBAGENT_STARTED" | "SUBAGENT_FINISHED" | "SUBAGENT_ERROR"
+                )
+                && let Some(child) = event.data.get("subagentRunId").and_then(Value::as_str)
+            {
+                children.insert(child.to_owned());
+            }
+        }
+        if children.len() == before {
+            break;
+        }
+    }
 }

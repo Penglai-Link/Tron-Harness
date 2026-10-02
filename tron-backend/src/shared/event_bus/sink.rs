@@ -10,6 +10,10 @@ pub trait EventSink: Send + Sync {
     fn name(&self) -> &'static str;
     fn accepts(&self, event: &BusEvent) -> bool;
     fn handle(&self, event: Arc<BusEvent>);
+    /// Nonblocking feedback when an accepted record could not reach this sink.
+    fn delivery_failed(&self, _event: &BusEvent, _detail: &str) {}
+    /// Rejected drafts never become events; report only their routing key, without payload.
+    fn delivery_rejected(&self, _stream_key: &str, _detail: &str) {}
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

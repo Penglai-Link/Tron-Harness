@@ -50,28 +50,6 @@ pub(super) fn agent_kind_label(agent_kind: AgentKind) -> &'static str {
     }
 }
 
-pub(super) fn model_stream_delta_payloads(delta: &str) -> Vec<String> {
-    const MAX_DELTA_JSON_BYTES: usize = 90;
-    let mut payloads = Vec::new();
-    let mut current = String::new();
-
-    for character in delta.chars() {
-        let mut candidate = current.clone();
-        candidate.push(character);
-        let candidate_json = serde_json::to_string(&candidate).unwrap_or_else(|_| "\"\"".into());
-        if !current.is_empty() && candidate_json.len() > MAX_DELTA_JSON_BYTES {
-            payloads.push(serde_json::to_string(&current).unwrap_or_else(|_| "\"\"".into()));
-            current.clear();
-        }
-        current.push(character);
-    }
-
-    if !current.is_empty() {
-        payloads.push(serde_json::to_string(&current).unwrap_or_else(|_| "\"\"".into()));
-    }
-    payloads
-}
-
 pub(super) fn compact_event_value(value: &str) -> String {
     const LIMIT: usize = 96;
     if value.len() <= LIMIT {

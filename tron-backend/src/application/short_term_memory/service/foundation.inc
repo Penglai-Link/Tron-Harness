@@ -40,6 +40,7 @@ pub struct ShortTermMemoryService {
 }
 
 impl ShortTermMemoryService {
+    pub(crate) fn framework_context_config(&self) -> &ShortTermMemoryConfig { &self.config }
     pub fn new(
         repository: impl ShortTermMemoryRepository + 'static,
         config: ShortTermMemoryConfig,
@@ -126,6 +127,29 @@ impl ShortTermMemoryService {
             None,
             None,
             "agent.run.completed",
+            "RUNTIME",
+            json!({"runCode": context.run_code}),
+            None,
+        )
+    }
+
+    /// A waiting logical run has ended this physical execution. Native interaction
+    /// checkpoints remain resumable; its product execution lease must be released.
+    pub fn record_run_awaiting_input(
+        &self,
+        context: &AgentRunContext,
+    ) -> Result<(), ShortTermMemoryError> {
+        let Some(memory) = context.short_term_memory.as_ref() else {
+            return Ok(());
+        };
+        self.append_run_lifecycle_event(
+            &memory.session_code,
+            &context.workspace_code,
+            Some(&context.run_code),
+            Some(&memory.input_code),
+            None,
+            None,
+            "agent.run.awaiting_input",
             "RUNTIME",
             json!({"runCode": context.run_code}),
             None,

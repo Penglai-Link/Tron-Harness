@@ -1,5 +1,7 @@
 mod agui_warning;
 mod attachments;
+#[path = "invocation/continuation.rs"]
+mod continuation;
 mod helpers;
 mod run_context_builder;
 mod session_summary;
@@ -18,8 +20,8 @@ use crate::{
         variable::VariableService, workspace::WorkspaceService,
     },
     domain::agent::{
-        AgentModelConfig, AgentModelProtocol, AgentRunHistoryRecord, AgentRunStatus,
-        AutoModelRouteContext, ModelRequest, ModelResponse, ToolRegistry,
+        AgentModelConfig, AgentModelProtocol, AgentNativeRunStatus, AgentRunHistoryRecord,
+        AgentRunStatus, AutoModelRouteContext, ModelRequest, ModelResponse, ToolRegistry,
     },
     shared::{event_bus::EventBusHandle, time::current_timestamp},
 };
@@ -255,10 +257,29 @@ impl AgentInvocationService {
         match execution {
             Ok(orchestrated) => {
                 let result = orchestrated.run;
-                let awaiting_user_input = result
-                    .observations
-                    .iter()
-                    .any(|observation| observation.tool_name == super::CHAT_ASK_USER_TOOL);
+                let native_status = result.native.as_ref().map(|native| native.status);
+                let awaiting_user_input = match native_status {
+                    Some(status) => status == AgentNativeRunStatus::AwaitingInput,
+                    None => result
+                        .observations
+                        .iter()
+                        .any(|observation| observation.tool_name == super::CHAT_ASK_USER_TOOL),
+                };
+                let limit_error = match native_status {
+                    Some(AgentNativeRunStatus::StepLimit) => {
+                        Some(AgentInvocationError::MaxStepsExceeded)
+                    }
+                    Some(AgentNativeRunStatus::ToolCallLimit) => {
+                        Some(AgentInvocationError::MaxToolCallsExceeded)
+                    }
+                    _ => None,
+                };
+                let status = match native_status {
+                    Some(AgentNativeRunStatus::StepLimit) => "STEP_LIMIT",
+                    Some(AgentNativeRunStatus::ToolCallLimit) => "TOOL_CALL_LIMIT",
+                    _ if awaiting_user_input => "AWAITING_USER_INPUT",
+                    _ => "COMPLETED",
+                };
                 let finished_at = current_timestamp();
                 let token_usage = result.token_usage;
                 self.history
@@ -272,11 +293,16 @@ impl AgentInvocationService {
                         task_code,
                         model_code: model_code.clone(),
                         reasoning_effort,
-                        status: AgentRunStatus::Completed,
-                        outcome: if awaiting_user_input {
-                            "awaiting_user_input".into()
+                        status: if limit_error.is_some() {
+                            AgentRunStatus::Failed
                         } else {
-                            "completed".into()
+                            AgentRunStatus::Completed
+                        },
+                        outcome: match native_status {
+                            Some(AgentNativeRunStatus::StepLimit) => "step_limit".into(),
+                            Some(AgentNativeRunStatus::ToolCallLimit) => "tool_call_limit".into(),
+                            _ if awaiting_user_input => "awaiting_user_input".into(),
+                            _ => "completed".into(),
                         },
                         step_count: result.step_count,
                         observation_count: result.observations.len() as u32,
@@ -284,8 +310,8 @@ impl AgentInvocationService {
                         output_tokens: token_usage.map(|usage| usage.output_tokens),
                         total_tokens: token_usage.map(|usage| usage.total_tokens),
                         output_preview: Some(safe_preview("output", &result.final_output)),
-                        error_code: None,
-                        error_message: None,
+                        error_code: limit_error.as_ref().map(|error| error.code().into()),
+                        error_message: limit_error.as_ref().map(AgentInvocationError::message),
                         started_at,
                         finished_at,
                         created_at: current_timestamp(),
@@ -296,7 +322,10 @@ impl AgentInvocationService {
                     self.prompt_service.clone(),
                     self.model_client.clone(),
                     session_summary_job_context,
-                    completed_session_summary_outcome(awaiting_user_input),
+                    match &limit_error {
+                        Some(error) => failed_session_summary_outcome(error),
+                        None => completed_session_summary_outcome(awaiting_user_input),
+                    },
                 );
                 Ok(AgentInvocationResult {
                     run_code: result.run_code,
@@ -305,11 +334,9 @@ impl AgentInvocationService {
                     model_code,
                     runtime_adapter_key: orchestrated.runtime_adapter_key,
                     reasoning_effort,
-                    status: if awaiting_user_input {
-                        "AWAITING_USER_INPUT"
-                    } else {
-                        "COMPLETED"
-                    },
+                    status,
+                    native: result.native,
+                    sdk_execution: result.sdk_execution,
                     final_output: result.final_output,
                     step_count: result.step_count,
                     token_usage,

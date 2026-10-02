@@ -1,5 +1,5 @@
 export type SystemConfigEffect = "hotUpdate" | "restart" | "migration";
-export type SystemConfigValue = string | number | boolean | null;
+export type SystemConfigValue = string | number | boolean | string[] | null;
 
 export interface SystemConfigItem {
   effect: SystemConfigEffect;
@@ -7,7 +7,7 @@ export interface SystemConfigItem {
   path: string;
   sensitive: boolean;
   value: SystemConfigValue;
-  valueType: "string" | "number" | "boolean";
+  valueType: "string" | "number" | "boolean" | "array";
 }
 
 export interface SystemConfigDocument {

@@ -1,6 +1,10 @@
 use super::model::{HostExecution, HostRunState};
+#[path = "tool_authority.rs"]
+mod authority;
+use crate::application::agent::tool_framework::FrameworkToolRegistryExt;
 use crate::domain::agent::{ToolObservation, ToolRequest};
 use async_trait::async_trait;
+pub(super) use authority::{ToolCatalogPolicy, map_authorized_descriptor};
 use eliteforge_agent_core as fw;
 use eliteforge_agent_official_plugin_tools_local as local;
 use serde_json::Value;
@@ -109,14 +113,16 @@ impl fw::ToolProvider for HarnessTools {
             return Ok(fw::ToolLease::new(vec![]));
         }
         let host = HostExecution::from_extensions(&run.extensions)?;
-        let state = host.state.lock().await;
+        let mut state = host.state.lock().await;
         let leases = host
             .harness
             .framework_registry()
             .take_framework_leases(&state.context.run_code);
         let mut tools = Vec::new();
-        let mut resources = Vec::new();
         for mut lease in leases {
+            // Transfer original resource callbacks to the run owner before filtering
+            // bindings, so setup failures and close reports remain native.
+            run.own_resources(std::mem::take(&mut lease.resources));
             for mut binding in std::mem::take(&mut lease.tools) {
                 if !state
                     .context
@@ -124,17 +130,32 @@ impl fw::ToolProvider for HarnessTools {
                 {
                     continue;
                 }
-                binding.exposed = state
+                binding.exposed &= state
                     .context
                     .tools
                     .iter()
                     .any(|tool| tool.tool_name == binding.descriptor.call_name);
+                // This witness comes from the original owned lease, never a
+                // same-name EffectiveTool projection or synthetic executor.
+                state.tool_catalog.insert(
+                    binding.descriptor.call_name.clone(),
+                    binding.descriptor.id.clone(),
+                );
                 tools.push(binding);
             }
-            resources.push(lease);
         }
         for tool in state.context.authorized_tools() {
-            if official_id(&tool.tool_name).is_some()
+            // EffectiveTool is an ACL/schema projection, not an implementation.
+            // Original SDK leases above retain their executor. Product wrappers
+            // exist only for the selected registration or the human adapter.
+            let implemented = tool.tool_name == crate::application::agent::CHAT_ASK_USER_TOOL
+                || authority::has_product_implementation(
+                    &host.harness.framework_registry(),
+                    &state.context,
+                    &tool.tool_name,
+                );
+            if !implemented
+                || official_id(&tool.tool_name).is_some()
                 || tools
                     .iter()
                     .any(|binding| binding.descriptor.call_name == tool.tool_name)
@@ -162,12 +183,7 @@ impl fw::ToolProvider for HarnessTools {
             binding.parallel_safe = tool.tool_name != crate::application::agent::CHAT_ASK_USER_TOOL;
             tools.push(binding);
         }
-        Ok(fw::ToolLease::new(tools).with_shutdown(move || async move {
-            for mut lease in resources {
-                lease.close(std::time::Duration::from_secs(5)).await;
-            }
-            Ok(())
-        }))
+        Ok(fw::ToolLease::new(tools))
     }
 }
 struct HarnessTool {
@@ -203,22 +219,25 @@ impl fw::Tool for HarnessTool {
         let name = self.name.clone();
         let invocation = identity.invocation_id.clone();
         let activity_id = invocation.clone();
-        let execution = tokio::task::spawn_blocking(move || {
-            let mut progress = |line: String| {
-                harness.framework_tool_activity(&context, &activity_id, &name, &line)
-            };
-            registry.execute_allowed_with_progress(
-                ToolRequest {
-                    tool_name: name.clone(),
-                    input: arguments,
-                    invocation_id: Some(invocation),
-                },
-                &context,
-                &mut progress,
-            )
-        })
-        .await
-        .map_err(|error| fw::ToolError::Indeterminate(error.to_string()))?;
+        let progress_context = context.clone();
+        let progress_name = name.clone();
+        let progress_run = run.clone();
+        let progress = std::sync::Arc::new(move |line: String| {
+            emit_tool_progress(&progress_run, &activity_id, &progress_name, &line);
+            harness.framework_tool_activity(&progress_context, &activity_id, &progress_name, &line)
+        });
+        let execution = crate::application::agent::tool_framework::execute(
+            &registry,
+            ToolRequest {
+                tool_name: name,
+                input: arguments,
+                invocation_id: Some(invocation),
+            },
+            context,
+            run,
+            progress,
+        )
+        .await;
         let execution = match execution {
             Ok(result) => result,
             Err(error) => return Ok(fw::ToolOutput::error(error.to_string())),
@@ -338,18 +357,41 @@ impl fw::ToolResultProcessor for ToolAudit {
         if let Some(error) = input_error {
             result = fw::ToolOutput::error(format!("tool input is invalid: {error}"));
         } else if invocation.descriptor.id == "unavailable" {
-            result = fw::ToolOutput::error(format!(
-                "tool `{}` is not allowed",
-                invocation.call.call_name
-            ));
+            // The native loop already rejected this call without executing it.
+            // Preserve the product distinction between an absent registration
+            // and a registered/native binding which is currently unavailable.
+            let diagnostic = if !state.tool_catalog.contains_key(&invocation.call.call_name) {
+                host.harness
+                    .framework_registry()
+                    .resolve_allowed(
+                        &ToolRequest {
+                            tool_name: invocation.call.call_name.clone(),
+                            input: invocation.call.arguments.clone(),
+                            invocation_id: Some(invocation.invocation_id.into()),
+                        },
+                        &state.context,
+                    )
+                    .err()
+                    .map(|error| error.to_string())
+            } else {
+                None
+            };
+            result =
+                fw::ToolOutput::error(diagnostic.unwrap_or_else(|| {
+                    format!("tool `{}` is not allowed", invocation.call.call_name)
+                }));
         }
         let output = result.content.protocol_text();
         if result.is_error {
             state.last_tool_failure = Some(format!("{}: {}", invocation.call.call_name, output));
         }
-        let HostRunState { context, turn, .. } = &mut *state;
-        let message = host
-            .harness
+        let HostRunState {
+            context,
+            turn,
+            tool_catalog,
+            ..
+        } = &mut *state;
+        host.harness
             .framework_tool_finished(
                 context,
                 turn,
@@ -363,11 +405,16 @@ impl fw::ToolResultProcessor for ToolAudit {
                 result.is_error,
             )
             .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-        result.content = super::messages::encode(&message)
-            .map_err(fw::AgentError::Run)?
-            .content;
+        // Product audit is a separate projection. Preserve native Content,
+        // including Media/Resource blocks and their token accounting.
         if matches!(result.effect, fw::ToolEffect::Continue) {
-            result.effect = fw::ToolEffect::SetExposedTools(visible(context));
+            result.effect = fw::ToolEffect::SetExposedTools(
+                context
+                    .tools
+                    .iter()
+                    .filter_map(|tool| tool_catalog.get(&tool.tool_name).cloned())
+                    .collect(),
+            );
         }
         Ok(result)
     }
@@ -396,6 +443,18 @@ impl local::FileReferenceReader for AttachmentReader {
     }
 }
 
+fn emit_tool_progress(run: &fw::RunContext, invocation_id: &str, name: &str, line: &str) {
+    run.emit_output(fw::OutputEvent::ActivitySnapshot {
+        id: invocation_id.into(),
+        activity_type: "tron.tool.progress".into(),
+        content: serde_json::Map::from_iter([
+            ("toolCallId".into(), invocation_id.into()),
+            ("toolName".into(), name.into()),
+            ("line".into(), line.into()),
+        ]),
+    });
+}
+
 pub(super) struct CommandProgress {
     pub harness: crate::application::agent::runtime::ReactAgent,
     pub context: crate::domain::agent::AgentRunContext,
@@ -418,6 +477,7 @@ impl local::CommandProgressSink for CommandProgress {
                 } else {
                     line.into()
                 };
+                emit_tool_progress(run, &identity.invocation_id, name, &line);
                 self.harness.framework_tool_activity(
                     &self.context,
                     &identity.invocation_id,
@@ -428,3 +488,7 @@ impl local::CommandProgressSink for CommandProgress {
         }
     }
 }
+
+#[cfg(test)]
+#[path = "managed_skills_tests.rs"]
+mod managed_skills_tests;

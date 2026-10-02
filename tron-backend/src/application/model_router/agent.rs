@@ -34,23 +34,13 @@ impl AgentModelRouter {
             .resolve_initial(workspace_code, session_code, agent_code, reasoning_effort)
     }
 
-    pub fn next_fallback(
+    pub fn authorized_models(
         &self,
-        workspace_code: &str,
-        route: &mut crate::domain::agent::AutoModelRouteContext,
-        current_model: &crate::domain::agent::AgentModelConfig,
-        reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
-        person_ai_unavailable: bool,
-    ) -> Result<Option<crate::domain::agent::AgentModelConfig>, String> {
-        self.inner.next_fallback(
-            workspace_code,
-            route,
-            current_model,
-            reasoning_effort,
-            person_ai_unavailable,
-        )
+        workspace: &str,
+        current: &crate::domain::agent::AgentModelConfig,
+    ) -> Result<Vec<crate::domain::agent::AgentModelConfig>, String> {
+        self.inner.authorized_models(workspace, current)
     }
-
     pub fn mark_success(
         &self,
         workspace_code: &str,

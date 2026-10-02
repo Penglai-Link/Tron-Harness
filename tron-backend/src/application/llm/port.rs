@@ -59,6 +59,51 @@ pub trait LlmRuntimeModelResolver: Send + Sync {
 }
 
 pub trait LlmRuntimeClient: Send + Sync {
+    fn generate_observed<'a>(
+        &'a self,
+        _: &'a RuntimeModelConfig,
+        _: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = eliteforge_agent_framework::ObservedModelResult<String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { unsupported_observed() })
+    }
+    fn embed_observed<'a>(
+        &'a self,
+        _: &'a RuntimeModelConfig,
+        _: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = eliteforge_agent_framework::ObservedModelResult<Vec<f32>>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { unsupported_observed() })
+    }
+    fn rerank_observed<'a>(
+        &'a self,
+        _: &'a RuntimeModelConfig,
+        _: &'a str,
+        _: &'a [String],
+        _: Option<usize>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = eliteforge_agent_framework::ObservedModelResult<
+                        Vec<LlmRuntimeRerankHit>,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { unsupported_observed() })
+    }
+
     fn generate<'a>(
         &'a self,
         config: &'a RuntimeModelConfig,
@@ -108,5 +153,14 @@ mod tests {
             .expect_err("zero chunk limit should be rejected");
 
         assert_eq!(error, "max_chars_per_chunk must be greater than zero");
+    }
+}
+
+fn unsupported_observed<T>() -> eliteforge_agent_framework::ObservedModelResult<T> {
+    eliteforge_agent_framework::ObservedModelResult {
+        result: Err(eliteforge_agent_core::AgentError::InvalidConfiguration(
+            "observed LLM operations must be explicitly implemented".into(),
+        )),
+        report: Default::default(),
     }
 }

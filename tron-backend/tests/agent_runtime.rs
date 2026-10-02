@@ -74,6 +74,34 @@ impl ModelClient for ScriptedModelClient {
             Ok(guard.remove(0))
         })
     }
+
+    // Test adapters explicitly declare one transport attempt per mock invocation.
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        self.generate(config, request)
+    }
+
+    fn close_observed<'a>(
+        &'a self,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn close<'a>(&'a self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
 }
 
 #[derive(Clone)]
@@ -131,6 +159,34 @@ impl ModelClient for BlockingFirstResponseModelClient {
             }
         })
     }
+
+    // Test adapters explicitly declare one transport attempt per mock invocation.
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        self.generate(config, request)
+    }
+
+    fn close_observed<'a>(
+        &'a self,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn close<'a>(&'a self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
 }
 
 impl ScriptedResultModelClient {
@@ -171,6 +227,34 @@ impl ModelClient for ScriptedResultModelClient {
             }
             guard.remove(0)
         })
+    }
+
+    // Test adapters explicitly declare one transport attempt per mock invocation.
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        self.generate(config, request)
+    }
+
+    fn close_observed<'a>(
+        &'a self,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn close<'a>(&'a self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
     }
 }
 
@@ -380,6 +464,17 @@ impl ShortTermMemoryRepository for ContextEpochFailingRepository {
         Ok(())
     }
 
+    fn create_compaction_at_revision(
+        &mut self,
+        compaction: &ShortTermMemoryCompaction,
+        message: &ShortTermMemoryMessage,
+        parts: &[ShortTermMemoryPart],
+        event: Option<&ShortTermMemoryEvent>,
+        enforce_idle: bool,
+        _: &eliteforge_agent_memory::MemoryRevision,
+    ) -> Result<(), ShortTermMemoryError> {
+        self.create_compaction(compaction, message, parts, event, enforce_idle)
+    }
     fn active_run_exists(&mut self, _session_code: &str) -> Result<bool, ShortTermMemoryError> {
         Ok(false)
     }
@@ -763,6 +858,87 @@ fn auto_compaction_fixture(
     )
 }
 
+// Observe official SDK output through the production owned consumer and real SQLite.
+fn native_presentation_fixture() -> (
+    tron_backend::application::agent::FrameworkHost,
+    tron_backend::application::agent::AgentAguiStreamService,
+) {
+    use tron_backend::{
+        adapters::outbound::persistence::SqliteAgentEventReplayStore,
+        application::agent::AgentAguiStreamService, shared::event_bus::AguiEventSink,
+    };
+    let service = AgentAguiStreamService::with_replay_store(
+        Arc::new(AguiEventSink::new(&EventBusConfig::default())),
+        Arc::new(SqliteAgentEventReplayStore::connect(":memory:").unwrap()),
+    );
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    host.bind_presentation(service.clone()).unwrap();
+    (host, service)
+}
+fn assert_native_source_identity(
+    events: &[tron_backend::domain::agent::AgentAguiProtocolEvent],
+    product_run: &str,
+) {
+    assert!(!events.is_empty());
+    let logical = events[0].data["metadata"]["framework"]["runId"]
+        .as_str()
+        .unwrap();
+    assert!(eliteforge_agent_core::RunId::parse_str(logical).is_ok());
+    let execution = events[0].data["metadata"]["framework"]["executionId"]
+        .as_str()
+        .unwrap();
+    assert!(eliteforge_agent_core::RunId::parse_str(execution).is_ok());
+    let mut identities = std::collections::BTreeSet::new();
+    let mut previous = 0;
+    for event in events {
+        assert_eq!(event.data["runId"], product_run);
+        assert_eq!(event.data["metadata"]["framework"]["runId"], logical);
+        assert_eq!(
+            event.data["metadata"]["framework"]["executionId"],
+            execution
+        );
+        let sequence = event.data["metadata"]["framework"]["sourceSequence"]
+            .as_u64()
+            .unwrap();
+        assert!(sequence >= previous);
+        previous = sequence;
+        assert!(
+            identities
+                .insert(tron_backend::application::agent::protocol_event_identity(event).unwrap())
+        );
+    }
+    assert_eq!(
+        events
+            .iter()
+            .filter(|event| event.sse_event == "RUN_STARTED")
+            .count(),
+        1
+    );
+}
+fn native_text(events: &[tron_backend::domain::agent::AgentAguiProtocolEvent]) -> String {
+    events
+        .iter()
+        .filter(|event| event.sse_event == "TEXT_MESSAGE_CONTENT")
+        .map(|event| event.data["delta"].as_str().unwrap())
+        .collect()
+}
+async fn wait_for_business_event(
+    sink: &RecordingEventSink,
+    name: &str,
+) -> Vec<tron_backend::shared::event_bus::BusEvent> {
+    tokio::time::timeout(Duration::from_secs(2), async {
+        loop {
+            let events = sink.events();
+            if events.iter().any(|event| event.event_name == name) {
+                return events;
+            }
+            tokio::time::sleep(Duration::from_millis(5)).await;
+        }
+    })
+    .await
+    .expect("existing business audit must still be delivered")
+}
+
 #[tokio::test]
 async fn react_agent_completes_final_answer_and_publishes_metadata_only_events() {
     let sink = Arc::new(RecordingEventSink::with_route_class(
@@ -775,6 +951,7 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
     )
     .register_sink(sink.clone())
     .build();
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
             "done",
@@ -782,6 +959,7 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
         Arc::new(ToolRegistry::default()),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
 
@@ -792,23 +970,40 @@ async fn react_agent_completes_final_answer_and_publishes_metadata_only_events()
 
     assert_eq!(result.final_output, "done");
     assert_eq!(result.step_count, 1);
-    assert!(sink.wait_for_len(6, Duration::from_secs(2)));
-    let events = sink.events();
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-FINAL");
+    assert_eq!(
+        protocol[0].data["metadata"]["framework"]["runId"],
+        result.native.as_ref().unwrap().run_id
+    );
+    assert_eq!(native_text(&protocol), "done");
+    assert_eq!(
+        protocol
+            .iter()
+            .filter(|event| event.sse_event == "RUN_FINISHED"
+                && event.data["outcome"]["type"] == "success")
+            .count(),
+        1
+    );
+    let canonical = presentation.events("CONV-1").unwrap();
+    let serialized = serde_json::to_string(&canonical).unwrap();
+    for private in ["hello", "done", "sk-test", "prompt", "completion"] {
+        assert!(!serialized.contains(private));
+    }
+    let events = wait_for_business_event(&sink, "agent.model.responded").await;
     let names: Vec<_> = events
         .iter()
+        .filter(|event| event.event_name.starts_with("agent.model."))
         .map(|event| event.event_name.as_str())
         .collect();
     assert_eq!(
         names,
-        vec![
-            "agent.run.requested",
-            "agent.run.started",
-            "agent.model.requested",
-            "agent.model.responded",
-            "agent.output.created",
-            "agent.run.completed",
-        ]
+        vec!["agent.model.requested", "agent.model.responded"]
     );
+    assert!(!events.iter().any(|event| matches!(
+        event.event_name.as_str(),
+        "agent.run.started" | "agent.run.completed" | "agent.output.created"
+    )));
     assert!(events.iter().all(|event| {
         event
             .payload_fields
@@ -837,6 +1032,7 @@ async fn react_agent_supports_auto_model_without_model_name() {
     )
     .register_sink(sink.clone())
     .build();
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![ModelResponse::final_output(
             "done",
@@ -844,6 +1040,7 @@ async fn react_agent_supports_auto_model_without_model_name() {
         Arc::new(ToolRegistry::default()),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
     let mut context = base_context("RUN-AUTO");
@@ -856,18 +1053,27 @@ async fn react_agent_supports_auto_model_without_model_name() {
         .expect("Auto run should succeed without a physical model name");
 
     assert_eq!(result.final_output, "done");
-    assert!(sink.wait_for_len(8, Duration::from_secs(2)));
-    let events = sink.events();
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-AUTO");
+    assert_eq!(native_text(&protocol), "done");
     assert!(
-        events
+        protocol
             .iter()
-            .any(|event| event.event_name == "agent.output.started")
+            .any(|event| event.sse_event == "TEXT_MESSAGE_START")
     );
     assert!(
-        events
+        protocol
             .iter()
-            .any(|event| event.event_name == "agent.output.delta")
+            .any(|event| event.sse_event == "TEXT_MESSAGE_END")
     );
+    assert_eq!(
+        protocol
+            .iter()
+            .filter(|event| event.sse_event == "RUN_FINISHED")
+            .count(),
+        1
+    );
+    let events = wait_for_business_event(&sink, "agent.model.responded").await;
     assert!(events.iter().all(|event| {
         event
             .payload_fields
@@ -923,7 +1129,7 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
     let mut context = base_context("RUN-OVERFLOW-RECOVERY");
     context.conversation_code = Some(session.session_code.clone());
     context.workspace_code = session.workspace_code.clone();
-    context.model.context_window_tokens = Some(8_000);
+    context.model.context_window_tokens = Some(40_000);
     context.model.max_tokens = Some(0);
     context.messages = vec![AgentMessage::user("trigger overflow recovery")];
     let input_code = short_term_memory
@@ -941,9 +1147,15 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
         todo_enabled: false,
     });
     let model_client = Arc::new(ScriptedResultModelClient::new(vec![
-        Err("context_length_exceeded: too many tokens".into()),
+        Err(
+            eliteforge_agent_official_plugin_model_http::encode_model_error(
+                &eliteforge_agent_core::ModelError::ContextOverflow(
+                    "context_length_exceeded: too many tokens".into(),
+                ),
+            ),
+        ),
         Ok(ModelResponse::final_output(
-            "## Goal\nRecover from overflow\n\n## Decisions\nModel-generated overflow checkpoint.",
+            r#"{"summary":"Recover from overflow. Model-generated overflow checkpoint."}"#,
         )),
         Ok(ModelResponse::final_output("recovered after checkpoint")),
     ]));
@@ -966,7 +1178,12 @@ async fn react_agent_recovers_context_overflow_with_checkpoint_retry() {
     assert!(requests[1].1.tools.is_empty());
     assert!(requests[1].1.previous_response_id.is_none());
     assert_eq!(requests[1].0.temperature, Some(0.0));
-    assert_eq!(requests[1].0.max_tokens, Some(4_096));
+    assert!(
+        requests[1]
+            .0
+            .max_tokens
+            .is_some_and(|limit| limit > 0 && limit <= 4_096)
+    );
 
     let connection = rusqlite::Connection::open(&database_url)
         .expect("short-term memory database should reopen");
@@ -1020,7 +1237,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
         .current_session_checkpoint
         .max_ratio_bps = None;
     config.context.blocks.current_session_checkpoint.max_tokens = Some(300);
-    config.compaction.trigger_ratio_bps = 4_000;
+    config.compaction.trigger_ratio_bps = 2_000;
     config.compaction.retained_history_ratio_bps = 2_000;
 
     let short_term_memory = ShortTermMemoryService::with_id_provider(
@@ -1045,7 +1262,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
     let mut context = base_context("RUN-AUTO-CURRENT");
     context.conversation_code = Some(session.session_code.clone());
     context.workspace_code = session.workspace_code.clone();
-    context.model.context_window_tokens = Some(8_000);
+    context.model.context_window_tokens = Some(40_000);
     context.model.max_tokens = Some(0);
     context.tools.clear();
     let current_prompt = format!("current auto input stays raw {}", "B".repeat(500));
@@ -1067,7 +1284,7 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
 
     let model_client = Arc::new(ScriptedResultModelClient::new(vec![
         Ok(ModelResponse::final_output(
-            "## Goal\nMODEL AUTO SUMMARY\n\n## Decisions\nAuto compaction used semantic model output.",
+            r#"{"summary":"MODEL AUTO SUMMARY. Auto compaction used semantic model output."}"#,
         )),
         Ok(ModelResponse::final_output("done after auto compaction")),
     ]));
@@ -1089,7 +1306,12 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
     assert_eq!(requests.len(), 2);
     assert!(requests[0].1.tools.is_empty());
     assert_eq!(requests[0].0.temperature, Some(0.0));
-    assert_eq!(requests[0].0.max_tokens, Some(4_096));
+    assert!(
+        requests[0]
+            .0
+            .max_tokens
+            .is_some_and(|limit| limit > 0 && limit <= 4_096)
+    );
     let final_request_text = requests[1]
         .1
         .messages
@@ -1117,6 +1339,14 @@ async fn react_agent_auto_compaction_calls_model_and_pins_current_input() {
         )
         .expect("model checkpoint should be persisted");
     assert!(summary.contains("MODEL AUTO SUMMARY"));
+    let audit: serde_json::Value = serde_json::from_str(&metadata).unwrap();
+    assert!(
+        audit["tokenUsage"].is_null(),
+        "unreported summary usage must remain unavailable"
+    );
+    assert_eq!(audit["usageAudit"]["usageSource"], "unavailable");
+    assert_eq!(audit["usageAudit"]["usageConfidence"], "unavailable");
+    assert!(audit["usageAudit"]["providerUsage"].is_null());
     assert!(metadata.contains("\"compactionMode\":\"model\""));
     assert!(metadata.contains("\"coverage\":\"head_only_tail_replayed\""));
     assert!(metadata.contains("\"selectorVersion\":4"));
@@ -1136,12 +1366,12 @@ async fn react_agent_auto_compaction_model_failures_do_not_write_checkpoint() {
         (
             "auto-model-empty-output",
             Ok(ModelResponse::final_output("")),
-            "COMPACTION_MODEL_EMPTY_OUTPUT",
+            "COMPACTION_MODEL_REQUEST_FAILED",
         ),
         (
             "auto-model-tool-call",
             Ok(ModelResponse::tool_call("unexpected.tool", json!({}))),
-            "COMPACTION_MODEL_TOOL_CALL",
+            "COMPACTION_MODEL_REQUEST_FAILED",
         ),
     ];
 
@@ -1264,6 +1494,7 @@ async fn react_agent_continues_after_tool_execution_failure() {
             |_request: ToolRequest| Err(ToolError::ExecutionFailed("boom".into())),
         )))
         .expect("tool should register");
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("flaky", json!({"value": "x"})),
@@ -1272,6 +1503,7 @@ async fn react_agent_continues_after_tool_execution_failure() {
         Arc::new(registry),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
 
@@ -1295,8 +1527,22 @@ async fn react_agent_continues_after_tool_execution_failure() {
     assert_eq!(result.observations.len(), 1);
     assert_eq!(result.observations[0].tool_name, "flaky");
     assert_eq!(result.observations[0].output, "boom");
-    assert!(sink.wait_for_len(12, Duration::from_secs(2)));
-    let events = sink.events();
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-TOOL-FAILURE");
+    let result = protocol
+        .iter()
+        .find(|event| event.sse_event == "TOOL_CALL_RESULT")
+        .unwrap();
+    let payload: serde_json::Value =
+        serde_json::from_str(result.data["content"].as_str().unwrap()).unwrap();
+    assert_eq!(payload["isError"], true);
+    assert!(payload["content"].to_string().contains("boom"));
+    assert_eq!(native_text(&protocol), "after-failure");
+    assert!(protocol.iter().any(
+        |event| event.sse_event == "RUN_FINISHED" && event.data["outcome"]["type"] == "success"
+    ));
+    assert!(!protocol.iter().any(|event| event.sse_event == "RUN_ERROR"));
+    let events = wait_for_business_event(&sink, "agent.observation.created").await;
     assert!(
         events
             .iter()
@@ -1306,16 +1552,6 @@ async fn react_agent_continues_after_tool_execution_failure() {
         events
             .iter()
             .any(|event| event.event_name == "agent.observation.created")
-    );
-    assert!(
-        events
-            .iter()
-            .any(|event| event.event_name == "agent.run.completed")
-    );
-    assert!(
-        !events
-            .iter()
-            .any(|event| event.event_name == "agent.run.failed")
     );
 }
 
@@ -1331,6 +1567,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
     )
     .register_sink(sink.clone())
     .build();
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![ToolCall {
@@ -1344,6 +1581,7 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
         Arc::new(ToolRegistry::default()),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
 
@@ -1360,15 +1598,36 @@ async fn react_agent_fails_when_tool_recovery_ends_without_an_assistant_response
         ),
         "{error:?}"
     );
-    assert!(sink.wait_for_len(11, Duration::from_secs(2)));
-    let event_names = sink
-        .events()
-        .into_iter()
-        .map(|event| event.event_name)
-        .collect::<Vec<_>>();
-    assert!(event_names.contains(&"agent.tool.failed".to_string()));
-    assert!(event_names.contains(&"agent.run.failed".to_string()));
-    assert!(!event_names.contains(&"agent.run.completed".to_string()));
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-EMPTY-FINAL-OUTPUT");
+    assert!(
+        protocol
+            .iter()
+            .any(|event| event.sse_event == "TOOL_CALL_RESULT")
+    );
+    assert_eq!(
+        protocol
+            .iter()
+            .filter(|event| event.sse_event == "RUN_ERROR")
+            .count(),
+        1
+    );
+    assert!(
+        !protocol
+            .iter()
+            .any(|event| event.sse_event == "RUN_FINISHED")
+    );
+    let events = wait_for_business_event(&sink, "agent.tool.failed").await;
+    assert!(
+        events
+            .iter()
+            .any(|event| event.event_name == "agent.tool.failed")
+    );
+    assert!(
+        !events
+            .iter()
+            .any(|event| event.event_name == "agent.run.completed")
+    );
 }
 
 #[tokio::test]
@@ -2076,12 +2335,28 @@ async fn react_agent_executes_remaining_parallel_budget_before_failing() {
     let mut context = base_context("RUN-PARALLEL-BUDGET");
     context.limits.max_tool_calls = 3;
     context.limits.max_parallel_tool_calls = 2;
-    let error = agent
+    let result = agent
         .run(context)
         .await
-        .expect_err("run should fail after exhausting total tool-call budget");
-
-    assert_eq!(error.to_string(), "agent run exceeded max tool calls");
+        .expect("native tool-call limit retains the complete outcome");
+    let native = result.native.as_ref().unwrap();
+    assert_eq!(
+        native.status,
+        tron_backend::domain::agent::AgentNativeRunStatus::ToolCallLimit
+    );
+    assert!(!native.run_id.is_empty());
+    assert_eq!(result.step_count, 1);
+    assert_eq!(result.observations.len(), 4);
+    assert!(
+        result.observations[3]
+            .output
+            .contains("tool-call budget exhausted")
+    );
+    assert!(result.final_output.is_empty());
+    let snapshot = result.sdk_execution.as_ref().unwrap();
+    assert_eq!(snapshot.model_calls, 1);
+    assert_eq!(snapshot.steps, 1);
+    assert_eq!(snapshot.tool_calls, 3);
     assert_eq!(executed.load(Ordering::SeqCst), 3);
 }
 
@@ -2113,6 +2388,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
     )
     .register_sink(sink.clone())
     .build();
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("echo", json!({"command": long_command})),
@@ -2121,6 +2397,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         Arc::new(registry),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
 
@@ -2129,8 +2406,7 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         .await
         .expect("tool run should pass");
 
-    assert!(sink.wait_for_len(11, Duration::from_secs(2)));
-    let events = sink.events();
+    let events = wait_for_business_event(&sink, "agent.observation.created").await;
     let tool_started = events
         .iter()
         .find(|event| event.event_name == "agent.tool.started")
@@ -2173,6 +2449,44 @@ async fn react_agent_publishes_tool_agui_correlation_payloads() {
         payload("tool_call_id", observation).as_deref(),
         Some(invocation_id.as_str())
     );
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-TOOL-META");
+    let start = protocol
+        .iter()
+        .find(|event| event.sse_event == "TOOL_CALL_START")
+        .unwrap();
+    let args = protocol
+        .iter()
+        .find(|event| event.sse_event == "TOOL_CALL_ARGS")
+        .unwrap();
+    let result = protocol
+        .iter()
+        .find(|event| event.sse_event == "TOOL_CALL_RESULT")
+        .unwrap();
+    assert_eq!(start.data["toolCallId"], invocation_id);
+    assert_eq!(start.data["toolCallName"], "echo");
+    assert_eq!(args.data["toolCallId"], invocation_id);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(args.data["delta"].as_str().unwrap()).unwrap(),
+        serde_json::from_str::<serde_json::Value>(&expected_args).unwrap()
+    );
+    assert_eq!(result.data["toolCallId"], invocation_id);
+    let output: serde_json::Value =
+        serde_json::from_str(result.data["content"].as_str().unwrap()).unwrap();
+    assert_eq!(output["isError"], false);
+    assert_eq!(output["content"][0]["text"], expected_result);
+    let end_index = protocol
+        .iter()
+        .position(|event| event.sse_event == "TOOL_CALL_END")
+        .unwrap();
+    let result_index = protocol
+        .iter()
+        .position(|event| event.sse_event == "TOOL_CALL_RESULT")
+        .unwrap();
+    assert!(
+        end_index < result_index,
+        "native argument stream closes before execution result"
+    );
 }
 
 #[tokio::test]
@@ -2191,6 +2505,7 @@ async fn react_agent_publishes_tool_progress_activity_events() {
     )
     .register_sink(sink.clone())
     .build();
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("progress", json!({})),
@@ -2199,6 +2514,7 @@ async fn react_agent_publishes_tool_progress_activity_events() {
         Arc::new(registry),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
 
@@ -2218,8 +2534,7 @@ async fn react_agent_publishes_tool_progress_activity_events() {
         .expect("progress tool run should pass");
 
     assert_eq!(result.final_output, "after-progress");
-    assert!(sink.wait_for_len(13, Duration::from_secs(2)));
-    let events = sink.events();
+    let events = wait_for_business_event(&sink, "agent.observation.created").await;
     let activity_payloads = events
         .iter()
         .filter(|event| event.event_name == "agent.tool.activity")
@@ -2237,6 +2552,34 @@ async fn react_agent_publishes_tool_progress_activity_events() {
         activity_payloads,
         vec!["first progress line", "second progress line"]
     );
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-TOOL-PROGRESS");
+    let activities: Vec<_> = protocol
+        .iter()
+        .filter(|event| {
+            event.sse_event == "ACTIVITY_SNAPSHOT"
+                && event.data["activityType"] == "tron.tool.progress"
+        })
+        .collect();
+    assert_eq!(activities.len(), 2);
+    let starts: Vec<_> = protocol
+        .iter()
+        .filter(|event| event.sse_event == "TOOL_CALL_START")
+        .collect();
+    assert_eq!(starts.len(), 1);
+    for start in starts {
+        let lines: Vec<_> = activities
+            .iter()
+            .filter(|event| event.data["content"]["toolCallId"] == start.data["toolCallId"])
+            .map(|event| event.data["content"]["line"].as_str().unwrap())
+            .collect();
+        assert_eq!(lines, vec!["first progress line", "second progress line"]);
+        assert!(
+            activities
+                .iter()
+                .all(|event| event.data["content"]["toolName"] == "progress")
+        );
+    }
 }
 
 #[tokio::test]
@@ -2255,6 +2598,7 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
     )
     .register_sink(sink.clone())
     .build();
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::from_tool_calls(vec![
@@ -2276,6 +2620,7 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
         Arc::new(registry),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
 
@@ -2343,6 +2688,34 @@ async fn react_agent_publishes_parallel_tool_progress_activity_events() {
         assert!(lines.contains(&"first progress line".to_string()));
         assert!(lines.contains(&"second progress line".to_string()));
     }
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-PARALLEL-TOOL-PROGRESS");
+    let activities: Vec<_> = protocol
+        .iter()
+        .filter(|event| {
+            event.sse_event == "ACTIVITY_SNAPSHOT"
+                && event.data["activityType"] == "tron.tool.progress"
+        })
+        .collect();
+    assert_eq!(activities.len(), 4);
+    let starts: Vec<_> = protocol
+        .iter()
+        .filter(|event| event.sse_event == "TOOL_CALL_START")
+        .collect();
+    assert_eq!(starts.len(), 2);
+    for start in starts {
+        let lines: Vec<_> = activities
+            .iter()
+            .filter(|event| event.data["content"]["toolCallId"] == start.data["toolCallId"])
+            .map(|event| event.data["content"]["line"].as_str().unwrap())
+            .collect();
+        assert_eq!(lines, vec!["first progress line", "second progress line"]);
+        assert!(
+            activities
+                .iter()
+                .all(|event| event.data["content"]["toolName"] == "progress")
+        );
+    }
 }
 
 #[tokio::test]
@@ -2370,6 +2743,7 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
     )
     .register_sink(sink.clone())
     .build();
+    let (native_host, presentation) = native_presentation_fixture();
     let agent = ReactAgentBuilder::new(
         Arc::new(ScriptedModelClient::new(vec![
             ModelResponse::tool_call("echo", json!({"command": "large"})),
@@ -2378,12 +2752,14 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
         Arc::new(registry),
         event_bus,
     )
+    .with_framework_host(Some(native_host))
     .build()
     .expect("agent builder should succeed");
 
     // Exercise event truncation without also overflowing the model input budget.
     let mut context = base_context("RUN-TOOL-OVERSIZE");
-    context.model.context_window_tokens = Some(32_000);
+    // Native protected history costs 148358 tokens, beyond the old 127845-token allocation.
+    context.model.context_window_tokens = Some(256_000);
     let result = agent
         .run(context)
         .await
@@ -2391,8 +2767,7 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
 
     assert_eq!(result.final_output, "after-tool");
     assert_eq!(result.observations[0].output, oversized_output);
-    assert!(sink.wait_for_len(11, Duration::from_secs(2)));
-    let events = sink.events();
+    let events = wait_for_business_event(&sink, "agent.observation.created").await;
     let tool_completed = events
         .iter()
         .find(|event| event.event_name == "agent.tool.completed")
@@ -2406,6 +2781,24 @@ async fn react_agent_truncates_oversize_tool_event_payloads_without_failing_run(
 
     assert!(truncated_result.len() <= 4096);
     assert!(truncated_result.contains("[truncated: original_bytes=73854]"));
+    let protocol = presentation.protocol_events("CONV-1").unwrap();
+    assert_native_source_identity(&protocol, "RUN-TOOL-OVERSIZE");
+    let start = protocol
+        .iter()
+        .find(|event| event.sse_event == "TOOL_CALL_START")
+        .unwrap();
+    let native_result = protocol
+        .iter()
+        .find(|event| event.sse_event == "TOOL_CALL_RESULT")
+        .unwrap();
+    assert_eq!(native_result.data["toolCallId"], start.data["toolCallId"]);
+    let output: serde_json::Value =
+        serde_json::from_str(native_result.data["content"].as_str().unwrap()).unwrap();
+    assert_eq!(output["isError"], false);
+    assert!(protocol.iter().any(
+        |event| event.sse_event == "RUN_FINISHED" && event.data["outcome"]["type"] == "success"
+    ));
+    assert!(!protocol.iter().any(|event| event.sse_event == "RUN_ERROR"));
 }
 
 #[tokio::test]
@@ -2730,12 +3123,23 @@ async fn max_step_exhaustion_fails_without_output_success() {
     .build()
     .expect("agent builder should succeed");
 
-    let error = agent
+    let result = agent
         .run(context)
         .await
-        .expect_err("tool loop should exhaust max steps");
-
-    assert_eq!(error.to_string(), "agent run exceeded max steps");
+        .expect("native step limit retains the complete outcome");
+    let native = result.native.as_ref().unwrap();
+    assert_eq!(
+        native.status,
+        tron_backend::domain::agent::AgentNativeRunStatus::StepLimit
+    );
+    assert!(!native.run_id.is_empty());
+    assert_eq!(result.step_count, 1);
+    assert_eq!(result.observations.len(), 1);
+    assert!(result.final_output.is_empty());
+    let snapshot = result.sdk_execution.as_ref().unwrap();
+    assert_eq!(snapshot.model_calls, 1);
+    assert_eq!(snapshot.steps, 1);
+    assert_eq!(snapshot.tool_calls, 1);
 }
 
 #[tokio::test]
@@ -3329,82 +3733,92 @@ async fn official_command_returns_after_ten_seconds_and_remains_readable_and_sto
     use tron_backend::application::agent::FrameworkHost;
     let directory = tempfile::tempdir().unwrap();
     let host = FrameworkHost::temporary(None).unwrap();
-    let mut context = base_context("COMMAND-1");
-    context.execution_scope.local_directory = Some(directory.path().display().to_string());
-    context.execution_scope.allowed_local_directories =
-        vec![directory.path().display().to_string()];
-    context.tools = ["bash_exec", "bash_task_read", "bash_task_stop"]
-        .into_iter()
-        .map(|name| EffectiveTool {
-            tool_name: name.into(),
-            domain_code: None,
-            description: name.into(),
-            input_schema: json!({"type":"object"}),
-            skill_name: None,
-            required_variable_keys: vec![],
-        })
-        .collect();
-    let client = Arc::new(ScriptedModelClient::new(vec![
-        ModelResponse::tool_call(
-            "bash_exec",
-            json!({"command":"printf 'started\n'; sleep 60"}),
-        ),
-        ModelResponse::final_output("backgrounded"),
-    ]));
-    let event_sink = Arc::new(RecordingEventSink::with_route_class(
-        "official-command",
-        BusRouteClass::Agui,
-    ));
-    let events = EventBusRuntimeBuilder::new(
-        EventBusConfig::default(),
-        Arc::new(FixedSnowflakeIdProvider::new(8500)),
-    )
-    .register_sink(event_sink.clone())
-    .build();
-    let agent = ReactAgentBuilder::new(client, Arc::new(ToolRegistry::default()), events)
-        .with_framework_host(Some(host.clone()))
-        .build()
-        .unwrap();
-    let start = std::time::Instant::now();
-    let result = tokio::time::timeout(Duration::from_secs(15), agent.run(context.clone()))
-        .await
-        .unwrap()
-        .unwrap();
-    assert!(start.elapsed() >= Duration::from_secs(9));
-    let output: serde_json::Value = serde_json::from_str(&result.observations[0].output).unwrap();
-    assert_eq!(output["status"], "running");
-    assert!(output["stdout"].as_str().unwrap().contains("started"));
-    let id = output["taskId"].as_str().unwrap().to_owned();
-    assert!(
-        event_sink
-            .events()
-            .iter()
-            .any(|event| event.event_name == "agent.tool.activity")
-    );
-    for (index, name) in ["bash_task_read", "bash_task_stop"].into_iter().enumerate() {
+    let check_host = host.clone();
+    let checked = tokio::spawn(async move {
+        let host = check_host;
+        let mut context = base_context("COMMAND-1");
+        // Real native command schema/history costs 9714 tokens, beyond the old 7496-token allocation.
+        context.model.context_window_tokens = Some(16_384);
+        context.execution_scope.local_directory = Some(directory.path().display().to_string());
+        context.execution_scope.allowed_local_directories =
+            vec![directory.path().display().to_string()];
+        context.tools = ["bash_exec", "bash_task_read", "bash_task_stop"]
+            .into_iter()
+            .map(|name| EffectiveTool {
+                tool_name: name.into(),
+                domain_code: None,
+                description: name.into(),
+                input_schema: json!({"type":"object"}),
+                skill_name: None,
+                required_variable_keys: vec![],
+            })
+            .collect();
         let client = Arc::new(ScriptedModelClient::new(vec![
-            ModelResponse::tool_call(name, json!({"taskId":id})),
-            ModelResponse::final_output("done"),
+            ModelResponse::tool_call(
+                "bash_exec",
+                json!({"command":"printf 'started\n'; sleep 60"}),
+            ),
+            ModelResponse::final_output("backgrounded"),
         ]));
-        let agent = ReactAgentBuilder::new(
-            client,
-            Arc::new(ToolRegistry::default()),
-            tron_backend::shared::event_bus::EventBusHandle::disabled(),
+        let event_sink = Arc::new(RecordingEventSink::with_route_class(
+            "official-command",
+            BusRouteClass::Agui,
+        ));
+        let events = EventBusRuntimeBuilder::new(
+            EventBusConfig::default(),
+            Arc::new(FixedSnowflakeIdProvider::new(8500)),
         )
-        .with_framework_host(Some(host.clone()))
-        .build()
-        .unwrap();
-        context.run_code = format!("COMMAND-{}", index + 2);
-        context.messages = vec![AgentMessage::user(name)];
-        let result = agent.run(context.clone()).await.unwrap();
+        .register_sink(event_sink.clone())
+        .build();
+        let agent = ReactAgentBuilder::new(client, Arc::new(ToolRegistry::default()), events)
+            .with_framework_host(Some(host.clone()))
+            .build()
+            .unwrap();
+        let start = std::time::Instant::now();
+        let result = tokio::time::timeout(Duration::from_secs(15), agent.run(context.clone()))
+            .await
+            .unwrap()
+            .unwrap();
+        assert!(start.elapsed() >= Duration::from_secs(9));
         let output: serde_json::Value =
             serde_json::from_str(&result.observations[0].output).unwrap();
-        assert_eq!(
-            output["status"],
-            if index == 0 { "running" } else { "cancelled" }
+        assert_eq!(output["status"], "running");
+        assert!(output["stdout"].as_str().unwrap().contains("started"));
+        let id = output["taskId"].as_str().unwrap().to_owned();
+        assert!(
+            event_sink
+                .events()
+                .iter()
+                .any(|event| event.event_name == "agent.tool.activity")
         );
-    }
-    host.close().await;
+        for (index, name) in ["bash_task_read", "bash_task_stop"].into_iter().enumerate() {
+            let client = Arc::new(ScriptedModelClient::new(vec![
+                ModelResponse::tool_call(name, json!({"taskId":id})),
+                ModelResponse::final_output("done"),
+            ]));
+            let agent = ReactAgentBuilder::new(
+                client,
+                Arc::new(ToolRegistry::default()),
+                tron_backend::shared::event_bus::EventBusHandle::disabled(),
+            )
+            .with_framework_host(Some(host.clone()))
+            .build()
+            .unwrap();
+            context.run_code = format!("COMMAND-{}", index + 2);
+            context.messages = vec![AgentMessage::user(name)];
+            let result = agent.run(context.clone()).await.unwrap();
+            let output: serde_json::Value =
+                serde_json::from_str(&result.observations[0].output).unwrap();
+            assert_eq!(
+                output["status"],
+                if index == 0 { "running" } else { "cancelled" }
+            );
+        }
+    })
+    .await;
+    let report = host.close().await;
+    assert!(report.is_success(), "{report:?}");
+    checked.unwrap();
 }
 
 #[tokio::test]
@@ -3480,7 +3894,13 @@ async fn framework_retries_only_the_model_after_a_tool_side_effect() {
         .unwrap();
     let client = Arc::new(ScriptedResultModelClient::new(vec![
         Ok(ModelResponse::tool_call("echo", json!({"value":"once"}))),
-        Err("HTTP 503 temporarily unavailable".into()),
+        Err(
+            eliteforge_agent_official_plugin_model_http::encode_model_error(
+                &eliteforge_agent_core::ModelError::Transient(
+                    "HTTP 503 temporarily unavailable".into(),
+                ),
+            ),
+        ),
         Ok(ModelResponse::final_output("retried-model-only")),
     ]));
     let agent = ReactAgentBuilder::new(
@@ -3543,6 +3963,34 @@ impl ModelClient for FloodThenFinalModel {
             }
         })
     }
+
+    // Test adapters explicitly declare one transport attempt per mock invocation.
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        self.generate(config, request)
+    }
+
+    fn close_observed<'a>(
+        &'a self,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn close<'a>(&'a self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
 }
 #[tokio::test]
 async fn framework_stream_overflow_stops_unfinished_provider_without_retry_and_releases_session() {
@@ -3586,3 +4034,1394 @@ async fn framework_stream_overflow_stops_unfinished_provider_without_retry_and_r
     assert_eq!(result.final_output, "recovered");
     host.close().await;
 }
+
+#[tokio::test]
+async fn framework_main_rich_input_and_remaining_output_budget_reach_actual_http_body() {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tron_backend::adapters::outbound::model::{HttpModelClient, HttpModelProviderClient};
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let url = format!("http://{}", listener.local_addr().unwrap());
+    let server = tokio::spawn(async move {
+        let mut bodies = vec![];
+        for index in 0..2 {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut bytes = Vec::new();
+            let mut buffer = [0; 4096];
+            let (end, length) = loop {
+                let n = socket.read(&mut buffer).await.unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buffer[..n]);
+                if let Some(end) = bytes.windows(4).position(|value| value == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&bytes[..end]);
+                    let length = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|value| value.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap();
+                    break (end + 4, length);
+                }
+            };
+            while bytes.len() < end + length {
+                let n = socket.read(&mut buffer).await.unwrap();
+                assert!(n > 0);
+                bytes.extend_from_slice(&buffer[..n]);
+            }
+            let body: serde_json::Value =
+                serde_json::from_slice(&bytes[end..end + length]).unwrap();
+            bodies.push(body);
+            let response = if index == 0 {
+                json!({"choices":[{"message":{"role":"assistant","content":null,"tool_calls":[{"id":"call-1","type":"function","function":{"name":"echo","arguments":"{}"}}]},"finish_reason":"tool_calls"}],"usage":{"prompt_tokens":21192,"completion_tokens":0}})
+            } else {
+                json!({"choices":[{"message":{"role":"assistant","content":"done"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":1}})
+            };
+            let response = response.to_string();
+            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}",response.len()).as_bytes()).await.unwrap();
+        }
+        bodies
+    });
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new(
+            "echo",
+            |request: ToolRequest| {
+                Ok(ToolObservation {
+                    tool_name: request.tool_name,
+                    output: "small result".into(),
+                })
+            },
+        )))
+        .unwrap();
+    let client = Arc::new(HttpModelClient::new(Arc::new(
+        HttpModelProviderClient::new(
+            eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+        ),
+    )));
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .build()
+    .unwrap();
+    let mut context = base_context("MAIN-WIRE-BUDGET");
+    context.model.base_url = url;
+    context.model.context_window_tokens = Some(8000);
+    context.model.max_tokens = Some(4096);
+    context.model.temperature = Some(0.25);
+    context.model.top_p = Some(0.8);
+    context.limits.max_steps = 2;
+    context.messages=serde_json::from_value(json!([{"role":"user","parts":[{"type":"text","text":"inspect"},{"type":"image","mime_type":"image/png","data":"aW1hZ2U="},{"type":"context","kind":"attachment","text":"reference data"}]}])).unwrap();
+    assert_eq!(agent.run(context).await.unwrap().final_output, "done");
+    client.close().await;
+    let bodies = server.await.unwrap();
+    assert!(
+        bodies[0]
+            .to_string()
+            .contains("data:image/png;base64,aW1hZ2U=")
+    );
+    assert!(bodies[0].to_string().contains("reference data"));
+    assert_eq!(bodies[0]["temperature"], json!(0.25));
+    assert_eq!(bodies[0]["top_p"], json!(0.8));
+    assert_eq!(bodies[0]["max_tokens"], 4096);
+    let remaining = bodies[1]["max_tokens"].as_u64().unwrap();
+    assert!(
+        remaining > 0 && remaining < 4096,
+        "remaining output budget must reach actual provider body: {remaining}"
+    );
+}
+
+// Real provider requests: fixtures are independent loopback services and temp SQLite.
+struct ProviderTcpServer {
+    url: String,
+    requests: Arc<Mutex<Vec<serde_json::Value>>>,
+    active: Arc<AtomicUsize>,
+    task: tokio::task::JoinHandle<()>,
+}
+impl Drop for ProviderTcpServer {
+    fn drop(&mut self) {
+        self.task.abort();
+    }
+}
+impl ProviderTcpServer {
+    async fn new(responses: Vec<serde_json::Value>, stall: bool) -> Self {
+        Self::with_gate(responses, stall, None).await
+    }
+    async fn with_gate(
+        responses: Vec<serde_json::Value>,
+        stall: bool,
+        gate: Option<Arc<Notify>>,
+    ) -> Self {
+        use tokio::io::{AsyncReadExt, AsyncWriteExt};
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let requests = Arc::new(Mutex::new(Vec::new()));
+        let recorded = requests.clone();
+        let active = Arc::new(AtomicUsize::new(0));
+        let connections = active.clone();
+        let task = tokio::spawn(async move {
+            let mut index = 0;
+            loop {
+                let (mut socket, _) = listener.accept().await.unwrap();
+                let requests = recorded.clone();
+                let active = connections.clone();
+                let value = &responses[index.min(responses.len() - 1)];
+                let status = value
+                    .get("_http_status")
+                    .and_then(|v| v.as_u64())
+                    .unwrap_or(200);
+                let response = value.get("_http_body").unwrap_or(value).to_string();
+                index += 1;
+                let gate = gate.clone();
+                active.fetch_add(1, Ordering::SeqCst);
+                tokio::spawn(async move {
+                    struct Connection(Arc<AtomicUsize>);
+                    impl Drop for Connection {
+                        fn drop(&mut self) {
+                            self.0.fetch_sub(1, Ordering::SeqCst);
+                        }
+                    }
+                    let _connection = Connection(active);
+                    let mut bytes = vec![];
+                    let mut buffer = [0; 4096];
+                    let (end, length) = loop {
+                        let n = socket.read(&mut buffer).await.unwrap();
+                        if n == 0 {
+                            return;
+                        }
+                        bytes.extend_from_slice(&buffer[..n]);
+                        if let Some(end) = bytes.windows(4).position(|value| value == b"\r\n\r\n") {
+                            let length = String::from_utf8_lossy(&bytes[..end])
+                                .lines()
+                                .find_map(|line| {
+                                    line.to_ascii_lowercase()
+                                        .strip_prefix("content-length:")
+                                        .map(|value| value.trim().parse::<usize>().unwrap())
+                                })
+                                .unwrap();
+                            break (end + 4, length);
+                        }
+                    };
+                    while bytes.len() < end + length {
+                        let n = socket.read(&mut buffer).await.unwrap();
+                        if n == 0 {
+                            return;
+                        }
+                        bytes.extend_from_slice(&buffer[..n]);
+                    }
+                    requests
+                        .lock()
+                        .unwrap()
+                        .push(serde_json::from_slice(&bytes[end..end + length]).unwrap());
+                    if stall {
+                        let _ = socket.read(&mut buffer).await;
+                        return;
+                    }
+                    if let Some(gate) = gate {
+                        tokio::select! { _ = gate.notified() => {}, _ = socket.read(&mut buffer) => {return;} }
+                    }
+                    let _ = socket.write_all(format!("HTTP/1.1 {status} Fixture\r\nContent-Type: application/json\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{response}", response.len()).as_bytes()).await;
+                });
+            }
+        });
+        Self {
+            url,
+            requests,
+            active,
+            task,
+        }
+    }
+    fn bodies(&self) -> Vec<serde_json::Value> {
+        self.requests.lock().unwrap().clone()
+    }
+    async fn drained(&self) {
+        tokio::time::timeout(Duration::from_secs(3), async {
+            while self.active.load(Ordering::SeqCst) != 0 {
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .unwrap();
+    }
+}
+fn provider_answer(text: &str) -> serde_json::Value {
+    json!({"choices":[{"message":{"role":"assistant","content":text},"finish_reason":"stop"}],"usage":{"prompt_tokens":24,"completion_tokens":12,"prompt_tokens_details":{"cached_tokens":16},"completion_tokens_details":{"reasoning_tokens":2}}})
+}
+fn real_provider_client() -> Arc<tron_backend::adapters::outbound::model::HttpModelClient> {
+    Arc::new(
+        tron_backend::adapters::outbound::model::HttpModelClient::new(Arc::new(
+            tron_backend::adapters::outbound::model::HttpModelProviderClient::new(
+                eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+            ),
+        )),
+    )
+}
+fn configured_provider_fixture(
+    label: &str,
+    config: ShortTermMemoryConfig,
+    id: i64,
+) -> (
+    String,
+    String,
+    ShortTermMemoryService,
+    AgentRunContext,
+    String,
+) {
+    let (database, session, old, mut context, prompt) = auto_compaction_fixture(label, id);
+    drop(old);
+    let service = ShortTermMemoryService::with_id_provider(
+        SqliteShortTermMemoryRepository::connect(&database).unwrap(),
+        config,
+        Arc::new(FixedSnowflakeIdProvider::new(id + 500)),
+    );
+    context.model.context_window_tokens = Some(40_000);
+    context.model.max_tokens = Some(512);
+    context.stream_key = Some(session.clone());
+    (database, session, service, context, prompt)
+}
+#[tokio::test]
+async fn provider_layout_order_changes_actual_http_and_protects_system_from_data() {
+    for reversed in [false, true] {
+        let mut config = ShortTermMemoryConfig::default();
+        config.compaction.trigger_ratio_bps = 10_000;
+        if reversed {
+            config.context.providers.order.swap(1, 4);
+        }
+        let (database, _, memory, mut context, _) = configured_provider_fixture(
+            if reversed {
+                "provider-order-b"
+            } else {
+                "provider-order-a"
+            },
+            config,
+            820_000_000_000_000_000 + i64::from(reversed) * 1000,
+        );
+        context
+            .short_term_memory
+            .as_mut()
+            .unwrap()
+            .prompt_prefix
+            .push(AgentMessage::context_block(
+                "application_execution_context",
+                "HOST APPLICATION DATA",
+            ));
+        add_provider_working(&memory, &mut context, "HOST WORKING DATA");
+        let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
+        context.model.base_url = server.url.clone();
+        let client = real_provider_client();
+        let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+        let agent = ReactAgentBuilder::new(
+            client.clone(),
+            Arc::new(ToolRegistry::default()),
+            tron_backend::shared::event_bus::EventBusHandle::disabled(),
+        )
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(Some(memory.clone()))
+        .build()
+        .unwrap();
+        assert_eq!(agent.run(context).await.unwrap().final_output, "done");
+        let bodies = server.bodies();
+        assert_eq!(bodies.len(), 1, "no trigger means zero auxiliary requests");
+        let messages = bodies[0]["messages"].as_array().unwrap();
+        let system = messages
+            .iter()
+            .position(|m| m["role"] == "system" && m.to_string().contains("system seed"))
+            .unwrap();
+        let application = messages
+            .iter()
+            .position(|m| m.to_string().contains("HOST APPLICATION DATA"))
+            .unwrap();
+        assert_eq!(messages[application]["role"], "user");
+        let working = messages
+            .iter()
+            .position(|message| message.to_string().contains("HOST WORKING DATA"))
+            .unwrap();
+        assert!(
+            system < application && system < working,
+            "trusted prefix remains stable"
+        );
+        assert_eq!(
+            application < working,
+            !reversed,
+            "nonempty scoped provider sources must follow configuration order"
+        );
+        host.close().await;
+        client.close().await;
+        server.drained().await;
+        drop(agent);
+        drop(memory);
+        let _ = std::fs::remove_file(database);
+    }
+}
+#[tokio::test]
+async fn provider_history_single_trigger_below_global_commits_true_checkpoint_usage() {
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.trigger_ratio_bps = 9_000;
+    config.context.providers.history.trigger_ratio_bps = 2_000;
+    config.context.providers.history.target_ratio_bps = 1_000;
+    let (database, session, memory, mut context, prompt) =
+        configured_provider_fixture("provider-history-only", config, 821_000_000_000_000_000);
+    let server = ProviderTcpServer::new(
+        vec![
+            provider_answer(r#"{"summary":"HISTORY SINGLE SUMMARY"}"#),
+            provider_answer("done"),
+        ],
+        false,
+    )
+    .await;
+    context.model.base_url = server.url.clone();
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(memory.clone()))
+    .build()
+    .unwrap();
+    let source = memory.prepare_model_context(&context).unwrap();
+    assert!(
+        !source.compaction_trigger_reached,
+        "single block pressure must be below the global trigger"
+    );
+    let result = tokio::time::timeout(Duration::from_secs(5), agent.run(context))
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(result.final_output, "done");
+    let bodies = server.bodies();
+    assert_eq!(bodies.len(), 2);
+    assert!(bodies[1].to_string().contains("HISTORY SINGLE SUMMARY"));
+    assert!(bodies[1].to_string().contains(&prompt));
+    let checkpoint = memory.latest_compaction(&session).unwrap().unwrap();
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let metadata: String = connection
+        .query_row(
+            "SELECT metadata_json FROM agent_transcript_messages WHERE message_code=?1",
+            [checkpoint.checkpoint_message_code],
+            |row| row.get(0),
+        )
+        .unwrap();
+    let audit: serde_json::Value = serde_json::from_str(&metadata).unwrap();
+    assert_eq!(audit["tokenUsage"]["cachedInputTokens"], 16);
+    assert_eq!(audit["tokenUsage"]["reasoningTokens"], 2);
+    assert_eq!(audit["coverage"], "head_only_tail_replayed");
+    assert_eq!(
+        audit["retainedHistoryRatioBps"], 1000,
+        "checkpoint must report the actual provider target"
+    );
+    let final_event:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
+    let final_event: serde_json::Value = serde_json::from_str(&final_event).unwrap();
+    assert_eq!(
+        final_event["budgetBreakdown"]["retainedHistoryRatioBps"],
+        1000
+    );
+
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(connection);
+    drop(agent);
+    drop(memory);
+    let _ = std::fs::remove_file(database);
+}
+
+fn semantic_working(config: &mut ShortTermMemoryConfig) {
+    use tron_backend::application::short_term_memory::ContextReductionStrategy;
+    config.context.providers.working.strategy = ContextReductionStrategy::Semantic;
+    config.context.providers.working.trigger_ratio_bps = 5_000;
+    config.context.providers.working.target_ratio_bps = 2_000;
+    config.context.providers.history.trigger_ratio_bps = 2_000;
+    config.context.providers.history.target_ratio_bps = 1_000;
+}
+fn add_provider_working(
+    memory: &ShortTermMemoryService,
+    context: &mut AgentRunContext,
+    content: &str,
+) {
+    context.short_term_memory.as_mut().unwrap().todo_enabled = true;
+    let characters = content.chars().collect::<Vec<_>>();
+    let items = characters
+        .chunks(400)
+        .enumerate()
+        .map(
+            |(position, chunk)| tron_backend::application::short_term_memory::TodoUpdateItem {
+                todo_code: None,
+                position: position as i64,
+                content: chunk.iter().collect(),
+                status: if position == 0 {
+                    "in_progress"
+                } else {
+                    "pending"
+                }
+                .into(),
+                priority: "high".into(),
+            },
+        )
+        .collect();
+    memory.replace_todos(context, items).unwrap();
+}
+#[tokio::test]
+async fn provider_global_coordinates_strategies_reuses_data_after_history_refresh_and_replays_usage()
+ {
+    use tron_backend::application::agent::AgentAguiReplayStore;
+    let mut config = ShortTermMemoryConfig::default();
+    semantic_working(&mut config);
+    config.compaction.trigger_ratio_bps = 2_000;
+    let (database, session, memory, mut context, _) =
+        configured_provider_fixture("provider-global", config, 822_000_000_000_000_000);
+    add_provider_working(
+        &memory,
+        &mut context,
+        &format!("RETAIN AUTHORIZED TODO {}", "W".repeat(1_500)),
+    );
+    let server = ProviderTcpServer::new(
+        vec![
+            provider_answer(r#"{"summary":"WORKING SUMMARY"}"#),
+            provider_answer(r#"{"summary":"HISTORY SUMMARY"}"#),
+            provider_answer("done"),
+        ],
+        false,
+    )
+    .await;
+    context.model.base_url = server.url.clone();
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let sink = Arc::new(RecordingEventSink::with_route_class(
+        "provider-usage",
+        BusRouteClass::Agui,
+    ));
+    let replay = Arc::new(
+        tron_backend::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(
+            &database,
+        )
+        .unwrap(),
+    );
+    let bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(829_000_000_000_000_000)),
+    )
+    .register_sink(sink.clone())
+    .register_sink(replay.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(client.clone(), Arc::new(ToolRegistry::default()), bus)
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(Some(memory.clone()))
+        .build()
+        .unwrap();
+    assert_eq!(
+        tokio::time::timeout(Duration::from_secs(5), agent.run(context))
+            .await
+            .unwrap()
+            .unwrap()
+            .final_output,
+        "done"
+    );
+    let bodies = server.bodies();
+    assert_eq!(
+        bodies.len(),
+        3,
+        "both paid reducers share the old 3-call ceiling and unchanged working summary must be cached on refresh"
+    );
+    assert!(bodies[0].to_string().contains("RETAIN AUTHORIZED TODO"));
+    assert!(bodies[2].to_string().contains("WORKING SUMMARY"));
+    assert!(bodies[2].to_string().contains("HISTORY SUMMARY"));
+    tokio::time::timeout(Duration::from_secs(3), async {
+        loop {
+            if replay
+                .replay_agui_events(&session)
+                .unwrap()
+                .iter()
+                .any(|e| e.event_name == "agent.context.block_compressed")
+            {
+                break;
+            }
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let events = replay.replay_agui_events(&session).unwrap();
+    let audits = events
+        .iter()
+        .filter(|event| event.event_name == "agent.context.block_compressed")
+        .collect::<Vec<_>>();
+    assert_eq!(audits.len(), 1, "cached bytes must not repeat prior audit");
+    let protocol = replay.replay_protocol_events(&session).unwrap();
+    let custom = protocol
+        .iter()
+        .find(|event| event.data["name"] == "tron.short_term_memory.context.block_compressed")
+        .unwrap();
+    assert_eq!(
+        custom.data["value"]["blockId"],
+        "current_session_working_state"
+    );
+    assert_eq!(
+        custom.data["value"]["usageAudit"]["providerUsage"]["cachedInputTokens"],
+        16
+    );
+    let audit: serde_json::Value =
+        serde_json::from_str(audits[0].metadata.get("usage_audit_json").unwrap()).unwrap();
+    assert_eq!(audit["providerUsage"]["cachedInputTokens"], 16);
+    assert_eq!(audit["providerUsage"]["reasoningTokens"], 2);
+    assert_eq!(audit["usageConfidence"], "actual");
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let metadata:String=connection.query_row("SELECT metadata_json FROM agent_transcript_events WHERE event_type='agent.context.block_compressed'",[],|row|row.get(0)).unwrap();
+    assert!(metadata.contains("usage_audit_json"));
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(agent);
+    drop(memory);
+    drop(replay);
+    drop(connection);
+    let _ = std::fs::remove_file(database);
+}
+#[tokio::test]
+async fn provider_stop_during_semantic_auxiliary_closes_transport_without_audit_or_checkpoint() {
+    let mut config = ShortTermMemoryConfig::default();
+    semantic_working(&mut config);
+    config.compaction.trigger_ratio_bps = 10_000;
+    let (database, session, memory, mut context, _) =
+        configured_provider_fixture("provider-stop", config, 823_000_000_000_000_000);
+    add_provider_working(
+        &memory,
+        &mut context,
+        &format!("UNFINISHED TODO {}", "W".repeat(1_500)),
+    );
+    let server = ProviderTcpServer::new(vec![provider_answer("unreachable")], true).await;
+    context.model.base_url = server.url.clone();
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let registry = ActiveRunRegistry::new();
+    let runtime_registry = tron_backend::application::agent::AgentRuntimeRegistry::new(
+        client.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+        reqwest::Client::new(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(memory.clone()))
+    .with_active_runs(registry.clone());
+    let executor = tron_backend::application::agent::AgentRunExecutor::new(runtime_registry);
+    let run_code = context.run_code.clone();
+    let task = tokio::spawn(async move {
+        executor
+            .execute_with_selection(
+                tron_backend::application::agent::RuntimeAdapterSelection::React,
+                context,
+                None,
+                None,
+                None,
+            )
+            .await
+    });
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while server.bodies().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    registry.request_stop(&session, &run_code).unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err()
+    );
+    server.drained().await;
+    assert_eq!(server.bodies().len(), 1);
+    assert!(memory.latest_compaction(&session).unwrap().is_none());
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let audits:i64=connection.query_row("SELECT COUNT(*) FROM agent_transcript_events WHERE event_type='agent.context.block_compressed'",[],|row|row.get(0)).unwrap();
+    assert_eq!(audits, 0);
+    host.close().await;
+    client.close().await;
+    drop(memory);
+    drop(connection);
+    let _ = std::fs::remove_file(database);
+}
+
+fn provider_responses_answer(id: &str) -> serde_json::Value {
+    json!({"id":id,"status":"completed","output":[{"type":"message","role":"assistant","content":[{"type":"output_text","text":"done"}]}],"usage":{"input_tokens":24,"output_tokens":12,"input_tokens_details":{"cached_tokens":16},"output_tokens_details":{"reasoning_tokens":2}}})
+}
+#[tokio::test]
+async fn provider_final_layout_resets_responses_continuation_but_plain_append_reuses_it() {
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.auto_enabled = false;
+    let (database, session, memory, mut context, _) = configured_provider_fixture(
+        "provider-continuation",
+        config.clone(),
+        824_000_000_000_000_000,
+    );
+    let server = ProviderTcpServer::new(
+        vec![
+            provider_responses_answer("response-a"),
+            provider_responses_answer("response-b"),
+            provider_responses_answer("response-c"),
+        ],
+        false,
+    )
+    .await;
+    context.model.base_url = server.url.clone();
+    context.model.protocol = AgentModelProtocol::Responses;
+    context.model.responses_stateful_enabled = true;
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    for index in 0..3 {
+        if index == 1 {
+            config.context.providers.order.swap(0, 1);
+        }
+        let memory = if index == 0 {
+            memory.clone()
+        } else {
+            ShortTermMemoryService::with_id_provider(
+                SqliteShortTermMemoryRepository::connect(&database).unwrap(),
+                config.clone(),
+                Arc::new(FixedSnowflakeIdProvider::new(
+                    824_100_000_000_000_000 + index * 1000,
+                )),
+            )
+        };
+        let mut current = context.clone();
+        current.run_code = format!("PROVIDER-CONTINUATION-{index}");
+        if index > 0 {
+            let prompt = format!("append {index}");
+            current.messages = vec![AgentMessage::user(&prompt)];
+            current.short_term_memory.as_mut().unwrap().input_code =
+                memory.record_user_input(&current, &prompt).unwrap();
+        }
+        let agent = ReactAgentBuilder::new(
+            client.clone(),
+            Arc::new(ToolRegistry::default()),
+            tron_backend::shared::event_bus::EventBusHandle::disabled(),
+        )
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(Some(memory))
+        .build()
+        .unwrap();
+        assert_eq!(agent.run(current).await.unwrap().final_output, "done");
+    }
+    let bodies = server.bodies();
+    assert_eq!(bodies.len(), 3);
+    assert!(bodies[0].get("previous_response_id").is_none());
+    assert!(
+        bodies[1].get("previous_response_id").is_none(),
+        "changed final layout must replay full inputs"
+    );
+    assert_eq!(
+        bodies[2]["previous_response_id"], "response-b",
+        "an ordinary appended history turn should keep the same stable nonhistory context"
+    );
+    assert!(bodies[1].to_string().contains("system seed"));
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(memory);
+    let _ = std::fs::remove_file(database);
+    let _ = session;
+}
+#[tokio::test]
+async fn provider_semantic_actual_summary_input_capacity_rejects_before_http() {
+    let mut config = ShortTermMemoryConfig::default();
+    semantic_working(&mut config);
+    // Reserve a usable reduced data target to reach the separate summary model input-capacity check.
+    config
+        .context
+        .blocks
+        .current_session_working_state
+        .max_ratio_bps = None;
+    config.compaction.trigger_ratio_bps = 10_000;
+    let (database, _, memory, mut context, _) =
+        configured_provider_fixture("provider-aux-capacity", config, 825_000_000_000_000_000);
+    add_provider_working(
+        &memory,
+        &mut context,
+        &format!("TOO LARGE SUMMARY SOURCE {}", "W".repeat(3_800)),
+    );
+    let server = ProviderTcpServer::new(vec![provider_answer("unreachable")], false).await;
+    context.model.base_url = server.url.clone();
+    context.model.max_tokens = Some(0);
+    context.model.context_window_tokens = Some(8_000);
+    // Main can fit this full source. Existing summary policy reserves 4096,
+    // leaving only 3904 input tokens for its actual summary request.
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    connection.execute("DELETE FROM agent_transcript_parts WHERE message_code IN (SELECT message_code FROM agent_transcript_messages WHERE run_code LIKE 'RUN-AUTO-OLD-%')",[]).unwrap();
+    connection
+        .execute(
+            "DELETE FROM agent_transcript_messages WHERE run_code LIKE 'RUN-AUTO-OLD-%'",
+            [],
+        )
+        .unwrap();
+    let raw = memory.prepare_model_context(&context).unwrap();
+    assert!(
+        raw.estimated_tokens < 8_000,
+        "main source must fit: {}",
+        raw.estimated_tokens
+    );
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(memory.clone()))
+    .build()
+    .unwrap();
+    let error = agent.run(context).await.unwrap_err();
+    assert!(
+        error.to_string().contains("summary-model input limit"),
+        "must fail specifically at auxiliary capacity: {error}"
+    );
+    assert!(
+        server.bodies().is_empty(),
+        "output reserve must not be treated as additional auxiliary input capacity"
+    );
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(agent);
+    drop(memory);
+    let _ = std::fs::remove_file(database);
+}
+
+fn provider_overflow() -> serde_json::Value {
+    json!({"_http_status":400,"_http_body":{"error":{"code":"context_length_exceeded","message":"maximum context length exceeded"}}})
+}
+#[tokio::test]
+async fn provider_overflow_respects_keep_and_zero_auxiliary_allowance() {
+    use tron_backend::application::short_term_memory::ContextReductionStrategy;
+    for keep in [false, true] {
+        let mut config = ShortTermMemoryConfig::default();
+        config.compaction.trigger_ratio_bps = 10_000;
+        if keep {
+            config.context.providers.history.strategy = ContextReductionStrategy::Keep;
+        } else {
+            config.context.providers.max_auxiliary_calls_per_step = 0;
+        }
+        let (database, session, memory, mut context, _) = configured_provider_fixture(
+            if keep {
+                "provider-overflow-keep"
+            } else {
+                "provider-overflow-zero"
+            },
+            config,
+            826_000_000_000_000_000 + i64::from(keep) * 1000,
+        );
+        let server = ProviderTcpServer::new(vec![provider_overflow()], false).await;
+        context.model.base_url = server.url.clone();
+        context.model.max_retries = Some(1);
+        let client = real_provider_client();
+        let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+        let agent = ReactAgentBuilder::new(
+            client.clone(),
+            Arc::new(ToolRegistry::default()),
+            tron_backend::shared::event_bus::EventBusHandle::disabled(),
+        )
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(Some(memory.clone()))
+        .build()
+        .unwrap();
+        assert!(agent.run(context).await.is_err());
+        assert_eq!(
+            server.bodies().len(),
+            1,
+            "configured keep/zero auxiliary ceiling must not dispatch implicit history recovery"
+        );
+        assert!(memory.latest_compaction(&session).unwrap().is_none());
+        host.close().await;
+        client.close().await;
+        server.drained().await;
+        drop(agent);
+        drop(memory);
+        let _ = std::fs::remove_file(database);
+    }
+}
+#[tokio::test]
+async fn provider_overflow_cached_same_final_projection_stops_without_second_main_call() {
+    use tron_backend::application::short_term_memory::ContextReductionStrategy;
+    let mut config = ShortTermMemoryConfig::default();
+    semantic_working(&mut config);
+    config.context.providers.history.strategy = ContextReductionStrategy::Keep;
+    config.compaction.trigger_ratio_bps = 2_000;
+    let (database, _, memory, mut context, _) =
+        configured_provider_fixture("provider-overflow-no-gain", config, 827_000_000_000_000_000);
+    add_provider_working(
+        &memory,
+        &mut context,
+        &format!("KEEP SOURCE STABLE {}", "W".repeat(1500)),
+    );
+    let server = ProviderTcpServer::new(
+        vec![
+            provider_answer(r#"{"summary":"STABLE WORKING SUMMARY"}"#),
+            provider_overflow(),
+        ],
+        false,
+    )
+    .await;
+    context.model.base_url = server.url.clone();
+    context.model.max_retries = Some(1);
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(memory.clone()))
+    .build()
+    .unwrap();
+    assert!(agent.run(context).await.is_err());
+    assert_eq!(
+        server.bodies().len(),
+        2,
+        "cached source-relative reduction is not progress relative to the actual failed model input"
+    );
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(agent);
+    drop(memory);
+    let _ = std::fs::remove_file(database);
+}
+#[tokio::test]
+async fn provider_live_guard_rejects_todo_change_after_paid_aux_and_preserves_actual_audit() {
+    use tron_backend::application::agent::AgentAguiReplayStore;
+    let mut config = ShortTermMemoryConfig::default();
+    semantic_working(&mut config);
+    config.compaction.trigger_ratio_bps = 10_000;
+    let (database, session, memory, mut context, _) =
+        configured_provider_fixture("provider-live-update", config, 828_000_000_000_000_000);
+    add_provider_working(
+        &memory,
+        &mut context,
+        &format!("ORIGINAL TODO {}", "W".repeat(1500)),
+    );
+    let gate = Arc::new(Notify::new());
+    let server = ProviderTcpServer::with_gate(
+        vec![provider_answer(r#"{"summary":"STALE OLD SUMMARY"}"#)],
+        false,
+        Some(gate.clone()),
+    )
+    .await;
+    context.model.base_url = server.url.clone();
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let replay = Arc::new(
+        tron_backend::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(
+            &database,
+        )
+        .unwrap(),
+    );
+    let bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(828_500_000_000_000_000)),
+    )
+    .register_sink(replay.clone())
+    .build();
+    let agent = Arc::new(
+        ReactAgentBuilder::new(client.clone(), Arc::new(ToolRegistry::default()), bus)
+            .with_framework_host(Some(host.clone()))
+            .with_short_term_memory(Some(memory.clone()))
+            .build()
+            .unwrap(),
+    );
+    let task = tokio::spawn({
+        let agent = agent.clone();
+        let context = context.clone();
+        async move { agent.run(context).await }
+    });
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while server.bodies().is_empty() {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    add_provider_working(&memory, &mut context, "NEW AUTHORIZED TODO");
+    gate.notify_one();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), task)
+            .await
+            .unwrap()
+            .unwrap()
+            .is_err()
+    );
+    assert_eq!(
+        server.bodies().len(),
+        1,
+        "stale data must not reach primary HTTP"
+    );
+    assert!(memory.latest_compaction(&session).unwrap().is_none());
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while replay
+            .replay_agui_events(&session)
+            .unwrap()
+            .iter()
+            .all(|e| e.event_name != "agent.context.block_compressed")
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let events = replay.replay_agui_events(&session).unwrap();
+    let audit = events
+        .iter()
+        .find(|e| e.event_name == "agent.context.block_compressed")
+        .unwrap();
+    let usage: serde_json::Value =
+        serde_json::from_str(audit.metadata.get("usage_audit_json").unwrap()).unwrap();
+    assert_eq!(usage["providerUsage"]["inputTokens"], 24);
+    assert_eq!(
+        memory.list_todos(&session).unwrap()[0].content,
+        "NEW AUTHORIZED TODO"
+    );
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(agent);
+    drop(memory);
+    drop(replay);
+    let _ = std::fs::remove_file(database);
+}
+
+#[tokio::test]
+async fn provider_after_protocol_percentages_coordinate_recoverable_tools_pressure() {
+    use tron_backend::application::short_term_memory::{
+        CompactionContextPolicy, ModelCompactionOutput,
+    };
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.trigger_ratio_bps = 5_000;
+    config.context.blocks.seed_prompt_prefix.max_tokens = None;
+    config
+        .context
+        .blocks
+        .current_session_checkpoint
+        .max_ratio_bps = Some(3_000);
+    config.context.blocks.current_session_checkpoint.max_tokens = None;
+    config.context.blocks.session_family_context.max_ratio_bps = Some(0);
+    config
+        .context
+        .blocks
+        .current_session_working_state
+        .max_ratio_bps = Some(2_000);
+    config
+        .context
+        .blocks
+        .current_session_working_state
+        .max_tokens = None;
+    config.context.providers.checkpoint.target_ratio_bps = 5_000;
+    config.context.providers.working.strategy =
+        tron_backend::application::short_term_memory::ContextReductionStrategy::Bound;
+    config.context.providers.working.target_ratio_bps = 5_000;
+    let (database, session, memory, mut context, _) = configured_provider_fixture(
+        "provider-protocol-pressure",
+        config,
+        830_000_000_000_000_000,
+    );
+    let prepared = memory
+        .prepare_automatic_model_compaction_input(
+            &session,
+            "fixture-existing-checkpoint",
+            CompactionContextPolicy {
+                todo_enabled: false,
+            },
+            context.model.context_window_tokens,
+            context.model.max_tokens,
+            Some(&context.run_code),
+            None,
+            Some(6_000),
+        )
+        .unwrap();
+    memory
+        .commit_model_compaction(
+            prepared,
+            ModelCompactionOutput {
+                summary: format!("EXISTING CHECKPOINT {}", "C".repeat(12_000)),
+                token_usage: None,
+                provider_metadata: None,
+            },
+            &context.model,
+        )
+        .unwrap();
+    add_provider_working(
+        &memory,
+        &mut context,
+        &format!("AUTHORIZED WORKING {}", "W".repeat(8_000)),
+    );
+    context.short_term_memory.as_mut().unwrap().prompt_prefix = vec![AgentMessage::system(
+        format!("PROTECTED SYSTEM {}", "S".repeat(13_000)),
+    )];
+    context.tools = vec![EffectiveTool {
+        tool_name: "pressure_tool".into(),
+        domain_code: None,
+        description: "T".repeat(44_000),
+        input_schema: json!({"type":"object"}),
+        skill_name: None,
+        required_variable_keys: vec![],
+    }];
+    let registry = ToolRegistry::default();
+    registry
+        .register(Arc::new(InProcessTool::new("pressure_tool", |_| {
+            Ok(ToolObservation {
+                tool_name: "pressure_tool".into(),
+                output: "unused".into(),
+            })
+        })))
+        .unwrap();
+    let server = ProviderTcpServer::new(
+        vec![
+            provider_answer(r#"{"summary":"COORDINATED HISTORY"}"#),
+            provider_answer("done"),
+        ],
+        false,
+    )
+    .await;
+    context.model.base_url = server.url.clone();
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(registry),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(memory.clone()))
+    .build()
+    .unwrap();
+    assert_eq!(agent.run(context).await.unwrap().final_output, "done");
+    let bodies = server.bodies();
+    assert!(bodies.len() <= 3);
+    let final_body = bodies.last().unwrap();
+    assert!(final_body.to_string().contains("PROTECTED SYSTEM"));
+    assert!(final_body.to_string().contains(&"S".repeat(13_000)));
+    assert_eq!(final_body["tools"].as_array().unwrap().len(), 1);
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let report:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
+    let assembly = &report["contextReport"];
+    assert!(
+        assembly["protocol_tokens"].as_u64().unwrap()
+            > assembly["input_capacity"].as_u64().unwrap() / 10
+    );
+    assert!(
+        assembly["estimated_input_tokens"].as_u64().unwrap()
+            <= assembly["input_capacity"].as_u64().unwrap()
+    );
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(agent);
+    drop(memory);
+    drop(connection);
+    let _ = std::fs::remove_file(database);
+}
+
+#[tokio::test]
+async fn provider_auxiliary_transport_timeout_releases_connection_and_audits_unavailable_usage() {
+    use tron_backend::application::agent::AgentAguiReplayStore;
+    let mut config = ShortTermMemoryConfig::default();
+    semantic_working(&mut config);
+    config.compaction.trigger_ratio_bps = 10_000;
+    let (database, session, memory, mut context, _) =
+        configured_provider_fixture("provider-timeout", config, 831_000_000_000_000_000);
+    add_provider_working(
+        &memory,
+        &mut context,
+        &format!("TIMEOUT TODO {}", "W".repeat(1500)),
+    );
+    let server = ProviderTcpServer::new(vec![provider_answer("unreachable")], true).await;
+    context.model.base_url = server.url.clone();
+    let transport = eliteforge_agent_official_plugin_model_http::ModelHttpClient::from_builder(
+        reqwest::Client::builder().timeout(Duration::from_millis(150)),
+    )
+    .unwrap();
+    let client = Arc::new(
+        tron_backend::adapters::outbound::model::HttpModelClient::new(Arc::new(
+            tron_backend::adapters::outbound::model::HttpModelProviderClient::new(transport),
+        )),
+    );
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let replay = Arc::new(
+        tron_backend::adapters::outbound::persistence::SqliteAgentEventReplayStore::connect(
+            &database,
+        )
+        .unwrap(),
+    );
+    let bus = EventBusRuntimeBuilder::new(
+        EventBusConfig::default(),
+        Arc::new(FixedSnowflakeIdProvider::new(831_500_000_000_000_000)),
+    )
+    .register_sink(replay.clone())
+    .build();
+    let agent = ReactAgentBuilder::new(client.clone(), Arc::new(ToolRegistry::default()), bus)
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(Some(memory.clone()))
+        .build()
+        .unwrap();
+    assert!(
+        tokio::time::timeout(Duration::from_secs(3), agent.run(context))
+            .await
+            .unwrap()
+            .is_err()
+    );
+    server.drained().await;
+    assert_eq!(server.bodies().len(), 1);
+    assert!(memory.latest_compaction(&session).unwrap().is_none());
+    tokio::time::timeout(Duration::from_secs(3), async {
+        while replay
+            .replay_agui_events(&session)
+            .unwrap()
+            .iter()
+            .all(|e| e.event_name != "agent.context.block_compressed")
+        {
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .unwrap();
+    let events = replay.replay_agui_events(&session).unwrap();
+    let event = events
+        .iter()
+        .find(|e| e.event_name == "agent.context.block_compressed")
+        .unwrap();
+    assert_eq!(event.outcome, "FAILURE");
+    let audit: serde_json::Value =
+        serde_json::from_str(event.metadata.get("usage_audit_json").unwrap()).unwrap();
+    assert!(audit["providerUsage"].is_null());
+    assert_eq!(audit["usageConfidence"], "unavailable");
+    assert!(
+        audit["requestEstimate"]["estimatedInputTokens"]
+            .as_u64()
+            .unwrap()
+            > 0
+    );
+    host.close().await;
+    client.close().await;
+    drop(agent);
+    drop(memory);
+    drop(replay);
+    let _ = std::fs::remove_file(database);
+}
+
+#[tokio::test]
+async fn provider_default_working_bounds_complete_legal_todo_source_inside_sdk() {
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.trigger_ratio_bps = 10_000;
+    let (database, session, memory, mut context, _) =
+        configured_provider_fixture("provider-default-todos", config, 832_000_000_000_000_000);
+    context.short_term_memory.as_mut().unwrap().todo_enabled = true;
+    let items = (0..40)
+        .map(
+            |position| tron_backend::application::short_term_memory::TodoUpdateItem {
+                todo_code: None,
+                position,
+                content: format!("LEGAL TODO {position} {}", "W".repeat(400)),
+                status: "pending".into(),
+                priority: "high".into(),
+            },
+        )
+        .collect();
+    memory.replace_todos(&context, items).unwrap();
+    let raw = memory.prepare_model_context(&context).unwrap();
+    let source = serde_json::to_string(&raw.sources.as_ref().unwrap().working).unwrap();
+    assert!(source.contains("LEGAL TODO 39"));
+    assert!(source.len() > 4_000, "no legacy 4k pre-truncation");
+    let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
+    context.model.base_url = server.url.clone();
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(memory.clone()))
+    .build()
+    .unwrap();
+    assert_eq!(agent.run(context).await.unwrap().final_output, "done");
+    let bodies = server.bodies();
+    assert_eq!(bodies.len(), 1, "default bound uses no auxiliary HTTP");
+    assert!(bodies[0].to_string().contains("LEGAL TODO 0"));
+    assert!(!bodies[0].to_string().contains("LEGAL TODO 39"));
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let report:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
+    let block = report["contextReport"]["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|b| b["id"] == "current_session_working_state")
+        .unwrap();
+    assert!(block["final_tokens"].as_u64().unwrap() <= 2_000);
+    assert!(block["original_tokens"].as_u64().unwrap() > 4_000);
+    assert_eq!(memory.list_todos(&session).unwrap().len(), 40);
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(agent);
+    drop(memory);
+    drop(connection);
+    let _ = std::fs::remove_file(database);
+}
+
+#[tokio::test]
+async fn provider_working_bound_preserves_goal_before_todos() {
+    let mut config = ShortTermMemoryConfig::default();
+    config.compaction.trigger_ratio_bps = 10_000;
+    config
+        .context
+        .blocks
+        .current_session_working_state
+        .max_ratio_bps = None;
+    config
+        .context
+        .blocks
+        .current_session_working_state
+        .max_tokens = Some(800);
+    let (database, session, memory, mut context, _) =
+        configured_provider_fixture("provider-goal-priority", config, 833_000_000_000_000_000);
+    context.short_term_memory.as_mut().unwrap().todo_enabled = true;
+    memory
+        .set_goal(
+            tron_backend::application::short_term_memory::SetGoalCommand {
+                session_code: session.clone(),
+                objective: "Preserve the active session goal under pressure".into(),
+                max_runs: Some(5),
+            },
+        )
+        .unwrap();
+    memory
+        .replace_todos(
+            &context,
+            (0..10)
+                .map(
+                    |position| tron_backend::application::short_term_memory::TodoUpdateItem {
+                        todo_code: None,
+                        position,
+                        content: format!("LOWER PRIORITY TODO {position} {}", "T".repeat(400)),
+                        status: "pending".into(),
+                        priority: "high".into(),
+                    },
+                )
+                .collect(),
+        )
+        .unwrap();
+    let raw = memory.prepare_model_context(&context).unwrap();
+    assert!(
+        serde_json::to_string(&raw.sources.unwrap().working)
+            .unwrap()
+            .contains("LOWER PRIORITY TODO 9")
+    );
+    let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
+    context.model.base_url = server.url.clone();
+    let client = real_provider_client();
+    let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+    let agent = ReactAgentBuilder::new(
+        client.clone(),
+        Arc::new(ToolRegistry::default()),
+        tron_backend::shared::event_bus::EventBusHandle::disabled(),
+    )
+    .with_framework_host(Some(host.clone()))
+    .with_short_term_memory(Some(memory.clone()))
+    .build()
+    .unwrap();
+    assert_eq!(agent.run(context).await.unwrap().final_output, "done");
+    let bodies = server.bodies();
+    assert_eq!(bodies.len(), 1);
+    let rendered = bodies[0].to_string();
+    assert!(
+        rendered.contains("Preserve the active session goal under pressure"),
+        "{rendered}"
+    );
+    assert!(!rendered.contains("LOWER PRIORITY TODO 9"));
+    let connection = rusqlite::Connection::open(&database).unwrap();
+    let report:String=connection.query_row("SELECT payload_json FROM agent_transcript_events WHERE event_type='agent.context.assembled' AND json_extract(payload_json,'$.source')='framework.default-context-assembler' ORDER BY seq DESC LIMIT 1",[],|row|row.get(0)).unwrap();
+    let report: serde_json::Value = serde_json::from_str(&report).unwrap();
+    let working = report["contextReport"]["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .find(|block| block["id"] == "current_session_working_state")
+        .unwrap();
+    assert!(working["final_tokens"].as_u64().unwrap() <= 800);
+    assert!(working["original_tokens"].as_u64().unwrap() > 800);
+    host.close().await;
+    client.close().await;
+    server.drained().await;
+    drop(agent);
+    drop(memory);
+    drop(connection);
+    let _ = std::fs::remove_file(database);
+}
+
+#[tokio::test]
+async fn provider_full_retention_keep_is_noop_and_explicit_invalid_checkpoint_is_rejected() {
+    for keep in [true, false] {
+        let mut config = ShortTermMemoryConfig::default();
+        config.compaction.retained_history_ratio_bps = 10_000;
+        config.compaction.trigger_ratio_bps = 10_000;
+        config.context.providers.history.target_ratio_bps = 10_000;
+        config.context.providers.history.strategy = if keep {
+            tron_backend::application::short_term_memory::ContextReductionStrategy::Keep
+        } else {
+            tron_backend::application::short_term_memory::ContextReductionStrategy::Checkpoint
+        };
+        let (database, session, memory, mut context, _) = configured_provider_fixture(
+            if keep {
+                "provider-retain-all"
+            } else {
+                "provider-invalid-retain"
+            },
+            config,
+            834_000_000_000_000_000 + if keep { 0 } else { 10000 },
+        );
+        let server = ProviderTcpServer::new(vec![provider_answer("done")], false).await;
+        context.model.base_url = server.url.clone();
+        let client = real_provider_client();
+        let host = tron_backend::application::agent::FrameworkHost::temporary(None).unwrap();
+        let agent = ReactAgentBuilder::new(
+            client.clone(),
+            Arc::new(ToolRegistry::default()),
+            tron_backend::shared::event_bus::EventBusHandle::disabled(),
+        )
+        .with_framework_host(Some(host.clone()))
+        .with_short_term_memory(Some(memory.clone()))
+        .build()
+        .unwrap();
+        let result = agent.run(context).await;
+        if keep {
+            assert_eq!(result.unwrap().final_output, "done");
+            assert_eq!(server.bodies().len(), 1);
+            assert!(memory.latest_compaction(&session).unwrap().is_none());
+        } else {
+            assert!(
+                result
+                    .unwrap_err()
+                    .to_string()
+                    .contains("compression target must be below trigger")
+            );
+            assert!(server.bodies().is_empty());
+        }
+        host.close().await;
+        client.close().await;
+        server.drained().await;
+        drop(agent);
+        drop(memory);
+        let _ = std::fs::remove_file(database);
+    }
+}
+
+#[path = "support/native_model_runtime.rs"]
+mod native_model_runtime;

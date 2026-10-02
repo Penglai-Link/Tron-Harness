@@ -1,7 +1,13 @@
 mod messages;
 mod model;
+pub(crate) use model::NativeModelScope;
+mod presentation;
+pub(crate) use presentation::consume_native_agui_group;
 
 mod context;
+mod context_auxiliary;
+mod context_projection;
+mod context_providers;
 
 mod tools;
 
@@ -20,3 +26,6 @@ mod native_sessions;
 pub(crate) use external::FrameworkExternalRuntime;
 
 mod question;
+
+#[cfg(test)]
+mod context_auth_recovery_tests;

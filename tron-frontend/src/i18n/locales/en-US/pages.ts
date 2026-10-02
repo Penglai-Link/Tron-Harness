@@ -675,6 +675,8 @@ export const pages = {
       browserClose: "Close",
     },
     userInput: {
+      approve: "Approve",
+      reject: "Reject",
       ariaLabel: "Assistant questions",
       progress: "Question {{current}} of {{total}}",
       back: "Back",
@@ -953,6 +955,11 @@ export const pages = {
         overBudget: "Over budget",
         inputBudget: "/ {{budget}} input budget",
         runtimeNotices: {
+          mcp_unavailable: {title: "MCP integration unavailable"},
+          presentation_incomplete: {
+            title: "Presentation replay is incomplete",
+            detail: "Some output could not be displayed or saved. The execution result is reported separately.",
+          },
           compaction_requested: {
             title: "Context compaction queued",
             detail:

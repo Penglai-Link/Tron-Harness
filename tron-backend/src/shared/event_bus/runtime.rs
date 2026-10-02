@@ -97,6 +97,7 @@ struct EventBusInner {
     id_generator: Arc<dyn IdGenerator>,
     critical_tx: SyncSender<Arc<BusEvent>>,
     standard_tx: SyncSender<Arc<BusEvent>>,
+    sinks: Arc<Vec<SinkRegistration>>,
 }
 
 struct SinkRegistration {
@@ -120,6 +121,16 @@ impl EventBusHandle {
         let Some(inner) = &self.inner else {
             return PublishOutcome::Disabled;
         };
+        let rejected_stream = draft.stream_key_ref().map(str::to_owned);
+        let reject = || {
+            if let Some(key) = &rejected_stream {
+                for registration in inner.sinks.iter() {
+                    registration
+                        .sink
+                        .delivery_rejected(key, "presentation event rejected");
+                }
+            }
+        };
         let event = match BusEvent::from_draft(draft, inner.id_generator.as_ref(), &inner.config) {
             Ok(event) => event,
             Err(BusEventValidationError::Oversize {
@@ -127,6 +138,7 @@ impl EventBusHandle {
                 actual,
                 limit,
             }) => {
+                reject();
                 inner.stats.increment_rejected_oversize();
                 return PublishOutcome::RejectedOversize {
                     field,
@@ -135,6 +147,7 @@ impl EventBusHandle {
                 };
             }
             Err(BusEventValidationError::IdGenerationFailed(_)) => {
+                reject();
                 inner.stats.increment_rejected_invalid();
                 return PublishOutcome::RejectedInvalid { field: "event_id" };
             }
@@ -143,6 +156,7 @@ impl EventBusHandle {
                 | BusEventValidationError::ForbiddenField(field)
                 | BusEventValidationError::InvalidField(field),
             ) => {
+                reject();
                 inner.stats.increment_rejected_invalid();
                 return PublishOutcome::RejectedInvalid { field };
             }
@@ -158,11 +172,17 @@ impl EventBusHandle {
                 inner.stats.increment_accepted();
                 PublishOutcome::Accepted { event_id }
             }
-            Err(TrySendError::Full(_)) => {
+            Err(TrySendError::Full(event)) => {
+                notify_delivery_failure(
+                    &event,
+                    &inner.sinks,
+                    "presentation ingress capacity exceeded",
+                );
                 inner.stats.increment_dropped_full(lane);
                 PublishOutcome::DroppedIngressFull { lane }
             }
-            Err(TrySendError::Disconnected(_)) => {
+            Err(TrySendError::Disconnected(event)) => {
+                notify_delivery_failure(&event, &inner.sinks, "presentation ingress disconnected");
                 inner.stats.increment_dropped_disconnected();
                 PublishOutcome::DroppedIngressDisconnected { lane }
             }
@@ -251,6 +271,7 @@ impl EventBusRuntimeBuilder {
                 id_generator: self.id_generator,
                 critical_tx,
                 standard_tx,
+                sinks: sink_registrations,
             })),
         }
     }
@@ -305,8 +326,23 @@ fn dispatch_to_sinks(event: &Arc<BusEvent>, sinks: &[SinkRegistration], stats: &
         match registration.sender.try_send(event.clone()) {
             Ok(()) => stats.increment_sink_enqueued(),
             Err(TrySendError::Full(_)) | Err(TrySendError::Disconnected(_)) => {
+                registration
+                    .sink
+                    .delivery_failed(event, "presentation sink capacity exceeded or disconnected");
                 stats.increment_sink_dropped()
             }
         }
     }
 }
+
+fn notify_delivery_failure(event: &BusEvent, sinks: &[SinkRegistration], detail: &str) {
+    for registration in sinks {
+        if registration.sink.accepts(event) {
+            registration.sink.delivery_failed(event, detail);
+        }
+    }
+}
+
+#[cfg(test)]
+#[path = "delivery_tests.rs"]
+mod delivery_tests;

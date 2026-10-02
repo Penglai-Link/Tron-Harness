@@ -135,6 +135,12 @@ impl BusEventDraft {
         self
     }
 
+    pub fn stream_key_ref(&self) -> Option<&str> {
+        self.request
+            .as_ref()
+            .and_then(|request| request.stream_key.as_deref())
+    }
+
     pub fn route_class(&self) -> BusRouteClass {
         self.route_class
     }

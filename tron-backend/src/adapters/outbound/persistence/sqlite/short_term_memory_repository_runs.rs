@@ -54,9 +54,10 @@ pub(super) fn create_event_and_update_run_lease(
     assign_event_storage_fields(&tx, &mut event)?;
     match event.event_type.as_str() {
         "agent.run.started" => insert_run_lease(&tx, &event)?,
-        "agent.run.completed" | "agent.run.failed" | "agent.run.recovered" => {
-            delete_run_lease(&tx, &event)?
-        }
+        "agent.run.completed"
+        | "agent.run.awaiting_input"
+        | "agent.run.failed"
+        | "agent.run.recovered" => delete_run_lease(&tx, &event)?,
         _ => {}
     }
     insert_event(&tx, &event)?;
@@ -131,7 +132,7 @@ pub(super) fn recover_stale_runs(
                        FROM agent_transcript_events ended
                        WHERE ended.session_code = started.session_code
                          AND ended.run_code = started.run_code
-                         AND ended.event_type IN ('agent.run.completed', 'agent.run.failed', 'agent.run.recovered')
+                         AND ended.event_type IN ('agent.run.completed', 'agent.run.awaiting_input', 'agent.run.failed', 'agent.run.recovered')
                    )
                  ORDER BY started.created_at ASC, started.id ASC
                  LIMIT ?1",

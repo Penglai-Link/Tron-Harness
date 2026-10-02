@@ -19,6 +19,8 @@ pub struct AgentAguiEventSnapshot {
     pub stream_key: String,
     pub active_streams: usize,
     pub total_streams: usize,
+    #[serde(default)]
+    pub replay_incomplete: bool,
     pub events: Vec<AgentAguiEvent>,
 }
 

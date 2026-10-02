@@ -1,56 +1,356 @@
+use async_trait::async_trait;
+use eliteforge_agent_core as fw;
+use eliteforge_agent_framework::{ChatModelJob, ModelJobClient};
+use eliteforge_agent_official_plugin_model_http as sdk;
 use std::{future::Future, pin::Pin, sync::Arc};
-
-use serde_json::Value;
 
 use crate::{
     application::agent::{ModelClient, ModelStreamSink},
     domain::agent::{AgentModelConfig, ModelRequest, ModelResponse},
 };
 
-use super::protocol_adapters::{ModelProtocolAdapter, adapter_for_protocol};
-
-#[path = "http_model_stream_accumulator.rs"]
-mod http_model_stream_accumulator;
-
-use http_model_stream_accumulator::StreamAccumulator;
-
-pub trait ModelProviderClient: Send + Sync {
-    fn post_json<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        url: &'a str,
-        body: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + 'a>>;
-
-    fn post_event_stream<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        url: &'a str,
-        body: &'a Value,
-        sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>>;
+pub(crate) fn convert<T: serde::de::DeserializeOwned>(
+    value: &impl serde::Serialize,
+) -> Result<T, String> {
+    serde_json::from_value(serde_json::to_value(value).map_err(|e| e.to_string())?)
+        .map_err(|e| e.to_string())
+}
+pub(crate) fn sdk_config(config: &AgentModelConfig) -> Result<sdk::AgentModelConfig, String> {
+    let mut config: sdk::AgentModelConfig = convert(config)?;
+    if config.model_code.starts_with("PERSON_AI:") {
+        config.api_path = None;
+    }
+    Ok(config)
+}
+pub(crate) fn error(error: fw::AgentError) -> String {
+    match error.primary() {
+        fw::AgentError::Model(error) => sdk::encode_model_error(error),
+        _ => error.to_string(),
+    }
+}
+pub(crate) fn limits(config: &AgentModelConfig) -> fw::RunLimits {
+    fw::RunLimits {
+        max_model_retries: config.max_retries.unwrap_or(0) as usize,
+        max_model_calls_per_step: Some(config.max_retries.unwrap_or(0) as usize + 2),
+        max_model_output_tokens: config.max_tokens.filter(|v| *v > 0).unwrap_or(4096),
+        model_timeout: std::time::Duration::from_secs(30),
+        run_timeout: std::time::Duration::from_secs(30),
+        max_context_tokens: config.context_window_tokens.unwrap_or(128_000) as usize,
+        ..Default::default()
+    }
 }
 
 #[derive(Clone)]
 pub struct HttpModelClient {
-    provider: Arc<dyn ModelProviderClient>,
+    pub(crate) factory: Arc<dyn sdk::ModelTransportFactory>,
+    pub(crate) jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
 }
-
 impl HttpModelClient {
-    pub fn new(provider: Arc<dyn ModelProviderClient>) -> Self {
-        Self { provider }
+    pub fn new(factory: Arc<dyn sdk::ModelTransportFactory>) -> Self {
+        Self {
+            factory,
+            jobs: Arc::new(Default::default()),
+        }
+    }
+    pub fn with_jobs(mut self, jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>) -> Self {
+        self.jobs = jobs;
+        self
+    }
+    pub(crate) async fn jobs(&self) -> Result<&ModelJobClient, String> {
+        self.jobs.get().await.map_err(error)
+    }
+    fn build_job(
+        &self,
+        config: &AgentModelConfig,
+        request: &ModelRequest,
+        repair: Option<Arc<dyn eliteforge_agent_framework::ModelJobRepair>>,
+        max_calls: usize,
+    ) -> Result<ChatModelJob, fw::AgentError> {
+        let fail = |message| fw::AgentError::InvalidConfiguration(message);
+        let wire = sdk_config(config).map_err(fail)?;
+        let mut input = sdk::request_to_framework(convert(request).map_err(fail)?)?;
+        input.options.temperature = config.temperature;
+        input.options.top_p = config.top_p;
+        input.options.max_output_tokens = config.max_tokens.filter(|v| *v > 0);
+        let factory = Arc::new(sdk::ScopedModelTransportFactory::new(
+            self.factory.clone(),
+            &convert(config).map_err(fail)?,
+        )?);
+        let descriptor = sdk::model_descriptor(&wire);
+        let reference = fw::ModelRef::new("http-model", &wire.model_code);
+        Ok(ChatModelJob {
+            workflow: None,
+            connection: fw::ModelConnection::new(
+                &reference.connection,
+                Arc::new(sdk::ProtocolChatModel {
+                    config: wire.clone(),
+                    factory,
+                    streaming: false,
+                }),
+                vec![descriptor],
+            )
+            .with_protocol(sdk::model_protocol(&wire)),
+            model: reference,
+            request: input,
+            limits: limits(config),
+            stage: "host.stateless".into(),
+            max_calls,
+            repair,
+        })
+    }
+    pub(crate) async fn job_observed(
+        &self,
+        config: &AgentModelConfig,
+        request: &ModelRequest,
+        repair: Option<Arc<dyn eliteforge_agent_framework::ModelJobRepair>>,
+        max_calls: usize,
+        parent: Option<&fw::RunContext>,
+    ) -> eliteforge_agent_framework::ObservedModelResult<ModelResponse> {
+        let job = match self.build_job(config, request, repair, max_calls) {
+            Ok(job) => job,
+            Err(error) => {
+                return eliteforge_agent_framework::ObservedModelResult {
+                    result: Err(error),
+                    report: Default::default(),
+                };
+            }
+        };
+        let jobs = match self.jobs.get().await {
+            Ok(jobs) => jobs,
+            Err(error) => {
+                return eliteforge_agent_framework::ObservedModelResult {
+                    result: Err(error),
+                    report: Default::default(),
+                };
+            }
+        };
+        let observed = match parent {
+            Some(parent) => jobs.execute_child_observed(job, parent).await,
+            None => jobs.execute_observed(job).await,
+        };
+        eliteforge_agent_framework::ObservedModelResult {
+            result: observed
+                .result
+                .and_then(|response| sdk::response_from_framework(response).map_err(Into::into))
+                .and_then(|response| {
+                    convert(&response).map_err(fw::AgentError::InvalidConfiguration)
+                }),
+            report: observed.report,
+        }
+    }
+    pub(crate) async fn job(
+        &self,
+        config: &AgentModelConfig,
+        request: &ModelRequest,
+        repair: Option<Arc<dyn eliteforge_agent_framework::ModelJobRepair>>,
+        max_calls: usize,
+    ) -> Result<ModelResponse, String> {
+        self.job_observed(config, request, repair, max_calls, None)
+            .await
+            .into_result()
+            .map_err(error)
     }
 }
-
 impl ModelClient for HttpModelClient {
+    fn generate_native_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        admitted: &'a fw::ChatRequest,
+        product: &'a ModelRequest,
+        sink: Option<ModelStreamSink>,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let mut input =
+                sdk::request_from_framework(admitted).map_err(|e| sdk::encode_model_error(&e))?;
+            // Continuation is prepared by the product turn state; every content block
+            // and tool schema still comes from the SDK's final admitted request.
+            // SDK regenerates the schema from the admitted descriptors.
+            input.system_agent_session_id = product.system_agent_session_id.clone();
+            input.previous_response_id = product.previous_response_id.clone();
+            input.response_input_items = product.response_input_items.clone();
+            let transport = self
+                .factory
+                .create(&convert(config)?)
+                .await
+                .map_err(|e| sdk::encode_model_error(&e))?;
+            let client = sdk::HttpProtocolClient::new(transport);
+            let response = match sink {
+                Some(sink) => {
+                    client
+                        .generate_stream(
+                            &sdk_config(config)?,
+                            &input,
+                            Arc::new(move |event| {
+                                if let Ok(event) = convert(&event) {
+                                    sink(event)
+                                }
+                            }),
+                        )
+                        .await
+                }
+                None => client.generate(&sdk_config(config)?, &input).await,
+            }
+            .map_err(|e| sdk::encode_model_error(&e))?;
+            convert(&response)
+        })
+    }
+
+    fn bind_for_run(
+        &self,
+        config: &AgentModelConfig,
+    ) -> Result<Option<Arc<dyn ModelClient>>, String> {
+        Ok(Some(Arc::new(Self {
+            factory: Arc::new(
+                sdk::ScopedModelTransportFactory::new(self.factory.clone(), &convert(config)?)
+                    .map_err(|e| sdk::encode_model_error(&e))?,
+            ),
+            jobs: self.jobs.clone(),
+        })))
+    }
+    fn authorization_scope(&self, config: &AgentModelConfig) -> Result<Option<String>, String> {
+        self.factory
+            .authorization_scope(&convert(config)?)
+            .map_err(|e| sdk::encode_model_error(&e))
+    }
+    fn close_observed<'a>(
+        &'a self,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move { Ok(self.jobs.close_observed().await) })
+    }
+    fn generate_observed<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = eliteforge_agent_framework::ObservedModelResult<ModelResponse>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            self.job_observed(
+                config,
+                request,
+                None,
+                config.max_retries.unwrap_or(0) as usize + 2,
+                None,
+            )
+            .await
+        })
+    }
+    fn generate_goal_judge_child<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+        repair: Arc<dyn eliteforge_agent_framework::ModelJobRepair>,
+        max_calls: usize,
+        parent: &'a fw::RunContext,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = eliteforge_agent_framework::ObservedModelResult<ModelResponse>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            self.job_observed(config, request, Some(repair), max_calls, Some(parent))
+                .await
+        })
+    }
+
+    fn compact_memory<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        history: &'a [String],
+        previous_summary: Option<&'a str>,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = Result<eliteforge_agent_memory::MemoryCompactionResult, String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async move {
+            let wire = sdk_config(config)?;
+            let job = ChatModelJob {
+                workflow: Some(Arc::new(MemoryWorkflow {
+                    history: history.to_vec(),
+                    previous: previous_summary.map(str::to_owned),
+                })),
+                connection: fw::ModelConnection::new(
+                    "memory",
+                    Arc::new(sdk::ProtocolChatModel {
+                        config: wire.clone(),
+                        factory: self.factory.clone(),
+                        streaming: false,
+                    }),
+                    vec![sdk::model_descriptor(&wire)],
+                ),
+                model: fw::ModelRef::new("memory", &wire.model_code),
+                request: fw::ChatRequest {
+                    messages: vec![],
+                    tools: vec![],
+                    extensions: Default::default(),
+                    options: Default::default(),
+                },
+                limits: fw::RunLimits {
+                    max_model_calls_per_step: Some(17),
+                    ..limits(config)
+                },
+                stage: "memory.compaction".into(),
+                max_calls: 16,
+                repair: None,
+            };
+            let response = self.jobs().await?.execute(job).await.map_err(error)?;
+            eliteforge_agent_memory::MemoryCompactionResult::from_chat_response(response)
+                .map_err(error)
+        })
+    }
+    fn on_model_failure(&self, config: &AgentModelConfig, error: &fw::ModelError) {
+        if let Ok(config) = convert(config) {
+            self.factory.on_failure(&config, error);
+        }
+    }
     fn generate<'a>(
         &'a self,
         config: &'a AgentModelConfig,
         request: &'a ModelRequest,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
-        Box::pin(async move { self.generate_with_adapter(config, request).await })
+        Box::pin(async move {
+            self.job(
+                config,
+                request,
+                None,
+                config.max_retries.unwrap_or(0) as usize + 2,
+            )
+            .await
+        })
     }
-
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move {
+            let transport = self
+                .factory
+                .create(&convert(config)?)
+                .await
+                .map_err(|e| sdk::encode_model_error(&e))?;
+            let response = sdk::HttpProtocolClient::new(transport)
+                .generate(&sdk_config(config)?, &convert(request)?)
+                .await
+                .map_err(|e| sdk::encode_model_error(&e))?;
+            convert(&response)
+        })
+    }
     fn generate_stream<'a>(
         &'a self,
         config: &'a AgentModelConfig,
@@ -58,453 +358,160 @@ impl ModelClient for HttpModelClient {
         sink: ModelStreamSink,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
         Box::pin(async move {
-            self.generate_stream_with_adapter(config, request, sink)
+            let transport = self
+                .factory
+                .create(&convert(config)?)
+                .await
+                .map_err(|e| sdk::encode_model_error(&e))?;
+            let response = sdk::HttpProtocolClient::new(transport)
+                .generate_stream(
+                    &sdk_config(config)?,
+                    &convert(request)?,
+                    Arc::new(move |event| {
+                        if let Ok(event) = convert(&event) {
+                            sink(event);
+                        }
+                    }),
+                )
+                .await
+                .map_err(|e| sdk::encode_model_error(&e))?;
+            convert(&response)
+        })
+    }
+    fn recover_authentication<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        error: &'a fw::ModelError,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, fw::ModelError>> + Send + 'a>> {
+        Box::pin(async move {
+            self.factory
+                .recover_authentication(&convert(config).map_err(fw::ModelError::Fatal)?, error)
                 .await
         })
     }
-}
-
-impl HttpModelClient {
-    async fn generate_with_adapter(
-        &self,
-        config: &AgentModelConfig,
-        request: &ModelRequest,
-    ) -> Result<ModelResponse, String> {
-        let adapter = adapter_for_protocol(config.protocol)
-            .ok_or_else(|| "model protocol was unsupported".to_string())?;
-        let url = endpoint_url(config, adapter.default_path())?;
-        let body = adapter.request_body(config, request)?;
-        let response_body = self.provider.post_json(config, &url, &body).await?;
-        adapter.parse_response(&response_body)
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
+        Box::pin(async move {
+            self.jobs.close().await;
+        })
     }
-
-    async fn generate_stream_with_adapter(
-        &self,
-        config: &AgentModelConfig,
-        request: &ModelRequest,
-        sink: ModelStreamSink,
-    ) -> Result<ModelResponse, String> {
-        let adapter = adapter_for_protocol(config.protocol)
-            .ok_or_else(|| "model protocol was unsupported".to_string())?;
-        let url = endpoint_url(config, adapter.default_path())?;
-        let body = adapter.stream_request_body(config, request)?;
-        let accumulator = Arc::new(std::sync::Mutex::new(StreamAccumulator::default()));
-        let accumulator_for_sink = accumulator.clone();
-        let protocol = config.protocol;
-        let event_sink = Arc::new(move |event: Value| {
-            let mut accumulator = accumulator_for_sink
-                .lock()
-                .expect("model stream accumulator mutex poisoned");
-            if let Some(usage) = adapter.parse_usage(&event) {
-                accumulator.token_usage = Some(usage);
-            }
-            if let Some(response) = adapter.parse_stream_terminal_response(&event)? {
-                accumulator.terminal_response = Some(response);
-            }
-            accumulator.observe_raw_event(protocol, &event);
-            if let Some(delta) = adapter.parse_stream_event(&event)? {
-                accumulator.observe_delta(&delta);
-                sink(delta);
-            }
-            Ok::<(), String>(())
-        });
-        self.provider
-            .post_event_stream(config, &url, &body, event_sink)
-            .await?;
-        let accumulator = accumulator
-            .lock()
-            .expect("model stream accumulator mutex poisoned")
-            .clone();
-        if let Some(response) = accumulator.terminal_response {
-            return Ok(response);
-        }
-        if let Some(response) = accumulator.into_response() {
-            return Ok(response);
-        }
-        self.generate_with_adapter(config, request).await
+    fn generate_with_repair<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+        repair: Arc<dyn eliteforge_agent_framework::ModelJobRepair>,
+        max_calls: usize,
+    ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
+        Box::pin(async move { self.job(config, request, Some(repair), max_calls).await })
     }
 }
 
 #[derive(Debug, Clone)]
 pub struct HttpModelProviderClient {
-    client: reqwest::Client,
+    client: sdk::ModelHttpClient,
 }
-
 impl HttpModelProviderClient {
-    pub fn new(client: reqwest::Client) -> Self {
+    pub fn new(client: sdk::ModelHttpClient) -> Self {
         Self { client }
     }
 }
-
-impl ModelProviderClient for HttpModelProviderClient {
-    fn post_json<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        url: &'a str,
-        body: &'a Value,
-    ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + 'a>> {
-        Box::pin(async move {
-            let response = self
-                .request(config, url, body)
-                .send()
-                .await
-                .map_err(provider_error)?;
-            let status = response.status();
-            let body: Value = response.json().await.map_err(provider_error)?;
-            if !status.is_success() {
-                return Err(provider_status_error(status, &body));
-            }
-            Ok(body)
-        })
-    }
-
-    fn post_event_stream<'a>(
-        &'a self,
-        config: &'a AgentModelConfig,
-        url: &'a str,
-        body: &'a Value,
-        sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
-    ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
-        Box::pin(async move {
-            let mut response = self
-                .request(config, url, body)
-                .header("Accept", "text/event-stream")
-                .send()
-                .await
-                .map_err(provider_error)?;
-            let status = response.status();
-            if !status.is_success() {
-                let body: Value = response.json().await.unwrap_or(Value::Null);
-                return Err(provider_status_error(status, &body));
-            }
-
-            let mut buffer = String::new();
-            while let Some(chunk) = response.chunk().await.map_err(provider_error)? {
-                buffer.push_str(&String::from_utf8_lossy(&chunk));
-                drain_sse_events(&mut buffer, &sink)?;
-            }
-            drain_sse_events(&mut format!("{buffer}\n\n"), &sink)?;
-            Ok(())
-        })
-    }
-}
-
-impl HttpModelProviderClient {
-    fn request(
+#[async_trait]
+impl sdk::ModelTransportFactory for HttpModelProviderClient {
+    async fn create(
         &self,
-        config: &AgentModelConfig,
-        url: &str,
-        body: &Value,
-    ) -> reqwest::RequestBuilder {
-        self.client
-            .post(url)
-            .bearer_auth(&config.api_key)
-            .json(body)
+        config: &sdk::AgentModelConfig,
+    ) -> Result<Arc<dyn sdk::ModelTransport>, fw::ModelError> {
+        Ok(Arc::new(sdk::HttpModelTransport::new(
+            self.client.clone(),
+            &config.base_url,
+            &config.api_key,
+        )))
     }
 }
 
-fn drain_sse_events(
-    buffer: &mut String,
-    sink: &Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + '_>,
-) -> Result<(), String> {
-    while let Some(boundary) = buffer.find("\n\n") {
-        let frame = buffer[..boundary].to_string();
-        buffer.replace_range(..boundary + 2, "");
-        for line in frame.lines() {
-            let Some(raw_data) = line.strip_prefix("data:") else {
-                continue;
-            };
-            let data = raw_data.trim();
-            if data.is_empty() || data == "[DONE]" {
-                continue;
-            }
-            let event = serde_json::from_str(data)
-                .map_err(|error| format!("model provider stream returned invalid JSON: {error}"))?;
-            sink(event)?;
-        }
-    }
-    Ok(())
+struct MemoryWorkflow {
+    history: Vec<String>,
+    previous: Option<String>,
 }
-
-fn provider_error(error: reqwest::Error) -> String {
-    if error.is_timeout() {
-        "model provider connection timed out".into()
-    } else {
-        error.to_string()
+#[async_trait]
+impl fw::ModelWorkflow for MemoryWorkflow {
+    async fn run(
+        &self,
+        run: &fw::RunContext,
+        models: &dyn fw::ChatExecutor,
+        limits: &fw::RunLimits,
+        model: &fw::ModelRef,
+    ) -> Result<fw::ChatResponse, fw::AgentError> {
+        let compactor = eliteforge_agent_memory::MemoryCompactor::new(
+            model.clone(),
+            eliteforge_agent_memory::CompressionOptions {
+                max_input_tokens: limits
+                    .max_context_tokens
+                    .saturating_sub(limits.max_model_output_tokens as usize)
+                    .max(1),
+                max_summary_bytes: limits.max_model_output_tokens as usize,
+                max_model_calls: 16,
+            },
+        )?;
+        let result = compactor
+            .compact_history_with_usage(
+                &self.history,
+                self.previous.as_deref(),
+                run,
+                models,
+                limits,
+            )
+            .await?;
+        Ok(result.into_chat_response())
     }
-}
-
-fn provider_status_error(status: reqwest::StatusCode, body: &Value) -> String {
-    let detail = body
-        .pointer("/error/message")
-        .or_else(|| body.get("message"))
-        .and_then(Value::as_str)
-        .unwrap_or("model provider request failed");
-    format!("model provider returned {status}: {detail}")
-}
-
-fn _assert_adapter_object_safe(_: &dyn ModelProtocolAdapter) {}
-
-fn endpoint_url(config: &AgentModelConfig, default_path: &str) -> Result<String, String> {
-    let path = config.api_path.as_deref().unwrap_or(default_path);
-    let base = config.base_url.trim().trim_end_matches('/');
-    let path = path.trim().trim_start_matches('/');
-    if base.is_empty() || path.is_empty() {
-        return Err("model baseUrl and apiPath are required".into());
-    }
-    Ok(format!("{base}/{path}"))
 }
 
 #[cfg(test)]
-mod tests {
+mod controlled_native_tests {
     use super::*;
-    use serde_json::json;
-
-    use crate::domain::agent::{
-        AgentMessage, AgentModelProtocol, ModelRequest, ModelResponse, ModelStreamEvent, ToolCall,
-    };
-
-    #[derive(Clone)]
-    struct StubProvider {
-        stream_events: Vec<Value>,
-    }
-
-    impl ModelProviderClient for StubProvider {
-        fn post_json<'a>(
-            &'a self,
-            _config: &'a AgentModelConfig,
-            _url: &'a str,
-            _body: &'a Value,
-        ) -> Pin<Box<dyn Future<Output = Result<Value, String>> + Send + 'a>> {
-            Box::pin(async { Err("post_json should not be used in this test".into()) })
-        }
-
-        fn post_event_stream<'a>(
-            &'a self,
-            _config: &'a AgentModelConfig,
-            _url: &'a str,
-            _body: &'a Value,
-            sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
-        ) -> Pin<Box<dyn Future<Output = Result<(), String>> + Send + 'a>> {
-            let events = self.stream_events.clone();
-            Box::pin(async move {
-                for event in events {
-                    sink(event)?;
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    #[tokio::test]
+    async fn native_image_and_attachment_generate_uses_controlled_sdk_transport() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let server = tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut data = Vec::new();
+            let mut buf = [0; 4096];
+            let (end, len) = loop {
+                let n = socket.read(&mut buf).await.unwrap();
+                assert!(n > 0);
+                data.extend_from_slice(&buf[..n]);
+                if let Some(end) = data.windows(4).position(|v| v == b"\r\n\r\n") {
+                    let headers = String::from_utf8_lossy(&data[..end]);
+                    let len = headers
+                        .lines()
+                        .find_map(|line| {
+                            line.to_ascii_lowercase()
+                                .strip_prefix("content-length:")
+                                .map(|v| v.trim().parse::<usize>().unwrap())
+                        })
+                        .unwrap();
+                    break (end + 4, len);
                 }
-                Ok(())
-            })
-        }
-    }
-
-    #[tokio::test]
-    async fn responses_stream_terminal_tool_calls_override_text_accumulator() {
-        let client = HttpModelClient::new(Arc::new(StubProvider {
-            stream_events: vec![
-                json!({
-                    "type": "response.output_text.delta",
-                    "delta": "好的，我来同时调用"
-                }),
-                json!({
-                    "type": "response.completed",
-                    "response": {
-                        "output": [
-                            {
-                                "type": "function_call",
-                                "call_id": "call_123",
-                                "name": "lookup",
-                                "arguments": "{\"query\":\"status\"}"
-                            },
-                            {
-                                "type": "function_call",
-                                "call_id": "call_456",
-                                "name": "lookup",
-                                "arguments": "{\"query\":\"health\"}"
-                            }
-                        ]
-                    }
-                }),
-            ],
-        }));
-        let seen = Arc::new(std::sync::Mutex::new(Vec::<ModelStreamEvent>::new()));
-        let seen_for_sink = seen.clone();
-        let sink: ModelStreamSink = Arc::new(move |event| {
-            seen_for_sink
-                .lock()
-                .expect("stream event collection mutex poisoned")
-                .push(event);
+            };
+            while data.len() < end + len {
+                let n = socket.read(&mut buf).await.unwrap();
+                data.extend_from_slice(&buf[..n]);
+            }
+            let body: serde_json::Value = serde_json::from_slice(&data[end..end + len]).unwrap();
+            assert!(body.to_string().contains("data:image/png;base64,aW1hZ2U="));
+            assert!(body.to_string().contains("reference data"));
+            let answer = r#"{"choices":[{"message":{"role":"assistant","content":"ok"},"finish_reason":"stop"}],"usage":{"prompt_tokens":30,"completion_tokens":1}}"#;
+            socket.write_all(format!("HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{answer}",answer.len()).as_bytes()).await.unwrap();
         });
-
-        let response = client
-            .generate_stream(&responses_model_config(), &minimal_request(), sink)
-            .await
-            .expect("responses stream should parse terminal tool calls");
-
-        assert_eq!(
-            response,
-            ModelResponse::from_tool_calls(vec![
-                ToolCall {
-                    call_id: Some("call_123".into()),
-                    tool_name: "lookup".into(),
-                    input: json!({ "query": "status" }),
-                    input_error: None,
-                },
-                ToolCall {
-                    call_id: Some("call_456".into()),
-                    tool_name: "lookup".into(),
-                    input: json!({ "query": "health" }),
-                    input_error: None,
-                },
-            ])
-        );
-        assert_eq!(
-            seen.lock()
-                .expect("stream event collection mutex poisoned")
-                .as_slice(),
-            &[ModelStreamEvent::text_delta("好的，我来同时调用")]
-        );
-    }
-
-    #[tokio::test]
-    async fn chat_completions_stream_accumulates_compatible_summary_and_tool_calls() {
-        let client = HttpModelClient::new(Arc::new(StubProvider {
-            stream_events: vec![
-                json!({
-                    "id": "chatcmpl-stream-1",
-                    "choices": [{
-                        "delta": {
-                            "reasoning_summary": "Need a lookup. "
-                        }
-                    }]
-                }),
-                json!({
-                    "id": "chatcmpl-stream-1",
-                    "choices": [{
-                        "delta": {
-                            "tool_calls": [{
-                                "index": 0,
-                                "id": "call_chat_1",
-                                "function": {
-                                    "name": "lookup",
-                                    "arguments": "{\"query\":"
-                                }
-                            }]
-                        }
-                    }]
-                }),
-                json!({
-                    "id": "chatcmpl-stream-1",
-                    "choices": [{
-                        "delta": {
-                            "tool_calls": [{
-                                "index": 0,
-                                "function": {
-                                    "arguments": "\"status\"}"
-                                }
-                            }]
-                        },
-                        "finish_reason": "tool_calls"
-                    }],
-                    "usage": {
-                        "prompt_tokens": 11,
-                        "completion_tokens": 3,
-                        "total_tokens": 14
-                    }
-                }),
-            ],
-        }));
-        let seen = Arc::new(std::sync::Mutex::new(Vec::<ModelStreamEvent>::new()));
-        let seen_for_sink = seen.clone();
-        let sink: ModelStreamSink = Arc::new(move |event| {
-            seen_for_sink
-                .lock()
-                .expect("stream event collection mutex poisoned")
-                .push(event);
-        });
-
-        let response = client
-            .generate_stream(&chat_model_config(), &minimal_request(), sink)
-            .await
-            .expect("chat completions stream should accumulate tool call response");
-
-        assert_eq!(
-            response.finish,
-            crate::domain::agent::ModelFinish::ToolCalls
-        );
-        assert_eq!(response.response_id(), Some("chatcmpl-stream-1"));
-        assert_eq!(
-            response.token_usage(),
-            Some(crate::domain::agent::ModelTokenUsage {
-                input_tokens: 11,
-                output_tokens: 3,
-                total_tokens: 14,
-                cached_input_tokens: None,
-                reasoning_tokens: None,
-            })
-        );
-        assert!(response.assistant.text_content().contains("Need a lookup."));
-        assert_eq!(
-            response.tool_calls(),
-            vec![ToolCall {
-                call_id: Some("call_chat_1".into()),
-                tool_name: "lookup".into(),
-                input: json!({ "query": "status" }),
-                input_error: None,
-            }]
-        );
-        assert_eq!(
-            seen.lock()
-                .expect("stream event collection mutex poisoned")
-                .as_slice(),
-            &[ModelStreamEvent::reasoning_summary_delta("Need a lookup. ")]
-        );
-    }
-
-    fn responses_model_config() -> AgentModelConfig {
-        AgentModelConfig {
-            model_code: "MODEL-TEST".into(),
-            protocol: AgentModelProtocol::Responses,
-            base_url: "https://example.com/v1".into(),
-            api_path: Some("/responses".into()),
-            api_key: "test-key".into(),
-            model_name: "qwen3.7-max".into(),
-            thinking_enabled: true,
-            reasoning_effort: None,
-            responses_stateful_enabled: false,
-            temperature: Some(0.2),
-            max_tokens: Some(4096),
-            context_window_tokens: None,
-            top_p: None,
-            max_retries: None,
-        }
-    }
-
-    fn chat_model_config() -> AgentModelConfig {
-        AgentModelConfig {
-            model_code: "MODEL-CHAT-TEST".into(),
-            protocol: AgentModelProtocol::ChatCompletions,
-            base_url: "https://example.com/v1".into(),
-            api_path: Some("/chat/completions".into()),
-            api_key: "test-key".into(),
-            model_name: "qwen3.7-max".into(),
-            thinking_enabled: true,
-            reasoning_effort: None,
-            responses_stateful_enabled: false,
-            temperature: Some(0.2),
-            max_tokens: Some(4096),
-            context_window_tokens: None,
-            top_p: None,
-            max_retries: None,
-        }
-    }
-
-    fn minimal_request() -> ModelRequest {
-        ModelRequest {
-            messages: vec![AgentMessage::user("测试多个工具并行调用")],
-            tools: Vec::new(),
-            system_agent_session_id: None,
-            prepared_tool_schema: None,
-            response_input_items: None,
-            previous_response_id: None,
-        }
+        let config:AgentModelConfig=serde_json::from_value(serde_json::json!({"modelCode":"fixture","protocol":"CHAT_COMPLETIONS","baseUrl":url,"apiKey":"fixture","modelName":"fixture","maxTokens":32,"contextWindowTokens":12000})).unwrap();
+        let request:ModelRequest=serde_json::from_value(serde_json::json!({"messages":[{"role":"user","parts":[{"type":"text","text":"inspect reference data"},{"type":"image","mime_type":"image/png","data":"aW1hZ2U="}]}],"tools":[]})).unwrap();
+        let client = HttpModelClient::new(Arc::new(HttpModelProviderClient::new(
+            sdk::ModelHttpClient::new(),
+        )));
+        let response = client.generate(&config, &request).await.unwrap();
+        assert_eq!(response.output_text(), "ok");
+        client.close().await;
+        server.await.unwrap();
     }
 }

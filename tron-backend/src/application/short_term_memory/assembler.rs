@@ -1,8 +1,8 @@
 use crate::domain::{
     agent::{AgentMessage, AgentMessagePart},
     short_term_memory::{
-        ShortTermMemoryGoalView, ShortTermMemoryMessage, ShortTermMemoryPart, ShortTermMemoryTodo,
-        TodoStatus,
+        ShortTermMemoryError, ShortTermMemoryGoalView, ShortTermMemoryMessage, ShortTermMemoryPart,
+        ShortTermMemoryTodo, TodoStatus,
     },
 };
 use sha2::{Digest, Sha256};
@@ -10,9 +10,9 @@ use sha2::{Digest, Sha256};
 use super::{ContextBudgetBreakdown, ModelContextBudgetPlan, PreparedModelContext};
 
 pub(super) const DEFAULT_TODO_MAX_ITEMS: usize = 50;
-pub(super) const DEFAULT_TODO_MAX_CONTEXT_CHARS: usize = 4_000;
 
 pub(super) fn assemble_context(
+    scope: &eliteforge_agent_memory::MemoryScope,
     prompt_prefix: &[AgentMessage],
     current_input_message: Option<&AgentMessage>,
     current_run_code: Option<&str>,
@@ -24,45 +24,22 @@ pub(super) fn assemble_context(
     todo_enabled: bool,
     budget_plan: &ModelContextBudgetPlan,
     reasoning_summary_replay_enabled: bool,
-) -> PreparedModelContext {
-    let mut messages = prompt_prefix.to_vec();
-    let prompt_prefix_tokens = estimate_messages_tokens(&messages);
+) -> Result<PreparedModelContext, ShortTermMemoryError> {
+    use eliteforge_agent_memory::{
+        MemoryBlock, MemoryBlockKind as Kind, MemoryRevision, MemorySnapshot,
+    };
+    if recent.iter().any(|(message, parts)| {
+        message.workspace_code != scope.namespace()
+            || message.session_code != scope.session()
+            || parts.iter().any(|part| {
+                part.workspace_code != scope.namespace() || part.session_code != scope.session()
+            })
+    }) {
+        return Err(ShortTermMemoryError::StorageFailure);
+    }
+    let revision = recent.last().map(|(m, _)| m.seq.max(0) as u64).unwrap_or(0);
     let rebased = checkpoint.is_some();
-    let mut checkpoint_tokens = 0;
-    if let Some(checkpoint) = checkpoint {
-        if budget_plan.block_budgets.current_session_checkpoint.enabled {
-            let checkpoint_message = truncate_checkpoint_message(
-                checkpoint,
-                budget_plan
-                    .block_budgets
-                    .current_session_checkpoint
-                    .effective_limit_tokens,
-            );
-            checkpoint_tokens = estimate_messages_tokens(std::slice::from_ref(&checkpoint_message));
-            messages.push(checkpoint_message);
-        }
-    }
-    let mut session_family_context_tokens = 0;
-    if let Some(family_context) = family_context {
-        session_family_context_tokens =
-            estimate_messages_tokens(std::slice::from_ref(&family_context));
-        messages.push(family_context);
-    }
-    let working_state_limit = budget_plan
-        .block_budgets
-        .current_session_working_state
-        .effective_limit_tokens;
-    let mut working_state_tokens = 0;
-    if budget_plan
-        .block_budgets
-        .current_session_working_state
-        .enabled
-        && let Some(working_state) =
-            working_state_message(active_goal, todos, todo_enabled, working_state_limit)
-    {
-        working_state_tokens = estimate_messages_tokens(std::slice::from_ref(&working_state));
-        messages.push(working_state);
-    }
+    let working_state = working_state_message(active_goal, todos, todo_enabled, u32::MAX);
     let mut current_input_inserted = false;
     let recent_messages = recent
         .into_iter()
@@ -80,11 +57,74 @@ pub(super) fn assemble_context(
             transcript_message_to_agent_message(entry, reasoning_summary_replay_enabled)
         })
         .collect::<Vec<_>>();
-    let recent_transcript_tokens = estimate_messages_tokens(&recent_messages);
-    messages.extend(recent_messages);
+    let source = MemorySnapshot {
+        revision: MemoryRevision {
+            scope: scope.clone(),
+            generation: "product-transcript".into(),
+            revision,
+        },
+        blocks: vec![
+            MemoryBlock {
+                kind: Kind::SeedPromptPrefix,
+                entries: prompt_prefix.to_vec(),
+            },
+            MemoryBlock {
+                kind: Kind::CurrentSessionCheckpoint,
+                entries: checkpoint.into_iter().collect(),
+            },
+            MemoryBlock {
+                kind: Kind::SessionFamilyContext,
+                entries: family_context.into_iter().collect(),
+            },
+            MemoryBlock {
+                kind: Kind::CurrentSessionWorkingState,
+                entries: working_state.into_iter().collect(),
+            },
+            MemoryBlock {
+                kind: Kind::CurrentSessionHistory,
+                entries: recent_messages,
+            },
+        ],
+    };
+    // This phase maps authorized repository records into independent sources.
+    // It neither reduces nor admits a model window; DefaultContextAssembler does that.
+    let entries = |kind| {
+        source
+            .blocks
+            .iter()
+            .find(|b| b.kind == kind)
+            .map(|b| b.entries.clone())
+            .unwrap_or_default()
+    };
+    let sources = super::PreparedContextSources {
+        revision: source.revision.clone(),
+        prefix: entries(Kind::SeedPromptPrefix),
+        checkpoint: entries(Kind::CurrentSessionCheckpoint),
+        family: entries(Kind::SessionFamilyContext),
+        working: entries(Kind::CurrentSessionWorkingState),
+        history: entries(Kind::CurrentSessionHistory),
+    };
+    let block_tokens = |entries: &[AgentMessage]| estimate_messages_tokens(entries);
+    let prompt_prefix_tokens = block_tokens(&sources.prefix);
+    let checkpoint_tokens = block_tokens(&sources.checkpoint);
+    let session_family_context_tokens = block_tokens(&sources.family);
+    let working_state_tokens = block_tokens(&sources.working);
+    let recent_transcript_tokens = block_tokens(&sources.history);
+    let messages = [
+        &sources.prefix,
+        &sources.checkpoint,
+        &sources.family,
+        &sources.working,
+        &sources.history,
+    ]
+    .into_iter()
+    .flatten()
+    .cloned()
+    .collect::<Vec<_>>();
     let context_hash = Some(hash_context_messages(&messages));
     let estimated_tokens = estimate_messages_tokens(&messages);
-    PreparedModelContext {
+    Ok(PreparedModelContext {
+        sources: Some(sources),
         messages,
         rebased,
         context_hash,
@@ -164,7 +204,7 @@ pub(super) fn assemble_context(
         compaction_tail_start_seq: None,
         compaction_trigger_tokens: None,
         effective_retained_history_tokens: None,
-    }
+    })
 }
 
 pub(super) fn session_family_context_message(text: String) -> AgentMessage {
@@ -175,7 +215,7 @@ pub(super) fn is_application_context(message: &AgentMessage) -> bool {
     message.parts.iter().any(|part| matches!(part, AgentMessagePart::Context { kind, .. } if kind == "application_execution_context"))
 }
 
-fn working_state_message(
+pub(super) fn working_state_message(
     active_goal: Option<&ShortTermMemoryGoalView>,
     todos: &[ShortTermMemoryTodo],
     todo_enabled: bool,
@@ -214,7 +254,7 @@ fn working_state_message(
     if todo_enabled && !active_todos.is_empty() {
         text.push_str("\n<active-todos>\n");
         for todo in active_todos.into_iter().take(DEFAULT_TODO_MAX_ITEMS) {
-            if text.len() >= DEFAULT_TODO_MAX_CONTEXT_CHARS {
+            if text.len() >= token_limit as usize {
                 break;
             }
             text.push_str(&format!(
@@ -227,25 +267,15 @@ fn working_state_message(
         text.push_str("</active-todos>\n");
     }
     text.push_str("</current-session-working-state>");
-    text = truncate_chars(
-        &text,
-        token_limit
-            .saturating_mul(4)
-            .try_into()
-            .unwrap_or(DEFAULT_TODO_MAX_CONTEXT_CHARS)
-            .min(DEFAULT_TODO_MAX_CONTEXT_CHARS),
-    );
+    text = truncate_chars(&text, token_limit as usize);
     Some(AgentMessage::context_block(
         "current_session_working_state",
         text,
     ))
 }
 
-fn truncate_checkpoint_message(message: AgentMessage, token_limit: u32) -> AgentMessage {
-    let max_chars = token_limit.saturating_mul(4) as usize;
-    if max_chars == 0 {
-        return AgentMessage::context_block("conversation_checkpoint", "");
-    }
+pub(crate) fn truncate_checkpoint_message(message: AgentMessage, token_limit: u32) -> AgentMessage {
+    let max_chars = token_limit as usize;
     AgentMessage::new(
         message.role,
         message
@@ -258,10 +288,12 @@ fn truncate_checkpoint_message(message: AgentMessage, token_limit: u32) -> Agent
                     source_start_seq,
                     source_end_seq,
                 } => {
-                    let half = (max_chars / 2).max(1);
+                    let (summary, recent) = eliteforge_agent_memory::bound_checkpoint_data(
+                        &summary, &recent, max_chars,
+                    );
                     AgentMessagePart::CompactionCheckpoint {
-                        summary: truncate_chars(&summary, half),
-                        recent: truncate_chars(&recent, half),
+                        summary,
+                        recent,
                         source_start_seq,
                         source_end_seq,
                     }
@@ -285,17 +317,7 @@ fn truncate_checkpoint_message(message: AgentMessage, token_limit: u32) -> Agent
 }
 
 fn truncate_chars(text: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
-    }
-    if text.chars().count() <= max_chars {
-        return text.to_string();
-    }
-    let suffix = "\n...[truncated by short-term-memory block budget]";
-    let take = max_chars.saturating_sub(suffix.chars().count()).max(1);
-    let mut truncated = text.chars().take(take).collect::<String>();
-    truncated.push_str(suffix);
-    truncated
+    eliteforge_agent_memory::bound_text(text, max_chars)
 }
 
 pub(super) fn transcript_message_to_agent_message(
@@ -478,10 +500,9 @@ fn part_model_replay_allowed(part: &ShortTermMemoryPart) -> bool {
 }
 
 pub(crate) fn estimate_messages_tokens(messages: &[AgentMessage]) -> u32 {
-    messages
-        .iter()
-        .map(|message| (message.text_content().len() as u32 / 4).max(1))
-        .sum()
+    messages.iter().fold(0u32, |total, message| {
+        total.saturating_add(eliteforge_agent_memory::estimate_serialized_tokens(message))
+    })
 }
 
 fn hash_context_messages(messages: &[AgentMessage]) -> String {

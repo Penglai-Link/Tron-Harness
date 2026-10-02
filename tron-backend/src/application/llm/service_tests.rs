@@ -12,7 +12,6 @@ use super::*;
 
 #[derive(Clone)]
 struct FakeModelResolver {
-    text_config: Option<RuntimeModelConfig>,
     embedding_config: Option<RuntimeModelConfig>,
     rerank_config: Option<RuntimeModelConfig>,
 }
@@ -190,7 +189,6 @@ async fn embedding_call_uses_resolved_model_and_returns_embedding_vector() {
         .push_back(Ok(vec![0.1, 0.2, 0.3]));
     let service = LlmRuntimeService::new(
         Arc::new(FakeModelResolver {
-            text_config: Some(text_config()),
             embedding_config: Some(embedding_config()),
             rerank_config: Some(rerank_config()),
         }),
@@ -221,7 +219,6 @@ async fn embedding_call_with_chunking_embeds_every_slice() {
     let shared_client = Arc::new(client.clone());
     let service = LlmRuntimeService::new(
         Arc::new(FakeModelResolver {
-            text_config: Some(text_config()),
             embedding_config: Some(embedding_config()),
             rerank_config: Some(rerank_config()),
         }),
@@ -278,7 +275,6 @@ async fn rerank_call_returns_ranked_documents() {
         ]));
     let service = LlmRuntimeService::new(
         Arc::new(FakeModelResolver {
-            text_config: Some(text_config()),
             embedding_config: Some(embedding_config()),
             rerank_config: Some(rerank_config()),
         }),
@@ -314,7 +310,6 @@ async fn text_generation_call_uses_resolved_model_and_returns_output() {
     let shared_client = Arc::new(client.clone());
     let service = LlmRuntimeService::new(
         Arc::new(FakeModelResolver {
-            text_config: Some(text_config()),
             embedding_config: Some(embedding_config()),
             rerank_config: Some(rerank_config()),
         }),
@@ -340,7 +335,6 @@ async fn text_generation_call_uses_resolved_model_and_returns_output() {
 async fn embedding_call_rejects_blank_input() {
     let service = LlmRuntimeService::new(
         Arc::new(FakeModelResolver {
-            text_config: Some(text_config()),
             embedding_config: Some(embedding_config()),
             rerank_config: Some(rerank_config()),
         }),
@@ -369,7 +363,6 @@ async fn embedding_call_with_chunking_rejects_invalid_strategy() {
         .push_back(Ok(vec![0.1, 0.2, 0.3]));
     let service = LlmRuntimeService::new(
         Arc::new(FakeModelResolver {
-            text_config: Some(text_config()),
             embedding_config: Some(embedding_config()),
             rerank_config: Some(rerank_config()),
         }),

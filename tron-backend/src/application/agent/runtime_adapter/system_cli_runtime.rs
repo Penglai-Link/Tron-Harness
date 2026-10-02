@@ -110,6 +110,8 @@ impl SystemCliRuntime {
             latest_usage_audit: None,
             system_agent_session_id: result.session_id,
             observations: observations.lock().unwrap().clone(),
+            native: None,
+            sdk_execution: None,
         })
     }
 }

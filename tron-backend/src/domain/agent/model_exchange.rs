@@ -372,10 +372,6 @@ fn stable_tool_call_id(tool_name: &str, input: &Value, call_index: usize) -> Str
     format!("{GENERATED_TOOL_CALL_ID_PREFIX}{}", &digest[..16])
 }
 
-pub(crate) fn is_generated_tool_call_id(call_id: &str) -> bool {
-    call_id.starts_with(GENERATED_TOOL_CALL_ID_PREFIX)
-}
-
 impl ModelTokenUsage {
     pub fn add(self, other: Self) -> Self {
         Self {

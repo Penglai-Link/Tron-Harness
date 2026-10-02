@@ -124,136 +124,24 @@ impl ReactAgent {
 
         match self.event_bus.publish(draft) {
             PublishOutcome::Disabled | PublishOutcome::Accepted { .. } => Ok(()),
-            outcome => Err(AgentError::EventPublishFailed(format!("{outcome:?}"))),
+            outcome => {
+                // Presentation delivery cannot change the SDK execution result. The bus
+                // reports delivery failures to replay sinks, which expose incomplete replay.
+                eprintln!("agent presentation delivery incomplete for run {}: {outcome:?}", context.run_code);
+                Ok(())
+            }
         }
     }
 
     fn model_stream_event_sink(
         &self,
-        context: &AgentRunContext,
+        _context: &AgentRunContext,
+        _turn_state_kind: TurnStateKind,
         sink: ModelStreamSink,
-        turn_state_kind: TurnStateKind,
-        output_started: Arc<Mutex<bool>>,
+        _output_started: Arc<Mutex<bool>>,
     ) -> ModelStreamSink {
-        let event_bus = self.event_bus.clone();
-        let run_code = context.run_code.clone();
-        let workspace_code = context.workspace_code.clone();
-        let agent_kind = context.agent_kind;
-        let conversation_code = context.conversation_code.clone();
-        let stream_key = context.stream_key.clone();
-        let model_code = context.model.model_code.clone();
-        let model_name = context.model.model_name.clone();
-        let context_window_tokens = context
-            .model
-            .context_window_tokens
-            .map(|value| value.to_string());
-        Arc::new(move |event: ModelStreamEvent| {
-            let event_name = turn_state_kind.stream_event_name(event.kind);
-            if event.kind == ModelStreamEventKind::Text {
-                let mut started = output_started
-                    .lock()
-                    .expect("agent output start mutex poisoned");
-                if !*started {
-                    *started = true;
-                    let mut start_draft =
-                        BusEventDraft::agui("agent.output.started", "agent_runtime")
-                            .outcome(BusOutcome::Started)
-                            .subject("agent_run", run_code.clone())
-                            .attr("workspace_code", workspace_code.clone())
-                            .attr("agent_kind", agent_kind_label(agent_kind))
-                            .attr("runtime_kind", "in_process")
-                            .attr("model_code", model_code.clone());
-                    if !model_name.trim().is_empty() {
-                        start_draft = start_draft.payload_field("model_name", model_name.clone());
-                    }
-                    if let Some(context_window_tokens) = &context_window_tokens {
-                        start_draft = start_draft
-                            .payload_field("context_window_limit", context_window_tokens.clone());
-                    }
-                    if let Some(conversation_code) = &conversation_code {
-                        start_draft =
-                            start_draft.attr("conversation_code", conversation_code.clone());
-                    }
-                    if let Some(stream_key) = &stream_key {
-                        start_draft =
-                            start_draft.request(BusRequestRef::with_stream_key(stream_key.clone()));
-                    }
-                    let _ = event_bus.publish(start_draft);
-                }
-            }
-            for delta_payload in model_stream_delta_payloads(&event.delta) {
-                let mut draft = BusEventDraft::agui(event_name, "agent_runtime")
-                    .outcome(BusOutcome::Progress)
-                    .subject("agent_run", run_code.clone())
-                    .attr("workspace_code", workspace_code.clone())
-                    .attr("agent_kind", agent_kind_label(agent_kind))
-                    .attr("runtime_kind", "in_process")
-                    .attr("model_code", model_code.clone())
-                    .payload_field("delta_json", delta_payload);
-                if !model_name.trim().is_empty() {
-                    draft = draft.payload_field("model_name", model_name.clone());
-                }
-                if let Some(context_window_tokens) = &context_window_tokens {
-                    draft =
-                        draft.payload_field("context_window_limit", context_window_tokens.clone());
-                }
-                if let Some(conversation_code) = &conversation_code {
-                    draft = draft.attr("conversation_code", conversation_code.clone());
-                }
-                if let Some(stream_key) = &stream_key {
-                    draft = draft.request(BusRequestRef::with_stream_key(stream_key.clone()));
-                }
-                let _ = event_bus.publish(draft);
-            }
-            sink(event);
-        })
+        // The SDK owns message/reasoning lifecycle. Preserve only the optional
+        // product/raw transport callback; never synthesize a second protocol stream.
+        sink
     }
-}
-
-fn is_retryable_auto_route_error(message: &str, model: &AgentModelConfig) -> bool {
-    let normalized = message.to_ascii_lowercase();
-    if ["http 400", "http 403", "http 404", "http 422", "status 400", "status 403"]
-        .iter()
-        .any(|status| normalized.contains(status))
-    {
-        return false;
-    }
-    if model.model_code.starts_with("PERSON_AI:")
-        && ["401", "unauthorized", "authentication", "authorization"]
-            .iter()
-            .any(|marker| normalized.contains(marker))
-    {
-        return true;
-    }
-    [
-        "408", "429", "500", "502", "503", "504", "timed out", "timeout",
-        "connection", "network", "temporarily unavailable", "request failed",
-        "person-ai request failed",
-    ]
-    .iter()
-    .any(|marker| normalized.contains(marker))
-}
-
-fn is_person_ai_auth_or_connection_error(message: &str, model: &AgentModelConfig) -> bool {
-    if !model.model_code.starts_with("PERSON_AI:") {
-        return false;
-    }
-    let normalized = message.to_ascii_lowercase();
-    [
-        "401",
-        "unauthorized",
-        "authentication",
-        "authorization",
-        "decrypt",
-        "密钥",
-        "授权",
-        "重新登录",
-        "connection refused",
-        "connection reset",
-        "network",
-        "timed out",
-        "timeout",
-    ]
-    .iter()
-    .any(|marker| normalized.contains(marker))
 }

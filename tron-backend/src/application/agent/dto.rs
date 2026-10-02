@@ -65,6 +65,9 @@ pub struct AgentInvocationResult {
     pub latest_request_estimate: Option<TokenEstimateSnapshot>,
     pub latest_usage_audit: Option<TokenUsageAuditSnapshot>,
     pub system_agent_session_id: Option<String>,
+    pub native: Option<crate::domain::agent::AgentNativeRunOutcome>,
+    #[serde(skip)]
+    pub sdk_execution: Option<crate::domain::agent::AgentNativeExecutionSnapshot>,
     #[serde(skip)]
     pub observations: Vec<ToolObservation>,
 }

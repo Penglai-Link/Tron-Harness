@@ -11,7 +11,7 @@ use crate::{
     },
     domain::agent::{
         AgentError, AgentModelConfig, AgentRunContext, AgentRunResult, ModelRequest, ModelResponse,
-        ModelStreamEvent, ModelStreamEventKind, ModelTokenUsage, ToolRegistry,
+        ModelStreamEvent, ModelTokenUsage, ToolRegistry,
     },
     shared::event_bus::{BusEventDraft, BusOutcome, BusRequestRef, EventBusHandle, PublishOutcome},
 };
@@ -38,7 +38,7 @@ mod runtime_steering;
 
 use runtime_helpers::{
     agent_kind_label, compact_event_payload_value, compact_event_value,
-    model_stream_delta_payloads, record_failure_on_short_term_memory_error,
+    record_failure_on_short_term_memory_error,
     short_term_memory_error, validate_context,
 };
 use runtime_model_request::{model_request_facts, prepared_context_event_payload};
@@ -52,6 +52,23 @@ pub trait ModelClient: Send + Sync {
         request: &'a ModelRequest,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>>;
 
+    /// Bind immutable authorization for a native run. Stateless adapters may
+    /// return None; credential-backed adapters must capture the account scope.
+    fn bind_for_run(&self,_:&AgentModelConfig)->Result<Option<Arc<dyn ModelClient>>,String> {Ok(None)}
+    fn authorization_scope(&self,_:&AgentModelConfig)->Result<Option<String>,String> {Ok(None)}
+    fn close_observed<'a>(&'a self)->Pin<Box<dyn Future<Output=Result<eliteforge_agent_plugin_core::ShutdownReport,String>>+Send+'a>> {Box::pin(async {Err("model client does not declare lifecycle ownership".into())})}
+    fn generate_observed<'a>(&'a self,_:&'a AgentModelConfig,_:&'a ModelRequest)->Pin<Box<dyn Future<Output=eliteforge_agent_framework::ObservedModelResult<ModelResponse>>+Send+'a>> {Box::pin(async {eliteforge_agent_framework::ObservedModelResult{result:Err(eliteforge_agent_core::AgentError::InvalidConfiguration("observed model invocation is unavailable".into())),report:Default::default()}})}
+    fn generate_goal_judge_child<'a>(&'a self,_:&'a AgentModelConfig,_:&'a ModelRequest,_:Arc<dyn eliteforge_agent_framework::ModelJobRepair>,_:usize,_:&'a eliteforge_agent_core::RunContext)->Pin<Box<dyn Future<Output=eliteforge_agent_framework::ObservedModelResult<ModelResponse>>+Send+'a>> {Box::pin(async {eliteforge_agent_framework::ObservedModelResult{result:Err(eliteforge_agent_core::AgentError::InvalidConfiguration("model client does not support native child jobs".into())),report:Default::default()}})}
+    /// Exact admitted native content is separate from the product audit projection.
+    fn generate_native_once<'a>(&'a self,config:&'a AgentModelConfig,_:&'a eliteforge_agent_core::ChatRequest,product:&'a ModelRequest,sink:Option<ModelStreamSink>)->Pin<Box<dyn Future<Output=Result<ModelResponse,String>>+Send+'a>> { match sink {Some(sink)=>self.generate_stream(config,product,sink),None=>self.generate_once(config,product)} }
+    fn compact_memory<'a>(&'a self, _: &'a AgentModelConfig, _: &'a [String], _:Option<&'a str>)->Pin<Box<dyn Future<Output=Result<eliteforge_agent_memory::MemoryCompactionResult,String>>+Send+'a>> {Box::pin(async {Err("memory compaction is unavailable".into())})}
+    fn on_model_failure(&self, _: &AgentModelConfig, _: &eliteforge_agent_core::ModelError) {}
+    /// Used only inside an SDK-controlled turn or auxiliary call.
+    fn generate_once<'a>(&'a self, config: &'a AgentModelConfig, request: &'a ModelRequest) -> Pin<Box<dyn Future<Output = Result<ModelResponse,String>> + Send + 'a>> { let _=(config,request); Box::pin(async {Err("single-attempt model invocation must be explicitly implemented".into())}) }
+    fn recover_authentication<'a>(&'a self, _: &'a AgentModelConfig, _: &'a eliteforge_agent_core::ModelError) -> Pin<Box<dyn Future<Output=Result<bool,eliteforge_agent_core::ModelError>> + Send + 'a>> { Box::pin(async { Ok(false) }) }
+    fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output=()> + Send + 'a>>;
+    fn generate_with_repair<'a>(&'a self, config: &'a AgentModelConfig, request: &'a ModelRequest, _: Arc<dyn eliteforge_agent_framework::ModelJobRepair>, _: usize) -> Pin<Box<dyn Future<Output=Result<ModelResponse,String>> + Send + 'a>> { let _=(config,request); Box::pin(async {Err("controlled repair must be explicitly implemented".into())}) }
+
     fn generate_stream<'a>(
         &'a self,
         config: &'a AgentModelConfig,
@@ -59,7 +76,7 @@ pub trait ModelClient: Send + Sync {
         sink: ModelStreamSink,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
         Box::pin(async move {
-            let response = self.generate(config, request).await?;
+            let response = self.generate_once(config, request).await?;
             let output = response.output_text();
             if response.finish == crate::domain::agent::ModelFinish::Final && !output.is_empty() {
                 sink(ModelStreamEvent::text_delta(output));

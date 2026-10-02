@@ -722,6 +722,36 @@ fn execute_tool(
                 })
             })
         }
+
+        // Test adapters explicitly declare one transport attempt per mock invocation.
+        fn generate_once<'a>(
+            &'a self,
+            config: &'a AgentModelConfig,
+            request: &'a ModelRequest,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+        > {
+            self.generate(config, request)
+        }
+
+        fn close_observed<'a>(
+            &'a self,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(Default::default()) })
+        }
+
+        fn close<'a>(
+            &'a self,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+            Box::pin(async {})
+        }
     }
     let mut context = context.clone();
     context.limits.max_steps = 2;
@@ -1167,6 +1197,36 @@ async fn one_run_switches_worktrees_and_refreshes_next_model_request_without_inv
                 })
             })
         }
+
+        // Test adapters explicitly declare one transport attempt per mock invocation.
+        fn generate_once<'a>(
+            &'a self,
+            config: &'a AgentModelConfig,
+            request: &'a ModelRequest,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+        > {
+            self.generate(config, request)
+        }
+
+        fn close_observed<'a>(
+            &'a self,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(Default::default()) })
+        }
+
+        fn close<'a>(
+            &'a self,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+            Box::pin(async {})
+        }
     }
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path().join("repository");
@@ -1418,7 +1478,11 @@ fn code_patch_previews_and_applies_multiple_files_and_moves() {
     let temporary = tempfile::tempdir().unwrap();
     let root = temporary.path().canonicalize().unwrap();
     let state = productivity_state(&root);
-    let context = productivity_context(&root);
+    let mut context = productivity_context(&root);
+    // The full native multi-file patch observation costs 9,820 history tokens,
+    // above the default 8k fixture's 7,776 allowance. Retain every diff and move
+    // while giving this filesystem behavior test an adequate declared window.
+    context.model.context_window_tokens = Some(16_384);
     std::fs::write(root.join("main.rs"), "fn old() {}\n").unwrap();
     std::fs::write(root.join("move.rs"), "fn moved() {}\n").unwrap();
     std::fs::write(root.join("remove.txt"), "obsolete\n").unwrap();
@@ -1940,6 +2004,36 @@ async fn terminal_http_and_agent_share_process_with_conversation_isolation() {
                     None => ModelResponse::final_output("terminal started"),
                 })
             })
+        }
+
+        // Test adapters explicitly declare one transport attempt per mock invocation.
+        fn generate_once<'a>(
+            &'a self,
+            config: &'a AgentModelConfig,
+            request: &'a ModelRequest,
+        ) -> std::pin::Pin<
+            Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+        > {
+            self.generate(config, request)
+        }
+
+        fn close_observed<'a>(
+            &'a self,
+        ) -> std::pin::Pin<
+            Box<
+                dyn std::future::Future<
+                        Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                    > + Send
+                    + 'a,
+            >,
+        > {
+            Box::pin(async { Ok(Default::default()) })
+        }
+
+        fn close<'a>(
+            &'a self,
+        ) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+            Box::pin(async {})
         }
     }
     let model = StartTerminalModel(std::sync::Mutex::new(Some(

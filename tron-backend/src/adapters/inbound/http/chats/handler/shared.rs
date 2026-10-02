@@ -55,6 +55,16 @@ impl ChatStreamCompletion {
     pub(crate) fn payload(&self, session_code: &str, run_code: &str) -> ChatSsePayload {
         match self {
             Self::Success(result) => {
+                if matches!(result.run.status, "STEP_LIMIT" | "TOOL_CALL_LIMIT") {
+                    return ChatSsePayload::agui(
+                        "RUN_ERROR",
+                        json!({
+                            "type": "RUN_ERROR", "threadId": session_code, "runId": result.run.run_code,
+                            "code": result.run.status, "message": "agent execution reached its configured limit",
+                            "result": result, "timestamp": chrono::Utc::now().timestamp_millis(),
+                        }),
+                    );
+                }
                 let outcome = result
                     .user_input_request
                     .as_ref()
@@ -73,6 +83,7 @@ impl ChatStreamCompletion {
                             }],
                         })
                     })
+                    .or_else(|| native_interrupt_outcome(result.run.native.as_ref()))
                     .unwrap_or_else(|| json!({ "type": "success" }));
                 ChatSsePayload::agui(
                     "RUN_FINISHED",
@@ -222,10 +233,6 @@ pub(crate) fn resolve_chat_agent_runtime(
                 AgentInvocationError::RuntimeFailed("agent runtime resolution failed".into()),
             ),
         })
-}
-
-pub(crate) fn uses_system_live_stream(runtime: &ResolvedAgentRuntime) -> bool {
-    !matches!(runtime.runtime_type, AgentRuntimeType::React)
 }
 
 pub(crate) fn prepare_send_model(
@@ -491,3 +498,28 @@ mod tests {
         );
     }
 }
+
+// This decorates the independently completed product response when replay failed;
+// normal streaming preserves the SDK's native terminal verbatim.
+fn native_interrupt_outcome(
+    native: Option<&crate::domain::agent::AgentNativeRunOutcome>,
+) -> Option<Value> {
+    use crate::domain::agent::{AgentNativeInteractionKind, AgentNativeRunStatus};
+    let native = native.filter(|native| native.status == AgentNativeRunStatus::AwaitingInput)?;
+    let interrupts=native.interactions.iter().map(|interaction| {
+        let message=serde_json::from_value::<eliteforge_agent_core::Content>(interaction.prompt.clone()).ok().map(|content|content.text());
+        let (reason,tool_call_id)=match &interaction.kind {
+            AgentNativeInteractionKind::Input=>("input_required",None),
+            AgentNativeInteractionKind::Approval{invocation_id}=>("tool_call",Some(invocation_id)),
+        };
+        let mut value=json!({"id":interaction.id,"reason":reason,"responseSchema":interaction.response_schema,"metadata":{"nativeInteraction":interaction}});
+        if let Some(message)=message {value["message"]=json!(message);}
+        if let Some(id)=tool_call_id {value["toolCallId"]=json!(id);}
+        value
+    }).collect::<Vec<_>>();
+    Some(json!({"type":"interrupt","interrupts":interrupts}))
+}
+
+#[cfg(test)]
+#[path = "completion_tests.rs"]
+mod completion_tests;

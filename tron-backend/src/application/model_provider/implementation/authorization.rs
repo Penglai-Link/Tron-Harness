@@ -172,8 +172,7 @@ impl ModelProviderService {
                             "Person-AI returned no selectable chat models".into(),
                         ));
                     }
-                    adapter.verify_chat_auto(&credentials).await?;
-                    adapter.verify_embedding(&credentials).await?;
+                    self.verify_sdk_model_credentials(&credentials).await?;
                     let identity = self.fetch_person_ai_identity(&credentials).await?;
                     Ok::<_, ModelProviderError>((catalog, multimedia_catalog, identity))
                 }

@@ -336,3 +336,26 @@ fn validate_user_input_answers(
     }
     Ok(())
 }
+
+
+/// Legacy question cards are optional projections of a native paused run.
+/// Generic Input and Approval retain their full schema and content on `run.native`.
+pub(super) fn paused_run_presentation(run:&AgentInvocationResult)->Result<(String,Option<RawUserInputRequest>),ChatSendError> {
+    if let Some(native)=run.native.as_ref().filter(|native|native.status==crate::domain::agent::AgentNativeRunStatus::AwaitingInput) {
+        if native.interactions.is_empty() {
+            return Err(ChatSendError::Agent(AgentInvocationError::RuntimeFailed("native paused run has no pending interaction".into())));
+        }
+        if let Ok(raw)=raw_user_input_request(run) {return Ok((raw.intro.clone(),Some(raw)));}
+        for interaction in &native.interactions {
+            if let Some(presentation)=interaction.presentation.as_ref().filter(|value|value.get("kind").and_then(serde_json::Value::as_str)==Some("ask_user")) {
+                let mut raw:RawUserInputRequest=serde_json::from_value(presentation.clone()).map_err(|_|ChatSendError::Agent(AgentInvocationError::RuntimeFailed("native question presentation is invalid".into())))?;
+                raw.framework_interaction_id=Some(interaction.id.clone());
+                return Ok((raw.intro.clone(),Some(raw)));
+            }
+        }
+        return Ok((run.final_output.clone(),None));
+    }
+    let raw=raw_user_input_request(run)?;Ok((raw.intro.clone(),Some(raw)))
+}
+#[cfg(test)]
+mod native_pause_tests { include!("native_pause_tests.inc"); }

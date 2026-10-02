@@ -1,7 +1,6 @@
-use std::{
-    collections::{BTreeMap, BTreeSet},
-    sync::Arc,
-};
+use std::{collections::BTreeSet, sync::Arc};
+
+use serde_json::Value;
 
 use crate::{
     domain::agent::{
@@ -15,6 +14,9 @@ use super::agui_translate::{translate_agui_event, translate_protocol_events};
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentAguiStreamError {
     StreamKeyRequired,
+    ReplayReadFailed(String),
+    ReplayWriteFailed(String),
+    ReplayIncomplete(String),
 }
 
 pub trait AgentAguiReplayStore: Send + Sync {
@@ -23,6 +25,13 @@ pub trait AgentAguiReplayStore: Send + Sync {
         stream_key: &str,
         event: AgentAguiProtocolEvent,
     ) -> Result<(), String>;
+
+    /// Nonblocking delivery diagnostics; no database I/O on the bus publication path.
+    fn record_delivery_failure(&self, _stream_key: &str, _detail: &str) {}
+
+    fn replay_failure(&self, _stream_key: &str) -> Option<String> {
+        None
+    }
 
     fn replay_agui_events(&self, stream_key: &str) -> Result<Vec<AgentAguiEvent>, String>;
 
@@ -80,13 +89,16 @@ impl AgentAguiStreamService {
             .into_iter()
             .filter_map(|event| translate_agui_event(&stream_key, &event))
             .collect::<Vec<_>>();
-        let stored_events = self
-            .replay_store
-            .as_ref()
-            .and_then(|store| store.replay_agui_events(&stream_key).ok())
-            .unwrap_or_default();
+        let stored_events = match &self.replay_store {
+            Some(store) => store
+                .replay_agui_events(&stream_key)
+                .map_err(AgentAguiStreamError::ReplayReadFailed)?,
+            None => Vec::new(),
+        };
         let events = merge_agui_events(stored_events, memory_events);
+        let replay_incomplete = self.ensure_complete(&stream_key).is_err();
         Ok(AgentAguiEventSnapshot {
+            replay_incomplete,
             stream_key,
             active_streams: snapshot.active_streams,
             total_streams: snapshot.total_streams,
@@ -105,12 +117,22 @@ impl AgentAguiStreamService {
             .into_iter()
             .flat_map(|event| translate_protocol_events(&stream_key, &event))
             .collect::<Vec<_>>();
-        let stored_events = self
-            .replay_store
-            .as_ref()
-            .and_then(|store| store.replay_protocol_events(&stream_key).ok())
-            .unwrap_or_default();
-        Ok(merge_protocol_events(stored_events, memory_events))
+        let stored_events = match &self.replay_store {
+            Some(store) => {
+                self.ensure_complete(&stream_key)?;
+                store
+                    .replay_protocol_events(&stream_key)
+                    .map_err(AgentAguiStreamError::ReplayReadFailed)?
+            }
+            None => Vec::new(),
+        };
+        let mut events = merge_protocol_events(stored_events, memory_events);
+        // Older replay rows retain their original bytes; the public read boundary
+        // applies the same visibility projection as new native output writes.
+        for event in &mut events {
+            project_product_visibility(&mut event.data);
+        }
+        Ok(events)
     }
 
     pub fn record_protocol_event(
@@ -120,9 +142,29 @@ impl AgentAguiStreamService {
     ) -> Result<(), AgentAguiStreamError> {
         let stream_key = normalized_stream_key(stream_key)?;
         if let Some(store) = self.replay_store.as_ref() {
-            let _ = store.append_protocol_event(&stream_key, event);
+            if let Err(error) = store.append_protocol_event(&stream_key, event) {
+                store.record_delivery_failure(&stream_key, &error);
+                return Err(AgentAguiStreamError::ReplayWriteFailed(error));
+            }
         }
         Ok(())
+    }
+
+    pub fn mark_incomplete(&self, stream_key: &str, detail: &str) {
+        if let Some(store) = &self.replay_store {
+            store.record_delivery_failure(stream_key, detail);
+        }
+    }
+
+    pub fn ensure_complete(&self, stream_key: &str) -> Result<(), AgentAguiStreamError> {
+        match self
+            .replay_store
+            .as_ref()
+            .and_then(|store| store.replay_failure(stream_key))
+        {
+            Some(error) => Err(AgentAguiStreamError::ReplayIncomplete(error)),
+            None => Ok(()),
+        }
     }
 
     fn state(&self, stream_key: String) -> AgentAguiStreamState {
@@ -166,132 +208,43 @@ fn merge_protocol_events(
     let mut seen = BTreeSet::new();
     let mut merged = Vec::new();
     for event in stored_events.into_iter().chain(memory_events) {
-        let key = serde_json::to_string(&event).unwrap_or_else(|_| format!("{event:?}"));
-        if seen.insert(key) {
-            merged.push(event);
+        // Repeated content is valid. Only a durable event identity is a dedup key.
+        if let Some(key) = protocol_event_identity(&event) {
+            if !seen.insert(key) {
+                continue;
+            }
         }
+        merged.push(event);
     }
-    normalize_protocol_events(merged)
+    merged
 }
 
-#[derive(Debug, Clone)]
-struct ReasoningProtocolState {
-    message_id: String,
-    open: bool,
-}
-
-fn normalize_protocol_events(events: Vec<AgentAguiProtocolEvent>) -> Vec<AgentAguiProtocolEvent> {
-    let mut reasoning_by_run = BTreeMap::<String, ReasoningProtocolState>::new();
-    let mut normalized = Vec::new();
-
-    for event in events {
-        match event.sse_event.as_str() {
-            "REASONING_START" | "REASONING_MESSAGE_START" => {
-                if let Some(run_id) = protocol_run_id(&event) {
-                    let message_id = protocol_message_id(&event)
-                        .unwrap_or_else(|| fallback_reasoning_message_id(&run_id));
-                    reasoning_by_run.insert(
-                        run_id,
-                        ReasoningProtocolState {
-                            message_id,
-                            open: true,
-                        },
-                    );
-                }
-                normalized.push(event);
-            }
-            "REASONING_MESSAGE_END" | "REASONING_END" => {
-                let Some(run_id) = protocol_run_id(&event) else {
-                    normalized.push(event);
-                    continue;
-                };
-                let Some(state) = reasoning_by_run.get_mut(&run_id) else {
-                    continue;
-                };
-                if !state.open {
-                    continue;
-                }
-                if event.sse_event == "REASONING_END" {
-                    state.open = false;
-                }
-                normalized.push(event);
-            }
-            "TEXT_MESSAGE_START" | "TEXT_MESSAGE_CONTENT" => {
-                if let Some(run_id) = protocol_run_id(&event) {
-                    if let Some(state) = reasoning_by_run.get_mut(&run_id)
-                        && state.open
-                    {
-                        normalized.extend(reasoning_close_events(
-                            &event,
-                            &run_id,
-                            state.message_id.as_str(),
-                        ));
-                        state.open = false;
-                    }
-                }
-                normalized.push(event);
-            }
-            _ => normalized.push(event),
-        }
-    }
-
-    normalized
-}
-
-fn reasoning_close_events(
-    boundary_event: &AgentAguiProtocolEvent,
-    run_id: &str,
-    reasoning_message_id: &str,
-) -> Vec<AgentAguiProtocolEvent> {
-    let thread_id = boundary_event
-        .data
-        .get("threadId")
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
-    let timestamp = boundary_event
-        .data
-        .get("timestamp")
-        .cloned()
-        .unwrap_or(serde_json::Value::Null);
-    vec![
-        AgentAguiProtocolEvent {
-            sse_event: "REASONING_MESSAGE_END".into(),
-            data: serde_json::json!({
-                "type": "REASONING_MESSAGE_END",
-                "threadId": thread_id,
-                "runId": run_id,
-                "messageId": reasoning_message_id,
-                "timestamp": timestamp,
-            }),
-        },
-        AgentAguiProtocolEvent {
-            sse_event: "REASONING_END".into(),
-            data: serde_json::json!({
-                "type": "REASONING_END",
-                "threadId": thread_id,
-                "runId": run_id,
-                "timestamp": timestamp,
-            }),
-        },
-    ]
-}
-
-fn protocol_run_id(event: &AgentAguiProtocolEvent) -> Option<String> {
+pub fn protocol_event_identity(event: &AgentAguiProtocolEvent) -> Option<String> {
     event
         .data
-        .get("runId")
+        .pointer("/metadata/tron/eventId")
         .and_then(serde_json::Value::as_str)
-        .map(str::to_string)
+        .map(str::to_owned)
 }
 
-fn protocol_message_id(event: &AgentAguiProtocolEvent) -> Option<String> {
-    event
-        .data
-        .get("messageId")
-        .and_then(serde_json::Value::as_str)
-        .map(str::to_string)
-}
-
-fn fallback_reasoning_message_id(run_id: &str) -> String {
-    format!("{run_id}-reasoning")
+// The lossless native/history codec deliberately retains private product reasoning.
+// Its public transport projection follows the existing product visibility policy,
+// at explicit SDK Content paths only; arbitrary user JSON is never traversed.
+pub(crate) fn project_product_visibility(data: &mut Value) {
+    let path = match data.get("type").and_then(Value::as_str) {
+        Some("CUSTOM") if data.get("name").and_then(Value::as_str) == Some("framework.message") => {
+            "/value/content"
+        }
+        Some("RUN_FINISHED") => "/result/content",
+        _ => return,
+    };
+    if let Some(content) = data.pointer_mut(path).and_then(Value::as_array_mut) {
+        content.retain(|block| {
+            !(block.get("type").and_then(Value::as_str) == Some("json")
+                && block
+                    .pointer("/value/tronMessagePart/type")
+                    .and_then(Value::as_str)
+                    == Some("reasoning"))
+        });
+    }
 }

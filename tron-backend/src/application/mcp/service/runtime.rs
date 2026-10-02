@@ -1,4 +1,5 @@
 use super::McpService;
+use crate::application::agent::tool_framework::FrameworkToolRegistryExt;
 use crate::domain::{
     agent::{EffectiveTool, McpAccessMode, ToolRegistry},
     mcp::{McpError, McpServerAuthKind, McpServerTransportKind, PlatformMcpServerRecord},

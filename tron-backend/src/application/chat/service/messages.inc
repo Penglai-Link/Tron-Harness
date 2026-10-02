@@ -179,7 +179,7 @@ impl ChatService {
             transcript_input_kind: None,
             transcript_input_metadata: (!command.resume.is_empty()).then(|| json!({"resume": command.resume})),
         };
-        let run = if let Some(sink) = sink {
+        let mut run = if let Some(sink) = sink {
             agent
                 .invoke_stream_reserved(
                     invocation,
@@ -202,8 +202,7 @@ impl ChatService {
         .map_err(ChatSendError::Agent)?;
         let awaiting_user_input = run.status == "AWAITING_USER_INPUT";
         let (assistant_content, user_input_request) = if awaiting_user_input {
-            let raw = raw_user_input_request(&run)?;
-            (raw.intro.clone(), Some(raw))
+            paused_run_presentation(&run)?
         } else {
             (run.final_output.clone(), None)
         };
@@ -267,8 +266,7 @@ impl ChatService {
                     supports_user_input_requests,
                 )
                 .await?;
-            result_messages.extend(goal_result.messages);
-            user_input_request = user_input_request.or(goal_result.user_input_request);
+            goal_result.merge_into(&mut run, &mut result_messages, &mut user_input_request);
         }
         let updated_session = self
             .repository()

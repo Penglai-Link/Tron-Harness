@@ -5,12 +5,14 @@ mod config;
 mod dto;
 mod history_retention;
 mod port;
+mod provider_config;
 mod service;
+mod service_provider;
+pub(crate) use service_provider::memory_provider_usage;
 mod service_access;
 mod service_budget;
 mod service_compaction;
 mod service_compaction_model;
-mod service_compaction_prompt;
 mod service_compaction_summary;
 mod service_context;
 mod service_events;
@@ -27,7 +29,7 @@ mod service_session_summary_support;
 mod service_todos;
 mod service_tool_output;
 
-pub(crate) use assembler::estimate_messages_tokens;
+pub(crate) use assembler::{estimate_messages_tokens, truncate_checkpoint_message};
 pub use config::{
     CompactionPolicyConfig, ContextBlockBudgetConfig, ContextBlockBudgets, ContextBudgetConfig,
     EventLogConfig, FamilyLoadConfig, GoalLoopConfig, ModelContextBudgetPlan,
@@ -37,10 +39,15 @@ pub use dto::{
     CompactionContextPolicy, ContextBudgetBreakdown, CreateCompactionCommand, GoalJudgeFailure,
     GoalJudgeOutput, GoalLoopDecision, GoalSessionCommand, ModelCompactionFailure,
     ModelCompactionOutput, ModelRequestTranscriptFacts, ModelResponseTranscriptFacts,
-    ModelSessionSummaryOutput, PreparedCompactionInput, PreparedGoalJudgeInput,
-    PreparedModelContext, PreparedSessionSummaryInput, PreparedSessionSummaryJob,
-    ReplaceTodosCommand, SessionSummaryFailure, SessionSummaryJobContext, SessionSummaryRunOutcome,
-    SetGoalCommand, TodoUpdateItem, ToolTranscriptStatus, UpdateGoalCommand,
+    ModelSessionSummaryOutput, PreparedCompactionInput, PreparedContextSources,
+    PreparedGoalJudgeInput, PreparedModelContext, PreparedSessionSummaryInput,
+    PreparedSessionSummaryJob, ReplaceTodosCommand, SessionSummaryFailure,
+    SessionSummaryJobContext, SessionSummaryRunOutcome, SetGoalCommand, TodoUpdateItem,
+    ToolTranscriptStatus, UpdateGoalCommand,
 };
 pub use port::ShortTermMemoryRepository;
+pub use provider_config::{
+    ContextPriceInputs, ContextProviderPolicy, ContextProvidersConfig, ContextReductionStrategy,
+};
 pub use service::ShortTermMemoryService;
+pub(crate) use service_session_summary_support::redact_sensitive_text;

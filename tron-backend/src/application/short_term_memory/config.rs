@@ -1,3 +1,6 @@
+pub use eliteforge_agent_memory::{
+    ContextBlockBudgetConfig, ContextBlockBudgets, ModelContextBudgetPlan,
+};
 use serde::Serialize;
 
 const DEFAULT_TOOL_OUTPUT_ROOT: &str = "~/.tron/artifacts/short-term-memory/tool-results";
@@ -6,12 +9,6 @@ const DEFAULT_CONTEXT_WINDOW_TOKENS: u32 = 32_000;
 const DEFAULT_FAMILY_CONTEXT_MAX_RATIO_BPS: u32 = 1_000;
 const DEFAULT_FAMILY_CONTEXT_HARD_CAP_TOKENS: u32 = 12_000;
 const DEFAULT_FAMILY_CONTEXT_MAX_CHARS: usize = 6_000;
-const DEFAULT_SEED_PROMPT_PREFIX_MAX_RATIO_BPS: u32 = 5_000;
-const DEFAULT_SEED_PROMPT_PREFIX_HARD_CAP_TOKENS: u32 = 16_000;
-const DEFAULT_CHECKPOINT_CONTEXT_MAX_RATIO_BPS: u32 = 2_000;
-const DEFAULT_CHECKPOINT_CONTEXT_HARD_CAP_TOKENS: u32 = 6_000;
-const DEFAULT_WORKING_STATE_CONTEXT_MAX_RATIO_BPS: u32 = 1_000;
-const DEFAULT_WORKING_STATE_CONTEXT_HARD_CAP_TOKENS: u32 = 2_000;
 const DEFAULT_MAX_FAMILY_SESSIONS: usize = 3;
 const DEFAULT_SNAPSHOT_MAX_CHARS: usize = 2_000;
 const DEFAULT_FAMILY_TTL_HOURS: u32 = 72;
@@ -65,21 +62,7 @@ pub struct ContextBudgetConfig {
     pub family_context_max_chars: usize,
     pub reasoning_summary_replay_enabled: bool,
     pub blocks: ContextBlockBudgets,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct ContextBlockBudgets {
-    pub seed_prompt_prefix: ContextBlockBudgetConfig,
-    pub current_session_checkpoint: ContextBlockBudgetConfig,
-    pub session_family_context: ContextBlockBudgetConfig,
-    pub current_session_working_state: ContextBlockBudgetConfig,
-    pub tool_schema: ContextBlockBudgetConfig,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct ContextBlockBudgetConfig {
-    pub max_ratio_bps: Option<u32>,
-    pub max_tokens: Option<u32>,
+    pub providers: super::ContextProvidersConfig,
 }
 
 #[derive(Debug, Clone, Eq, PartialEq, Serialize)]
@@ -110,33 +93,6 @@ pub struct GoalLoopConfig {
     pub judge_output_max_tokens: u32,
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct ModelContextBudgetPlan {
-    pub model_context_window: u32,
-    pub output_token_reserve: u32,
-    pub effective_input_budget: u32,
-    pub block_budgets: ContextBlockBudgetPlans,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct ContextBlockBudgetPlans {
-    pub seed_prompt_prefix: ContextBlockBudgetPlan,
-    pub current_session_checkpoint: ContextBlockBudgetPlan,
-    pub session_family_context: ContextBlockBudgetPlan,
-    pub current_session_working_state: ContextBlockBudgetPlan,
-    pub tool_schema: ContextBlockBudgetPlan,
-    pub current_session_history: ContextBlockBudgetPlan,
-}
-
-#[derive(Debug, Clone, Eq, PartialEq, Serialize)]
-pub struct ContextBlockBudgetPlan {
-    pub block_kind: &'static str,
-    pub enabled: bool,
-    pub effective_limit_tokens: u32,
-    pub priority: u8,
-    pub allow_borrow_unused_budget: bool,
-}
-
 impl Default for ShortTermMemoryConfig {
     fn default() -> Self {
         Self {
@@ -159,6 +115,7 @@ impl Default for ShortTermMemoryConfig {
                 family_context_max_chars: DEFAULT_FAMILY_CONTEXT_MAX_CHARS,
                 reasoning_summary_replay_enabled: false,
                 blocks: ContextBlockBudgets::default(),
+                providers: Default::default(),
             },
             family_load: FamilyLoadConfig {
                 default_max_sessions: DEFAULT_MAX_FAMILY_SESSIONS,
@@ -186,106 +143,15 @@ impl Default for ShortTermMemoryConfig {
     }
 }
 
-impl Default for ContextBlockBudgets {
-    fn default() -> Self {
-        Self {
-            seed_prompt_prefix: ContextBlockBudgetConfig {
-                max_ratio_bps: Some(DEFAULT_SEED_PROMPT_PREFIX_MAX_RATIO_BPS),
-                max_tokens: Some(DEFAULT_SEED_PROMPT_PREFIX_HARD_CAP_TOKENS),
-            },
-            current_session_checkpoint: ContextBlockBudgetConfig {
-                max_ratio_bps: Some(DEFAULT_CHECKPOINT_CONTEXT_MAX_RATIO_BPS),
-                max_tokens: Some(DEFAULT_CHECKPOINT_CONTEXT_HARD_CAP_TOKENS),
-            },
-            session_family_context: ContextBlockBudgetConfig {
-                max_ratio_bps: Some(DEFAULT_FAMILY_CONTEXT_MAX_RATIO_BPS),
-                max_tokens: Some(DEFAULT_FAMILY_CONTEXT_HARD_CAP_TOKENS),
-            },
-            current_session_working_state: ContextBlockBudgetConfig {
-                max_ratio_bps: Some(DEFAULT_WORKING_STATE_CONTEXT_MAX_RATIO_BPS),
-                max_tokens: Some(DEFAULT_WORKING_STATE_CONTEXT_HARD_CAP_TOKENS),
-            },
-            // Preserve existing DirectList agents until an explicit tool budget is configured.
-            tool_schema: ContextBlockBudgetConfig {
-                max_ratio_bps: Some(10_000),
-                max_tokens: None,
-            },
-        }
-    }
-}
-
 impl ShortTermMemoryConfig {
     pub fn model_context_budget_plan(
         &self,
         context_window_tokens: Option<u32>,
         max_output_tokens: Option<u32>,
     ) -> ModelContextBudgetPlan {
-        let model_context_window =
-            context_window_tokens.unwrap_or(self.context.default_context_window_tokens);
-        let output_token_reserve = max_output_tokens.unwrap_or(0);
-        let effective_input_budget = model_context_window.saturating_sub(output_token_reserve);
-        ModelContextBudgetPlan {
-            model_context_window,
-            output_token_reserve,
-            effective_input_budget,
-            block_budgets: ContextBlockBudgetPlans {
-                seed_prompt_prefix: block_plan(
-                    "seed_prompt_prefix",
-                    &self.context.blocks.seed_prompt_prefix,
-                    effective_input_budget,
-                ),
-                current_session_checkpoint: block_plan(
-                    "current_session_checkpoint",
-                    &self.context.blocks.current_session_checkpoint,
-                    effective_input_budget,
-                ),
-                session_family_context: block_plan(
-                    "session_family_context",
-                    &self.context.blocks.session_family_context,
-                    effective_input_budget,
-                ),
-                current_session_working_state: block_plan(
-                    "current_session_working_state",
-                    &self.context.blocks.current_session_working_state,
-                    effective_input_budget,
-                ),
-                current_session_history: ContextBlockBudgetPlan {
-                    block_kind: "current_session_history",
-                    enabled: true,
-                    effective_limit_tokens: effective_input_budget,
-                    priority: 60,
-                    allow_borrow_unused_budget: true,
-                },
-                tool_schema: block_plan(
-                    "tool_schema",
-                    &self.context.blocks.tool_schema,
-                    effective_input_budget,
-                ),
-            },
-        }
-    }
-}
-
-fn block_plan(
-    block_kind: &'static str,
-    config: &ContextBlockBudgetConfig,
-    effective_input_budget: u32,
-) -> ContextBlockBudgetPlan {
-    let ratio_cap = config.max_ratio_bps.map(|ratio| {
-        ((u64::from(effective_input_budget) * u64::from(ratio.min(10_000))) / 10_000) as u32
-    });
-    let effective_limit_tokens = match (ratio_cap, config.max_tokens) {
-        (Some(ratio), Some(max_tokens)) => ratio.min(max_tokens),
-        (Some(ratio), None) => ratio,
-        (None, Some(max_tokens)) => max_tokens,
-        (None, None) => effective_input_budget,
-    }
-    .min(effective_input_budget);
-    ContextBlockBudgetPlan {
-        block_kind,
-        enabled: true,
-        effective_limit_tokens,
-        priority: 0,
-        allow_borrow_unused_budget: false,
+        self.context.blocks.plan(
+            context_window_tokens.unwrap_or(self.context.default_context_window_tokens),
+            max_output_tokens.unwrap_or(0),
+        )
     }
 }

@@ -132,6 +132,9 @@ pub struct PreparedCompactionInput {
     pub prompt: String,
     pub prompt_hash: String,
     pub pinned_start_seq: Option<i64>,
+    /// Authorized semantic records for the Framework memory plugin.
+    pub history: Vec<String>,
+    pub previous_summary: Option<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -284,6 +287,8 @@ pub struct GoalJudgeFailure {
 
 #[derive(Debug, Clone, PartialEq)]
 pub struct PreparedModelContext {
+    /// Authorized sources only; the SDK asynchronous assembler owns model admission.
+    pub sources: Option<PreparedContextSources>,
     pub messages: Vec<AgentMessage>,
     pub rebased: bool,
     pub context_hash: Option<String>,
@@ -302,6 +307,16 @@ pub struct PreparedModelContext {
     pub compaction_tail_start_seq: Option<i64>,
     pub compaction_trigger_tokens: Option<u32>,
     pub effective_retained_history_tokens: Option<u32>,
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub struct PreparedContextSources {
+    pub revision: eliteforge_agent_memory::MemoryRevision,
+    pub prefix: Vec<AgentMessage>,
+    pub checkpoint: Vec<AgentMessage>,
+    pub family: Vec<AgentMessage>,
+    pub working: Vec<AgentMessage>,
+    pub history: Vec<AgentMessage>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize)]

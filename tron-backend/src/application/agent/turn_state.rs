@@ -4,24 +4,13 @@ use super::ToolSchemaCache;
 
 use crate::domain::agent::{
     AgentMessage, AgentModelProtocol, AgentRunContext, ModelRequest, ModelResponse,
-    ModelStreamEventKind, ToolObservation, responses_function_call_item_json,
-    responses_input_item_json,
+    ToolObservation, responses_function_call_item_json, responses_input_item_json,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TurnStateKind {
     Chat,
     Responses,
-}
-
-impl TurnStateKind {
-    pub fn stream_event_name(self, event_kind: ModelStreamEventKind) -> &'static str {
-        match event_kind {
-            ModelStreamEventKind::Text => "agent.output.delta",
-            ModelStreamEventKind::Reasoning => "agent.reasoning.raw_delta",
-            ModelStreamEventKind::ReasoningSummary => "agent.reasoning.delta",
-        }
-    }
 }
 
 #[derive(Debug, Clone)]

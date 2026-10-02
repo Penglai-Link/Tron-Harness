@@ -1,9 +1,8 @@
-use std::{future::Future, pin::Pin};
-
-use serde_json::{Value, json};
-
+use super::http_model_client::{error, limits, sdk_config};
+use super::{HttpModelClient, HttpModelProviderClient};
 use crate::{
     application::{
+        agent::ModelClient,
         llm::{LlmRuntimeClient, LlmRuntimeRerankHit},
         model::RuntimeModelConfig,
     },
@@ -12,284 +11,33 @@ use crate::{
         model::{ModelProtocol, ModelType},
     },
 };
-
-use super::protocol_adapters::adapter_for_protocol;
-
-#[derive(Debug, Clone, Default)]
+use eliteforge_agent_core as fw;
+use eliteforge_agent_official_plugin_model_http as sdk;
+use std::{future::Future, pin::Pin, sync::Arc};
+#[derive(Clone)]
 pub struct HttpLlmRuntimeClient {
-    client: reqwest::Client,
+    models: Arc<HttpModelClient>,
 }
-
 impl HttpLlmRuntimeClient {
-    pub fn new(client: reqwest::Client) -> Self {
-        Self { client }
+    pub fn new(client: sdk::ModelHttpClient) -> Self {
+        Self {
+            models: Arc::new(HttpModelClient::new(Arc::new(
+                HttpModelProviderClient::new(client),
+            ))),
+        }
+    }
+    pub fn with_model_client(models: Arc<HttpModelClient>) -> Self {
+        Self { models }
     }
 }
-
-impl LlmRuntimeClient for HttpLlmRuntimeClient {
-    fn generate<'a>(
-        &'a self,
-        config: &'a RuntimeModelConfig,
-        prompt: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
-        Box::pin(async move { self.generate_inner(config, prompt).await })
-    }
-
-    fn embed<'a>(
-        &'a self,
-        config: &'a RuntimeModelConfig,
-        input: &'a str,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
-        Box::pin(async move { self.embed_inner(config, input).await })
-    }
-
-    fn rerank<'a>(
-        &'a self,
-        config: &'a RuntimeModelConfig,
-        query: &'a str,
-        documents: &'a [String],
-        top_n: Option<usize>,
-    ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>> {
-        Box::pin(async move { self.rerank_inner(config, query, documents, top_n).await })
-    }
-}
-
-impl HttpLlmRuntimeClient {
-    async fn generate_inner(
-        &self,
-        config: &RuntimeModelConfig,
-        prompt: &str,
-    ) -> Result<String, String> {
-        if config.model_type != ModelType::Text {
-            return Err(format!(
-                "text generation call requires TEXT modelType, got {:?}",
-                config.model_type
-            ));
-        }
-        let model_config = runtime_to_agent_model_config(config)?;
-        let adapter = adapter_for_protocol(model_config.protocol)
-            .ok_or_else(|| "model protocol was unsupported".to_string())?;
-        let path = config.api_path.as_deref().unwrap_or(adapter.default_path());
-        let url = endpoint_url(config, path)?;
-        let request = ModelRequest {
-            messages: vec![AgentMessage::user(prompt)],
-            tools: Vec::new(),
-            system_agent_session_id: None,
-            prepared_tool_schema: None,
-            response_input_items: None,
-            previous_response_id: None,
-        };
-        let body = adapter.request_body(&model_config, &request)?;
-        let response_body = self
-            .post_json_with_retry(config, url.as_str(), &body)
-            .await?;
-        let response = adapter.parse_response(&response_body)?;
-        match response.finish {
-            ModelFinish::Final => Ok(response.output_text()),
-            ModelFinish::ToolCalls => {
-                Err("text generation response unexpectedly requested tool calls".into())
-            }
-        }
-    }
-
-    async fn embed_inner(
-        &self,
-        config: &RuntimeModelConfig,
-        input: &str,
-    ) -> Result<Vec<f32>, String> {
-        if config.model_type != ModelType::Embedding {
-            return Err(format!(
-                "embedding call requires EMBEDDING modelType, got {:?}",
-                config.model_type
-            ));
-        }
-        if config.protocol != ModelProtocol::OpenAiCompatibleEmbedding {
-            return Err(format!(
-                "embedding call requires OPENAI_COMPATIBLE_EMBEDDING protocol, got {:?}",
-                config.protocol
-            ));
-        }
-
-        let path = config.api_path.as_deref().unwrap_or("/embeddings");
-        let url = endpoint_url(config, path)?;
-        let body = json!({
-            "model": config.model_name,
-            "input": input,
-        });
-        let response_body = self
-            .post_json_with_retry(config, url.as_str(), &body)
-            .await?;
-        parse_embedding_response(&response_body)
-    }
-
-    async fn rerank_inner(
-        &self,
-        config: &RuntimeModelConfig,
-        query: &str,
-        documents: &[String],
-        top_n: Option<usize>,
-    ) -> Result<Vec<LlmRuntimeRerankHit>, String> {
-        if config.model_type != ModelType::Rerank {
-            return Err(format!(
-                "rerank call requires RERANK modelType, got {:?}",
-                config.model_type
-            ));
-        }
-        if config.protocol != ModelProtocol::Rerank {
-            return Err(format!(
-                "rerank call requires RERANK protocol, got {:?}",
-                config.protocol
-            ));
-        }
-
-        let path = config.api_path.as_deref().unwrap_or("/rerank");
-        let url = endpoint_url(config, path)?;
-        let mut body = json!({
-            "model": config.model_name,
-            "query": query,
-            "documents": documents,
-        });
-        if let Some(top_n) = top_n
-            && top_n > 0
-        {
-            body["top_n"] = json!(top_n);
-        }
-        let response_body = self
-            .post_json_with_retry(config, url.as_str(), &body)
-            .await?;
-        parse_rerank_response(&response_body)
-    }
-
-    async fn post_json_with_retry(
-        &self,
-        config: &RuntimeModelConfig,
-        url: &str,
-        body: &Value,
-    ) -> Result<Value, String> {
-        let attempts = config.max_retries.unwrap_or(0).saturating_add(1);
-        let mut last_error = None;
-        for _ in 0..attempts {
-            let response = self.request_builder(config, url, body).send().await;
-            match response {
-                Ok(response) if response.status().is_success() => {
-                    return response.json().await.map_err(provider_error);
-                }
-                Ok(response) => {
-                    let status = response.status();
-                    let body: Value = response.json().await.unwrap_or(Value::Null);
-                    last_error = Some(provider_status_error(status, &body));
-                }
-                Err(error) => {
-                    last_error = Some(provider_error(error));
-                }
-            }
-        }
-        Err(last_error.unwrap_or_else(|| "llm runtime request failed".into()))
-    }
-
-    fn request_builder(
-        &self,
-        config: &RuntimeModelConfig,
-        url: &str,
-        body: &Value,
-    ) -> reqwest::RequestBuilder {
-        self.client
-            .post(url)
-            .bearer_auth(&config.api_key)
-            .json(body)
-    }
-}
-
-fn parse_embedding_response(body: &Value) -> Result<Vec<f32>, String> {
-    let Some(data) = body.get("data").and_then(Value::as_array) else {
-        return Err("embedding response missing data array".into());
-    };
-    let Some(first) = data.first() else {
-        return Err("embedding response data array is empty".into());
-    };
-    let Some(raw_vector) = first.get("embedding").and_then(Value::as_array) else {
-        return Err("embedding response missing embedding array".into());
-    };
-    raw_vector
-        .iter()
-        .enumerate()
-        .map(|(index, value)| {
-            value
-                .as_f64()
-                .map(|number| number as f32)
-                .ok_or_else(|| format!("embedding value at index {index} was not numeric"))
-        })
-        .collect()
-}
-
-fn parse_rerank_response(body: &Value) -> Result<Vec<LlmRuntimeRerankHit>, String> {
-    let items = body
-        .get("results")
-        .or_else(|| body.get("data"))
-        .and_then(Value::as_array)
-        .ok_or_else(|| "rerank response missing results/data array".to_string())?;
-    let mut hits = Vec::with_capacity(items.len());
-    for (array_index, item) in items.iter().enumerate() {
-        let document_index = item
-            .get("index")
-            .or_else(|| item.get("document_index"))
-            .or_else(|| item.pointer("/document/index"))
-            .and_then(Value::as_u64)
-            .ok_or_else(|| format!("rerank result {array_index} missing index"))?
-            as usize;
-        let score = item
-            .get("relevance_score")
-            .or_else(|| item.get("score"))
-            .and_then(Value::as_f64)
-            .ok_or_else(|| format!("rerank result {array_index} missing score"))?;
-        hits.push(LlmRuntimeRerankHit {
-            document_index,
-            score,
-        });
-    }
-    Ok(hits)
-}
-
-fn provider_error(error: reqwest::Error) -> String {
-    if error.is_timeout() {
-        "llm runtime connection timed out".into()
-    } else {
-        error.to_string()
-    }
-}
-
-fn provider_status_error(status: reqwest::StatusCode, body: &Value) -> String {
-    let detail = body
-        .pointer("/error/message")
-        .or_else(|| body.get("message"))
-        .and_then(Value::as_str)
-        .unwrap_or("llm runtime request failed");
-    format!("llm runtime provider returned {status}: {detail}")
-}
-
-fn endpoint_url(config: &RuntimeModelConfig, path: &str) -> Result<String, String> {
-    let base = config.base_url.trim().trim_end_matches('/');
-    let path = path.trim().trim_start_matches('/');
-    if base.is_empty() || path.is_empty() {
-        return Err("model baseUrl and apiPath are required".into());
-    }
-    Ok(format!("{base}/{path}"))
-}
-
-fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> Result<AgentModelConfig, String> {
-    let protocol = match (config.protocol, config.model_type) {
-        (ModelProtocol::OpenAiCompatible, ModelType::Text) => AgentModelProtocol::ChatCompletions,
-        (ModelProtocol::Responses, ModelType::Text) => AgentModelProtocol::Responses,
-        _ => {
-            return Err(format!(
-                "text generation call requires text-capable protocol/modelType, got {:?}/{:?}",
-                config.protocol, config.model_type
-            ));
-        }
-    };
-    Ok(AgentModelConfig {
+pub(crate) fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> AgentModelConfig {
+    AgentModelConfig {
         model_code: config.model_code.clone(),
-        protocol,
+        protocol: match config.protocol {
+            ModelProtocol::Responses => AgentModelProtocol::Responses,
+            ModelProtocol::OpenAiCompatibleEmbedding => AgentModelProtocol::Embeddings,
+            _ => AgentModelProtocol::ChatCompletions,
+        },
         base_url: config.base_url.clone(),
         api_path: config.api_path.clone(),
         api_key: config.api_key.clone(),
@@ -302,47 +50,258 @@ fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> Result<AgentMod
         context_window_tokens: config.context_window_tokens,
         top_p: config.top_p,
         max_retries: config.max_retries,
-    })
+    }
+}
+#[path = "http_llm_observed.rs"]
+mod observed;
+impl LlmRuntimeClient for HttpLlmRuntimeClient {
+    fn generate_observed<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        prompt: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = eliteforge_agent_framework::ObservedModelResult<String>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(self.observed_generate(config, prompt))
+    }
+    fn embed_observed<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+    ) -> Pin<
+        Box<
+            dyn Future<Output = eliteforge_agent_framework::ObservedModelResult<Vec<f32>>>
+                + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(self.observed_embed(config, input))
+    }
+    fn rerank_observed<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        query: &'a str,
+        documents: &'a [String],
+        top_n: Option<usize>,
+    ) -> Pin<
+        Box<
+            dyn Future<
+                    Output = eliteforge_agent_framework::ObservedModelResult<
+                        Vec<LlmRuntimeRerankHit>,
+                    >,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(self.observed_rerank(config, query, documents, top_n))
+    }
+
+    fn generate<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        prompt: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async move {
+            if config.model_type != ModelType::Text {
+                return Err("text generation requires TEXT model".into());
+            }
+            let request = ModelRequest {
+                messages: vec![AgentMessage::user(prompt)],
+                tools: vec![],
+                prepared_tool_schema: None,
+                system_agent_session_id: None,
+                response_input_items: None,
+                previous_response_id: None,
+            };
+            let response = self
+                .models
+                .generate(&runtime_to_agent_model_config(config), &request)
+                .await?;
+            if response.finish != ModelFinish::Final {
+                return Err("text generation unexpectedly requested tool calls".into());
+            }
+            Ok(response.output_text())
+        })
+    }
+    fn embed<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+        Box::pin(async move {
+            if config.model_type != ModelType::Embedding {
+                return Err("embedding requires EMBEDDING model".into());
+            }
+            let model = runtime_to_agent_model_config(config);
+            let reference = fw::ModelRef::new("http-embedding", &model.model_code);
+            let service = fw::EmbeddingModelService::new(
+                reference.clone(),
+                Arc::new(sdk::HttpEmbeddingModel {
+                    config: sdk_config(&model)?,
+                    factory: self.models.factory.clone(),
+                }),
+            );
+            let mut request = fw::EmbeddingRequest::texts([input]);
+            request.choice = fw::ModelChoice::model(reference);
+            let response = self
+                .models
+                .jobs()
+                .await?
+                .embed(
+                    service,
+                    request,
+                    limits(&model),
+                    config.max_retries.unwrap_or(0) as usize + 2,
+                )
+                .await
+                .map_err(error)?;
+            Ok(response
+                .vectors
+                .into_iter()
+                .next()
+                .ok_or("embedding response empty")?
+                .values)
+        })
+    }
+    fn rerank<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        query: &'a str,
+        documents: &'a [String],
+        top_n: Option<usize>,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>> {
+        Box::pin(async move {
+            if config.model_type != ModelType::Rerank {
+                return Err("rerank requires RERANK model".into());
+            }
+            if top_n == Some(0) {
+                return Err("rerank top_n must be positive".into());
+            }
+            if documents.is_empty() {
+                return Ok(Vec::new());
+            }
+            // Product search limits mean at most N hits; SDK top_n describes
+            // the actual candidate set and must stay within its cardinality.
+            let top_n = top_n.map(|limit| limit.min(documents.len()));
+            let model = runtime_to_agent_model_config(config);
+            let reference = fw::ModelRef::new("http-rerank", &model.model_code);
+            let service = fw::RerankModelService::new(
+                reference.clone(),
+                Arc::new(sdk::HttpRerankModel {
+                    config: sdk_config(&model)?,
+                    factory: self.models.factory.clone(),
+                    chat_fallback: config.model_code.starts_with("PERSON_AI:"),
+                }),
+            );
+            let request = fw::RerankRequest {
+                choice: fw::ModelChoice::model(reference),
+                query: query.into(),
+                documents: documents.iter().cloned().map(Into::into).collect(),
+                top_n,
+            };
+            let response = self
+                .models
+                .jobs()
+                .await?
+                .rerank(
+                    service,
+                    request,
+                    limits(&model),
+                    config.max_retries.unwrap_or(0) as usize + 2,
+                )
+                .await
+                .map_err(error)?;
+            Ok(response
+                .results
+                .into_iter()
+                .map(|item| LlmRuntimeRerankHit {
+                    document_index: item.index,
+                    score: item.score,
+                })
+                .collect())
+        })
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use axum::{Json, Router, routing::post};
+    use serde_json::{Value, json};
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
-    #[test]
-    fn parses_openai_compatible_embedding_response() {
-        let vector = parse_embedding_response(&json!({
-            "data": [
-                { "embedding": [0.11, -0.02, 3.5] }
-            ]
-        }))
-        .expect("embedding response should parse");
-
-        assert_eq!(vector, vec![0.11, -0.02, 3.5]);
-    }
-
-    #[test]
-    fn parses_rerank_results_from_results_field() {
-        let hits = parse_rerank_response(&json!({
-            "results": [
-                { "index": 2, "relevance_score": 0.88 },
-                { "index": 0, "relevance_score": 0.12 }
-            ]
-        }))
-        .expect("rerank response should parse");
-
-        assert_eq!(
-            hits,
-            vec![
-                LlmRuntimeRerankHit {
-                    document_index: 2,
-                    score: 0.88
-                },
-                LlmRuntimeRerankHit {
-                    document_index: 0,
-                    score: 0.12
-                }
-            ]
+    #[tokio::test]
+    async fn native_rerank_limits_search_size_to_candidates_and_skips_empty_dispatch() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let observed = calls.clone();
+        let app = Router::new().route("/rerank", post(move |Json(body): Json<Value>| {
+            let observed = observed.clone();
+            async move {
+                observed.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(body["top_n"], 2);
+                assert_eq!(body["documents"].as_array().unwrap().len(), 2);
+                Json(json!({"results":[{"index":0,"relevance_score":1.0},{"index":1,"relevance_score":0.5}]}))
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", listener.local_addr().unwrap());
+        let (shutdown, stopped) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move {
+            axum::serve(listener, app)
+                .with_graceful_shutdown(async {
+                    let _ = stopped.await;
+                })
+                .await
+                .unwrap();
+        });
+        let config = RuntimeModelConfig {
+            model_code: "fixture".into(),
+            protocol: ModelProtocol::Rerank,
+            model_type: ModelType::Rerank,
+            base_url: url,
+            api_path: None,
+            api_key: "fixture".into(),
+            model_name: "fixture".into(),
+            thinking_enabled: false,
+            reasoning_effort: None,
+            responses_stateful_enabled: false,
+            temperature: None,
+            max_tokens: None,
+            context_window_tokens: None,
+            top_p: None,
+            max_retries: Some(0),
+        };
+        let client = HttpLlmRuntimeClient::new(sdk::ModelHttpClient::new());
+        let results = client
+            .rerank(
+                &config,
+                "query",
+                &["first".into(), "second".into()],
+                Some(20),
+            )
+            .await
+            .unwrap();
+        assert_eq!(results.len(), 2);
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(
+            client
+                .rerank(&config, "query", &[], Some(20))
+                .await
+                .unwrap()
+                .is_empty()
         );
+        assert_eq!(calls.load(Ordering::SeqCst), 1);
+        assert!(client.rerank(&config, "query", &[], Some(0)).await.is_err());
+        client.models.close().await;
+        drop(client);
+        shutdown.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2), server)
+            .await
+            .unwrap()
+            .unwrap();
     }
 }

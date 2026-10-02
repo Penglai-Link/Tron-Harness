@@ -310,6 +310,22 @@ impl ChatService {
         })
     }
 
+    /// Product session/model mapping only; native schema and answer CAS live in the SDK.
+    pub fn native_resume_command(
+        &self, session_code: &str, entry: crate::application::chat::ChatResumeEntry,
+        model_code: Option<String>, reasoning_effort: Option<crate::domain::reasoning::ReasoningEffort>,
+    ) -> Result<SendChatMessageCommand, ChatError> {
+        let session=self.repository().get_session(session_code)?;
+        Ok(SendChatMessageCommand {
+            run_code:None,content:None,workspace_code:Some(session.workspace_code),app_code:session.app_code,
+            task_code:session.task_code,agent_code:session.agent_code,
+            model_selection:Self::continuation_model_selection(model_code.as_deref()),model_code,
+            system_model_id:None,reasoning_effort,page_context:None,limits:None,tools:Vec::new(),attachments:Vec::new(),
+            client_capabilities:Some(crate::domain::chat::ChatClientCapabilities {user_input_requests:true}),
+            resume:vec![entry],
+        })
+    }
+
     fn continuation_model_selection(model_code: Option<&str>) -> Option<ModelSelection> {
         let model_code = model_code?;
         if model_code == "PERSON_AI:ROUTE:ChatAuto" {

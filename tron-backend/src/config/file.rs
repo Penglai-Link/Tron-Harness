@@ -41,6 +41,18 @@ impl AppConfig {
         Ok(config)
     }
 
+    /// Resolve effective memory settings without provisioning keys or writing files.
+    pub(crate) fn effective_short_term_memory(
+        content: &str,
+        path: &Path,
+    ) -> Result<crate::application::short_term_memory::ShortTermMemoryConfig, ConfigError> {
+        let file_config = AppConfigFile::from_content(content, path)?;
+        let mut config = Self::runtime_defaults();
+        config.apply_file_overrides(file_config)?;
+        config.apply_env_overrides()?;
+        Ok(config.short_term_memory)
+    }
+
     pub fn validate_yaml(content: &str, path: impl AsRef<Path>) -> Result<(), ConfigError> {
         let path = path.as_ref();
         let file_config = AppConfigFile::from_content(content, path)?;
@@ -95,6 +107,14 @@ impl AppConfig {
         if let Some(value) = overrides.short_term_memory {
             self.short_term_memory.apply_overrides(value);
         }
+        self.short_term_memory
+            .context
+            .providers
+            .validate()
+            .map_err(|value| ConfigError::InvalidConfigValue {
+                key: "shortTermMemory.context.providers".into(),
+                value,
+            })?;
         if let Some(value) = overrides.event_bus {
             self.event_bus.apply_overrides(value);
         }

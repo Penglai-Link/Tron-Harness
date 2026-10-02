@@ -132,6 +132,9 @@ impl Drop for ReactRuntimeCancellationCleanup {
 }
 
 impl AgentRuntime for ReactRuntime {
+    fn owns_native_lifecycle(&self) -> bool {
+        true
+    }
     fn key(&self) -> RuntimeAdapterKey {
         self.key
     }
@@ -173,16 +176,20 @@ impl AgentRuntime for ReactRuntime {
         run_code: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), AgentInvocationError>> + Send + 'a>> {
         Box::pin(async move {
-            Err(AgentInvocationError::RuntimeFailed(format!(
-                "runtime adapter `{}` does not support cancel for run `{run_code}`",
-                self.key.code()
-            )))
+            match &self.framework_host {
+                Some(host) => host.cancel_run(run_code).map_err(map_agent_error),
+                None => Err(AgentInvocationError::RuntimeFailed(
+                    "Framework host is missing".into(),
+                )),
+            }
         })
     }
 }
 
 fn map_agent_error(error: AgentError) -> AgentInvocationError {
     match error {
+        AgentError::SessionBusy(session) => AgentInvocationError::SessionBusy(session),
+        AgentError::Cancelled => AgentInvocationError::RunStopped,
         AgentError::ModelFailure(message) => AgentInvocationError::ModelFailed(message),
         AgentError::ToolFailure(message)
         | AgentError::MissingTool(message)

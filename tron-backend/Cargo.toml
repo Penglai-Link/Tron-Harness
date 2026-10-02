@@ -5,6 +5,10 @@ edition = "2024"
 publish = false
 
 [dependencies]
+eliteforge-agent-plugin-core = { path = "../.agent-deps/agent-framework/crates/framework/eliteforge-agent-plugin-core" }
+eliteforge-agent-official-plugin-agui = { path = "../.agent-deps/agent-framework/crates/plugin/protocol/eliteforge-agent-official-plugin-agui" }
+eliteforge-agent-memory = { path = "../.agent-deps/agent-framework/crates/plugin/memory/eliteforge-agent-memory" }
+eliteforge-agent-official-plugin-model-http = { path = "../.agent-deps/agent-framework/crates/plugin/model/eliteforge-agent-official-plugin-model-http" }
 eliteforge-agent-official-plugin-tools-human = { path = "../.agent-deps/agent-framework/crates/plugin/tool/eliteforge-agent-official-plugin-tools-human" }
 eliteforge-agent-capability-external = { path = "../.agent-deps/agent-framework/crates/capability/eliteforge-agent-capability-external" }
 async-trait = "0.1"
@@ -67,6 +71,9 @@ umya-spreadsheet = "3.1"
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
 
 [dev-dependencies]
+quote = "1"
+syn = { version = "2", features = ["full", "visit", "visit-mut"] }
+eliteforge-agent-official-plugin-skills = { path = "../.agent-deps/agent-framework/crates/plugin/skill/eliteforge-agent-official-plugin-skills" }
 tower = { version = "0.5", features = ["util"] }
 
 [profile.release]

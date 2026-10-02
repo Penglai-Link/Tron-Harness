@@ -6,6 +6,7 @@ pub enum AgentInvocationError {
     ModelRequired,
     HistoryStorageFailed,
     RunStopped,
+    SessionBusy(String),
     RuntimeFailed(String),
     RuntimeSecretDeliveryUntrusted,
     ModelFailed(String),
@@ -24,6 +25,7 @@ impl AgentInvocationError {
             Self::ModelRequired => "AGENT_MODEL_REQUIRED",
             Self::HistoryStorageFailed => "AGENT_HISTORY_STORAGE_FAILED",
             Self::RunStopped => "AGENT_RUN_STOPPED",
+            Self::SessionBusy(_) => "RUN_ALREADY_ACTIVE",
             Self::RuntimeFailed(_) => "AGENT_RUNTIME_FAILED",
             Self::RuntimeSecretDeliveryUntrusted => "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
             Self::ModelFailed(_) => "AGENT_MODEL_FAILED",
@@ -42,6 +44,7 @@ impl AgentInvocationError {
             Self::ModelRequired => "model config is required".into(),
             Self::HistoryStorageFailed => "agent run history storage failed".into(),
             Self::RunStopped => "agent run was stopped".into(),
+            Self::SessionBusy(_) => "session already has an active agent run".into(),
             Self::RuntimeFailed(message)
             | Self::ModelFailed(message)
             | Self::ToolFailed(message)

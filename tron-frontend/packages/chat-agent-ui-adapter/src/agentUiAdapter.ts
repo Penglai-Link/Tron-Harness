@@ -47,7 +47,7 @@ export function createAgentUiAdapter(host: ChatAdapter, config: ChatClientConfig
     answerUserInputRequestStream: host.answerUserInputRequestStream ? async (session, id, input, events, signal) => {
       const answers = input.answers.map(fromUiAnswer);
       // The payload is a product API contract too; mapping only the outer answers loses resume data.
-      const resume = input.resume ? fromUiResume(input.resume) : undefined;
+      const resume = input.resume ? (input.answers.length ? fromUiResume(input.resume) : input.resume) : undefined;
       return toUiResult(await uiRequest(host.answerUserInputRequestStream!(fromUiSession(session), id,
         { answers, resume }, handlers(events), signal)));
     } : undefined,

@@ -74,55 +74,25 @@ impl ChatAutoModelRouter {
         ))
     }
 
-    pub fn next_fallback(
+    /// Authorization and ordering only. SDK selection/recovery owns attempts.
+    pub fn authorized_models(
         &self,
-        workspace_code: &str,
-        route: &mut AutoModelRouteContext,
-        current_model: &AgentModelConfig,
-        reasoning_effort: Option<ReasoningEffort>,
-        person_ai_unavailable: bool,
-    ) -> Result<Option<AgentModelConfig>, String> {
-        if route.fallback_attempts >= 2 {
-            return Ok(None);
-        }
-        let candidates = self.candidates(workspace_code, reasoning_effort)?;
-        let mut eligible = candidates
-            .into_iter()
-            .filter(|candidate| candidate.key != route.current_candidate_key)
-            .filter(|candidate| !route.failed_candidate_keys.contains(&candidate.key))
-            .filter(|candidate| {
-                fallback_candidate_is_allowed(candidate.provider, person_ai_unavailable)
-            })
-            .collect::<Vec<_>>();
-        eligible.sort_by_key(|candidate| {
+        workspace: &str,
+        current: &AgentModelConfig,
+    ) -> Result<Vec<AgentModelConfig>, String> {
+        let mut candidates = self.candidates(workspace, current.reasoning_effort)?;
+        candidates.sort_by_key(|candidate| {
             (
+                u8::from(candidate.config.model_code != current.model_code),
                 u8::from(!candidate.provider),
                 context_window_rank(
-                    current_model.context_window_tokens.unwrap_or_default(),
+                    current.context_window_tokens.unwrap_or_default(),
                     candidate.config.context_window_tokens.unwrap_or_default(),
                 ),
-                candidate.config.context_window_tokens.unwrap_or_default(),
                 candidate.key.clone(),
             )
         });
-        let Some(candidate) = eligible.into_iter().next() else {
-            return Ok(None);
-        };
-        route
-            .failed_candidate_keys
-            .push(route.current_candidate_key.clone());
-        route.fallback_attempts = route.fallback_attempts.saturating_add(1);
-        route.current_candidate_key = candidate.key;
-        self.providers
-            .save_chat_auto_route_selection(
-                workspace_code,
-                &route.session_code,
-                &route.agent_code,
-                &candidate.selection,
-                &candidate.config,
-            )
-            .map_err(|error| error.to_string())?;
-        Ok(Some(candidate.config))
+        Ok(candidates.into_iter().map(|c| c.config).collect())
     }
 
     pub fn mark_success(
@@ -282,13 +252,9 @@ fn context_window_rank(current: u32, candidate: u32) -> u8 {
     }
 }
 
-fn fallback_candidate_is_allowed(is_person_ai: bool, person_ai_unavailable: bool) -> bool {
-    !is_person_ai || !person_ai_unavailable
-}
-
 #[cfg(test)]
 mod tests {
-    use super::{context_window_rank, fallback_candidate_is_allowed, rendezvous_score};
+    use super::{context_window_rank, rendezvous_score};
 
     #[test]
     fn rendezvous_routing_is_stable_per_session_agent_and_candidate() {
@@ -311,12 +277,5 @@ mod tests {
         assert_eq!(context_window_rank(256, 256), 0);
         assert_eq!(context_window_rank(256, 512), 1);
         assert_eq!(context_window_rank(256, 128), 2);
-    }
-
-    #[test]
-    fn provider_auth_failure_skips_remaining_person_ai_models() {
-        assert!(!fallback_candidate_is_allowed(true, true));
-        assert!(fallback_candidate_is_allowed(false, true));
-        assert!(fallback_candidate_is_allowed(true, false));
     }
 }

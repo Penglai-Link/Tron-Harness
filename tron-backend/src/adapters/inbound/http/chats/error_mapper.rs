@@ -253,6 +253,11 @@ fn agent_error_response(error: AgentInvocationError) -> Response {
             "AGENT_HISTORY_STORAGE_FAILED",
             "agent run history storage failed".to_string(),
         ),
+        AgentInvocationError::SessionBusy(_) => (
+            StatusCode::CONFLICT,
+            "RUN_ALREADY_ACTIVE",
+            "session already has an active agent run".to_string(),
+        ),
         AgentInvocationError::RunStopped => (
             StatusCode::CONFLICT,
             "AGENT_RUN_STOPPED",

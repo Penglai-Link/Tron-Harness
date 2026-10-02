@@ -1,6 +1,8 @@
 include!("runtime/foundation.inc");
 include!("runtime/execution.inc");
 
+#[path = "runtime/context_usage.rs"]
+mod context_usage;
 #[path = "runtime/framework_model.rs"]
 mod framework_model;
 

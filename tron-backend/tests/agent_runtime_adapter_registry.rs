@@ -39,6 +39,34 @@ impl ModelClient for NoopModelClient {
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
         Box::pin(async move { Err("noop model client".into()) })
     }
+
+    // Test adapters explicitly declare one transport attempt per mock invocation.
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        self.generate(config, request)
+    }
+
+    fn close_observed<'a>(
+        &'a self,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn close<'a>(&'a self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
 }
 
 fn base_context() -> AgentRunContext {

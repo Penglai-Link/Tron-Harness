@@ -119,6 +119,19 @@ pub trait ShortTermMemoryRepository: Send {
         event: Option<&ShortTermMemoryEvent>,
         enforce_idle: bool,
     ) -> Result<(), ShortTermMemoryError>;
+    /// Fail closed unless the adapter can atomically check scope/generation and
+    /// full source revision before persisting a derived projection.
+    fn create_compaction_at_revision(
+        &mut self,
+        _compaction: &ShortTermMemoryCompaction,
+        _message: &ShortTermMemoryMessage,
+        _parts: &[ShortTermMemoryPart],
+        _event: Option<&ShortTermMemoryEvent>,
+        _enforce_idle: bool,
+        _expected: &eliteforge_agent_memory::MemoryRevision,
+    ) -> Result<(), ShortTermMemoryError> {
+        Err(ShortTermMemoryError::CompactionConflict)
+    }
     fn active_run_exists(&mut self, session_code: &str) -> Result<bool, ShortTermMemoryError>;
     fn upsert_family_memberships(
         &mut self,

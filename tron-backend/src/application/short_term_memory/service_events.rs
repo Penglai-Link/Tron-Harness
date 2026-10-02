@@ -299,7 +299,11 @@ fn agui_context_payload(event_type: &str, payload_json: &Value) -> String {
 fn is_run_lifecycle_event(event_type: &str) -> bool {
     matches!(
         event_type,
-        "agent.run.started" | "agent.run.completed" | "agent.run.failed" | "agent.run.recovered"
+        "agent.run.started"
+            | "agent.run.completed"
+            | "agent.run.awaiting_input"
+            | "agent.run.failed"
+            | "agent.run.recovered"
     )
 }
 

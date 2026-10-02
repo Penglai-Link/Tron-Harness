@@ -1,0 +1,225 @@
+//! Native preparation and execution use one SDK owner through product completion.
+use super::*;
+impl FrameworkHost {
+    pub(super) async fn run_inner(
+        &self,
+        harness: ReactAgent,
+        context: AgentRunContext,
+        sink: Option<ModelStreamSink>,
+        steering: Option<ActiveRunControl>,
+        registration: host_control::NativeRegistration,
+    ) -> Result<AgentRunResult, AgentError> {
+        let admission = self.0.config_lock.lock().await;
+        self.ensure_open()
+            .map_err(AgentError::InvalidConfiguration)?;
+        registration.ensure_active()?;
+        let mut lifecycle = host_run::ProductLifecycle::start(&harness, &context)?;
+        let agent = self.agent().await.map_err(map_error)?;
+        let session = context
+            .conversation_code
+            .clone()
+            .unwrap_or_else(|| context.run_code.clone());
+        let memory_input = context
+            .short_term_memory
+            .as_ref()
+            .and_then(|memory| memory.current_input_message.as_ref());
+        let (history, current) = if let Some(input) = memory_input {
+            let history = if context.messages.last().is_some_and(|last| last == input) {
+                &context.messages[..context.messages.len() - 1]
+            } else {
+                &context.messages[..]
+            };
+            (history, input)
+        } else {
+            let current = context
+                .messages
+                .iter()
+                .rposition(|message| message.role == "user")
+                .ok_or_else(|| {
+                    AgentError::InvalidConfiguration("run requires a current user message".into())
+                })?;
+            if current + 1 != context.messages.len() {
+                return Err(AgentError::InvalidConfiguration(
+                    "current input must follow the prepared conversation history".into(),
+                ));
+            }
+            (&context.messages[..current], &context.messages[current])
+        };
+        let history = super::super::messages::encode_history(history)
+            .map_err(AgentError::InvalidConfiguration)?;
+        let input = super::super::messages::encode(current)
+            .map_err(AgentError::InvalidConfiguration)?
+            .content;
+        let answers = host_interactions::answers_from_parts(&current.parts)?;
+        let key = fw::ConversationKey::new(&session);
+        let snapshot = agent.conversation(&key).await.map_err(map_error)?;
+        if snapshot.revision == 0 && !history.is_empty() {
+            agent
+                .append_conversation(&key, 0, history)
+                .await
+                .map_err(map_error)?;
+        }
+        let mut request = fw::RunRequest::new(&session, input);
+        host_interactions::apply_answers(agent, &session, &answers, &mut request).await?;
+        request.limits.max_steps = context.limits.max_steps as usize;
+        request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
+        request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
+        // Domain discovery controls schema exposure; the effective catalog owns authority.
+        request.limits.allow_unexposed_tools = true;
+        request.limits.max_parallel_tools = context.limits.max_parallel_tool_calls.max(1) as usize;
+        request.limits.max_context_messages = context
+            .messages
+            .len()
+            .max(256)
+            .saturating_add(request.limits.max_steps + request.limits.max_tool_calls * 2);
+        request.limits.max_context_tokens =
+            context.model.context_window_tokens.unwrap_or(128_000) as usize;
+        request.limits.max_model_output_tokens = context
+            .model
+            .max_tokens
+            .filter(|value| *value > 0)
+            .unwrap_or(4096);
+        request.limits.max_total_tokens = (request.limits.max_context_tokens as u64
+            + u64::from(request.limits.max_model_output_tokens))
+        .saturating_mul(request.limits.max_steps as u64);
+        request.limits.model_timeout = Duration::from_secs(300);
+        request.limits.run_timeout =
+            Duration::from_secs(300 * context.limits.max_steps.max(1) as u64);
+        request.limits.max_model_retries = if context.auto_model_route.is_some() {
+            2
+        } else {
+            context.model.max_retries.unwrap_or(0).min(3) as usize
+        };
+        request.limits.max_model_calls_per_step =
+            Some((request.limits.max_model_retries + 1).max(3));
+        request.limits.max_overflow_recoveries = harness.framework_overflow_limit();
+        request.generation.temperature = context.model.temperature;
+        request.generation.top_p = context.model.top_p;
+        request.generation.max_output_tokens = context.model.max_tokens.filter(|value| *value > 0);
+        let state = Arc::new(Mutex::new(HostRunState::new(context.clone())));
+        request
+            .extensions
+            .insert(fw::ToolResultProcessorService(Arc::new(ToolAudit)));
+        request.extensions.insert(
+            eliteforge_agent_official_plugin_tools_local::CommandProgressSinkService(Arc::new(
+                super::super::tools::CommandProgress {
+                    harness: harness.clone(),
+                    context: context.clone(),
+                },
+            )),
+        );
+        request.extensions.insert(HostExecution {
+            harness: harness.clone(),
+            state: state.clone(),
+            summaries: self.summary_store().await.map_err(map_error)?,
+            sink,
+        });
+        tron_agent_harness::TronRunScope {
+            user_code: context.user_code.clone().unwrap_or_else(|| "system".into()),
+            workspace_code: context.workspace_code.clone(),
+            session_code: session,
+            run_code: context.run_code.clone(),
+            app_code: context.execution_scope.app_code.clone(),
+            task_code: context.execution_scope.task_code.clone(),
+            agent_code: context
+                .short_term_memory
+                .as_ref()
+                .and_then(|memory| memory.agent_code.clone()),
+        }
+        .attach(&mut request)
+        .map_err(map_error)?;
+        if let Some(resources) = &self.0.resources {
+            request
+                .extensions
+                .insert(FileReferenceReaderService(Arc::new(AttachmentReader(
+                    resources.clone(),
+                ))));
+        }
+        if let Some(control) = steering {
+            request
+                .extensions
+                .insert(fw::LiveInputSourceService(Arc::new(HostSteering {
+                    control,
+                })));
+        }
+        harness
+            .framework_model_scope(&context)?
+            .attach(&mut request);
+        self.ensure_open()
+            .map_err(AgentError::InvalidConfiguration)?;
+        let parent = eliteforge_agent_framework::current_continuation_parent();
+        let result = if let Some(parent) = parent {
+            let started = agent
+                .start_child_with_output_owned::<eliteforge_agent_official_plugin_agui::AgUiStream>(
+                    request, &parent,
+                )
+                .await;
+            drop(admission);
+            match started {
+                Ok((handle, stream)) => {
+                    self.wait_native_child(
+                        agent.clone(),
+                        handle,
+                        stream,
+                        &context,
+                        registration.clone(),
+                    )
+                    .await
+                }
+                Err(error) => Err(error),
+            }
+        } else {
+            let started = agent
+                .start_with_output::<eliteforge_agent_official_plugin_agui::AgUiStream>(request);
+            drop(admission);
+            match started {
+                Ok((handle, stream)) => {
+                    self.wait_native(
+                        agent.clone(),
+                        handle,
+                        stream,
+                        &context,
+                        registration.clone(),
+                    )
+                    .await
+                }
+                Err(error) => Err(error),
+            }
+        };
+        let state = state.lock().await;
+        let failure = match &result {
+            Err(error) => Some(match error.primary() {
+                fw::AgentError::SessionBusy(_) | fw::AgentError::Cancelled => map_error_ref(error),
+                _ if matches!(error, fw::AgentError::WithCleanup { .. }) => map_error_ref(error),
+                _ => state.error.clone().unwrap_or_else(|| map_error_ref(error)),
+            }),
+            _ => None,
+        };
+        if let Some(error) = failure {
+            lifecycle.finish(&state.context, &Err(fw::AgentError::Run(error.to_string())))?;
+            return Err(error);
+        }
+        lifecycle.finish(&state.context, &result)?;
+        let result = result.map_err(map_error)?;
+        let output = state.final_output.clone();
+        Ok(AgentRunResult {
+            run_code: context.run_code,
+            conversation_code: context.conversation_code,
+            workspace_code: context.workspace_code,
+            final_output: output,
+            step_count: result.steps as u32,
+            token_usage: state.usage,
+            latest_request_estimate: state.estimate.clone(),
+            latest_usage_audit: state.audit.clone(),
+            system_agent_session_id: state.context.system_agent_session_id.clone(),
+            observations: state.context.observations.clone(),
+            native: Some(host_control::native_outcome(
+                registration.run_id(),
+                &result,
+            )?),
+            sdk_execution: Some(host_snapshot::product_snapshot(
+                registration.snapshot(&result).map_err(map_error)?,
+            )?),
+        })
+    }
+}

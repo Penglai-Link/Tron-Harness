@@ -39,6 +39,7 @@ export interface InternalAdapterOptions {
 }
 
 interface AguiEventSnapshot {
+  replayIncomplete?: boolean;
   events: ChatAguiEvent[];
 }
 
@@ -142,7 +143,19 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         path: "/api/v1/agents/agui/streams/{streamKey}/events",
         pathParams: { streamKey: sessionCode },
       });
-      return payload.events ?? [];
+      const events = payload.events ?? [];
+      if (!payload.replayIncomplete) return events;
+      if (!events.length) {
+        throw new FetchTransportError("Presentation replay is incomplete", {
+          code: "AGENT_AGUI_REPLAY_INCOMPLETE",
+          status: 503,
+        });
+      }
+      // Canonical metadata uses string values; preserve the known usage subtotal.
+      return events.map((event) => ({
+        ...event,
+        metadata: { ...event.metadata, replayIncomplete: "true" },
+      }));
     },
     loadMessages(sessionCode: string) {
       return transport.requestJson<ChatMessage[]>({
@@ -233,7 +246,11 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         },
         onResult: (payload) => {
           const type = String(payload.type ?? "").toUpperCase();
-          if (type === "RUN_ERROR") {
+          if (payload.productCompletion === true && payload.productCompletionError && typeof payload.productCompletionError === "object") {
+            const error=payload.productCompletionError as Record<string,unknown>;
+            throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
+          }
+          if (type === "RUN_ERROR" && (payload.productCompletion === true || payload.result || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
             throw new FetchTransportError(
               String(payload.message ?? payload.code ?? "Chat stream failed"),
               {
@@ -273,7 +290,11 @@ export function createInternalChatAdapter(options: InternalAdapterOptions = {}):
         },
         onResult: (payload) => {
           const type = String(payload.type ?? "").toUpperCase();
-          if (type === "RUN_ERROR") {
+          if (payload.productCompletion === true && payload.productCompletionError && typeof payload.productCompletionError === "object") {
+            const error=payload.productCompletionError as Record<string,unknown>;
+            throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
+          }
+          if (type === "RUN_ERROR" && (payload.productCompletion === true || payload.result || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
             throw new FetchTransportError(String(payload.message ?? payload.code ?? "Chat stream failed"), {
               code: typeof payload.code === "string" ? payload.code : undefined,
               data: payload,

@@ -80,6 +80,9 @@ export function useChatWorkRailLabels() {
         resolveName: resolveToolName,
       },
       notices: {
+        mcpUnavailable: t("chat.shortTermMemory.contextPanel.runtimeNotices.mcp_unavailable.title"),
+        presentationIncomplete: t("chat.shortTermMemory.contextPanel.runtimeNotices.presentation_incomplete.title"),
+        presentationIncompleteDetail: t("chat.shortTermMemory.contextPanel.runtimeNotices.presentation_incomplete.detail"),
         compactionRequested: t("chat.shortTermMemory.contextPanel.runtimeNotices.compaction_requested.title"),
         compactionStarted: t("chat.shortTermMemory.contextPanel.runtimeNotices.compaction_started.title"),
         compactionCompleted: t("chat.shortTermMemory.contextPanel.runtimeNotices.compaction_completed.title"),

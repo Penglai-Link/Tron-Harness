@@ -33,7 +33,7 @@ impl std::error::Error for HttpClientBuildError {
 #[derive(Clone)]
 pub struct HttpClientPool {
     default: Client,
-    model_inference: Client,
+    model_inference: eliteforge_agent_official_plugin_model_http::ModelHttpClient,
     runtime_control: Client,
     document_parsing: Client,
 }
@@ -42,7 +42,11 @@ impl HttpClientPool {
     pub fn from_profiles(config: &HttpClientProfilesConfig) -> Result<Self, HttpClientBuildError> {
         Ok(Self {
             default: build_client("default", &config.default)?,
-            model_inference: build_client("modelInference", &config.model_inference)?,
+            model_inference:
+                eliteforge_agent_official_plugin_model_http::ModelHttpClient::from_builder(
+                    client_builder("modelInference", &config.model_inference)?,
+                )
+                .map_err(HttpClientBuildError::BuildFailed)?,
             runtime_control: build_client("runtimeControl", &config.runtime_control)?,
             document_parsing: build_client("documentParsing", &config.document_parsing)?,
         })
@@ -52,7 +56,9 @@ impl HttpClientPool {
         self.default.clone()
     }
 
-    pub fn model_inference_client(&self) -> Client {
+    pub fn model_inference_client(
+        &self,
+    ) -> eliteforge_agent_official_plugin_model_http::ModelHttpClient {
         self.model_inference.clone()
     }
 
@@ -69,6 +75,15 @@ fn build_client(
     profile_name: &str,
     config: &HttpClientProfileConfig,
 ) -> Result<Client, HttpClientBuildError> {
+    client_builder(profile_name, config)?
+        .build()
+        .map_err(HttpClientBuildError::BuildFailed)
+}
+
+fn client_builder(
+    profile_name: &str,
+    config: &HttpClientProfileConfig,
+) -> Result<reqwest::ClientBuilder, HttpClientBuildError> {
     if config.connect_timeout_ms == 0 {
         return Err(HttpClientBuildError::InvalidProfile(format!(
             "http profile `{profile_name}` requires connectTimeoutMs > 0"
@@ -95,5 +110,5 @@ fn build_client(
         builder = builder.tcp_keepalive(Duration::from_millis(timeout_ms));
     }
 
-    builder.build().map_err(HttpClientBuildError::BuildFailed)
+    Ok(builder)
 }

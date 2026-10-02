@@ -81,9 +81,10 @@ pub(super) fn annotate_compaction_budget(
         .map(|breakdown| breakdown.recent_transcript_tokens)
         .unwrap_or(0);
     let history_budget_tokens = current_session_history_budget_tokens(prepared);
-    let retained_history_tokens = history_budget_tokens
-        .saturating_mul(config.compaction.retained_history_ratio_bps.min(10_000))
-        / 10_000;
+    let retained_history_tokens = eliteforge_agent_memory::ratio_tokens(
+        history_budget_tokens,
+        config.compaction.retained_history_ratio_bps,
+    );
     let trigger_tokens = compaction_trigger_tokens(budget_plan, Some(config));
     prepared.compaction_trigger_tokens = Some(trigger_tokens);
     prepared.compaction_trigger_reached = prepared.estimated_tokens >= trigger_tokens;
@@ -117,35 +118,16 @@ pub(super) fn annotate_compaction_budget(
 }
 
 pub(super) fn refresh_over_budget_reason(prepared: &mut PreparedModelContext) {
-    if !prepared.over_budget {
-        prepared.over_budget_reason = None;
-        return;
-    }
-    if tool_schema_budget_exceeded(prepared) {
-        prepared.over_budget_reason = Some("TOOL_SCHEMA_OVER_BUDGET".into());
-        return;
-    }
-    let Some(breakdown) = prepared.budget_breakdown.as_ref() else {
-        prepared.over_budget_reason = Some("NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET".into());
-        return;
-    };
-    if prompt_prefix_budget_exceeded(prepared) {
-        prepared.over_budget_reason = Some("SEED_PROMPT_PREFIX_OVER_BUDGET".into());
-        return;
-    }
-    let compressed_history_message_count = breakdown.compressed_history_message_count.unwrap_or(0);
-    prepared.over_budget_reason = Some(
-        if breakdown.input_budget_exceeded {
-            if compressed_history_message_count > 0 {
-                "COMPRESSED_HISTORY_OVER_EFFECTIVE_BUDGET"
-            } else {
-                "NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET"
-            }
-        } else {
-            "NON_COMPRESSIBLE_CONTEXT_OVER_EFFECTIVE_BUDGET"
-        }
-        .to_string(),
-    );
+    prepared.over_budget_reason = eliteforge_agent_memory::budget_reason(
+        prepared.estimated_tokens > prepared.effective_input_budget.unwrap_or(u32::MAX),
+        prompt_prefix_budget_exceeded(prepared),
+        tool_schema_budget_exceeded(prepared),
+        prepared
+            .budget_breakdown
+            .as_ref()
+            .is_some_and(|b| b.compressed_history_message_count.unwrap_or(0) > 0),
+    )
+    .map(str::to_owned);
 }
 
 fn compaction_trigger_tokens(
@@ -156,7 +138,7 @@ fn compaction_trigger_tokens(
         .map(|config| config.compaction.trigger_ratio_bps)
         .unwrap_or(10_000)
         .min(10_000);
-    budget_plan.effective_input_budget.saturating_mul(ratio) / 10_000
+    eliteforge_agent_memory::ratio_tokens(budget_plan.effective_input_budget, ratio)
 }
 
 fn tool_schema_budget_exceeded(prepared: &PreparedModelContext) -> bool {
@@ -184,11 +166,14 @@ pub(super) fn current_session_history_budget_tokens(prepared: &PreparedModelCont
         return prepared.effective_input_budget.unwrap_or(0);
     };
     let effective_input_budget = breakdown.effective_input_budget.unwrap_or(0);
-    let fixed_tokens = breakdown
-        .prompt_prefix_tokens
-        .saturating_add(breakdown.checkpoint_tokens)
-        .saturating_add(breakdown.session_family_context_tokens)
-        .saturating_add(breakdown.working_state_tokens)
-        .saturating_add(breakdown.tool_schema_tokens);
-    effective_input_budget.saturating_sub(fixed_tokens)
+    eliteforge_agent_memory::remaining_history_budget(
+        effective_input_budget,
+        &[
+            breakdown.prompt_prefix_tokens,
+            breakdown.checkpoint_tokens,
+            breakdown.session_family_context_tokens,
+            breakdown.working_state_tokens,
+            breakdown.tool_schema_tokens,
+        ],
+    )
 }

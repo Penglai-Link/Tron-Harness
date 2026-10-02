@@ -234,22 +234,3 @@ fn requirement_code(input_metadata: Option<&Value>) -> Option<String> {
         .filter(|value| !value.is_empty())
         .map(str::to_string)
 }
-
-pub(super) fn truncate_chars(value: &str, max_chars: usize) -> String {
-    if max_chars == 0 {
-        return String::new();
-    }
-    if value.chars().count() <= max_chars {
-        return value.to_string();
-    }
-    let suffix = "\n...[snapshot truncated]";
-    if max_chars <= suffix.chars().count() {
-        return value.chars().take(max_chars).collect();
-    }
-    let mut text = value
-        .chars()
-        .take(max_chars.saturating_sub(suffix.chars().count()))
-        .collect::<String>();
-    text.push_str(suffix);
-    text
-}

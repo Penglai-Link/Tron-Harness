@@ -52,14 +52,14 @@ pub use model_exchange::{
     ModelFinish, ModelRequest, ModelResponse, ModelStreamEvent, ModelStreamEventKind,
     ModelTokenUsage, TokenEstimateSnapshot, TokenUsageAuditSnapshot, ToolCall,
 };
-pub(crate) use model_exchange::{
-    function_call_arguments_json, is_generated_tool_call_id, responses_function_call_item_json,
-    responses_input_item_json,
+pub(crate) use model_exchange::{responses_function_call_item_json, responses_input_item_json};
+pub use run::{
+    AgentChargedUsage, AgentNativeExecutionSnapshot, AgentNativeInteraction,
+    AgentNativeInteractionKind, AgentNativeRunOutcome, AgentNativeRunStatus, AgentRunResult,
+    AgentRunStatus,
 };
-pub use run::{AgentRunResult, AgentRunStatus};
-pub(crate) use tool::FrameworkLeaseGuard;
 pub use tool::{
-    InProcessTool, Tool, ToolContextDelta, ToolError, ToolExecutionResult, ToolObservation,
-    ToolRegistry, ToolRequest,
+    InProcessTool, Tool, ToolContextDelta, ToolError, ToolExecutionControl, ToolExecutionFuture,
+    ToolExecutionResult, ToolObservation, ToolRegistry, ToolRequest,
 };
 pub use tool_schema::PreparedToolSchema;

@@ -3,8 +3,8 @@ use std::{path::Path, sync::Arc};
 use super::{
     SystemConfigUpdateResult,
     helpers::{
-        changed_leaf_paths, classify_paths, config_items, leaf_paths, parse_yaml,
-        remove_removed_config_sections, set_value_at_path, value_at_path,
+        changed_leaf_paths, classify_paths, config_items, effective_context_value, leaf_paths,
+        parse_yaml, remove_removed_config_sections, set_value_at_path, value_at_path,
     },
     types::{
         SystemConfigChange, SystemConfigDocument, SystemConfigError, SystemConfigService,
@@ -19,10 +19,11 @@ impl SystemConfigService {
 
     pub fn get(&self) -> Result<SystemConfigDocument, SystemConfigError> {
         let (stored, value) = self.read_sanitized()?;
+        let effective = effective_context_value(&stored.content, Path::new(&stored.path), value)?;
         Ok(SystemConfigDocument {
             revision: stored.revision,
             path: stored.path,
-            items: config_items(&value),
+            items: config_items(&effective),
         })
     }
 
@@ -44,12 +45,22 @@ impl SystemConfigService {
             return Err(SystemConfigError::RevisionConflict);
         }
         let path = Path::new(&stored.path);
-        let available_paths = leaf_paths(&next_value);
+        let effective = effective_context_value(&stored.content, path, next_value.clone())?;
+        let available_paths = leaf_paths(&effective);
+        let mut selected_paths = std::collections::BTreeSet::new();
         for change in changes {
-            if !available_paths.contains(&change.path) {
+            if !selected_paths.insert(change.path.clone())
+                || !available_paths.contains(&change.path)
+            {
                 return Err(SystemConfigError::InvalidField(change.path));
             }
-            set_value_at_path(&mut next_value, &change.path, change.value)?;
+            if value_at_path(&effective, &change.path)
+                .and_then(|value| serde_json::to_value(value).ok())
+                .as_ref()
+                != Some(&change.value)
+            {
+                set_value_at_path(&mut next_value, &change.path, change.value)?;
+            }
         }
 
         let next_yaml = serde_yaml::to_string(&next_value)

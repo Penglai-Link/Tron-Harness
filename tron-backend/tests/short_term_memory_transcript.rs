@@ -1535,7 +1535,7 @@ fn family_context_deduplicates_sessions_across_families_and_counts_wrapper_budge
     let mut current_context = base_context(&current_session.session_code);
     current_context.run_code = "RUN-FAMILY-DEDUPE-CURRENT".into();
     current_context.execution_scope.task_code = Some("TASK-FAMILY-DEDUPE".into());
-    current_context.model.context_window_tokens = Some(4_000);
+    current_context.model.context_window_tokens = Some(10_000);
     current_context.model.max_tokens = Some(0);
     let current_input = service
         .record_user_input(&current_context, "load deduped family context")
@@ -4041,7 +4041,7 @@ fn working_state_budget_prioritizes_goal_before_todos() {
         .context
         .blocks
         .current_session_working_state
-        .max_tokens = Some(80);
+        .max_tokens = Some(450);
     let service = ShortTermMemoryService::new(
         SqliteShortTermMemoryRepository::connect(&database_url)
             .expect("short-term memory repository should connect"),
@@ -4096,8 +4096,26 @@ fn working_state_budget_prioritizes_goal_before_todos() {
 
     assert!(rendered.contains("<active-goal"));
     assert!(rendered.contains("Preserve the active session goal under pressure"));
-    assert!(rendered.contains("truncated by short-term-memory block budget"));
-    assert!(!rendered.contains("TODO-SHOULD-TRUNCATE"));
+    // Prepared DTOs preserve the complete authorized source. The actual SDK
+    // admission/reduction is exercised by provider_working_bound_preserves_goal_before_todos.
+    assert!(rendered.contains("TODO-SHOULD-TRUNCATE"));
+    assert!(
+        prepared
+            .budget_breakdown
+            .as_ref()
+            .unwrap()
+            .working_state_tokens
+            > 450
+    );
+    assert!(
+        prepared
+            .sources
+            .as_ref()
+            .unwrap()
+            .working
+            .iter()
+            .any(|message| message.text_content().contains("TODO-SHOULD-TRUNCATE"))
+    );
 }
 
 #[test]
@@ -4460,7 +4478,7 @@ fn model_compaction_keeps_current_tool_pair_as_raw_tail() {
 }
 
 #[test]
-fn auto_compaction_can_compress_same_run_early_tool_chain() {
+fn auto_compaction_preserves_complete_same_run_tool_chain_and_refuses_to_split_latest_turn() {
     let database_url = temp_database_url("short-term-memory-same-run-tool-chain");
     let session = create_test_session(&database_url, "same run tool chain");
     let mut config = ShortTermMemoryConfig::default();
@@ -4535,111 +4553,51 @@ fn auto_compaction_can_compress_same_run_early_tool_chain() {
         .expect("same-run tool chain context should prepare");
 
     assert!(before.compaction_trigger_reached);
-    assert!(before.compaction_required);
-    assert_eq!(before.over_budget_reason, None);
-    let breakdown = before
-        .budget_breakdown
-        .as_ref()
-        .expect("budget breakdown should be present");
-    assert!(
-        breakdown
-            .compressed_history_message_count
-            .expect("compressed message count should be present")
-            > 100,
-        "early same-run tool messages should become compressible head"
-    );
-    assert!(
-        breakdown
-            .raw_tail_message_count
-            .expect("raw tail count should be present")
-            <= 3,
-        "only the latest replay-safe tail should stay raw"
-    );
-    let before_rendered = rendered_messages(&before.messages);
-    assert!(!before_rendered.contains("early-tool-failure-0"));
-    assert!(before_rendered.contains("latest-tool-result-119"));
-
-    let compaction_input = service
-        .prepare_automatic_model_compaction_input(
+    assert!(!before.compaction_required);
+    assert!(!before.over_budget);
+    let breakdown = before.budget_breakdown.as_ref().unwrap();
+    assert_eq!(breakdown.compressed_history_message_count, Some(0));
+    assert_eq!(breakdown.raw_tail_message_count, Some(241));
+    let rendered = rendered_messages(&before.messages);
+    assert!(rendered.contains("early-tool-failure-0"));
+    assert!(rendered.contains("latest-tool-result-119"));
+    let flattened = before
+        .messages
+        .iter()
+        .flat_map(|message| &message.parts)
+        .collect::<Vec<_>>();
+    for index in 0..120 {
+        let id = format!("call-same-run-{index}");
+        let call=flattened.iter().position(|part|matches!(part,AgentMessagePart::ToolCall{call_id:Some(call_id),..} if call_id==&id)).unwrap();
+        let result=flattened.iter().position(|part|matches!(part,AgentMessagePart::ToolResult{call_id:Some(call_id),..} if call_id==&id)).unwrap();
+        assert!(call < result);
+    }
+    assert!(matches!(
+        service.prepare_automatic_model_compaction_input(
             &session.session_code,
             "auto_compaction_trigger",
             tron_backend::application::short_term_memory::CompactionContextPolicy {
-                todo_enabled: false,
+                todo_enabled: false
             },
             context.model.context_window_tokens,
             context.model.max_tokens,
             Some(&context.run_code),
-            before.compaction_tail_start_seq,
-            before.effective_retained_history_tokens,
-        )
-        .expect("auto compaction input should prepare");
+            None,
+            None
+        ),
+        Err(ShortTermMemoryError::ContextBudgetExceeded)
+    ));
+    context.model.context_window_tokens = Some(baseline.estimated_tokens / 2);
+    let oversized = service.prepare_model_context(&context).unwrap();
+    assert!(oversized.over_budget);
+    assert!(!oversized.compaction_required);
+    assert!(rendered_messages(&oversized.messages).contains("early-tool-failure-0"));
     assert!(
-        compaction_input.source_end_seq > 1,
-        "same-run early tool messages should be included in checkpoint source"
+        service
+            .latest_compaction(&session.session_code)
+            .unwrap()
+            .is_none()
     );
-    assert!(
-        compaction_input
-            .pinned_start_seq
-            .is_some_and(|pinned_seq| compaction_input.source_end_seq < pinned_seq),
-        "latest tool pair should remain outside checkpoint source"
-    );
-    assert!(compaction_input.prompt.contains("early-tool-failure-0"));
-    assert!(compaction_input.recent.contains("latest-tool-result-119"));
-
-    let model = service.compaction_model_config(&context.model);
-    service
-        .commit_model_compaction(
-            compaction_input,
-            ModelCompactionOutput {
-                summary: "## Goal\nSAME RUN TOOL SUMMARY\n\n## Decisions\nEarly same-run tool attempts compacted."
-                    .into(),
-                token_usage: None,
-                provider_metadata: None,
-            },
-            &model,
-        )
-        .expect("model compaction should commit");
-
-    let after = service
-        .prepare_model_context(&context)
-        .expect("retry after same-run compaction should prepare");
-    assert!(!after.over_budget);
-    let after_rendered = rendered_messages(&after.messages);
-    assert!(after_rendered.contains("SAME RUN TOOL SUMMARY"));
-    assert!(!after_rendered.contains("early-tool-failure-0"));
-
-    let flattened_parts = after
-        .messages
-        .iter()
-        .flat_map(|message| message.parts.iter())
-        .collect::<Vec<_>>();
-    let latest_call_index = flattened_parts
-        .iter()
-        .position(|part| {
-            matches!(
-                part,
-                AgentMessagePart::ToolCall {
-                    call_id: Some(call_id),
-                    ..
-                } if call_id == "call-same-run-119"
-            )
-        })
-        .expect("latest tool call should remain structured");
-    let latest_result_index = flattened_parts
-        .iter()
-        .position(|part| {
-            matches!(
-                part,
-                AgentMessagePart::ToolResult {
-                    call_id: Some(call_id),
-                    output,
-                    ..
-                } if call_id == "call-same-run-119"
-                    && output.contains("latest-tool-result-119")
-            )
-        })
-        .expect("latest tool result should remain structured");
-    assert!(latest_call_index < latest_result_index);
 }
 
 #[test]
@@ -5016,7 +4974,7 @@ fn auto_compaction_summarizes_head_and_replays_raw_tail_after_checkpoint() {
         Arc::new(FixedSnowflakeIdProvider::new(804_000_000_000_000_000)),
     );
     let mut context = base_context(&session.session_code);
-    context.model.context_window_tokens = Some(1_300);
+    context.model.context_window_tokens = Some(5_200);
     context.model.max_tokens = Some(0);
     context.tools.clear();
     let messages = [
@@ -6508,6 +6466,8 @@ fn create_legacy_full_source_stub_compaction(
         prompt: "legacy full-source checkpoint test input".into(),
         prompt_hash: "legacy-full-source-stub".into(),
         pinned_start_seq: None,
+        history: vec![],
+        previous_summary: None,
     };
     service
         .commit_model_compaction(
@@ -6731,3 +6691,214 @@ fn temp_artifact_root(label: &str) -> std::path::PathBuf {
         .as_millis();
     std::env::temp_dir().join(format!("{label}-{}-{millis}", std::process::id()))
 }
+
+#[test]
+fn memory_projection_cas_rejects_two_connection_late_results_and_preserves_complete_history() {
+    for scenario in ["checkpoint", "append", "scope"] {
+        let database_url = temp_database_url(&format!("memory-cas-{scenario}"));
+        let session = create_test_session(&database_url, "memory CAS");
+        let mut config = ShortTermMemoryConfig::default();
+        config.compaction.retained_history_ratio_bps = 1;
+        let first = ShortTermMemoryService::new(
+            SqliteShortTermMemoryRepository::connect(&database_url).unwrap(),
+            config.clone(),
+        );
+        let second = ShortTermMemoryService::new(
+            SqliteShortTermMemoryRepository::connect(&database_url).unwrap(),
+            config,
+        );
+        let mut context = base_context(&session.session_code);
+        context.run_code = "older-memory-turn".into();
+        first
+            .record_user_input(&context, &"older complete turn ".repeat(200))
+            .unwrap();
+        context.run_code = "latest-memory-turn".into();
+        first
+            .record_user_input(&context, "latest complete user turn")
+            .unwrap();
+        let command = || CreateCompactionCommand {
+            session_code: session.session_code.clone(),
+            reason: Some("CAS test".into()),
+            note: Some("Preserve identifier CASE-42".into()),
+            todo_enabled: Some(false),
+        };
+        let mut input = first
+            .prepare_manual_model_compaction_input(command(), Some(8_192), Some(512))
+            .unwrap();
+        assert_eq!(input.coverage, "head_only_tail_replayed");
+        assert!(
+            input
+                .history
+                .first()
+                .unwrap()
+                .contains("Preserve identifier CASE-42")
+        );
+        assert!(
+            input
+                .history
+                .first()
+                .unwrap()
+                .contains("latest complete user turn")
+        );
+        assert!(input.selection_source_end_seq > input.source_end_seq);
+        let connection = rusqlite::Connection::open(&database_url).unwrap();
+        let before:i64=connection.query_row("SELECT count(1) FROM agent_transcript_messages WHERE session_code=?1 AND message_type!='compaction'",[&session.session_code],|r|r.get(0)).unwrap();
+        let model = first.compaction_model_config(&compaction_test_model());
+        let output = || ModelCompactionOutput {
+            summary: "SDK validated summary".into(),
+            token_usage: None,
+            provider_metadata: None,
+        };
+        if scenario == "checkpoint" {
+            let newer = second
+                .prepare_manual_model_compaction_input(command(), Some(8_192), Some(512))
+                .unwrap();
+            second
+                .commit_model_compaction(newer, output(), &model)
+                .unwrap();
+        }
+        if scenario == "append" {
+            context.run_code = "appended-during-compression".into();
+            second
+                .record_user_input(&context, "new history must remain readable")
+                .unwrap();
+        }
+        if scenario == "scope" {
+            input.workspace_code = "another-user-workspace".into();
+        }
+        assert!(matches!(
+            first.commit_model_compaction(input, output(), &model),
+            Err(ShortTermMemoryError::CompactionConflict)
+        ));
+        let after:i64=connection.query_row("SELECT count(1) FROM agent_transcript_messages WHERE session_code=?1 AND message_type!='compaction'",[&session.session_code],|r|r.get(0)).unwrap();
+        assert_eq!(after, before + if scenario == "append" { 1 } else { 0 });
+        let checkpoints:i64=connection.query_row("SELECT count(1) FROM agent_transcript_messages WHERE session_code=?1 AND message_type='compaction'",[&session.session_code],|r|r.get(0)).unwrap();
+        assert_eq!(checkpoints, if scenario == "checkpoint" { 1 } else { 0 });
+        if scenario == "checkpoint" {
+            assert!(
+                second
+                    .latest_compaction(&session.session_code)
+                    .unwrap()
+                    .is_some()
+            );
+        }
+        let mut repository = SqliteShortTermMemoryRepository::connect(&database_url).unwrap();
+        let rows = repository
+            .list_messages_after_seq(&session.session_code, 0)
+            .unwrap();
+        assert!(
+            rows.iter()
+                .flat_map(|(_, parts)| parts)
+                .any(|part| part.content_text.as_deref() == Some("latest complete user turn"))
+        );
+    }
+}
+
+#[test]
+fn compaction_unknown_provider_usage_persists_unavailable_audit_without_ledger_estimates() {
+    for reported in [false, true] {
+        let database_url = temp_database_url("memory-usage-audit");
+        let session = create_test_session(&database_url, "memory usage audit");
+        let mut config = ShortTermMemoryConfig::default();
+        config.compaction.retained_history_ratio_bps = 1;
+        let service = ShortTermMemoryService::new(
+            SqliteShortTermMemoryRepository::connect(&database_url).unwrap(),
+            config,
+        );
+        let mut context = base_context(&session.session_code);
+        context.run_code = "older-usage-turn".into();
+        service
+            .record_user_input(&context, &"authorized historical facts ".repeat(100))
+            .unwrap();
+        context.run_code = "latest-usage-turn".into();
+        service
+            .record_user_input(&context, "latest user turn replayed separately")
+            .unwrap();
+        let input = service
+            .prepare_manual_model_compaction_input(
+                CreateCompactionCommand {
+                    session_code: session.session_code.clone(),
+                    reason: None,
+                    note: None,
+                    todo_enabled: Some(false),
+                },
+                Some(8192),
+                Some(0),
+            )
+            .unwrap();
+        let result = eliteforge_agent_memory::MemoryCompactionResult {
+            summary: "SDK summary".into(),
+            usage: eliteforge_agent_framework::Usage {
+                input_tokens: 8000,
+                output_tokens: 1000,
+            },
+            provider_metrics: reported.then_some(eliteforge_agent_framework::ProviderMetrics {
+                cached_input_tokens: Some(16),
+                reasoning_tokens: Some(2),
+            }),
+            provider_usage: reported.then_some(eliteforge_agent_framework::Usage {
+                input_tokens: 24,
+                output_tokens: 12,
+            }),
+        };
+        let result = eliteforge_agent_memory::MemoryCompactionResult::from_chat_response(
+            result.into_chat_response(),
+        )
+        .unwrap();
+        let output = ModelCompactionOutput {
+            summary: result.summary.clone(),
+            token_usage: result.provider_usage.map(|usage| ModelTokenUsage {
+                input_tokens: usage.input_tokens as u32,
+                output_tokens: usage.output_tokens as u32,
+                total_tokens: (usage.input_tokens + usage.output_tokens) as u32,
+                cached_input_tokens: result
+                    .provider_metrics
+                    .as_ref()
+                    .and_then(|m| m.cached_input_tokens)
+                    .map(|v| v as u32),
+                reasoning_tokens: result
+                    .provider_metrics
+                    .as_ref()
+                    .and_then(|m| m.reasoning_tokens)
+                    .map(|v| v as u32),
+            }),
+            provider_metadata: None,
+        };
+        let model = service.compaction_model_config(&compaction_test_model());
+        let checkpoint = service
+            .commit_model_compaction(input, output, &model)
+            .unwrap();
+        let connection = rusqlite::Connection::open(&database_url).unwrap();
+        let (input_tokens, output_tokens, metadata_json): (Option<u32>, Option<u32>, String) = connection.query_row(
+            "SELECT input_tokens,output_tokens,metadata_json FROM agent_transcript_messages WHERE message_code=?1",
+            [&checkpoint.checkpoint_message_code], |row| Ok((row.get(0)?,row.get(1)?,row.get(2)?))).unwrap();
+        assert_eq!(input_tokens, reported.then_some(24));
+        assert_eq!(output_tokens, reported.then_some(12));
+        let metadata: serde_json::Value = serde_json::from_str(&metadata_json).unwrap();
+        let audit = &metadata["usageAudit"];
+        assert_eq!(
+            audit["usageSource"],
+            if reported { "provider" } else { "unavailable" }
+        );
+        assert_eq!(
+            audit["usageConfidence"],
+            if reported { "actual" } else { "unavailable" }
+        );
+        assert_eq!(metadata["tokenUsage"].is_null(), !reported);
+        assert_eq!(audit["providerUsage"].is_null(), !reported);
+        if reported {
+            assert_eq!(audit["providerUsage"]["inputTokens"], 24);
+            assert_eq!(audit["providerUsage"]["cachedInputTokens"], 16);
+            assert_eq!(audit["providerUsage"]["reasoningTokens"], 2);
+        }
+        drop(connection);
+        drop(service);
+        std::fs::remove_file(&database_url).unwrap();
+        for suffix in ["-wal", "-shm"] {
+            let _ = std::fs::remove_file(format!("{database_url}{suffix}"));
+        }
+    }
+}
+
+#[path = "support/short_term_memory_pause_lease_tests.rs"]
+mod pause_lease_tests;

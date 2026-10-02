@@ -303,7 +303,7 @@ fn backfill_active_run_leases(connection: &Connection) -> Result<(), ShortTermMe
                        FROM agent_transcript_events ended
                        WHERE ended.session_code = started.session_code
                          AND ended.run_code = started.run_code
-                         AND ended.event_type IN ('agent.run.completed', 'agent.run.failed', 'agent.run.recovered')
+                         AND ended.event_type IN ('agent.run.completed', 'agent.run.awaiting_input', 'agent.run.failed', 'agent.run.recovered')
                    )
                    AND NOT EXISTS (
                        SELECT 1

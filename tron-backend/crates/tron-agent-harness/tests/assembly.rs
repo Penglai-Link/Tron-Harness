@@ -11,18 +11,22 @@ use tron_agent_harness::{TronHarness, TronRunScope};
 
 struct HostContext;
 #[async_trait]
-impl ContextProvider for HostContext {
-    async fn context(&self, run: &RunContext) -> Result<Vec<Message>, AgentError> {
-        let scope = TronRunScope::from_run(run)?;
-        Ok(vec![
-            Message::system(format!("Workspace: {}", scope.workspace_code)),
-            Message::user(Content(vec![ContentBlock::Json {
-                value: json!({
-                    "fileRef": {"kind": "chat_attachment", "resourceCode": "RES-1"},
-                    "userCode": scope.user_code,
-                }),
-            }])),
-        ])
+impl ContextContributor for HostContext {
+    fn kind(&self) -> ContextSourceKind {
+        ContextSourceKind::Instruction
+    }
+    fn block_id(&self) -> &str {
+        "tron.test.instructions"
+    }
+    async fn contribute(&self, input: &ContextInput<'_>) -> Result<ContextBlock, AgentError> {
+        let scope = TronRunScope::from_run(input.run)?;
+        Ok(ContextBlock::instructions(
+            self.block_id(),
+            vec![Message::system(format!(
+                "Workspace: {}",
+                scope.workspace_code
+            ))],
+        ))
     }
 }
 
@@ -65,14 +69,33 @@ impl AgentLoop for ProbeLoop {
         services: &AgentServices,
     ) -> Result<RunResult, AgentError> {
         let mut messages = Vec::new();
-        for provider in &services.context {
-            messages.extend(provider.context(run).await?);
+        for provider in &services.context_sources {
+            messages.extend(
+                provider
+                    .contribute(&ContextInput {
+                        stage: "test",
+                        step: 1,
+                        model: &ModelRef::new("test", "test"),
+                        budget: ContextBudget {
+                            max_tokens: 100_000,
+                            max_messages: 4096,
+                        },
+                        current_input: &Content::default(),
+                        history: &ConversationSnapshot::new(
+                            ConversationKey::new(&run.session_id),
+                            "test",
+                            Vec::new(),
+                        ),
+                        estimator: &ConservativeTokenEstimator,
+                        run: run,
+                    })
+                    .await?
+                    .messages,
+            );
         }
-        assert_eq!(messages.len(), 2);
-        assert!(matches!(
-            messages[1].content.0[0],
-            ContentBlock::Json { .. }
-        ));
+        assert_eq!(messages.len(), 1);
+        assert_eq!(messages[0].role, Role::System);
+        assert!(messages[0].content.text().contains("Workspace:"));
         let mut tools = Vec::new();
         for provider in &services.tools {
             let mut lease = provider.lease(run).await?;
@@ -158,12 +181,9 @@ async fn agent(tool: ToolBinding, shared: Vec<ToolDescriptor>) -> Agent {
             previous: Mutex::new(None),
         }))
         .capability_pack(
-            TronHarness::new(
-                Arc::new(HostContext),
-                Arc::new(StaticToolProvider::new(vec![tool])),
-                shared,
-            )
-            .capability_pack(),
+            TronHarness::new(Arc::new(StaticToolProvider::new(vec![tool])), shared)
+                .with_context_source(HostContext)
+                .capability_pack(),
         )
         .build()
         .await

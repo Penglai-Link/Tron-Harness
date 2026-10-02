@@ -10,9 +10,8 @@ use crate::{
     adapters::inbound::http::auth::RequestAuthContext,
     app::AppState,
     application::agent::{
-        AgentAguiStreamService, AgentInvocationCommand, AgentInvocationService,
-        AgentManagementService, UpdateWorkspaceInternalAgentMcpPolicyCommand,
-        UpdateWorkspaceInternalAgentPolicyCommand,
+        AgentInvocationCommand, AgentInvocationService, AgentManagementService,
+        UpdateWorkspaceInternalAgentMcpPolicyCommand, UpdateWorkspaceInternalAgentPolicyCommand,
     },
     domain::mcp::WorkspaceMcpServerListQuery,
     domain::{
@@ -113,16 +112,13 @@ struct AgentRunDetailResponse {
 
 pub async fn activate_agui_stream(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path(stream_key): Path<String>,
 ) -> Response {
-    let service = AgentAguiStreamService::with_replay_store(
-        state.agui_events.clone(),
-        state.agui_replay_store.clone(),
-    );
+    let service = state.agent_presentation.clone();
     match service.activate(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => agent_agui_error_response(error),
+        Err(error) => agent_agui_error_response(error, &auth.locale),
     }
 }
 
@@ -409,16 +405,13 @@ pub async fn disable_workspace_system_agent(
 
 pub async fn deactivate_agui_stream(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path(stream_key): Path<String>,
 ) -> Response {
-    let service = AgentAguiStreamService::with_replay_store(
-        state.agui_events.clone(),
-        state.agui_replay_store.clone(),
-    );
+    let service = state.agent_presentation.clone();
     match service.deactivate(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => agent_agui_error_response(error),
+        Err(error) => agent_agui_error_response(error, &auth.locale),
     }
 }
 
@@ -569,30 +562,24 @@ fn normalize_mode_token(raw: &str) -> String {
 
 pub async fn list_agui_stream_events(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path(stream_key): Path<String>,
 ) -> Response {
-    let service = AgentAguiStreamService::with_replay_store(
-        state.agui_events.clone(),
-        state.agui_replay_store.clone(),
-    );
+    let service = state.agent_presentation.clone();
     match service.events(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => agent_agui_error_response(error),
+        Err(error) => agent_agui_error_response(error, &auth.locale),
     }
 }
 
 pub async fn list_agui_stream_protocol_events(
     State(state): State<AppState>,
-    _auth: RequestAuthContext,
+    auth: RequestAuthContext,
     Path(stream_key): Path<String>,
 ) -> Response {
-    let service = AgentAguiStreamService::with_replay_store(
-        state.agui_events.clone(),
-        state.agui_replay_store.clone(),
-    );
+    let service = state.agent_presentation.clone();
     match service.protocol_events(&stream_key) {
         Ok(result) => Json(ApiResponse::success(result)).into_response(),
-        Err(error) => agent_agui_error_response(error),
+        Err(error) => agent_agui_error_response(error, &auth.locale),
     }
 }

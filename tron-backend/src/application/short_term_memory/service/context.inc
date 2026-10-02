@@ -67,6 +67,7 @@ impl ShortTermMemoryService {
         let budget_plan = self.model_context_budget_plan(&context.model);
         let Some(memory) = context.short_term_memory.as_ref() else {
             let mut prepared = PreparedModelContext {
+                sources: None,
                 messages: context.messages.clone(),
                 rebased: false,
                 context_hash: None,
@@ -94,6 +95,9 @@ impl ShortTermMemoryService {
             );
             return Ok(prepared);
         };
+        let workspace=self.ensure_session(&memory.session_code)?;
+        if workspace!=context.workspace_code{return Err(ShortTermMemoryError::StorageFailure);}
+        let scope=eliteforge_agent_memory::MemoryScope::new(workspace,&memory.session_code).map_err(|_|ShortTermMemoryError::StorageFailure)?;
         let mut repository = self.repository();
         let compaction = repository.latest_compaction(&memory.session_code)?;
         let min_seq = Self::checkpoint_replay_min_seq(compaction.as_ref());
@@ -127,7 +131,7 @@ impl ShortTermMemoryService {
         )?;
         let active_goal = self.load_active_goal_for_context(&memory.session_code)?;
         let mut full_prepared = assemble_context(
-            &memory.prompt_prefix,
+            &scope,            &memory.prompt_prefix,
             memory.current_input_message.as_ref(),
             Some(&context.run_code),
             checkpoint.clone(),
@@ -138,7 +142,7 @@ impl ShortTermMemoryService {
             memory.todo_enabled,
             &budget_plan,
             self.config.context.reasoning_summary_replay_enabled,
-        );
+        )?;
         apply_request_budget_fields(
             &mut full_prepared,
             &budget_plan,
@@ -170,12 +174,7 @@ impl ShortTermMemoryService {
             && !prompt_prefix_budget_exceeded(&full_prepared)
         {
             let history_budget_tokens = current_session_history_budget_tokens(&full_prepared);
-            let retained_history_tokens = history_budget_tokens.saturating_mul(
-                self.config
-                    .compaction
-                    .retained_history_ratio_bps
-                    .min(10_000),
-            ) / 10_000;
+            let retained_history_tokens = eliteforge_agent_memory::ratio_tokens(history_budget_tokens,self.config.compaction.retained_history_ratio_bps);
             let selection = select_retained_history(
                 recent_source.clone(),
                 retained_history_tokens,
@@ -200,7 +199,7 @@ impl ShortTermMemoryService {
                 let tail_start_seq = selection.tail_start_seq;
                 let full_estimated_tokens = full_prepared.estimated_tokens;
                 let mut tail_prepared = assemble_context(
-                    &memory.prompt_prefix,
+            &scope,                    &memory.prompt_prefix,
                     memory.current_input_message.as_ref(),
                     Some(&context.run_code),
                     checkpoint,
@@ -211,7 +210,7 @@ impl ShortTermMemoryService {
                     memory.todo_enabled,
                     &budget_plan,
                     self.config.context.reasoning_summary_replay_enabled,
-                );
+                )?;
                 apply_request_budget_fields(
                     &mut tail_prepared,
                     &budget_plan,
@@ -219,6 +218,7 @@ impl ShortTermMemoryService {
                     tool_schema_token_estimate,
                 );
                 tail_prepared.checkpoint_code = checkpoint_code;
+                if let (Some(tail), Some(full)) = (&mut tail_prepared.sources, &full_prepared.sources) { tail.history = full.history.clone(); }
                 tail_prepared.compaction_required = true;
                 tail_prepared.compaction_tail_start_seq = Some(tail_start_seq);
                 annotate_compaction_budget(
@@ -231,9 +231,9 @@ impl ShortTermMemoryService {
                     Some(tail_start_seq),
                     full_history_tokens,
                 );
-                tail_prepared.compaction_trigger_reached = true;
+                tail_prepared.compaction_trigger_reached = full_prepared.compaction_trigger_reached;
                 if let Some(breakdown) = tail_prepared.budget_breakdown.as_mut() {
-                    breakdown.compaction_trigger_reached = true;
+                    breakdown.compaction_trigger_reached = full_prepared.compaction_trigger_reached;
                 }
                 self.append_event(
                     &memory.session_code,

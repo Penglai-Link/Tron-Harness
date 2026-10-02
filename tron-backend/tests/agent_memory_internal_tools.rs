@@ -222,11 +222,17 @@ async fn main_agent_default_all_platform_tools_injects_memory_tools() {
     let authorization = format!("Bearer {token}");
     common::enable_direct_list(&app).await;
 
+    // The complete platform catalog is deliberately exposed. Its 102 schemas
+    // exceed the default 32k model's admitted input; this fixture declares the
+    // larger model window instead of reducing selection or changing guards.
+    let mut payload = agent_run_payload(&model_server.base_url, None, json!({}));
+    payload["model"]["contextWindowTokens"] = json!(128_000);
+
     let response = request_with_headers(
         &app,
         Method::POST,
         "/api/v1/agents/runs",
-        Some(agent_run_payload(&model_server.base_url, None, json!({}))),
+        Some(payload),
         None,
         Some(&authorization),
     )
@@ -739,18 +745,25 @@ async fn memory_search_observation_stays_under_event_bus_limit_with_governance_m
     create_embedding_default(&app, &authorization, &model_server.base_url).await;
     create_rerank_default(&app, &authorization, &model_server.base_url).await;
 
+    // All seven save observations and the full search result are retained.
+    // Their measured native history cost is 31,568 tokens, beyond the default
+    // 27,314 history allowance. This case tests event payload bounds rather than
+    // model overflow, so declare a model window which admits the complete turn.
+    let mut payload = agent_run_payload(
+        &model_server.base_url,
+        Some(vec![
+            effective_tool("memory.search"),
+            effective_tool("memory.save"),
+        ]),
+        json!({ "maxSteps": 12, "maxToolCalls": 8 }),
+    );
+    payload["model"]["contextWindowTokens"] = json!(128_000);
+
     let response = request_with_headers(
         &app,
         Method::POST,
         "/api/v1/agents/runs",
-        Some(agent_run_payload(
-            &model_server.base_url,
-            Some(vec![
-                effective_tool("memory.search"),
-                effective_tool("memory.save"),
-            ]),
-            json!({ "maxSteps": 12, "maxToolCalls": 8 }),
-        )),
+        Some(payload),
         None,
         Some(&authorization),
     )

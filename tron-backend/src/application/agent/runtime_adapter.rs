@@ -145,7 +145,7 @@ impl RuntimeCapabilities {
     fn react() -> Self {
         Self {
             supports_resume: false,
-            supports_cancel: false,
+            supports_cancel: true,
             supports_steer: true,
             supports_streaming: true,
             supports_ephemeral: true,
@@ -177,6 +177,10 @@ impl RuntimeCapabilities {
 }
 
 pub trait AgentRuntime: Send + Sync {
+    /// Native adapters must be drained after cancellation before product admission releases.
+    fn owns_native_lifecycle(&self) -> bool {
+        false
+    }
     /// Framework-managed runs must never be replayed wholesale after side effects.
     fn key(&self) -> RuntimeAdapterKey;
     /// Stable transport configuration identity for durable remote-session reuse.

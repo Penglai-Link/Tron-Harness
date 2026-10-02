@@ -90,3 +90,12 @@ describe("Tron / Agent UI boundary", () => {
     expect(error).toMatchObject({ code: "FORBIDDEN", status: 403, details: { reason: "scope" } });
   });
 });
+
+it.each([true,false,{answers:[true],count:2}])("keeps native resume payload %j through the real product adapter", async (payload) => {
+  const host=createMockChatAdapter();
+  host.answerUserInputRequestStream=vi.fn(async()=>({session,run:{runCode:"NEXT",workspaceCode:"WORKSPACE",status:"COMPLETED" as const,finalOutput:"",stepCount:1},messages:[],userInputRequest:null}));
+  const adapter=createAgentUiAdapter(host,{workspaceCode:"WORKSPACE"});
+  const resume=[{interruptId:"SDK-NATIVE",status:"resolved" as const,payload}];
+  await adapter.answerUserInputRequestStream!(toUiSession(session),"SDK-NATIVE",{answers:[],resume});
+  expect(host.answerUserInputRequestStream).toHaveBeenCalledWith(session,"SDK-NATIVE",{answers:[],resume},expect.anything(),undefined);
+});

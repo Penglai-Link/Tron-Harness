@@ -39,6 +39,129 @@ use common::{
     app, app_with_config, authenticated_bearer_token, request_with_headers, response_json,
 };
 
+const RAW_REASONING_SENTINEL: &str = "provider-private-reasoning-sentinel";
+
+fn protocol_events(body: &str) -> Vec<Value> {
+    body.replace("\r\n", "\n")
+        .split("\n\n")
+        .filter_map(|frame| {
+            let data = frame
+                .lines()
+                .filter_map(|line| line.strip_prefix("data:").map(str::trim_start))
+                .collect::<Vec<_>>()
+                .join("\n");
+            (!data.is_empty())
+                .then(|| serde_json::from_str(&data).expect("protocol SSE data should be JSON"))
+        })
+        .collect()
+}
+
+fn assert_native_identity(event: &Value, session_code: &str) {
+    assert_eq!(event["threadId"], json!(session_code));
+    for key in ["runId", "executionId"] {
+        assert!(
+            !event
+                .pointer(&format!("/metadata/framework/{key}"))
+                .and_then(Value::as_str)
+                .expect("native identity should be retained")
+                .is_empty()
+        );
+    }
+    let execution = event
+        .pointer("/metadata/framework/executionId")
+        .unwrap()
+        .as_str()
+        .unwrap();
+    let sequence = event
+        .pointer("/metadata/framework/sourceSequence")
+        .and_then(Value::as_u64)
+        .expect("native source sequence should be retained");
+    let ordinal = event
+        .pointer("/metadata/tron/sourceOrdinal")
+        .and_then(Value::as_u64)
+        .expect("native source ordinal should be retained");
+    assert_eq!(
+        event.pointer("/metadata/tron/eventId"),
+        Some(&json!(format!("native:{execution}:{sequence}:{ordinal}")))
+    );
+    assert_eq!(event.pointer("/metadata/tron/runCode"), event.get("runId"));
+}
+
+fn assert_native_reasoning_and_text(
+    body: &str,
+    session_code: &str,
+    expected_reasoning: &str,
+    expected_text: &str,
+) {
+    let events = protocol_events(body);
+    let index = |kind: &str| {
+        events
+            .iter()
+            .position(|event| event["type"] == kind)
+            .unwrap_or_else(|| panic!("native {kind} event should be present"))
+    };
+    let deltas = |kind: &str| {
+        events
+            .iter()
+            .filter(|event| event["type"] == kind)
+            .map(|event| {
+                event["delta"]
+                    .as_str()
+                    .expect("content delta should be text")
+            })
+            .collect::<String>()
+    };
+    assert_eq!(deltas("REASONING_MESSAGE_CONTENT"), expected_reasoning);
+    assert_eq!(deltas("TEXT_MESSAGE_CONTENT"), expected_text);
+    let reasoning_start = index("REASONING_MESSAGE_START");
+    let reasoning_content = index("REASONING_MESSAGE_CONTENT");
+    let reasoning_end = index("REASONING_MESSAGE_END");
+    let text_start = index("TEXT_MESSAGE_START");
+    let text_content = index("TEXT_MESSAGE_CONTENT");
+    let text_end = index("TEXT_MESSAGE_END");
+    assert!(index("REASONING_START") < reasoning_start);
+    assert!(reasoning_start < reasoning_content && reasoning_content < reasoning_end);
+    assert!(text_start < text_content && text_content < text_end);
+    let last_reasoning = events
+        .iter()
+        .rposition(|event| event["type"] == "REASONING_MESSAGE_CONTENT")
+        .unwrap();
+    assert!(
+        last_reasoning < text_content,
+        "fixture reasoning must precede answer deltas"
+    );
+    // Native AG-UI keeps the reasoning envelope open until MessageFinished.
+    // Both envelopes still close before the authoritative run terminal event.
+    assert!(reasoning_end < text_end && text_end < index("RUN_FINISHED"));
+    assert_eq!(
+        events[reasoning_start]["messageId"],
+        events[reasoning_end]["messageId"]
+    );
+    assert_eq!(
+        events[text_start]["messageId"],
+        events[text_end]["messageId"]
+    );
+    let mut identities = std::collections::HashSet::new();
+    for event in events
+        .iter()
+        .filter(|event| event.pointer("/metadata/framework").is_some())
+    {
+        assert_native_identity(event, session_code);
+        assert!(
+            identities.insert(
+                event
+                    .pointer("/metadata/tron/eventId")
+                    .unwrap()
+                    .as_str()
+                    .unwrap()
+                    .to_owned()
+            ),
+            "native events must not be injected twice"
+        );
+    }
+    assert!(!body.contains("event: REASONING_TEXT_CONTENT"));
+}
+
 struct AgentModelMockServer {
     base_url: String,
     _task: JoinHandle<()>,
@@ -118,19 +241,11 @@ async fn summary_failure_agent_model_mock_server() -> AgentModelMockServer {
         "/v1/chat/completions",
         post({
             let calls = calls.clone();
-            move || {
+            move |Json(payload): Json<Value>| {
                 let calls = calls.clone();
                 async move {
                     if calls.fetch_add(1, Ordering::SeqCst) == 0 {
-                        Json(json!({
-                            "choices": [{
-                                "message": {
-                                    "role": "assistant",
-                                    "content": "main response remains successful"
-                                }
-                            }]
-                        }))
-                        .into_response()
+                        valid_mock_completion(&payload, "main response remains successful")
                     } else {
                         (
                             StatusCode::INTERNAL_SERVER_ERROR,
@@ -173,14 +288,7 @@ async fn delayed_agent_model_mock_server() -> AgentModelMockServer {
                         .find_map(|message| message["content"].as_str())
                 })
                 .unwrap_or_default();
-            Json(json!({
-                "choices": [{
-                    "message": {
-                        "role": "assistant",
-                        "content": format!("delayed reply: {prompt}")
-                    }
-                }]
-            }))
+            valid_mock_completion(&payload, format!("delayed reply: {prompt}"))
         }),
     );
     let task = tokio::spawn(async move {
@@ -258,10 +366,13 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
         .unwrap_or_default();
     if payload["stream"].as_bool() == Some(true) {
         assert_eq!(payload["enable_thinking"], json!(true));
+        let raw_reasoning = json!({
+            "choices": [{"delta": {"reasoning_content": RAW_REASONING_SENTINEL}}]
+        });
         let reasoning = json!({
             "choices": [{
                 "delta": {
-                    "reasoning_content": format!(
+                    "reasoning_summary_content": format!(
                         "thinking about {prompt}. {}done thinking.",
                         "reasoning detail ".repeat(12)
                     )
@@ -279,10 +390,12 @@ async fn agent_chat_completion(Json(payload): Json<Value>) -> Response {
             "choices": [{
                 "delta": {
                     "content": format!("reply: {prompt}")
-                }
+                },
+                "finish_reason":"stop"
             }]
         });
         let stream = async_stream::stream! {
+            yield Ok::<Event, Infallible>(Event::default().data(raw_reasoning.to_string()));
             yield Ok::<Event, Infallible>(Event::default().data(reasoning.to_string()));
             yield Ok::<Event, Infallible>(Event::default().data(first.to_string()));
             yield Ok::<Event, Infallible>(Event::default().data(second.to_string()));
@@ -360,7 +473,8 @@ async fn delayed_steer_chat_completion(
     };
     let chunk = json!({
         "choices": [{
-            "delta": {"content": content}
+            "delta": {"content": content},
+            "finish_reason":"stop"
         }]
     });
     let stream = async_stream::stream! {
@@ -368,6 +482,17 @@ async fn delayed_steer_chat_completion(
         yield Ok::<Event, Infallible>(Event::default().data("[DONE]"));
     };
     Sse::new(stream).into_response()
+}
+
+fn valid_mock_completion(payload: &Value, content: impl Into<String>) -> Response {
+    let content = content.into();
+    if payload["stream"].as_bool() == Some(true) {
+        let chunk = json!({"choices":[{"delta":{"content":content},"finish_reason":"stop"}]});
+        let stream = async_stream::stream! {yield Ok::<Event,Infallible>(Event::default().data(chunk.to_string()));yield Ok::<Event,Infallible>(Event::default().data("[DONE]"));};
+        Sse::new(stream).into_response()
+    } else {
+        Json(json!({"choices":[{"message":{"role":"assistant","content":content},"finish_reason":"stop"}]})).into_response()
+    }
 }
 
 fn is_session_summary_request(payload: &Value) -> bool {
@@ -1220,8 +1345,24 @@ async fn chat_stop_run_cancels_runtime_cleans_lease_and_prevents_orphan_messages
         .expect("stopped stream body should complete");
     let stream_body =
         String::from_utf8(stream_body.to_vec()).expect("stopped stream should be utf8");
-    assert!(stream_body.contains("event: RUN_ERROR"));
-    assert!(stream_body.contains("AGENT_RUN_STOPPED"));
+    let stopped_events = protocol_events(&stream_body);
+    let errors = stopped_events
+        .iter()
+        .filter(|event| event["type"] == "RUN_ERROR")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        errors.len(),
+        1,
+        "cancellation should have one authoritative terminal"
+    );
+    assert_eq!(errors[0]["code"], json!("AGENT_CANCELLED"));
+    assert_eq!(errors[0]["runId"], json!(active_run_code));
+    assert_native_identity(errors[0], &session_code);
+    assert!(
+        !stopped_events
+            .iter()
+            .any(|event| event["type"] == "RUN_FINISHED")
+    );
 
     let mut became_idle = false;
     for _ in 0..50 {
@@ -1263,6 +1404,37 @@ async fn chat_stop_run_cancels_runtime_cleans_lease_and_prevents_orphan_messages
     let next_stream_body =
         String::from_utf8(next_stream_body.to_vec()).expect("next stream should be utf8");
     assert!(next_stream_body.contains("event: RUN_FINISHED"));
+    assert_eq!(
+        model_state.calls.load(Ordering::SeqCst),
+        2,
+        "rejected concurrent send must not dispatch a model request"
+    );
+    let messages = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/chats/sessions/{session_code}/messages"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    let messages = response_json(messages).await;
+    let messages = messages["data"]
+        .as_array()
+        .expect("messages should be returned");
+    assert_eq!(
+        messages
+            .iter()
+            .map(|message| message["role"].as_str().unwrap())
+            .collect::<Vec<_>>(),
+        vec!["USER", "USER", "ASSISTANT"]
+    );
+    assert_eq!(messages[2]["content"], json!("steered final output"));
+    assert!(
+        !messages
+            .iter()
+            .any(|message| message["content"] == "must not be persisted")
+    );
 }
 
 #[tokio::test]
@@ -2369,21 +2541,32 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
     assert!(body.contains("event: RUN_STARTED"));
     assert!(body.contains("\"type\":\"RUN_STARTED\""));
     assert!(body.contains("\"supportsSteer\":true"));
-    assert!(body.contains("event: REASONING_TEXT_CONTENT"));
+    let exposed_raw = protocol_events(&body)
+        .into_iter()
+        .filter(|event| event.to_string().contains(RAW_REASONING_SENTINEL))
+        .map(|event| (event["type"].clone(), event["name"].clone()))
+        .collect::<Vec<_>>();
+    assert!(
+        exposed_raw.is_empty(),
+        "raw reasoning leaked through public events: {exposed_raw:?}"
+    );
+    assert!(body.contains("event: REASONING_MESSAGE_CONTENT"));
     assert!(body.contains("thinking about stream this session"));
     assert!(body.contains("done thinking."));
-    assert!(!body.contains("event: REASONING_MESSAGE_CONTENT"));
+
     assert!(!body.contains("Analyzing request with gpt-chat."));
     assert!(body.contains("event: TEXT_MESSAGE_START"));
     assert!(body.contains("event: TEXT_MESSAGE_CONTENT"));
     assert!(body.contains("\"delta\":\"chat \""));
     assert!(body.contains("\"delta\":\"reply: stream this session\""));
-    assert!(
-        body.find("event: REASONING_MESSAGE_END")
-            .expect("reasoning should end")
-            < body
-                .find("event: TEXT_MESSAGE_START")
-                .expect("text should start")
+    assert_native_reasoning_and_text(
+        &body,
+        &session_code,
+        &format!(
+            "thinking about stream this session. {}done thinking.",
+            "reasoning detail ".repeat(12)
+        ),
+        "chat reply: stream this session",
     );
     assert!(body.contains("event: TEXT_MESSAGE_END"));
     assert!(body.contains("event: RUN_FINISHED"));
@@ -2420,12 +2603,57 @@ async fn chat_stream_persists_messages_and_emits_deltas() {
         messages["data"][1]["content"],
         json!("chat reply: stream this session")
     );
+    assert!(!messages.to_string().contains(RAW_REASONING_SENTINEL));
+    let replay = request_with_headers(
+        &app,
+        Method::GET,
+        &format!("/api/v1/agents/agui/streams/{session_code}/protocol-events"),
+        None,
+        None,
+        Some(&authorization),
+    )
+    .await;
+    assert_eq!(replay.status(), StatusCode::OK);
+    let replay = response_json(replay).await;
+    assert!(
+        !replay.to_string().contains(RAW_REASONING_SENTINEL),
+        "private raw reasoning must not enter durable public replay"
+    );
+    let replay = replay["data"]
+        .as_array()
+        .expect("protocol events should be returned");
+    let public_summary = replay
+        .iter()
+        .map(|event| &event["data"])
+        .filter(|event| event["type"] == "REASONING_MESSAGE_CONTENT")
+        .map(|event| event["delta"].as_str().expect("summary should be text"))
+        .collect::<String>();
+    assert_eq!(
+        public_summary,
+        format!(
+            "thinking about stream this session. {}done thinking.",
+            "reasoning detail ".repeat(12)
+        )
+    );
+    for event in protocol_events(&body)
+        .into_iter()
+        .filter(|event| event["type"] == "REASONING_MESSAGE_CONTENT")
+    {
+        assert_eq!(
+            replay
+                .iter()
+                .filter(|record| record["data"] == event)
+                .count(),
+            1,
+            "public reasoning frame must retain its identity once in replay"
+        );
+    }
 }
 
 #[tokio::test]
 async fn chat_stream_downgrades_unreachable_mcp_server_to_agui_warning_and_finishes_run() {
     let app = app();
-    let server = agent_model_mock_server().await;
+    let server = recording_agent_model_mock_server().await;
     let token = authenticated_bearer_token(&app).await;
     let authorization = format!("Bearer {token}");
     let model_code = create_platform_text_model(&app, &authorization, &server.base_url).await;
@@ -2507,10 +2735,62 @@ async fn chat_stream_downgrades_unreachable_mcp_server_to_agui_warning_and_finis
         .await
         .expect("stream body should be readable");
     let body = String::from_utf8(body.to_vec()).expect("stream body should be utf8");
-    assert!(body.contains("event: TOOL_CALL_START"));
-    assert!(body.contains("\"toolCallName\":\"MCP warning\""));
-    assert!(body.contains("continuing without its tools"));
-    assert!(body.contains("hanging_stdio"));
+    let events = protocol_events(&body);
+    let warnings = events
+        .iter()
+        .filter(|event| event["type"] == "CUSTOM" && event["name"] == "tron.mcp.runtime.warning")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        warnings.len(),
+        1,
+        "failed discovery should produce one diagnostic"
+    );
+    let warning = warnings[0];
+    assert_eq!(warning["value"]["serverCode"], json!("hanging_stdio"));
+    assert_eq!(warning["value"]["serverName"], json!("Hanging Stdio"));
+    assert_eq!(warning["value"]["stage"], json!("discovery"));
+    assert!(
+        warning["value"]["message"]
+            .as_str()
+            .unwrap()
+            .contains("continuing without its tools")
+    );
+    let warning_id = warning
+        .pointer("/metadata/tron/eventId")
+        .and_then(Value::as_str)
+        .expect("warning should have a durable identity");
+    assert!(warning_id.starts_with("bus:") && warning_id.ends_with(":0"));
+    assert!(
+        !events.iter().any(|event| event["type"]
+            .as_str()
+            .is_some_and(|kind| kind.starts_with("TOOL_CALL_"))
+            && event["toolCallName"] == "MCP warning"),
+        "discovery warning must not impersonate a tool invocation"
+    );
+    {
+        let requests = server
+            .requests
+            .lock()
+            .expect("recorded model requests should be available");
+        let main = requests
+            .iter()
+            .filter(|request| request["stream"] == true)
+            .collect::<Vec<_>>();
+        assert_eq!(
+            main.len(),
+            1,
+            "degraded discovery must still dispatch the main request once"
+        );
+        for tool in main[0]["tools"].as_array().into_iter().flatten() {
+            let name = tool["function"]["name"]
+                .as_str()
+                .expect("tool names should be explicit");
+            assert!(
+                !name.contains("hanging_stdio") && name != "MCP warning",
+                "failed MCP server must not expose callable tools"
+            );
+        }
+    }
     assert!(body.contains("event: RUN_STARTED"));
     assert!(body.contains("\"supportsSteer\":true"));
     assert!(body.contains("event: RUN_FINISHED"));
@@ -2526,10 +2806,31 @@ async fn chat_stream_downgrades_unreachable_mcp_server_to_agui_warning_and_finis
     )
     .await;
     assert_eq!(replay_response.status(), StatusCode::OK);
-    let replay_json = response_json(replay_response).await.to_string();
-    assert!(replay_json.contains("MCP warning"));
-    assert!(replay_json.contains("continuing without its tools"));
-    assert!(replay_json.contains("RUN_FINISHED"));
+    let replay = response_json(replay_response).await;
+    let replay = replay["data"]
+        .as_array()
+        .expect("protocol replay should contain events");
+    let replay_warnings = replay
+        .iter()
+        .map(|event| &event["data"])
+        .filter(|event| event["type"] == "CUSTOM" && event["name"] == "tron.mcp.runtime.warning")
+        .collect::<Vec<_>>();
+    assert_eq!(
+        replay_warnings,
+        vec![warning],
+        "live and durable warning must retain the same payload and identity"
+    );
+    assert!(
+        replay
+            .iter()
+            .any(|event| event["data"]["type"] == "RUN_FINISHED")
+    );
+    let finished = events
+        .iter()
+        .find(|event| event["type"] == "RUN_FINISHED")
+        .unwrap();
+    assert_native_identity(finished, &session_code);
+    assert!(!events.iter().any(|event| event["type"] == "RUN_ERROR"));
 }
 
 #[tokio::test]
@@ -3196,12 +3497,11 @@ async fn chat_stream_uses_opencode_system_agent_cli_runtime_and_emits_live_event
     assert!(body.contains("event: TEXT_MESSAGE_START"));
     assert!(body.contains("\"delta\":\"streamed \""));
     assert!(body.contains("\"delta\":\"opencode reply\""));
-    assert!(
-        body.find("event: REASONING_MESSAGE_END")
-            .expect("reasoning should end")
-            < body
-                .find("event: TEXT_MESSAGE_START")
-                .expect("text should start")
+    assert_native_reasoning_and_text(
+        &body,
+        &session_code,
+        "stream thinking",
+        "streamed opencode reply",
     );
     assert!(body.contains("event: TEXT_MESSAGE_END"));
     assert!(body.contains("event: RUN_FINISHED"));
@@ -3905,3 +4205,6 @@ fn assert_decimal_code_has_snowflake_shape(prefix: &str, code: &str) {
         "code `{code}` should use a generated snowflake id, not a table-local sequence"
     );
 }
+
+#[path = "support/chat_resume_lease_tests.rs"]
+mod resume_lease_tests;

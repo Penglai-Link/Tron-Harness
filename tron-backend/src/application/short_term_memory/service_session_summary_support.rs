@@ -209,7 +209,7 @@ pub(super) fn truncate_markdown(value: &str, max_chars: usize) -> String {
     )
 }
 
-pub(super) fn redact_sensitive_text(value: &str) -> String {
+pub(crate) fn redact_sensitive_text(value: &str) -> String {
     value
         .lines()
         .map(redact_sensitive_line)
@@ -219,6 +219,16 @@ pub(super) fn redact_sensitive_text(value: &str) -> String {
 
 fn redact_sensitive_line(line: &str) -> String {
     let lowered = line.to_ascii_lowercase();
+    // URLs in provider diagnostics can carry basic credentials without a named key.
+    if line.split_whitespace().any(|word| {
+        word.split_once("://").is_some_and(|(_, rest)| {
+            rest.split(['/', '?', '#'])
+                .next()
+                .is_some_and(|authority| authority.contains('@'))
+        })
+    }) {
+        return "[REDACTED SENSITIVE LINE]".into();
+    }
     const SENSITIVE_KEYS: &[&str] = &[
         "api_key",
         "apikey",
@@ -357,6 +367,17 @@ mod tests {
         assert_eq!(
             redact_sensitive_text("https://example.test/file?access_token=abc123"),
             "[REDACTED SENSITIVE LINE]"
+        );
+    }
+    #[test]
+    fn diagnostics_redact_url_userinfo_without_hiding_public_urls() {
+        assert_eq!(
+            redact_sensitive_text("connect https://name:PASSWORD_SENTINEL@example.test/path"),
+            "[REDACTED SENSITIVE LINE]"
+        );
+        assert_eq!(
+            redact_sensitive_text("https://example.test/path"),
+            "https://example.test/path"
         );
     }
 }

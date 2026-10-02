@@ -1,6 +1,10 @@
+use crate::application::agent::tool_framework::FrameworkToolRegistryExt;
 mod page_context;
 use page_context::page_context_message;
-use std::{collections::HashMap, sync::Arc};
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
 
 use crate::{
     application::{
@@ -89,7 +93,7 @@ fn invocation_locale(request_locale: Option<&str>) -> String {
 }
 
 pub(crate) struct PreparedAgentRun {
-    pub leases: crate::domain::agent::FrameworkLeaseGuard,
+    pub leases: crate::application::agent::tool_framework::FrameworkLeaseGuard,
     pub run_code: String,
     pub conversation_code: Option<String>,
     pub workspace_code: String,
@@ -219,6 +223,10 @@ impl AgentRunContextBuilder {
         let locale = invocation_locale(locale.as_deref());
         let run_code = requested_run_code.unwrap_or_else(generate_agent_run_code);
         let leases = self.tool_registry.framework_lease_guard(&run_code);
+        let requested_tool_names = requested_tools
+            .iter()
+            .map(|tool| tool.tool_name.clone())
+            .collect::<HashSet<_>>();
         let mut tools = requested_tools;
         let mut effective_tools = tools.clone();
         let mut tool_exposure = AgentToolExposureState::default();
@@ -243,9 +251,10 @@ impl AgentRunContextBuilder {
             None
         };
 
-        if tools.is_empty()
-            && let Some(policy) = internal_agent_policy.as_ref()
-        {
+        if let Some(policy) = internal_agent_policy.as_ref() {
+            // Saved policy owns internal-agent authority. Request DTOs only narrow
+            // that authority by name; their descriptions/schemas are never trusted.
+            // An empty request keeps the legacy contract: use the saved policy.
             let effective_tool_records = self
                 .management
                 .resolve_internal_agent_effective_tool_definitions(
@@ -256,6 +265,10 @@ impl AgentRunContextBuilder {
                 .map_err(|error| map_agent_error(&resolved_agent.agent_code, error))?
                 .into_iter()
                 .filter(|tool| tool.availability_state == ToolAvailabilityState::Available)
+                .filter(|tool| {
+                    requested_tool_names.is_empty()
+                        || requested_tool_names.contains(&tool.tool_name)
+                })
                 .collect::<Vec<_>>();
             match policy.tool_exposure_mode {
                 ToolExposureMode::DirectList => {
@@ -334,7 +347,7 @@ impl AgentRunContextBuilder {
             .collect::<Vec<_>>();
 
         if let Some(policy) = internal_agent_policy.as_ref() {
-            let materialization = self
+            let mut materialization = self
                 .mcp
                 .materialize_runtime_tools(
                     &run_code,
@@ -360,6 +373,11 @@ impl AgentRunContextBuilder {
                 },
                 &materialization.warnings,
             );
+            // Only discovered bindings from policy-selected enabled servers can
+            // add MCP authority. A same-name request projection creates no tool.
+            materialization.tools.retain(|tool| {
+                requested_tool_names.is_empty() || requested_tool_names.contains(&tool.tool_name)
+            });
             effective_tools.extend(materialization.tools.iter().cloned());
             tools.extend(materialization.tools);
         }

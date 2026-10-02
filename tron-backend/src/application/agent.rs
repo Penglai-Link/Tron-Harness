@@ -30,6 +30,7 @@ mod runtime_adapter;
 mod runtime_capability;
 mod system_agent_model_probe;
 mod tool_catalog;
+pub(crate) mod tool_framework;
 mod tool_schema;
 mod turn_state;
 mod usage_snapshots;
@@ -38,7 +39,9 @@ pub use active_run::{
     ActiveRunCancellation, ActiveRunControl, ActiveRunError, ActiveRunGuard, ActiveRunRegistry,
     ActiveRunSnapshot, ActiveRunState, AgentSteerInput,
 };
-pub use agui_stream::{AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStreamService};
+pub use agui_stream::{
+    AgentAguiReplayStore, AgentAguiStreamError, AgentAguiStreamService, protocol_event_identity,
+};
 pub use business_tools::{
     CHAT_ASK_USER_TOOL, DISCOVERY_EXPAND_TOOL_DOMAIN_TOOL, ask_user_definition,
     build_domain_discovery_guidance, discovery_expand_tool_definition,

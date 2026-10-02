@@ -120,39 +120,6 @@ pub trait ModelProviderAdapter: Send + Sync {
         &'a self,
         credentials: &'a ProviderCredentials,
     ) -> ProviderFuture<'a, Vec<ExternalMultimediaCatalogModel>>;
-
-    fn verify_chat_auto<'a>(
-        &'a self,
-        credentials: &'a ProviderCredentials,
-    ) -> ProviderFuture<'a, ()>;
-
-    fn verify_embedding<'a>(
-        &'a self,
-        credentials: &'a ProviderCredentials,
-    ) -> ProviderFuture<'a, ()>;
-
-    fn chat<'a>(
-        &'a self,
-        credentials: &'a ProviderCredentials,
-        body: &'a Value,
-        quality_type: ProviderModelQuality,
-        conversation_id: Option<&'a str>,
-    ) -> ProviderFuture<'a, Value>;
-
-    fn chat_stream<'a>(
-        &'a self,
-        credentials: &'a ProviderCredentials,
-        body: &'a Value,
-        quality_type: ProviderModelQuality,
-        conversation_id: Option<&'a str>,
-        sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
-    ) -> ProviderFuture<'a, ()>;
-
-    fn embed<'a>(
-        &'a self,
-        credentials: &'a ProviderCredentials,
-        body: &'a Value,
-    ) -> ProviderFuture<'a, Value>;
 }
 
 #[derive(Debug, Clone)]

@@ -14,20 +14,21 @@ use chrono::DateTime;
 use crab_serverapi::{
     AuthorizedClientApi, AuthorizedClientContext, ServerApiError,
     auth::{AccountClient, AccountInfo, LoginClient, SessionRequest},
-    gateway::{
-        ChatCompletionsClient, EmbeddingsClient, ProtocolType, QualityType, ResponsesClient,
-    },
+    gateway::{ChatCompletionsClient, ProtocolType, QualityType},
     multimedia::MultimediaClient,
 };
 use reqwest::Method;
 use rusqlite::{Connection, OptionalExtension, Transaction, params};
 use serde::{Deserialize, Serialize};
-use serde_json::{Value, json};
+use serde_json::Value;
+#[cfg(test)]
+use serde_json::json;
 use tokio::sync::broadcast;
 use url::Url;
 
 mod chat_auto_routes;
 mod person_ai_services;
+mod sdk_models;
 
 use crate::{
     application::{
@@ -62,6 +63,8 @@ const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
 
 #[derive(Clone)]
 pub struct ModelProviderService {
+    model_jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
+    model_attempt_salt: Arc<String>,
     connection: Arc<Mutex<Connection>>,
     token_refresh_lock: Arc<tokio::sync::Mutex<()>>,
     server_auth_events: broadcast::Sender<()>,
@@ -146,7 +149,6 @@ use utilities::*;
 mod authorization;
 mod credentials;
 mod lifecycle;
-mod requests;
 mod selection;
 mod snapshots;
 mod sync;
@@ -162,10 +164,10 @@ mod tests {
     struct UnauthorizedOnceAdapter {
         refresh_count: AtomicUsize,
         refresh_tokens: Mutex<Vec<String>>,
-        chat_count: AtomicUsize,
-        chat_tokens: Mutex<Vec<String>>,
-        stream_count: AtomicUsize,
-        stream_tokens: Mutex<Vec<String>>,
+        block: AtomicBool,
+        fail: AtomicBool,
+        entered: tokio::sync::Notify,
+        release: tokio::sync::Notify,
     }
 
     impl ModelProviderAdapter for UnauthorizedOnceAdapter {
@@ -204,6 +206,13 @@ mod tests {
                     .expect("lock refresh tokens")
                     .push(refresh_token);
                 let refresh_number = self.refresh_count.fetch_add(1, Ordering::SeqCst) + 1;
+                if self.block.load(Ordering::SeqCst) {
+                    self.entered.notify_one();
+                    self.release.notified().await;
+                }
+                if self.fail.load(Ordering::SeqCst) {
+                    return Err(ModelProviderError::DeviceUnbound);
+                }
                 Ok(ProviderCredentials {
                     token: format!("access-{refresh_number}"),
                     refresh_token: format!("refresh-{refresh_number}"),
@@ -228,75 +237,10 @@ mod tests {
         ) -> ProviderFuture<'a, Vec<ExternalMultimediaCatalogModel>> {
             Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
         }
-
-        fn verify_chat_auto<'a>(
-            &'a self,
-            _credentials: &'a ProviderCredentials,
-        ) -> ProviderFuture<'a, ()> {
-            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
-        }
-
-        fn verify_embedding<'a>(
-            &'a self,
-            _credentials: &'a ProviderCredentials,
-        ) -> ProviderFuture<'a, ()> {
-            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
-        }
-
-        fn chat<'a>(
-            &'a self,
-            credentials: &'a ProviderCredentials,
-            _body: &'a Value,
-            _quality_type: ProviderModelQuality,
-            _conversation_id: Option<&'a str>,
-        ) -> ProviderFuture<'a, Value> {
-            let token = credentials.token.clone();
-            Box::pin(async move {
-                self.chat_tokens
-                    .lock()
-                    .expect("lock chat tokens")
-                    .push(token);
-                if self.chat_count.fetch_add(1, Ordering::SeqCst) == 0 {
-                    Err(ModelProviderError::Unauthorized)
-                } else {
-                    Ok(json!({"model": "mock-model"}))
-                }
-            })
-        }
-
-        fn chat_stream<'a>(
-            &'a self,
-            credentials: &'a ProviderCredentials,
-            _body: &'a Value,
-            _quality_type: ProviderModelQuality,
-            _conversation_id: Option<&'a str>,
-            _sink: Arc<dyn Fn(Value) -> Result<(), String> + Send + Sync + 'a>,
-        ) -> ProviderFuture<'a, ()> {
-            let token = credentials.token.clone();
-            Box::pin(async move {
-                self.stream_tokens
-                    .lock()
-                    .expect("lock stream tokens")
-                    .push(token);
-                if self.stream_count.fetch_add(1, Ordering::SeqCst) == 0 {
-                    Err(ModelProviderError::Unauthorized)
-                } else {
-                    Ok(())
-                }
-            })
-        }
-
-        fn embed<'a>(
-            &'a self,
-            _credentials: &'a ProviderCredentials,
-            _body: &'a Value,
-        ) -> ProviderFuture<'a, Value> {
-            Box::pin(async { Err(ModelProviderError::Remote("unused in test".into())) })
-        }
     }
 
     #[tokio::test]
-    async fn chat_and_stream_refresh_401_rebuild_requests_and_persist_rotated_tokens() {
+    async fn credential_refresh_policy_persists_rotated_tokens_without_model_resubmission() {
         let cipher: Arc<dyn VariableCipher> = Arc::new(
             Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
                 key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
@@ -309,6 +253,8 @@ mod tests {
             .expect("create provider schema");
         let adapter = Arc::new(UnauthorizedOnceAdapter::default());
         let service = ModelProviderService {
+            model_jobs: Default::default(),
+            model_attempt_salt: Arc::new(eliteforge_agent_core::RunId::new_v4().to_string()),
             connection: Arc::new(Mutex::new(connection)),
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),
             server_auth_events: broadcast::channel(16).0,
@@ -349,36 +295,45 @@ mod tests {
             )
             .expect("seed provider credentials");
 
-        let config = person_ai_agent_config(
-            "PERSON_AI:ROUTE:ChatAuto",
-            "Auto",
-            Some(256_000),
-            None,
-            AgentModelProtocol::ChatCompletions,
+        let identity = service.sdk_credential_attempt("expired-access");
+        let rejected = eliteforge_agent_core::ModelError::Provider(Box::new(
+            eliteforge_agent_core::ProviderModelError {
+                authorization_attempt: Some(identity),
+                provider: "personai".into(),
+                category: eliteforge_agent_core::ProviderErrorCategory::Authentication,
+                http_status: Some(401),
+                business_code: None,
+                error_type: None,
+                model: None,
+                message: "expired".into(),
+            },
+        ));
+        let (first, concurrent) = tokio::join!(
+            service.sdk_recover_model_authentication(&rejected),
+            service.sdk_recover_model_authentication(&rejected)
         );
-        service
-            .chat_completion(&config, &json!({"messages": []}), None, None)
+        assert!(first.unwrap() && concurrent.unwrap());
+        assert_eq!(adapter.refresh_count.load(Ordering::SeqCst), 1);
+        let first = service
+            .active_credentials(ModelProviderCode::PersonAi)
             .await
-            .expect("chat should retry with refreshed credentials");
-        service
-            .chat_completion_stream(
-                &config,
-                &json!({"messages": []}),
-                None,
-                None,
-                Arc::new(|_| Ok(())),
-            )
+            .unwrap();
+        assert_eq!(first.token, "access-1");
+        let mut rejected_new = rejected.clone();
+        if let eliteforge_agent_core::ModelError::Provider(error) = &mut rejected_new {
+            error.authorization_attempt = Some(service.sdk_credential_attempt("access-1"));
+        }
+        let (stale, new) = tokio::join!(
+            service.sdk_recover_model_authentication(&rejected),
+            service.sdk_recover_model_authentication(&rejected_new)
+        );
+        assert!(stale.unwrap() && new.unwrap());
+        assert_eq!(adapter.refresh_count.load(Ordering::SeqCst), 2);
+        let second = service
+            .active_credentials(ModelProviderCode::PersonAi)
             .await
-            .expect("stream should retry with refreshed credentials");
-
-        assert_eq!(
-            *adapter.chat_tokens.lock().expect("read chat tokens"),
-            ["expired-access", "access-1"]
-        );
-        assert_eq!(
-            *adapter.stream_tokens.lock().expect("read stream tokens"),
-            ["access-1", "access-2"]
-        );
+            .unwrap();
+        assert_eq!(second.token, "access-2");
         assert_eq!(
             *adapter.refresh_tokens.lock().expect("read refresh tokens"),
             ["initial-refresh", "refresh-1"]
@@ -401,6 +356,63 @@ mod tests {
         assert_eq!(stored_credentials.refresh_token, "refresh-2");
         assert_eq!(stored_credentials.client_id, "client-id");
         assert_eq!(stored_credentials.public_key, "public-key");
+        use eliteforge_agent_official_plugin_model_http::ModelTransportFactory;
+        let factory = crate::adapters::outbound::model::PersonAiModelProviderClient::new(
+            crate::adapters::outbound::model::HttpModelProviderClient::new(
+                eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+            ),
+            service.clone(),
+        );
+        let mut config = person_ai_agent_config(
+            "PERSON_AI:ROUTE:ChatAuto",
+            "",
+            None,
+            None,
+            AgentModelProtocol::ChatCompletions,
+        );
+        config.model_code = "external".into();
+        let external =
+            crate::adapters::outbound::model::http_model_client::convert(&config).unwrap();
+        factory.on_failure(&external, &rejected);
+        assert_eq!(
+            read_connection(
+                &service.connection.lock().unwrap(),
+                ModelProviderCode::PersonAi
+            )
+            .unwrap()
+            .unwrap()
+            .status,
+            ProviderConnectionStatus::Connected
+        );
+        config.model_code = "PERSON_AI:ROUTE:ChatAuto".into();
+        let personai =
+            crate::adapters::outbound::model::http_model_client::convert(&config).unwrap();
+        factory.on_failure(&personai, &rejected);
+        assert_eq!(
+            read_connection(
+                &service.connection.lock().unwrap(),
+                ModelProviderCode::PersonAi
+            )
+            .unwrap()
+            .unwrap()
+            .status,
+            ProviderConnectionStatus::Connected
+        );
+        let mut rejected_current = rejected.clone();
+        if let eliteforge_agent_core::ModelError::Provider(error) = &mut rejected_current {
+            error.authorization_attempt = Some(service.sdk_credential_attempt("access-2"));
+        }
+        factory.on_failure(&personai, &rejected_current);
+        assert_eq!(
+            read_connection(
+                &service.connection.lock().unwrap(),
+                ModelProviderCode::PersonAi
+            )
+            .unwrap()
+            .unwrap()
+            .status,
+            ProviderConnectionStatus::AuthRequired
+        );
     }
 
     #[test]
@@ -502,6 +514,146 @@ mod tests {
         assert_eq!(active.person_ai_user_id.as_deref(), Some("person-charlie"));
         assert_eq!(active.status, ProviderConnectionStatus::AuthRequired);
         assert!(active.credentials_encrypted.is_none());
+    }
+
+    #[tokio::test]
+    async fn switched_profile_rejects_inflight_refresh_success_and_failure() {
+        for failure in [false, true] {
+            let cipher: Arc<dyn VariableCipher> = Arc::new(
+                Sm4GcmVariableCipher::from_config(VariableCryptoConfig {
+                    key_base64: "MDEyMzQ1Njc4OUFCQ0RFRg==".into(),
+                })
+                .unwrap(),
+            );
+            let mut service = ModelProviderService::connect(":memory:", cipher).unwrap();
+            let adapter = Arc::new(UnauthorizedOnceAdapter::default());
+            adapter.block.store(true, Ordering::SeqCst);
+            adapter.fail.store(failure, Ordering::SeqCst);
+            service.adapters = Arc::new(HashMap::from([(
+                ModelProviderCode::PersonAi,
+                adapter.clone() as Arc<dyn ModelProviderAdapter>,
+            )]));
+            for user in ["alice", "bob"] {
+                let credentials = ProviderCredentials {
+                    token: format!("{user}-token"),
+                    refresh_token: format!("{user}-refresh"),
+                    client_id: "client".into(),
+                    public_key: "key".into(),
+                    server_base_url: format!("https://{user}.invalid"),
+                    authorization_expires_at: Some(now_millis() + 3_600_000),
+                };
+                let encrypted = service.encrypt_credentials(&credentials).unwrap();
+                let mut connection = service.connection.lock().unwrap();
+                let transaction = connection.transaction().unwrap();
+                replace_authorized_connection(
+                    &transaction,
+                    ModelProviderCode::PersonAi,
+                    &credentials,
+                    user,
+                    user,
+                    &encrypted,
+                    "session",
+                    &[],
+                    &[],
+                    &format!("sync-{user}"),
+                    now_millis(),
+                )
+                .unwrap();
+                transaction.commit().unwrap();
+            }
+            service
+                .activate_person_ai_profile("alice", "alice")
+                .unwrap();
+
+            let attempt = service.sdk_credential_attempt("alice-token");
+            service.activate_person_ai_profile("bob", "bob").unwrap();
+            let rejected = eliteforge_agent_core::ModelError::Provider(Box::new(
+                eliteforge_agent_core::ProviderModelError {
+                    authorization_attempt: Some(attempt),
+                    provider: "personai".into(),
+                    category: eliteforge_agent_core::ProviderErrorCategory::Authentication,
+                    http_status: Some(401),
+                    business_code: None,
+                    error_type: None,
+                    model: None,
+                    message: "rejected".into(),
+                },
+            ));
+            assert!(
+                service
+                    .sdk_recover_model_authentication(&rejected)
+                    .await
+                    .is_err()
+            );
+            assert_eq!(
+                adapter.refresh_count.load(Ordering::SeqCst),
+                0,
+                "switched profile must not refresh or authorize a retry"
+            );
+            service.sdk_final_model_failure(&rejected);
+            {
+                let connection = service.connection.lock().unwrap();
+                let active = read_connection(&connection, ModelProviderCode::PersonAi)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(active.status, ProviderConnectionStatus::Connected);
+                assert_eq!(
+                    service
+                        .decrypt_credentials(active.credentials_encrypted.as_deref().unwrap())
+                        .unwrap()
+                        .token,
+                    "bob-token"
+                );
+            }
+            service
+                .activate_person_ai_profile("alice", "alice")
+                .unwrap();
+            let running = {
+                let service = service.clone();
+                tokio::spawn(async move {
+                    service
+                        .refresh_credentials_after_unauthorized(
+                            ModelProviderCode::PersonAi,
+                            "alice-token",
+                        )
+                        .await
+                })
+            };
+            adapter.entered.notified().await;
+            service.activate_person_ai_profile("bob", "bob").unwrap();
+            adapter.release.notify_one();
+            assert!(matches!(
+                running.await.unwrap(),
+                Err(ModelProviderError::ConnectionNotReady)
+            ));
+            let connection = service.connection.lock().unwrap();
+            let active = read_connection(&connection, ModelProviderCode::PersonAi)
+                .unwrap()
+                .unwrap();
+            assert_eq!(active.person_ai_user_id.as_deref(), Some("bob"));
+            assert_eq!(active.status, ProviderConnectionStatus::Connected);
+            assert_eq!(
+                service
+                    .decrypt_credentials(active.credentials_encrypted.as_deref().unwrap())
+                    .unwrap()
+                    .token,
+                "bob-token"
+            );
+            for user in ["alice", "bob"] {
+                let profile = read_person_ai_profile_credentials(&connection, user)
+                    .unwrap()
+                    .unwrap();
+                assert_eq!(profile.status, ProviderConnectionStatus::Connected);
+                assert_eq!(
+                    service
+                        .decrypt_credentials(&profile.credentials_encrypted)
+                        .unwrap()
+                        .token,
+                    format!("{user}-token")
+                );
+            }
+            assert!(!service.device_unbound.load(Ordering::SeqCst));
+        }
     }
 
     #[test]

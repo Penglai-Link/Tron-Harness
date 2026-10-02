@@ -165,31 +165,58 @@ pub async fn answer_user_input(
         Ok(request) => request,
         Err(error) => return steer_chat_message_request_rejection_response(error),
     };
-    let answers = request
-        .answers
-        .or_else(|| {
-            request
-                .resume
-                .first()
-                .and_then(|entry| entry.payload.get("answers"))
-                .and_then(|value| serde_json::from_value(value.clone()).ok())
-        });
-    let Some(answers) = answers else {
-        return chat_error_response(ChatError::UserInputAnswerInvalid(
-            "resume payload must contain answers".into(),
-        ));
+    let session=match state.chats.get_session(&session_code) {
+        Ok(session)=>session,Err(error)=>return chat_error_response(error),
     };
-    // Do not mark the request answered if its previous run has not released
-    // the session yet; stream_message_command will reject that continuation.
-    if let Err(response) = ensure_no_active_run(&state, &session_code) {
-        return response;
+    if let Err(response)=ensure_no_active_run(&state,&session_code) { return response; }
+    let answers=request.answers.or_else(||request.resume.first().and_then(|entry|entry.payload.get("answers"))
+        .and_then(|value|serde_json::from_value(value.clone()).ok()));
+    let native_id=request_code.strip_prefix("INPUT-FW-").unwrap_or(&request_code);
+    let is_native=eliteforge_agent_core::RunId::parse_str(native_id).is_ok() || request_code.starts_with("INPUT-FW-");
+    if is_native {
+        if request.resume.len()>1 || request.resume.first().is_some_and(|entry| {
+            entry.interrupt_id.strip_prefix("INPUT-FW-").unwrap_or(&entry.interrupt_id)!=native_id
+        }) { return chat_error_response(ChatError::UserInputAnswerInvalid("response identity must match the requested native interaction".into())); }
+        let payload=match request.resume.first() {
+            Some(entry)=>entry.payload.clone(),
+            None=>match &answers { Some(answers)=>json!({"answers":answers}),None=>return chat_error_response(ChatError::UserInputAnswerInvalid("native response payload is required".into())) },
+        };
+        let entry=crate::application::chat::ChatResumeEntry {interrupt_id:request_code.clone(),status:"resolved".into(),payload};
+        if let Err(error)=state.agent_framework.validate_native_resume(&session_code,std::slice::from_ref(&entry)).await {
+            return chat_error_response(ChatError::UserInputAnswerInvalid(error.to_string()));
+        }
+        // Existing ask-user rows keep their status and human-readable answer history.
+        if let Some(answers)=answers {
+            match state.chats.answer_user_input(&session_code,&request_code,answers.clone()) {
+                Ok(command)=>return stream_message_command(state,auth,session_code,command).await,
+                Err(ChatError::UserInputRequestNotFound)=>{},
+                Err(ChatError::UserInputAlreadyAnswered)=>{
+                    let previous=match state.chats.list_user_input_requests(&session_code) {
+                        Ok(requests)=>requests.into_iter().find(|request|request.request_code==request_code).and_then(|request|request.answers),
+                        Err(error)=>return chat_error_response(error),
+                    };
+                    if !previous.as_ref().is_some_and(|saved|saved.len()==answers.len() && answers.iter().all(|answer|saved.contains(answer))) {
+                        return chat_error_response(ChatError::UserInputAlreadyAnswered);
+                    }
+                    // Only an identical product audit can retry the native answer CAS.
+                },
+                Err(error)=>return chat_error_response(error),
+            }
+        }
+        let history=match session.last_run_code.as_deref() {
+            Some(run)=>match state.agent_runs.get_run(run) {
+                Ok(record)=>Some(record),Err(_)=>return chat_error_response(ChatError::StorageFailure),
+            },None=>None,
+        };
+        let command=match state.chats.native_resume_command(&session_code,entry,
+            history.as_ref().map(|record|record.model_code.clone()),history.and_then(|record|record.reasoning_effort)) {
+            Ok(command)=>command,Err(error)=>return chat_error_response(error),
+        };
+        return stream_message_command(state,auth,session_code,command).await;
     }
-    let command = match state
-        .chats
-        .answer_user_input(&session_code, &request_code, answers)
-    {
-        Ok(command) => command,
-        Err(error) => return chat_error_response(error),
+    let Some(answers)=answers else { return chat_error_response(ChatError::UserInputAnswerInvalid("legacy response payload must contain answers".into())); };
+    let command=match state.chats.answer_user_input(&session_code,&request_code,answers) {
+        Ok(command)=>command,Err(error)=>return chat_error_response(error),
     };
     stream_message_command(state, auth, session_code, command).await
 }

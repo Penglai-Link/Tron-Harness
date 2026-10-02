@@ -181,6 +181,8 @@ export interface ChatUserInputLabels {
   next: string;
   continue: string;
   confirm?: string;
+  approve?: string;
+  reject?: string;
   continuing: string;
   otherOptionLabel: string;
   otherOptionDescription: string;
@@ -191,6 +193,8 @@ export interface ChatUserInputLabels {
 }
 
 export interface ChatRunNoticeLabels {
+  presentationIncomplete?: string;
+  presentationIncompleteDetail?: string;
   compactionRequested: string;
   compactionStarted: string;
   compactionCompleted: string;

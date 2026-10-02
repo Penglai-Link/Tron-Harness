@@ -10,8 +10,8 @@ use serde::Deserialize;
 use crate::{
     app::AppState,
     application::short_term_memory::{
-        CreateCompactionCommand, GoalSessionCommand, ModelCompactionFailure, SetGoalCommand,
-        UpdateGoalCommand,
+        CreateCompactionCommand, GoalSessionCommand, ModelCompactionFailure, ModelCompactionOutput,
+        SetGoalCommand, UpdateGoalCommand,
     },
     domain::short_term_memory::ShortTermMemoryError,
     response::{ApiResponse, EmptyData},
@@ -108,7 +108,7 @@ pub async fn get_latest_compaction(
 
 pub async fn create_compaction(
     State(state): State<AppState>,
-    auth: RequestAuthContext,
+    _auth: RequestAuthContext,
     command: Result<Json<CreateCompactionRequest>, JsonRejection>,
 ) -> Response {
     let command = match parse_json_command(command) {
@@ -153,11 +153,12 @@ pub async fn create_compaction(
         Ok(input) => input,
         Err(error) => return short_term_memory_error_response(error),
     };
-    let request = state
-        .short_term_memory
-        .compaction_model_request(&input, &auth.locale);
-    let response = match state.agent_model_client.generate(&model, &request).await {
-        Ok(response) => response,
+    let result = match state
+        .agent_model_client
+        .compact_memory(&model, &input.history, input.previous_summary.as_deref())
+        .await
+    {
+        Ok(result) => result,
         Err(message) => {
             let failure = ModelCompactionFailure {
                 error_code: "COMPACTION_MODEL_REQUEST_FAILED".into(),
@@ -169,17 +170,10 @@ pub async fn create_compaction(
             return compaction_model_error_response("COMPACTION_MODEL_REQUEST_FAILED", message);
         }
     };
-    let output = match state.short_term_memory.model_compaction_output(&response) {
-        Ok(output) => output,
-        Err(failure) => {
-            let _ = state
-                .short_term_memory
-                .record_compaction_failed(&input, &failure);
-            return compaction_model_error_response(
-                "COMPACTION_MODEL_RESPONSE_INVALID",
-                failure.message,
-            );
-        }
+    let output = ModelCompactionOutput {
+        summary: result.summary.clone(),
+        token_usage: crate::application::short_term_memory::memory_provider_usage(&result),
+        provider_metadata: None,
     };
     match state
         .short_term_memory

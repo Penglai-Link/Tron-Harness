@@ -185,6 +185,9 @@ pub(crate) struct FrameworkExternalRuntime {
     pub transport: Arc<dyn AgentRuntime>,
 }
 impl AgentRuntime for FrameworkExternalRuntime {
+    fn owns_native_lifecycle(&self) -> bool {
+        true
+    }
     fn session_scope(&self) -> Option<String> {
         self.transport.session_scope()
     }
@@ -192,7 +195,9 @@ impl AgentRuntime for FrameworkExternalRuntime {
         self.transport.key()
     }
     fn capabilities(&self) -> RuntimeCapabilities {
-        self.transport.capabilities()
+        let mut capabilities = self.transport.capabilities();
+        capabilities.supports_cancel = true;
+        capabilities
     }
     fn start<'a>(
         &'a self,
@@ -222,6 +227,15 @@ impl AgentRuntime for FrameworkExternalRuntime {
         &'a self,
         run: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<(), AgentInvocationError>> + Send + 'a>> {
-        self.transport.cancel(run)
+        Box::pin(async move {
+            self.host
+                .cancel_run(run)
+                .map_err(|error| AgentInvocationError::RuntimeFailed(error.to_string()))?;
+            if self.transport.capabilities().supports_cancel {
+                super::super::run_cancellation::cancel_runtime_after_stop(&self.transport, run)
+                    .await;
+            }
+            Ok(())
+        })
     }
 }

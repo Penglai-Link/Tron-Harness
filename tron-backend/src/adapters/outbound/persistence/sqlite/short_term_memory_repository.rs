@@ -13,10 +13,12 @@ use crate::{
 };
 
 use super::short_term_memory_rows::{
-    insert_context_epoch, insert_event, insert_family, insert_family_member, insert_message,
-    insert_part, list_parts, row_to_family, row_to_family_member, storage_error,
+    insert_event, insert_family, insert_family_member, insert_message, insert_part, list_parts,
+    row_to_family, row_to_family_member, storage_error,
 };
 
+#[path = "short_term_memory_repository_compaction.rs"]
+mod repository_compaction;
 #[path = "short_term_memory_repository_context.rs"]
 mod repository_context;
 #[path = "short_term_memory_repository_family.rs"]
@@ -323,29 +325,34 @@ impl ShortTermMemoryRepository for SqliteShortTermMemoryRepository {
         event: Option<&ShortTermMemoryEvent>,
         enforce_idle: bool,
     ) -> Result<(), ShortTermMemoryError> {
-        let tx = self
-            .connection
-            .transaction_with_behavior(TransactionBehavior::Immediate)
-            .map_err(storage_error)?;
-        if enforce_idle
-            && repository_runs::active_run_exists_in_transaction(&tx, &message.session_code)?
-        {
-            return Err(ShortTermMemoryError::CompactionConflict);
-        }
-        let mut message = message.clone();
-        let mut parts = parts.to_vec();
-        assign_message_storage_fields(&tx, &mut message, &mut parts)?;
-        insert_message(&tx, &message)?;
-        for part in &parts {
-            insert_part(&tx, part)?;
-        }
-        insert_context_epoch(&tx, compaction)?;
-        if let Some(event) = event {
-            let mut event = event.clone();
-            assign_event_storage_fields(&tx, &mut event)?;
-            insert_event(&tx, &event)?;
-        }
-        tx.commit().map_err(storage_error)
+        repository_compaction::persist_compaction(
+            &mut self.connection,
+            compaction,
+            message,
+            parts,
+            event,
+            enforce_idle,
+            None,
+        )
+    }
+    fn create_compaction_at_revision(
+        &mut self,
+        compaction: &ShortTermMemoryCompaction,
+        message: &ShortTermMemoryMessage,
+        parts: &[ShortTermMemoryPart],
+        event: Option<&ShortTermMemoryEvent>,
+        enforce_idle: bool,
+        expected: &eliteforge_agent_memory::MemoryRevision,
+    ) -> Result<(), ShortTermMemoryError> {
+        repository_compaction::persist_compaction(
+            &mut self.connection,
+            compaction,
+            message,
+            parts,
+            event,
+            enforce_idle,
+            Some(expected),
+        )
     }
 
     fn active_run_exists(&mut self, session_code: &str) -> Result<bool, ShortTermMemoryError> {

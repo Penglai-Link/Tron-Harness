@@ -71,7 +71,29 @@ impl Display for ToolError {
 
 impl Error for ToolError {}
 
+/// Cooperative control supplied by the application runtime, without a vendor
+/// execution or process implementation in the domain contract.
+pub trait ToolExecutionControl: Send + Sync {
+    fn check_active(&self) -> Result<(), ToolError>;
+    fn remaining(&self) -> std::time::Duration;
+    fn cancelled(&self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + '_>>;
+}
+pub type ToolExecutionFuture<'a> = std::pin::Pin<
+    Box<dyn std::future::Future<Output = Result<ToolExecutionResult, ToolError>> + Send + 'a>,
+>;
+
 pub trait Tool: Send + Sync {
+    /// Optional cancellable application execution. The selected registration
+    /// remains authoritative; synchronous tools keep the compatibility adapter.
+    fn exec_async<'a>(
+        &'a self,
+        _request: ToolRequest,
+        _context: &'a AgentRunContext,
+        _control: &'a dyn ToolExecutionControl,
+    ) -> Option<ToolExecutionFuture<'a>> {
+        None
+    }
+
     fn name(&self) -> &str;
     fn exec(
         &self,
@@ -129,48 +151,51 @@ where
 #[derive(Default)]
 pub struct ToolRegistry {
     tools: Mutex<HashMap<String, Arc<dyn Tool>>>,
-    // Public plugin leases are transferred to Framework's run lifecycle. This
-    // registry only transports bindings; it implements no external tool protocol.
-    framework_leases: Mutex<HashMap<String, Vec<eliteforge_agent_core::ToolLease>>>,
-}
-
-/// Releases run-scoped plugin connections if preparation or execution is
-/// cancelled before the Framework takes ownership of their leases.
-pub(crate) struct FrameworkLeaseGuard {
-    registry: Arc<ToolRegistry>,
-    run_code: String,
-}
-impl Drop for FrameworkLeaseGuard {
-    fn drop(&mut self) {
-        drop(self.registry.take_framework_leases(&self.run_code));
-    }
+    // Opaque preparation attachments; lifecycle and protocol belong to the app.
+    run_attachments: Mutex<HashMap<String, Vec<Box<dyn std::any::Any + Send>>>>,
 }
 
 impl ToolRegistry {
-    pub(crate) fn framework_lease_guard(self: &Arc<Self>, run_code: &str) -> FrameworkLeaseGuard {
-        FrameworkLeaseGuard {
-            registry: self.clone(),
-            run_code: run_code.into(),
-        }
-    }
-    pub fn register_framework_lease(
-        &self,
-        run_code: &str,
-        lease: eliteforge_agent_core::ToolLease,
-    ) {
-        self.framework_leases
+    pub(crate) fn attach_run(&self, run: &str, value: Box<dyn std::any::Any + Send>) {
+        self.run_attachments
             .lock()
-            .expect("framework leases poisoned")
-            .entry(run_code.into())
+            .unwrap_or_else(|e| e.into_inner())
+            .entry(run.into())
             .or_default()
-            .push(lease);
+            .push(value);
     }
-    pub fn take_framework_leases(&self, run_code: &str) -> Vec<eliteforge_agent_core::ToolLease> {
-        self.framework_leases
+    pub(crate) fn inspect_run_attachments<R>(
+        &self,
+        run: &str,
+        inspect: impl FnOnce(&[Box<dyn std::any::Any + Send>]) -> R,
+    ) -> R {
+        let attachments = self
+            .run_attachments
             .lock()
-            .expect("framework leases poisoned")
-            .remove(run_code)
+            .unwrap_or_else(|e| e.into_inner());
+        inspect(attachments.get(run).map_or(&[], Vec::as_slice))
+    }
+    pub(crate) fn take_run_attachments(&self, run: &str) -> Vec<Box<dyn std::any::Any + Send>> {
+        self.run_attachments
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .remove(run)
             .unwrap_or_default()
+    }
+    pub(crate) fn resolve_allowed(
+        &self,
+        request: &ToolRequest,
+        context: &AgentRunContext,
+    ) -> Result<Arc<dyn Tool>, ToolError> {
+        if !context.is_tool_authorized(&request.tool_name) {
+            return Err(ToolError::UnauthorizedTool(request.tool_name.clone()));
+        }
+        self.tools
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .get(&request.tool_name)
+            .cloned()
+            .ok_or_else(|| ToolError::MissingTool(request.tool_name.clone()))
     }
     pub fn register(&self, tool: Arc<dyn Tool>) -> Result<(), ToolError> {
         let name = tool.name().trim();
@@ -199,46 +224,7 @@ impl ToolRegistry {
         context: &AgentRunContext,
         progress: &mut dyn FnMut(String),
     ) -> Result<ToolExecutionResult, ToolError> {
-        if !context.is_tool_authorized(&request.tool_name) {
-            return Err(ToolError::UnauthorizedTool(request.tool_name));
-        }
-        let tool = self
-            .tools
-            .lock()
-            .expect("tool registry mutex poisoned")
-            .get(&request.tool_name)
-            .cloned()
-            .ok_or_else(|| ToolError::MissingTool(request.tool_name.clone()))?;
+        let tool = self.resolve_allowed(&request, context)?;
         tool.exec_with_progress(request, context, progress)
-    }
-}
-
-#[cfg(test)]
-mod framework_lease_tests {
-    use super::*;
-    use std::sync::atomic::{AtomicBool, Ordering};
-
-    #[test]
-    fn preparation_guard_releases_only_its_runs_pending_plugins() {
-        let registry = Arc::new(ToolRegistry::default());
-        let released = Arc::new(AtomicBool::new(false));
-        let other = Arc::new(AtomicBool::new(false));
-        let guard = registry.framework_lease_guard("failed");
-        for (run, flag) in [("failed", released.clone()), ("other", other.clone())] {
-            registry.register_framework_lease(
-                run,
-                eliteforge_agent_core::ToolLease::new(vec![]).with_cleanup(move || {
-                    flag.store(true, Ordering::SeqCst);
-                }),
-            );
-        }
-        drop(guard);
-        assert!(released.load(Ordering::SeqCst));
-        assert!(!other.load(Ordering::SeqCst));
-        let transferred = registry.take_framework_leases("other");
-        drop(registry.framework_lease_guard("other"));
-        assert!(!other.load(Ordering::SeqCst));
-        drop(transferred);
-        assert!(other.load(Ordering::SeqCst));
     }
 }

@@ -4,7 +4,10 @@ mod office;
 use super::coding_tools::{json_observation, resolve_optional_directory, resolve_path};
 use crate::{
     application::resource::ResourceService,
-    domain::agent::{AgentRunContext, Tool, ToolError, ToolExecutionResult, ToolRequest},
+    domain::agent::{
+        AgentRunContext, Tool, ToolError, ToolExecutionControl, ToolExecutionFuture,
+        ToolExecutionResult, ToolRequest,
+    },
 };
 use serde_json::{Value, json};
 use std::{
@@ -54,40 +57,75 @@ impl Tool for ProductivityTool {
         request: ToolRequest,
         context: &AgentRunContext,
     ) -> Result<ToolExecutionResult, ToolError> {
-        if request.input.to_string().len() > 4 * 1024 * 1024 {
-            return Err(error("tool input exceeds 4 MiB"));
-        }
-        let definition = crate::application::agent::BusinessToolCatalog::tool(
-            &self.name.replacen('_', ".", 1),
-            &context.locale,
-        )
-        .ok_or_else(|| error("tool definition unavailable"))?;
-        let validator = jsonschema::validator_for(&definition.input_schema).map_err(error)?;
-        if let Err(failure) = validator.validate(&request.input) {
-            return Err(error(format!("invalid tool input: {failure}")));
-        }
-        if ["worktree_create", "worktree_select"].contains(&self.name)
-            && context.execution_scope.applications.is_empty()
-        {
-            return Err(error(
-                "worktree selection requires a project-linked application",
-            ));
-        }
+        validate(self.name, &request.input, context)?;
         let result = if self.name.starts_with("word_") || self.name.starts_with("excel_") {
             office::execute(self.name, &request.input, context, &self.resources)?
         } else {
-            git::execute(self.name, &request.input, context)?
+            let name = self.name;
+            let input = request.input;
+            let context = context.clone();
+            eliteforge_agent_official_plugin_tools_local::capture::host_operation_blocking(
+                async move {
+                    git::execute(name, &input, &context, None)
+                        .await
+                        .map_err(|error| {
+                            eliteforge_agent_core::ToolError::Failed(error.to_string())
+                        })
+                },
+            )
+            .map_err(error)?
         };
-        if (self.name.starts_with("word_")
-            || self.name.starts_with("excel_")
-            || self.name == "worktree_list")
-            && result.to_string().len() > MAX_OUTPUT_BYTES
-        {
-            return Err(error("result exceeds 64 KiB; request a smaller range"));
+        finish(self.name, result)
+    }
+    fn exec_async<'a>(
+        &'a self,
+        request: ToolRequest,
+        context: &'a AgentRunContext,
+        control: &'a dyn ToolExecutionControl,
+    ) -> Option<ToolExecutionFuture<'a>> {
+        if self.name.starts_with("word_") || self.name.starts_with("excel_") {
+            return None;
         }
-        json_observation(self.name, &result)
+        Some(Box::pin(async move {
+            control.check_active()?;
+            validate(self.name, &request.input, context)?;
+            let result = git::execute(self.name, &request.input, context, Some(control)).await?;
+            control.check_active()?;
+            finish(self.name, result)
+        }))
     }
 }
+fn validate(name: &str, input: &Value, context: &AgentRunContext) -> Result<(), ToolError> {
+    if input.to_string().len() > 4 * 1024 * 1024 {
+        return Err(error("tool input exceeds 4 MiB"));
+    }
+    let definition = crate::application::agent::BusinessToolCatalog::tool(
+        &name.replacen('_', ".", 1),
+        &context.locale,
+    )
+    .ok_or_else(|| error("tool definition unavailable"))?;
+    let validator = jsonschema::validator_for(&definition.input_schema).map_err(error)?;
+    if let Err(failure) = validator.validate(&input) {
+        return Err(error(format!("invalid tool input: {failure}")));
+    }
+    if ["worktree_create", "worktree_select"].contains(&name)
+        && context.execution_scope.applications.is_empty()
+    {
+        return Err(error(
+            "worktree selection requires a project-linked application",
+        ));
+    }
+    Ok(())
+}
+fn finish(name: &str, result: Value) -> Result<ToolExecutionResult, ToolError> {
+    if (name.starts_with("word_") || name.starts_with("excel_") || name == "worktree_list")
+        && result.to_string().len() > MAX_OUTPUT_BYTES
+    {
+        return Err(error("result exceeds 64 KiB; request a smaller range"));
+    }
+    json_observation(name, &result)
+}
+
 fn error(message: impl ToString) -> ToolError {
     ToolError::ExecutionFailed(message.to_string())
 }
@@ -131,9 +169,15 @@ fn write_new(path: &Path, bytes: &[u8]) -> Result<(), ToolError> {
     temporary.persist_noclobber(path).map_err(error)?;
     Ok(())
 }
-fn run(command: &str, args: &[String], directory: &Path, timeout: u64) -> Result<Value, ToolError> {
+async fn run(
+    command: &str,
+    args: &[String],
+    directory: &Path,
+    timeout: u64,
+    control: Option<&dyn ToolExecutionControl>,
+) -> Result<Value, ToolError> {
     use eliteforge_agent_official_plugin_tools_local::capture::{
-        CapturedCommand, capture_command_blocking,
+        CapturedCommand, capture_command, capture_command_with_cancel,
     };
     let mut env = std::collections::BTreeMap::new();
     let mut env_remove = Vec::new();
@@ -145,7 +189,10 @@ fn run(command: &str, args: &[String], directory: &Path, timeout: u64) -> Result
         env.insert("GIT_OPTIONAL_LOCKS".into(), "0".into());
         env.insert("GIT_TERMINAL_PROMPT".into(), "0".into());
     }
-    let output = capture_command_blocking(CapturedCommand {
+    if let Some(control) = control {
+        control.check_active()?;
+    }
+    let spec = CapturedCommand {
         program: command.into(),
         args: args.to_vec(),
         cwd: directory.into(),
@@ -153,7 +200,17 @@ fn run(command: &str, args: &[String], directory: &Path, timeout: u64) -> Result
         env_remove,
         timeout: Duration::from_secs(timeout),
         max_output_bytes: MAX_OUTPUT_BYTES,
-    })
+    };
+    let output = if let Some(control) = control {
+        capture_command_with_cancel(
+            spec,
+            control.cancelled(),
+            tokio::time::Instant::now() + control.remaining(),
+        )
+        .await
+    } else {
+        capture_command(spec).await
+    }
     .map_err(error)?;
     if matches!(
         output["status"].as_str(),
@@ -170,3 +227,7 @@ fn run(command: &str, args: &[String], directory: &Path, timeout: u64) -> Result
         "truncated": output["stdoutTruncated"].as_bool().unwrap_or(false) || output["stderrTruncated"].as_bool().unwrap_or(false) }),
     )
 }
+
+#[cfg(test)]
+#[path = "productivity_tools/git_control_tests.rs"]
+mod git_control_tests;

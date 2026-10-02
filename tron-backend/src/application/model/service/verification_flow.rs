@@ -9,50 +9,85 @@ impl ModelService {
             .unwrap_or_else(|| default_verify_path(model.protocol, model.model_type).into());
         let url = join_verify_url(&model.base_url, &endpoint_path)?;
         let payload = verify_request_payload(model.protocol, model.model_type, &model.model_name);
-        let attempts = model.max_retries.unwrap_or(0).saturating_add(1);
+        use eliteforge_agent_core as fw;
+        use eliteforge_agent_official_plugin_model_http as sdk;
         let api_key = self.resolve_api_key_value(model)?;
         let method_label = format!("POST {}", url.path());
-        let mut last_error = None;
-
-        for _ in 0..attempts {
-            let response = self
-                .http_client
-                .post(url.clone())
-                .bearer_auth(api_key.clone())
-                .json(&payload)
-                .send()
-                .await;
-            match response {
-                Ok(response) if response.status().is_success() => {
-                    return Ok(VerifyOutcome {
-                        message: format!("Verified via {method_label}"),
-                        status: ModelVerifyStatus::Succeeded,
-                    });
-                }
-                Ok(response) => {
-                    let status = response.status();
-                    let body = response.text().await.unwrap_or_default();
-                    last_error = Some(format!(
-                        "{method_label} returned {status}{}",
-                        if body.trim().is_empty() {
-                            String::new()
-                        } else {
-                            format!(": {}", truncate_message(&body))
-                        }
-                    ));
-                }
-                Err(error) => {
-                    last_error = Some(format!(
+        let config = sdk::AgentModelConfig {
+            model_code: model.model_code.clone(),
+            protocol: sdk::AgentModelProtocol::ChatCompletions,
+            base_url: model.base_url.clone(),
+            api_path: Some(endpoint_path),
+            api_key,
+            model_name: model.model_name.clone(),
+            thinking_enabled: false,
+            reasoning_effort: None,
+            responses_stateful_enabled: false,
+            temperature: None,
+            max_tokens: Some(MIN_VERIFY_OUTPUT_TOKENS),
+            context_window_tokens: model.context_window_tokens,
+            top_p: None,
+            max_retries: model.max_retries,
+        };
+        let factory = self.verification_factory.clone();
+        let job = eliteforge_agent_framework::ChatModelJob {
+            workflow: None,
+            connection: fw::ModelConnection::new(
+                "probe",
+                Arc::new(sdk::HttpProbeModel { config, factory }),
+                vec![fw::ModelDescriptor::new("probe")],
+            ),
+            model: fw::ModelRef::new("probe", "probe"),
+            request: fw::ChatRequest {
+                messages: vec![fw::Message::user(fw::Content(vec![
+                    fw::ContentBlock::Json { value: payload },
+                ]))],
+                tools: vec![],
+                extensions: Default::default(),
+                options: fw::GenerationOptions {
+                    max_output_tokens: Some(MIN_VERIFY_OUTPUT_TOKENS),
+                    ..Default::default()
+                },
+            },
+            limits: fw::RunLimits {
+                max_model_output_tokens: MIN_VERIFY_OUTPUT_TOKENS,
+                max_model_retries: model.max_retries.unwrap_or(0) as usize,
+                model_timeout: std::time::Duration::from_secs(30),
+                run_timeout: std::time::Duration::from_secs(30),
+                ..Default::default()
+            },
+            stage: "model.verify".into(),
+            max_calls: model.max_retries.unwrap_or(0) as usize + 1,
+            repair: None,
+        };
+        self.model_jobs
+            .get()
+            .await
+            .map_err(|error| ModelError::VerificationFailed(error.to_string()))?
+            .execute(job)
+            .await
+            .map_err(|error| {
+                ModelError::VerificationFailed(match error.primary() {
+                    fw::AgentError::Model(fw::ModelError::Provider(detail))
+                        if detail.http_status.is_some() =>
+                    {
+                        format!(
+                            "{method_label} returned {}: {}",
+                            reqwest::StatusCode::from_u16(detail.http_status.unwrap())
+                                .expect("provider HTTP status"),
+                            truncate_message(&detail.message)
+                        )
+                    }
+                    _ => format!(
                         "{method_label} failed: {}",
                         truncate_message(&error.to_string())
-                    ));
-                }
-            }
-        }
-
-        Err(ModelError::VerificationFailed(
-            last_error.unwrap_or_else(|| format!("{method_label} failed")),
-        ))
+                    ),
+                })
+            })?;
+        Ok(VerifyOutcome {
+            message: format!("Verified via {method_label}"),
+            status: ModelVerifyStatus::Succeeded,
+        })
     }
 
     fn resolve_api_key_value(&self, model: &Model) -> Result<String, ModelError> {

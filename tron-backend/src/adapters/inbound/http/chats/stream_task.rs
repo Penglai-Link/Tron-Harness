@@ -19,6 +19,7 @@ impl ChatStreamForwardingGate {
         }
     }
 
+    #[cfg(test)]
     pub(crate) fn is_open(&self) -> bool {
         self.open.load(Ordering::Acquire)
     }

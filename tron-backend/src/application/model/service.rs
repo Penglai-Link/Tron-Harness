@@ -3,7 +3,6 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use reqwest::Client;
 use serde_json::{Value, json};
 use url::Url;
 
@@ -130,7 +129,9 @@ pub trait ModelRepository: Send {
 pub struct ModelService {
     repository: Arc<Mutex<Box<dyn ModelRepository>>>,
     workspaces: WorkspaceService,
-    http_client: Client,
+    model_jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
+    verification_factory:
+        Arc<dyn eliteforge_agent_official_plugin_model_http::ModelTransportFactory>,
     cipher: Arc<dyn VariableCipher>,
 }
 
@@ -194,6 +195,24 @@ struct ResolvedWorkspaceCatalog {
 }
 
 impl ModelService {
+    pub fn with_model_transport(
+        mut self,
+        client: eliteforge_agent_official_plugin_model_http::ModelHttpClient,
+    ) -> Self {
+        self.verification_factory = Arc::new(
+            eliteforge_agent_official_plugin_model_http::HttpModelTransportFactory::new(client),
+        );
+        self
+    }
+
+    pub fn with_model_jobs(
+        mut self,
+        jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
+    ) -> Self {
+        self.model_jobs = jobs;
+        self
+    }
+
     pub fn new(
         repository: impl ModelRepository + 'static,
         workspaces: WorkspaceService,
@@ -202,9 +221,12 @@ impl ModelService {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
-            http_client: Client::builder()
-                .build()
-                .expect("model verify client should initialize"),
+            model_jobs: Default::default(),
+            verification_factory: Arc::new(
+                eliteforge_agent_official_plugin_model_http::HttpModelTransportFactory::new(
+                    eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),
+                ),
+            ),
             cipher,
         }
     }

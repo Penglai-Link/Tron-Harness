@@ -4,6 +4,49 @@ use super::*;
 use crate::domain::agent::{TokenEstimateSnapshot, TokenUsageAuditSnapshot};
 
 impl ReactAgent {
+    pub(crate) fn framework_live_memory_source(
+        &self,
+        context: &AgentRunContext,
+        id: &str,
+    ) -> Result<
+        (Vec<crate::domain::agent::AgentMessage>, Option<String>),
+        crate::domain::short_term_memory::ShortTermMemoryError,
+    > {
+        self.short_term_memory
+            .as_ref()
+            .ok_or(crate::domain::short_term_memory::ShortTermMemoryError::StorageFailure)?
+            .framework_data_source(context, id)
+    }
+    pub(crate) fn framework_record_context(
+        &self,
+        context: &AgentRunContext,
+        prepared: &PreparedModelContext,
+        report: &eliteforge_agent_core::ContextAssemblyReport,
+    ) -> Result<(), AgentError> {
+        if let Some(memory) = &self.short_term_memory {
+            memory
+                .record_framework_context(context, prepared, report)
+                .map_err(short_term_memory_error)?;
+        }
+        Ok(())
+    }
+    pub(crate) fn framework_context_config(
+        &self,
+    ) -> crate::application::short_term_memory::ShortTermMemoryConfig {
+        self.short_term_memory
+            .as_ref()
+            .map(|memory| memory.framework_context_config().clone())
+            .unwrap_or_default()
+    }
+    pub(crate) fn framework_compaction_model_config(
+        &self,
+        model: &AgentModelConfig,
+    ) -> AgentModelConfig {
+        self.short_term_memory
+            .as_ref()
+            .map(|memory| memory.compaction_model_config(model))
+            .unwrap_or_else(|| model.clone())
+    }
     pub(crate) async fn prepare_framework_context(
         &self,
         context: &mut AgentRunContext,
@@ -59,6 +102,7 @@ impl ReactAgent {
                 message_token_estimate.saturating_add(tool_schema.estimated_tokens());
             let over_budget = estimated_tokens > budget.effective_input_budget;
             PreparedModelContext {
+                sources: None,
                 messages: context.messages.clone(),
                 rebased: false,
                 context_hash: None,
@@ -83,39 +127,6 @@ impl ReactAgent {
         context.messages = prepared_context.messages.clone();
         Ok(prepared_context)
     }
-    pub(crate) fn validate_framework_context(
-        &self,
-        context: &AgentRunContext,
-        prepared_context: &PreparedModelContext,
-    ) -> Result<(), AgentError> {
-        if prepared_context.over_budget {
-            let failure_reason = prepared_context
-                .over_budget_reason
-                .as_deref()
-                .unwrap_or("context_budget_exceeded");
-            let mut payload = prepared_context_event_payload(&prepared_context);
-            payload.push((
-                "failureCode".to_string(),
-                "context_budget_exceeded".to_string(),
-            ));
-            self.publish_with_payload(
-                &context,
-                "agent.run.failed",
-                BusOutcome::Failure,
-                Some(failure_reason),
-                payload,
-            )?;
-            if let Some(short_term_memory) = self.short_term_memory.as_ref() {
-                short_term_memory
-                    .record_run_failed_with_budget(context, failure_reason, &prepared_context)
-                    .map_err(short_term_memory_error)?;
-            }
-            return Err(AgentError::InvalidConfiguration(
-                "short-term memory context exceeded budget".into(),
-            ));
-        }
-        Ok(())
-    }
     pub(crate) async fn framework_model_turn(
         &self,
         context: &mut AgentRunContext,
@@ -123,6 +134,7 @@ impl ReactAgent {
         previous_usage: Option<ModelTokenUsage>,
         sink: Option<ModelStreamSink>,
         mut prepared: Option<PreparedModelContext>,
+        native_request: Option<&eliteforge_agent_core::ChatRequest>,
     ) -> Result<
         (
             ModelResponse,
@@ -174,18 +186,32 @@ impl ReactAgent {
             )?;
         }
         let output_started = Arc::new(Mutex::new(false));
-        let response_result = if let Some(sink) = sink.clone() {
-            let stream_sink = self.model_stream_event_sink(
+        let stream_sink = sink.map(|sink| {
+            self.model_stream_event_sink(
                 context,
-                sink,
                 turn_state_kind,
+                sink,
                 Arc::clone(&output_started),
-            );
-            self.model_client
-                .generate_stream(&context.model, &request, stream_sink)
-                .await
-        } else {
-            self.model_client.generate(&context.model, &request).await
+            )
+        });
+        let response_result = match native_request {
+            Some(native) => {
+                self.model_client
+                    .generate_native_once(&context.model, native, &request, stream_sink)
+                    .await
+            }
+            None => match stream_sink {
+                Some(sink) => {
+                    self.model_client
+                        .generate_stream(&context.model, &request, sink)
+                        .await
+                }
+                None => {
+                    self.model_client
+                        .generate_once(&context.model, &request)
+                        .await
+                }
+            },
         };
         let mut response = match response_result {
             Ok(response) => response,
@@ -260,13 +286,6 @@ impl ReactAgent {
 impl ReactAgent {
     pub(crate) fn framework_started(&self, context: &AgentRunContext) -> Result<(), AgentError> {
         validate_context(context)?;
-        self.publish(
-            context,
-            "agent.run.requested",
-            BusOutcome::Started,
-            Some("run_requested"),
-        )?;
-        self.publish(context, "agent.run.started", BusOutcome::Started, None)?;
         if let Some(memory) = &self.short_term_memory {
             memory
                 .record_run_started(context)
@@ -279,41 +298,43 @@ impl ReactAgent {
         context: &AgentRunContext,
         result: &Result<eliteforge_agent_core::RunResult, eliteforge_agent_core::AgentError>,
     ) -> Result<(), AgentError> {
+        use eliteforge_agent_core::RunStatus;
         match result {
-            Ok(result) => {
-                let waiting = result.status == eliteforge_agent_core::RunStatus::AwaitingInput;
-                if !waiting {
-                    self.publish(
-                        context,
-                        "agent.output.created",
-                        BusOutcome::Completed,
-                        Some("output_created"),
-                    )?;
+            Ok(result) => match result.status {
+                RunStatus::Completed => {
+                    if let Some(memory) = &self.short_term_memory {
+                        memory
+                            .record_run_completed(context)
+                            .map_err(short_term_memory_error)?;
+                    }
                 }
-                self.publish(
+                RunStatus::AwaitingInput => {
+                    if let Some(memory) = &self.short_term_memory {
+                        memory
+                            .record_run_awaiting_input(context)
+                            .map_err(short_term_memory_error)?;
+                    }
+                }
+                RunStatus::StepLimit => self.record_short_term_memory_failure(
                     context,
-                    "agent.run.completed",
-                    BusOutcome::Completed,
-                    Some(if waiting {
-                        "awaiting_user_input"
-                    } else {
-                        "run_completed"
-                    }),
-                )?;
-                if let Some(memory) = &self.short_term_memory {
-                    memory
-                        .record_run_completed(context)
-                        .map_err(short_term_memory_error)?;
-                }
-            }
+                    "native execution reached its step limit",
+                )?,
+                RunStatus::ToolCallLimit => self.record_short_term_memory_failure(
+                    context,
+                    "native execution reached its tool call limit",
+                )?,
+            },
             Err(error) => {
-                self.publish(
-                    context,
-                    "agent.run.failed",
-                    BusOutcome::Failure,
-                    Some("framework_run_failed"),
-                )?;
-                self.record_short_term_memory_failure(context, &error.to_string())?;
+                let reason = match error {
+                    eliteforge_agent_core::AgentError::Cancelled => {
+                        "native execution was cancelled"
+                    }
+                    eliteforge_agent_core::AgentError::SessionBusy(_) => {
+                        "native session already has an active execution"
+                    }
+                    _ => "native execution failed",
+                };
+                self.record_short_term_memory_failure(context, reason)?;
             }
         }
         Ok(())

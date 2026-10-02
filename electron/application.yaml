@@ -94,6 +94,35 @@ shortTermMemory:
         # Preserve existing DirectList agents. Set a tighter measured limit per deployment.
         # Example: maxRatio: "20%" and maxTokens: 6000.
         maxRatio: "60%"
+    providers:
+      order:
+        - seed_prompt_prefix
+        - application_context
+        - current_session_checkpoint
+        - session_family_context
+        - current_session_working_state
+        - current_session_history
+      checkpoint:
+        strategy: bound
+        triggerRatio: "100%"
+        targetRatio: "80%"
+        minGainTokens: 1
+      family:
+        strategy: bound
+        triggerRatio: "100%"
+        targetRatio: "80%"
+        minGainTokens: 1
+      working:
+        strategy: bound
+        triggerRatio: "100%"
+        targetRatio: "80%"
+        minGainTokens: 1
+      history:
+        strategy: checkpoint
+        triggerRatio: "100%"
+        targetRatio: "20%"
+        minGainTokens: 1
+      maxAuxiliaryCallsPerStep: 16
   familyLoad:
     defaultMaxSessions: 3
     defaultSnapshotMaxChars: 2000
@@ -104,6 +133,7 @@ shortTermMemory:
     workspaceHeartbeatWeight: "10%"
     otherWeight: "5%"
   compaction:
+    autoEnabled: true
     triggerRatio: "80%"
     retainedHistoryRatio: "20%"
   goalLoop:

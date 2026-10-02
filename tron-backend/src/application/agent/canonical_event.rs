@@ -16,14 +16,17 @@ pub enum CanonicalRuntimeEvent {
     ToolFailed,
     ObservationCreated,
     ContextAssembled,
+    ContextBlockCompressed,
     ContextCompactionRequested,
     ContextRebased,
     CompactionStarted,
     CompactionCompleted,
     CompactionFailed,
+    RunAwaitingInput,
     RunCompleted,
     RunFailed,
     SessionTitleGenerationFailed,
+    McpWarning,
 }
 
 impl CanonicalRuntimeEvent {
@@ -45,14 +48,17 @@ impl CanonicalRuntimeEvent {
             Self::ToolFailed => "TOOL_FAILED",
             Self::ObservationCreated => "OBSERVATION_CREATED",
             Self::ContextAssembled => "CONTEXT_ASSEMBLED",
+            Self::ContextBlockCompressed => "CONTEXT_BLOCK_COMPRESSED",
             Self::ContextCompactionRequested => "CONTEXT_COMPACTION_REQUESTED",
             Self::ContextRebased => "CONTEXT_REBASED",
             Self::CompactionStarted => "COMPACTION_STARTED",
             Self::CompactionCompleted => "COMPACTION_COMPLETED",
             Self::CompactionFailed => "COMPACTION_FAILED",
+            Self::RunAwaitingInput => "RUN_AWAITING_INPUT",
             Self::RunCompleted => "RUN_COMPLETED",
             Self::RunFailed => "RUN_FAILED",
             Self::SessionTitleGenerationFailed => "SESSION_TITLE_GENERATION_FAILED",
+            Self::McpWarning => "MCP_WARNING",
         }
     }
 
@@ -74,14 +80,17 @@ impl CanonicalRuntimeEvent {
             "agent.tool.failed" => Some(Self::ToolFailed),
             "agent.observation.created" => Some(Self::ObservationCreated),
             "agent.context.assembled" => Some(Self::ContextAssembled),
+            "agent.context.block_compressed" => Some(Self::ContextBlockCompressed),
             "agent.context.compaction_requested" => Some(Self::ContextCompactionRequested),
             "agent.context.rebased" => Some(Self::ContextRebased),
             "agent.compaction.started" => Some(Self::CompactionStarted),
             "agent.compaction.completed" => Some(Self::CompactionCompleted),
             "agent.compaction.failed" => Some(Self::CompactionFailed),
+            "agent.run.awaiting_input" => Some(Self::RunAwaitingInput),
             "agent.run.completed" => Some(Self::RunCompleted),
             "agent.run.failed" => Some(Self::RunFailed),
             "agent.session_title_generation_failed" => Some(Self::SessionTitleGenerationFailed),
+            "agent.mcp.warning" => Some(Self::McpWarning),
             _ => None,
         }
     }
@@ -98,6 +107,7 @@ mod tests {
             ("agent.run.started", "RUN_STARTED"),
             ("agent.model.requested", "MODEL_REQUESTED"),
             ("agent.model.responded", "MODEL_RESPONDED"),
+            ("agent.context.block_compressed", "CONTEXT_BLOCK_COMPRESSED"),
             ("agent.reasoning.delta", "REASONING_DELTA"),
             ("agent.reasoning.raw_delta", "REASONING_RAW_DELTA"),
             ("agent.output.started", "OUTPUT_STARTED"),

@@ -197,6 +197,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
   const [debouncedSystemSearch, setDebouncedSystemSearch] = useState("");
   const [loading, setLoading] = useState(false);
   const [busyKeys, setBusyKeys] = useState<Record<string, boolean>>({});
+  const internalDraftsRef = useRef<Record<string, InternalAgentDraft>>({});
   const internalSaveTimersRef = useRef<Record<string, number>>({});
   const internalSaveFlashTimersRef = useRef<Record<string, number>>({});
 
@@ -306,6 +307,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
       accum[item.agentCode] = draftFromRecord(item);
       return accum;
     }, {});
+    internalDraftsRef.current = nextDrafts;
     setInternalDrafts(nextDrafts);
   }
 
@@ -408,14 +410,15 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
       return;
     }
 
-    let nextDraft = draftFromRecord(baseRecord);
-    setInternalDrafts((current) => {
-      nextDraft = buildDraft(baseRecord, current[agentCode] ?? draftFromRecord(baseRecord), patch);
-      return {
-        ...current,
-        [agentCode]: nextDraft,
-      };
-    });
+    // React may defer state updaters. Keep consecutive input events on the latest
+    // draft and compute save status without relying on updater execution timing.
+    const nextDraft = buildDraft(
+      baseRecord,
+      internalDraftsRef.current[agentCode] ?? draftFromRecord(baseRecord),
+      patch,
+    );
+    internalDraftsRef.current = { ...internalDraftsRef.current, [agentCode]: nextDraft };
+    setInternalDrafts((current) => ({ ...current, [agentCode]: nextDraft }));
 
     clearInternalSaveFlashTimer(agentCode);
     setInternalSaveState(agentCode, hasDraftChanges(baseRecord, nextDraft) ? "pending" : "idle");
@@ -426,7 +429,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     key: "maxSteps" | "maxToolCalls" | "maxParallelToolCalls",
     valueAsNumber: number,
   ) {
-    const draft = internalDrafts[agentCode];
+    const draft = internalDraftsRef.current[agentCode];
     if (!draft) {
       return;
     }
@@ -440,7 +443,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
   }
 
   function handleToolSelection(agentCode: string, toolCode: string, checked: boolean) {
-    const draft = internalDrafts[agentCode];
+    const draft = internalDraftsRef.current[agentCode];
     if (!draft) return;
 
     const next = new Set(draft.selectedToolCodes);
@@ -457,7 +460,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
   }
 
   function handleBulkToolSelection(agentCode: string, toolCodes: string[], checked: boolean) {
-    const draft = internalDrafts[agentCode];
+    const draft = internalDraftsRef.current[agentCode];
     if (!draft || toolCodes.length === 0) return;
 
     const next = new Set(draft.selectedToolCodes);
@@ -476,7 +479,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
   }
 
   function handleServerSelection(agentCode: string, serverCode: string, checked: boolean) {
-    const draft = internalDrafts[agentCode];
+    const draft = internalDraftsRef.current[agentCode];
     if (!draft) return;
 
     const next = new Set(draft.selectedServerCodes);
@@ -493,7 +496,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
   }
 
   function handleBulkServerSelection(agentCode: string, serverCodes: string[], checked: boolean) {
-    const draft = internalDrafts[agentCode];
+    const draft = internalDraftsRef.current[agentCode];
     if (!draft || serverCodes.length === 0) return;
 
     const next = new Set(draft.selectedServerCodes);
@@ -518,6 +521,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
       setTools([]);
       setWorkspaceMcpServers([]);
       setSystemAgents([]);
+      internalDraftsRef.current = {};
       setInternalDrafts({});
       setInternalSaveStates({});
       setBusyKeys({});
@@ -563,19 +567,28 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     }
   }
 
-  async function refreshInternalAgents() {
+  async function refreshInternalAgent(agentCode: string) {
     if (!activeWorkspaceCode) return;
 
     const nextInternalAgents = dataSource === "api"
       ? await fetchWorkspaceInternalAgents(activeWorkspaceCode)
       : listWorkspaceInternalAgentsMock(activeWorkspaceCode);
-    setInternalAgents(nextInternalAgents);
-    updateDraftMap(nextInternalAgents);
+    const savedAgent = nextInternalAgents.find((agent) => agent.agentCode === agentCode);
+    if (!savedAgent) return;
+
+    // Other rows may have pending edits while this row's save is in flight.
+    // Apply the authoritative response only to the row whose save completed.
+    setInternalAgents((current) => current.map((agent) => (
+      agent.agentCode === agentCode ? savedAgent : agent
+    )));
+    const savedDraft = draftFromRecord(savedAgent);
+    internalDraftsRef.current = { ...internalDraftsRef.current, [agentCode]: savedDraft };
+    setInternalDrafts((current) => ({ ...current, [agentCode]: savedDraft }));
   }
 
   async function handleSaveInternalAgent(agentCode: string) {
     const row = internalAgents.find((item) => item.agentCode === agentCode);
-    const draft = internalDrafts[agentCode];
+    const draft = internalDraftsRef.current[agentCode];
     if (!row || !draft || isBusy(`internal-save:${agentCode}`)) {
       return;
     }
@@ -608,8 +621,7 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     }
 
     const shouldSaveTools = draft.toolAssignmentMode === "selected_tools"
-      ? hasToolChanges(row, draft)
-      : false;
+      && (row.toolAssignmentMode !== "selected_tools" || hasToolChanges(row, draft));
     const shouldSaveServers = draft.mcpAccessMode === "selected_servers"
       ? hasMcpServerChanges(row, draft)
       : false;
@@ -619,25 +631,20 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
     setBusy(`internal-save:${agentCode}`, true);
     setInternalSaveState(agentCode, "saving");
     try {
-      if (Object.keys(payload).length > 0) {
-        if (dataSource === "api") {
-          await patchWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode, payload);
-        } else {
-          patchWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode, payload);
-        }
-      }
-      if (Object.keys(mcpPayload).length > 0) {
-        if (dataSource === "api") {
-          await patchWorkspaceInternalAgentMcpPolicy(activeWorkspaceCode, agentCode, mcpPayload);
-        } else {
-          patchWorkspaceInternalAgentMcpPolicyMock(activeWorkspaceCode, agentCode, mcpPayload);
-        }
-      }
+      // Persist the visible selection before changing its policy mode. The all-tools
+      // response is an effective list, so it may differ from stored assignments.
       if (shouldSaveTools) {
         if (dataSource === "api") {
           await updateWorkspaceInternalAgentToolAssignments(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
         } else {
           updateWorkspaceInternalAgentToolAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedToolCodes);
+        }
+      }
+      if (Object.keys(payload).length > 0) {
+        if (dataSource === "api") {
+          await patchWorkspaceInternalAgentPolicy(activeWorkspaceCode, agentCode, payload);
+        } else {
+          patchWorkspaceInternalAgentPolicyMock(activeWorkspaceCode, agentCode, payload);
         }
       }
       if (shouldSaveServers) {
@@ -647,7 +654,14 @@ export function WorkspaceAgentsPage({ category }: WorkspaceAgentsPageProps) {
           updateWorkspaceInternalAgentMcpServerAssignmentsMock(activeWorkspaceCode, agentCode, draft.selectedServerCodes);
         }
       }
-      await refreshInternalAgents();
+      if (Object.keys(mcpPayload).length > 0) {
+        if (dataSource === "api") {
+          await patchWorkspaceInternalAgentMcpPolicy(activeWorkspaceCode, agentCode, mcpPayload);
+        } else {
+          patchWorkspaceInternalAgentMcpPolicyMock(activeWorkspaceCode, agentCode, mcpPayload);
+        }
+      }
+      await refreshInternalAgent(agentCode);
       setInternalSaveState(agentCode, "saved");
       internalSaveFlashTimersRef.current[agentCode] = window.setTimeout(() => {
         setInternalSaveState(agentCode, "idle");

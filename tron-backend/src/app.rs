@@ -24,7 +24,7 @@ use crate::{
             crypto::VariableCipherProvider,
             model::{
                 HttpLlmRuntimeClient, HttpModelClient, HttpModelProviderClient,
-                PersonAiAwareLlmRuntimeClient, PersonAiModelProviderClient,
+                PersonAiModelProviderClient,
             },
             persistence::{
                 GrafeoStoreCore, GraphBackedRagRepository, SqliteAgentEventReplayStore,
@@ -42,8 +42,8 @@ use crate::{
         },
     },
     application::agent::{
-        ActiveRunRegistry, AgentAguiReplayStore, AgentInvocationService, AgentManagementService,
-        AgentRunHistoryService, ModelClient, register_default_agent_tools,
+        ActiveRunRegistry, AgentAguiReplayStore, AgentAguiStreamService, AgentInvocationService,
+        AgentManagementService, AgentRunHistoryService, ModelClient, register_default_agent_tools,
     },
     application::app::AppService,
     application::automation::AutomationService,
@@ -117,6 +117,7 @@ pub struct AppState {
     pub readiness: AppReadiness,
     pub agui_events: Arc<AguiEventSink>,
     pub agui_replay_store: Arc<dyn AgentAguiReplayStore>,
+    pub agent_presentation: AgentAguiStreamService,
     pub agent_model_client: Arc<dyn ModelClient>,
     pub runtime_http_client: reqwest::Client,
     pub agent_management: AgentManagementService,
@@ -189,6 +190,10 @@ impl AppState {
         let agui_replay_store = Arc::new(
             SqliteAgentEventReplayStore::connect(&config.database_url)
                 .expect("agent event replay store should initialize"),
+        );
+        let agent_presentation = AgentAguiStreamService::with_replay_store(
+            agui_events.clone(),
+            agui_replay_store.clone(),
         );
         let event_bus = EventBusRuntimeBuilder::new(config.event_bus.clone(), id_provider.clone())
             .register_sink(agui_events.clone())
@@ -322,12 +327,16 @@ impl AppState {
             build_model_service(&config.database_url, workspaces.clone(), variables.clone())
         };
         let model_providers = build_model_provider_service(&config.database_url, variables.clone());
-        let agent_model_client = Arc::new(HttpModelClient::new(Arc::new(
-            PersonAiModelProviderClient::new(
+        let models = models
+            .with_model_jobs(model_providers.model_jobs())
+            .with_model_transport(model_inference_client.clone());
+        let agent_model_client = Arc::new(
+            HttpModelClient::new(Arc::new(PersonAiModelProviderClient::new(
                 HttpModelProviderClient::new(model_inference_client.clone()),
                 model_providers.clone(),
-            ),
-        )));
+            )))
+            .with_jobs(model_providers.model_jobs()),
+        );
         let prompts = build_prompt_service(
             &config.database_url,
             workspaces.clone(),
@@ -339,9 +348,8 @@ impl AppState {
                 models.clone(),
                 model_providers.clone(),
             )),
-            Arc::new(PersonAiAwareLlmRuntimeClient::new(
-                HttpLlmRuntimeClient::new(model_inference_client),
-                model_providers.clone(),
+            Arc::new(HttpLlmRuntimeClient::with_model_client(
+                agent_model_client.clone(),
             )),
         );
         let prompts = prompts.with_llm_runtime(llm_runtime.clone());
@@ -403,6 +411,12 @@ impl AppState {
             resources.clone(),
         )
         .expect("initialize Framework storage configuration");
+        agent_framework
+            .bind_presentation(agent_presentation.clone())
+            .expect("initial presentation binding");
+        agent_framework
+            .bind_model_client(agent_model_client.clone())
+            .expect("initial model client binding");
         let agent_tool_registry = Arc::new(ToolRegistry::default());
         let agent_terminal: Arc<dyn crate::application::agent::AgentTerminal> = Arc::new(
             crate::adapters::outbound::agent_terminal::LocalAgentTerminal::new(
@@ -503,6 +517,7 @@ impl AppState {
             readiness,
             agui_events,
             agui_replay_store,
+            agent_presentation,
             agent_model_client,
             runtime_http_client,
             agent_management,

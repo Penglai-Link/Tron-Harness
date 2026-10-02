@@ -120,6 +120,34 @@ impl ModelClient for ScriptedClient {
                 .ok_or_else(|| "script exhausted".into())
         })
     }
+
+    // Test adapters explicitly declare one transport attempt per mock invocation.
+    fn generate_once<'a>(
+        &'a self,
+        config: &'a AgentModelConfig,
+        request: &'a ModelRequest,
+    ) -> std::pin::Pin<
+        Box<dyn std::future::Future<Output = Result<ModelResponse, String>> + Send + 'a>,
+    > {
+        self.generate(config, request)
+    }
+
+    fn close_observed<'a>(
+        &'a self,
+    ) -> std::pin::Pin<
+        Box<
+            dyn std::future::Future<
+                    Output = Result<eliteforge_agent_plugin_core::ShutdownReport, String>,
+                > + Send
+                + 'a,
+        >,
+    > {
+        Box::pin(async { Ok(Default::default()) })
+    }
+
+    fn close<'a>(&'a self) -> std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send + 'a>> {
+        Box::pin(async {})
+    }
 }
 
 fn call(name: &str, domain: &str, id: &str) -> ToolCall {
@@ -194,7 +222,8 @@ fn builder(
 ) -> ReactAgentBuilder {
     let registry = Arc::new(ToolRegistry::default());
     registry.register(Arc::new(ExpandDomain)).unwrap();
-    for name in ["echo", "work"] {
+    // Every authorized test descriptor has an actual registered implementation.
+    for name in ["echo", "work", "left_work", "right_work"] {
         registry
             .register(Arc::new(InProcessTool::new(name, |request| {
                 Ok(ToolObservation {
@@ -444,17 +473,50 @@ async fn rejected_expansion_preserves_tools_cache_and_call_id() {
 #[tokio::test]
 async fn schema_within_its_own_limit_still_counts_toward_total_input_budget() {
     for service in [false, true] {
+        let mut context = context();
+        context.model.context_window_tokens = Some(1000);
+        context.tools[0].description = "x".repeat(300);
+        context.messages = vec![AgentMessage::user("x".repeat(700))];
+        let input_budget =
+            context.model.context_window_tokens.unwrap() - context.model.max_tokens.unwrap();
+        let message_tokens =
+            eliteforge_agent_memory::estimate_serialized_tokens(&context.messages[0]);
+        let schema_tokens = estimate(&context.tools);
+        assert!(message_tokens < input_budget);
+        assert!(schema_tokens < input_budget);
+        assert!(message_tokens + schema_tokens > input_budget);
+        eprintln!(
+            "service={service}, message={message_tokens}, schema={schema_tokens}, combined={}, input_budget={input_budget}",
+            message_tokens + schema_tokens
+        );
+        // Each component must be admitted separately; only their combined
+        // model-visible input should exceed the window minus output reserve.
+        for tools_only in [false, true] {
+            let client = ScriptedClient::new(vec![ModelResponse::final_output("within budget")]);
+            let agent = builder(client.clone(), service.then(ShortTermMemoryConfig::default))
+                .build()
+                .unwrap();
+            let mut isolated = context.clone();
+            if tools_only {
+                isolated.messages = vec![AgentMessage::user("small input")];
+            } else {
+                isolated.tools.clear();
+            }
+            assert_eq!(
+                agent.run(isolated).await.unwrap().final_output,
+                "within budget"
+            );
+            assert_eq!(client.requests.lock().unwrap().len(), 1);
+        }
         let client = ScriptedClient::new(vec![ModelResponse::final_output("must not execute")]);
         let agent = builder(client.clone(), service.then(ShortTermMemoryConfig::default))
             .build()
             .unwrap();
-        let mut context = context();
-        context.model.context_window_tokens = Some(1000);
-        context.tools[0].description = "x".repeat(300);
-        context.messages = vec![AgentMessage::user("x".repeat(3300))];
-        assert!(estimate(&context.tools) < 872);
         let error = agent.run(context).await.unwrap_err();
-        assert!(error.to_string().contains("context exceeded budget"));
+        assert!(
+            error.to_string().contains("context budget exceeded"),
+            "service={service}: {error:?}"
+        );
         assert!(client.requests.lock().unwrap().is_empty());
     }
 }
@@ -481,6 +543,7 @@ async fn parallel_expansions_check_the_merged_tool_set() {
             ],
             None,
         ),
+        ModelResponse::tool_call("left_work", json!({"query":"accepted domain"})),
         ModelResponse::final_output("one domain accepted"),
     ]);
     let result = builder(client.clone(), Some(limit_config(cap)))
@@ -498,8 +561,14 @@ async fn parallel_expansions_check_the_merged_tool_set() {
             .output
             .contains("TOOL_SCHEMA_OVER_BUDGET")
     );
+    assert_eq!(result.final_output, "one domain accepted");
+    assert_eq!(result.observations.len(), 3);
+    assert_eq!(result.observations[2].tool_name, "left_work");
+    assert_eq!(result.observations[2].output, "done");
     let requests = client.requests.lock().unwrap();
+    assert_eq!(requests.len(), 3);
     assert_eq!(requests[1].tools, left);
+    assert_eq!(requests[2].tools, left);
     assert!(
         requests[1]
             .prepared_tool_schema

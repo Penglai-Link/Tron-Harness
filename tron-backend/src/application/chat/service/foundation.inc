@@ -70,6 +70,16 @@ pub struct ChatService {
 pub(super) struct GoalContinuationResult {
     pub(super) messages: Vec<ChatMessage>,
     pub(super) user_input_request: Option<ChatUserInputRequest>,
+    // The actual last product child retains its native identity/status/schema.
+    // None means that no continuation result replaced the initial invocation.
+    pub(super) final_run: Option<AgentInvocationResult>,
+}
+impl GoalContinuationResult {
+    pub(super) fn merge_into(self, run: &mut AgentInvocationResult, messages: &mut Vec<ChatMessage>, user_input_request: &mut Option<ChatUserInputRequest>) {
+        messages.extend(self.messages);
+        *user_input_request = user_input_request.take().or(self.user_input_request);
+        if let Some(final_run) = self.final_run { *run = final_run; }
+    }
 }
 
 impl ChatService {

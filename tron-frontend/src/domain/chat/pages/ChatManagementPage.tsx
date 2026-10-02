@@ -4931,6 +4931,8 @@ export function ChatManagementPage() {
     back: t("chat.userInput.back"),
     next: t("chat.userInput.next"),
     continue: t("chat.userInput.continue"),
+    approve: t("chat.userInput.approve"),
+    reject: t("chat.userInput.reject"),
     continuing: t("chat.userInput.continuing"),
     otherOptionLabel: t("chat.userInput.otherOptionLabel"),
     otherOptionDescription: t("chat.userInput.otherOptionDescription"),

@@ -2723,3 +2723,39 @@ async fn capture_verify_request(
             .into_response(),
     }
 }
+
+#[tokio::test]
+async fn sdk_probe_preview_client_errors_are_single_attempt_and_do_not_persist() {
+    let database_url = temp_database_url("sdk-probe-client-errors");
+    let router = app_with_config(AppConfig {
+        database_url: database_url.to_string_lossy().into_owned(),
+        ..Default::default()
+    });
+    let server = verify_mock_server().await;
+    for status in [StatusCode::BAD_REQUEST, StatusCode::UNAUTHORIZED] {
+        *server.response_mode.lock().unwrap() = VerifyResponseMode::Error {
+            status,
+            body: "invalid credential or request".into(),
+        };
+        server.captures.lock().unwrap().clear();
+        let response=authenticated_request(&router,Method::POST,"/api/v1/admin/platform/models/verify",Some(json!({"displayName":"Transient Draft","vendor":"OpenAI","protocol":"OPENAI_COMPATIBLE","modelType":"TEXT","modelCapabilities":["TEXT_GENERATION"],"baseUrl":server.base_url,"apiPath":"/chat/completions","apiKeyRef":"test-sdk-probe","modelName":"probe","enabled":true,"maxRetries":3}))).await;
+        assert!(!response.status().is_success());
+        assert_eq!(
+            server.captures.lock().unwrap().len(),
+            1,
+            "client errors must not be blindly retried"
+        );
+        let list =
+            authenticated_request(&router, Method::GET, "/api/v1/admin/platform/models", None)
+                .await;
+        let payload = response_json(list).await;
+        assert!(
+            !payload["data"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|model| model["displayName"] == json!("Transient Draft"))
+        );
+    }
+    server.task.abort();
+}

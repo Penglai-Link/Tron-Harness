@@ -1,6 +1,6 @@
 use super::{
-    context::{TronContext, TronTokenEstimator},
-    model::{HostExecution, HostRunState, TronChatModel},
+    context::TronContext,
+    model::{HostExecution, HostRunState},
     tools::{AttachmentReader, HarnessTools, LocalScope, ToolAudit},
 };
 use crate::application::agent::{ActiveRunControl, ModelStreamSink, runtime::ReactAgent};
@@ -18,12 +18,32 @@ use std::{
 };
 use tokio::sync::{Mutex, OnceCell};
 
+#[path = "host_capability_state.rs"]
+mod capability_state;
+#[path = "host_continuation.rs"]
+mod host_continuation;
+#[path = "host_control.rs"]
+mod host_control;
+#[path = "host_execution.rs"]
+mod host_execution;
 #[path = "host_external.rs"]
 mod host_external;
+#[path = "host_interactions.rs"]
+mod host_interactions;
+#[path = "host_run.rs"]
+mod host_run;
+#[path = "host_shutdown.rs"]
+mod host_shutdown;
+#[path = "host_snapshot.rs"]
+mod host_snapshot;
+#[path = "host_summary.rs"]
+mod host_summary;
+use capability_state::{load_capability_state, persist_capability_state};
 
 #[derive(Clone)]
 pub struct FrameworkHost(Arc<Host>);
 struct Host {
+    model_client: std::sync::RwLock<Option<Arc<dyn crate::application::agent::ModelClient>>>,
     path: PathBuf,
     state_path: PathBuf,
     pack_root: PathBuf,
@@ -33,9 +53,14 @@ struct Host {
     pty: eliteforge_agent_capability_tools::PtyService,
     agent: OnceCell<Agent>,
     external_agent: OnceCell<Agent>,
+    continuation_agent: OnceCell<Agent>,
     native_sessions: OnceCell<SqliteConversationStore>,
+    summaries: OnceCell<Arc<eliteforge_agent_official_plugin_storage_local::SqliteSummaryStore>>,
     native_bindings: super::native_sessions::Bindings,
     closed: std::sync::atomic::AtomicBool,
+    control: host_control::NativeRuns,
+    shutdown: host_shutdown::OwnedShutdown,
+    presentation: std::sync::RwLock<Option<crate::application::agent::AgentAguiStreamService>>,
     resources: Option<crate::application::resource::ResourceService>,
     _temporary: Option<tempfile::TempDir>,
 }
@@ -100,10 +125,9 @@ impl FrameworkHost {
         extensions: &BTreeMap<String, bool>,
     ) -> Result<AgentBuilder, String> {
         let enabled = |point: &str| extensions.get(point).copied().unwrap_or(true);
-        let mut descriptor = fw::ModelDescriptor::new("route")
-            .with_input_modalities([fw::Modality::Text, fw::Modality::Image]);
-        descriptor.supports_tools = Some(true);
-        let builder = AgentBuilder::new().default_models(false);
+        let builder = AgentBuilder::new()
+            .default_models(false)
+            .plugin(eliteforge_agent_official_plugin_agui::AgUiPlugin::default());
         let builder = if enabled("storage") {
             builder.plugin(LocalStoragePlugin::new(
                 &self.0.path,
@@ -113,18 +137,22 @@ impl FrameworkHost {
             builder
         };
         let builder = if enabled("model") {
-            builder.plugin(fw::ModelConnectionPlugin::new(
-                fw::ModelConnection::new(
-                    "tron",
-                    Arc::new(TronChatModel),
-                    vec![descriptor, fw::ModelDescriptor::new("compaction")],
+            builder.plugin(eliteforge_agent_framework::ModelRuntimePlugin::new(
+                eliteforge_agent_framework::ModelRuntime::new(
+                    eliteforge_agent_framework::ModelRuntimeUpdate::new("", 0, vec![]),
                 )
-                .with_protocol("tron-host")
-                .with_token_estimator(Arc::new(TronTokenEstimator)),
+                .map_err(|error| error.to_string())?,
             ))
         } else {
             builder
         };
+        // Product authority is a host invariant, independent of the optional
+        // harness pack. Managed packs may keep model/context capabilities while
+        // the tool extension is disabled, but cannot admit any tool executor.
+        let builder = builder.plugin(fw::ToolPolicyPlugin::new(
+            "tron.harness.tool-authority",
+            super::tools::ToolCatalogPolicy::new(enabled("tool")),
+        ));
         let builder = if enabled("observe") {
             builder.plugin(fw::ToolMiddlewarePlugin::new(
                 "tron.harness.audit",
@@ -147,13 +175,9 @@ impl FrameworkHost {
             && enabled("tool")
         {
             builder.capability_pack(
-                tron_agent_harness::TronHarness::new(
-                    Arc::new(TronContext),
-                    Arc::new(HarnessTools),
-                    [],
-                )
-                .with_context_preparation(TronContext, 32)
-                .capability_pack(),
+                tron_agent_harness::TronHarness::new(Arc::new(HarnessTools), [])
+                    .with_context_preparation(TronContext, 32)
+                    .capability_pack(),
             )
         } else {
             builder
@@ -187,6 +211,15 @@ impl FrameworkHost {
 
     fn ensure_external_idle(&self) -> Result<(), String> {
         self.ensure_open()?;
+        if let Some(agent) = self.0.continuation_agent.get() {
+            if !agent
+                .reconfiguration_blockers()
+                .map_err(|error| error.to_string())?
+                .is_empty()
+            {
+                return Err("native continuation is busy".into());
+            }
+        }
         if let Some(agent) = self.0.external_agent.get()
             && !agent
                 .reconfiguration_blockers()
@@ -198,7 +231,9 @@ impl FrameworkHost {
         Ok(())
     }
     fn prepare_artifacts(&self) -> Result<(), String> {
-        let path = self.0.path.with_extension("artifacts");
+        self.prepare_artifacts_at(&self.0.path.with_extension("artifacts"))
+    }
+    fn prepare_artifacts_at(&self, path: &Path) -> Result<(), String> {
         if !path.exists() {
             let mut builder = fs::DirBuilder::new();
             builder.recursive(true);
@@ -207,7 +242,7 @@ impl FrameworkHost {
                 use std::os::unix::fs::DirBuilderExt;
                 builder.mode(0o700);
             }
-            builder.create(&path).map_err(|e| e.to_string())?;
+            builder.create(path).map_err(|e| e.to_string())?;
         }
         Ok(())
     }
@@ -216,28 +251,6 @@ impl FrameworkHost {
             return Err("framework host is closed".into());
         }
         Ok(())
-    }
-    pub async fn close(&self) {
-        let _admission = self.0.config_lock.lock().await;
-        if self
-            .0
-            .closed
-            .swap(true, std::sync::atomic::Ordering::AcqRel)
-        {
-            return;
-        }
-        if let Some(agent) = self.0.agent.get() {
-            agent.close().await;
-        }
-        if let Some(agent) = self.0.external_agent.get() {
-            agent.close().await;
-        }
-        self.0.native_bindings.close().await;
-        if let Some(store) = self.0.native_sessions.get() {
-            let _ = store.close().await;
-        }
-        let pty = self.pty();
-        let _ = tokio::task::spawn_blocking(move || pty.close()).await;
     }
 
     pub fn persistent(
@@ -249,6 +262,7 @@ impl FrameworkHost {
         let pack_root = path.with_extension("capability-packs");
         let (packs, extensions) = load_capability_state(&state_path);
         Self(Arc::new(Host {
+            model_client: Default::default(),
             path,
             state_path,
             pack_root,
@@ -257,9 +271,14 @@ impl FrameworkHost {
             config_lock: tokio::sync::Mutex::new(()),
             agent: OnceCell::new(),
             external_agent: OnceCell::new(),
+            continuation_agent: OnceCell::new(),
             native_sessions: OnceCell::new(),
+            summaries: OnceCell::new(),
             native_bindings: Default::default(),
             closed: Default::default(),
+            control: Default::default(),
+            shutdown: Default::default(),
+            presentation: Default::default(),
             pty: Default::default(),
             resources,
             _temporary: None,
@@ -272,6 +291,7 @@ impl FrameworkHost {
             .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
         let path = directory.path().join("framework.sqlite3");
         Ok(Self(Arc::new(Host {
+            model_client: Default::default(),
             state_path: path.with_extension("capabilities.json"),
             pack_root: path.with_extension("capability-packs"),
             path,
@@ -280,9 +300,14 @@ impl FrameworkHost {
             config_lock: tokio::sync::Mutex::new(()),
             agent: OnceCell::new(),
             external_agent: OnceCell::new(),
+            continuation_agent: OnceCell::new(),
             native_sessions: OnceCell::new(),
+            summaries: OnceCell::new(),
             native_bindings: Default::default(),
             closed: Default::default(),
+            control: Default::default(),
+            shutdown: Default::default(),
+            presentation: Default::default(),
             pty: Default::default(),
             resources,
             _temporary: Some(directory),
@@ -326,217 +351,6 @@ impl FrameworkHost {
             })
             .await
     }
-
-    pub(crate) async fn run(
-        &self,
-        harness: ReactAgent,
-        context: AgentRunContext,
-        sink: Option<ModelStreamSink>,
-        steering: Option<ActiveRunControl>,
-    ) -> Result<AgentRunResult, AgentError> {
-        let admission = self.0.config_lock.lock().await;
-        self.ensure_open()
-            .map_err(AgentError::InvalidConfiguration)?;
-        harness.framework_started(&context)?;
-        let agent = self.agent().await.map_err(map_error)?;
-        let session = context
-            .conversation_code
-            .clone()
-            .unwrap_or_else(|| context.run_code.clone());
-        let memory_input = context
-            .short_term_memory
-            .as_ref()
-            .and_then(|memory| memory.current_input_message.as_ref());
-        let (history, current) = if let Some(input) = memory_input {
-            let history = if context.messages.last().is_some_and(|last| last == input) {
-                &context.messages[..context.messages.len() - 1]
-            } else {
-                &context.messages[..]
-            };
-            (history, input)
-        } else {
-            let current = context
-                .messages
-                .iter()
-                .rposition(|message| message.role == "user")
-                .ok_or_else(|| {
-                    AgentError::InvalidConfiguration("run requires a current user message".into())
-                })?;
-            if current + 1 != context.messages.len() {
-                return Err(AgentError::InvalidConfiguration(
-                    "current input must follow the prepared conversation history".into(),
-                ));
-            }
-            (&context.messages[..current], &context.messages[current])
-        };
-        let history =
-            super::messages::encode_history(history).map_err(AgentError::InvalidConfiguration)?;
-        let input = super::messages::encode(current)
-            .map_err(AgentError::InvalidConfiguration)?
-            .content;
-        let answer = current.parts.iter().find_map(|part| match part {
-            crate::domain::agent::AgentMessagePart::Context {
-                kind,
-                metadata: Some(metadata),
-                ..
-            } if kind == "tron_interaction_response" => metadata
-                .get("resume")
-                .and_then(|value| value.as_array())
-                .and_then(|entries| entries.first())
-                .and_then(|entry| {
-                    entry
-                        .get("interruptId")
-                        .and_then(|id| id.as_str())
-                        .and_then(|id| id.strip_prefix("INPUT-FW-"))
-                        .map(|id| {
-                            (
-                                id.to_owned(),
-                                entry.get("payload").cloned().unwrap_or_default(),
-                            )
-                        })
-                }),
-            _ => None,
-        });
-        let key = fw::ConversationKey::new(&session);
-        let snapshot = agent.conversation(&key).await.map_err(map_error)?;
-        if snapshot.revision == 0 && !history.is_empty() {
-            agent
-                .append_conversation(&key, 0, history)
-                .await
-                .map_err(map_error)?;
-        }
-        let mut request = fw::RunRequest::new(&session, input);
-        if let Some((answer_id, payload)) = answer {
-            let id = fw::RunId::parse_str(&answer_id)
-                .map_err(|error| AgentError::InvalidConfiguration(error.to_string()))?;
-            let resumed = agent
-                .answer(&session, id, super::question::framework_answer(&payload)?)
-                .await
-                .map_err(map_error)?;
-            request.resume = resumed.resume;
-        }
-        request.model = Some(fw::ModelRef::new("tron", "route"));
-        request.limits.max_steps = context.limits.max_steps as usize;
-        request.limits.max_tool_calls = context.limits.max_tool_calls as usize;
-        request.limits.tool_batch_budget_policy = fw::ToolBatchBudgetPolicy::ExecuteAvailable;
-        // Domain discovery controls schema exposure; the effective catalog owns authority.
-        request.limits.allow_unexposed_tools = true;
-        request.limits.max_parallel_tools = context.limits.max_parallel_tool_calls.max(1) as usize;
-        request.limits.max_context_messages = context
-            .messages
-            .len()
-            .max(256)
-            .saturating_add(request.limits.max_steps + request.limits.max_tool_calls * 2);
-        request.limits.max_context_tokens =
-            context.model.context_window_tokens.unwrap_or(128_000) as usize;
-        request.limits.max_model_output_tokens = context
-            .model
-            .max_tokens
-            .filter(|value| *value > 0)
-            .unwrap_or(4096);
-        request.limits.max_total_tokens = (request.limits.max_context_tokens as u64
-            + u64::from(request.limits.max_model_output_tokens))
-        .saturating_mul(request.limits.max_steps as u64);
-        request.limits.model_timeout = Duration::from_secs(300);
-        request.limits.run_timeout =
-            Duration::from_secs(300 * context.limits.max_steps.max(1) as u64);
-        request.limits.max_model_retries = if context.auto_model_route.is_some() {
-            2
-        } else {
-            context.model.max_retries.unwrap_or(0).min(3) as usize
-        };
-        request.limits.max_model_calls_per_step =
-            Some((request.limits.max_model_retries + 1).max(3));
-        request.limits.max_overflow_recoveries = harness.framework_overflow_limit();
-        request.generation.max_output_tokens = context.model.max_tokens.filter(|value| *value > 0);
-        let state = Arc::new(Mutex::new(HostRunState::new(context.clone())));
-        request
-            .extensions
-            .insert(fw::ToolResultProcessorService(Arc::new(ToolAudit)));
-        request.extensions.insert(
-            eliteforge_agent_official_plugin_tools_local::CommandProgressSinkService(Arc::new(
-                super::tools::CommandProgress {
-                    harness: harness.clone(),
-                    context: context.clone(),
-                },
-            )),
-        );
-        request.extensions.insert(HostExecution {
-            harness: harness.clone(),
-            state: state.clone(),
-            sink,
-        });
-        tron_agent_harness::TronRunScope {
-            user_code: context.user_code.clone().unwrap_or_else(|| "system".into()),
-            workspace_code: context.workspace_code.clone(),
-            session_code: session,
-            run_code: context.run_code.clone(),
-            app_code: context.execution_scope.app_code.clone(),
-            task_code: context.execution_scope.task_code.clone(),
-            agent_code: context
-                .short_term_memory
-                .as_ref()
-                .and_then(|memory| memory.agent_code.clone()),
-        }
-        .attach(&mut request)
-        .map_err(map_error)?;
-        if let Some(resources) = &self.0.resources {
-            request
-                .extensions
-                .insert(FileReferenceReaderService(Arc::new(AttachmentReader(
-                    resources.clone(),
-                ))));
-        }
-        if let Some(control) = steering {
-            request
-                .extensions
-                .insert(fw::LiveInputSourceService(Arc::new(HostSteering {
-                    control,
-                })));
-        }
-        let started = agent.start(request);
-        drop(admission);
-        let result = match started {
-            Ok(handle) => agent.wait(handle).await,
-            Err(error) => Err(error),
-        };
-        let state = state.lock().await;
-        let failure = match &result {
-            Ok(result) if result.status == fw::RunStatus::StepLimit => {
-                Some(AgentError::MaxStepsExceeded)
-            }
-            Ok(result) if result.status == fw::RunStatus::ToolCallLimit => {
-                Some(AgentError::MaxToolCallsExceeded)
-            }
-            Err(error) => Some(
-                state
-                    .error
-                    .clone()
-                    .unwrap_or_else(|| AgentError::InvalidConfiguration(error.to_string())),
-            ),
-            _ => None,
-        };
-        if let Some(error) = failure {
-            harness
-                .framework_finished(&state.context, &Err(fw::AgentError::Run(error.to_string())))?;
-            return Err(error);
-        }
-        harness.framework_finished(&state.context, &result)?;
-        let result = result.map_err(map_error)?;
-        let output = state.final_output.clone();
-        Ok(AgentRunResult {
-            run_code: context.run_code,
-            conversation_code: context.conversation_code,
-            workspace_code: context.workspace_code,
-            final_output: output,
-            step_count: result.steps as u32,
-            token_usage: state.usage,
-            latest_request_estimate: state.estimate.clone(),
-            latest_usage_audit: state.audit.clone(),
-            system_agent_session_id: state.context.system_agent_session_id.clone(),
-            observations: state.context.observations.clone(),
-        })
-    }
 }
 struct HostSteering {
     control: ActiveRunControl,
@@ -571,35 +385,20 @@ impl fw::LiveInputSource for HostSteering {
     }
 }
 fn map_error(error: fw::AgentError) -> AgentError {
-    AgentError::InvalidConfiguration(error.to_string())
+    map_error_ref(&error)
+}
+fn map_error_ref(error: &fw::AgentError) -> AgentError {
+    match error.primary() {
+        fw::AgentError::SessionBusy(session) => AgentError::SessionBusy(session.clone()),
+        fw::AgentError::Cancelled => AgentError::Cancelled,
+        _ => AgentError::InvalidConfiguration(error.to_string()),
+    }
 }
 
-#[derive(serde::Serialize, serde::Deserialize, Default)]
-struct CapabilityState {
-    packs: BTreeMap<String, bool>,
-    extensions: BTreeMap<String, bool>,
-}
-fn load_capability_state(path: &Path) -> (BTreeMap<String, bool>, BTreeMap<String, bool>) {
-    fs::read(path)
-        .ok()
-        .and_then(|bytes| serde_json::from_slice::<CapabilityState>(&bytes).ok())
-        .map(|state| (state.packs, state.extensions))
-        .unwrap_or_default()
-}
-fn persist_capability_state(
-    path: &Path,
-    packs: &BTreeMap<String, bool>,
-    extensions: &BTreeMap<String, bool>,
-) -> Result<(), String> {
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent).map_err(|error| error.to_string())?;
-    }
-    let bytes = serde_json::to_vec(&CapabilityState {
-        packs: packs.clone(),
-        extensions: extensions.clone(),
-    })
-    .map_err(|error| error.to_string())?;
-    let temp = path.with_extension("tmp");
-    fs::write(&temp, bytes).map_err(|error| error.to_string())?;
-    fs::rename(temp, path).map_err(|error| error.to_string())
-}
+#[cfg(test)]
+#[path = "host_lifecycle_tests.rs"]
+mod lifecycle_tests;
+
+#[cfg(test)]
+#[path = "context_seed_budget_tests.rs"]
+mod context_seed_budget_tests;

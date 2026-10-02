@@ -1,5 +1,5 @@
-//! Tron owns prompt sources, attachments and compaction; Framework calls this
-//! before admitting a model request, using the same estimator for final admission.
+//! Tron maps authorized product prompt sources and attachments; Framework memory
+//! owns assembly and compaction before the final controlled model admission.
 use super::model::HostExecution;
 use crate::domain::agent::{AgentModelProtocol, EffectiveTool};
 use async_trait::async_trait;
@@ -7,15 +7,6 @@ use eliteforge_agent_core as fw;
 use eliteforge_agent_core::ContextAssembler;
 
 pub(super) struct TronContext;
-#[async_trait]
-impl fw::ContextProvider for TronContext {
-    async fn context(&self, _run: &fw::RunContext) -> Result<Vec<fw::Message>, fw::AgentError> {
-        // Ordered product history is seeded into the conversation, not promoted
-        // into trusted instructions by the ContextProvider extension point.
-        Ok(Vec::new())
-    }
-}
-
 #[async_trait]
 impl fw::ContextPreparationPolicy for TronContext {
     async fn prepare(
@@ -36,34 +27,34 @@ impl fw::ContextPreparationPolicy for TronContext {
         }
         let host = HostExecution::from_extensions(&input.run.extensions)?;
         let mut state = host.state.lock().await;
+        super::model::synchronize_selected_model(
+            &mut state,
+            input.model,
+            &input.run.extensions,
+            input.options,
+        )?;
+        if state
+            .context_auxiliary_calls
+            .as_ref()
+            .is_none_or(|(step, _)| *step != input.step)
+        {
+            state.context_auxiliary_calls = Some((
+                input.step,
+                std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            ));
+        }
         if reductions == 0 && input.attempt > 1 {
             if let Some(message) = state.last_model_failure.take() {
                 state.error = None;
                 match host.harness.framework_model_error(&state.context, &message) {
                     fw::ModelError::ContextOverflow(_) => {
-                        if let Some(prepared) = state.prepared.as_ref() {
-                            let job = host
-                                .harness
-                                .framework_compaction_job(
-                                    &state.context,
-                                    prepared,
-                                    Some(&message),
-                                    input.limits,
-                                )
-                                .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-                            if let Some(job) = job {
-                                return Ok(fw::ContextPreparation::Reduce(job));
-                            }
-                        }
-                        return Err(fw::ModelError::ContextOverflow(message).into());
+                        state.context_force_compression = true;
+                        // Recovery goes through the same configured global coordinator.
+                        // Keep strategies and the additional auxiliary ceiling remain binding.
                     }
-                    fw::ModelError::Transient(_) => {
-                        let super::model::HostRunState { context, turn, .. } = &mut *state;
-                        host.harness
-                            .framework_fallback(context, turn, &message)
-                            .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-                    }
-                    error => return Err(error.into()),
+                    // ModelInvoker already admitted this recovery. Structured provider
+                    // authentication/rate-limit errors must not veto its next dispatch.
+                    _ => {}
                 }
             }
         }
@@ -87,30 +78,9 @@ impl fw::ContextPreparationPolicy for TronContext {
         state.context.tools = input
             .tools
             .iter()
-            .map(|descriptor| {
-                let mut tool = state
-                    .context
-                    .authorized_tools()
-                    .iter()
-                    .find(|tool| tool.tool_name == descriptor.call_name)
-                    .cloned()
-                    .ok_or_else(|| {
-                        fw::AgentError::ToolSetup(format!(
-                            "unauthorized tool: {}",
-                            descriptor.call_name
-                        ))
-                    })?;
-                tool.description = descriptor.description.clone();
-                tool.input_schema = descriptor.input_schema.clone();
-                Ok(tool)
-            })
+            .map(|descriptor| super::tools::map_authorized_descriptor(&state.context, descriptor))
             .collect::<Result<Vec<_>, fw::AgentError>>()?;
-        let super::model::HostRunState {
-            context,
-            turn,
-            prepared,
-            ..
-        } = &mut *state;
+        let super::model::HostRunState { context, turn, .. } = &mut *state;
         let projection = match host.harness.prepare_framework_context(context, turn).await {
             Ok(projection) => projection,
             Err(error) => {
@@ -119,82 +89,82 @@ impl fw::ContextPreparationPolicy for TronContext {
                 return Err(fw::AgentError::Run(message));
             }
         };
-        if projection.compaction_required && projection.compaction_trigger_reached {
-            if let Some(job) = host
-                .harness
-                .framework_compaction_job(context, &projection, None, input.limits)
-                .map_err(|error| fw::AgentError::Run(error.to_string()))?
-            {
-                return Ok(fw::ContextPreparation::Reduce(job));
-            }
+        let context = context.clone();
+        if state
+            .context_auxiliary_calls
+            .as_ref()
+            .is_none_or(|(step, _)| *step != input.step)
+        {
+            state.context_auxiliary_calls = Some((
+                input.step,
+                std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+            ));
         }
-        host.harness
-            .validate_framework_context(context, &projection)
-            .map_err(|error| fw::AgentError::Run(error.to_string()))?;
-        let mut messages = projection
+        let auxiliary_calls = state.context_auxiliary_calls.as_ref().unwrap().1.clone();
+        let force = state.context_force_compression;
+        let previous_messages = state
+            .prepared
+            .as_ref()
+            .map(|prepared| prepared.messages.clone());
+        // No host mutex may be held while a reducer invokes an auxiliary model.
+        drop(state);
+        let window = match super::context_providers::assemble(
+            input,
+            host.clone(),
+            &context,
+            &projection,
+            force,
+            auxiliary_calls,
+        )
+        .await
+        {
+            Ok(window) => window,
+            Err(error) => match error.primary() {
+                fw::AgentError::Context(fw::ContextError::RefreshRequired { source_revision }) => {
+                    return Ok(fw::ContextPreparation::Refresh {
+                        source_revision: source_revision.clone(),
+                    });
+                }
+                _ => return Err(error),
+            },
+        };
+        let mut projection = projection;
+        projection.messages = window
             .messages
             .iter()
-            .map(super::messages::encode)
+            .map(super::messages::decode)
             .collect::<Result<Vec<_>, _>>()
             .map_err(fw::AgentError::InvalidConfiguration)?;
-        // Carry opaque continuation only for an unchanged assistant message.
-        for message in &mut messages {
-            if message.role != fw::Role::Assistant {
-                continue;
-            }
-            if let Some(original) = input.history.messages.iter().rev().find(|candidate| {
-                candidate.role == message.role
-                    && candidate.content == message.content
-                    && candidate
-                        .tool_calls
-                        .iter()
-                        .map(|call| (&call.id, &call.call_name, &call.arguments))
-                        .eq(message
-                            .tool_calls
-                            .iter()
-                            .map(|call| (&call.id, &call.call_name, &call.arguments)))
-            }) {
-                message.model_context = original.model_context.clone();
-                message.tool_calls = original.tool_calls.clone();
-            }
+        if force && previous_messages.as_ref() == Some(&projection.messages) {
+            return Err(fw::ModelError::ContextOverflow(
+                "configured context strategies reproduced the failed model input".into(),
+            )
+            .into());
         }
-        let tokens = fw::context_tokens(&messages, input.model, input.estimator).await?;
-        let protocol = input
-            .estimator
-            .tools(input.model, input.tools)
-            .await?
-            .saturating_add(input.estimator.options(input.model, input.options).await?);
-        let report = fw::ContextAssemblyReport {
-            model: input.model.clone(),
-            stage: input.stage.into(),
-            step: input.step,
-            attempt: input.attempt,
-            node_execution: input.run.node_execution().cloned(),
-            input_capacity: input.budget.max_tokens,
-            protocol_tokens: protocol,
-            estimated_input_tokens: tokens.saturating_add(protocol),
-            blocks: vec![fw::ContextBlockReport {
-                id: "tron.harness.context".into(),
-                position: 0,
-                source_version: projection.context_hash.clone(),
-                original_tokens: Some(
-                    fw::context_tokens(&input.history.messages, input.model, input.estimator)
-                        .await?,
-                ),
-                allocated_tokens: input.budget.max_tokens.saturating_sub(protocol),
-                final_tokens: tokens,
-                outcome: if projection.rebased {
-                    fw::ContextBlockOutcome::Reduced
-                } else {
-                    fw::ContextBlockOutcome::Kept
-                },
-            }],
-        };
-        *prepared = Some(projection);
-        Ok(fw::ContextPreparation::Ready(fw::ContextWindow {
-            messages,
-            report,
-        }))
+        projection.message_token_estimate = window
+            .report
+            .estimated_input_tokens
+            .saturating_sub(window.report.protocol_tokens)
+            .min(u32::MAX as usize) as u32;
+        projection.estimated_tokens =
+            window.report.estimated_input_tokens.min(u32::MAX as usize) as u32;
+        projection.over_budget = false;
+        projection.over_budget_reason = None;
+        projection.compaction_required = false;
+        super::context_projection::update(
+            &mut projection,
+            &window,
+            input,
+            &host.harness.framework_context_config(),
+        )?;
+        host.harness
+            .framework_record_context(&context, &projection, &window.report)
+            .map_err(|error| fw::AgentError::Run(error.to_string()))?;
+        let mut state = host.state.lock().await;
+        state.context.messages = projection.messages.clone();
+        state.context_force_compression = false;
+        state.prepared = Some(projection);
+        Ok(fw::ContextPreparation::Ready(window))
     }
 }
 
@@ -203,11 +173,29 @@ pub(super) struct TronTokenEstimator;
 impl fw::TokenEstimator for TronTokenEstimator {
     async fn message(
         &self,
-        _: &fw::ModelRef,
+        model: &fw::ModelRef,
         message: &fw::Message,
     ) -> Result<usize, fw::ModelError> {
         let native = super::messages::decode(message).map_err(fw::ModelError::Fatal)?;
-        Ok(crate::application::short_term_memory::estimate_messages_tokens(&[native]) as usize)
+        let native_tokens =
+            crate::application::short_term_memory::estimate_messages_tokens(&[native]) as usize;
+        let metadata = message
+            .model_context
+            .as_ref()
+            .map_or(0, |value| {
+                serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
+            })
+            .saturating_add(message.structured.as_ref().map_or(0, |value| {
+                serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
+            }))
+            .saturating_add(message.tool_result.as_ref().map_or(0, |value| {
+                serde_json::to_vec(value).map_or(usize::MAX, |bytes| bytes.len())
+            }));
+        // Native typed media/resource estimates remain binding even when the
+        // product history projection exposes a compact display representation.
+        let typed_tokens =
+            fw::TokenEstimator::message(&fw::ConservativeTokenEstimator, model, message).await?;
+        Ok(native_tokens.saturating_add(metadata).max(typed_tokens))
     }
     async fn tools(
         &self,

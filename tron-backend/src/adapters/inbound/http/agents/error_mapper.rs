@@ -37,6 +37,11 @@ pub fn agent_error_response(error: AgentInvocationError) -> Response {
             "AGENT_HISTORY_STORAGE_FAILED",
             "agent run history storage failed".to_string(),
         ),
+        AgentInvocationError::SessionBusy(_) => (
+            StatusCode::CONFLICT,
+            "RUN_ALREADY_ACTIVE",
+            "session already has an active agent run".to_string(),
+        ),
         AgentInvocationError::RunStopped => (
             StatusCode::CONFLICT,
             "AGENT_RUN_STOPPED",
@@ -89,13 +94,39 @@ pub fn agent_history_error_response(error: AgentRunHistoryError) -> Response {
     (status, Json(ApiResponse::error(code, message))).into_response()
 }
 
-pub fn agent_agui_error_response(error: AgentAguiStreamError) -> Response {
+pub fn agent_agui_error_response(error: AgentAguiStreamError, locale: &str) -> Response {
     let (status, code, message) = match error {
         AgentAguiStreamError::StreamKeyRequired => (
             StatusCode::BAD_REQUEST,
             "AGENT_AGUI_STREAM_KEY_REQUIRED",
             "stream key is required".to_string(),
         ),
+        AgentAguiStreamError::ReplayReadFailed(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "AGENT_AGUI_REPLAY_READ_FAILED",
+            "agent presentation replay is unavailable".to_string(),
+        ),
+        AgentAguiStreamError::ReplayWriteFailed(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "AGENT_AGUI_REPLAY_WRITE_FAILED",
+            "agent presentation replay could not be saved".to_string(),
+        ),
+        AgentAguiStreamError::ReplayIncomplete(_) => (
+            StatusCode::SERVICE_UNAVAILABLE,
+            "AGENT_AGUI_REPLAY_INCOMPLETE",
+            "agent presentation replay is incomplete".to_string(),
+        ),
+    };
+    let message = if locale.starts_with("zh") {
+        match code {
+            "AGENT_AGUI_STREAM_KEY_REQUIRED" => "流标识不能为空",
+            "AGENT_AGUI_REPLAY_READ_FAILED" => "展示回放暂时无法读取",
+            "AGENT_AGUI_REPLAY_WRITE_FAILED" => "展示回放未能保存",
+            _ => "展示回放不完整，执行结果会单独报告",
+        }
+        .to_string()
+    } else {
+        message
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
 }
@@ -145,3 +176,7 @@ pub fn agent_management_error_response(error: AgentManagementError) -> Response 
     };
     (status, Json(ApiResponse::error(code, message))).into_response()
 }
+
+#[cfg(test)]
+#[path = "agui_error_tests.rs"]
+mod agui_error_tests;
