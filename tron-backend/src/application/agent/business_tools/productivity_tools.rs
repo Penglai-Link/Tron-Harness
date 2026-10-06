@@ -59,7 +59,14 @@ impl Tool for ProductivityTool {
     ) -> Result<ToolExecutionResult, ToolError> {
         validate(self.name, &request.input, context)?;
         let result = if self.name.starts_with("word_") || self.name.starts_with("excel_") {
-            office::execute(self.name, &request.input, context, &self.resources)?
+            office::execute(
+                self.name,
+                &request.input,
+                context,
+                &self
+                    .resources
+                    .for_agent_in_workspace(context.agent_code.as_deref(), &context.workspace_code),
+            )?
         } else {
             let name = self.name;
             let input = request.input;

@@ -53,6 +53,13 @@ impl AppConfig {
         Ok(config.short_term_memory)
     }
 
+    pub(crate) fn effective_mineru(content:&str,path:&Path) -> Result<super::MineruConfig,ConfigError> {
+        let file_config=AppConfigFile::from_content(content,path)?;
+        let mut config=Self::runtime_defaults();
+        config.apply_file_overrides(file_config)?;
+        config.apply_env_overrides()?;
+        Ok(config.mineru)
+    }
     pub fn validate_yaml(content: &str, path: impl AsRef<Path>) -> Result<(), ConfigError> {
         let path = path.as_ref();
         let file_config = AppConfigFile::from_content(content, path)?;
@@ -104,6 +111,7 @@ impl AppConfig {
         if let Some(value) = overrides.mineru {
             self.mineru.apply_overrides(value);
         }
+        self.mineru.validate().map_err(|value| ConfigError::InvalidConfigValue { key: "mineru".into(), value })?;
         if let Some(value) = overrides.short_term_memory {
             self.short_term_memory.apply_overrides(value);
         }

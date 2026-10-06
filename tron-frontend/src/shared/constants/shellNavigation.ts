@@ -14,7 +14,6 @@ import {
   PlugZap,
   Server,
   ScrollText,
-  Search,
   Sparkles,
   UserRound,
   Wrench,
@@ -70,7 +69,6 @@ export const tronNavigation: TronNavSection[] = [
       { label: "Memory", href: "/memory", icon: Database, translationKey: "shell:nav.items.memory" },
       { label: "KnowledgeGraph", href: "/knowledge-graph", icon: Network, translationKey: "shell:nav.items.knowledgeGraph" },
       { label: "KnowledgeBase", href: "/knowledge-base", icon: BookOpenText, translationKey: "shell:nav.items.knowledgeBase" },
-      { label: "RAG", href: "/rag", icon: Search, translationKey: "shell:nav.items.rag" },
       {
         label: "Resource Management",
         href: "/resource-management/files",

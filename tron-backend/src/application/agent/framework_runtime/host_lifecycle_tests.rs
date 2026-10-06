@@ -409,6 +409,7 @@ fn native_result_preserves_generic_input_approval_schema_and_full_prompt() {
 
 fn test_context(max_retries: u32) -> AgentRunContext {
     AgentRunContext {
+        agent_code: None,
         auto_model_route: None,
         conversation_code: Some("CONV-1".into()),
         run_code: "RUN-1".into(),

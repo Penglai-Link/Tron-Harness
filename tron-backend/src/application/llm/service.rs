@@ -32,8 +32,8 @@ impl LlmRuntimeModelResolver for ModelService {
 
 #[derive(Clone)]
 pub struct LlmRuntimeService {
-    model_resolver: Arc<dyn LlmRuntimeModelResolver>,
-    client: Arc<dyn LlmRuntimeClient>,
+    pub(super) model_resolver: Arc<dyn LlmRuntimeModelResolver>,
+    pub(super) client: Arc<dyn LlmRuntimeClient>,
 }
 
 impl LlmRuntimeService {
@@ -69,6 +69,74 @@ impl LlmRuntimeService {
         })
     }
 
+    /// Pin the existing resolved model before indexing any document chunks.
+    pub fn resolve_embedding_index_model_code(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+    ) -> Result<String, LlmRuntimeError> {
+        let config = self.resolve_embedding_model_config(workspace, model)?;
+        Ok(config.model_code)
+    }
+
+    /// Stable, secret-free identity for a concrete locally indexed vector space.
+    pub fn embedding_space_fingerprint(
+        &self,
+        workspace: &str,
+        model: Option<&str>,
+        dimensions: usize,
+    ) -> Result<String, LlmRuntimeError> {
+        use sha2::{Digest, Sha256};
+        let config = self.resolve_embedding_model_config(workspace, model)?;
+        let identity = serde_json::to_vec(&(
+            &config.model_code,
+            &config.model_name,
+            config.protocol,
+            &config.base_url,
+            &config.api_path,
+            dimensions,
+            "knowledge-base-local-v1",
+        ))
+        .map_err(|error| LlmRuntimeError::invalid_provider_response(error.to_string()))?;
+        Ok(format!("{:x}", Sha256::digest(identity)))
+    }
+
+    pub async fn embedding_query_in_run(
+        &self,
+        command: LlmEmbeddingCallCommand,
+        dimensions: usize,
+        run: &eliteforge_agent_core::RunContext,
+    ) -> Result<LlmEmbeddingCallResult, LlmRuntimeError> {
+        let workspace =
+            required_trimmed(command.workspace_code, LlmRuntimeError::WorkspaceRequired)?;
+        let input = required_trimmed(command.input, LlmRuntimeError::InputRequired)?;
+        let model = optional_trimmed(command.model_code);
+        let config = self.resolve_embedding_model_config(&workspace, model.as_deref())?;
+        if let Some(allowance) = run.extensions.get::<ContextQueryAllowance>() {
+            allowance
+                .admit()
+                .map_err(LlmRuntimeError::provider_failed)?;
+        }
+        let (embedding, provider_model) = self
+            .client
+            .embed_query_with_model_in_run(&config, &input, dimensions, run)
+            .await
+            .map_err(LlmRuntimeError::provider_failed)?;
+        if dimensions == 0
+            || embedding.len() != dimensions
+            || embedding.iter().any(|value| !value.is_finite())
+        {
+            return Err(LlmRuntimeError::invalid_provider_response(
+                "query embedding does not match index space",
+            ));
+        }
+        Ok(LlmEmbeddingCallResult {
+            model_code: config.model_code,
+            provider_model,
+            embedding,
+        })
+    }
+
     pub async fn embedding_call(
         &self,
         command: LlmEmbeddingCallCommand,
@@ -80,9 +148,19 @@ impl LlmRuntimeService {
         let config =
             self.resolve_embedding_model_config(workspace_code.as_str(), model_code.as_deref())?;
 
-        let embedding = self.embed_chunk(&config, input.as_str(), None).await?;
+        let (embedding, provider_model) = self
+            .client
+            .embed_with_model(&config, &input)
+            .await
+            .map_err(LlmRuntimeError::provider_failed)?;
+        if embedding.is_empty() {
+            return Err(LlmRuntimeError::invalid_provider_response(
+                "embedding response contained an empty vector",
+            ));
+        }
         Ok(LlmEmbeddingCallResult {
             model_code: config.model_code,
+            provider_model,
             embedding,
         })
     }
@@ -231,4 +309,40 @@ fn optional_trimmed(value: Option<String>) -> Option<String> {
 
 fn map_model_error(error: ModelError) -> LlmRuntimeError {
     LlmRuntimeError::model_resolution(error.to_string())
+}
+
+/// Query retrieval shares the existing context auxiliary allowance.
+#[derive(Clone)]
+pub(crate) struct ContextQueryAllowance {
+    pub calls: Arc<std::sync::atomic::AtomicUsize>,
+    pub limit: usize,
+}
+impl ContextQueryAllowance {
+    fn admit(&self) -> Result<(), String> {
+        use std::sync::atomic::Ordering;
+        self.calls
+            .fetch_update(Ordering::AcqRel, Ordering::Acquire, |calls| {
+                (calls < self.limit).then(|| calls + 1)
+            })
+            .map(|_| ())
+            .map_err(|_| "shared context auxiliary call allowance exhausted".into())
+    }
+}
+
+#[cfg(test)]
+mod context_query_allowance_tests {
+    use super::*;
+    #[test]
+    fn query_and_context_reducers_share_a_single_ceiling() {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let calls = Arc::new(AtomicUsize::new(1));
+        let query = ContextQueryAllowance {
+            calls: calls.clone(),
+            limit: 2,
+        };
+        query.admit().unwrap();
+        assert_eq!(calls.load(Ordering::Acquire), 2);
+        assert!(query.admit().is_err());
+        assert!(ContextQueryAllowance { calls, limit: 0 }.admit().is_err());
+    }
 }

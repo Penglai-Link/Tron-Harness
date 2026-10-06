@@ -396,6 +396,7 @@ impl ContextProvidersFileConfig {
     fn apply_to(self, config: &mut crate::application::short_term_memory::ContextProvidersConfig) {
         if let Some(order) = self.order {
             config.order = order;
+            config.normalize_legacy_order();
         }
         if let Some(policy) = self.checkpoint {
             policy.apply_to(&mut config.checkpoint);

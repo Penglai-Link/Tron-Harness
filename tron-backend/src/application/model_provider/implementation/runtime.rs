@@ -13,6 +13,22 @@ impl ProviderAwareLlmRuntimeResolver {
 }
 
 impl LlmRuntimeModelResolver for ProviderAwareLlmRuntimeResolver {
+    fn vision_cache_identity(&self) -> Result<Option<String>, ModelError> {
+        // Stable account identity across process restarts; never hash or persist credentials.
+        let connection = self.providers.connection.lock().map_err(|_| ModelError::StorageFailure)?;
+        let row = read_connection(&connection, ModelProviderCode::PersonAi).map_err(|_| ModelError::StorageFailure)?.ok_or(ModelError::StorageFailure)?;
+        let account = row.person_ai_user_id.filter(|id| !id.trim().is_empty()).ok_or(ModelError::StorageFailure)?;
+        let identity = serde_json::to_vec(&(row.provider_code.storage_value(), account, row.server_base_url)).map_err(|_| ModelError::StorageFailure)?;
+        use sha2::{Digest, Sha256};
+        Ok(Some(format!("{:x}", Sha256::digest(identity))))
+    }
+
+    fn vision_runtime_model_config(&self, workspace: &str, model: &str) -> Result<Option<RuntimeModelConfig>, ModelError> {
+        // A concrete High-quality model makes description cache lineage stable. No silent Auto fallback.
+        if !model.starts_with("PERSON_AI:FIXED:High:") { return Ok(None); }
+        self.providers.text_runtime_model_config(workspace, Some(model)).map_err(|_| ModelError::StorageFailure)
+    }
+
     fn embedding_runtime_model_config(
         &self,
         workspace_code: &str,
@@ -60,10 +76,10 @@ pub(super) fn person_ai_agent_config(
         protocol,
         base_url: "https://person-ai.invalid".into(),
         api_path: Some(
-            if protocol == AgentModelProtocol::Responses {
-                "responses"
-            } else {
-                "chat/completions"
+            match protocol {
+                AgentModelProtocol::Responses => "responses",
+                AgentModelProtocol::ChatCompletions => "chat/completions",
+                AgentModelProtocol::Embeddings => "embeddings",
             }
             .into(),
         ),

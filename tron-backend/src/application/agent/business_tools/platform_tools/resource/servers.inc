@@ -29,7 +29,7 @@ impl Tool for ServerCreateTool {
         let input: ServerCreateInput = parse_tool_input(request.input)?;
         let actor_user_code = required_actor(context)?.to_string();
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
-        let resources = self.resources.clone();
+        let resources = self.resources.for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code);
         let output = run_resource_future(async move {
             resources
                 .create_server_for_http(
@@ -79,6 +79,7 @@ impl Tool for ServerAccountCreateTool {
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
         let output = self
             .resources
+            .for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code)
             .create_server_account_for_http(
                 actor_user_code,
                 ServerAccountCreateCommand {

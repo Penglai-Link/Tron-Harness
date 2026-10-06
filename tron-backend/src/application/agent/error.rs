@@ -1,3 +1,5 @@
+use crate::domain::variable::VariableError;
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum AgentInvocationError {
     PromptRequired,
@@ -9,6 +11,7 @@ pub enum AgentInvocationError {
     SessionBusy(String),
     RuntimeFailed(String),
     RuntimeSecretDeliveryUntrusted,
+    RuntimeVariableResolutionFailed(VariableError),
     ModelFailed(String),
     ToolFailed(String),
     EmptyFinalOutput(String),
@@ -28,6 +31,14 @@ impl AgentInvocationError {
             Self::SessionBusy(_) => "RUN_ALREADY_ACTIVE",
             Self::RuntimeFailed(_) => "AGENT_RUNTIME_FAILED",
             Self::RuntimeSecretDeliveryUntrusted => "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",
+            Self::RuntimeVariableResolutionFailed(error) => match error {
+                VariableError::DecryptFailed => "VARIABLE_RUNTIME_DECRYPT_FAILED",
+                VariableError::EncryptionNotConfigured => {
+                    "VARIABLE_RUNTIME_ENCRYPTION_NOT_CONFIGURED"
+                }
+                VariableError::StorageFailure => "VARIABLE_RUNTIME_STORAGE_FAILED",
+                _ => "VARIABLE_RUNTIME_RESOLUTION_FAILED",
+            },
             Self::ModelFailed(_) => "AGENT_MODEL_FAILED",
             Self::ToolFailed(_) => "AGENT_TOOL_FAILED",
             Self::EmptyFinalOutput(_) => "AGENT_EMPTY_FINAL_OUTPUT",
@@ -51,6 +62,9 @@ impl AgentInvocationError {
             | Self::EmptyFinalOutput(message) => message.clone(),
             Self::RuntimeSecretDeliveryUntrusted => {
                 "Sensitive runtime variable delivery is not trusted".into()
+            }
+            Self::RuntimeVariableResolutionFailed(error) => {
+                format!("runtime variables could not be resolved: {error}")
             }
             Self::MaxStepsExceeded => "agent run exceeded max steps".into(),
             Self::MaxToolCallsExceeded => "agent run exceeded max tool calls".into(),

@@ -1,6 +1,6 @@
 use async_trait::async_trait;
 use eliteforge_agent_core as fw;
-use eliteforge_agent_framework::{ChatModelJob, ModelJobClient};
+
 use eliteforge_agent_official_plugin_model_http as sdk;
 use std::{future::Future, pin::Pin, sync::Arc};
 
@@ -43,71 +43,79 @@ pub(crate) fn limits(config: &AgentModelConfig) -> fw::RunLimits {
 #[derive(Clone)]
 pub struct HttpModelClient {
     pub(crate) factory: Arc<dyn sdk::ModelTransportFactory>,
-    pub(crate) jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
+    pub(crate) executor: Arc<eliteforge_agent_framework::ModelClient>,
 }
 impl HttpModelClient {
     pub fn new(factory: Arc<dyn sdk::ModelTransportFactory>) -> Self {
         Self {
             factory,
-            jobs: Arc::new(Default::default()),
+            executor: Arc::default(),
         }
     }
-    pub fn with_jobs(mut self, jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>) -> Self {
-        self.jobs = jobs;
+    pub fn with_model_executor(
+        mut self,
+        executor: Arc<eliteforge_agent_framework::ModelClient>,
+    ) -> Self {
+        self.executor = executor;
         self
     }
-    pub(crate) async fn jobs(&self) -> Result<&ModelJobClient, String> {
-        self.jobs.get().await.map_err(error)
-    }
-    fn build_job(
+    pub(crate) fn scoped_factory(
         &self,
         config: &AgentModelConfig,
-        request: &ModelRequest,
-        repair: Option<Arc<dyn eliteforge_agent_framework::ModelJobRepair>>,
-        max_calls: usize,
-    ) -> Result<ChatModelJob, fw::AgentError> {
-        let fail = |message| fw::AgentError::InvalidConfiguration(message);
-        let wire = sdk_config(config).map_err(fail)?;
-        let mut input = sdk::request_to_framework(convert(request).map_err(fail)?)?;
-        input.options.temperature = config.temperature;
-        input.options.top_p = config.top_p;
-        input.options.max_output_tokens = config.max_tokens.filter(|v| *v > 0);
-        let factory = Arc::new(sdk::ScopedModelTransportFactory::new(
+    ) -> Result<Arc<dyn sdk::ModelTransportFactory>, fw::AgentError> {
+        Ok(Arc::new(sdk::ScopedModelTransportFactory::new(
             self.factory.clone(),
-            &convert(config).map_err(fail)?,
-        )?);
-        let descriptor = sdk::model_descriptor(&wire);
-        let reference = fw::ModelRef::new("http-model", &wire.model_code);
-        Ok(ChatModelJob {
-            workflow: None,
-            connection: fw::ModelConnection::new(
-                &reference.connection,
-                Arc::new(sdk::ProtocolChatModel {
-                    config: wire.clone(),
-                    factory,
-                    streaming: false,
-                }),
-                vec![descriptor],
-            )
-            .with_protocol(sdk::model_protocol(&wire)),
-            model: reference,
-            request: input,
-            limits: limits(config),
-            stage: "host.stateless".into(),
-            max_calls,
-            repair,
-        })
+            &convert(config).map_err(fw::AgentError::InvalidConfiguration)?,
+        )?))
     }
-    pub(crate) async fn job_observed(
+    fn chat_binding(
+        &self,
+        config: &AgentModelConfig,
+    ) -> Result<(eliteforge_agent_framework::ModelClient, fw::ModelRef), fw::AgentError> {
+        let wire = sdk_config(config).map_err(fw::AgentError::InvalidConfiguration)?;
+        let reference = fw::ModelRef::new("http-model", &wire.model_code);
+        let connection = fw::ModelConnection::new(
+            &reference.connection,
+            Arc::new(sdk::ProtocolChatModel {
+                config: wire.clone(),
+                factory: self.scoped_factory(config)?,
+                streaming: false,
+            }),
+            vec![sdk::model_descriptor(&wire)],
+        )
+        .with_protocol(sdk::model_protocol(&wire));
+        let runtime = eliteforge_agent_framework::ModelRuntime::new(
+            eliteforge_agent_framework::ModelRuntimeUpdate::new("http-model", 0, vec![connection]),
+        )?;
+        Ok((self.executor.with_runtime(runtime), reference))
+    }
+    pub(crate) async fn invoke_observed(
         &self,
         config: &AgentModelConfig,
         request: &ModelRequest,
-        repair: Option<Arc<dyn eliteforge_agent_framework::ModelJobRepair>>,
+        validator: Option<Arc<dyn fw::ModelResponseValidator>>,
         max_calls: usize,
         parent: Option<&fw::RunContext>,
     ) -> eliteforge_agent_framework::ObservedModelResult<ModelResponse> {
-        let job = match self.build_job(config, request, repair, max_calls) {
-            Ok(job) => job,
+        let prepared = self.chat_binding(config).and_then(|(client, reference)| {
+            let mut input = sdk::request_to_framework(
+                convert(request).map_err(fw::AgentError::InvalidConfiguration)?,
+            )?;
+            input.options.temperature = config.temperature;
+            input.options.top_p = config.top_p;
+            input.options.max_output_tokens = config.max_tokens.filter(|v| *v > 0);
+            let mut effective = limits(config);
+            effective.max_model_calls_per_step = Some(max_calls);
+            let client = match parent {
+                Some(parent) => {
+                    client.with_options(fw::ModelInvocationOptions::for_run(parent, &effective))
+                }
+                None => client,
+            };
+            Ok((client, reference, input, effective))
+        });
+        let (client, reference, input, effective) = match prepared {
+            Ok(value) => value,
             Err(error) => {
                 return eliteforge_agent_framework::ObservedModelResult {
                     result: Err(error),
@@ -115,18 +123,23 @@ impl HttpModelClient {
                 };
             }
         };
-        let jobs = match self.jobs.get().await {
-            Ok(jobs) => jobs,
-            Err(error) => {
-                return eliteforge_agent_framework::ObservedModelResult {
-                    result: Err(error),
-                    report: Default::default(),
-                };
+        let observed = match validator {
+            Some(validator) => {
+                client
+                    .chat_with_validator_observed(
+                        &reference,
+                        input,
+                        &effective,
+                        "host.stateless",
+                        validator,
+                    )
+                    .await
             }
-        };
-        let observed = match parent {
-            Some(parent) => jobs.execute_child_observed(job, parent).await,
-            None => jobs.execute_observed(job).await,
+            None => {
+                client
+                    .chat_observed(&reference, input, &effective, "host.stateless")
+                    .await
+            }
         };
         eliteforge_agent_framework::ObservedModelResult {
             result: observed
@@ -138,14 +151,14 @@ impl HttpModelClient {
             report: observed.report,
         }
     }
-    pub(crate) async fn job(
+    pub(crate) async fn invoke(
         &self,
         config: &AgentModelConfig,
         request: &ModelRequest,
-        repair: Option<Arc<dyn eliteforge_agent_framework::ModelJobRepair>>,
+        validator: Option<Arc<dyn fw::ModelResponseValidator>>,
         max_calls: usize,
     ) -> Result<ModelResponse, String> {
-        self.job_observed(config, request, repair, max_calls, None)
+        self.invoke_observed(config, request, validator, max_calls, None)
             .await
             .into_result()
             .map_err(error)
@@ -204,7 +217,7 @@ impl ModelClient for HttpModelClient {
                 sdk::ScopedModelTransportFactory::new(self.factory.clone(), &convert(config)?)
                     .map_err(|e| sdk::encode_model_error(&e))?,
             ),
-            jobs: self.jobs.clone(),
+            executor: self.executor.clone(),
         })))
     }
     fn authorization_scope(&self, config: &AgentModelConfig) -> Result<Option<String>, String> {
@@ -221,7 +234,7 @@ impl ModelClient for HttpModelClient {
                 + 'a,
         >,
     > {
-        Box::pin(async move { Ok(self.jobs.close_observed().await) })
+        Box::pin(async move { Ok(self.executor.close_observed().await) })
     }
     fn generate_observed<'a>(
         &'a self,
@@ -235,7 +248,7 @@ impl ModelClient for HttpModelClient {
         >,
     > {
         Box::pin(async move {
-            self.job_observed(
+            self.invoke_observed(
                 config,
                 request,
                 None,
@@ -249,7 +262,7 @@ impl ModelClient for HttpModelClient {
         &'a self,
         config: &'a AgentModelConfig,
         request: &'a ModelRequest,
-        repair: Arc<dyn eliteforge_agent_framework::ModelJobRepair>,
+        repair: Arc<dyn eliteforge_agent_core::ModelResponseValidator>,
         max_calls: usize,
         parent: &'a fw::RunContext,
     ) -> Pin<
@@ -260,7 +273,7 @@ impl ModelClient for HttpModelClient {
         >,
     > {
         Box::pin(async move {
-            self.job_observed(config, request, Some(repair), max_calls, Some(parent))
+            self.invoke_observed(config, request, Some(repair), max_calls, Some(parent))
                 .await
         })
     }
@@ -278,37 +291,24 @@ impl ModelClient for HttpModelClient {
         >,
     > {
         Box::pin(async move {
-            let wire = sdk_config(config)?;
-            let job = ChatModelJob {
-                workflow: Some(Arc::new(MemoryWorkflow {
-                    history: history.to_vec(),
-                    previous: previous_summary.map(str::to_owned),
-                })),
-                connection: fw::ModelConnection::new(
-                    "memory",
-                    Arc::new(sdk::ProtocolChatModel {
-                        config: wire.clone(),
-                        factory: self.factory.clone(),
-                        streaming: false,
-                    }),
-                    vec![sdk::model_descriptor(&wire)],
-                ),
-                model: fw::ModelRef::new("memory", &wire.model_code),
-                request: fw::ChatRequest {
-                    messages: vec![],
-                    tools: vec![],
-                    extensions: Default::default(),
-                    options: Default::default(),
-                },
-                limits: fw::RunLimits {
-                    max_model_calls_per_step: Some(17),
-                    ..limits(config)
-                },
-                stage: "memory.compaction".into(),
-                max_calls: 16,
-                repair: None,
+            let (client, reference) = self.chat_binding(config).map_err(error)?;
+            let effective = fw::RunLimits {
+                max_model_calls_per_step: Some(16),
+                ..limits(config)
             };
-            let response = self.jobs().await?.execute(job).await.map_err(error)?;
+            let response = client
+                .workflow_observed(
+                    &reference,
+                    Arc::new(MemoryWorkflow {
+                        history: history.to_vec(),
+                        previous: previous_summary.map(str::to_owned),
+                    }),
+                    &effective,
+                    "memory.compaction",
+                )
+                .await
+                .into_result()
+                .map_err(error)?;
             eliteforge_agent_memory::MemoryCompactionResult::from_chat_response(response)
                 .map_err(error)
         })
@@ -324,7 +324,7 @@ impl ModelClient for HttpModelClient {
         request: &'a ModelRequest,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
         Box::pin(async move {
-            self.job(
+            self.invoke(
                 config,
                 request,
                 None,
@@ -391,17 +391,17 @@ impl ModelClient for HttpModelClient {
     }
     fn close<'a>(&'a self) -> Pin<Box<dyn Future<Output = ()> + Send + 'a>> {
         Box::pin(async move {
-            self.jobs.close().await;
+            self.executor.close().await;
         })
     }
     fn generate_with_repair<'a>(
         &'a self,
         config: &'a AgentModelConfig,
         request: &'a ModelRequest,
-        repair: Arc<dyn eliteforge_agent_framework::ModelJobRepair>,
+        repair: Arc<dyn eliteforge_agent_core::ModelResponseValidator>,
         max_calls: usize,
     ) -> Pin<Box<dyn Future<Output = Result<ModelResponse, String>> + Send + 'a>> {
-        Box::pin(async move { self.job(config, request, Some(repair), max_calls).await })
+        Box::pin(async move { self.invoke(config, request, Some(repair), max_calls).await })
     }
 }
 

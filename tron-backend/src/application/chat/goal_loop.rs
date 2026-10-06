@@ -487,7 +487,7 @@ struct GoalJudgeRepair {
     last_failure: std::sync::Mutex<Option<GoalJudgeFailure>>,
 }
 #[async_trait::async_trait]
-impl eliteforge_agent_framework::ModelJobRepair for GoalJudgeRepair {
+impl eliteforge_agent_core::ModelResponseValidator for GoalJudgeRepair {
     async fn validate(
         &self,
         response: &eliteforge_agent_core::ChatResponse,

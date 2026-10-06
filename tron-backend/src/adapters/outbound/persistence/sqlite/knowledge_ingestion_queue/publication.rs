@@ -1,0 +1,78 @@
+//! Atomic activation of one complete product generation.
+use super::*;
+
+impl SqliteKnowledgeIngestionQueue {
+    pub(super) fn publish_generation(
+        &self,
+        lease: &IngestionLease,
+        now: i64,
+        ready: &Value,
+    ) -> Result<(), IngestionQueueError> {
+        let mut conn = self.connection.lock().map_err(storage)?;
+        let tx = conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)
+            .map_err(storage)?;
+        let mut task = leased(&tx, lease, now)?;
+        if task.stage != IngestionStage::Publishing
+            || ready["id"].as_str() != Some(task.document_id.as_str())
+            || ready["resourceRevision"].as_u64() != Some(task.resource_revision)
+            || ready["activeSourceCode"].as_str() != Some(task.generation_source_code().as_str())
+        {
+            return Err(IngestionQueueError::Conflict);
+        }
+        let current = document(&tx, &task)?;
+        if ready["resourceCode"] != current["resourceCode"] {
+            return Err(IngestionQueueError::Conflict);
+        }
+        // The product owns this fixed embedded layout. Promote all rows and retire
+        // the previous whole generation in the same transaction as the pointer.
+        if !task
+            .knowledge_base_id
+            .bytes()
+            .all(|c| c.is_ascii_alphanumeric() || c == b'_')
+        {
+            return Err(IngestionQueueError::Invalid("Invalid corpus ID".into()));
+        }
+        let table = format!("\"rag_{}_units\"", task.knowledge_base_id);
+        let source = ready["activeSourceCode"].as_str().unwrap();
+        let count: usize = tx
+            .query_row(
+                &format!(
+                    "SELECT count(*) FROM {table} WHERE source_code=?1 AND source_status='STAGING'"
+                ),
+                [source],
+                |r| r.get(0),
+            )
+            .map_err(storage)?;
+        if count == 0 || ready["chunkCount"].as_u64() != Some(count as u64) {
+            return Err(IngestionQueueError::Conflict);
+        }
+        publication_indexes::validate_vectors(&tx, &task.knowledge_base_id, source, count)?;
+        publication_indexes::retire_indexes(
+            &tx,
+            &task.knowledge_base_id,
+            current["activeSourceCode"].as_str().unwrap_or(""),
+        )?;
+        tx.execute(
+            &format!(
+                "UPDATE {table} SET source_status='INACTIVE',status='INACTIVE' WHERE source_code=?1"
+            ),
+            [current["activeSourceCode"].as_str().unwrap_or("")],
+        )
+        .map_err(storage)?;
+        tx.execute(&format!("UPDATE {table} SET source_status='ACTIVE',status='ACTIVE' WHERE source_code=?1 AND source_status='STAGING'"), [source]).map_err(storage)?;
+        let mut ready = ready.clone();
+        ready["status"] = "READY".into();
+        ready["error"] = Value::Null;
+        ready["revision"] = (task.document_revision + 1).into();
+        let changed = tx.execute("UPDATE knowledge_base_documents SET payload_json=?1,revision=revision+1 WHERE id=?2 AND knowledge_base_id=?3 AND revision=?4",
+            params![ready.to_string(),task.document_id,task.knowledge_base_id,task.document_revision]).map_err(storage)?;
+        if changed != 1 {
+            return Err(IngestionQueueError::Conflict);
+        }
+        task.state = "READY".into();
+        clear_lease(&mut task);
+        write(&tx, &task)?;
+        tx.commit().map_err(storage)
+    }
+}

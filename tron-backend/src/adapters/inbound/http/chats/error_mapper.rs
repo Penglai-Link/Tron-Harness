@@ -266,6 +266,11 @@ fn agent_error_response(error: AgentInvocationError) -> Response {
         AgentInvocationError::RuntimeFailed(message) => {
             (StatusCode::BAD_REQUEST, "AGENT_RUNTIME_FAILED", message)
         }
+        error @ AgentInvocationError::RuntimeVariableResolutionFailed(_) => (
+            StatusCode::INTERNAL_SERVER_ERROR,
+            error.code(),
+            error.message(),
+        ),
         AgentInvocationError::RuntimeSecretDeliveryUntrusted => (
             StatusCode::BAD_REQUEST,
             "VARIABLE_RUNTIME_SECRET_DELIVERY_UNTRUSTED",

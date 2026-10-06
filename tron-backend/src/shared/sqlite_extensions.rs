@@ -228,6 +228,9 @@ pub fn sqlite_simple_tokenizer_available(connection: &Connection) -> bool {
     probe_simple_tokenizer(connection)
 }
 
+// Product embedding index space matches the configured singleton bge-m3 model.
+pub const TRON_VECTOR_INDEX_DIMENSION: usize = 1024;
+
 pub fn sqlite_vec_available(connection: &Connection) -> bool {
     probe_vec_version(connection).is_some()
 }

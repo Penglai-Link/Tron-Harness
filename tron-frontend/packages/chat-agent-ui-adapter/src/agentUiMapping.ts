@@ -1,5 +1,5 @@
 import * as Ui from "@eliteforge/agent-ui-chat-core";
-import { FetchTransportError, sessionAgentTagLabel, type ChatSession, type ChatMessage, type ChatMessageAttachment, type ChatSendResult, type ChatUserInputRequest, type ChatUserInputAnswer, type ChatAguiStreamEvent, type SendChatMessageInput } from "@tron/chat-core";
+import { FetchTransportError, isChatSendResult, sessionAgentTagLabel, type ChatSession, type ChatMessage, type ChatMessageAttachment, type ChatSendResult, type ChatUserInputRequest, type ChatUserInputAnswer, type ChatAguiStreamEvent, type SendChatMessageInput } from "@tron/chat-core";
 
 /** Product fields remain host-owned; the public UI only reads its neutral contract. */
 interface MappedSession extends Ui.ChatSession {
@@ -101,7 +101,22 @@ const eventNames: Record<string, string> = {
   "tron.short_term_memory.compaction.completed": "agent.memory.compaction.completed",
   "tron.short_term_memory.compaction.failed": "agent.memory.compaction.failed",
 };
-export function toUiEvent(event: ChatAguiStreamEvent): Ui.ChatAguiStreamEvent {
+type ProtocolEvent = Pick<ChatAguiStreamEvent, "type" | "outcome" | "threadId" | "runId" | "timestamp"> & {
+  result?: unknown;
+  [key: string]: unknown;
+};
+
+function mapProtocolResult(event: ProtocolEvent, result: unknown): unknown {
+  const productCompletion = event.productCompletion === true && !isRecord(event.productCompletionError)
+    && (event.type === "RUN_FINISHED" || result !== undefined);
+  // Unmarked native JSON may use these keys too; only a valid product envelope is legacy.
+  const validProduct = isChatSendResult(result);
+  if (!productCompletion && !validProduct) return result;
+  if (!validProduct) throw new Error("Invalid product completion result");
+  return toUiResult(result);
+}
+
+export function toUiEvent(event: ProtocolEvent): Ui.ChatAguiStreamEvent {
   const { result, ...rest } = event;
   return { ...rest, ...(typeof event.name === "string" ? { name: eventNames[event.name] ?? event.name } : {}),
     outcome: event.outcome?.type === "interrupt" ? {
@@ -110,7 +125,7 @@ export function toUiEvent(event: ChatAguiStreamEvent): Ui.ChatAguiStreamEvent {
         ...entry, metadata: entry.metadata ? mapQuestionMetadata(entry.metadata) : entry.metadata,
       })),
     } : event.outcome,
-    result: result ? toUiResult(result) : undefined };
+    result: mapProtocolResult(event, result) };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

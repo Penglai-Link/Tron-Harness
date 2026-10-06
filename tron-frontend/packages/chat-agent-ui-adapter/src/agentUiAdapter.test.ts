@@ -1,7 +1,9 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatAdapterError } from "@eliteforge/agent-ui-chat-core";
 import { createMockChatAdapter, FetchTransportError, type ChatSession, type SendChatMessageInput } from "@tron/chat-core";
 import { createAgentUiAdapter } from "./agentUiAdapter";
+import { createInternalChatAdapter } from "../../chat-internal-adapter/src/index";
+import type { ChatAguiStreamEvent as UiProtocolEvent } from "@eliteforge/agent-ui-chat-core";
 import { fromUiInput, fromUiResume, fromUiSession, toUiAttachment, fromUiAttachment, toUiEvent, toUiInput, toUiSession } from "./agentUiMapping";
 
 const session = {
@@ -98,4 +100,136 @@ it.each([true,false,{answers:[true],count:2}])("keeps native resume payload %j t
   const resume=[{interruptId:"SDK-NATIVE",status:"resolved" as const,payload}];
   await adapter.answerUserInputRequestStream!(toUiSession(session),"SDK-NATIVE",{answers:[],resume});
   expect(host.answerUserInputRequestStream).toHaveBeenCalledWith(session,"SDK-NATIVE",{answers:[],resume},expect.anything(),undefined);
+});
+
+
+describe("native protocol result boundary", () => {
+  afterEach(() => vi.unstubAllGlobals());
+  const nativeResult = {
+    output: "Input required", content: [{ type: "text", text: "Input required" }],
+    structured: { nested: { runCode: "opaque-user-data" } },
+    interactions: [{ id: "SDK-INPUT", kind: "Input", prompt: [{ type: "text", text: "Continue?" }], response_schema: { type: "boolean" } }],
+    status: "AwaitingInput", usage: { input_tokens: 10, output_tokens: 3, total_tokens: 13 }, steps: 1, tool_calls: 1,
+  };
+  const nativeTerminal = {
+    type: "RUN_FINISHED", runId: "ROOT", threadId: "SESSION", timestamp: 20,
+    outcome: { type: "interrupt" as const, interrupts: [{ id: "SDK-INPUT", reason: "input_required", responseSchema: { type: "boolean" } }] },
+    result: nativeResult,
+    metadata: { framework: { executionId: "EXECUTION", sourceSequence: 16 }, tron: { eventId: "native:EXECUTION:16:0" } },
+  };
+  const productResult = {
+    session, run: { runCode: "ROOT", workspaceCode: "WORKSPACE", status: "AWAITING_USER_INPUT" as const, finalOutput: "Input required", stepCount: 1 },
+    messages: [], userInputRequest: null,
+  };
+
+  const message = { messageCode: "MESSAGE", sessionCode: "SESSION", role: "ASSISTANT", channel: "FINAL" };
+  const invalidConsumedResults = [
+    { name: "session status", result: { ...productResult, session: { ...session, status: 1 } } },
+    { name: "last run status", result: { ...productResult, session: { ...session, lastRunStatus: {} } } },
+    { name: "source type", result: { ...productResult, session: { ...session, sourceType: false } } },
+    { name: "agent code", result: { ...productResult, session: { ...session, agentCode: [] } } },
+    { name: "run status", result: { ...productResult, run: { ...productResult.run, status: 1 } } },
+    { name: "message role", result: { ...productResult, messages: [{ ...message, role: 1 }] } },
+    { name: "message channel", result: { ...productResult, messages: [{ ...message, channel: {} }] } },
+    { name: "attachments array", result: { ...productResult, messages: [{ ...message, attachments: 1 }] } },
+    { name: "attachment entry", result: { ...productResult, messages: [{ ...message, attachments: [null] }] } },
+    { name: "request object", result: { ...productResult, userInputRequest: 1 } },
+    { name: "questions array", result: { ...productResult, userInputRequest: { questions: null } } },
+    { name: "question entry", result: { ...productResult, userInputRequest: { questions: [null] } } },
+    { name: "options array", result: { ...productResult, userInputRequest: { questions: [{ options: 1 }] } } },
+    { name: "option entry", result: { ...productResult, userInputRequest: { questions: [{ options: [null] }] } } },
+    { name: "answers array", result: { ...productResult, userInputRequest: { questions: [], answers: {} } } },
+    { name: "answer entry", result: { ...productResult, userInputRequest: { questions: [], answers: [null] } } },
+  ];
+
+  it.each(invalidConsumedResults)("preserves opaque $name and rejects the same marked product shape", ({ result }) => {
+    expect(toUiEvent({ ...nativeTerminal, result }).result).toBe(result);
+    expect(() => toUiEvent({ ...nativeTerminal, productCompletion: true, result })).toThrow("Invalid product completion result");
+  });
+
+  it("loads opaque colliding consumer shapes through the real replay adapter", async () => {
+    const frames = invalidConsumedResults.flatMap(({ result }) => [
+      { ...nativeTerminal, result },
+      { ...nativeTerminal, type: "RUN_ERROR", code: "MODEL_PROVIDER_FAILED", result },
+    ]);
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "SUCCESS", data: frames.map((data) => ({ data, sseEvent: data.type })), message: "" }), { headers: { "Content-Type": "application/json" } })));
+    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    const replay = await adapter.loadProtocolEvents!("SESSION");
+    expect(replay).toHaveLength(frames.length);
+    replay.forEach((event, index) => {
+      expect(event.result).toEqual(frames[index].result);
+      expect(event.type).toBe(frames[index].type);
+    });
+  });
+
+  it("maps valid product collections and nullable optional strings", () => {
+    const result = {
+      ...productResult,
+      session: { ...session, sourceType: null, lastRunStatus: null, agentCode: null },
+      messages: [{ ...message, attachments: [{ resourceCode: "RESOURCE" }] }],
+      userInputRequest: { requestCode: "REQUEST", sessionCode: "SESSION", runCode: "ROOT", questions: [{ questionCode: "QUESTION", options: [{ optionCode: "OPTION" }] }], answers: [{ questionCode: "QUESTION", optionCode: "OPTION" }] },
+    };
+    expect(toUiEvent({ ...nativeTerminal, productCompletion: true, result }).result).toMatchObject({
+      session: { sessionId: "SESSION" },
+      messages: [{ messageId: "MESSAGE", attachments: [{ resourceId: "RESOURCE" }] }],
+      userInputRequest: { requestId: "REQUEST", questions: [{ questionId: "QUESTION", options: [{ optionId: "OPTION" }] }], answers: [{ questionId: "QUESTION", optionId: "OPTION" }] },
+    });
+  });
+
+  it("loads real native root and child terminal replay without treating opaque results as product DTOs", async () => {
+    const child = { ...nativeTerminal, runId: "CHILD", result: { ...nativeResult, status: "Completed", interactions: [] }, outcome: { type: "success" } };
+    const warning = { type: "RUN_ERROR", runId: "ROOT", threadId: "SESSION", code: "AGUI_STREAM_OVERFLOW", presentationIncomplete: true };
+    const incomplete = { type: "CUSTOM", runId: "ROOT", threadId: "SESSION", name: "tron.presentation.incomplete", value: { code: "AGENT_AGUI_REPLAY_INCOMPLETE" } };
+    const frames = [nativeTerminal, child, warning, incomplete];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: "SUCCESS", data: frames.map((data) => ({ data, sseEvent: data.type })), message: "" }), { headers: { "Content-Type": "application/json" } })));
+    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    const replay = await adapter.loadProtocolEvents!("SESSION");
+    expect(replay[0].result).toEqual(nativeResult);
+    expect(replay[0].outcome).toEqual(nativeTerminal.outcome);
+    expect(replay[0].metadata).toEqual(nativeTerminal.metadata);
+    expect(replay[1].result).toEqual(child.result);
+    expect(replay[1].runId).toBe("CHILD");
+    expect(replay[2]).toMatchObject(warning);
+    expect(replay[3]).toMatchObject(incomplete);
+  });
+
+  it("still maps actual product completion through the real SSE and UI adapters", async () => {
+    const frames = [{ type: "RUN_STARTED", runId: "ROOT", threadId: "SESSION" }, { ...nativeTerminal, productCompletion: true, result: productResult }];
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(frames.map((frame) => `event: ${frame.type}\ndata: ${JSON.stringify(frame)}\n\n`).join(""), { headers: { "Content-Type": "text/event-stream" } })));
+    const events: UiProtocolEvent[] = [];
+    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    const result = await adapter.streamMessage(toUiSession(session), toUiInput({ workspaceCode: "WORKSPACE", content: "Continue" }), { onAguiEvent: (event) => events.push(event) });
+    expect(result.run.runId).toBe("ROOT");
+    expect(result.session.sessionId).toBe("SESSION");
+    expect(events[1].result).toMatchObject({ run: { runId: "ROOT" }, session: { sessionId: "SESSION" } });
+    expect(events[1].productCompletion).toBe(true);
+  });
+
+  it.each([null, false, 0, "opaque", ["native"], { run: "arbitrary-native-json" }, { session: "native", run: "opaque", messages: [] }, { session: { sessionCode: "native" }, run: { runCode: "opaque" }, messages: [null] }].map((result) => ({ result })))("retains arbitrary AG-UI result JSON: $result", ({ result }) => {
+    expect(toUiEvent({ ...nativeTerminal, result }).result).toBe(result);
+  });
+
+  it.each([undefined, nativeResult, { session: "native", run: "opaque", messages: [] }, { ...productResult, messages: undefined }, { ...productResult, run: null }, { ...productResult, session: {} }, { ...productResult, messages: [null] }])("rejects malformed explicit product completion instead of treating it as native: %j", (result) => {
+    expect(() => toUiEvent({ ...nativeTerminal, productCompletion: true, result })).toThrow("Invalid product completion result");
+  });
+
+  it("reports lost product acknowledgment through the real SSE adapters without deleting the native result", async () => {
+    const failed = { ...nativeTerminal, productCompletion: true, presentationIncomplete: true, productCompletionError: { code: "CHAT_STREAM_COMPLETION_UNAVAILABLE", message: "Product acknowledgment unavailable" } };
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(`event: RUN_FINISHED\ndata: ${JSON.stringify(failed)}\n\n`, { headers: { "Content-Type": "text/event-stream" } })));
+    const events: UiProtocolEvent[] = [];
+    const adapter = createAgentUiAdapter(createInternalChatAdapter(), { workspaceCode: "WORKSPACE" });
+    await expect(adapter.streamMessage(toUiSession(session), toUiInput({ workspaceCode: "WORKSPACE", content: "Continue" }), { onAguiEvent: (event) => events.push(event) })).rejects.toMatchObject({ code: "CHAT_STREAM_COMPLETION_UNAVAILABLE" });
+    expect(events[0].result).toEqual(nativeResult);
+    expect(events[0].presentationIncomplete).toBe(true);
+    expect(events[0].productCompletionError).toEqual(failed.productCompletionError);
+  });
+
+  it("maps a legacy product envelope and preserves native acknowledgment failure details", () => {
+    expect(toUiEvent({ ...nativeTerminal, result: productResult }).result).toMatchObject({ run: { runId: "ROOT" } });
+    const failed = { ...nativeTerminal, productCompletion: true, presentationIncomplete: true, productCompletionError: { code: "CHAT_STREAM_COMPLETION_UNAVAILABLE" } };
+    const mapped = toUiEvent(failed);
+    expect(mapped.result).toBe(nativeResult);
+    expect(mapped.presentationIncomplete).toBe(true);
+    expect(mapped.productCompletionError).toEqual(failed.productCompletionError);
+  });
 });

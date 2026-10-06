@@ -1,5 +1,16 @@
 export type SystemConfigEffect = "hotUpdate" | "restart" | "migration";
-export type SystemConfigValue = string | number | boolean | string[] | null;
+export type SystemConfigValue = string | number | boolean | null | SystemConfigValue[] | { [key: string]: SystemConfigValue };
+
+export type MineruNodeConfig = {
+  id: string;
+  baseUrl: string;
+  enabled: boolean;
+  allowRemote: boolean;
+  capacity: number;
+  weight: number;
+  resourceGroup: string;
+  resourceGroupCapacity: number;
+};
 
 export interface SystemConfigItem {
   effect: SystemConfigEffect;

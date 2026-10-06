@@ -71,7 +71,7 @@ async fn retry_rebuilds_fulltext_and_vector_from_persisted_text_units() {
 
     let service = RagRetryIndexService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25)),
     );
 
     let result = service
@@ -125,7 +125,7 @@ async fn retry_rebuilds_fulltext_and_vector_from_persisted_search_text_when_avai
         "tu-retry-1",
         "Debug > Retry\nRetry can rebuild persisted text only.",
     );
-    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25));
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25));
 
     let result = RagRetryIndexService::new(repository, runtime.clone())
         .retry_index(RagRetryIndexRequest {
@@ -180,7 +180,7 @@ async fn retry_vector_uses_distinct_fulltext_carrier_search_text_when_rowids_div
         &database_url,
         "Debug > Retry\nRetry can rebuild persisted text only.",
     );
-    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25));
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25));
 
     let result = RagRetryIndexService::new(repository, runtime.clone())
         .retry_index(RagRetryIndexRequest {
@@ -247,7 +247,7 @@ async fn retry_vector_rebuild_supports_distinct_vector_storage_table() {
     let connection = open_prepared_connection(&database_url);
     connection
         .execute(
-            "DROP TABLE IF EXISTS rag_project_doc_text_units_vec_d4096",
+            "DROP TABLE IF EXISTS rag_project_doc_text_units_vec_d1024",
             [],
         )
         .unwrap();
@@ -255,7 +255,7 @@ async fn retry_vector_rebuild_supports_distinct_vector_storage_table() {
 
     let service = RagRetryIndexService::new(
         retry_repository,
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25)),
     );
 
     let result = service
@@ -283,14 +283,14 @@ async fn retry_vector_rebuild_supports_distinct_vector_storage_table() {
     assert_eq!(
         query_i64(
             &connection,
-            "SELECT COUNT(*) FROM rag_project_doc_vectors_vec_d4096"
+            "SELECT COUNT(*) FROM rag_project_doc_vectors_vec_d1024"
         ),
         1
     );
     assert_eq!(
         query_i64(
             &connection,
-            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'rag_project_doc_text_units_vec_d4096'"
+            "SELECT COUNT(*) FROM sqlite_schema WHERE name = 'rag_project_doc_text_units_vec_d1024'"
         ),
         0
     );
@@ -367,7 +367,7 @@ async fn search_trace_writes_lightweight_ttl_row_only_when_enabled() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(1.0, 0.0)),
     );
     service
         .search(search_request(false))
@@ -444,7 +444,7 @@ async fn rag_ingest_events_use_safe_payload_and_publish_failure_is_non_blocking(
     let service = RagIngestService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25)),
     )
     .with_event_bus(event_bus);
 
@@ -495,7 +495,7 @@ async fn rag_ingest_events_use_safe_payload_and_publish_failure_is_non_blocking(
     let failing_service = RagIngestService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25)),
     )
     .with_event_bus(failing_event_bus);
     let mut failing_request = ingest_request();
@@ -528,7 +528,7 @@ async fn rag_search_events_use_safe_payload_and_publish_failure_is_non_blocking(
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(1.0, 0.0)),
     )
     .with_event_bus(event_bus);
 
@@ -580,7 +580,7 @@ async fn rag_search_events_use_safe_payload_and_publish_failure_is_non_blocking(
     let failing_service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(1.0, 0.0)),
     )
     .with_event_bus(failing_event_bus);
     let mut failing_request = search_request(false);
@@ -612,7 +612,7 @@ async fn rag_retry_events_are_audit_only_and_include_terminal_failures() {
     .build();
     let service = RagRetryIndexService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25)),
     )
     .with_event_bus(event_bus);
 
@@ -654,7 +654,7 @@ async fn rag_retry_events_are_audit_only_and_include_terminal_failures() {
     .build();
     let failing_service = RagRetryIndexService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25)),
     )
     .with_event_bus(failing_event_bus);
     assert!(
@@ -849,7 +849,7 @@ async fn seed_project_doc_debug_fixture(database_url: &str) {
     seed_retry_fixture(database_url);
     let retry_service = RagRetryIndexService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.0, 0.0)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.0, 0.0)),
     );
     retry_service
         .retry_index(RagRetryIndexRequest {
@@ -1096,7 +1096,7 @@ async fn seed_search_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(1.0, 0.0)),
     );
     service.ingest(ingest_request()).await.unwrap();
 }
@@ -1109,8 +1109,8 @@ fn query_i64(connection: &Connection, sql: &str) -> i64 {
     connection.query_row(sql, [], |row| row.get(0)).unwrap()
 }
 
-fn embedding_4096(first: f32, second: f32) -> Vec<f32> {
-    let mut embedding = vec![0.0; 4096];
+fn embedding_1024(first: f32, second: f32) -> Vec<f32> {
+    let mut embedding = vec![0.0; 1024];
     embedding[0] = first;
     embedding[1] = second;
     embedding

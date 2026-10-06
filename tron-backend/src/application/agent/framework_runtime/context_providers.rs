@@ -16,6 +16,8 @@ use std::sync::Arc;
 #[path = "context_budget.rs"]
 mod context_budget;
 use context_budget::SharedSeedBudget;
+#[path = "knowledge_base_context.rs"]
+mod knowledge_base_context;
 
 pub(super) async fn assemble(
     input: &fw::ContextAssemblyInput<'_>,
@@ -111,7 +113,27 @@ pub(super) async fn assemble(
         block_budget(&caps.seed_prompt_prefix)?,
     );
     let seed_cap = fw::configured_block_budget(&seed, available)?.max_tokens;
+    let working_cap = fw::configured_block_budget(
+        &fw::ContextBlockConfig::new(
+            "current_session_working_state",
+            block_budget(&caps.current_session_working_state)?,
+        ),
+        available,
+    )?
+    .max_tokens;
+    let visual_enabled=host.harness.framework_knowledge_bases().is_some_and(|s|s.visual_context_enabled());
+    let knowledge_cap = if visual_enabled { available.max_tokens.min(16_000) } else { (working_cap / 2).min(1200) };
     let mut contributors: Vec<Arc<dyn fw::ContextContributor>> = Vec::new();
+    contributors.push(Arc::new(knowledge_base_context::KnowledgeBaseContributor {
+        service: host.harness.framework_knowledge_bases(),
+        user: context.user_code.clone(),
+        workspace: context.workspace_code.clone(),
+        agent: context.agent_code.clone(),
+        allowance: crate::application::llm::ContextQueryAllowance {
+            calls: calls.clone(),
+            limit: config.context.providers.max_auxiliary_calls_per_step,
+        },
+    }));
     let mut configs = std::collections::HashMap::new();
     configs.insert(
         "seed_prompt_prefix",
@@ -193,6 +215,10 @@ pub(super) async fn assemble(
         }
         configs.insert(id, block);
     }
+    let mut knowledge =
+        fw::ContextBlockConfig::new("knowledge_base", fw::BlockBudget::tokens(knowledge_cap));
+    knowledge.reducer = Arc::new(memory::BoundMultimodalData::default());
+    configs.insert("knowledge_base", knowledge);
     let mut block = fw::ContextBlockConfig::new(
         fw::HISTORY_BLOCK,
         fw::BlockBudget::tokens(plan.effective_input_budget as usize),
@@ -225,10 +251,15 @@ pub(super) async fn assemble(
             "context layout must include every mandatory and data block exactly once".into(),
         ));
     }
+    let base_policy: Arc<dyn fw::ContextBudgetPolicy> = Arc::new(SharedSeedBudget {
+        max_tokens: seed_cap, working_pool: Some(working_cap), knowledge_cap: (working_cap / 2).min(1200),
+    });
+    let policy: Arc<dyn fw::ContextBudgetPolicy> = if visual_enabled {
+        Arc::new(memory::BorrowHistoryForData { base:base_policy, block_id:"knowledge_base".into(), max_tokens:knowledge_cap,
+            protected_history_tokens:memory::required_recent_turn_tokens(&history.messages,input.model,input.estimator).await?, })
+    } else {base_policy};
     let assembler = fw::DefaultContextAssembler::new(fw::ContextLayout(layout), contributors)?
-        .with_policy(Arc::new(SharedSeedBudget {
-            max_tokens: seed_cap,
-        }))
+        .with_policy(policy)
         .with_global_compression(
             config
                 .compaction

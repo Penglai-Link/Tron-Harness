@@ -414,6 +414,7 @@ fn application_context_survives_compaction_and_is_a_separate_inspectable_block()
 fn memory_context(run_code: &str) -> tron_backend::domain::agent::AgentRunContext {
     use tron_backend::domain::agent::*;
     AgentRunContext {
+        agent_code: None,
         conversation_code: Some("CONV-1".into()),
         run_code: run_code.into(),
         workspace_code: "TRON_CORE".into(),

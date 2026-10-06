@@ -678,6 +678,7 @@ impl Tool for ProgressTool {
 
 fn base_context(run_code: &str) -> AgentRunContext {
     AgentRunContext {
+        agent_code: None,
         conversation_code: Some("CONV-1".into()),
         run_code: run_code.into(),
         workspace_code: "TRON_CORE".into(),

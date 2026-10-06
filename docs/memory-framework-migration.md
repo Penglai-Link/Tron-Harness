@@ -1,8 +1,10 @@
+> 当前直接 ModelClient 重构与 UI 原生结果整改的验收，以任务 `direct-model-architecture-evidence/results.json`、`reopened-ui-fault-evidence/results.json` 及最终源码快照为准；其余归档是各自源码基线的历史证据。
+
 # Framework memory integration
 
 短期记忆与压缩归属 `eliteforge-agent-memory`。Tron 保留产品触发、配置覆盖、权限与
 family membership、完整历史/附件 DTO 映射、业务 goal/todo/session summary、事务存储和展示。
-普通会话标题与业务 session summary 继续原业务语义，通过统一 SDK model job 执行。
+普通会话标题与业务 session summary 继续原业务语义，通过已有 SDK ModelClient 直接调用执行。
 
 | 产品入口 | Framework memory 公共能力 |
 | --- | --- |
@@ -10,7 +12,7 @@ family membership、完整历史/附件 DTO 映射、业务 goal/todo/session su
 | history retention / requested tail | `select_history` / 完整最新 turn 与 exact tool ID 边界 |
 | assembler | 可信 scope 的独立来源 DTO → `MemoryContextContributor` + builtin instructions/history → 唯一 `DefaultContextAssembler` |
 | related-session block | 产品权限检索 → scoped contributor → SDK source-aware quota / 每块 reducer |
-| manual HTTP compaction | ModelClient memory job → `MemoryCompactor` |
+| manual HTTP compaction | SDK ModelClient.workflow_observed → `MemoryCompactor` |
 | automatic / provider overflow compaction | Framework ContextReductionJob workflow → 同一个 `MemoryCompactor` |
 | checkpoint write | `ShortTermMemoryEngine::write_projection` → product `ShortTermMemoryProjectionStore` → SQLite atomic CAS |
 
@@ -79,7 +81,7 @@ Semantic 使用 SDK memory compressor 与官方 SQLite SummaryStore；稳定内�
 新 raw 来源复用，cache identity 包含 scope、该块 body/policy 和实际摘要模型配置。
 无关 history append 或新的 history checkpoint 不使未变化的 working/family 摘要失效。
 动态来源在模型调用前后重查真实 scope/body revision；迟到结果拒绝，checkpoint commit
-沿用同一事务 CAS。压缩/refresh 不建立额外 job，仍共享当前 run usage、取消及调用预算。
+沿用同一事务 CAS。压缩/refresh 复用现有 ChatExecutor 与当前调用的控制上下文，共享 usage、取消及调用预算，不启动新的 Agent 或原生 run。
 
 `maxAuxiliaryCallsPerStep` 是额外收紧上限，默认 16 不是允许增加模型花费；实际仍受原
 SDK 每步 `max(3, maxModelRetries + 1)`、当前 run 总预算和主回答预留 1 次限制。

@@ -6,6 +6,7 @@ import {
   normalizeChatActiveRunResult,
   normalizeChatMessage,
   normalizeChatSendResult,
+  isChatSendResult,
   normalizeChatSession,
   normalizeChatSteerResult,
   normalizeChatUserInputRequest,
@@ -305,7 +306,7 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
             const error=payload.productCompletionError as Record<string,unknown>;
             throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
           }
-          if (type === "RUN_ERROR" && (payload.productCompletion === true || payload.result || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
+          if (type === "RUN_ERROR" && (payload.productCompletion === true || isChatSendResult(payload.result) || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
             throw new FetchTransportError(
               String(payload.message ?? payload.code ?? "Chat stream failed"),
               {
@@ -315,9 +316,16 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
               },
             );
           }
-          return type === "RUN_FINISHED" && payload.result
-            ? normalizeChatSendResult(payload.result as ChatSendResult)
-            : null;
+          if (type !== "RUN_FINISHED") return null;
+          if (isChatSendResult(payload.result)) return normalizeChatSendResult(payload.result);
+          if (payload.productCompletion === true) {
+            throw new FetchTransportError("Product completion result is invalid", {
+              code: "CHAT_STREAM_COMPLETION_INVALID", status: 200,
+            });
+          }
+          // Native child/continuation terminals carry SDK results and are
+          // delivered above to onAguiEvent; only the product result settles SSE.
+          return null;
         },
         path: "/open-api/v1/chats/sessions/{sessionCode}/messages/stream",
         pathParams: { sessionCode: session.sessionCode },
@@ -349,16 +357,23 @@ export function createOpenApiChatAdapter(options: OpenApiAdapterOptions = {}): C
             const error=payload.productCompletionError as Record<string,unknown>;
             throw new FetchTransportError(String(error.message ?? "Product completion is unavailable"), {code:typeof error.code === "string" ? error.code : "CHAT_STREAM_COMPLETION_UNAVAILABLE",data:payload,status:200});
           }
-          if (type === "RUN_ERROR" && (payload.productCompletion === true || payload.result || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
+          if (type === "RUN_ERROR" && (payload.productCompletion === true || isChatSendResult(payload.result) || (!payload.metadata && !String(payload.code ?? "").startsWith("AGUI_")))) {
             throw new FetchTransportError(String(payload.message ?? payload.code ?? "Chat stream failed"), {
               code: typeof payload.code === "string" ? payload.code : undefined,
               data: payload,
               status: 200,
             });
           }
-          return type === "RUN_FINISHED" && payload.result
-            ? normalizeChatSendResult(payload.result as ChatSendResult)
-            : null;
+          if (type !== "RUN_FINISHED") return null;
+          if (isChatSendResult(payload.result)) return normalizeChatSendResult(payload.result);
+          if (payload.productCompletion === true) {
+            throw new FetchTransportError("Product completion result is invalid", {
+              code: "CHAT_STREAM_COMPLETION_INVALID", status: 200,
+            });
+          }
+          // Native child/continuation terminals carry SDK results and are
+          // delivered above to onAguiEvent; only the product result settles SSE.
+          return null;
         },
         path: "/open-api/v1/chats/sessions/{sessionCode}/user-input-requests/{requestCode}/answers/stream",
         pathParams: { requestCode, sessionCode: session.sessionCode },

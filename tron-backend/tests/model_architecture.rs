@@ -30,6 +30,10 @@ fn production_model_network_and_retry_execution_belongs_to_sdk() {
             "ResponsesClient",
             "String::from_utf8_lossy(&chunk)",
             "parse_sse_payloads",
+            "ModelJobClient",
+            "LazyModelJobClient",
+            "ChatModelJob",
+            "ModelJobRepair",
         ] {
             assert!(
                 !production.contains(retired),
@@ -77,35 +81,44 @@ fn production_model_network_and_retry_execution_belongs_to_sdk() {
             "retired production model control remains"
         );
     }
+    let compact = |text: &str| text.split_whitespace().collect::<String>();
     let probe = source("application/model/service/verification_flow.rs");
-    assert!(
-        probe.contains("ChatModelJob")
-            && probe
-                .split_whitespace()
-                .collect::<String>()
-                .contains("model_jobs.get()")
-    );
+    assert!(compact(probe).contains("self.model_executor.with_runtime(runtime).chat("));
     assert!(!probe.contains("for_in"));
     let client = source("adapters/outbound/model/http_model_client.rs");
-    assert!(
-        client.contains("LazyModelJobClient")
-            && client
-                .split_whitespace()
-                .collect::<String>()
-                .contains("self.jobs.close_observed().await")
-            && client
-                .split_whitespace()
-                .collect::<String>()
-                .contains("workflow:Some")
-    );
-    let llm = source("adapters/outbound/model/http_llm_runtime_client.rs");
-    assert!(llm.contains(".embed(") && llm.contains(".rerank("));
+    assert!(client.contains("eliteforge_agent_framework::ModelClient"));
+    for controlled in [
+        "chat_observed",
+        "chat_with_validator_observed",
+        "workflow_observed",
+    ] {
+        assert!(
+            client.contains(controlled),
+            "missing SDK-controlled {controlled}"
+        );
+    }
+    assert!(compact(client).contains("self.executor.close_observed().await"));
+    let llm = source("adapters/outbound/model/http_llm_observed.rs");
+    assert!(llm.contains("embed_observed") && llm.contains("rerank_observed"));
+    // Ordinary model calls must not acquire an Agent/native lifecycle simply
+    // to obtain timeout, retry, cancellation, or usage accounting.
+    for direct in [probe, client, llm] {
+        for lifecycle in [
+            "AgentBuilder",
+            "Agent::builder",
+            "Agent::new",
+            ".start(",
+            ".run(",
+        ] {
+            assert!(
+                !compact(direct).contains(lifecycle),
+                "direct model path constructs {lifecycle}"
+            );
+        }
+    }
     let goal = source("application/chat/goal_loop.rs");
     assert!(!goal.contains("forattemptin"));
-    assert!(goal.contains("ModelJobRepair"));
+    assert!(goal.contains("ModelResponseValidator"));
     let app = source("app.rs");
-    assert!(
-        app.contains("with_jobs(model_providers.model_jobs())")
-            && app.contains("models.with_model_jobs(model_providers.model_jobs())")
-    );
+    assert!(compact(app).contains("with_model_executor(model_providers.model_executor())"));
 }

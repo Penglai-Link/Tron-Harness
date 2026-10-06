@@ -14,6 +14,7 @@ pub struct LlmEmbeddingCallCommand {
 #[derive(Debug, Clone, PartialEq)]
 pub struct LlmEmbeddingCallResult {
     pub model_code: String,
+    pub provider_model: Option<String>,
     pub embedding: Vec<f32>,
 }
 

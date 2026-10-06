@@ -282,8 +282,16 @@ export const appRoutes: AppRoute[] = [
     title: "Knowledge Base",
     archetype: "data-table",
     shellConfig: {
-      searchPlaceholder: "Search knowledge bases, corpora, and sync status...",
+      searchPlaceholder: "Search knowledge bases...",
     },
+  },
+  {
+    pageId: "knowledgeBase.detail",
+    route: "/knowledge-base/:knowledgeBaseId",
+    activeNav: "KnowledgeBase",
+    title: "Knowledge Base",
+    titleTranslationKey: "pages:knowledgeLibrary.title",
+    archetype: "detail",
   },
   {
     pageId: "agent.main",

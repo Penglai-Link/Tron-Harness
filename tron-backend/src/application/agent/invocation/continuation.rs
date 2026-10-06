@@ -99,7 +99,7 @@ impl AgentInvocationService {
         &self,
         model: &AgentModelConfig,
         request: &ModelRequest,
-        repair: Arc<dyn eliteforge_agent_framework::ModelJobRepair>,
+        repair: Arc<dyn eliteforge_agent_core::ModelResponseValidator>,
         max_calls: usize,
         parent: &fw::RunContext,
     ) -> Result<ModelResponse, AgentInvocationError> {

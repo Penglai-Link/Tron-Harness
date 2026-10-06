@@ -5,43 +5,37 @@ use axum::{
 };
 use common::{app_with_config, authenticated_request, response_json};
 use serde_json::{Value, json};
-use std::{
-    fs,
-    path::PathBuf,
-    time::{SystemTime, UNIX_EPOCH},
-};
+use std::{fs, path::PathBuf};
 use tron_backend::config::AppConfig;
 
 struct Fixture {
     path: PathBuf,
     app: Router,
+    // Keep each uniquely-created directory alive until the router has dropped.
+    _root: tempfile::TempDir,
 }
 impl Fixture {
     fn new(extra: &str) -> Self {
-        let nonce = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_nanos();
-        let root = std::env::temp_dir().join(format!(
-            "tron-context-config-{}-{nonce}",
-            std::process::id()
-        ));
-        fs::create_dir_all(&root).unwrap();
-        let path = root.join("application.yaml");
+        let root = tempfile::Builder::new()
+            .prefix("tron-context-config-")
+            .tempdir()
+            .unwrap();
+        let path = root.path().join("application.yaml");
         fs::write(
             &path,
             format!("port: 8080\nvariableCrypto:\n  keyBase64: dGVzdC1zZWNyZXQ=\n{extra}"),
         )
         .unwrap();
         let config = AppConfig {
-            database_url: root.join("tron.sqlite3").display().to_string(),
-            graph_storage_path: root.join("graph.grafeo").display().to_string(),
-            skills_registry_root: root.join("skills").display().to_string(),
+            database_url: root.path().join("tron.sqlite3").display().to_string(),
+            graph_storage_path: root.path().join("graph.grafeo").display().to_string(),
+            skills_registry_root: root.path().join("skills").display().to_string(),
             ..AppConfig::from_yaml_file(&path).unwrap()
         };
         Self {
             path,
             app: app_with_config(config),
+            _root: root,
         }
     }
     async fn get(&self) -> Value {
@@ -63,11 +57,6 @@ impl Fixture {
         (response.status(), response_json(response).await)
     }
 }
-impl Drop for Fixture {
-    fn drop(&mut self) {
-        let _ = fs::remove_dir_all(self.path.parent().unwrap());
-    }
-}
 fn item<'a>(document: &'a Value, path: &str) -> &'a Value {
     document["items"]
         .as_array()
@@ -85,7 +74,8 @@ async fn old_yaml_exposes_effective_context_defaults_without_writing_or_leaking_
     let before = fs::read(&f.path).unwrap();
     let d = f.get().await;
     let order = &item(&d, "shortTermMemory.context.providers.order")["value"];
-    assert_eq!(order.as_array().unwrap().len(), 6);
+    assert_eq!(order.as_array().unwrap().len(), 7);
+    assert_eq!(order[5], "knowledge_base");
     assert_eq!(order[0], "seed_prompt_prefix");
     assert_eq!(
         item(&d, "shortTermMemory.context.providers.order")["valueType"],
@@ -295,7 +285,7 @@ async fn null_legacy_context_sections_support_default_view_and_explicit_update()
                 .as_array()
                 .unwrap()
                 .len(),
-            6
+            7
         );
         assert_eq!(fs::read(&f.path).unwrap(), before);
         let (status, payload) = f

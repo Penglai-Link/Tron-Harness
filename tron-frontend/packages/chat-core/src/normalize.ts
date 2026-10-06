@@ -48,6 +48,37 @@ export function normalizeChatMessage(message: ChatMessage): ChatMessage {
   };
 }
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}
+
+function isNullableString(value: unknown): boolean {
+  return value === null || value === undefined || typeof value === "string";
+}
+
+function isRecordArray(value: unknown): value is Record<string, unknown>[] {
+  return Array.isArray(value) && value.every(isRecord);
+}
+
+/** Product completion is distinct from an opaque native AG-UI result.
+ * Check only the fields consumed by product normalization and UI mapping.
+ */
+export function isChatSendResult(value: unknown): value is ChatSendResult {
+  if (!isRecord(value) || !isRecord(value.session) || !isRecord(value.run)) return false;
+  const { session, run, messages, userInputRequest } = value;
+  if (typeof session.sessionCode !== "string" || typeof run.runCode !== "string"
+    || ![session.status, session.lastRunStatus, session.sourceType, session.agentCode, run.status].every(isNullableString)
+    || !isRecordArray(messages)) return false;
+  if (!messages.every((message) => typeof message.messageCode === "string"
+    && typeof message.sessionCode === "string"
+    && isNullableString(message.role) && isNullableString(message.channel)
+    && (message.attachments == null || isRecordArray(message.attachments)))) return false;
+  if (userInputRequest == null) return true;
+  return isRecord(userInputRequest) && isRecordArray(userInputRequest.questions)
+    && userInputRequest.questions.every((question) => isRecordArray(question.options))
+    && (userInputRequest.answers == null || isRecordArray(userInputRequest.answers));
+}
+
 export function normalizeChatSendResult(result: ChatSendResult): ChatSendResult {
   return {
     ...result,

@@ -43,3 +43,8 @@ pub use skill_repository::SqliteSkillRegistryRepository;
 pub use task_repository::SqliteTaskRepository;
 pub use variable_repository::SqliteVariableRepository;
 pub use workspace_repository::SqliteWorkspaceRepository;
+
+mod knowledge_ingestion_queue;
+mod knowledge_base_repository;
+pub use knowledge_ingestion_queue::SqliteKnowledgeIngestionQueue;
+pub use knowledge_base_repository::SqliteKnowledgeBaseRepository;

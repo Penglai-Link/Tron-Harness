@@ -49,6 +49,8 @@ pub(super) fn resolve_input_file_bounded(
     resources: &ResourceService,
     limit: u64,
 ) -> Result<ResolvedInputFile, ToolError> {
+    let resources =
+        resources.for_agent_in_workspace(context.agent_code.as_deref(), &context.workspace_code);
     let limit = limit.min(MAX_INPUT_FILE_BYTES);
     let reference = match (input.get("fileRef"), input.get("path")) {
         (Some(_), Some(_)) => {
@@ -75,6 +77,15 @@ pub(super) fn resolve_input_file_bounded(
     match reference {
         AgentFileRef::WorkspacePath { path } => {
             let path = resolve_path(context, &path)?;
+            if resources.storage_roots().iter().any(|root| {
+                let actual_root = std::fs::canonicalize(root).unwrap_or_else(|_| root.clone());
+                path.starts_with(actual_root)
+            }) {
+                return Err(ToolError::ExecutionFailed(
+                    "resource storage objects must be read through authorized resource references"
+                        .into(),
+                ));
+            }
             let file = std::fs::File::open(&path)
                 .map_err(|e| ToolError::ExecutionFailed(format!("file read failed: {e}")))?;
             let size = file

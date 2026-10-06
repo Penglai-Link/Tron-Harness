@@ -26,3 +26,5 @@ pub mod variable;
 pub mod workspace;
 
 pub mod skin;
+
+pub mod knowledge_base;

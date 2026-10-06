@@ -426,7 +426,8 @@ mod tests {
 
     fn context(max_retries: u32) -> AgentRunContext {
         AgentRunContext {
-            auto_model_route: None,
+            agent_code: None,
+        auto_model_route: None,
             conversation_code: Some("CONV-1".into()),
             run_code: "RUN-1".into(),
             workspace_code: "TRON_CORE".into(),

@@ -176,6 +176,7 @@ fn executor() -> (
 
 fn context() -> AgentRunContext {
     AgentRunContext {
+        agent_code: None,
         conversation_code: Some("CONV-1".into()),
         run_code: "RUN-1".into(),
         workspace_code: "TRON_CORE".into(),

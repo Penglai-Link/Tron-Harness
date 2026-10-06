@@ -35,7 +35,7 @@ async fn memory_search_returns_active_scoped_fulltext_vector_hits_and_context_pa
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
 
     let result = service
@@ -96,7 +96,7 @@ async fn memory_search_projects_requested_logical_return_fields_only() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
 
     let result = service
@@ -128,7 +128,7 @@ async fn pipeline_only_memory_retrieval_profile_preserves_existing_search_contra
     insert_pipeline_only_retrieval_profile(&database_url, "memory-pipeline-only-v1");
     let repository = CapturingSearchRepository::connect(&database_url);
     let route_calls = repository.route_calls.clone();
-    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0));
     let service = RagSearchService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -192,7 +192,7 @@ async fn tree_fulltext_retriever_matches_summary_and_hydrates_text_units() {
     let service = RagIngestService::new(
         repository.clone(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(0.25, 0.75)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(0.25, 0.75)),
     );
     let mut request = memory_request("memory-rag-rule", "v1", "SPACE", "TRON_CORE");
     request.ingest_profile_id = "memory-card-tree-pipeline-v1".into();
@@ -306,7 +306,7 @@ async fn tree_vector_retriever_filters_tree_rows_by_source_and_scope_before_hydr
     let service = RagIngestService::new(
         repository.clone(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(0.25, 0.75)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(0.25, 0.75)),
     );
     let core_request = memory_request("memory-rag-rule", "v1", "SPACE", "TRON_CORE");
     service.ingest(core_request).await.unwrap();
@@ -335,7 +335,7 @@ async fn tree_vector_retriever_filters_tree_rows_by_source_and_scope_before_hydr
             retriever: "TREE_VECTOR_V1".into(),
             workspace_code: "TRON_CORE".into(),
             query: "alternate vector tree".into(),
-            query_embedding: Some(embedding_4096(0.25, 0.75)),
+            query_embedding: Some(embedding_1024(0.25, 0.75)),
             query_embedding_model_code: Some("fake-embedding".into()),
             source_version: "v1".into(),
             scopes: vec![RagSearchScope {
@@ -367,7 +367,7 @@ async fn tree_vector_retriever_matches_summary_embedding_and_hydrates_text_units
     let service = RagIngestService::new(
         repository.clone(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
     let mut request = memory_request("memory-rag-rule", "v1", "SPACE", "TRON_CORE");
     request.ingest_profile_id = "memory-card-tree-pipeline-v1".into();
@@ -380,7 +380,7 @@ async fn tree_vector_retriever_matches_summary_embedding_and_hydrates_text_units
             retriever: "TREE_VECTOR_V1".into(),
             workspace_code: "TRON_CORE".into(),
             query: "source title citation".into(),
-            query_embedding: Some(embedding_4096(1.0, 0.0)),
+            query_embedding: Some(embedding_1024(1.0, 0.0)),
             query_embedding_model_code: Some("fake-embedding".into()),
             source_version: "v1".into(),
             scopes: vec![RagSearchScope {
@@ -413,7 +413,7 @@ async fn tree_fulltext_route_policy_excludes_root_limits_expansion_and_prefers_d
     let service = RagIngestService::new(
         repository.clone(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
     let mut request = memory_request("memory-rag-rule", "v1", "SPACE", "TRON_CORE");
     request.ingest_profile_id = "memory-card-heading-tree-v1".into();
@@ -565,7 +565,7 @@ async fn search_rejects_physical_return_field_names() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
 
     let error = service
@@ -591,7 +591,7 @@ async fn skill_search_returns_scoped_fulltext_and_vector_hits() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(0.5, 0.25)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(0.5, 0.25)),
     );
 
     let result = service
@@ -656,7 +656,7 @@ async fn project_doc_search_projects_requested_document_fields_and_context_pack(
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(0.0, 1.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(0.0, 1.0)),
     );
 
     let result = service
@@ -708,7 +708,7 @@ async fn project_doc_vector_route_reads_distinct_vector_storage_table_when_confi
     let connection = open_prepared_connection(&database_url);
     connection
         .execute(
-            "DROP TABLE IF EXISTS rag_project_doc_text_units_vec_d4096",
+            "DROP TABLE IF EXISTS rag_project_doc_text_units_vec_d1024",
             [],
         )
         .unwrap();
@@ -737,11 +737,11 @@ async fn project_doc_vector_route_reads_distinct_vector_storage_table_when_confi
 
     assert!(!table_exists(
         &repository,
-        "rag_project_doc_text_units_vec_d4096"
+        "rag_project_doc_text_units_vec_d1024"
     ));
     assert!(table_exists(
         &repository,
-        "rag_project_doc_vectors_vec_d4096"
+        "rag_project_doc_vectors_vec_d1024"
     ));
     assert!(hits.iter().any(|hit| hit.text.contains("synchronous DAG")));
 }
@@ -820,7 +820,7 @@ async fn fusion_dedup_and_fake_rerank_produce_stable_ordering() {
         .to_string();
     seed_two_memory_fixture(&database_url).await;
     let runtime = FakeSearchRuntime::new()
-        .with_embedding(embedding_4096(1.0, 0.0))
+        .with_embedding(embedding_1024(1.0, 0.0))
         .with_rerank(vec![(1, 0.99), (0, 0.10)]);
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
@@ -856,7 +856,7 @@ async fn rrf_embedding_mmr_promotes_diverse_cross_corpus_candidate() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
 
     let result = service
@@ -881,7 +881,7 @@ async fn seeded_memory_project_doc_fusion_profile_searches_both_corpora() {
         .to_string();
     seed_two_memory_fixture(&database_url).await;
     seed_project_doc_fixture(&database_url).await;
-    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0));
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
@@ -932,7 +932,7 @@ async fn request_filters_match_each_route_filter_schema() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
 
     let result = service
@@ -983,7 +983,7 @@ async fn embedding_mmr_missing_embeddings_falls_back_to_fused_order() {
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
 
     let result = service
@@ -1262,7 +1262,7 @@ async fn seeded_memory_related_profile_uses_structured_fulltext_and_vector_route
     seed_memory_fixture(&database_url).await;
     let repository = CapturingSearchRepository::connect(&database_url);
     let route_calls = repository.route_calls.clone();
-    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0));
     let service = RagSearchService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -1341,7 +1341,7 @@ async fn seeded_memory_query_profile_uses_only_query_routes_and_access_context_s
     seed_memory_fixture(&database_url).await;
     let repository = CapturingSearchRepository::connect(&database_url);
     let route_calls = repository.route_calls.clone();
-    let runtime = FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0));
+    let runtime = FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0));
     let service = RagSearchService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -1464,7 +1464,7 @@ async fn context_assembly_supports_all_required_strategy_shapes() {
         let service = RagSearchService::new(
             SqliteRagRepository::connect(&database_url).unwrap(),
             DefaultRagStrategyRegistry::default(),
-            FakeSearchRuntime::new().with_embedding(embedding_4096(0.0, 1.0)),
+            FakeSearchRuntime::new().with_embedding(embedding_1024(0.0, 1.0)),
         );
         let mut request = search_request(
             "project-doc-related-v1",
@@ -1559,7 +1559,7 @@ async fn default_and_custom_extension_retrievers_return_storage_scored_hits() {
     let default_service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
     let default_result = default_service
         .search(search_request(
@@ -1576,7 +1576,7 @@ async fn default_and_custom_extension_retrievers_return_storage_scored_hits() {
     let extension_service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
     let extension_result = extension_service
         .search(search_request(
@@ -1614,7 +1614,7 @@ async fn sqlite_extension_indexes_survive_reconnect_without_main_index_payload()
         .query_row(
             "SELECT COUNT(*)
              FROM sqlite_schema
-             WHERE name = 'rag_memory_text_units_vec_d4096'",
+             WHERE name = 'rag_memory_text_units_vec_d1024'",
             [],
             |row| row.get::<_, i64>(0),
         )
@@ -1626,7 +1626,7 @@ async fn sqlite_extension_indexes_survive_reconnect_without_main_index_payload()
     let service = RagSearchService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
     let result = service
         .search(search_request(
@@ -1870,7 +1870,7 @@ impl RagSearchRuntime for FakeSearchRuntime {
                 .lock()
                 .unwrap()
                 .pop_front()
-                .unwrap_or_else(|| Ok(embedding_4096(1.0, 0.0)))
+                .unwrap_or_else(|| Ok(embedding_1024(1.0, 0.0)))
                 .map(|embedding| RagEmbeddingResult {
                     model_code: "workspace-default-embedding".into(),
                     embedding,
@@ -1961,7 +1961,7 @@ async fn seed_memory_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(1.0, 0.0)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(1.0, 0.0)),
     );
     service
         .ingest(memory_request(
@@ -1988,7 +1988,7 @@ async fn seed_two_memory_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(0.9, 0.1)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(0.9, 0.1)),
     );
     service
         .ingest(memory_request(
@@ -2017,7 +2017,7 @@ async fn seed_skill_fixture(database_url: &str) {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeSearchRuntime::new().with_embedding(embedding_4096(0.5, 0.25)),
+        FakeSearchRuntime::new().with_embedding(embedding_1024(0.5, 0.25)),
     );
     service.ingest(skill_request()).await.unwrap();
 }
@@ -2770,15 +2770,15 @@ fn insert_mixed_filter_profile(database_url: &str, profile_id: &str) {
         .unwrap();
 }
 
-fn embedding_4096(first: f32, second: f32) -> Vec<f32> {
-    let mut embedding = vec![0.0; 4096];
+fn embedding_1024(first: f32, second: f32) -> Vec<f32> {
+    let mut embedding = vec![0.0; 1024];
     embedding[0] = first;
     embedding[1] = second;
     embedding
 }
 
 fn project_doc_embedding() -> Vec<f32> {
-    embedding_4096(0.2, 0.98)
+    embedding_1024(0.2, 0.98)
 }
 
 fn embedding_1536(first: f32, second: f32) -> Vec<f32> {
@@ -2954,9 +2954,9 @@ fn tree_scope_filter_command(
             embedding_model_code: Some("fake-embedding".into()),
             embedding_version: Some("v1".into()),
             embedding_text_hash: Some(format!("{text_unit_code}-embedding-hash")),
-            embedding_dimension: Some(4096),
+            embedding_dimension: Some(1024),
             embedding: Some(
-                embedding_4096(0.25, 0.75)
+                embedding_1024(0.25, 0.75)
                     .into_iter()
                     .flat_map(f32::to_le_bytes)
                     .collect(),
@@ -2983,9 +2983,9 @@ fn tree_scope_filter_command(
             summary_embedding_model_code: Some("fake-embedding".into()),
             summary_embedding_version: Some("v1".into()),
             summary_embedding_text_hash: Some(format!("{scope_type}-{scope_code}-tree-embedding")),
-            summary_embedding_dimension: Some(4096),
+            summary_embedding_dimension: Some(1024),
             summary_embedding: Some(
-                embedding_4096(0.25, 0.75)
+                embedding_1024(0.25, 0.75)
                     .into_iter()
                     .flat_map(f32::to_le_bytes)
                     .collect(),

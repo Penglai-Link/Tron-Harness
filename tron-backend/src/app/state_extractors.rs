@@ -181,3 +181,7 @@ impl FromRef<AppState> for McpService {
         state.mcp.clone()
     }
 }
+
+impl FromRef<AppState> for crate::application::knowledge_base::KnowledgeBaseService {
+ fn from_ref(state:&AppState)->Self{state.knowledge_bases.clone()}
+}

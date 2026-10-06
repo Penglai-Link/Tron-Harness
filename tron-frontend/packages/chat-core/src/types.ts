@@ -236,6 +236,7 @@ export interface ChatWorkRailLabels {
   workedFor: (duration: string) => string;
   workingFor: (duration: string) => string;
   failed?: string;
+  stopped?: string;
   notices?: Partial<ChatRunNoticeLabels>;
   askingQuestions?: (count: number) => string;
   askedQuestions?: (count: number) => string;

@@ -62,6 +62,7 @@ impl ResourceService {
         validate_resource_code(&command.resource_code)?;
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(_)) => Ok(()),
             Some(_) | None => Err(ResourceError::NotFound),
@@ -81,6 +82,7 @@ impl ResourceService {
             Some(ManagedResource::File(record)) => record,
             Some(_) | None => return Err(ResourceError::NotFound),
         };
+        self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         let updated = self.replace_file_contents(actor_user_code, &record, file_name, source)?;
         Ok(ResourceBinaryResult {
             action: "UPLOADED".to_string(),
@@ -107,6 +109,11 @@ impl ResourceService {
             Some(ManagedResource::File(record)) => record,
             Some(_) | None => return Err(ResourceError::NotFound),
         };
+        self.authorize_resource_read(
+            actor_user_code,
+            &record.workspace_code,
+            &record.resource_code,
+        )?;
         if !self.storage.exists(&record.storage_locator)? {
             return Err(ResourceError::MissingBinaryObject);
         }
@@ -160,6 +167,7 @@ impl ResourceService {
         {
             return Err(ResourceError::InvalidInput);
         }
+        self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         let updated =
             self.replace_file_contents(actor_user_code, &record, &file_name, &mut input)?;
         Ok(ResourceBinaryResult {
@@ -188,6 +196,11 @@ impl ResourceService {
             Some(ManagedResource::File(record)) => record,
             Some(_) | None => return Err(ResourceError::NotFound),
         };
+        self.authorize_resource_read(
+            actor_user_code,
+            &record.workspace_code,
+            &record.resource_code,
+        )?;
         let target_path = command
             .target_path
             .as_deref()

@@ -187,7 +187,8 @@ mod tests {
 
     fn context_with_tools(tools: Vec<EffectiveTool>) -> AgentRunContext {
         AgentRunContext {
-            auto_model_route: None,
+            agent_code: None,
+        auto_model_route: None,
             conversation_code: Some("SESSION-1".into()),
             run_code: "RUN-1".into(),
             workspace_code: "TRON_CORE".into(),

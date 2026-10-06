@@ -57,6 +57,7 @@ pub(super) fn build_protected_routes(state: &AppState) -> Router<AppState> {
         .merge(variable_routes())
         .merge(memory_routes())
         .merge(rag_routes())
+        .merge(crate::adapters::inbound::http::knowledge_bases::routes())
         .merge(resource_routes(&state.resources))
         .merge(knowledge_graph_routes::routes())
         .merge(skill_routes())

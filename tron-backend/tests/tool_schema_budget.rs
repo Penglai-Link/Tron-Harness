@@ -44,6 +44,7 @@ fn tool(name: &str, domain: &str, description_len: usize) -> EffectiveTool {
 
 fn context() -> AgentRunContext {
     AgentRunContext {
+        agent_code: None,
         conversation_code: None,
         run_code: "RUN-SCHEMA".into(),
         workspace_code: "TRON_CORE".into(),

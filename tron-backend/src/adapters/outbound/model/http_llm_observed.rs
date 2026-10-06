@@ -45,7 +45,7 @@ impl HttpLlmRuntimeClient {
         &self,
         config: &RuntimeModelConfig,
         input: &str,
-    ) -> ObservedModelResult<Vec<f32>> {
+    ) -> ObservedModelResult<(Vec<f32>, Option<String>)> {
         if config.model_type != ModelType::Embedding {
             return failure("embedding requires EMBEDDING model");
         }
@@ -74,8 +74,11 @@ impl HttpLlmRuntimeClient {
         );
         let mut request = fw::EmbeddingRequest::texts([input]);
         request.choice = fw::ModelChoice::model(reference);
-        let jobs = match self.models.jobs.get().await {
-            Ok(jobs) => jobs,
+        let mut update =
+            eliteforge_agent_framework::ModelRuntimeUpdate::new("http-embedding", 0, vec![]);
+        update.embedding.push(service);
+        let runtime = match eliteforge_agent_framework::ModelRuntime::new(update) {
+            Ok(runtime) => runtime,
             Err(error) => {
                 return ObservedModelResult {
                     result: Err(error),
@@ -83,21 +86,20 @@ impl HttpLlmRuntimeClient {
                 };
             }
         };
-        let observed = jobs
-            .embed_observed(
-                service,
-                request,
-                limits(&model),
-                config.max_retries.unwrap_or(0) as usize + 2,
-            )
+        let observed = self
+            .models
+            .executor
+            .with_runtime(runtime)
+            .embed_observed(request, &limits(&model))
             .await;
         ObservedModelResult {
             result: observed.result.and_then(|response| {
+                let provider_model = response.provider_model;
                 response
                     .vectors
                     .into_iter()
                     .next()
-                    .map(|vector| vector.values)
+                    .map(|vector| (vector.values, provider_model))
                     .ok_or_else(|| fw::AgentError::Run("embedding response empty".into()))
             }),
             report: observed.report,
@@ -152,8 +154,11 @@ impl HttpLlmRuntimeClient {
             documents: documents.iter().cloned().map(Into::into).collect(),
             top_n: top_n.map(|n| n.min(documents.len())),
         };
-        let jobs = match self.models.jobs.get().await {
-            Ok(jobs) => jobs,
+        let mut update =
+            eliteforge_agent_framework::ModelRuntimeUpdate::new("http-rerank", 0, vec![]);
+        update.rerank.push(service);
+        let runtime = match eliteforge_agent_framework::ModelRuntime::new(update) {
+            Ok(runtime) => runtime,
             Err(error) => {
                 return ObservedModelResult {
                     result: Err(error),
@@ -161,22 +166,20 @@ impl HttpLlmRuntimeClient {
                 };
             }
         };
-        jobs.rerank_reported(
-            service,
-            request,
-            limits(&model),
-            config.max_retries.unwrap_or(0) as usize + 2,
-        )
-        .await
-        .map(|response| {
-            response
-                .results
-                .into_iter()
-                .map(|hit| LlmRuntimeRerankHit {
-                    document_index: hit.index,
-                    score: hit.score,
-                })
-                .collect()
-        })
+        self.models
+            .executor
+            .with_runtime(runtime)
+            .rerank_observed(request, &limits(&model))
+            .await
+            .map(|response| {
+                response
+                    .results
+                    .into_iter()
+                    .map(|hit| LlmRuntimeRerankHit {
+                        document_index: hit.index,
+                        score: hit.score,
+                    })
+                    .collect()
+            })
     }
 }

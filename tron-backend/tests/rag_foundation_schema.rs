@@ -19,13 +19,13 @@ fn rag_foundation_migration_creates_approved_tables_and_seeds_corpora_idempotent
         "rag_project_doc_sources".to_string(),
         "rag_memory_text_units".to_string(),
         "rag_memory_text_units_fts".to_string(),
-        "rag_memory_text_units_vec_d4096".to_string(),
+        "rag_memory_text_units_vec_d1024".to_string(),
         "rag_project_doc_text_units".to_string(),
         "rag_skill_text_units".to_string(),
         "rag_skill_text_units_fts".to_string(),
-        "rag_skill_text_units_vec_d4096".to_string(),
+        "rag_skill_text_units_vec_d1024".to_string(),
         "rag_project_doc_text_units_fts".to_string(),
-        "rag_project_doc_text_units_vec_d4096".to_string(),
+        "rag_project_doc_text_units_vec_d1024".to_string(),
         "rag_diagnostics".to_string(),
     ]);
 
@@ -113,7 +113,7 @@ fn extension_indexes_use_configured_enabled_corpus_text_unit_tables() {
         1
     );
     assert_eq!(
-        schema_object_count(&connection, "rag_custom_text_units_vec_d4096"),
+        schema_object_count(&connection, "rag_custom_text_units_vec_d1024"),
         1
     );
 }
@@ -166,11 +166,11 @@ fn rag_foundation_embeds_memory_source_and_keeps_project_doc_split() {
     }
     for sidecar in [
         "rag_memory_text_units_fts",
-        "rag_memory_text_units_vec_d4096",
+        "rag_memory_text_units_vec_d1024",
         "rag_project_doc_text_units_fts",
-        "rag_project_doc_text_units_vec_d4096",
+        "rag_project_doc_text_units_vec_d1024",
         "rag_skill_text_units_fts",
-        "rag_skill_text_units_vec_d4096",
+        "rag_skill_text_units_vec_d1024",
     ] {
         assert!(
             repository.rag_table_names().unwrap().contains(sidecar),

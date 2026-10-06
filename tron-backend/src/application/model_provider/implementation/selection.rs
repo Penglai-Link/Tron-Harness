@@ -218,9 +218,11 @@ impl ModelProviderService {
         workspace_code: &str,
         model_code: Option<&str>,
     ) -> Result<Option<RuntimeModelConfig>, ModelProviderError> {
-        if model_code.is_some_and(|value| !value.trim().is_empty()) {
+        let requested = model_code.map(str::trim).filter(|value| !value.is_empty());
+        if requested.is_some_and(|value| value != "PERSON_AI:ROUTE:EmbeddingAuto") {
             return Ok(None);
         }
+        // An explicit route identity must still match this workspace's current selection.
         let Some(selection) = self.default_selection(workspace_code, ModelType::Embedding)? else {
             return Ok(None);
         };

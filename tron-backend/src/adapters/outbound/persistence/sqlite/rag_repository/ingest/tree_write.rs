@@ -26,7 +26,10 @@ fn delete_tree_rows_for_source(
     if table_exists(tx, &fts_table)? {
         delete_rowids(tx, &fts_table, &rowids)?;
     }
-    let vec_table = vec_table_name(table_name, 4096);
+    let vec_table = vec_table_name(
+        table_name,
+        crate::shared::sqlite_extensions::TRON_VECTOR_INDEX_DIMENSION as i64,
+    );
     if table_exists(tx, &vec_table)? {
         delete_rowids(tx, &vec_table, &rowids)?;
     }

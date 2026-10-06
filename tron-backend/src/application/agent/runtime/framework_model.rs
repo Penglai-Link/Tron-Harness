@@ -4,6 +4,14 @@ use super::*;
 use crate::domain::agent::{TokenEstimateSnapshot, TokenUsageAuditSnapshot};
 
 impl ReactAgent {
+    pub(crate) fn framework_knowledge_bases(
+        &self,
+    ) -> Option<crate::application::knowledge_base::KnowledgeBaseService> {
+        self.framework_host
+            .as_ref()
+            .and_then(|host| host.knowledge_bases())
+    }
+
     pub(crate) fn framework_live_memory_source(
         &self,
         context: &AgentRunContext,

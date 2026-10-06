@@ -154,6 +154,7 @@ pub struct AppState {
     pub memory_work_domains: MemoryWorkDomainService,
     pub navigation: NavigationService,
     pub rag: AppRagService,
+    pub knowledge_bases: crate::application::knowledge_base::KnowledgeBaseService,
 }
 
 impl AppState {
@@ -284,6 +285,9 @@ impl AppState {
                 event_bus.clone(),
             )
         };
+        let knowledge_base_repository = crate::adapters::outbound::persistence::sqlite::SqliteKnowledgeBaseRepository::connect(&config.database_url)
+            .map_err(|_| AppBootstrapError::RagInitFailed{database_url:config.database_url.clone(),source:crate::domain::rag::RagError::StorageFailure})?;
+        let resources = resources.with_privacy_policy(Arc::new(knowledge_base_repository.clone()));
         let mcp = build_mcp_service(
             &config.database_url,
             workspaces.clone(),
@@ -328,14 +332,14 @@ impl AppState {
         };
         let model_providers = build_model_provider_service(&config.database_url, variables.clone());
         let models = models
-            .with_model_jobs(model_providers.model_jobs())
+            .with_model_executor(model_providers.model_executor())
             .with_model_transport(model_inference_client.clone());
         let agent_model_client = Arc::new(
             HttpModelClient::new(Arc::new(PersonAiModelProviderClient::new(
                 HttpModelProviderClient::new(model_inference_client.clone()),
                 model_providers.clone(),
             )))
-            .with_jobs(model_providers.model_jobs()),
+            .with_model_executor(model_providers.model_executor()),
         );
         let prompts = build_prompt_service(
             &config.database_url,
@@ -378,6 +382,11 @@ impl AppState {
             document_parsing_client,
             event_bus.clone(),
         )?;
+        let rag = rag.with_product_guard(Arc::new(knowledge_base_repository.clone()));
+        let knowledge_bases = crate::application::knowledge_base::KnowledgeBaseService::new(knowledge_base_repository,rag.clone(),resources.clone(),workspaces.clone(),agent_management.clone(),llm_runtime.clone()).with_document_parser(Arc::new(crate::adapters::outbound::mineru_documents::MineruKnowledgeDocumentParser::new(config.mineru.clone()))).with_image_descriptions(config.mineru.image_description.clone()).with_visual_context(config.mineru.visual_context_enabled).with_office_renderer(Arc::new(crate::adapters::outbound::office_visuals::LocalOfficeChartRenderer)).with_ingestion_config(config.mineru.ingestion.clone());
+        if tokio::runtime::Handle::try_current().is_ok() {
+            knowledge_bases.start_ingestion_workers().map_err(|_| AppBootstrapError::RagInitFailed { database_url: config.database_url.clone(), source: crate::domain::rag::RagError::StorageFailure })?;
+        }
         let memory = MemoryService::new(rag.clone());
         let memory_work_domains = if config.database_url == ":memory:" {
             GLOBAL_MEMORY_WORK_DOMAIN_SERVICE
@@ -411,6 +420,7 @@ impl AppState {
             resources.clone(),
         )
         .expect("initialize Framework storage configuration");
+        agent_framework.bind_knowledge_bases(knowledge_bases.clone()).expect("initial knowledge-base binding");
         agent_framework
             .bind_presentation(agent_presentation.clone())
             .expect("initial presentation binding");
@@ -546,6 +556,7 @@ impl AppState {
             memory_work_domains,
             navigation,
             rag,
+            knowledge_bases,
             skills,
             system_config,
             skins,

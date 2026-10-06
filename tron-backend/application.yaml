@@ -53,8 +53,34 @@ httpClients:
     tcpKeepaliveMs: 30000
 
 mineru:
+  ocrMode: ocr
+  parserProfile: mineru-4.0.10-ocr
+  expectedParserVersion: "4.0.10"
+  ingestion:
+    parseCapacity: 2
+    embeddingCapacity: 2
+    # Set the same group as a parser node only when both use the same hardware.
+    embeddingResourceGroup: null
+    embeddingResourceGroupCapacity: 2
+    leaseMs: 30000
+    pollMs: 250
+    maxAttempts: 3
+    retryBackoffMs: 2000
+  # Empty: use baseUrl (an official MinerU router can be this endpoint).
+  # Nodes: id, baseUrl, enabled, allowRemote, capacity, weight,
+  # resourceGroup, resourceGroupCapacity. Remote nodes are disabled by default.
+  nodes: []
+  # Optional Framework SDK supplement; enabling sends extracted images to PersonAI.
+  # Opt-in only: sends authorized KB images to the selected answer model.
+  visualContextEnabled: false
+  imageDescription:
+    enabled: false
+    modelCode: ""
+    maxImagesPerDocument: 64
+    timeoutSeconds: 30
+  defaultTier: standard
   enabled: true
-  baseUrl: https://pre-platform.cisdigital.cn/mineru
+  baseUrl: http://127.0.0.1:8000
   parseEndpoint: /file_parse
   timeoutSeconds: 300
   maxBytes: 52428800

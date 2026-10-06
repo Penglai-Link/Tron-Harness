@@ -2,6 +2,8 @@ mod dto;
 mod error;
 mod port;
 mod service;
+mod vision;
+pub use vision::VisionModelBinding;
 #[cfg(test)]
 mod service_tests;
 
@@ -16,3 +18,5 @@ pub use port::{
     LlmRuntimeRerankHit,
 };
 pub use service::LlmRuntimeService;
+
+pub(crate) use service::ContextQueryAllowance;

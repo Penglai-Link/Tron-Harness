@@ -77,7 +77,7 @@ impl ModelProviderService {
         let mut adapters = HashMap::new();
         adapters.insert(adapter.code(), adapter);
         Ok(Self {
-            model_jobs: Default::default(),
+            model_executor: Default::default(),
             model_attempt_salt: Arc::new(eliteforge_agent_core::RunId::new_v4().to_string()),
             connection: Arc::new(Mutex::new(connection)),
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),

@@ -37,7 +37,7 @@ async fn memory_text_contract_ingest_writes_business_text_unit_and_sidecar_index
     let database_path = temp_database_path("rag-ingest-memory-success");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
-    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75));
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75));
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -81,7 +81,7 @@ async fn memory_text_contract_ingest_writes_business_text_unit_and_sidecar_index
     );
     assert_index_payload_columns_absent(&connection, "rag_memory_text_units");
     assert!(table_exists(&connection, "rag_memory_text_units_fts"));
-    assert!(table_exists(&connection, "rag_memory_text_units_vec_d4096"));
+    assert!(table_exists(&connection, "rag_memory_text_units_vec_d1024"));
     assert_eq!(embeddings.last_model_code(), None);
     let source_metadata = serde_json::from_str::<Value>(&query_string(
         &connection,
@@ -101,7 +101,7 @@ async fn memory_ingest_maps_business_version_from_payload() {
     let service = RagIngestService::new(
         SqliteRagRepository::connect(&database_url).unwrap(),
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2)),
     );
     let mut request = memory_request("storage-v1");
     request.payload["domainFields"]["version"] = json!("business-v9");
@@ -134,7 +134,7 @@ async fn pipeline_only_memory_ingest_profile_preserves_existing_request_contract
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75)),
     );
     let mut request = memory_request("v1");
     request.ingest_profile_id = "memory-card-pipeline-only-v1".into();
@@ -170,7 +170,7 @@ async fn pipeline_extracts_and_persists_tree_graph_without_request_related_graph
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75)),
     );
     let mut request = memory_request("v1");
     request.ingest_profile_id = "memory-card-tree-pipeline-v1".into();
@@ -271,7 +271,7 @@ async fn pipeline_persists_summary_tree_without_optional_tree_indexes() {
     let repository = CapturingIngestRepository::connect(&database_url);
     insert_summary_tree_only_ingest_profile(&database_url, "memory-card-summary-tree-only-v1");
     let persisted_commands = repository.persisted_commands.clone();
-    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75));
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75));
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -333,7 +333,7 @@ async fn llm_summary_tree_ingest_summarizes_bottom_up_with_configured_model() {
         Some(json!({ "modelCode": "summary-model-alpha" })),
     );
     let persisted_commands = repository.persisted_commands.clone();
-    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)).with_summary_outputs([
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75)).with_summary_outputs([
         "leaf summary",
         "parent summary",
         "root summary",
@@ -415,7 +415,7 @@ async fn llm_summary_tree_empty_response_falls_back_to_extractive_without_partia
     );
     let persisted_commands = repository.persisted_commands.clone();
     let runtime =
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75)).with_summary_outputs([""]);
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75)).with_summary_outputs([""]);
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -478,7 +478,7 @@ async fn rag_service_ingest_auto_wires_default_runtime_llm_summary() {
     let persisted_commands = repository.persisted_commands.clone();
     let client = FakeLlmClient::new()
         .with_generations(["leaf summary", "parent summary", "root summary"])
-        .with_embeddings((0..8).map(|_| embedding_4096(0.25, 0.75)));
+        .with_embeddings((0..8).map(|_| embedding_1024(0.25, 0.75)));
     let runtime = DefaultRagRuntime::new(
         LlmRuntimeService::new(Arc::new(FakeLlmModelResolver), Arc::new(client.clone())),
         FakeLlmModelResolver,
@@ -521,7 +521,7 @@ async fn tree_vector_embedding_failure_fails_fast_source() {
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75))
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75))
             .fail_after_successes(1, "fake tree vector unavailable"),
     );
     let mut request = memory_request("v1");
@@ -550,7 +550,7 @@ async fn sqlite_tree_segment_creates_indexes_and_ingest_persists_summary_rows() 
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
     set_memory_card_tree_table(&database_url, "rag_memory_tree_nodes");
     insert_tree_pipeline_ingest_profile(&database_url, "memory-card-tree-pipeline-v1");
-    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.25, 0.75));
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_1024(0.25, 0.75));
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -577,7 +577,7 @@ async fn sqlite_tree_segment_creates_indexes_and_ingest_persists_summary_rows() 
         assert!(columns.iter().any(|column| column == required));
     }
     assert!(table_exists(&connection, "rag_memory_tree_nodes_fts"));
-    assert!(table_exists(&connection, "rag_memory_tree_nodes_vec_d4096"));
+    assert!(table_exists(&connection, "rag_memory_tree_nodes_vec_d1024"));
     assert!(
         index_with_columns_exists(
             &connection,
@@ -740,7 +740,7 @@ async fn sqlite_tree_rows_keep_stable_codes_but_do_not_collide_across_scopes() {
     assert_eq!(
         query_i64(
             &connection,
-            "SELECT COUNT(*) FROM rag_memory_tree_nodes_vec_d4096"
+            "SELECT COUNT(*) FROM rag_memory_tree_nodes_vec_d1024"
         ),
         2,
         "vector rows should sync by the source/scope-aware rowid"
@@ -785,8 +785,8 @@ fn tree_only_command(scope_code: &str) -> RagPersistIngestCommand {
             summary_embedding_model_code: Some("fake-embedding".into()),
             summary_embedding_version: Some("v1".into()),
             summary_embedding_text_hash: Some(format!("embedding-hash-{scope_code}")),
-            summary_embedding_dimension: Some(4096),
-            summary_embedding: Some(encoded_embedding_4096()),
+            summary_embedding_dimension: Some(1024),
+            summary_embedding: Some(encoded_embedding_1024()),
             covered_text_unit_codes: vec!["memory-rag-rule:v1:0".into()],
             covered_text_unit_count: 1,
             child_start_ordinal: 0,
@@ -801,8 +801,8 @@ fn tree_only_command(scope_code: &str) -> RagPersistIngestCommand {
     }
 }
 
-fn encoded_embedding_4096() -> Vec<u8> {
-    embedding_4096(0.25, 0.75)
+fn encoded_embedding_1024() -> Vec<u8> {
+    embedding_1024(0.25, 0.75)
         .into_iter()
         .flat_map(|value| value.to_le_bytes())
         .collect()
@@ -813,7 +813,7 @@ async fn skill_ingest_writes_name_description_scope_fulltext_and_vector_fields()
     let database_path = temp_database_path("rag-ingest-skill-success");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
-    let embeddings = FakeEmbeddingRuntime::fixed(embedding_4096(0.5, 0.25));
+    let embeddings = FakeEmbeddingRuntime::fixed(embedding_1024(0.5, 0.25));
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -843,7 +843,7 @@ async fn skill_ingest_writes_name_description_scope_fulltext_and_vector_fields()
     );
     assert_index_payload_columns_absent(&connection, "rag_skill_text_units");
     assert!(table_exists(&connection, "rag_skill_text_units_fts"));
-    assert!(table_exists(&connection, "rag_skill_text_units_vec_d4096"));
+    assert!(table_exists(&connection, "rag_skill_text_units_vec_d1024"));
     assert!(
         !table_columns(&connection, "rag_skill_text_units")
             .iter()
@@ -859,7 +859,7 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown()),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2)).with_document(project_doc_markdown()),
     );
 
     let result = service.ingest(project_doc_request("v1")).await.unwrap();
@@ -892,7 +892,7 @@ async fn project_doc_markdown_ingest_persists_document_fields_and_heading_split_
     assert!(table_exists(&connection, "rag_project_doc_text_units_fts"));
     assert!(table_exists(
         &connection,
-        "rag_project_doc_text_units_vec_d4096"
+        "rag_project_doc_text_units_vec_d1024"
     ));
 }
 
@@ -913,7 +913,7 @@ async fn project_doc_markdown_split_enriches_index_and_embedding_text_without_re
         }),
     );
     let embeddings =
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown());
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2)).with_document(project_doc_markdown());
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -957,7 +957,7 @@ async fn project_doc_explicit_plain_split_keeps_parsed_markdown_as_one_text_unit
         }),
     );
     let embeddings =
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown());
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2)).with_document(project_doc_markdown());
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
@@ -984,7 +984,7 @@ async fn project_doc_pdf_mineru_ingest_uses_mineru_markdown_for_split() {
     let database_path = temp_database_path("rag-ingest-project-doc-mineru-pdf");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
-    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2))
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2))
         .with_document("binary source placeholder")
         .with_mineru_document(project_doc_mineru_markdown());
     let service = RagIngestService::new(
@@ -1025,7 +1025,7 @@ async fn project_doc_docx_mineru_ingest_accepts_same_profile() {
     let database_path = temp_database_path("rag-ingest-project-doc-mineru-docx");
     let database_url = database_path.to_string_lossy().to_string();
     let repository = SqliteRagRepository::connect(&database_url).unwrap();
-    let runtime = FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2))
+    let runtime = FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2))
         .with_document("docx source placeholder")
         .with_mineru_document("# DOCX Parsed\nText extracted from DOCX by MinerU.");
     let service = RagIngestService::new(
@@ -1057,7 +1057,7 @@ async fn project_doc_ingest_populates_distinct_vector_storage_when_configured() 
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown()),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2)).with_document(project_doc_markdown()),
     );
 
     let result = service.ingest(project_doc_request("v1")).await.unwrap();
@@ -1070,7 +1070,7 @@ async fn project_doc_ingest_populates_distinct_vector_storage_when_configured() 
     assert!(table_exists(&connection, "rag_project_doc_vectors"));
     assert!(table_exists(
         &connection,
-        "rag_project_doc_vectors_vec_d4096"
+        "rag_project_doc_vectors_vec_d1024"
     ));
     assert_eq!(
         query_i64(&connection, "SELECT COUNT(*) FROM rag_project_doc_vectors"),
@@ -1079,7 +1079,7 @@ async fn project_doc_ingest_populates_distinct_vector_storage_when_configured() 
     assert_eq!(
         query_i64(
             &connection,
-            "SELECT COUNT(*) FROM rag_project_doc_vectors_vec_d4096"
+            "SELECT COUNT(*) FROM rag_project_doc_vectors_vec_d1024"
         ),
         2
     );
@@ -1102,7 +1102,7 @@ async fn project_doc_ingest_populates_distinct_fulltext_storage_when_configured(
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)).with_document(project_doc_markdown()),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2)).with_document(project_doc_markdown()),
     );
 
     let result = service.ingest(project_doc_request("v1")).await.unwrap();
@@ -1147,7 +1147,7 @@ async fn project_doc_markdown_heading_depth_controls_split_boundaries() {
     let depth_two_service = RagIngestService::new(
         depth_two_repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.0))
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.0))
             .with_document(project_doc_nested_markdown()),
     );
 
@@ -1170,7 +1170,7 @@ async fn project_doc_markdown_heading_depth_controls_split_boundaries() {
     let depth_three_service = RagIngestService::new(
         depth_three_repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.0))
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.0))
             .with_document(project_doc_nested_markdown()),
     );
 
@@ -1195,7 +1195,7 @@ async fn project_doc_ingest_rejects_direct_markdown_payload() {
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(0.1, 0.2)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(0.1, 0.2)),
     );
     let mut request = project_doc_request("v1");
     request.payload = json!({
@@ -1234,7 +1234,7 @@ async fn same_source_version_is_idempotent_and_multiple_versions_coexist() {
     let service = RagIngestService::new(
         repository,
         DefaultRagStrategyRegistry::default(),
-        FakeEmbeddingRuntime::fixed(embedding_4096(1.0, 0.0)),
+        FakeEmbeddingRuntime::fixed(embedding_1024(1.0, 0.0)),
     );
 
     service.ingest(memory_request("v1")).await.unwrap();
@@ -3053,9 +3053,9 @@ fn tree_scope_command(
             embedding_model_code: Some("fake-embedding".into()),
             embedding_version: Some("v1".into()),
             embedding_text_hash: Some(format!("{text_unit_code}-embedding-hash")),
-            embedding_dimension: Some(4096),
+            embedding_dimension: Some(1024),
             embedding: Some(
-                embedding_4096(0.25, 0.75)
+                embedding_1024(0.25, 0.75)
                     .into_iter()
                     .flat_map(f32::to_le_bytes)
                     .collect(),
@@ -3082,9 +3082,9 @@ fn tree_scope_command(
             summary_embedding_model_code: Some("fake-embedding".into()),
             summary_embedding_version: Some("v1".into()),
             summary_embedding_text_hash: Some(format!("{scope_type}-{scope_code}-tree-embedding")),
-            summary_embedding_dimension: Some(4096),
+            summary_embedding_dimension: Some(1024),
             summary_embedding: Some(
-                embedding_4096(0.25, 0.75)
+                embedding_1024(0.25, 0.75)
                     .into_iter()
                     .flat_map(f32::to_le_bytes)
                     .collect(),
@@ -3103,8 +3103,8 @@ fn tree_scope_command(
     }
 }
 
-fn embedding_4096(first: f32, second: f32) -> Vec<f32> {
-    let mut embedding = vec![0.0; 4096];
+fn embedding_1024(first: f32, second: f32) -> Vec<f32> {
+    let mut embedding = vec![0.0; 1024];
     embedding[0] = first;
     embedding[1] = second;
     embedding

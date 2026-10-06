@@ -104,6 +104,11 @@ export const routePages: Record<string, RoutePageComponent> = {
       (module) => ({ default: module.KnowledgeBasePage }),
     ),
   ),
+  "knowledgeBase.detail": lazy(() =>
+    import("@/domain/knowledge-base/pages/KnowledgeBaseDetailPage").then(
+      (module) => ({ default: module.KnowledgeBaseDetailPage }),
+    ),
+  ),
   "knowledgeGraph.domainFiltering": lazy(() =>
     import("@/domain/knowledge-graph/pages/KnowledgeGraphDomainPage").then(
       (module) => ({ default: module.KnowledgeGraphDomainPage }),

@@ -75,6 +75,7 @@ impl Tool for ChatAttachmentReadTextTool {
         let range_start = requested_start.saturating_sub(3);
         let (record, range_start, bytes) = self
             .resources
+            .for_agent_in_workspace(context.agent_code.as_deref(), &context.workspace_code)
             .read_chat_session_attachment_range(
                 &context.workspace_code,
                 conversation_code(context)?,
@@ -215,8 +216,13 @@ impl Tool for ChatAttachmentParseJsonTool {
                 ));
             }
         };
-        let source =
-            super::super::file_access::resolve_input_file(&source_input, context, &self.resources)?;
+        let source = super::super::file_access::resolve_input_file(
+            &source_input,
+            context,
+            &self
+                .resources
+                .for_agent_in_workspace(context.agent_code.as_deref(), &context.workspace_code),
+        )?;
         let record = source.attachment_record.as_ref();
         let document = serde_json::from_slice::<Value>(&source.bytes).map_err(|error| {
             ToolError::ExecutionFailed(format!(

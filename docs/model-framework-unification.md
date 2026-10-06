@@ -1,19 +1,21 @@
+> 当前直接 ModelClient 重构与 UI 原生结果整改的验收，以任务 `direct-model-architecture-evidence/results.json`、`reopened-ui-fault-evidence/results.json` 及最终源码快照为准；其余归档是各自源码基线的历史证据。
+
 # 模型请求统一到 Framework
 
-Tron 生产模型请求由 Framework 官方 HTTP model plugin 执行；独立任务经共享 SDK model job host。Tron 保留 DTO/配置、用户与 workspace 权限、PersonAI 登录与凭据刷新、业务路由和产品结果快照，不拥有模型 POST、私有 SSE parser 或隐式模型重发。
+Tron 生产模型请求由 Framework 官方 HTTP model plugin 执行；独立文本与 typed operation 直接复用 SDK `ModelClient` / `ModelOperations`。Tron 保留 DTO/配置、用户与 workspace 权限、PersonAI 登录与凭据刷新、业务路由和产品结果快照，不拥有模型 POST、私有 SSE parser 或隐式模型重发。
 
 | 产品入口 | 受控入口 |
 | --- | --- |
 | ReAct 主聊天、工具后续调用 | Framework ModelInvoker → TronChatModel 薄映射 → SDK single-attempt transport |
 | 自动 overflow 压缩 | Framework ContextReductionJob workflow → memory MemoryCompactor → invoke_auxiliary |
-| 手动上下文压缩 | ModelClient.compact_memory → 共享 ModelJobClient workflow → memory MemoryCompactor |
-| goal judge / JSON repair | 一个 ChatModelJob + ModelJobRepair，共享调用数与总 token 预算 |
-| 标题、session summary、terminal/prompt/RAG 文本与独立 LLM generate | ModelClient.generate → 共享 ChatModelJob |
-| RAG 摄取、查询、重建 embedding / rerank | ModelJobClient typed embedding / rerank；PersonAI chat fallback 也由 SDK 构造执行 |
-| PersonAI 激活验证 chat / embedding | 同一个共享 job host 的受控 chat / embedding probe |
-| 自定义模型 verify-preview / verify-and-persist | SDK ModelProbeKind payload + HttpProbeModel job；preview 不写产品状态 |
+| 手动上下文压缩 | ModelClient.compact_memory → SDK ModelClient.workflow_observed → memory MemoryCompactor |
+| goal judge / JSON repair | SDK ModelClient.chat_with_validator_observed + ModelResponseValidator，共享调用数与总 token 预算 |
+| 标题、session summary、terminal/prompt/RAG 文本与独立 LLM generate | 产品 ModelClient.generate → SDK ModelClient.chat_observed |
+| RAG 摄取、查询、重建 embedding / rerank | SDK ModelClient.embed_observed / rerank_observed；PersonAI chat fallback 也由 SDK 构造执行 |
+| PersonAI 激活验证 chat / embedding | 同一个 ModelClient owner 的直接 chat / embedding probe |
+| 自定义模型 verify-preview / verify-and-persist | SDK ModelProbeKind payload + 已注册 HttpProbeModel 的直接调用；preview 不写产品状态 |
 
-共享 LazyModelJobClient 绑定 FrameworkHost.close。主 run 停止、goal-judge 等待取消、业务 timeout/drop 和 host close 都释放受控模型工作；首次使用前 close 不允许之后创建 job。模型 timeout/不完整流不会盲目重试，空流不会再发非流请求。单次口 generate_once/generate_stream 只由主 Framework invoker 与自动压缩 auxiliary 适配器调用，源码 architecture test 防回退。
+共享 SDK ModelClient owner 绑定 FrameworkHost.close；with_runtime / with_options 视图共享 stop/drain 状态。独立调用不构建 Agent，不启动原生 run，不创建 session、历史或工具循环。ModelInvocationOptions.for_call 仅创建 ledger/deadline/cancellation/extensions 控制数据；for_run 复用父 ledger、取消与 deadline。主 run 停止、goal-judge 等待取消、业务 timeout/drop 和 host close 都释放受控模型工作；首次使用前 close 也拒绝后续直接调用。模型 timeout/不完整流不会盲目重试，空流不会再发非流请求。单次口 generate_once/generate_stream 只由主 Framework invoker 与自动压缩 auxiliary 适配器调用，源码 architecture test 防回退。
 
 PersonAI 的官方加密 envelope、X-Product-Code 和 conversation/quality 字段保持。产品 factory 为每次发送绑定凭据 attempt fingerprint；401 恢复和终态 rejection 校验该身份。账号切换与迟到 refresh 通过同一 SQLite 事务核对原 user/server/encrypted credentials，拒绝过期结果，保护新账号凭据和状态。普通外部 HTTP 401 不改变 PersonAI 连接。
 
@@ -35,6 +37,8 @@ Descriptor 的 `context_window_tokens` 表示输入与输出总窗口，`max_inp
 
 `ObservedModelResult` 在成功和错误时都保留 dispatch、尝试与 retry 数、真实选择、保守 ledger charge、完整 provider usage 或已知 subtotal。实际 usage 完整性依赖每次派发均报告，不要求实际费用等于保守估算；缺失段不按零伪造完整值，cached/reasoning 指标也仅在所有已报告段均提供该字段时聚合。现有兼容 DTO 调用仍可只取结果，显式 observed 口提供完整 SDK 观察。
 
-模型客户端默认单次、repair、观察与关闭能力均不静默退化为另一个受控任务；不支持的实现明确返回 unsupported。原生 goal judge child 沿父 SDK run 执行，共享树级硬限额，repair 不可通过替换 extensions 重置该计数。真实 SDK 历史通过 occurrence witness 保留 typed Media、Resource、structured 和 model context，产品 Data JSON 无法创建 tool 或 continuation 协议身份。
+模型客户端默认单次、repair、观察与关闭能力均不静默退化为另一个受控任务；不支持的实现明确返回 unsupported。goal judge 的直接模型调用沿父 SDK 控制上下文执行，共享树级硬限额，repair 不可通过替换 extensions 重置该计数。真实 SDK 历史通过 occurrence witness 保留 typed Media、Resource、structured 和 model context，产品 Data JSON 无法创建 tool 或 continuation 协议身份。
 
-主 conversation 的 `tron.responses.v2` 仍是产品续传策略快照，但其 identity 已绑定 SDK 真实 scoped ModelRef/protocol；旧占位 v2 和 v1 无法匹配时完整 replay。独立 HTTP job 的 counted continuation private witness 与 `wire.response.v1` opaque 响应桥不代表这个持久化格式。SDK `ModelInvoker` 的每步 tracker 取调用方与有效 run 上限的最小值；controlled job 的 workflow/repair admission 还按剩余实际派发量前置拒绝，不产生额外 ModelDispatched 或树级 slot。
+主 conversation 的 `tron.responses.v2` 仍是产品续传策略快照，但其 identity 已绑定 SDK 真实 scoped ModelRef/protocol；旧占位 v2 和 v1 无法匹配时完整 replay。独立 HTTP 模型调用的 counted continuation private witness 与 `wire.response.v1` opaque 响应桥不代表这个持久化格式。SDK `ModelInvoker` 的每步 tracker 取调用方与有效 run 上限的最小值；直接模型调用的 workflow/validator admission 还按剩余实际派发量前置拒绝，不产生额外 ModelDispatched 或树级 slot。
+
+本轮删除新增的模型执行 Job façade，回归保留直接 text/embed/rerank、validator、重试、超时、取消、Drop、关闭、父 ledger 与 memory CAS 语义。`ContextReductionJob` 仍是既有 Hook 的 reduction plan 数据；图片/视频供应商的真实异步 Job 状态继续保留。历史冻结证据不代表本轮直接接口的最终验收结果；本轮结果由最终源码清单和门禁日志确认。

@@ -63,7 +63,7 @@ const MAX_PROVIDER_SYNC_RUNS: i64 = 10;
 
 #[derive(Clone)]
 pub struct ModelProviderService {
-    model_jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
+    model_executor: Arc<eliteforge_agent_framework::ModelClient>,
     model_attempt_salt: Arc<String>,
     connection: Arc<Mutex<Connection>>,
     token_refresh_lock: Arc<tokio::sync::Mutex<()>>,
@@ -253,7 +253,7 @@ mod tests {
             .expect("create provider schema");
         let adapter = Arc::new(UnauthorizedOnceAdapter::default());
         let service = ModelProviderService {
-            model_jobs: Default::default(),
+            model_executor: Default::default(),
             model_attempt_salt: Arc::new(eliteforge_agent_core::RunId::new_v4().to_string()),
             connection: Arc::new(Mutex::new(connection)),
             token_refresh_lock: Arc::new(tokio::sync::Mutex::new(())),

@@ -28,6 +28,7 @@ impl Tool for ResourceQueryTool {
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
         let output = self
             .resources
+            .for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code)
             .query_resources(
                 actor_user_code,
                 ResourcePageQuery {
@@ -71,6 +72,7 @@ impl Tool for ResourceGetTool {
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
         let output = self
             .resources
+            .for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code)
             .get_resource(
                 actor_user_code,
                 ResourceGetQuery {
@@ -115,6 +117,7 @@ impl Tool for ResourceCreateTool {
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
         let output = self
             .resources
+            .for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code)
             .create_file_resource_from_agent_path(
                 actor_user_code,
                 ResourceCreateCommand {
@@ -163,6 +166,7 @@ impl Tool for ResourceUpdateTool {
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
         let output = self
             .resources
+            .for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code)
             .update_resource(
                 actor_user_code,
                 ResourceUpdateCommand {

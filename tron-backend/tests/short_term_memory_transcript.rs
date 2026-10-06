@@ -6179,6 +6179,7 @@ fn concurrent_append_allocates_unique_session_sequence_values() {
 
 fn base_context(session_code: &str) -> AgentRunContext {
     AgentRunContext {
+        agent_code: None,
         conversation_code: Some(session_code.into()),
         run_code: "RUN-STMEM-1".into(),
         workspace_code: "TRON_CORE".into(),

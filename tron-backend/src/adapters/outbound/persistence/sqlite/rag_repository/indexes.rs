@@ -1,8 +1,9 @@
 use rusqlite::{Connection, OptionalExtension, params};
 
 use crate::{
-    application::rag::RagTextUnitWrite, domain::rag::RagError,
-    shared::sqlite_extensions::sqlite_vec_available,
+    application::rag::RagTextUnitWrite,
+    domain::rag::RagError,
+    shared::sqlite_extensions::{TRON_VECTOR_INDEX_DIMENSION, sqlite_vec_available},
 };
 
 use super::{
@@ -11,7 +12,7 @@ use super::{
     storage_error,
 };
 
-const VECTOR_INDEX_DIMENSIONS: &[i64] = &[4096];
+const VECTOR_INDEX_DIMENSIONS: &[i64] = &[TRON_VECTOR_INDEX_DIMENSION as i64];
 
 pub(super) fn apply_extension_index_migration(
     repository: &SqliteRagRepository,

@@ -45,6 +45,9 @@ pub struct LlmRuntimeRerankHit {
 }
 
 pub trait LlmRuntimeModelResolver: Send + Sync {
+    fn vision_cache_identity(&self) -> Result<Option<String>, ModelError> { Ok(None) }
+    fn vision_runtime_model_config(&self, _: &str, _: &str) -> Result<Option<RuntimeModelConfig>, ModelError> { Ok(None) }
+
     fn embedding_runtime_model_config(
         &self,
         workspace_code: &str,
@@ -59,6 +62,44 @@ pub trait LlmRuntimeModelResolver: Send + Sync {
 }
 
 pub trait LlmRuntimeClient: Send + Sync {
+    fn model_authorization_scope(&self, _: &RuntimeModelConfig) -> Result<Option<String>, String> { Ok(None) }
+    fn generate_vision<'a>(&'a self, _: &'a RuntimeModelConfig, _: &'a str, _: &'a str, _: &'a [u8]) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async { Err("vision generation is unavailable".into()) })
+    }
+
+    /// Preserve observed provider identity without fabricating it for older adapters.
+    fn embed_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
+        Box::pin(async move { self.embed(config, input).await.map(|vector| (vector, None)) })
+    }
+    fn embed_query_with_model_in_run<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+        dimensions: usize,
+        run: &'a eliteforge_agent_core::RunContext,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.embed_query_in_run(config, input, dimensions, run)
+                .await
+                .map(|vector| (vector, None))
+        })
+    }
+
+    /// Query embeddings share the caller's SDK admission, usage and cancellation.
+    fn embed_query_in_run<'a>(
+        &'a self,
+        _: &'a RuntimeModelConfig,
+        _: &'a str,
+        _: usize,
+        _: &'a eliteforge_agent_core::RunContext,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+        Box::pin(async { Err("run-scoped query embedding is unavailable".into()) })
+    }
+
     fn generate_observed<'a>(
         &'a self,
         _: &'a RuntimeModelConfig,

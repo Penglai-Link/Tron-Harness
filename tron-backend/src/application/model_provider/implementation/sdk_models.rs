@@ -15,8 +15,8 @@ impl ModelProviderService {
             .ok_or_else(|| fw::ModelError::Fatal("provider connection missing".into()))?;
         Ok(self.sdk_identity_scope(&row))
     }
-    pub fn model_jobs(&self) -> Arc<eliteforge_agent_framework::LazyModelJobClient> {
-        self.model_jobs.clone()
+    pub fn model_executor(&self) -> Arc<eliteforge_agent_framework::ModelClient> {
+        self.model_executor.clone()
     }
     pub async fn sdk_model_transport(
         &self,
@@ -213,11 +213,6 @@ impl ModelProviderService {
         &self,
         credentials: &ProviderCredentials,
     ) -> Result<(), ModelProviderError> {
-        let jobs = self
-            .model_jobs
-            .get()
-            .await
-            .map_err(|e| ModelProviderError::Remote(e.to_string()))?;
         let transport = sdk::PersonAiModelTransport::new(
             credentials.server_base_url.clone(),
             credentials.context(),
@@ -246,31 +241,46 @@ impl ModelProviderService {
             response_input_items: None,
             previous_response_id: None,
         };
-        let job = eliteforge_agent_framework::ChatModelJob {
-            workflow: None,
-            connection: fw::ModelConnection::new(
-                "verify",
-                Arc::new(sdk::ProtocolChatModel {
-                    config: config.clone(),
-                    factory: factory.clone(),
-                    streaming: false,
-                }),
-                vec![fw::ModelDescriptor::new("chat")],
-            ),
-            model: fw::ModelRef::new("verify", "chat"),
-            request: sdk::request_to_framework(request)
-                .map_err(|e| ModelProviderError::Remote(e.to_string()))?,
-            limits: fw::RunLimits {
-                max_model_output_tokens: 8,
-                max_model_retries: 0,
-                max_model_calls_per_step: Some(1),
-                ..Default::default()
-            },
-            stage: "provider.verify_chat".into(),
-            max_calls: 1,
-            repair: None,
+        let connection = fw::ModelConnection::new(
+            "verify",
+            Arc::new(sdk::ProtocolChatModel {
+                config: config.clone(),
+                factory: factory.clone(),
+                streaming: false,
+            }),
+            vec![fw::ModelDescriptor::new("chat")],
+        );
+        let runtime = eliteforge_agent_framework::ModelRuntime::new(
+            eliteforge_agent_framework::ModelRuntimeUpdate::new("verify", 0, vec![connection]),
+        )
+        .map_err(sdk_provider_error)?;
+        let limits = fw::RunLimits {
+            max_model_output_tokens: 8,
+            max_model_retries: 0,
+            max_model_calls_per_step: Some(1),
+            ..Default::default()
         };
-        jobs.execute(job).await.map_err(sdk_provider_error)?;
+        self.model_executor
+            .with_runtime(runtime)
+            .chat(
+                &fw::ModelRef::new("verify", "chat"),
+                sdk::request_to_framework(request)
+                    .map_err(|e| ModelProviderError::Remote(e.to_string()))?,
+                &limits,
+                "provider.verify_chat",
+            )
+            .await
+            .map_err(sdk_provider_error)?;
+        let embedding_config = person_ai_agent_config(
+            "PERSON_AI:ROUTE:EmbeddingAuto",
+            "",
+            None,
+            None,
+            AgentModelProtocol::Embeddings,
+        );
+        let config =
+            crate::adapters::outbound::model::http_model_client::convert(&embedding_config)
+                .map_err(ModelProviderError::Remote)?;
         let service = fw::EmbeddingModelService::new(
             fw::ModelRef::new("verify", "embedding"),
             Arc::new(sdk::HttpEmbeddingModel { config, factory }),
@@ -278,24 +288,31 @@ impl ModelProviderService {
         let mut request =
             fw::EmbeddingRequest::texts(["Tron Person-AI embedding connectivity check"]);
         request.choice = fw::ModelChoice::model(service.model.clone());
-        jobs.embed(
-            service,
-            request,
-            fw::RunLimits {
-                max_model_retries: 0,
-                ..Default::default()
-            },
-            1,
-        )
-        .await
-        .map_err(sdk_provider_error)?;
+        let mut update = eliteforge_agent_framework::ModelRuntimeUpdate::new("verify", 0, vec![]);
+        update.embedding.push(service);
+        let runtime =
+            eliteforge_agent_framework::ModelRuntime::new(update).map_err(sdk_provider_error)?;
+        self.model_executor
+            .with_runtime(runtime)
+            .embed_observed(
+                request,
+                &fw::RunLimits {
+                    max_model_retries: 0,
+                    max_model_calls_per_step: Some(1),
+                    ..Default::default()
+                },
+            )
+            .await
+            .into_result()
+            .map_err(sdk_provider_error)?;
         Ok(())
     }
 }
 fn sdk_provider_error(error: fw::AgentError) -> ModelProviderError {
     match error.primary() {
         fw::AgentError::Model(fw::ModelError::Provider(error))
-            if error.error_type.as_deref() == Some("device_unbound") =>
+            if error.category == fw::ProviderErrorCategory::AccountChanged
+                && error.error_type.as_deref() == Some("device_unbound") =>
         {
             ModelProviderError::DeviceUnbound
         }
@@ -353,3 +370,7 @@ impl ModelProviderService {
         self.sdk_attempt_for_row(&row, token)
     }
 }
+
+#[cfg(test)]
+#[path = "sdk_models_tests.rs"]
+mod tests;

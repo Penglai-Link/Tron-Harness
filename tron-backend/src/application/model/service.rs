@@ -129,7 +129,7 @@ pub trait ModelRepository: Send {
 pub struct ModelService {
     repository: Arc<Mutex<Box<dyn ModelRepository>>>,
     workspaces: WorkspaceService,
-    model_jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
+    model_executor: Arc<eliteforge_agent_framework::ModelClient>,
     verification_factory:
         Arc<dyn eliteforge_agent_official_plugin_model_http::ModelTransportFactory>,
     cipher: Arc<dyn VariableCipher>,
@@ -205,11 +205,11 @@ impl ModelService {
         self
     }
 
-    pub fn with_model_jobs(
+    pub fn with_model_executor(
         mut self,
-        jobs: Arc<eliteforge_agent_framework::LazyModelJobClient>,
+        executor: Arc<eliteforge_agent_framework::ModelClient>,
     ) -> Self {
-        self.model_jobs = jobs;
+        self.model_executor = executor;
         self
     }
 
@@ -221,7 +221,7 @@ impl ModelService {
         Self {
             repository: Arc::new(Mutex::new(Box::new(repository))),
             workspaces,
-            model_jobs: Default::default(),
+            model_executor: Default::default(),
             verification_factory: Arc::new(
                 eliteforge_agent_official_plugin_model_http::HttpModelTransportFactory::new(
                     eliteforge_agent_official_plugin_model_http::ModelHttpClient::new(),

@@ -62,12 +62,28 @@ struct Host {
     shutdown: host_shutdown::OwnedShutdown,
     presentation: std::sync::RwLock<Option<crate::application::agent::AgentAguiStreamService>>,
     resources: Option<crate::application::resource::ResourceService>,
+    knowledge_bases: OnceCell<crate::application::knowledge_base::KnowledgeBaseService>,
     _temporary: Option<tempfile::TempDir>,
 }
 impl FrameworkHost {
     /// Drain owned runs and command processes before shutting down a profile.
     pub fn pty(&self) -> eliteforge_agent_capability_tools::PtyService {
         self.0.pty.clone()
+    }
+
+    pub fn bind_knowledge_bases(
+        &self,
+        service: crate::application::knowledge_base::KnowledgeBaseService,
+    ) -> Result<(), AgentError> {
+        self.0.knowledge_bases.set(service).map_err(|_| {
+            AgentError::InvalidConfiguration("knowledge base service is already bound".into())
+        })
+    }
+
+    pub(crate) fn knowledge_bases(
+        &self,
+    ) -> Option<crate::application::knowledge_base::KnowledgeBaseService> {
+        self.0.knowledge_bases.get().cloned()
     }
 
     pub fn capability_state(&self) -> (BTreeMap<String, bool>, BTreeMap<String, bool>) {
@@ -281,6 +297,7 @@ impl FrameworkHost {
             presentation: Default::default(),
             pty: Default::default(),
             resources,
+            knowledge_bases: OnceCell::new(),
             _temporary: None,
         }))
     }
@@ -310,6 +327,7 @@ impl FrameworkHost {
             presentation: Default::default(),
             pty: Default::default(),
             resources,
+            knowledge_bases: OnceCell::new(),
             _temporary: Some(directory),
         })))
     }

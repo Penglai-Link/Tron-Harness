@@ -1,4 +1,4 @@
-> 下方历史验收数字只描述对应的源码基线。本轮 SDK 接入与统一上下文整改的命令、退出码及源码对应关系以任务 `sdk-integration-correction-evidence/` 为准；旧验收数字不能验收当前源码。
+> 当前直接 ModelClient 重构与 UI 原生结果整改的验收，以任务 `direct-model-architecture-evidence/results.json`、`reopened-ui-fault-evidence/results.json` 及最终源码快照为准；其余归档是各自源码基线的历史证据。
 
 相关设计见 [模型请求统一](model-framework-unification.md) 和 [memory 接入](memory-framework-migration.md)。`acceptance-evidence`、`model-unification-evidence` 与 `context-provider-correction-evidence` 保留各阶段历史证据。
 
@@ -119,7 +119,7 @@ LSP 不在此次范围内。
 后续请求由 Tron 映射独立授权来源 DTO 与配置。所有 Instruction、History、Data 来源使用同一个 ContextContributor；唯一 DefaultContextAssembler 按 layout、source-aware budget 和每块 reducer 读一次、压缩与重组。共享 seed 配额按真实指令成本分给 application context，再按既有策略向 history 借出未用容量。原生 ContextProvider/ContextService/ContextPlugin 已移除，旧 v1 provider wire 仅在远端兼容边界映射；旧 data contributor 冒充指令的权限升级不再支持。真实原生历史作为出现次数 witness 保留媒体、资源和私有模型元数据，产品 JSON 不能伪造协议身份。
 
 主 ReAct 的 Responses 续传策略仍以 `tron.responses.v2` 模型消息上下文保存到 SDK conversation；本轮上下文已绑定真实 scoped `ModelRef` 与协议，并校验产品 providerScope（用户、workspace、模型、endpoint、API 路径、配置凭据）和历史/prefix 指纹。旧 `tron.responses.v1` 或旧占位 `tron/route` 的 v2 不能证明当前真实绑定，安全回退完整历史，不发送旧 response ID，也不删除历史。跨账号的实际请求还由 scope-bound SDK transport 拒绝。
-独立 HTTP model job 的 continuation 使用 SDK private witness 对已计入预算的公共消息作标识；`wire.response.v1` 是响应映射格式，两者不是主 conversation 的产品 v2 格式。普通 Data JSON 无法伪造这些协议标识。跨用户/workspace、真实模型/协议或最终 prefix/layout 变化时不复用失效续传信息。
+独立 HTTP 模型直接调用的 continuation 使用 SDK private witness 对已计入预算的公共消息作标识；`wire.response.v1` 是响应映射格式，两者不是主 conversation 的产品 v2 格式。普通 Data JSON 无法伪造这些协议标识。跨用户/workspace、真实模型/协议或最终 prefix/layout 变化时不复用失效续传信息。
 外部 runtime 会话引用由宿主独立分支 `tron.external/<runtime>` 持久化，格式为 `tron.external-session.v2`；不写外部 Framework checkpoint。SQLite 排他租约覆盖远端调用直到保存/释放。同作用域最新相同引用不重复追加，回切旧引用更新最新选择。指纹包含 transport、用户、工作空间、执行目录/作用域、模型、凭据、API 路径和协议；产品自动传入的已知 ID 也必须校验归属，失配强制续聊会在 HTTP 前拒绝，普通 start 创建新会话。未知显式 ID 保留既有直接引用语义。
 
 新分支未有记录时，仅从旧 main conversation 中精确匹配 `framework.external-session.v1` 的模型、协议及旧作用域导入原生引用；旧历史保持原样，不运行旧 checkpoint 或重放工具。新绑定建立后旧格式只用于已知 ID 归属判定，不能绕过新 API 路径/协议绑定。旧作用域本身没有 API 路径/协议信息，该初次导入限制保留，未扩展旧 Framework BLOB 自动迁移工程。Tron 产品附件由资源服务和 `attachments_json` 保存，重开历史与附件 HTTP 下载另行回归。

@@ -15,7 +15,7 @@ use crate::{
 };
 
 pub use self::error::ConfigError;
-pub use self::mineru::MineruConfig;
+pub use self::mineru::{MineruConfig, MineruNode, KnowledgeIngestionConfig, ImageDescriptionConfig};
 use self::parsing::env_port_override;
 use self::paths::{
     default_application_config_path_from_home, default_database_url_from_home,

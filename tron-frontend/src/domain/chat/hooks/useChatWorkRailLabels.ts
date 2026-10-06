@@ -53,6 +53,7 @@ export function useChatWorkRailLabels() {
       workedFor: (duration) => t("chat.workRail.workedFor", { duration }),
       workingFor: (duration) => t("chat.workRail.workingFor", { duration }),
       failed: t("chat.workRail.failed"),
+      stopped: t("chat.workRail.stopped"),
       askingQuestions: (count) => t("chat.workRail.askingQuestions", { count }),
       askedQuestions: (count) => t("chat.workRail.askedQuestions", { count }),
       waitingForAnswer: t("chat.workRail.waitingForAnswer"),

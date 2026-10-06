@@ -31,7 +31,7 @@ pub use document_source::{
     RagDocumentParseCall, RagDocumentSourceCall, RagDocumentSourceRuntime, RagResolvedDocument,
 };
 pub use events::publish_rag_event;
-pub use facade::RagService;
+pub use facade::{RagService,RagProductGuard};
 pub use ingest::{
     RagEmbeddingCall, RagEmbeddingResult, RagEmbeddingRuntime, RagIngestAccessContext,
     RagIngestRepository, RagIngestRequest, RagIngestResult, RagIngestScope, RagIngestService,

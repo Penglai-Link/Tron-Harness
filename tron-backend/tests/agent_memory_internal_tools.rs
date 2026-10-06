@@ -567,10 +567,19 @@ async fn invalid_memory_code_short_formats_are_rejected() {
         );
         assert_eq!(body["code"], json!("SUCCESS"));
         let final_output = body["data"]["finalOutput"].as_str().unwrap_or_default();
-        assert!(
-            final_output.contains("memoryCode") || final_output.contains("scope"),
-            "invalid memory short-format case `{case_name}` should fail at validation, got: {final_output}"
-        );
+        if case_name == "legacy public agent scope" {
+            // The public enum rejects AGENT before domain input parsing.
+            assert_eq!(
+                final_output,
+                "mock: Tool arguments do not match input schema"
+            );
+            assert_schema_rejection_in_followup(&model_server, "memory_search");
+        } else {
+            assert!(
+                final_output.contains("memoryCode") || final_output.contains("scope"),
+                "invalid memory short-format case `{case_name}` should fail at validation, got: {final_output}"
+            );
+        }
     }
 }
 
@@ -611,10 +620,12 @@ async fn memory_save_rejects_removed_pin_level_public_input() {
     );
     assert_eq!(body["code"], json!("SUCCESS"));
     let final_output = body["data"]["finalOutput"].as_str().unwrap_or_default();
-    assert!(
-        final_output.contains("pinLevel") || final_output.contains("unknown field"),
-        "removed pinLevel input should fail at tool input parsing, got: {final_output}"
+    // additionalProperties=false rejects the removed field before serde input parsing.
+    assert_eq!(
+        final_output,
+        "mock: Tool arguments do not match input schema"
     );
+    assert_schema_rejection_in_followup(&model_server, "memory_save");
 }
 
 #[tokio::test(flavor = "multi_thread", worker_threads = 2)]
@@ -1151,7 +1162,8 @@ async fn memory_code_save_update_delete_search_observations_are_sanitized() {
         tool_call_response(
             "memory.delete",
             json!({
-                "memoryCode": WORK_DOMAIN_MEMORY_CODE
+                "memoryCode": WORK_DOMAIN_MEMORY_CODE,
+                "reason": "Superseded citation preference"
             }),
         ),
         tool_call_response(
@@ -1504,6 +1516,28 @@ fn recorded_requests(server: &RecordingModelServer) -> Vec<Value> {
         .lock()
         .expect("recorded model request mutex poisoned")
         .clone()
+}
+
+fn assert_schema_rejection_in_followup(server: &RecordingModelServer, tool_name: &str) {
+    let requests = recorded_requests(server);
+    assert_eq!(
+        requests.len(),
+        2,
+        "a schema rejection must remain a recoverable tool observation"
+    );
+    let messages = requests[1]["messages"]
+        .as_array()
+        .expect("followup messages");
+    let observation = messages
+        .iter()
+        .rev()
+        .find(|message| message["role"] == json!("tool"))
+        .expect("SDK schema error must reach the next model as a tool observation");
+    assert_eq!(
+        observation["content"],
+        json!("Tool arguments do not match input schema")
+    );
+    assert_json_mentions(&requests[1]["messages"], tool_name);
 }
 
 fn find_record<'a>(rows: &'a Value, key: &str, value: &str) -> Option<&'a Value> {

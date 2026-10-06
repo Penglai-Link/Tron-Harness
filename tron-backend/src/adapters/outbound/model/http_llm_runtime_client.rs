@@ -52,9 +52,64 @@ pub(crate) fn runtime_to_agent_model_config(config: &RuntimeModelConfig) -> Agen
         max_retries: config.max_retries,
     }
 }
+#[path = "http_llm_in_run.rs"]
+mod in_run;
 #[path = "http_llm_observed.rs"]
 mod observed;
 impl LlmRuntimeClient for HttpLlmRuntimeClient {
+    fn model_authorization_scope(&self, config: &RuntimeModelConfig) -> Result<Option<String>, String> {
+        self.models.authorization_scope(&runtime_to_agent_model_config(config))
+    }
+    fn generate_vision<'a>(&'a self, config: &'a RuntimeModelConfig, prompt: &'a str, mime: &'a str, bytes: &'a [u8]) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
+        Box::pin(async move {
+            use base64::Engine;
+            use crate::domain::agent::AgentMessagePart;
+            if config.model_type != ModelType::Text { return Err("vision requires a text model".into()); }
+            let request = ModelRequest {
+                messages: vec![AgentMessage::new("user", vec![AgentMessagePart::Text { text: prompt.into() }, AgentMessagePart::Image { mime_type: mime.into(), data: base64::engine::general_purpose::STANDARD.encode(bytes) }])],
+                tools: vec![], prepared_tool_schema: None, system_agent_session_id: None, response_input_items: None, previous_response_id: None,
+            };
+            let response = self.models.generate_observed(&runtime_to_agent_model_config(config), &request).await.into_result().map_err(error)?;
+            if response.finish != ModelFinish::Final { return Err("image description requested tools".into()); }
+            Ok(response.output_text())
+        })
+    }
+
+    fn embed_with_model<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.observed_embed(config, input)
+                .await
+                .into_result()
+                .map_err(error)
+        })
+    }
+    fn embed_query_with_model_in_run<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+        dimensions: usize,
+        run: &'a fw::RunContext,
+    ) -> Pin<Box<dyn Future<Output = Result<(Vec<f32>, Option<String>), String>> + Send + 'a>> {
+        Box::pin(self.query_embedding_in_run(config, input, dimensions, run))
+    }
+    fn embed_query_in_run<'a>(
+        &'a self,
+        config: &'a RuntimeModelConfig,
+        input: &'a str,
+        dimensions: usize,
+        run: &'a fw::RunContext,
+    ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
+        Box::pin(async move {
+            self.query_embedding_in_run(config, input, dimensions, run)
+                .await
+                .map(|(vector, _)| vector)
+        })
+    }
+
     fn generate_observed<'a>(
         &'a self,
         config: &'a RuntimeModelConfig,
@@ -79,7 +134,11 @@ impl LlmRuntimeClient for HttpLlmRuntimeClient {
                 + 'a,
         >,
     > {
-        Box::pin(self.observed_embed(config, input))
+        Box::pin(async move {
+            self.observed_embed(config, input)
+                .await
+                .map(|(vector, _)| vector)
+        })
     }
     fn rerank_observed<'a>(
         &'a self,
@@ -106,25 +165,10 @@ impl LlmRuntimeClient for HttpLlmRuntimeClient {
         prompt: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<String, String>> + Send + 'a>> {
         Box::pin(async move {
-            if config.model_type != ModelType::Text {
-                return Err("text generation requires TEXT model".into());
-            }
-            let request = ModelRequest {
-                messages: vec![AgentMessage::user(prompt)],
-                tools: vec![],
-                prepared_tool_schema: None,
-                system_agent_session_id: None,
-                response_input_items: None,
-                previous_response_id: None,
-            };
-            let response = self
-                .models
-                .generate(&runtime_to_agent_model_config(config), &request)
-                .await?;
-            if response.finish != ModelFinish::Final {
-                return Err("text generation unexpectedly requested tool calls".into());
-            }
-            Ok(response.output_text())
+            self.observed_generate(config, prompt)
+                .await
+                .into_result()
+                .map_err(error)
         })
     }
     fn embed<'a>(
@@ -133,38 +177,11 @@ impl LlmRuntimeClient for HttpLlmRuntimeClient {
         input: &'a str,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<f32>, String>> + Send + 'a>> {
         Box::pin(async move {
-            if config.model_type != ModelType::Embedding {
-                return Err("embedding requires EMBEDDING model".into());
-            }
-            let model = runtime_to_agent_model_config(config);
-            let reference = fw::ModelRef::new("http-embedding", &model.model_code);
-            let service = fw::EmbeddingModelService::new(
-                reference.clone(),
-                Arc::new(sdk::HttpEmbeddingModel {
-                    config: sdk_config(&model)?,
-                    factory: self.models.factory.clone(),
-                }),
-            );
-            let mut request = fw::EmbeddingRequest::texts([input]);
-            request.choice = fw::ModelChoice::model(reference);
-            let response = self
-                .models
-                .jobs()
-                .await?
-                .embed(
-                    service,
-                    request,
-                    limits(&model),
-                    config.max_retries.unwrap_or(0) as usize + 2,
-                )
+            self.observed_embed(config, input)
                 .await
-                .map_err(error)?;
-            Ok(response
-                .vectors
-                .into_iter()
-                .next()
-                .ok_or("embedding response empty")?
-                .values)
+                .into_result()
+                .map(|(vector, _)| vector)
+                .map_err(error)
         })
     }
     fn rerank<'a>(
@@ -175,54 +192,10 @@ impl LlmRuntimeClient for HttpLlmRuntimeClient {
         top_n: Option<usize>,
     ) -> Pin<Box<dyn Future<Output = Result<Vec<LlmRuntimeRerankHit>, String>> + Send + 'a>> {
         Box::pin(async move {
-            if config.model_type != ModelType::Rerank {
-                return Err("rerank requires RERANK model".into());
-            }
-            if top_n == Some(0) {
-                return Err("rerank top_n must be positive".into());
-            }
-            if documents.is_empty() {
-                return Ok(Vec::new());
-            }
-            // Product search limits mean at most N hits; SDK top_n describes
-            // the actual candidate set and must stay within its cardinality.
-            let top_n = top_n.map(|limit| limit.min(documents.len()));
-            let model = runtime_to_agent_model_config(config);
-            let reference = fw::ModelRef::new("http-rerank", &model.model_code);
-            let service = fw::RerankModelService::new(
-                reference.clone(),
-                Arc::new(sdk::HttpRerankModel {
-                    config: sdk_config(&model)?,
-                    factory: self.models.factory.clone(),
-                    chat_fallback: config.model_code.starts_with("PERSON_AI:"),
-                }),
-            );
-            let request = fw::RerankRequest {
-                choice: fw::ModelChoice::model(reference),
-                query: query.into(),
-                documents: documents.iter().cloned().map(Into::into).collect(),
-                top_n,
-            };
-            let response = self
-                .models
-                .jobs()
-                .await?
-                .rerank(
-                    service,
-                    request,
-                    limits(&model),
-                    config.max_retries.unwrap_or(0) as usize + 2,
-                )
+            self.observed_rerank(config, query, documents, top_n)
                 .await
-                .map_err(error)?;
-            Ok(response
-                .results
-                .into_iter()
-                .map(|item| LlmRuntimeRerankHit {
-                    document_index: item.index,
-                    score: item.score,
-                })
-                .collect())
+                .into_result()
+                .map_err(error)
         })
     }
 }
@@ -304,4 +277,32 @@ mod tests {
             .unwrap()
             .unwrap();
     }
+    #[tokio::test]
+    async fn vision_uses_existing_framework_multimodal_client_without_tools() {
+        let calls = Arc::new(AtomicUsize::new(0));
+        let received = calls.clone();
+        let app = Router::new().route("/chat/completions", post(move |Json(body): Json<Value>| {
+            let received = received.clone();
+            async move {
+                received.fetch_add(1, Ordering::SeqCst);
+                assert_eq!(body["model"],"synthetic-vision");
+                assert!(body["tools"].is_null() || body["tools"].as_array().is_some_and(|a|a.is_empty()));
+                let content = body["messages"][0]["content"].as_array().unwrap();
+                assert!(content.iter().any(|c|c["type"]=="text" && c["text"]=="synthetic prompt"));
+                assert!(content.iter().any(|c|c["type"]=="image_url" && c["image_url"]["url"]=="data:image/jpeg;base64,/9j/"));
+                Json(json!({"id":"synthetic","object":"chat.completion","model":"synthetic-vision","choices":[{"index":0,"finish_reason":"stop","message":{"role":"assistant","content":"synthetic description"}}],"usage":{"prompt_tokens":3,"completion_tokens":2,"total_tokens":5}}))
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}",listener.local_addr().unwrap());
+        let (stop, stopped) = tokio::sync::oneshot::channel();
+        let server = tokio::spawn(async move { axum::serve(listener,app).with_graceful_shutdown(async { let _=stopped.await; }).await.unwrap(); });
+        let config = RuntimeModelConfig { model_code:"synthetic-local".into(), protocol:ModelProtocol::OpenAiCompatible, model_type:ModelType::Text, base_url:url, api_path:Some("chat/completions".into()), api_key:"synthetic".into(), model_name:"synthetic-vision".into(), thinking_enabled:false, reasoning_effort:None, responses_stateful_enabled:false, temperature:Some(0.0), max_tokens:Some(2048), context_window_tokens:None, top_p:None, max_retries:Some(0) };
+        let client=HttpLlmRuntimeClient::new(sdk::ModelHttpClient::new());
+        assert_eq!(client.generate_vision(&config,"synthetic prompt","image/jpeg",&[0xff,0xd8,0xff]).await.unwrap(),"synthetic description");
+        assert_eq!(calls.load(Ordering::SeqCst),1);
+        client.models.close().await;drop(client);stop.send(()).unwrap();
+        tokio::time::timeout(std::time::Duration::from_secs(2),server).await.unwrap().unwrap();
+    }
+
 }

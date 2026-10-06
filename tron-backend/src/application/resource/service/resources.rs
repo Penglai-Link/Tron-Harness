@@ -44,6 +44,13 @@ impl ResourceService {
         let mut records = self
             .effective_resources(&workspace_code)?
             .into_values()
+            .filter(|effective| {
+                self.resource_read_allowed(
+                    actor_user_code,
+                    effective.resource.workspace_code(),
+                    effective.resource.resource_code(),
+                )
+            })
             .map(|effective| {
                 self.resource_record(&effective.resource, effective.source_kind, connections_only)
             })
@@ -91,6 +98,11 @@ impl ResourceService {
             .effective_resources(&workspace_code)?
             .remove(&query.resource_code)
             .ok_or(ResourceError::NotFound)?;
+        self.authorize_resource_read(
+            actor_user_code,
+            resource.resource.workspace_code(),
+            resource.resource.resource_code(),
+        )?;
         Ok(self.resource_record(&resource.resource, resource.source_kind, true))
     }
 
@@ -110,6 +122,7 @@ impl ResourceService {
         }
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        self.authorize_resource_read(actor_user_code, &workspace_code, &command.resource_code)?;
         self.ensure_resource_create_is_available(&workspace_code, &command.resource_code)?;
         let record = self.store_file_resource(
             &workspace_code,
@@ -140,6 +153,7 @@ impl ResourceService {
         validate_resource_code(&command.resource_code)?;
         let workspace_code =
             self.workspace_scope(actor_user_code, &command.workspace_code, true)?;
+        self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         let kind = match self.managed_resource(&workspace_code, &command.resource_code)? {
             Some(ManagedResource::File(mut record)) => {
                 apply_name(&mut record.name, command.name.as_deref())?;
@@ -242,6 +256,7 @@ impl ResourceService {
         if connections_only && !resource.kind().is_connection_kind() {
             return Err(ResourceError::InvalidInput);
         }
+        self.authorize_resource_mutation(actor_user_code, &workspace_code, &command.resource_code)?;
         let deleted = match resource {
             ManagedResource::File(record) => {
                 let deleted = self.repository(|repository| {

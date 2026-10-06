@@ -10,7 +10,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { SelectItem } from "@/components/ui/select";
 import { useSystemConfig } from "@/domain/settings/hooks/useSystemConfig";
-import type { SystemConfigItem, SystemConfigValue } from "@/domain/settings/model/SystemConfig";
+import type { MineruNodeConfig, SystemConfigItem, SystemConfigValue } from "@/domain/settings/model/SystemConfig";
+import { MineruNodeEditor } from "./MineruNodeEditor";
+import { validateMineruNodes } from "../model/mineruNodeValidation";
 
 function displayGroup(path: string) {
   return path.includes(".") ? path.slice(0, path.indexOf(".")) : "server";
@@ -30,7 +32,7 @@ export function SystemConfigTable() {
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => new Set());
   const groups = useMemo(() => {
     const grouped = new Map<string, SystemConfigItem[]>();
-    document?.items.forEach((item) => {
+    document?.items.filter((item) => !item.path.startsWith("mineru.") || !["parseEndpoint", "backend", "parseMethod", "returnContentList"].includes(displayField(item.path))).forEach((item) => {
       const group = displayGroup(item.path);
       grouped.set(group, [...(grouped.get(group) ?? []), item]);
     });
@@ -53,6 +55,11 @@ export function SystemConfigTable() {
   }
 
   function fieldDescription(item: SystemConfigItem) {
+    if (item.path === "mineru.nodes") return t("settingsGeneral.systemConfig.mineruNodes.description");
+    if (item.path === "mineru.visualContextEnabled") return t("knowledgeLibrary.visualContextSettings");
+    if (item.path.startsWith("mineru.imageDescription.")) {
+      return t(`knowledgeLibrary.imageDescriptionSettings.${displayField(item.path)}`);
+    }
     const field = displayField(item.path);
     return t(`settingsGeneral.systemConfig.descriptions.fields.${field}`, {
       defaultValue: t("settingsGeneral.systemConfig.descriptions.unknownField"),
@@ -62,10 +69,19 @@ export function SystemConfigTable() {
   async function handleSave() {
     if (!document || dirtyItems.length === 0) return;
     try {
-      await save(dirtyItems.map((item) => ({ path: item.path, value: Array.isArray(changes[item.path]) ? (changes[item.path] as string[]).map((entry) => entry.trim()).filter(Boolean) : changes[item.path] })), confirmMigration);
+      if (Object.hasOwn(changes, "mineru.nodes")) {
+        const issue = validateMineruNodes(changes["mineru.nodes"] as MineruNodeConfig[]);
+        if (issue) throw new Error(t(`settingsGeneral.systemConfig.mineruNodes.validation.${issue.key}`, { node: issue.node }));
+      }
+      const result = await save(dirtyItems.map((item) => {
+        const value = changes[item.path];
+        return { path: item.path, value: item.path === "mineru.nodes" && Array.isArray(value)
+          ? (value as MineruNodeConfig[]).map((node) => ({ ...node, id: node.id.trim(), baseUrl: node.baseUrl.trim(), resourceGroup: node.resourceGroup.trim() }))
+          : Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === "string").map((entry) => entry.trim()).filter(Boolean) : value };
+      }), confirmMigration);
       setChanges({});
       setConfirmMigration(false);
-      toast.success(t("settingsGeneral.systemConfig.messages.saved"));
+      toast.success(t(`settingsGeneral.systemConfig.messages.${result?.restartPaths.length ? "savedRestart" : "saved"}`));
     } catch (reason) {
       toast.error(reason instanceof Error ? reason.message : t("settingsGeneral.systemConfig.messages.saveFailed"));
     }
@@ -135,7 +151,7 @@ export function SystemConfigTable() {
                           </InfoTooltip>
                         </div>
                       </div>
-                      {item.valueType === "array" ? (
+                      {item.path === "mineru.nodes" ? <MineruNodeEditor value={value} disabled={saving} onChange={(nodes) => update(item.path, nodes)} /> : item.path === "mineru.defaultTier" ? (<SelectInput value={String(value)} onValueChange={(next) => update(item.path, next)}>{(["flash", "basic", "standard", "advanced"] as const).map((tier) => <SelectItem key={tier} value={tier}>{t(`knowledgeLibrary.parsingTiers.${tier}`)}</SelectItem>)}</SelectInput>) : item.valueType === "array" ? (
                         <TextArea
                           aria-label={item.path}
                           rows={6}

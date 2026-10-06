@@ -30,41 +30,42 @@ impl ModelService {
             max_retries: model.max_retries,
         };
         let factory = self.verification_factory.clone();
-        let job = eliteforge_agent_framework::ChatModelJob {
-            workflow: None,
-            connection: fw::ModelConnection::new(
-                "probe",
-                Arc::new(sdk::HttpProbeModel { config, factory }),
-                vec![fw::ModelDescriptor::new("probe")],
-            ),
-            model: fw::ModelRef::new("probe", "probe"),
-            request: fw::ChatRequest {
-                messages: vec![fw::Message::user(fw::Content(vec![
-                    fw::ContentBlock::Json { value: payload },
-                ]))],
-                tools: vec![],
-                extensions: Default::default(),
-                options: fw::GenerationOptions {
-                    max_output_tokens: Some(MIN_VERIFY_OUTPUT_TOKENS),
-                    ..Default::default()
-                },
-            },
-            limits: fw::RunLimits {
-                max_model_output_tokens: MIN_VERIFY_OUTPUT_TOKENS,
-                max_model_retries: model.max_retries.unwrap_or(0) as usize,
-                model_timeout: std::time::Duration::from_secs(30),
-                run_timeout: std::time::Duration::from_secs(30),
+        let connection = fw::ModelConnection::new(
+            "probe",
+            Arc::new(sdk::HttpProbeModel { config, factory }),
+            vec![fw::ModelDescriptor::new("probe")],
+        );
+        let runtime = eliteforge_agent_framework::ModelRuntime::new(
+            eliteforge_agent_framework::ModelRuntimeUpdate::new("probe", 0, vec![connection]),
+        )
+        .map_err(|error| ModelError::VerificationFailed(error.to_string()))?;
+        let request = fw::ChatRequest {
+            messages: vec![fw::Message::user(fw::Content(vec![
+                fw::ContentBlock::Json { value: payload },
+            ]))],
+            tools: vec![],
+            extensions: Default::default(),
+            options: fw::GenerationOptions {
+                max_output_tokens: Some(MIN_VERIFY_OUTPUT_TOKENS),
                 ..Default::default()
             },
-            stage: "model.verify".into(),
-            max_calls: model.max_retries.unwrap_or(0) as usize + 1,
-            repair: None,
         };
-        self.model_jobs
-            .get()
-            .await
-            .map_err(|error| ModelError::VerificationFailed(error.to_string()))?
-            .execute(job)
+        let limits = fw::RunLimits {
+            max_model_output_tokens: MIN_VERIFY_OUTPUT_TOKENS,
+            max_model_retries: model.max_retries.unwrap_or(0) as usize,
+            max_model_calls_per_step: Some(model.max_retries.unwrap_or(0) as usize + 1),
+            model_timeout: std::time::Duration::from_secs(30),
+            run_timeout: std::time::Duration::from_secs(30),
+            ..Default::default()
+        };
+        self.model_executor
+            .with_runtime(runtime)
+            .chat(
+                &fw::ModelRef::new("probe", "probe"),
+                request,
+                &limits,
+                "model.verify",
+            )
             .await
             .map_err(|error| {
                 ModelError::VerificationFailed(match error.primary() {

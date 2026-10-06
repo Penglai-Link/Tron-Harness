@@ -26,6 +26,7 @@ impl Tool for ResourceDeleteTool {
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
         let output = self
             .resources
+            .for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code)
             .delete_resource(
                 actor_user_code,
                 ResourceDeleteCommand {
@@ -85,9 +86,10 @@ impl Tool for ResourceBinaryTool {
         let output = match input.action {
             ResourceBinaryAction::Upload => {
                 self.resources
+            .for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code)
                     .handle_agent_binary_upload(actor_user_code, &workspace_code, command)
             }
-            ResourceBinaryAction::Download => self.resources.handle_agent_binary_download(
+            ResourceBinaryAction::Download => self.resources.for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code).handle_agent_binary_download(
                 actor_user_code,
                 &workspace_code,
                 command,

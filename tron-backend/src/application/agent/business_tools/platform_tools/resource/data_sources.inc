@@ -28,7 +28,7 @@ impl Tool for DataSourceCreateTool {
         let input: DataSourceCreateInput = parse_tool_input(request.input)?;
         let actor_user_code = required_actor(context)?.to_string();
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
-        let resources = self.resources.clone();
+        let resources = self.resources.for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code);
         let output = run_resource_future(async move {
             resources
                 .create_data_source_for_http(
@@ -78,7 +78,7 @@ impl Tool for DataSourceUpdateTool {
         let input: DataSourceUpdateInput = parse_tool_input(request.input)?;
         let actor_user_code = required_actor(context)?.to_string();
         let workspace_code = resolve_workspace_code(&input.workspace_code, context)?;
-        let resources = self.resources.clone();
+        let resources = self.resources.for_agent_in_workspace(context.agent_code.as_deref(),&context.workspace_code);
         let output = run_resource_future(async move {
             resources
                 .update_data_source_for_http(

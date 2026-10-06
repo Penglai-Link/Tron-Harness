@@ -66,6 +66,8 @@ url = "2"
 zip = { version = "2.4", default-features = false, features = ["deflate"] }
 roxmltree = "0.20"
 umya-spreadsheet = "3.1"
+pdf-extract = "0.12"
+image = { version = "0.25.10", default-features = false, features = ["png"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.59", features = ["Win32_Storage_FileSystem"] }
